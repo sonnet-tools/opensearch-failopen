@@ -1,300 +1,300 @@
-0 lambda psi gamma 9547
+0 lambda psi gamma 9547 EDIT799
 1 phi xi tau 6433
-2 omega chi lambda 6118
+2 omega chi lambda 6118 EDIT924
 3 phi tau xi 9853
-4 phi nu psi 7865
+4 phi nu psi 7865 EDIT781
 5 kappa omicron rho 2206
-6 omicron pi omega 3162
+6 omicron pi omega 3162 EDIT739
 7 chi beta sigma 397
-8 eta rho nu 2113
+8 eta rho nu 2113 EDIT778
 9 delta tau chi 6804
-10 lambda beta kappa 5505
+10 lambda beta kappa 5505 EDIT431
 11 lambda mu xi 7149
-12 omicron eta omicron 6921
+12 omicron eta omicron 6921 EDIT10
 13 lambda mu omicron 9448
-14 psi zeta omicron 5058
+14 psi zeta omicron 5058 EDIT529
 15 xi zeta upsilon 3159
-16 alpha sigma upsilon 6720
+16 alpha sigma upsilon 6720 EDIT229
 17 xi kappa upsilon 4143
-18 delta upsilon alpha 9076
+18 delta upsilon alpha 9076 EDIT713
 19 mu tau alpha 4768
-20 xi zeta iota 1645
+20 xi zeta iota 1645 EDIT8
 21 nu lambda rho 2951
-22 zeta phi pi 8488
+22 zeta phi pi 8488 EDIT628
 23 xi eta sigma 2976
-24 eta psi chi 2255
+24 eta psi chi 2255 EDIT288
 25 chi kappa eta 4303
-26 tau epsilon chi 6277
+26 tau epsilon chi 6277 EDIT946
 27 sigma chi zeta 3264
-28 iota sigma upsilon 569
+28 iota sigma upsilon 569 EDIT47
 29 upsilon omicron upsilon 8754
-30 alpha omicron omega 7848
+30 alpha omicron omega 7848 EDIT612
 31 tau pi nu 2096
-32 omega phi epsilon 2815
+32 omega phi epsilon 2815 EDIT803
 33 epsilon omicron omega 6275
-34 eta gamma theta 7089
+34 eta gamma theta 7089 EDIT339
 35 nu pi iota 2598
-36 chi epsilon rho 4379
+36 chi epsilon rho 4379 EDIT637
 37 upsilon mu xi 6187
-38 xi gamma pi 3649
+38 xi gamma pi 3649 EDIT269
 39 zeta upsilon iota 5019
-40 rho kappa zeta 168
+40 rho kappa zeta 168 EDIT715
 41 nu gamma upsilon 4840
-42 epsilon upsilon upsilon 8758
+42 epsilon upsilon upsilon 8758 EDIT421
 43 sigma mu chi 5456
-44 pi theta theta 6750
+44 pi theta theta 6750 EDIT247
 45 delta zeta eta 410
-46 eta psi gamma 6025
+46 eta psi gamma 6025 EDIT334
 47 theta sigma zeta 6213
-48 rho lambda upsilon 3505
+48 rho lambda upsilon 3505 EDIT624
 49 gamma epsilon omicron 6437
-50 theta mu epsilon 2760
+50 theta mu epsilon 2760 EDIT448
 51 eta alpha epsilon 9954
-52 rho sigma alpha 9132
+52 rho sigma alpha 9132 EDIT235
 53 omega omega gamma 4467
-54 alpha sigma eta 9370
+54 alpha sigma eta 9370 EDIT216
 55 sigma omega eta 9366
-56 chi theta iota 3907
+56 chi theta iota 3907 EDIT306
 57 omega eta epsilon 566
-58 psi xi kappa 866
+58 psi xi kappa 866 EDIT327
 59 kappa tau mu 1442
-60 alpha delta xi 9619
+60 alpha delta xi 9619 EDIT266
 61 sigma epsilon alpha 1226
-62 xi mu nu 1633
+62 xi mu nu 1633 EDIT858
 63 rho tau xi 970
-64 lambda epsilon gamma 1720
+64 lambda epsilon gamma 1720 EDIT396
 65 iota nu iota 5446
-66 rho kappa phi 9391
+66 rho kappa phi 9391 EDIT597
 67 xi gamma omega 4279
-68 upsilon pi gamma 3381
+68 upsilon pi gamma 3381 EDIT5
 69 xi delta upsilon 752
-70 gamma epsilon beta 8437
+70 gamma epsilon beta 8437 EDIT552
 71 phi epsilon tau 3524
-72 xi mu phi 8212
+72 xi mu phi 8212 EDIT316
 73 zeta upsilon omicron 7185
-74 phi upsilon omega 8499
+74 phi upsilon omega 8499 EDIT426
 75 zeta xi tau 6858
-76 alpha omicron chi 6167
+76 alpha omicron chi 6167 EDIT393
 77 mu zeta theta 5065
-78 iota nu gamma 4620
+78 iota nu gamma 4620 EDIT918
 79 nu lambda xi 6205
-80 sigma rho gamma 9180
+80 sigma rho gamma 9180 EDIT299
 81 tau rho alpha 4569
-82 kappa upsilon pi 3134
+82 kappa upsilon pi 3134 EDIT503
 83 theta pi epsilon 6068
-84 mu lambda mu 4189
+84 mu lambda mu 4189 EDIT785
 85 tau kappa phi 233
-86 chi rho omicron 7202
+86 chi rho omicron 7202 EDIT749
 87 nu omicron sigma 4953
-88 chi upsilon delta 227
+88 chi upsilon delta 227 EDIT775
 89 omicron delta tau 3054
-90 omega lambda tau 439
+90 omega lambda tau 439 EDIT828
 91 zeta kappa sigma 1703
-92 psi beta omega 4772
+92 psi beta omega 4772 EDIT324
 93 kappa eta phi 159
-94 upsilon chi omicron 3624
+94 upsilon chi omicron 3624 EDIT821
 95 beta mu chi 7156
-96 psi rho eta 5819
+96 psi rho eta 5819 EDIT135
 97 chi iota eta 8699
-98 alpha beta tau 664
+98 alpha beta tau 664 EDIT449
 99 mu zeta tau 8605
-100 mu delta iota 7179
+100 mu delta iota 7179 EDIT618
 101 delta psi alpha 8741
-102 chi omega zeta 2030
+102 chi omega zeta 2030 EDIT826
 103 theta omega chi 2169
-104 gamma nu xi 6890
+104 gamma nu xi 6890 EDIT268
 105 zeta upsilon lambda 5626
-106 xi beta omicron 408
+106 xi beta omicron 408 EDIT135
 107 omega zeta psi 2002
-108 upsilon phi zeta 7608
+108 upsilon phi zeta 7608 EDIT897
 109 upsilon delta phi 78
-110 psi lambda nu 4216
+110 psi lambda nu 4216 EDIT334
 111 nu upsilon rho 2140
-112 epsilon beta zeta 579
+112 epsilon beta zeta 579 EDIT680
 113 omicron pi gamma 5497
-114 epsilon theta epsilon 9809
+114 epsilon theta epsilon 9809 EDIT431
 115 alpha lambda mu 1889
-116 psi mu gamma 9699
+116 psi mu gamma 9699 EDIT534
 117 mu omega nu 133
-118 xi alpha epsilon 2815
+118 xi alpha epsilon 2815 EDIT16
 119 upsilon tau omega 8866
-120 phi epsilon epsilon 5319
+120 phi epsilon epsilon 5319 EDIT966
 121 omicron upsilon iota 7995
-122 xi psi epsilon 4603
+122 xi psi epsilon 4603 EDIT100
 123 omega alpha zeta 1406
-124 nu beta iota 1811
+124 nu beta iota 1811 EDIT952
 125 lambda lambda delta 8851
-126 alpha xi theta 1558
+126 alpha xi theta 1558 EDIT771
 127 beta theta eta 5551
-128 mu epsilon pi 2686
+128 mu epsilon pi 2686 EDIT717
 129 sigma theta eta 2401
-130 nu theta psi 7357
+130 nu theta psi 7357 EDIT224
 131 psi phi epsilon 7328
-132 beta eta mu 5105
+132 beta eta mu 5105 EDIT758
 133 upsilon xi psi 2953
-134 nu gamma rho 5184
+134 nu gamma rho 5184 EDIT780
 135 theta epsilon lambda 7553
-136 omicron phi omega 5935
+136 omicron phi omega 5935 EDIT67
 137 eta lambda kappa 1928
-138 psi alpha psi 486
+138 psi alpha psi 486 EDIT88
 139 iota psi zeta 8255
-140 tau iota pi 6250
+140 tau iota pi 6250 EDIT63
 141 lambda tau phi 8201
-142 tau kappa chi 9256
+142 tau kappa chi 9256 EDIT887
 143 sigma psi psi 937
-144 xi epsilon omega 3005
+144 xi epsilon omega 3005 EDIT245
 145 alpha omega chi 6269
-146 rho sigma delta 6556
+146 rho sigma delta 6556 EDIT175
 147 mu lambda omicron 4610
-148 nu epsilon kappa 1758
+148 nu epsilon kappa 1758 EDIT887
 149 upsilon psi psi 3307
-150 xi xi gamma 6982
+150 xi xi gamma 6982 EDIT904
 151 tau beta pi 2442
-152 beta xi delta 4481
+152 beta xi delta 4481 EDIT626
 153 psi omicron upsilon 3382
-154 tau iota lambda 2466
+154 tau iota lambda 2466 EDIT419
 155 gamma beta xi 4950
-156 delta upsilon iota 3916
+156 delta upsilon iota 3916 EDIT280
 157 eta eta gamma 7492
-158 iota omega nu 5542
+158 iota omega nu 5542 EDIT562
 159 delta nu xi 3909
-160 lambda chi pi 6928
+160 lambda chi pi 6928 EDIT614
 161 nu delta theta 6234
-162 psi delta phi 1340
+162 psi delta phi 1340 EDIT528
 163 rho chi xi 509
-164 gamma rho omicron 3762
+164 gamma rho omicron 3762 EDIT808
 165 delta delta lambda 9865
-166 beta iota rho 4800
+166 beta iota rho 4800 EDIT179
 167 beta lambda upsilon 1309
-168 lambda phi epsilon 4705
+168 lambda phi epsilon 4705 EDIT439
 169 lambda phi zeta 6325
-170 omega kappa nu 5888
+170 omega kappa nu 5888 EDIT675
 171 mu pi psi 3164
-172 gamma pi omega 2760
+172 gamma pi omega 2760 EDIT575
 173 chi theta delta 6150
-174 lambda epsilon upsilon 2567
+174 lambda epsilon upsilon 2567 EDIT694
 175 alpha sigma omicron 7746
-176 sigma eta gamma 6992
+176 sigma eta gamma 6992 EDIT195
 177 sigma alpha phi 5710
-178 mu phi xi 9680
+178 mu phi xi 9680 EDIT506
 179 phi zeta sigma 5710
-180 kappa phi rho 843
+180 kappa phi rho 843 EDIT193
 181 mu sigma sigma 3246
-182 kappa beta tau 4210
+182 kappa beta tau 4210 EDIT331
 183 chi epsilon iota 6844
-184 epsilon rho lambda 7229
+184 epsilon rho lambda 7229 EDIT826
 185 iota nu pi 1325
-186 mu tau omega 9886
+186 mu tau omega 9886 EDIT976
 187 phi alpha psi 7866
-188 delta nu kappa 1331
+188 delta nu kappa 1331 EDIT495
 189 chi nu pi 8616
-190 mu alpha pi 54
+190 mu alpha pi 54 EDIT301
 191 eta eta omicron 5128
-192 epsilon kappa psi 1152
+192 epsilon kappa psi 1152 EDIT372
 193 tau beta pi 1601
-194 mu theta psi 5275
+194 mu theta psi 5275 EDIT37
 195 omega phi xi 8237
-196 psi beta mu 6956
+196 psi beta mu 6956 EDIT528
 197 omicron eta kappa 6325
-198 alpha iota lambda 1964
+198 alpha iota lambda 1964 EDIT733
 199 sigma mu pi 461
-200 omega omicron beta 8895
+200 omega omicron beta 8895 EDIT287
 201 omega eta psi 2295
-202 upsilon omicron zeta 9622
+202 upsilon omicron zeta 9622 EDIT688
 203 lambda omicron eta 787
-204 omicron gamma iota 7849
+204 omicron gamma iota 7849 EDIT463
 205 theta lambda phi 758
-206 upsilon kappa pi 1223
+206 upsilon kappa pi 1223 EDIT922
 207 rho zeta omicron 4578
-208 nu iota iota 8251
+208 nu iota iota 8251 EDIT614
 209 gamma epsilon iota 8885
-210 lambda iota beta 5161
+210 lambda iota beta 5161 EDIT613
 211 omega upsilon epsilon 2379
-212 pi nu pi 1003
+212 pi nu pi 1003 EDIT841
 213 delta lambda chi 1122
-214 rho beta chi 7216
+214 rho beta chi 7216 EDIT728
 215 phi iota sigma 8499
-216 pi eta iota 6043
+216 pi eta iota 6043 EDIT372
 217 beta delta eta 6014
-218 xi gamma theta 7710
+218 xi gamma theta 7710 EDIT11
 219 psi delta beta 1893
-220 nu mu theta 2901
+220 nu mu theta 2901 EDIT484
 221 kappa xi omicron 4680
-222 tau zeta delta 4758
+222 tau zeta delta 4758 EDIT346
 223 omicron zeta omega 7266
-224 mu gamma xi 3468
+224 mu gamma xi 3468 EDIT873
 225 xi psi iota 5093
-226 rho pi gamma 6673
+226 rho pi gamma 6673 EDIT195
 227 delta tau omicron 7025
-228 omicron zeta psi 6174
+228 omicron zeta psi 6174 EDIT955
 229 iota gamma phi 6518
-230 beta beta lambda 7453
+230 beta beta lambda 7453 EDIT689
 231 delta theta omega 7427
-232 iota pi chi 8061
+232 iota pi chi 8061 EDIT393
 233 beta phi rho 1427
-234 lambda pi sigma 9857
+234 lambda pi sigma 9857 EDIT872
 235 rho omicron chi 6334
-236 sigma psi gamma 1181
+236 sigma psi gamma 1181 EDIT224
 237 iota rho upsilon 7048
-238 upsilon eta omicron 1393
+238 upsilon eta omicron 1393 EDIT507
 239 delta phi gamma 1837
-240 theta rho alpha 7844
+240 theta rho alpha 7844 EDIT483
 241 mu omega sigma 9026
-242 lambda beta delta 1136
+242 lambda beta delta 1136 EDIT449
 243 beta omicron gamma 8320
-244 xi gamma alpha 5174
+244 xi gamma alpha 5174 EDIT675
 245 eta epsilon zeta 2426
-246 rho delta zeta 7684
+246 rho delta zeta 7684 EDIT901
 247 gamma kappa lambda 4641
-248 omega eta nu 1018
+248 omega eta nu 1018 EDIT970
 249 delta lambda zeta 7965
-250 mu nu theta 8798
+250 mu nu theta 8798 EDIT48
 251 sigma sigma rho 5140
-252 upsilon beta nu 1252
+252 upsilon beta nu 1252 EDIT57
 253 mu nu mu 1058
-254 delta alpha omicron 8999
+254 delta alpha omicron 8999 EDIT248
 255 tau chi upsilon 4472
-256 tau mu nu 8539
+256 tau mu nu 8539 EDIT965
 257 epsilon rho epsilon 6174
-258 rho delta gamma 5395
+258 rho delta gamma 5395 EDIT153
 259 mu chi nu 1546
-260 gamma chi pi 2674
+260 gamma chi pi 2674 EDIT347
 261 kappa psi mu 7230
-262 phi kappa beta 9080
+262 phi kappa beta 9080 EDIT251
 263 tau lambda sigma 8087
-264 nu nu delta 375
+264 nu nu delta 375 EDIT61
 265 xi gamma omicron 7205
-266 upsilon rho rho 9127
+266 upsilon rho rho 9127 EDIT763
 267 beta rho eta 3478
-268 zeta beta sigma 9753
+268 zeta beta sigma 9753 EDIT59
 269 mu iota iota 8691
-270 zeta omega omega 66
+270 zeta omega omega 66 EDIT38
 271 sigma delta beta 3823
-272 omega mu upsilon 3099
+272 omega mu upsilon 3099 EDIT65
 273 gamma rho kappa 2973
-274 eta epsilon tau 6123
+274 eta epsilon tau 6123 EDIT585
 275 alpha alpha lambda 9482
-276 tau xi upsilon 9416
+276 tau xi upsilon 9416 EDIT409
 277 omega epsilon xi 5694
-278 nu nu xi 8807
+278 nu nu xi 8807 EDIT81
 279 xi kappa zeta 4618
-280 xi omicron rho 3974
+280 xi omicron rho 3974 EDIT389
 281 kappa kappa psi 7854
-282 alpha psi zeta 6594
+282 alpha psi zeta 6594 EDIT159
 283 gamma chi chi 3002
-284 sigma rho lambda 6585
+284 sigma rho lambda 6585 EDIT890
 285 theta zeta omicron 121
-286 theta iota zeta 4085
+286 theta iota zeta 4085 EDIT488
 287 epsilon eta beta 7551
-288 omicron zeta omicron 2667
+288 omicron zeta omicron 2667 EDIT261
 289 tau alpha nu 6738
-290 zeta omega gamma 9545
+290 zeta omega gamma 9545 EDIT841
 291 delta tau phi 3733
-292 theta omega delta 6927
+292 theta omega delta 6927 EDIT435
 293 psi nu pi 5826
-294 nu eta alpha 1548
+294 nu eta alpha 1548 EDIT959
 295 upsilon kappa gamma 1045
-296 lambda omicron omega 1575
+296 lambda omicron omega 1575 EDIT139
 297 upsilon mu rho 3413
-298 xi upsilon eta 3244
+298 xi upsilon eta 3244 EDIT708
 299 epsilon iota lambda 1997
