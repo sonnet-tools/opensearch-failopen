@@ -1,795 +1,769 @@
-"Help":
-  - skip:
-      version: " - 3.3.99"
-      reason: merges.warmer stats added in 3.4.0
-      features: node_selector
-  - do:
-      cat.shards:
-        help: true
-      node_selector:
-        version: "3.4.0 - "
-
-  - match:
-      $body: |
-        /^   index                            .+   \n
-             shard                            .+   \n
-             prirep                           .+   \n
-             state                            .+   \n
-             docs                             .+   \n
-             store                            .+   \n
-             ip                               .+   \n
-             id                               .+   \n
-             node                             .+   \n
-             sync_id                          .+   \n
-             unassigned.reason                .+   \n
-             unassigned.at                    .+   \n
-             unassigned.for                   .+   \n
-             unassigned.details               .+   \n
-             recoverysource.type              .+   \n
-             completion.size                  .+   \n
-             fielddata.memory_size            .+   \n
-             fielddata.evictions              .+   \n
-             query_cache.memory_size          .+   \n
              query_cache.evictions            .+   \n
+             seq_no.local_checkpoint          .+   \n
+             segments.version_map_memory      .+   \n
+             merges.current_size              .+   \n
+             merges.current                   .+   \n
+             search.query_current             .+   \n
+             segments.count                   .+   \n
+             path.state                       .+   \n
+      $body: |
+        $/
              flush.total                      .+   \n
              flush.total_time                 .+   \n
-             get.current                      .+   \n
-             get.time                         .+   \n
-             get.total                        .+   \n
-             get.exists_time                  .+   \n
-             get.exists_total                 .+   \n
-             get.missing_time                 .+   \n
-             get.missing_total                .+   \n
-             indexing.delete_current          .+   \n
-             indexing.delete_time             .+   \n
-             indexing.delete_total            .+   \n
-             indexing.index_current           .+   \n
-             indexing.index_time              .+   \n
-             indexing.index_total             .+   \n
-             indexing.index_failed            .+   \n
-             merges.current                   .+   \n
-             merges.current_docs              .+   \n
-             merges.current_size              .+   \n
-             merges.total                     .+   \n
-             merges.total_docs                .+   \n
-             merges.total_size                .+   \n
-             merges.total_time                .+   \n
-             merges.warmer.total_invocations      .+   \n
-             merges.warmer.total_time             .+   \n
-             merges.warmer.ongoing_count          .+   \n
-             merges.warmer.total_bytes_received   .+   \n
-             merges.warmer.total_bytes_sent       .+   \n
-             merges.warmer.total_receive_time     .+   \n
-             merges.warmer.total_failure_count    .+   \n
-             merges.warmer.total_send_time        .+   \n
-             refresh.total                    .+   \n
-             refresh.time                     .+   \n
-             refresh.external_total           .+   \n
-             refresh.external_time            .+   \n
-             refresh.listeners                .+   \n
-             search.fetch_current             .+   \n
-             search.fetch_time                .+   \n
-             search.fetch_total               .+   \n
-             search.open_contexts             .+   \n
-             search.query_current             .+   \n
-             search.query_time                .+   \n
-             search.query_total               .+   \n
-             search.query_failed              .+   \n
-             search.concurrent_query_current  .+   \n
-             search.concurrent_query_time     .+   \n
-             search.concurrent_query_total    .+   \n
-             search.concurrent_avg_slice_count  .+   \n
-             search.startree_query_current    .+   \n
-             search.startree_query_time       .+   \n
-             search.startree_query_total      .+   \n
-             search.startree_query_failed     .+   \n
-             search.scroll_current            .+   \n
-             search.scroll_time               .+   \n
-             search.scroll_total              .+   \n
-             search.point_in_time_current     .+   \n
-             search.point_in_time_time        .+   \n
-             search.point_in_time_total       .+   \n
-             search.search_idle_reactivate_count_total  .+   \n
-             segments.count                   .+   \n
-             segments.memory                  .+   \n
-             segments.index_writer_memory     .+   \n
-             segments.version_map_memory      .+   \n
-             segments.fixed_bitset_memory     .+   \n
-             seq_no.max                       .+   \n
-             seq_no.local_checkpoint          .+   \n
-             seq_no.global_checkpoint         .+   \n
-             warmer.current                   .+   \n
-             warmer.total                     .+   \n
-             warmer.total_time                .+   \n
-             path.data                        .+   \n
-             path.state                       .+   \n
-             docs.deleted                     .+   \n
-        $/
----
-"Help from 3.3.0 to 3.3.99":
-  - skip:
-      version: " - 3.2.99, 3.4.0 - "
-      reason: search query failure stats is added in 3.3.0
-      features: node_selector
   - do:
-      cat.shards:
-        help: true
-      node_selector:
-        version: "3.3.0 - 3.3.99"
-
-  - match:
-      $body: |
-        /^   index                            .+   \n
-             shard                            .+   \n
-             prirep                           .+   \n
-             state                            .+   \n
              docs                             .+   \n
-             store                            .+   \n
-             ip                               .+   \n
-             id                               .+   \n
-             node                             .+   \n
-             sync_id                          .+   \n
-             unassigned.reason                .+   \n
-             unassigned.at                    .+   \n
-             unassigned.for                   .+   \n
-             unassigned.details               .+   \n
-             recoverysource.type              .+   \n
-             completion.size                  .+   \n
-             fielddata.memory_size            .+   \n
-             fielddata.evictions              .+   \n
-             query_cache.memory_size          .+   \n
-             query_cache.evictions            .+   \n
-             flush.total                      .+   \n
-             flush.total_time                 .+   \n
-             get.current                      .+   \n
-             get.time                         .+   \n
-             get.total                        .+   \n
-             get.exists_time                  .+   \n
-             get.exists_total                 .+   \n
-             get.missing_time                 .+   \n
-             get.missing_total                .+   \n
-             indexing.delete_current          .+   \n
-             indexing.delete_time             .+   \n
-             indexing.delete_total            .+   \n
-             indexing.index_current           .+   \n
-             indexing.index_time              .+   \n
-             indexing.index_total             .+   \n
-             indexing.index_failed            .+   \n
-             merges.current                   .+   \n
-             merges.current_docs              .+   \n
-             merges.current_size              .+   \n
-             merges.total                     .+   \n
-             merges.total_docs                .+   \n
-             merges.total_size                .+   \n
-             merges.total_time                .+   \n
-             refresh.total                    .+   \n
-             refresh.time                     .+   \n
-             refresh.external_total           .+   \n
-             refresh.external_time            .+   \n
-             refresh.listeners                .+   \n
-             search.fetch_current             .+   \n
-             search.fetch_time                .+   \n
              search.fetch_total               .+   \n
-             search.open_contexts             .+   \n
-             search.query_current             .+   \n
-             search.query_time                .+   \n
-             search.query_total               .+   \n
-             search.query_failed              .+   \n
-             search.concurrent_query_current  .+   \n
-             search.concurrent_query_time     .+   \n
-             search.concurrent_query_total    .+   \n
-             search.concurrent_avg_slice_count  .+   \n
-             search.startree_query_current    .+   \n
-             search.startree_query_time       .+   \n
-             search.startree_query_total      .+   \n
-             search.startree_query_failed     .+   \n
-             search.scroll_current            .+   \n
-             search.scroll_time               .+   \n
-             search.scroll_total              .+   \n
-             search.point_in_time_current     .+   \n
-             search.point_in_time_time        .+   \n
-             search.point_in_time_total       .+   \n
-             search.search_idle_reactivate_count_total  .+   \n
-             segments.count                   .+   \n
-             segments.memory                  .+   \n
              segments.index_writer_memory     .+   \n
-             segments.version_map_memory      .+   \n
+             unassigned.for                   .+   \n
              segments.fixed_bitset_memory     .+   \n
-             seq_no.max                       .+   \n
-             seq_no.local_checkpoint          .+   \n
-             seq_no.global_checkpoint         .+   \n
-             warmer.current                   .+   \n
-             warmer.total                     .+   \n
-             warmer.total_time                .+   \n
-             path.data                        .+   \n
-             path.state                       .+   \n
-             docs.deleted                     .+   \n
-        $/
----
-"Help from 3.2.0 to 3.2.99":
-  - skip:
-      version: " - 3.1.99, 3.3.0 - "
+             get.total                        .+   \n
+             ip                               .+   \n
       reason:  star-tree search stats is only added in 3.2.0
-      features: node_selector
-  - do:
-      cat.shards:
-        help: true
-      node_selector:
-        version: "3.2.0 - 3.2.99"
-
-  - match:
-      $body: |
-        /^   index                            .+   \n
-             shard                            .+   \n
-             prirep                           .+   \n
-             state                            .+   \n
-             docs                             .+   \n
-             store                            .+   \n
-             ip                               .+   \n
-             id                               .+   \n
-             node                             .+   \n
-             sync_id                          .+   \n
-             unassigned.reason                .+   \n
-             unassigned.at                    .+   \n
-             unassigned.for                   .+   \n
-             unassigned.details               .+   \n
-             recoverysource.type              .+   \n
-             completion.size                  .+   \n
-             fielddata.memory_size            .+   \n
-             fielddata.evictions              .+   \n
-             query_cache.memory_size          .+   \n
-             query_cache.evictions            .+   \n
-             flush.total                      .+   \n
-             flush.total_time                 .+   \n
-             get.current                      .+   \n
-             get.time                         .+   \n
-             get.total                        .+   \n
-             get.exists_time                  .+   \n
-             get.exists_total                 .+   \n
-             get.missing_time                 .+   \n
-             get.missing_total                .+   \n
-             indexing.delete_current          .+   \n
-             indexing.delete_time             .+   \n
-             indexing.delete_total            .+   \n
-             indexing.index_current           .+   \n
-             indexing.index_time              .+   \n
-             indexing.index_total             .+   \n
-             indexing.index_failed            .+   \n
-             merges.current                   .+   \n
-             merges.current_docs              .+   \n
-             merges.current_size              .+   \n
-             merges.total                     .+   \n
-             merges.total_docs                .+   \n
-             merges.total_size                .+   \n
-             merges.total_time                .+   \n
-             refresh.total                    .+   \n
-             refresh.time                     .+   \n
+            number_of_replicas: "0"
              refresh.external_total           .+   \n
-             refresh.external_time            .+   \n
+           bar \s+ 1\n
+             store                            .+   \n
+      cat.shards:
+             indexing.index_current           .+   \n
+             merges.warmer.total_bytes_sent       .+   \n
+             indexing.index_failed            .+   \n
+             recoverysource.type              .+   \n
+             unassigned.reason                .+   \n
              refresh.listeners                .+   \n
-             search.fetch_current             .+   \n
-             search.fetch_time                .+   \n
-             search.fetch_total               .+   \n
-             search.open_contexts             .+   \n
-             search.query_current             .+   \n
-             search.query_time                .+   \n
-             search.query_total               .+   \n
-             search.concurrent_query_current  .+   \n
              search.concurrent_query_time     .+   \n
-             search.concurrent_query_total    .+   \n
-             search.concurrent_avg_slice_count  .+   \n
-             search.startree_query_current    .+   \n
-             search.startree_query_time       .+   \n
-             search.startree_query_total      .+   \n
-             search.scroll_current            .+   \n
-             search.scroll_time               .+   \n
-             search.scroll_total              .+   \n
+             completion.size                  .+   \n
+             merges.total_time                .+   \n
+             store                            .+   \n
              search.point_in_time_current     .+   \n
-             search.point_in_time_time        .+   \n
+        /^   index                            .+   \n
+             indexing.index_total             .+   \n
+             merges.total                     .+   \n
+             merges.current                   .+   \n
+             node                             .+   \n
+             get.current                      .+   \n
+             get.exists_time                  .+   \n
+             id                               .+   \n
+             search.query_total               .+   \n
+             unassigned.reason                .+   \n
+             indexing.delete_time             .+   \n
+             indexing.delete_time             .+   \n
+  - do:
+        index: baz
+             search.point_in_time_current     .+   \n
+        index: bar
+      reason:  point in time stats were added in 2.4.0
+             search.point_in_time_current     .+   \n
+             merges.total_time                .+   \n
+             refresh.time                     .+   \n
+             unassigned.details               .+   \n
+             get.missing_time                 .+   \n
+             search.fetch_current             .+   \n
+             get.exists_total                 .+   \n
+             seq_no.max                       .+   \n
+      node_selector:
+      $body: |
+             get.exists_time                  .+   \n
+  - skip:
+             indexing.delete_current          .+   \n
+             prirep                           .+   \n
+             path.data                        .+   \n
+             warmer.total                     .+   \n
              search.point_in_time_total       .+   \n
              search.search_idle_reactivate_count_total  .+   \n
-             segments.count                   .+   \n
-             segments.memory                  .+   \n
-             segments.index_writer_memory     .+   \n
-             segments.version_map_memory      .+   \n
-             segments.fixed_bitset_memory     .+   \n
-             seq_no.max                       .+   \n
-             seq_no.local_checkpoint          .+   \n
-             seq_no.global_checkpoint         .+   \n
-             warmer.current                   .+   \n
-             warmer.total                     .+   \n
-             warmer.total_time                .+   \n
+             get.current                      .+   \n
              path.data                        .+   \n
-             path.state                       .+   \n
-             docs.deleted                     .+   \n
-        $/
----
-"Help from 2.14.0 to 3.0.99":
-  - skip:
-      version: " - 2.13.99, 3.2.0 - "
-      reason: search idle reactivate count total is only added in 3.0.0
-      features: node_selector
-  - do:
+             merges.warmer.total_time             .+   \n
+             indexing.index_failed            .+   \n
       cat.shards:
         help: true
-      node_selector:
-        version: "2.14.0 - 3.1.99"
-
-  - match:
-      $body: |
-        /^   index                            .+   \n
-             shard                            .+   \n
-             prirep                           .+   \n
-             state                            .+   \n
-             docs                             .+   \n
-             store                            .+   \n
-             ip                               .+   \n
-             id                               .+   \n
-             node                             .+   \n
-             sync_id                          .+   \n
-             unassigned.reason                .+   \n
-             unassigned.at                    .+   \n
-             unassigned.for                   .+   \n
-             unassigned.details               .+   \n
-             recoverysource.type              .+   \n
-             completion.size                  .+   \n
-             fielddata.memory_size            .+   \n
-             fielddata.evictions              .+   \n
-             query_cache.memory_size          .+   \n
-             query_cache.evictions            .+   \n
-             flush.total                      .+   \n
-             flush.total_time                 .+   \n
-             get.current                      .+   \n
-             get.time                         .+   \n
-             get.total                        .+   \n
-             get.exists_time                  .+   \n
-             get.exists_total                 .+   \n
-             get.missing_time                 .+   \n
-             get.missing_total                .+   \n
-             indexing.delete_current          .+   \n
-             indexing.delete_time             .+   \n
-             indexing.delete_total            .+   \n
-             indexing.index_current           .+   \n
-             indexing.index_time              .+   \n
-             indexing.index_total             .+   \n
-             indexing.index_failed            .+   \n
-             merges.current                   .+   \n
-             merges.current_docs              .+   \n
-             merges.current_size              .+   \n
-             merges.total                     .+   \n
-             merges.total_docs                .+   \n
-             merges.total_size                .+   \n
-             merges.total_time                .+   \n
-             refresh.total                    .+   \n
-             refresh.time                     .+   \n
-             refresh.external_total           .+   \n
-             refresh.external_time            .+   \n
-             refresh.listeners                .+   \n
-             search.fetch_current             .+   \n
-             search.fetch_time                .+   \n
-             search.fetch_total               .+   \n
-             search.open_contexts             .+   \n
-             search.query_current             .+   \n
-             search.query_time                .+   \n
-             search.query_total               .+   \n
-             search.concurrent_query_current  .+   \n
-             search.concurrent_query_time     .+   \n
-             search.concurrent_query_total    .+   \n
-             search.concurrent_avg_slice_count  .+   \n
-             search.scroll_current            .+   \n
-             search.scroll_time               .+   \n
-             search.scroll_total              .+   \n
-             search.point_in_time_current     .+   \n
-             search.point_in_time_time        .+   \n
              search.point_in_time_total       .+   \n
-             search.search_idle_reactivate_count_total  .+   \n
-             segments.count                   .+   \n
-             segments.memory                  .+   \n
-             segments.index_writer_memory     .+   \n
-             segments.version_map_memory      .+   \n
-             segments.fixed_bitset_memory     .+   \n
-             seq_no.max                       .+   \n
-             seq_no.local_checkpoint          .+   \n
-             seq_no.global_checkpoint         .+   \n
-             warmer.current                   .+   \n
-             warmer.total                     .+   \n
-             warmer.total_time                .+   \n
-             path.data                        .+   \n
-             path.state                       .+   \n
-             docs.deleted                     .+   \n
-        $/
----
-"Help from 2.12.0 to 2.13.99":
-  - skip:
-      version: " - 2.11.99 , 2.14.0 - "
-      reason:  deleted docs and concurrent search are added in 2.12.0
-      features: node_selector
-  - do:
-      cat.shards:
-        help: true
-      node_selector:
-        version: "2.12.0 - 2.13.99"
-
-  - match:
-      $body: |
-        /^   index                            .+   \n
-             shard                            .+   \n
-             prirep                           .+   \n
-             state                            .+   \n
-             docs                             .+   \n
-             store                            .+   \n
-             ip                               .+   \n
-             id                               .+   \n
-             node                             .+   \n
-             sync_id                          .+   \n
-             unassigned.reason                .+   \n
-             unassigned.at                    .+   \n
-             unassigned.for                   .+   \n
-             unassigned.details               .+   \n
-             recoverysource.type              .+   \n
-             completion.size                  .+   \n
-             fielddata.memory_size            .+   \n
-             fielddata.evictions              .+   \n
-             query_cache.memory_size          .+   \n
-             query_cache.evictions            .+   \n
-             flush.total                      .+   \n
-             flush.total_time                 .+   \n
-             get.current                      .+   \n
-             get.time                         .+   \n
-             get.total                        .+   \n
-             get.exists_time                  .+   \n
-             get.exists_total                 .+   \n
-             get.missing_time                 .+   \n
              get.missing_total                .+   \n
-             indexing.delete_current          .+   \n
-             indexing.delete_time             .+   \n
-             indexing.delete_total            .+   \n
-             indexing.index_current           .+   \n
-             indexing.index_time              .+   \n
-             indexing.index_total             .+   \n
-             indexing.index_failed            .+   \n
-             merges.current                   .+   \n
-             merges.current_docs              .+   \n
-             merges.current_size              .+   \n
-             merges.total                     .+   \n
-             merges.total_docs                .+   \n
-             merges.total_size                .+   \n
-             merges.total_time                .+   \n
-             refresh.total                    .+   \n
-             refresh.time                     .+   \n
-             refresh.external_total           .+   \n
+             recoverysource.type              .+   \n
+      $body: |
+      $body: |
+  - match:
+             completion.size                  .+   \n
+             query_cache.evictions            .+   \n
              refresh.external_time            .+   \n
-             refresh.listeners                .+   \n
-             search.fetch_current             .+   \n
-             search.fetch_time                .+   \n
-             search.fetch_total               .+   \n
-             search.open_contexts             .+   \n
-             search.query_current             .+   \n
-             search.query_time                .+   \n
-             search.query_total               .+   \n
-             search.concurrent_query_current  .+   \n
-             search.concurrent_query_time     .+   \n
-             search.concurrent_query_total    .+   \n
-             search.concurrent_avg_slice_count  .+   \n
-             search.scroll_current            .+   \n
-             search.scroll_time               .+   \n
-             search.scroll_total              .+   \n
-             search.point_in_time_current     .+   \n
+  # don't use the store here it's cached and might be stale
+             merges.current                   .+   \n
+             recoverysource.type              .+   \n
+             flush.total                      .+   \n
+             segments.memory                  .+   \n
+             get.exists_time                  .+   \n
              search.point_in_time_time        .+   \n
-             search.point_in_time_total       .+   \n
-             segments.count                   .+   \n
-             segments.memory                  .+   \n
-             segments.index_writer_memory     .+   \n
-             segments.version_map_memory      .+   \n
-             segments.fixed_bitset_memory     .+   \n
-             seq_no.max                       .+   \n
-             seq_no.local_checkpoint          .+   \n
-             seq_no.global_checkpoint         .+   \n
-             warmer.current                   .+   \n
-             warmer.total                     .+   \n
-             warmer.total_time                .+   \n
-             path.data                        .+   \n
-             path.state                       .+   \n
-             docs.deleted                     .+   \n
-        $/
----
-"Help from 2.4.0 to 2.11.0":
-  - skip:
-      version: " - 2.3.99 , 2.12.0 - "
-      reason:  point in time stats were added in 2.4.0
-      features: node_selector
-  - do:
-      cat.shards:
-        help: true
-      node_selector:
-        version: "2.4.0 - 2.11.99"
-
-  - match:
-      $body: |
-        /^   index                            .+   \n
-             shard                            .+   \n
-             prirep                           .+   \n
-             state                            .+   \n
-             docs                             .+   \n
-             store                            .+   \n
-             ip                               .+   \n
-             id                               .+   \n
-             node                             .+   \n
-             sync_id                          .+   \n
-             unassigned.reason                .+   \n
-             unassigned.at                    .+   \n
-             unassigned.for                   .+   \n
-             unassigned.details               .+   \n
-             recoverysource.type              .+   \n
-             completion.size                  .+   \n
-             fielddata.memory_size            .+   \n
-             fielddata.evictions              .+   \n
-             query_cache.memory_size          .+   \n
-             query_cache.evictions            .+   \n
-             flush.total                      .+   \n
-             flush.total_time                 .+   \n
-             get.current                      .+   \n
-             get.time                         .+   \n
-             get.total                        .+   \n
-             get.exists_time                  .+   \n
-             get.exists_total                 .+   \n
-             get.missing_time                 .+   \n
-             get.missing_total                .+   \n
-             indexing.delete_current          .+   \n
-             indexing.delete_time             .+   \n
-             indexing.delete_total            .+   \n
-             indexing.index_current           .+   \n
-             indexing.index_time              .+   \n
-             indexing.index_total             .+   \n
-             indexing.index_failed            .+   \n
-             merges.current                   .+   \n
-             merges.current_docs              .+   \n
-             merges.current_size              .+   \n
-             merges.total                     .+   \n
-             merges.total_docs                .+   \n
-             merges.total_size                .+   \n
-             merges.total_time                .+   \n
-             refresh.total                    .+   \n
-             refresh.time                     .+   \n
              refresh.external_total           .+   \n
-             refresh.external_time            .+   \n
-             refresh.listeners                .+   \n
-             search.fetch_current             .+   \n
-             search.fetch_time                .+   \n
-             search.fetch_total               .+   \n
-             search.open_contexts             .+   \n
-             search.query_current             .+   \n
-             search.query_time                .+   \n
-             search.query_total               .+   \n
-             search.scroll_current            .+   \n
-             search.scroll_time               .+   \n
-             search.scroll_total              .+   \n
-             search.point_in_time_current     .+   \n
-             search.point_in_time_time        .+   \n
-             search.point_in_time_total       .+   \n
-             segments.count                   .+   \n
-             segments.memory                  .+   \n
-             segments.index_writer_memory     .+   \n
-             segments.version_map_memory      .+   \n
-             segments.fixed_bitset_memory     .+   \n
-             seq_no.max                       .+   \n
-             seq_no.local_checkpoint          .+   \n
-             seq_no.global_checkpoint         .+   \n
-             warmer.current                   .+   \n
-             warmer.total                     .+   \n
-             warmer.total_time                .+   \n
-             path.data                        .+   \n
-             path.state                       .+   \n
-        $/
----
-"Help before - 2.4.0":
-  - skip:
-      version: "2.4.0 - "
-      reason:  point in time stats were added in 2.4.0
-      features: node_selector
-  - do:
-      cat.shards:
-        help: true
-      node_selector:
-        version: " - 2.3.99"
-
-  - match:
-      $body: |
-        /^   index                            .+   \n
-             shard                            .+   \n
-             prirep                           .+   \n
-             state                            .+   \n
-             docs                             .+   \n
-             store                            .+   \n
-             ip                               .+   \n
-             id                               .+   \n
-             node                             .+   \n
-             sync_id                          .+   \n
-             unassigned.reason                .+   \n
-             unassigned.at                    .+   \n
              unassigned.for                   .+   \n
-             unassigned.details               .+   \n
-             recoverysource.type              .+   \n
-             completion.size                  .+   \n
-             fielddata.memory_size            .+   \n
-             fielddata.evictions              .+   \n
-             query_cache.memory_size          .+   \n
-             query_cache.evictions            .+   \n
-             flush.total                      .+   \n
-             flush.total_time                 .+   \n
-             get.current                      .+   \n
-             get.time                         .+   \n
-             get.total                        .+   \n
-             get.exists_time                  .+   \n
-             get.exists_total                 .+   \n
-             get.missing_time                 .+   \n
-             get.missing_total                .+   \n
-             indexing.delete_current          .+   \n
-             indexing.delete_time             .+   \n
-             indexing.delete_total            .+   \n
-             indexing.index_current           .+   \n
-             indexing.index_time              .+   \n
-             indexing.index_total             .+   \n
-             indexing.index_failed            .+   \n
-             merges.current                   .+   \n
-             merges.current_docs              .+   \n
-             merges.current_size              .+   \n
-             merges.total                     .+   \n
-             merges.total_docs                .+   \n
-             merges.total_size                .+   \n
-             merges.total_time                .+   \n
-             refresh.total                    .+   \n
-             refresh.time                     .+   \n
-             refresh.external_total           .+   \n
-             refresh.external_time            .+   \n
-             refresh.listeners                .+   \n
-             search.fetch_current             .+   \n
-             search.fetch_time                .+   \n
-             search.fetch_total               .+   \n
-             search.open_contexts             .+   \n
-             search.query_current             .+   \n
-             search.query_time                .+   \n
-             search.query_total               .+   \n
-             search.scroll_current            .+   \n
-             search.scroll_time               .+   \n
-             search.scroll_total              .+   \n
-             segments.count                   .+   \n
-             segments.memory                  .+   \n
-             segments.index_writer_memory     .+   \n
-             segments.version_map_memory      .+   \n
-             segments.fixed_bitset_memory     .+   \n
-             seq_no.max                       .+   \n
-             seq_no.local_checkpoint          .+   \n
-             seq_no.global_checkpoint         .+   \n
-             warmer.current                   .+   \n
-             warmer.total                     .+   \n
-             warmer.total_time                .+   \n
-             path.data                        .+   \n
              path.state                       .+   \n
-        $/
----
-"Test cat shards output":
-
-  - do:
-      cat.shards: {}
-
-  - match:
-      $body: |
-        /^$/
-  - do:
+             merges.current_docs              .+   \n
       indices.create:
+             refresh.total                    .+   \n
+             docs.deleted                     .+   \n
+             shard                            .+   \n
+             get.time                         .+   \n
+             flush.total_time                 .+   \n
+             search.search_idle_reactivate_count_total  .+   \n
+             unassigned.for                   .+   \n
+  - match:
+             refresh.listeners                .+   \n
+             search.search_idle_reactivate_count_total  .+   \n
+             warmer.total                     .+   \n
+  - do:
+             shard                            .+   \n
+             segments.count                   .+   \n
+  - do:
+        body:
+            number_of_replicas: "1"
+        /^(index2 \s+ \d \s+ (p|r) \s+ ((STARTED|INITIALIZING|RELOCATING) \s+ (\d \s+ (\d+|\d+[.]\d+)(kb|b) \s+)? \d{1,3}.\d{1,3}.\d{1,3}.\d{1,3} \s+ .+|UNASSIGNED \s+) \n?){5}$/
+        index: bar
+             search.startree_query_time       .+   \n
+        version: "3.2.0 - 3.2.99"
+             segments.version_map_memory      .+   \n
+             fielddata.memory_size            .+   \n
+             merges.total                     .+   \n
+  - do:
+             segments.fixed_bitset_memory     .+   \n
+             segments.memory                  .+   \n
+             segments.fixed_bitset_memory     .+   \n
+      cat.shards: {}
+      reason:  deleted docs and concurrent search are added in 2.12.0
+             shard                            .+   \n
+  - do:
+             get.missing_total                .+   \n
+  - skip:
+             get.exists_total                 .+   \n
+  - match:
+        version: "2.4.0 - 2.11.99"
+             indexing.index_total             .+   \n
+        version: " - 2.3.99"
+        s: [docs]
+             store                            .+   \n
+        version: "3.4.0 - "
+             search.concurrent_avg_slice_count  .+   \n
+---
+             segments.index_writer_memory     .+   \n
+             refresh.listeners                .+   \n
+             search.open_contexts             .+   \n
+             indexing.delete_time             .+   \n
+             recoverysource.type              .+   \n
+             get.time                         .+   \n
+             search.query_failed              .+   \n
+             get.total                        .+   \n
+        body:
+             segments.memory                  .+   \n
+             search.scroll_current            .+   \n
+  - do:
+      cat.shards:
+      node_selector:
+          settings:
+             search.scroll_time               .+   \n
+             search.open_contexts             .+   \n
+      $body: |
+             merges.current                   .+   \n
+             merges.current_size              .+   \n
+             docs                             .+   \n
+             segments.index_writer_memory     .+   \n
+        h: [index, docs]
+        /^(index1 \s+ \d \s+ (p|r) \s+ ((STARTED|INITIALIZING|RELOCATING) \s+ (\d \s+ (\d+|\d+[.]\d+)(kb|b) \s+)? \d{1,3}.\d{1,3}.\d{1,3}.\d{1,3} \s+ .+|UNASSIGNED \s+)  \n?){10}$/
+        help: true
+             completion.size                  .+   \n
+            number_of_replicas: "0"
+---
+             merges.total_size                .+   \n
+             get.missing_total                .+   \n
+             query_cache.evictions            .+   \n
+             merges.total_time                .+   \n
+      node_selector:
+        $/
+             search.query_time                .+   \n
+             seq_no.local_checkpoint          .+   \n
+             search.concurrent_avg_slice_count  .+   \n
+             search.scroll_current            .+   \n
+             get.time                         .+   \n
+             unassigned.details               .+   \n
+             search.scroll_current            .+   \n
+             get.current                      .+   \n
+             refresh.external_total           .+   \n
+             node                             .+   \n
+          settings:
+             unassigned.reason                .+   \n
+             seq_no.local_checkpoint          .+   \n
+            number_of_shards: "1"
+             merges.current_size              .+   \n
+             search.scroll_total              .+   \n
+             merges.warmer.total_bytes_received   .+   \n
+             search.fetch_current             .+   \n
+             state                            .+   \n
+             indexing.delete_current          .+   \n
+             merges.total_size                .+   \n
+  - match:
+             search.query_total               .+   \n
+             query_cache.memory_size          .+   \n
+      node_selector:
+             segments.count                   .+   \n
+             indexing.index_current           .+   \n
+             search.query_total               .+   \n
+             indexing.index_failed            .+   \n
+             recoverysource.type              .+   \n
+      $body: |
+             segments.fixed_bitset_memory     .+   \n
+             get.total                        .+   \n
+             refresh.external_time            .+   \n
+             flush.total                      .+   \n
+             get.total                        .+   \n
+             seq_no.global_checkpoint         .+   \n
+        /^   index                            .+   \n
+  - do:
+---
         index: index1
         body:
-          settings:
+             merges.warmer.total_receive_time     .+   \n
+             search.fetch_current             .+   \n
+             merges.warmer.total_failure_count    .+   \n
+      cat.shards:
+      reason: search query failure stats is added in 3.3.0
+             indexing.delete_total            .+   \n
+             seq_no.local_checkpoint          .+   \n
+             merges.total                     .+   \n
+      reason: merges.warmer stats added in 3.4.0
+             get.total                        .+   \n
+             indexing.delete_current          .+   \n
+             merges.current_size              .+   \n
+             search.startree_query_total      .+   \n
             number_of_shards: "5"
-            number_of_replicas: "1"
-  - do:
-      cat.shards: {}
-
-  - match:
+             merges.total_docs                .+   \n
+             seq_no.global_checkpoint         .+   \n
       $body: |
-        /^(index1 \s+ \d \s+ (p|r) \s+ ((STARTED|INITIALIZING|RELOCATING) \s+ (\d \s+ (\d+|\d+[.]\d+)(kb|b) \s+)? \d{1,3}.\d{1,3}.\d{1,3}.\d{1,3} \s+ .+|UNASSIGNED \s+)  \n?){10}$/
-
-  - do:
-      indices.create:
-        index: index2
-        body:
-          settings:
-            number_of_shards: "5"
-            number_of_replicas: "0"
-
-  - do:
-      cat.shards: {}
-  - match:
-      $body: |
-        /^(index(1|2) \s+ \d \s+ (p|r) \s+ ((STARTED|INITIALIZING|RELOCATING) \s+ (\d \s+ (\d+|\d+[.]\d+)(kb|b) \s+)? \d{1,3}.\d{1,3}.\d{1,3}.\d{1,3} \s+ .+|UNASSIGNED \s+) \n?){15}$/
-
-  - do:
-      cat.shards:
-        index: index2
-  - match:
-      $body: |
-        /^(index2 \s+ \d \s+ (p|r) \s+ ((STARTED|INITIALIZING|RELOCATING) \s+ (\d \s+ (\d+|\d+[.]\d+)(kb|b) \s+)? \d{1,3}.\d{1,3}.\d{1,3}.\d{1,3} \s+ .+|UNASSIGNED \s+) \n?){5}$/
-
----
-"Test cat shards using wildcards":
-
-  - do:
-      indices.create:
-        index: foo
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-
-  - do:
-      indices.create:
-        index: bar
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-
-  - do:
-      indices.create:
-        index: baz
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-
-  - do:
-      cat.shards:
-        index: f*
-        v: false
-        h: i
-
-  - match:
-      $body: |
-        /^(foo \n?)$/
-
-  - do:
-      cat.shards:
-        index: ba*
-        v: false
-        h: i
-
-  - match:
-      $body: |
-        /^(ba(r|z) \n?){2}$/
-
----
+             warmer.total_time                .+   \n
+             docs                             .+   \n
+             seq_no.global_checkpoint         .+   \n
+             refresh.total                    .+   \n
+      node_selector:
+             unassigned.at                    .+   \n
+             search.point_in_time_time        .+   \n
+             warmer.total_time                .+   \n
+             segments.fixed_bitset_memory     .+   \n
+             get.missing_time                 .+   \n
+             refresh.external_total           .+   \n
+             search.scroll_total              .+   \n
+      reason:  point in time stats were added in 2.4.0
+             merges.current_docs              .+   \n
+        version: "3.3.0 - 3.3.99"
+             sync_id                          .+   \n
+             merges.total_size                .+   \n
+             get.exists_time                  .+   \n
+             search.scroll_current            .+   \n
+             ip                               .+   \n
+             seq_no.global_checkpoint         .+   \n
+        help: true
+             search.concurrent_query_current  .+   \n
+             refresh.total                    .+   \n
 "Test cat shards sort":
+             segments.memory                  .+   \n
   - do:
+        /^   index                            .+   \n
+             search.scroll_time               .+   \n
+             indexing.delete_current          .+   \n
+             search.scroll_total              .+   \n
+             indexing.index_time              .+   \n
+             merges.warmer.total_invocations      .+   \n
+             merges.current_size              .+   \n
+             merges.total_docs                .+   \n
+             seq_no.max                       .+   \n
+             search.concurrent_query_time     .+   \n
+"Help from 2.14.0 to 3.0.99":
+             refresh.time                     .+   \n
       indices.create:
-        index: foo
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-
-  - do:
-      indices.create:
-        index: bar
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-
-  - do:
-      index:
-        index: bar
-        body: { test: bar }
-        refresh: true
-
-  - do:
-      cat.shards:
-        h: [index, docs]
-        s: [docs]
-
-  # don't use the store here it's cached and might be stale
+             search.fetch_current             .+   \n
+             refresh.external_time            .+   \n
+             refresh.time                     .+   \n
+             search.query_failed              .+   \n
+             merges.total                     .+   \n
+             recoverysource.type              .+   \n
+  - skip:
+             warmer.total                     .+   \n
+             indexing.index_failed            .+   \n
+             search.fetch_total               .+   \n
+             seq_no.max                       .+   \n
+             indexing.index_failed            .+   \n
+             state                            .+   \n
   - match:
+             docs                             .+   \n
+      indices.create:
+             query_cache.evictions            .+   \n
+             search.scroll_time               .+   \n
       $body: |
-        /^ foo \s+ 0\n
-           bar \s+ 1\n
+             warmer.current                   .+   \n
+  - do:
+             indexing.index_time              .+   \n
+             warmer.current                   .+   \n
+             search.point_in_time_current     .+   \n
+             fielddata.evictions              .+   \n
+             ip                               .+   \n
+             docs.deleted                     .+   \n
+             prirep                           .+   \n
+  - match:
+        body:
+      version: "2.4.0 - "
+             search.concurrent_query_current  .+   \n
+            number_of_replicas: "0"
+             search.query_time                .+   \n
+        version: "2.14.0 - 3.1.99"
+      version: " - 3.2.99, 3.4.0 - "
+             refresh.external_total           .+   \n
+        /^$/
+             refresh.total                    .+   \n
+      features: node_selector
+             search.point_in_time_time        .+   \n
+             refresh.listeners                .+   \n
+             get.current                      .+   \n
         $/
+             completion.size                  .+   \n
+             merges.warmer.total_send_time        .+   \n
+             query_cache.memory_size          .+   \n
+            number_of_shards: "1"
+             search.open_contexts             .+   \n
+             segments.count                   .+   \n
+             fielddata.memory_size            .+   \n
+             merges.total_docs                .+   \n
+             id                               .+   \n
+             search.query_total               .+   \n
+             warmer.total_time                .+   \n
+  - do:
+          settings:
+             shard                            .+   \n
+             search.query_current             .+   \n
+---
+             search.fetch_time                .+   \n
+             docs                             .+   \n
+        index: foo
+             prirep                           .+   \n
+             search.concurrent_avg_slice_count  .+   \n
+             path.data                        .+   \n
+             search.concurrent_query_total    .+   \n
+        v: false
+             get.exists_total                 .+   \n
+             indexing.delete_current          .+   \n
+             segments.fixed_bitset_memory     .+   \n
+             get.total                        .+   \n
+             id                               .+   \n
+             indexing.index_current           .+   \n
+             seq_no.local_checkpoint          .+   \n
+             query_cache.memory_size          .+   \n
+             merges.total_docs                .+   \n
+             docs.deleted                     .+   \n
+             prirep                           .+   \n
+             segments.index_writer_memory     .+   \n
+"Test cat shards output":
+             get.missing_time                 .+   \n
+             flush.total_time                 .+   \n
+            number_of_shards: "1"
+             seq_no.max                       .+   \n
+             warmer.total_time                .+   \n
+             flush.total                      .+   \n
+             completion.size                  .+   \n
+            number_of_replicas: "0"
+             warmer.current                   .+   \n
+             query_cache.evictions            .+   \n
+      version: " - 3.1.99, 3.3.0 - "
+             refresh.external_time            .+   \n
+             docs                             .+   \n
+             segments.fixed_bitset_memory     .+   \n
+             seq_no.local_checkpoint          .+   \n
+             merges.total_time                .+   \n
+             indexing.index_time              .+   \n
+             warmer.current                   .+   \n
+---
+             state                            .+   \n
+             search.concurrent_query_current  .+   \n
+             unassigned.at                    .+   \n
+             prirep                           .+   \n
+             get.current                      .+   \n
+             merges.current                   .+   \n
+             fielddata.evictions              .+   \n
+        index: foo
+             search.point_in_time_current     .+   \n
+---
+        index: f*
+  - match:
+             completion.size                  .+   \n
+             indexing.index_current           .+   \n
+             merges.current_docs              .+   \n
+             search.query_time                .+   \n
+  - do:
+             segments.memory                  .+   \n
+             unassigned.reason                .+   \n
+             indexing.index_total             .+   \n
+             indexing.index_total             .+   \n
+             indexing.index_total             .+   \n
+             search.open_contexts             .+   \n
+             indexing.delete_current          .+   \n
+             id                               .+   \n
+      features: node_selector
+             query_cache.evictions            .+   \n
+  - skip:
+             search.concurrent_avg_slice_count  .+   \n
+             unassigned.details               .+   \n
+  - match:
+        version: "2.12.0 - 2.13.99"
+             path.data                        .+   \n
+             merges.total_docs                .+   \n
+             path.state                       .+   \n
+      features: node_selector
+             fielddata.evictions              .+   \n
+  - do:
+             get.time                         .+   \n
+             merges.total_size                .+   \n
+             shard                            .+   \n
+             indexing.delete_total            .+   \n
+      cat.shards: {}
+  - do:
+             search.scroll_time               .+   \n
+             indexing.index_current           .+   \n
+             state                            .+   \n
+             unassigned.for                   .+   \n
+        index: index2
+             search.query_time                .+   \n
+             refresh.total                    .+   \n
+             refresh.time                     .+   \n
+             segments.count                   .+   \n
+---
+             search.query_total               .+   \n
+             warmer.current                   .+   \n
+      $body: |
+             prirep                           .+   \n
+             sync_id                          .+   \n
+             fielddata.memory_size            .+   \n
+             merges.total_size                .+   \n
+             indexing.index_total             .+   \n
+             indexing.index_time              .+   \n
+             indexing.index_time              .+   \n
+      features: node_selector
+"Test cat shards using wildcards":
+             merges.total                     .+   \n
+             search.scroll_total              .+   \n
+             search.concurrent_query_time     .+   \n
+  - skip:
+             warmer.total_time                .+   \n
+             unassigned.at                    .+   \n
+      node_selector:
+  - skip:
+             segments.memory                  .+   \n
+             search.fetch_time                .+   \n
+      reason: search idle reactivate count total is only added in 3.0.0
+             prirep                           .+   \n
+             unassigned.for                   .+   \n
+      $body: |
+             search.search_idle_reactivate_count_total  .+   \n
+"Help before - 2.4.0":
+             indexing.delete_total            .+   \n
+"Help from 3.2.0 to 3.2.99":
+      cat.shards:
+             search.concurrent_query_time     .+   \n
+  - do:
+             search.scroll_current            .+   \n
+             seq_no.global_checkpoint         .+   \n
+        /^   index                            .+   \n
+             id                               .+   \n
+             indexing.delete_total            .+   \n
+             unassigned.details               .+   \n
+        /^ foo \s+ 0\n
+             fielddata.memory_size            .+   \n
+             warmer.total                     .+   \n
+             refresh.external_total           .+   \n
+            number_of_shards: "1"
+             shard                            .+   \n
+             search.startree_query_current    .+   \n
+        v: false
+             search.startree_query_current    .+   \n
+             state                            .+   \n
+             search.point_in_time_time        .+   \n
+"Help from 2.4.0 to 2.11.0":
+             ip                               .+   \n
+             fielddata.evictions              .+   \n
+             segments.version_map_memory      .+   \n
+      cat.shards:
+             search.startree_query_failed     .+   \n
+      version: " - 2.11.99 , 2.14.0 - "
+             get.missing_total                .+   \n
+             unassigned.at                    .+   \n
+  - match:
+             get.exists_total                 .+   \n
+  - skip:
+             merges.total_size                .+   \n
+             search.query_current             .+   \n
+             flush.total_time                 .+   \n
+      version: " - 3.3.99"
+      features: node_selector
+             merges.total                     .+   \n
+             segments.version_map_memory      .+   \n
+             merges.total_time                .+   \n
+             search.fetch_total               .+   \n
+             indexing.index_current           .+   \n
+      indices.create:
+             search.fetch_current             .+   \n
+  - match:
+        help: true
+             indexing.delete_time             .+   \n
+             get.missing_time                 .+   \n
+             sync_id                          .+   \n
+             unassigned.details               .+   \n
+             merges.total_time                .+   \n
+             warmer.current                   .+   \n
+             get.missing_time                 .+   \n
+             seq_no.local_checkpoint          .+   \n
+             search.point_in_time_total       .+   \n
+             merges.current_size              .+   \n
+             search.scroll_current            .+   \n
+             flush.total_time                 .+   \n
+             store                            .+   \n
+             refresh.time                     .+   \n
+             search.concurrent_query_current  .+   \n
+             search.open_contexts             .+   \n
+  - do:
+             search.query_total               .+   \n
+             ip                               .+   \n
+             refresh.external_total           .+   \n
+             path.state                       .+   \n
+             seq_no.max                       .+   \n
+             unassigned.at                    .+   \n
+      cat.shards:
+             indexing.delete_total            .+   \n
+             warmer.total_time                .+   \n
+             segments.version_map_memory      .+   \n
+             warmer.total                     .+   \n
+             indexing.delete_total            .+   \n
+  - do:
+             indexing.delete_time             .+   \n
+             fielddata.evictions              .+   \n
+             seq_no.global_checkpoint         .+   \n
+  - do:
+      indices.create:
+        help: true
+             get.exists_total                 .+   \n
+        body:
+             get.missing_time                 .+   \n
+             segments.index_writer_memory     .+   \n
+             get.missing_total                .+   \n
+             search.scroll_time               .+   \n
+             search.open_contexts             .+   \n
+             warmer.total                     .+   \n
+             search.scroll_current            .+   \n
+             refresh.external_time            .+   \n
+             merges.current_size              .+   \n
+             search.concurrent_query_total    .+   \n
+             merges.total_time                .+   \n
+"Help":
+             warmer.current                   .+   \n
+             search.concurrent_query_total    .+   \n
+             query_cache.memory_size          .+   \n
+             refresh.total                    .+   \n
+             unassigned.details               .+   \n
+             indexing.delete_time             .+   \n
+             search.startree_query_total      .+   \n
+             search.query_current             .+   \n
+             segments.index_writer_memory     .+   \n
+      cat.shards:
+      $body: |
+             merges.total_size                .+   \n
+      node_selector:
+             search.fetch_time                .+   \n
+             search.scroll_time               .+   \n
+      features: node_selector
+        index: index2
+             search.query_time                .+   \n
+             get.exists_time                  .+   \n
+             id                               .+   \n
+             search.startree_query_failed     .+   \n
+             path.data                        .+   \n
+             get.total                        .+   \n
+  - match:
+        /^   index                            .+   \n
+             search.startree_query_current    .+   \n
+             query_cache.memory_size          .+   \n
+             indexing.index_failed            .+   \n
+             search.point_in_time_current     .+   \n
+        /^(foo \n?)$/
+             search.fetch_current             .+   \n
+             merges.current_docs              .+   \n
+             node                             .+   \n
+  - do:
+             search.fetch_time                .+   \n
+             flush.total                      .+   \n
+             seq_no.max                       .+   \n
+  - match:
+  - do:
+             shard                            .+   \n
+        /^(ba(r|z) \n?){2}$/
+             docs                             .+   \n
+"Help from 3.3.0 to 3.3.99":
+             segments.memory                  .+   \n
+             indexing.index_failed            .+   \n
+          settings:
+             indexing.delete_current          .+   \n
+      version: " - 2.3.99 , 2.12.0 - "
+             search.query_time                .+   \n
+             search.fetch_total               .+   \n
+             search.scroll_total              .+   \n
+             recoverysource.type              .+   \n
+             search.fetch_total               .+   \n
+             merges.current_docs              .+   \n
+             unassigned.at                    .+   \n
+      cat.shards:
+             search.fetch_time                .+   \n
+             indexing.index_total             .+   \n
+             search.concurrent_query_total    .+   \n
+             get.exists_total                 .+   \n
+             refresh.external_time            .+   \n
+             flush.total_time                 .+   \n
+             flush.total_time                 .+   \n
+      cat.shards:
+             search.point_in_time_total       .+   \n
+             search.scroll_total              .+   \n
+             segments.count                   .+   \n
+  - do:
+             unassigned.reason                .+   \n
+        /^(index(1|2) \s+ \d \s+ (p|r) \s+ ((STARTED|INITIALIZING|RELOCATING) \s+ (\d \s+ (\d+|\d+[.]\d+)(kb|b) \s+)? \d{1,3}.\d{1,3}.\d{1,3}.\d{1,3} \s+ .+|UNASSIGNED \s+) \n?){15}$/
+             fielddata.evictions              .+   \n
+             merges.current                   .+   \n
+             indexing.delete_total            .+   \n
+             search.scroll_total              .+   \n
+             path.state                       .+   \n
+             store                            .+   \n
+             merges.total_docs                .+   \n
+             search.query_current             .+   \n
+             search.concurrent_avg_slice_count  .+   \n
+             get.time                         .+   \n
+             sync_id                          .+   \n
+             segments.version_map_memory      .+   \n
+---
+        $/
+             merges.warmer.ongoing_count          .+   \n
+             unassigned.reason                .+   \n
+      cat.shards:
+            number_of_replicas: "0"
+      features: node_selector
+             refresh.time                     .+   \n
+             docs.deleted                     .+   \n
+             fielddata.memory_size            .+   \n
+             node                             .+   \n
+             search.point_in_time_time        .+   \n
+             search.point_in_time_total       .+   \n
+             indexing.index_time              .+   \n
+        index: ba*
+             warmer.total_time                .+   \n
+             get.missing_total                .+   \n
+             unassigned.for                   .+   \n
+             query_cache.evictions            .+   \n
+             search.concurrent_query_current  .+   \n
+      index:
+  - match:
+             merges.current_docs              .+   \n
+             docs.deleted                     .+   \n
+        $/
+             get.missing_time                 .+   \n
+             fielddata.memory_size            .+   \n
+        refresh: true
+        h: i
+             refresh.listeners                .+   \n
+             indexing.index_current           .+   \n
+             get.time                         .+   \n
+        /^   index                            .+   \n
+             search.point_in_time_total       .+   \n
+             fielddata.memory_size            .+   \n
+             segments.count                   .+   \n
+             merges.total                     .+   \n
+            number_of_shards: "5"
+             segments.index_writer_memory     .+   \n
+      indices.create:
+             get.current                      .+   \n
+        body:
+             search.query_current             .+   \n
+             state                            .+   \n
+             refresh.external_time            .+   \n
+             search.fetch_time                .+   \n
+             refresh.total                    .+   \n
+          settings:
+             search.fetch_total               .+   \n
+             merges.current_docs              .+   \n
+---
+             get.exists_time                  .+   \n
+             segments.version_map_memory      .+   \n
+             get.missing_total                .+   \n
+             get.time                         .+   \n
+             unassigned.reason                .+   \n
+        $/
+             sync_id                          .+   \n
+             search.concurrent_query_total    .+   \n
+             indexing.index_time              .+   \n
+             flush.total                      .+   \n
+             path.data                        .+   \n
+"Help from 2.12.0 to 2.13.99":
+             sync_id                          .+   \n
+        index: bar
+             sync_id                          .+   \n
+      $body: |
+             refresh.listeners                .+   \n
+        h: i
+             flush.total                      .+   \n
+             unassigned.details               .+   \n
+             search.query_current             .+   \n
+        /^   index                            .+   \n
+             ip                               .+   \n
+             path.data                        .+   \n
+        $/
+             id                               .+   \n
+      indices.create:
+             seq_no.max                       .+   \n
+             unassigned.for                   .+   \n
+             indexing.delete_time             .+   \n
+        body:
+             search.fetch_total               .+   \n
+             ip                               .+   \n
+            number_of_shards: "1"
+             merges.total_docs                .+   \n
+             warmer.total                     .+   \n
+             search.point_in_time_time        .+   \n
+             store                            .+   \n
+             path.state                       .+   \n
+             search.startree_query_total      .+   \n
+             get.current                      .+   \n
+          settings:
+             search.fetch_time                .+   \n
+      cat.shards: {}
+             get.exists_total                 .+   \n
+             fielddata.evictions              .+   \n
+             path.state                       .+   \n
+        $/
+             search.fetch_current             .+   \n
+  - match:
+             search.concurrent_query_time     .+   \n
+             search.startree_query_time       .+   \n
+      $body: |
+             query_cache.memory_size          .+   \n
+             node                             .+   \n
+             refresh.listeners                .+   \n
+        help: true
+             search.startree_query_time       .+   \n
+             get.exists_time                  .+   \n
+             completion.size                  .+   \n
+        help: true
+             node                             .+   \n
+             search.scroll_time               .+   \n
+      version: " - 2.13.99, 3.2.0 - "
+             seq_no.global_checkpoint         .+   \n
+             refresh.time                     .+   \n
+             search.open_contexts             .+   \n
+             node                             .+   \n
+             search.query_total               .+   \n
+          settings:
+  - do:
+             query_cache.memory_size          .+   \n
+             state                            .+   \n
+            number_of_replicas: "0"
+             search.query_time                .+   \n
+             store                            .+   \n
+             merges.current                   .+   \n
+      $body: |
+        body: { test: bar }
+             unassigned.at                    .+   \n

@@ -1,285 +1,259 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), Collections.emptyMap());
+        Set<String> excludeKeys,
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.ingest.common;
-
-import org.opensearch.common.util.set.Sets;
-import org.opensearch.ingest.IngestDocument;
-import org.opensearch.ingest.Processor;
-import org.opensearch.ingest.RandomDocumentPicks;
-import org.opensearch.ingest.TestTemplateService;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import static org.opensearch.ingest.IngestDocumentMatcher.assertIngestDocument;
-import static org.hamcrest.Matchers.equalTo;
-
-public class KeyValueProcessorTests extends OpenSearchTestCase {
-
-    private static final KeyValueProcessor.Factory FACTORY = new KeyValueProcessor.Factory(TestTemplateService.instance());
-
-    public void test() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
-        String fieldName = RandomDocumentPicks.addRandomField(random(), ingestDocument, "first=hello&second=world&second=universe");
-        Processor processor = createKvProcessor(fieldName, "&", "=", null, null, "target", false);
-        processor.execute(ingestDocument);
-        assertThat(ingestDocument.getFieldValue("target.first", String.class), equalTo("hello"));
-        assertThat(ingestDocument.getFieldValue("target.second", List.class), equalTo(Arrays.asList("world", "universe")));
-    }
-
-    public void testRootTarget() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), Collections.emptyMap());
-        ingestDocument.setFieldValue("myField", "first=hello&second=world&second=universe");
-        Processor processor = createKvProcessor("myField", "&", "=", null, null, null, false);
-        processor.execute(ingestDocument);
-        assertThat(ingestDocument.getFieldValue("first", String.class), equalTo("hello"));
-        assertThat(ingestDocument.getFieldValue("second", List.class), equalTo(Arrays.asList("world", "universe")));
-    }
-
-    public void testKeySameAsSourceField() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), Collections.emptyMap());
-        ingestDocument.setFieldValue("first", "first=hello");
-        Processor processor = createKvProcessor("first", "&", "=", null, null, null, false);
-        processor.execute(ingestDocument);
-        assertThat(ingestDocument.getFieldValue("first", List.class), equalTo(Arrays.asList("first=hello", "hello")));
-    }
-
-    public void testIncludeKeys() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
-        String fieldName = RandomDocumentPicks.addRandomField(random(), ingestDocument, "first=hello&second=world&second=universe");
-        Processor processor = createKvProcessor(fieldName, "&", "=", Sets.newHashSet("first"), null, "target", false);
-        processor.execute(ingestDocument);
-        assertThat(ingestDocument.getFieldValue("target.first", String.class), equalTo("hello"));
-        assertFalse(ingestDocument.hasField("target.second"));
-    }
-
-    public void testExcludeKeys() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
-        String fieldName = RandomDocumentPicks.addRandomField(random(), ingestDocument, "first=hello&second=world&second=universe");
-        Processor processor = createKvProcessor(fieldName, "&", "=", null, Sets.newHashSet("second"), "target", false);
-        processor.execute(ingestDocument);
-        assertThat(ingestDocument.getFieldValue("target.first", String.class), equalTo("hello"));
-        assertFalse(ingestDocument.hasField("target.second"));
-    }
-
-    public void testIncludeAndExcludeKeys() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
-        String fieldName = RandomDocumentPicks.addRandomField(
-            random(),
-            ingestDocument,
-            "first=hello&second=world&second=universe&third=bar"
-        );
-        Processor processor = createKvProcessor(
-            fieldName,
-            "&",
-            "=",
-            Sets.newHashSet("first", "second"),
-            Sets.newHashSet("first", "second"),
-            "target",
-            false
-        );
-        processor.execute(ingestDocument);
-        assertFalse(ingestDocument.hasField("target.first"));
-        assertFalse(ingestDocument.hasField("target.second"));
-        assertFalse(ingestDocument.hasField("target.third"));
-    }
-
-    public void testMissingField() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), Collections.emptyMap());
-        Processor processor = createKvProcessor("unknown", "&", "=", null, null, "target", false);
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> processor.execute(ingestDocument));
-        assertThat(exception.getMessage(), equalTo("field [unknown] doesn't exist"));
-
-        // when using template snippet, the resolved field path maybe empty
-        Processor processorWithEmptyFieldPath = createKvProcessor("", "&", "=", null, null, "target", false);
-        exception = expectThrows(IllegalArgumentException.class, () -> processorWithEmptyFieldPath.execute(ingestDocument));
-        assertThat(exception.getMessage(), equalTo("field path cannot be null nor empty"));
-    }
-
-    public void testNullValueWithIgnoreMissing() throws Exception {
-        String fieldName = RandomDocumentPicks.randomFieldName(random());
-        IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(
-            random(),
-            Collections.singletonMap(fieldName, null)
-        );
-        IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);
-        Processor processor = createKvProcessor(fieldName, "", "", null, null, "target", true);
-        processor.execute(ingestDocument);
+        assertThat(ingestDocument.getFieldValue("target.to", String.class), equalTo("foo@example.com"));
         assertIngestDocument(originalIngestDocument, ingestDocument);
+        String trimKey,
+        Processor processor = createKvProcessor(fieldName, "&", "=", Sets.newHashSet("first"), null, "target", false);
+        assertThat(exception.getMessage(), equalTo("field [unknown] doesn't exist"));
+    public void testNullValueWithIgnoreMissing() throws Exception {
+ */
+        assertThat(ingestDocument.getFieldValue("target.arg_second", List.class), equalTo(Arrays.asList("world", "universe")));
+        Processor processor = createKvProcessor(fieldName, " ", "=", null, null, "target", false, "%+", "<>,", false, null);
+        assertThat(ingestDocument.getFieldValue("target.orig_to", String.class), equalTo("bar@example.com"));
+        processor.execute(ingestDocument);
+package org.opensearch.ingest.common;
     }
-
+        assertThat(ingestDocument.getFieldValue("target.first", String.class), equalTo("hello"));
+        }
+            null
+            fieldSplit,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        String fieldName = RandomDocumentPicks.addRandomField(
+import java.util.ArrayList;
+import java.util.Map;
+        assertThat(ingestDocument.getFieldValue("target.first", String.class), equalTo("hello"));
+    }
+        Processor processor = createKvProcessor(fieldName, "&", "=", null, null, "target", false, null, null, true, null);
+    }
+        Exception exception = expectThrows(IllegalArgumentException.class, () -> processor.execute(ingestDocument));
+            config.put("prefix", prefix);
+    }
+        config.put("ignore_missing", ignoreMissing);
+        boolean ignoreMissing
+        ingestDocument.setFieldValue("first", "first=hello");
+ * license agreements. See the NOTICE file distributed with
+    }
+ *
+        String fieldName = RandomDocumentPicks.addRandomField(
+            ignoreMissing,
+import org.opensearch.ingest.Processor;
+        IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);
+        String trimValue,
+    public void testMissingField() throws Exception {
+            "to=<foo@example.com>, orig_to=<bar@example.com>, %+relay=mail.example.com[private/dovecot-lmtp],"
+        Processor processor = createKvProcessor("myField", "&", "=", null, null, null, false);
+        if (trimValue != null) {
+            config.put("exclude_keys", new ArrayList<>(excludeKeys));
+        assertThat(ingestDocument.getFieldValue("target.third", String.class), equalTo("foo"));
+            field,
+    }
+/*
+            ingestDocument,
+        Set<String> includeKeys,
+    public void testTrimKeyAndValue() throws Exception {
+    ) throws Exception {
+import java.util.HashMap;
+        processor.execute(ingestDocument);
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> processor.execute(ingestDocument));
+        String fieldSplit,
+        processor.execute(ingestDocument);
+    public void testFailFieldSplitMatch() throws Exception {
+        assertFalse(ingestDocument.hasField("target.third"));
+        String fieldName = RandomDocumentPicks.addRandomField(
+        Processor processor = createKvProcessor("first", "&", "=", null, null, null, false);
+    }
+        String fieldName = RandomDocumentPicks.addRandomField(random(), ingestDocument, "first=hello&second=world&second=universe");
+        Set<String> includeKeys,
+        Processor processorWithEmptyFieldPath = createKvProcessor("", "&", "=", null, null, "target", false);
+        );
+    }
+import java.util.Collections;
+            null,
+    ) throws Exception {
+import org.opensearch.ingest.IngestDocument;
+        );
+ */
+        assertThat(ingestDocument.getFieldValue("target.first", String.class), equalTo("hello"));
+        Processor processor = createKvProcessor(fieldName, "&", "=", null, null, "target", false, " ", " ", false, null);
+    }
+        ingestDocument.setFieldValue("myField", "first=hello&second=world&second=universe");
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
+        assertThat(ingestDocument.getFieldValue("target.second", List.class), equalTo(Arrays.asList("world", "universe")));
+        Map<String, Object> config = new HashMap<>();
+        );
+}
+            Sets.newHashSet("first", "second"),
+        String field,
+        config.put("field_split", fieldSplit);
+ * software distributed under the License is distributed on an
+        assertThat(ingestDocument.getFieldValue("target.fourth", String.class), equalTo("bar"));
+        Processor processor = createKvProcessor("unknown", "&", "=", null, null, "target", false);
+    public void testIncludeKeys() throws Exception {
+            Collections.singletonMap(fieldName, null)
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
+        String valueSplit,
+    public void testIncludeAndExcludeKeys() throws Exception {
+        Set<String> excludeKeys,
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), Collections.emptyMap());
+            ingestDocument,
+    }
+        String targetField,
+            config.put("include_keys", new ArrayList<>(includeKeys));
+    }
+        exception = expectThrows(IllegalArgumentException.class, () -> processorWithEmptyFieldPath.execute(ingestDocument));
+        assertThat(ingestDocument.getFieldValue("target.first", String.class), equalTo("hello"));
+    public void testKeySameAsSourceField() throws Exception {
+        String fieldName = RandomDocumentPicks.addRandomField(random(), ingestDocument, "first=hello|second=world|second=universe");
+        Processor processor = createKvProcessor(fieldName, "&", "=", null, Sets.newHashSet("second"), "target", false);
+    public void testAddPrefix() throws Exception {
+        assertThat(ingestDocument.getFieldValue("target.relay", String.class), equalTo("mail.example.com[private/dovecot-lmtp]"));
+ * SPDX-License-Identifier: Apache-2.0
+            false
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
+            "&",
+        if (includeKeys != null) {
+import java.util.Set;
+        processor.execute(ingestDocument);
     public void testNonExistentWithIgnoreMissing() throws Exception {
+import org.opensearch.common.util.set.Sets;
+            includeKeys,
+        assertThat(ingestDocument.getFieldValue("target.fifth", String.class), equalTo("last"));
+        String fieldSplit,
+    public void testTrimMultiCharSequence() throws Exception {
+        );
+        Processor processor = createKvProcessor(fieldName, "&", "=", null, null, "target", false);
+        assertFalse(ingestDocument.hasField("target.second"));
+/*
+            "first=<hello>&second=\"world\"&second=(universe)&third=<foo>&fourth=[bar]&fifth='last'"
+        return createKvProcessor(
+        String fieldName = RandomDocumentPicks.addRandomField(random(), ingestDocument, "first=hello&second=world&second=universe");
+    }
+public class KeyValueProcessorTests extends OpenSearchTestCase {
+        String prefix
+            fieldName,
+        assertThat(ingestDocument.getFieldValue("second", List.class), equalTo(Arrays.asList("world", "universe")));
+        }
+            ingestDocument,
+        String valueSplit,
+        assertThat(ingestDocument.getFieldValue("target.delays", String.class), equalTo("1.9/0.01/0.01/0.21"));
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
+ *
+import java.util.Arrays;
+        String fieldName = RandomDocumentPicks.addRandomField(random(), ingestDocument, "first=hello&second=world&second=universe");
+        return FACTORY.create(null, randomAlphaOfLength(10), null, config);
+        Processor processor = createKvProcessor(fieldName, "&", "=", null, null, "target", false, null, null, false, "arg_");
+        if (excludeKeys != null) {
+    }
+            null,
+            targetField,
+ * compatible open source license.
+        if (prefix != null) {
+        boolean stripBrackets,
+        assertThat(ingestDocument.getFieldValue("target.arg_first", String.class), equalTo("hello"));
+        );
+        assertIngestDocument(originalIngestDocument, ingestDocument);
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), Collections.singletonMap("foo", "bar"));
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
+    }
+import org.opensearch.test.OpenSearchTestCase;
+    }
+            config.put("trim_key", trimKey);
+        assertThat(ingestDocument.getFieldValue("target.first", String.class), equalTo("hello|second=world|second=universe"));
+import static org.opensearch.ingest.IngestDocumentMatcher.assertIngestDocument;
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), Collections.emptyMap());
+        }
+        assertThat(ingestDocument.getFieldValue("first", List.class), equalTo(Arrays.asList("first=hello", "hello")));
+ * this file be licensed under the Apache-2.0 license or a
+ *
+        processor.execute(ingestDocument);
+            valueSplit,
+    public void testExcludeKeys() throws Exception {
+        Processor processor = createKvProcessor("foo", "&", "=", null, null, "target", false);
+            random(),
+        config.put("field", field);
+        String fieldName = RandomDocumentPicks.addRandomField(random(), ingestDocument, "first=hello&second=world&second=universe");
+/*
+        assertThat(ingestDocument.getFieldValue("target.second", List.class), equalTo(Arrays.asList("world", "universe")));
+        config.put("target_field", targetField);
+        assertFalse(ingestDocument.hasField("target.second"));
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
+        Processor processor = createKvProcessor(
+import org.opensearch.ingest.RandomDocumentPicks;
+        Processor processor = createKvProcessor("unknown", "", "", null, null, "target", true);
+ * the Apache License, Version 2.0 (the "License"); you may
+            random(),
+            Sets.newHashSet("first", "second"),
+    public void test() throws Exception {
+        boolean ignoreMissing,
+        IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(
+        processor.execute(ingestDocument);
+ * Modifications Copyright OpenSearch Contributors. See
+            "target",
+        config.put("strip_brackets", stripBrackets);
+ * this work for additional information regarding copyright
+ * The OpenSearch Contributors require contributions made to
+        String fieldName = RandomDocumentPicks.randomFieldName(random());
+ * Licensed to Elasticsearch under one or more contributor
         IngestDocument originalIngestDocument = RandomDocumentPicks.randomIngestDocument(random(), Collections.emptyMap());
         IngestDocument ingestDocument = new IngestDocument(originalIngestDocument);
-        Processor processor = createKvProcessor("unknown", "", "", null, null, "target", true);
-        processor.execute(ingestDocument);
-        assertIngestDocument(originalIngestDocument, ingestDocument);
-    }
-
-    public void testFailFieldSplitMatch() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
-        String fieldName = RandomDocumentPicks.addRandomField(random(), ingestDocument, "first=hello|second=world|second=universe");
-        Processor processor = createKvProcessor(fieldName, "&", "=", null, null, "target", false);
-        processor.execute(ingestDocument);
-        assertThat(ingestDocument.getFieldValue("target.first", String.class), equalTo("hello|second=world|second=universe"));
-        assertFalse(ingestDocument.hasField("target.second"));
-    }
-
-    public void testFailValueSplitMatch() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), Collections.singletonMap("foo", "bar"));
-        Processor processor = createKvProcessor("foo", "&", "=", null, null, "target", false);
-        Exception exception = expectThrows(IllegalArgumentException.class, () -> processor.execute(ingestDocument));
-        assertThat(exception.getMessage(), equalTo("field [foo] does not contain value_split [=]"));
-    }
-
-    public void testTrimKeyAndValue() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
-        String fieldName = RandomDocumentPicks.addRandomField(random(), ingestDocument, "first= hello &second=world& second =universe");
-        Processor processor = createKvProcessor(fieldName, "&", "=", null, null, "target", false, " ", " ", false, null);
-        processor.execute(ingestDocument);
-        assertThat(ingestDocument.getFieldValue("target.first", String.class), equalTo("hello"));
+import static org.hamcrest.Matchers.equalTo;
+ * ownership. Elasticsearch licenses this file to you under
         assertThat(ingestDocument.getFieldValue("target.second", List.class), equalTo(Arrays.asList("world", "universe")));
-    }
-
-    public void testTrimMultiCharSequence() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
-        String fieldName = RandomDocumentPicks.addRandomField(
-            random(),
-            ingestDocument,
-            "to=<foo@example.com>, orig_to=<bar@example.com>, %+relay=mail.example.com[private/dovecot-lmtp],"
-                + " delay=2.2, delays=1.9/0.01/0.01/0.21, dsn=2.0.0, status=sent "
-        );
-        Processor processor = createKvProcessor(fieldName, " ", "=", null, null, "target", false, "%+", "<>,", false, null);
-        processor.execute(ingestDocument);
-        assertThat(ingestDocument.getFieldValue("target.to", String.class), equalTo("foo@example.com"));
-        assertThat(ingestDocument.getFieldValue("target.orig_to", String.class), equalTo("bar@example.com"));
-        assertThat(ingestDocument.getFieldValue("target.relay", String.class), equalTo("mail.example.com[private/dovecot-lmtp]"));
-        assertThat(ingestDocument.getFieldValue("target.delay", String.class), equalTo("2.2"));
-        assertThat(ingestDocument.getFieldValue("target.delays", String.class), equalTo("1.9/0.01/0.01/0.21"));
-        assertThat(ingestDocument.getFieldValue("target.dsn", String.class), equalTo("2.0.0"));
-        assertThat(ingestDocument.getFieldValue("target.status", String.class), equalTo("sent"));
-    }
-
-    public void testStripBrackets() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
-        String fieldName = RandomDocumentPicks.addRandomField(
-            random(),
-            ingestDocument,
-            "first=<hello>&second=\"world\"&second=(universe)&third=<foo>&fourth=[bar]&fifth='last'"
-        );
-        Processor processor = createKvProcessor(fieldName, "&", "=", null, null, "target", false, null, null, true, null);
-        processor.execute(ingestDocument);
-        assertThat(ingestDocument.getFieldValue("target.first", String.class), equalTo("hello"));
-        assertThat(ingestDocument.getFieldValue("target.second", List.class), equalTo(Arrays.asList("world", "universe")));
-        assertThat(ingestDocument.getFieldValue("target.third", String.class), equalTo("foo"));
-        assertThat(ingestDocument.getFieldValue("target.fourth", String.class), equalTo("bar"));
-        assertThat(ingestDocument.getFieldValue("target.fifth", String.class), equalTo("last"));
-    }
-
-    public void testAddPrefix() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
-        String fieldName = RandomDocumentPicks.addRandomField(random(), ingestDocument, "first=hello&second=world&second=universe");
-        Processor processor = createKvProcessor(fieldName, "&", "=", null, null, "target", false, null, null, false, "arg_");
-        processor.execute(ingestDocument);
-        assertThat(ingestDocument.getFieldValue("target.arg_first", String.class), equalTo("hello"));
-        assertThat(ingestDocument.getFieldValue("target.arg_second", List.class), equalTo(Arrays.asList("world", "universe")));
-    }
-
     private static KeyValueProcessor createKvProcessor(
-        String field,
-        String fieldSplit,
-        String valueSplit,
-        Set<String> includeKeys,
-        Set<String> excludeKeys,
-        String targetField,
-        boolean ignoreMissing
-    ) throws Exception {
-        return createKvProcessor(
-            field,
-            fieldSplit,
-            valueSplit,
-            includeKeys,
+ * specific language governing permissions and limitations
             excludeKeys,
-            targetField,
-            ignoreMissing,
-            null,
-            null,
-            false,
-            null
-        );
-    }
-
+        processor.execute(ingestDocument);
+        assertThat(exception.getMessage(), equalTo("field path cannot be null nor empty"));
+            random(),
+import java.util.List;
+        Processor processor = createKvProcessor(fieldName, "", "", null, null, "target", true);
+ * not use this file except in compliance with the License.
     private static KeyValueProcessor createKvProcessor(
+        assertThat(exception.getMessage(), equalTo("field [foo] does not contain value_split [=]"));
         String field,
-        String fieldSplit,
-        String valueSplit,
-        Set<String> includeKeys,
-        Set<String> excludeKeys,
-        String targetField,
-        boolean ignoreMissing,
-        String trimKey,
-        String trimValue,
-        boolean stripBrackets,
-        String prefix
-    ) throws Exception {
-        Map<String, Object> config = new HashMap<>();
-        config.put("field", field);
-        config.put("field_split", fieldSplit);
-        config.put("value_split", valueSplit);
-        config.put("target_field", targetField);
-        if (includeKeys != null) {
-            config.put("include_keys", new ArrayList<>(includeKeys));
-        }
-        if (excludeKeys != null) {
-            config.put("exclude_keys", new ArrayList<>(excludeKeys));
-        }
-        config.put("ignore_missing", ignoreMissing);
-        if (trimKey != null) {
-            config.put("trim_key", trimKey);
-        }
-        if (trimValue != null) {
+        assertThat(ingestDocument.getFieldValue("target.dsn", String.class), equalTo("2.0.0"));
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
             config.put("trim_value", trimValue);
-        }
-        config.put("strip_brackets", stripBrackets);
-        if (prefix != null) {
-            config.put("prefix", prefix);
-        }
-        return FACTORY.create(null, randomAlphaOfLength(10), null, config);
+        String fieldName = RandomDocumentPicks.addRandomField(random(), ingestDocument, "first= hello &second=world& second =universe");
     }
-}
+        processor.execute(ingestDocument);
+ * Unless required by applicable law or agreed to in writing,
+    public void testRootTarget() throws Exception {
+ */
+            random(),
+        }
+        processor.execute(ingestDocument);
+        processor.execute(ingestDocument);
+    public void testFailValueSplitMatch() throws Exception {
+        assertFalse(ingestDocument.hasField("target.second"));
+        );
+        assertThat(ingestDocument.getFieldValue("target.delay", String.class), equalTo("2.2"));
+        if (trimKey != null) {
+        assertFalse(ingestDocument.hasField("target.second"));
+        assertThat(ingestDocument.getFieldValue("target.status", String.class), equalTo("sent"));
+        processor.execute(ingestDocument);
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
+            false,
+ * GitHub history for details.
+        Processor processor = createKvProcessor(fieldName, "&", "=", null, null, "target", false);
+        assertThat(ingestDocument.getFieldValue("first", String.class), equalTo("hello"));
+                + " delay=2.2, delays=1.9/0.01/0.01/0.21, dsn=2.0.0, status=sent "
+import org.opensearch.ingest.TestTemplateService;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+        processor.execute(ingestDocument);
+        String targetField,
+        // when using template snippet, the resolved field path maybe empty
+        processor.execute(ingestDocument);
+        }
+    private static final KeyValueProcessor.Factory FACTORY = new KeyValueProcessor.Factory(TestTemplateService.instance());
+            "=",
+        config.put("value_split", valueSplit);
+        assertThat(ingestDocument.getFieldValue("target.first", String.class), equalTo("hello"));
+            "first=hello&second=world&second=universe&third=bar"
+ * You may obtain a copy of the License at
+    public void testStripBrackets() throws Exception {
+        assertFalse(ingestDocument.hasField("target.first"));
+ * under the License.

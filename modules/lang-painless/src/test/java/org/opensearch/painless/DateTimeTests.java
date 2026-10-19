@@ -1,252 +1,225 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.painless;
-
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-
-public class DateTimeTests extends ScriptTestCase {
-
-    public void testLongToZonedDateTime() {
-        assertEquals(
-            ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of("Z")),
-            exec(
-                "long milliSinceEpoch = 434931330000L;"
-                    + "Instant instant = Instant.ofEpochMilli(milliSinceEpoch);"
-                    + "return ZonedDateTime.ofInstant(instant, ZoneId.of('Z'));"
-            )
-        );
-    }
-
-    public void testStringToZonedDateTime() {
-        assertEquals(
-            ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of("Z")),
-            exec(
-                "String milliSinceEpochString = '434931330000';"
-                    + "long milliSinceEpoch = Long.parseLong(milliSinceEpochString);"
-                    + "Instant instant = Instant.ofEpochMilli(milliSinceEpoch);"
-                    + "return ZonedDateTime.ofInstant(instant, ZoneId.of('Z'));"
-            )
-        );
-
-        assertEquals(
-            ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of("Z")),
-            exec("String datetime = '1983-10-13T22:15:30Z';" + "return ZonedDateTime.parse(datetime);")
-        );
-
-        assertEquals(
-            ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of("Z")),
-            exec(
-                "String datetime = 'Thu, 13 Oct 1983 22:15:30 GMT';"
-                    + "return ZonedDateTime.parse(datetime, DateTimeFormatter.RFC_1123_DATE_TIME);"
-            )
-        );
-
-        assertEquals(
-            ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of("Z")),
-            exec(
-                "String datetime = 'custom y 1983 m 10 d 13 22:15:30 Z';"
-                    + "DateTimeFormatter dtf = DateTimeFormatter.ofPattern("
-                    + "\"'custom' 'y' yyyy 'm' MM 'd' dd HH:mm:ss VV\");"
-                    + "return ZonedDateTime.parse(datetime, dtf);"
-            )
-        );
-    }
-
-    public void testPiecesToZonedDateTime() {
-        assertEquals(
-            ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of("Z")),
-            exec(
-                "int year = 1983;"
-                    + "int month = 10;"
-                    + "int day = 13;"
-                    + "int hour = 22;"
-                    + "int minutes = 15;"
-                    + "int seconds = 30;"
-                    + "int nanos = 0;"
-                    + "String tz = 'Z';"
-                    + "return ZonedDateTime.of(year, month, day, hour, minutes, seconds, nanos, ZoneId.of(tz));"
-            )
-        );
-    }
-
-    public void testZonedDatetimeToLong() {
-        assertEquals(
-            434931330000L,
-            exec(
-                "ZonedDateTime zdt = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of('Z'));"
-                    + "return zdt.toInstant().toEpochMilli();"
-            )
-        );
-    }
-
-    public void testZonedDateTimeToString() {
-        assertEquals(
-            "1983-10-13T22:15:30Z",
-            exec(
-                "ZonedDateTime zdt = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of('Z'));"
                     + "return zdt.format(DateTimeFormatter.ISO_INSTANT);"
-            )
-        );
-
+package org.opensearch.painless;
+    }
+ * Licensed to Elasticsearch under one or more contributor
         assertEquals(
-            "date: 1983/10/13 time: 22:15:30",
-            exec(
-                "ZonedDateTime zdt = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of('Z'));"
+        assertEquals(
+    public void compareLongs() {
+            )
+            )
+            ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of("Z")),
+    public void testStringToZonedDateTime() {
                     + "DateTimeFormatter dtf = DateTimeFormatter.ofPattern("
-                    + "\"'date:' yyyy/MM/dd 'time:' HH:mm:ss\");"
-                    + "return zdt.format(dtf);"
-            )
+    public void testZonedDateTimeToString() {
         );
-    }
-
-    public void testZonedDateTimeToPieces() {
-        assertArrayEquals(
-            new int[] { 1983, 10, 13, 22, 15, 30, 100 },
-            (int[]) exec(
-                "int[] pieces = new int[7];"
-                    + "ZonedDateTime zdt = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 100, ZoneId.of('Z'));"
-                    + "pieces[0] = zdt.year;"
-                    + "pieces[1] = zdt.monthValue;"
-                    + "pieces[2] = zdt.dayOfMonth;"
-                    + "pieces[3] = zdt.hour;"
-                    + "pieces[4] = zdt.minute;"
-                    + "pieces[5] = zdt.second;"
-                    + "pieces[6] = zdt.nano;"
-                    + "return pieces;"
-            )
-        );
-    }
-
-    public void testLongManipulation() {
-        assertEquals(
-            ZonedDateTime.of(1983, 10, 13, 22, 15, 27, 0, ZoneId.of("Z")),
             exec(
+            exec(
+    public void testLongManipulation() {
+                "int[] pieces = new int[7];"
+                "ZonedDateTime zdt = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of('Z'));"
+            "Thu, 13 Oct 1983 15:15:30 -0700",
+        assertEquals(
                 "long milliSinceEpoch = 434931330000L;"
+            exec(
+                    + "int seconds = 30;"
+                    + "ZonedDateTime zdt2 = ZonedDateTime.of(1983, 10, 17, 22, 15, 35, 0, ZoneId.of('Z'));"
+        assertEquals(
+    public void testTimeZone() {
                     + "milliSinceEpoch = milliSinceEpoch - 1000L*3L;"
-                    + "Instant instant = Instant.ofEpochMilli(milliSinceEpoch);"
-                    + "return ZonedDateTime.ofInstant(instant, ZoneId.of('Z'))"
-            )
-        );
+    public void compareZonedDateTimes() {
+            exec(
     }
-
+ * software distributed under the License is distributed on an
     public void testZonedDateTimeManipulation() {
-        assertEquals(
-            ZonedDateTime.of(1983, 10, 16, 22, 15, 30, 0, ZoneId.of("Z")),
-            exec("ZonedDateTime zdt = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of('Z'));" + "return zdt.plusDays(3);")
-        );
-
-        assertEquals(
-            ZonedDateTime.of(1983, 10, 13, 20, 10, 30, 0, ZoneId.of("Z")),
-            exec("ZonedDateTime zdt = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of('Z'));" + "return zdt.minusMinutes(125);")
-        );
-
-        assertEquals(
+            exec(
+                    + "return utc.withZoneSameInstant(ZoneId.of('America/Los_Angeles'));"
             ZonedDateTime.of(1976, 10, 13, 22, 15, 30, 0, ZoneId.of("Z")),
-            exec("ZonedDateTime zdt = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of('Z'));" + "return zdt.withYear(1976);")
-        );
-    }
-
-    public void testLongTimeDifference() {
-        assertEquals(
-            3000L,
-            exec("long startTimestamp = 434931327000L;" + "long endTimestamp = 434931330000L;" + "return endTimestamp - startTimestamp;")
-        );
-    }
-
-    public void testZonedDateTimeDifference() {
-        assertEquals(
-            4989L,
+import java.time.ZoneId;
             exec(
                 "ZonedDateTime zdt1 = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 11000000, ZoneId.of('Z'));"
-                    + "ZonedDateTime zdt2 = ZonedDateTime.of(1983, 10, 13, 22, 15, 35, 0, ZoneId.of('Z'));"
-                    + "return ChronoUnit.MILLIS.between(zdt1, zdt2);"
-            )
+    }
+ * this file be licensed under the Apache-2.0 license or a
+}
+ * compatible open source license.
+                "ZonedDateTime utc = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of('Z'));"
+            4989L,
+                    + "ZonedDateTime gmtZdt = ZonedDateTime.parse(gmtString,"
+            exec(
+                    + "gmtZdt.withZoneSameInstant(ZoneId.of('America/Los_Angeles'));"
+                    + "Instant instant = Instant.ofEpochMilli(milliSinceEpoch);"
+                    + "return pieces;"
+ * license agreements. See the NOTICE file distributed with
+            (int[]) exec(
+                    + "return ZonedDateTime.ofInstant(instant, ZoneId.of('Z'))"
+            ZonedDateTime.of(1983, 10, 13, 20, 10, 30, 0, ZoneId.of("Z")),
         );
-
+        assertEquals(
+                    + "int day = 13;"
+/*
+            )
+            )
+            exec(
+                "ZonedDateTime zdt = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of('Z'));"
+ * KIND, either express or implied.  See the License for the
+            new int[] { 1983, 10, 13, 22, 15, 30, 100 },
+        assertEquals(
+        assertEquals(
+            exec(
+        );
+        assertEquals(
+        );
+ * this work for additional information regarding copyright
+ * the Apache License, Version 2.0 (the "License"); you may
+                    + "return ZonedDateTime.ofInstant(instant, ZoneId.of('Z'));"
+                "ZonedDateTime zdt = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of('Z'));"
+                    + "pieces[2] = zdt.dayOfMonth;"
         assertEquals(
             4L,
-            exec(
-                "ZonedDateTime zdt1 = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 11000000, ZoneId.of('Z'));"
-                    + "ZonedDateTime zdt2 = ZonedDateTime.of(1983, 10, 17, 22, 15, 35, 0, ZoneId.of('Z'));"
-                    + "return ChronoUnit.DAYS.between(zdt1, zdt2);"
+    }
+                "String datetime = 'Thu, 13 Oct 1983 22:15:30 GMT';"
+                    + "String tz = 'Z';"
             )
-        );
-    }
-
-    public void compareLongs() {
-        assertEquals(false, exec("long ts1 = 434931327000L;" + "long ts2 = 434931330000L;" + "return ts1 > ts2;"));
-    }
-
-    public void compareZonedDateTimes() {
-        assertEquals(
-            true,
-            exec(
                 "ZonedDateTime zdt1 = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of('Z'));"
-                    + "ZonedDateTime zdt2 = ZonedDateTime.of(1983, 10, 17, 22, 15, 35, 0, ZoneId.of('Z'));"
-                    + "return zdt1.isBefore(zdt2);"
+                    + "pieces[5] = zdt.second;"
             )
-        );
-
+            exec(
         assertEquals(
+                    + "int hour = 22;"
+ * You may obtain a copy of the License at
             false,
-            exec(
-                "ZonedDateTime zdt1 = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of('Z'));"
-                    + "ZonedDateTime zdt2 = ZonedDateTime.of(1983, 10, 17, 22, 15, 35, 0, ZoneId.of('Z'));"
-                    + "return zdt1.isAfter(zdt2);"
-            )
-        );
-    }
-
-    public void testTimeZone() {
-        assertEquals(
+                    + "return zdt1.isBefore(zdt2);"
             ZonedDateTime.of(1983, 10, 13, 15, 15, 30, 0, ZoneId.of("America/Los_Angeles")),
-            exec(
-                "ZonedDateTime utc = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of('Z'));"
-                    + "return utc.withZoneSameInstant(ZoneId.of('America/Los_Angeles'));"
-            )
+            exec("ZonedDateTime zdt = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of('Z'));" + "return zdt.withYear(1976);")
         );
-
+    public void testZonedDateTimeToPieces() {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            exec("long startTimestamp = 434931327000L;" + "long endTimestamp = 434931330000L;" + "return endTimestamp - startTimestamp;")
+                    + "pieces[6] = zdt.nano;"
+                "int year = 1983;"
+ * under the License.
+    public void testZonedDatetimeToLong() {
+                    + "return ZonedDateTime.parse(datetime, dtf);"
+                    + "pieces[4] = zdt.minute;"
+                    + "int month = 10;"
+                    + "return ZonedDateTime.of(year, month, day, hour, minutes, seconds, nanos, ZoneId.of(tz));"
+                    + "return zdt.toInstant().toEpochMilli();"
         assertEquals(
-            "Thu, 13 Oct 1983 15:15:30 -0700",
-            exec(
-                "String gmtString = 'Thu, 13 Oct 1983 22:15:30 GMT';"
-                    + "ZonedDateTime gmtZdt = ZonedDateTime.parse(gmtString,"
-                    + "DateTimeFormatter.RFC_1123_DATE_TIME);"
-                    + "ZonedDateTime pstZdt ="
-                    + "gmtZdt.withZoneSameInstant(ZoneId.of('America/Los_Angeles'));"
-                    + "return pstZdt.format(DateTimeFormatter.RFC_1123_DATE_TIME);"
+        );
+ * GitHub history for details.
+            ZonedDateTime.of(1983, 10, 13, 22, 15, 27, 0, ZoneId.of("Z")),
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                    + "DateTimeFormatter dtf = DateTimeFormatter.ofPattern("
+            ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of("Z")),
             )
+                "long milliSinceEpoch = 434931330000L;"
+    }
+    }
+            )
+            )
+                    + "DateTimeFormatter.RFC_1123_DATE_TIME);"
+            exec("String datetime = '1983-10-13T22:15:30Z';" + "return ZonedDateTime.parse(datetime);")
+            ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of("Z")),
+        assertEquals(
+            )
+            exec(
+    public void testPiecesToZonedDateTime() {
+ * Modifications Copyright OpenSearch Contributors. See
+        );
+        );
+            ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of("Z")),
+                    + "Instant instant = Instant.ofEpochMilli(milliSinceEpoch);"
+            )
+                    + "pieces[1] = zdt.monthValue;"
+    public void testLongTimeDifference() {
+        assertEquals(
+            exec("ZonedDateTime zdt = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of('Z'));" + "return zdt.plusDays(3);")
+ */
+ */
+public class DateTimeTests extends ScriptTestCase {
+            exec(
+        );
+                    + "return zdt1.isAfter(zdt2);"
         );
     }
-}
+            )
+        assertEquals(
+    }
+                    + "\"'custom' 'y' yyyy 'm' MM 'd' dd HH:mm:ss VV\");"
+        );
+        );
+        );
+ * ownership. Elasticsearch licenses this file to you under
+ *
+        assertArrayEquals(
+                    + "return ZonedDateTime.parse(datetime, DateTimeFormatter.RFC_1123_DATE_TIME);"
+    }
+                "String gmtString = 'Thu, 13 Oct 1983 22:15:30 GMT';"
+                    + "ZonedDateTime pstZdt ="
+        assertEquals(false, exec("long ts1 = 434931327000L;" + "long ts2 = 434931330000L;" + "return ts1 > ts2;"));
+            )
+                    + "int nanos = 0;"
+ * The OpenSearch Contributors require contributions made to
+                    + "ZonedDateTime zdt = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 100, ZoneId.of('Z'));"
+            )
+                    + "int minutes = 15;"
+    public void testLongToZonedDateTime() {
+            )
+        );
+                    + "long milliSinceEpoch = Long.parseLong(milliSinceEpochString);"
+                    + "return ChronoUnit.MILLIS.between(zdt1, zdt2);"
+            3000L,
+                "ZonedDateTime zdt1 = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 11000000, ZoneId.of('Z'));"
+                    + "return ZonedDateTime.ofInstant(instant, ZoneId.of('Z'));"
+                    + "ZonedDateTime zdt2 = ZonedDateTime.of(1983, 10, 13, 22, 15, 35, 0, ZoneId.of('Z'));"
+        assertEquals(
+/*
+        assertEquals(
+                "String milliSinceEpochString = '434931330000';"
+            ZonedDateTime.of(1983, 10, 16, 22, 15, 30, 0, ZoneId.of("Z")),
+            )
+    }
+                    + "ZonedDateTime zdt2 = ZonedDateTime.of(1983, 10, 17, 22, 15, 35, 0, ZoneId.of('Z'));"
+        assertEquals(
+                    + "\"'date:' yyyy/MM/dd 'time:' HH:mm:ss\");"
+    public void testZonedDateTimeDifference() {
+import java.time.ZonedDateTime;
+            ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of("Z")),
+        );
+        assertEquals(
+    }
+    }
+            "date: 1983/10/13 time: 22:15:30",
+        assertEquals(
+            ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of("Z")),
+            true,
+ *
+                    + "ZonedDateTime zdt2 = ZonedDateTime.of(1983, 10, 17, 22, 15, 35, 0, ZoneId.of('Z'));"
+                    + "return pstZdt.format(DateTimeFormatter.RFC_1123_DATE_TIME);"
+                    + "pieces[0] = zdt.year;"
+        );
+    }
+        );
+                    + "return zdt.format(dtf);"
+                "String datetime = 'custom y 1983 m 10 d 13 22:15:30 Z';"
+        assertEquals(
+ * Unless required by applicable law or agreed to in writing,
+                    + "pieces[3] = zdt.hour;"
+            exec(
+        );
+            exec(
+            exec(
+ *
+            "1983-10-13T22:15:30Z",
+            434931330000L,
+/*
+        );
+ * SPDX-License-Identifier: Apache-2.0
+            exec("ZonedDateTime zdt = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of('Z'));" + "return zdt.minusMinutes(125);")
+                    + "return ChronoUnit.DAYS.between(zdt1, zdt2);"
+ * not use this file except in compliance with the License.
+ * specific language governing permissions and limitations
+        );
+                    + "Instant instant = Instant.ofEpochMilli(milliSinceEpoch);"
+        );
+                "ZonedDateTime zdt1 = ZonedDateTime.of(1983, 10, 13, 22, 15, 30, 0, ZoneId.of('Z'));"

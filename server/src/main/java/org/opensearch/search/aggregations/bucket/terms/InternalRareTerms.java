@@ -1,232 +1,199 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
+        implements
+     * @opensearch.internal
  * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+    public boolean equals(Object obj) {
+        protected abstract XContentBuilder keyToXContent(XContentBuilder builder) throws IOException;
+import java.util.Objects;
+ * not use this file except in compliance with the License.
+        @FunctionalInterface
+    public int hashCode() {
+    protected static XContentBuilder doXContentCommon(XContentBuilder builder, Params params, List<? extends Bucket> buckets)
+    @Override
+            docCount = in.readVLong();
+ *
+            aggregations.toXContentInternal(builder, params);
+    protected B reduceBucket(List<B> buckets, ReduceContext context) {
+ *
+        long docCount = 0;
+         *
+                return false;
+import org.opensearch.common.util.SetBackedScalingCuckooFilter;
+        @Override
  * under the License.
+        @Override
+        order = InternalOrder.Streams.readOrder(in);
+        return createBucket(docCount, aggs, buckets.get(0));
+ * ownership. Elasticsearch licenses this file to you under
+     */
+        @Override
+        for (B bucket : buckets) {
+    public abstract B getBucketByKey(String term);
+        public final void writeTo(StreamOutput out) throws IOException {
+        InternalAggregations aggs = InternalAggregations.reduce(aggregationsList, context);
+            out.writeVLong(getDocCount());
+    protected abstract A createWithFilter(String name, List<B> buckets, SetBackedScalingCuckooFilter filter);
+         */
  */
+            aggregations.writeTo(out);
+        public interface Reader<B extends Bucket<B>> {
+        protected Bucket(StreamInput in, DocValueFormat formatter) throws IOException {
+ * Licensed to Elasticsearch under one or more contributor
+            docCount += bucket.docCount;
+        if (super.equals(obj) == false) return false;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    public abstract List<B> getBuckets();
+        if (obj == null || getClass() != obj.getClass()) return false;
+}
+        @Override
+            this.format = formatter;
+    protected final void doWriteTo(StreamOutput out) throws IOException {
+import org.opensearch.core.common.io.stream.StreamOutput;
+ *
+ * the Apache License, Version 2.0 (the "License"); you may
+        maxDocCount = in.readVLong();
+    @Override
+import org.opensearch.search.aggregations.BucketOrder;
+        @Override
+            this.aggregations = aggregations;
+        long bucketOrd;
+            writeTermTo(out);
+        this.maxDocCount = maxDocCount;
+    InternalMultiBucketAggregation<A, B>
+    protected abstract B[] createBucketsArray(int size);
+            if (obj == null || getClass() != obj.getClass()) {
+import org.opensearch.search.aggregations.KeyComparable;
+        throws IOException {
+        protected Bucket(long docCount, InternalAggregations aggregations, DocValueFormat formatter) {
+     * Read from a stream.
+import org.opensearch.search.DocValueFormat;
+            RareTerms.Bucket,
+            aggregations = InternalAggregations.readFrom(in);
+        public int hashCode() {
+    }
+    public abstract static class Bucket<B extends Bucket<B>> extends InternalMultiBucketAggregation.InternalBucket
+import java.io.IOException;
+        }
+    @Override
+            KeyComparable<B> {
+    }
+ * license agreements. See the NOTICE file distributed with
+        }
 /*
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.terms;
-
-import org.opensearch.common.util.SetBackedScalingCuckooFilter;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.Aggregations;
-import org.opensearch.search.aggregations.BucketOrder;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.InternalAggregations;
-import org.opensearch.search.aggregations.InternalMultiBucketAggregation;
-import org.opensearch.search.aggregations.InternalOrder;
-import org.opensearch.search.aggregations.KeyComparable;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-/**
- * Implementation of rare terms
- *
- * @opensearch.internal
- */
-public abstract class InternalRareTerms<A extends InternalRareTerms<A, B>, B extends InternalRareTerms.Bucket<B>> extends
-    InternalMultiBucketAggregation<A, B>
-    implements
-        RareTerms {
-
-    /**
-     * Bucket for a rare terms agg
-     *
-     * @opensearch.internal
-     */
-    public abstract static class Bucket<B extends Bucket<B>> extends InternalMultiBucketAggregation.InternalBucket
-        implements
-            RareTerms.Bucket,
-            KeyComparable<B> {
-        /**
-         * Reads a bucket. Should be a constructor reference.
-         *
-         * @opensearch.internal
-         */
-        @FunctionalInterface
-        public interface Reader<B extends Bucket<B>> {
-            B read(StreamInput in, DocValueFormat format) throws IOException;
-        }
-
-        long bucketOrd;
-
-        protected long docCount;
-        protected InternalAggregations aggregations;
-        protected final DocValueFormat format;
-
-        protected Bucket(long docCount, InternalAggregations aggregations, DocValueFormat formatter) {
-            this.format = formatter;
-            this.docCount = docCount;
-            this.aggregations = aggregations;
-        }
-
-        /**
-         * Read from a stream.
-         */
-        protected Bucket(StreamInput in, DocValueFormat formatter) throws IOException {
-            this.format = formatter;
-            docCount = in.readVLong();
-            aggregations = InternalAggregations.readFrom(in);
-        }
-
-        @Override
-        public final void writeTo(StreamOutput out) throws IOException {
-            out.writeVLong(getDocCount());
-            aggregations.writeTo(out);
-            writeTermTo(out);
-        }
-
-        protected abstract void writeTermTo(StreamOutput out) throws IOException;
-
-        @Override
-        public long getDocCount() {
-            return docCount;
-        }
-
-        @Override
-        public Aggregations getAggregations() {
-            return aggregations;
-        }
-
-        @Override
-        public final XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();
-            keyToXContent(builder);
-            builder.field(CommonFields.DOC_COUNT.getPreferredName(), getDocCount());
-            aggregations.toXContentInternal(builder, params);
-            builder.endObject();
-            return builder;
-        }
-
-        protected abstract XContentBuilder keyToXContent(XContentBuilder builder) throws IOException;
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null || getClass() != obj.getClass()) {
-                return false;
-            }
-            Bucket<?> that = (Bucket<?>) obj;
-            return Objects.equals(docCount, that.docCount) && Objects.equals(aggregations, that.aggregations);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(getClass(), docCount, aggregations);
-        }
-    }
-
-    protected final BucketOrder order;
-    protected final long maxDocCount;
-
-    protected InternalRareTerms(String name, BucketOrder order, long maxDocCount, Map<String, Object> metadata) {
-        super(name, metadata);
-        this.order = order;
-        this.maxDocCount = maxDocCount;
-    }
-
-    /**
-     * Read from a stream.
-     */
-    protected InternalRareTerms(StreamInput in) throws IOException {
-        super(in);
-        order = InternalOrder.Streams.readOrder(in);
-        maxDocCount = in.readVLong();
-    }
-
-    @Override
-    protected final void doWriteTo(StreamOutput out) throws IOException {
-        order.writeTo(out);
         out.writeVLong(maxDocCount);
-        writeTermTypeInfoTo(out);
     }
-
     protected abstract void writeTermTypeInfoTo(StreamOutput out) throws IOException;
-
-    @Override
-    public abstract List<B> getBuckets();
-
-    @Override
-    public abstract B getBucketByKey(String term);
-
-    @Override
-    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
-        throw new UnsupportedOperationException();
-    }
-
-    abstract B createBucket(long docCount, InternalAggregations aggs, B prototype);
-
-    @Override
-    protected B reduceBucket(List<B> buckets, ReduceContext context) {
-        assert buckets.size() > 0;
-        long docCount = 0;
-        List<InternalAggregations> aggregationsList = new ArrayList<>(buckets.size());
-        for (B bucket : buckets) {
-            docCount += bucket.docCount;
-            aggregationsList.add(bucket.aggregations);
-        }
-        InternalAggregations aggs = InternalAggregations.reduce(aggregationsList, context);
-        return createBucket(docCount, aggs, buckets.get(0));
-    }
-
-    protected abstract A createWithFilter(String name, List<B> buckets, SetBackedScalingCuckooFilter filter);
-
+ * GitHub history for details.
+            return Objects.equals(docCount, that.docCount) && Objects.equals(aggregations, that.aggregations);
     /**
-     * Create an array to hold some buckets. Used in collecting the results.
-     */
-    protected abstract B[] createBucketsArray(int size);
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;
-        InternalRareTerms<?, ?> that = (InternalRareTerms<?, ?>) obj;
-        return Objects.equals(maxDocCount, that.maxDocCount) && Objects.equals(order, that.order);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), maxDocCount, order);
-    }
-
-    protected static XContentBuilder doXContentCommon(XContentBuilder builder, Params params, List<? extends Bucket> buckets)
-        throws IOException {
         builder.startArray(CommonFields.BUCKETS.getPreferredName());
+import org.opensearch.search.aggregations.InternalAggregations;
+        public final XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        return Objects.hash(super.hashCode(), maxDocCount, order);
+    @Override
+import org.opensearch.search.aggregations.Aggregations;
+    /**
+        }
+     */
+ * this file be licensed under the Apache-2.0 license or a
+ */
+    }
+import java.util.Map;
+import org.opensearch.search.aggregations.InternalAggregation;
+/**
+        assert buckets.size() > 0;
+        }
+/*
+            Bucket<?> that = (Bucket<?>) obj;
         for (Bucket bucket : buckets) {
             bucket.toXContent(builder, params);
-        }
+ * software distributed under the License is distributed on an
+package org.opensearch.search.aggregations.bucket.terms;
+    protected final BucketOrder order;
         builder.endArray();
-        return builder;
     }
-}
+     *
+        @Override
+        /**
+        }
+ * Implementation of rare terms
+        writeTermTypeInfoTo(out);
+import org.opensearch.search.aggregations.InternalMultiBucketAggregation;
+ * @opensearch.internal
+        if (this == obj) return true;
+        protected long docCount;
+import org.opensearch.core.xcontent.XContentBuilder;
+    implements
+    /**
+            return aggregations;
+         * @opensearch.internal
+import java.util.List;
+        InternalRareTerms<?, ?> that = (InternalRareTerms<?, ?>) obj;
+            this.format = formatter;
+    @Override
+     * Bucket for a rare terms agg
+import org.opensearch.core.common.io.stream.StreamInput;
+         * Reads a bucket. Should be a constructor reference.
+        return builder;
+            builder.field(CommonFields.DOC_COUNT.getPreferredName(), getDocCount());
+    }
+     * Create an array to hold some buckets. Used in collecting the results.
+        this.order = order;
+public abstract class InternalRareTerms<A extends InternalRareTerms<A, B>, B extends InternalRareTerms.Bucket<B>> extends
+            return Objects.hash(getClass(), docCount, aggregations);
+import org.opensearch.search.aggregations.InternalOrder;
+ * Unless required by applicable law or agreed to in writing,
+    @Override
+    protected InternalRareTerms(String name, BucketOrder order, long maxDocCount, Map<String, Object> metadata) {
+        order.writeTo(out);
+            builder.startObject();
+        public Aggregations getAggregations() {
+        protected abstract void writeTermTo(StreamOutput out) throws IOException;
+        }
+        public long getDocCount() {
+ */
+            this.docCount = docCount;
+ * SPDX-License-Identifier: Apache-2.0
+    abstract B createBucket(long docCount, InternalAggregations aggs, B prototype);
+            }
+        return Objects.equals(maxDocCount, that.maxDocCount) && Objects.equals(order, that.order);
+        super(name, metadata);
+    protected final long maxDocCount;
+        /**
+    @Override
+            builder.endObject();
+ * specific language governing permissions and limitations
+    protected InternalRareTerms(StreamInput in) throws IOException {
+    }
+            return builder;
+import java.util.ArrayList;
+    }
+ * this work for additional information regarding copyright
+         * Read from a stream.
+        RareTerms {
+        protected InternalAggregations aggregations;
+/*
+ */
+ * You may obtain a copy of the License at
+            keyToXContent(builder);
+        }
+    }
+        }
+         */
+        }
+            B read(StreamInput in, DocValueFormat format) throws IOException;
+ * The OpenSearch Contributors require contributions made to
+        super(in);
+        }
+            return docCount;
+        }
+    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
+        public boolean equals(Object obj) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        throw new UnsupportedOperationException();
+        protected final DocValueFormat format;
+            aggregationsList.add(bucket.aggregations);
+        List<InternalAggregations> aggregationsList = new ArrayList<>(buckets.size());
+     */

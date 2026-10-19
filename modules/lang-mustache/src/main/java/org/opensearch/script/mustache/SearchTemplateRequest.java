@@ -1,311 +1,268 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.script.mustache;
-
-import org.opensearch.Version;
-import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.CompositeIndicesRequest;
-import org.opensearch.action.IndicesRequest;
-import org.opensearch.action.search.SearchRequest;
-import org.opensearch.action.support.IndicesOptions;
 import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.script.ScriptType;
-
-import java.io.IOException;
-import java.util.Map;
-import java.util.Objects;
-
-import static org.opensearch.action.ValidateActions.addValidationError;
-
-/**
- * A request to execute a search based on a search template.
- */
-public class SearchTemplateRequest extends ActionRequest implements IndicesRequest.Replaceable, CompositeIndicesRequest, ToXContentObject {
-
-    private SearchRequest request;
-    private boolean simulate = false;
-    private boolean explain = false;
-    private boolean profile = false;
-    private ScriptType scriptType;
-    private String script;
-    private Map<String, Object> scriptParams;
-    private String searchPipeline;
-
-    public SearchTemplateRequest() {}
-
-    public SearchTemplateRequest(StreamInput in) throws IOException {
-        super(in);
-        request = in.readOptionalWriteable(SearchRequest::new);
-        simulate = in.readBoolean();
-        explain = in.readBoolean();
-        profile = in.readBoolean();
-        scriptType = ScriptType.readFrom(in);
-        script = in.readOptionalString();
-        if (in.readBoolean()) {
             scriptParams = in.readMap();
+ *
+import java.io.IOException;
+            .field(SEARCH_PIPELINE_FIELD.getPreferredName(), searchPipeline)
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.action.ActionRequestValidationException;
+                    }
+    @Override
+            return new String[0];
+        boolean hasParams = scriptParams != null;
+        request = in.readOptionalWriteable(SearchRequest::new);
+    public SearchRequest getRequest() {
+import org.opensearch.core.xcontent.XContentBuilder;
+        this.explain = explain;
+                try (XContentBuilder builder = MediaTypeRegistry.JSON.contentBuilder()) {
+ * under the License.
+                request.setSearchPipeline(parser.text());
+        if (in.readBoolean()) {
+            }
+        if (out.getVersion().onOrAfter(Version.V_3_2_0)) {
+ * ownership. Elasticsearch licenses this file to you under
+        if (scriptType == ScriptType.STORED) {
+/*
+    }
+    }
+    }
+        return PARSER.parse(parser, new SearchTemplateRequest(), null);
+            return new SearchRequest(new String[0]).indices(indices);
+        scriptType = ScriptType.readFrom(in);
+    public void setScriptParams(Map<String, Object> scriptParams) {
+        ActionRequestValidationException validationException = null;
+    private SearchRequest request;
+ * this file be licensed under the Apache-2.0 license or a
+    private static ParseField PARAMS_FIELD = new ParseField("params");
+        if (simulate == false) {
+        super(in);
+        return Objects.hash(request, simulate, explain, profile, scriptType, script, scriptParams, searchPipeline);
+ * specific language governing permissions and limitations
+        }, SOURCE_FIELD, ObjectParser.ValueType.OBJECT_OR_STRING);
+        this.request = request;
+        if (scriptType == null) {
+    public SearchTemplateRequest() {}
         }
         if (in.getVersion().onOrAfter(Version.V_3_2_0)) {
-            searchPipeline = in.readOptionalString();
-        }
-
-    }
-
-    public SearchTemplateRequest(SearchRequest searchRequest) {
-        this.request = searchRequest;
-    }
-
-    public void setRequest(SearchRequest request) {
-        this.request = request;
-    }
-
-    public SearchRequest getRequest() {
-        return request;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        SearchTemplateRequest request1 = (SearchTemplateRequest) o;
-        return simulate == request1.simulate
-            && explain == request1.explain
-            && profile == request1.profile
-            && Objects.equals(request, request1.request)
-            && scriptType == request1.scriptType
-            && Objects.equals(script, request1.script)
-            && Objects.equals(scriptParams, request1.scriptParams)
-            && Objects.equals(searchPipeline, request1.searchPipeline);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(request, simulate, explain, profile, scriptType, script, scriptParams, searchPipeline);
-    }
-
-    public boolean isSimulate() {
-        return simulate;
-    }
-
-    public void setSimulate(boolean simulate) {
-        this.simulate = simulate;
-    }
-
-    public boolean isExplain() {
-        return explain;
-    }
-
-    public void setExplain(boolean explain) {
-        this.explain = explain;
-    }
-
-    public boolean isProfile() {
-        return profile;
-    }
-
-    public void setProfile(boolean profile) {
-        this.profile = profile;
-    }
-
-    public ScriptType getScriptType() {
+        out.writeOptionalWriteable(request);
+            if (request == null) {
+import java.util.Map;
+    public void setScriptType(ScriptType scriptType) {
+ */
+import org.opensearch.Version;
+import static org.opensearch.action.ValidateActions.addValidationError;
+        return script;
         return scriptType;
     }
-
-    public void setScriptType(ScriptType scriptType) {
-        this.scriptType = scriptType;
-    }
-
-    public String getScript() {
-        return script;
-    }
-
-    public void setScript(String script) {
-        this.script = script;
-    }
-
-    public Map<String, Object> getScriptParams() {
-        return scriptParams;
-    }
-
-    public void setScriptParams(Map<String, Object> scriptParams) {
-        this.scriptParams = scriptParams;
-    }
-
-    public String getSearchPipeline() {
-        return searchPipeline;
-    }
-
-    public void setSearchPipeline(String searchPipeline) {
-        this.searchPipeline = searchPipeline;
-    }
-
-    @Override
-    public ActionRequestValidationException validate() {
-        ActionRequestValidationException validationException = null;
-        if (script == null || script.isEmpty()) {
-            validationException = addValidationError("template is missing", validationException);
-        }
-        if (scriptType == null) {
-            validationException = addValidationError("template's script type is missing", validationException);
-        }
-        if (simulate == false) {
-            if (request == null) {
-                validationException = addValidationError("search request is missing", validationException);
-            } else {
-                ActionRequestValidationException ex = request.validate();
-                if (ex != null) {
-                    if (validationException == null) {
-                        validationException = new ActionRequestValidationException();
-                    }
-                    validationException.addValidationErrors(ex.validationErrors());
-                }
-            }
-        }
-        return validationException;
-    }
-
-    private static ParseField ID_FIELD = new ParseField("id");
-    private static ParseField SOURCE_FIELD = new ParseField("source", "inline", "template");
-
-    private static ParseField PARAMS_FIELD = new ParseField("params");
-    private static ParseField EXPLAIN_FIELD = new ParseField("explain");
-    private static ParseField PROFILE_FIELD = new ParseField("profile");
-    private static ParseField SEARCH_PIPELINE_FIELD = new ParseField("search_pipeline");
-
-    private static final ObjectParser<SearchTemplateRequest, Void> PARSER;
-    static {
-        PARSER = new ObjectParser<>("search_template");
-        PARSER.declareField((parser, request, s) -> request.setScriptParams(parser.map()), PARAMS_FIELD, ObjectParser.ValueType.OBJECT);
-        PARSER.declareString((request, s) -> {
-            request.setScriptType(ScriptType.STORED);
-            request.setScript(s);
-        }, ID_FIELD);
-        PARSER.declareBoolean(SearchTemplateRequest::setExplain, EXPLAIN_FIELD);
-        PARSER.declareBoolean(SearchTemplateRequest::setProfile, PROFILE_FIELD);
-        PARSER.declareField((parser, request, value) -> {
-            request.setScriptType(ScriptType.INLINE);
-            if (parser.currentToken() == XContentParser.Token.START_OBJECT) {
-                // convert the template to json which is the only supported XContentType (see CustomMustacheFactory#createEncoder)
-                try (XContentBuilder builder = MediaTypeRegistry.JSON.contentBuilder()) {
-                    request.setScript(builder.copyCurrentStructure(parser).toString());
-                } catch (IOException e) {
-                    throw new ParsingException(parser.getTokenLocation(), "Could not parse inline template", e);
-                }
-            } else {
-                request.setScript(parser.text());
-            }
-        }, SOURCE_FIELD, ObjectParser.ValueType.OBJECT_OR_STRING);
-        PARSER.declareField((parser, request, context) -> {
-            if (parser.currentToken() == XContentParser.Token.VALUE_NULL) {
-                request.setSearchPipeline(null);
-            } else {
-                request.setSearchPipeline(parser.text());
-            }
-        }, SEARCH_PIPELINE_FIELD, ObjectParser.ValueType.STRING_OR_NULL);
-
-    }
-
-    public static SearchTemplateRequest fromXContent(XContentParser parser) throws IOException {
-        return PARSER.parse(parser, new SearchTemplateRequest(), null);
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-
-        if (scriptType == ScriptType.STORED) {
-            builder.field(ID_FIELD.getPreferredName(), script);
-        } else if (scriptType == ScriptType.INLINE) {
-            builder.field(SOURCE_FIELD.getPreferredName(), script);
-        } else {
-            throw new UnsupportedOperationException("Unrecognized script type [" + scriptType + "].");
-        }
-
-        return builder.field(PARAMS_FIELD.getPreferredName(), scriptParams)
-            .field(EXPLAIN_FIELD.getPreferredName(), explain)
-            .field(PROFILE_FIELD.getPreferredName(), profile)
-            .field(SEARCH_PIPELINE_FIELD.getPreferredName(), searchPipeline)
-            .endObject();
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeOptionalWriteable(request);
-        out.writeBoolean(simulate);
-        out.writeBoolean(explain);
-        out.writeBoolean(profile);
-        scriptType.writeTo(out);
-        out.writeOptionalString(script);
-        boolean hasParams = scriptParams != null;
-        out.writeBoolean(hasParams);
-        if (hasParams) {
-            out.writeMap(scriptParams);
-        }
-        if (out.getVersion().onOrAfter(Version.V_3_2_0)) {
-            out.writeOptionalString(searchPipeline);
-        }
-    }
-
-    @Override
-    public String[] indices() {
-        if (request == null) {
-            return new String[0];
-        }
-        return request.indices();
-    }
-
-    @Override
-    public IndicesOptions indicesOptions() {
-        if (request == null) {
-            return SearchRequest.DEFAULT_INDICES_OPTIONS;
-        }
-        return request.indicesOptions();
-    }
-
-    @Override
-    public IndicesRequest indices(String... indices) {
-        if (request == null) {
-            return new SearchRequest(new String[0]).indices(indices);
-        }
-        return request.indices(indices);
     }
 }
+ * license agreements. See the NOTICE file distributed with
+    @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        }
+    public SearchTemplateRequest(SearchRequest searchRequest) {
+ * software distributed under the License is distributed on an
+ * GitHub history for details.
+ *
+        return simulate;
+    }
+            return SearchRequest.DEFAULT_INDICES_OPTIONS;
+    public void setRequest(SearchRequest request) {
+import org.opensearch.core.xcontent.ObjectParser;
+            && Objects.equals(scriptParams, request1.scriptParams)
+        }
+        return simulate == request1.simulate
+        this.simulate = simulate;
+        out.writeBoolean(hasParams);
+            }
+            .endObject();
+    private ScriptType scriptType;
+ * compatible open source license.
+/*
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+                request.setSearchPipeline(null);
+    public boolean isProfile() {
+package org.opensearch.script.mustache;
+    public Map<String, Object> getScriptParams() {
+import org.opensearch.core.xcontent.XContentParser;
+    }
+            throw new UnsupportedOperationException("Unrecognized script type [" + scriptType + "].");
+        PARSER = new ObjectParser<>("search_template");
+                        validationException = new ActionRequestValidationException();
+            .field(PROFILE_FIELD.getPreferredName(), profile)
+    private static ParseField SOURCE_FIELD = new ParseField("source", "inline", "template");
+            && explain == request1.explain
+        PARSER.declareField((parser, request, s) -> request.setScriptParams(parser.map()), PARAMS_FIELD, ObjectParser.ValueType.OBJECT);
+            && Objects.equals(request, request1.request)
+        PARSER.declareBoolean(SearchTemplateRequest::setExplain, EXPLAIN_FIELD);
+        PARSER.declareField((parser, request, value) -> {
+            && Objects.equals(searchPipeline, request1.searchPipeline);
+            out.writeMap(scriptParams);
+    }
+        return profile;
+    private boolean profile = false;
+        out.writeBoolean(explain);
+        return explain;
+import java.util.Objects;
+        PARSER.declareBoolean(SearchTemplateRequest::setProfile, PROFILE_FIELD);
+        return searchPipeline;
+        profile = in.readBoolean();
+ * Unless required by applicable law or agreed to in writing,
+/**
+    }
+        PARSER.declareString((request, s) -> {
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+    }
+            && profile == request1.profile
+ * A request to execute a search based on a search template.
+    }
+            out.writeOptionalString(searchPipeline);
+    }
+    }
+    }
+ */
+        builder.startObject();
+    private static ParseField SEARCH_PIPELINE_FIELD = new ParseField("search_pipeline");
+    @Override
+import org.opensearch.action.ActionRequest;
+    }
+        this.scriptType = scriptType;
+    }
+ * You may obtain a copy of the License at
+        this.profile = profile;
+            searchPipeline = in.readOptionalString();
+        super.writeTo(out);
+import org.opensearch.action.support.IndicesOptions;
+ * The OpenSearch Contributors require contributions made to
+            builder.field(ID_FIELD.getPreferredName(), script);
+    public void writeTo(StreamOutput out) throws IOException {
+        explain = in.readBoolean();
+    public boolean equals(Object o) {
+    public boolean isSimulate() {
+                ActionRequestValidationException ex = request.validate();
+    public void setScript(String script) {
+import org.opensearch.core.common.ParsingException;
+    }
+    public void setProfile(boolean profile) {
+    private static ParseField PROFILE_FIELD = new ParseField("profile");
+        if (script == null || script.isEmpty()) {
+                request.setScript(parser.text());
+    static {
+        simulate = in.readBoolean();
+        PARSER.declareField((parser, request, context) -> {
+                validationException = addValidationError("search request is missing", validationException);
+        }
+public class SearchTemplateRequest extends ActionRequest implements IndicesRequest.Replaceable, CompositeIndicesRequest, ToXContentObject {
+    private static ParseField EXPLAIN_FIELD = new ParseField("explain");
+            }
+        }
+import org.opensearch.core.common.io.stream.StreamInput;
+    @Override
+                }
+    public String getSearchPipeline() {
+    public void setSimulate(boolean simulate) {
+    }
+                } catch (IOException e) {
+    private String searchPipeline;
+        if (request == null) {
+ *
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        return request.indices(indices);
+        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) return true;
+import org.opensearch.core.xcontent.ToXContentObject;
+    private static ParseField ID_FIELD = new ParseField("id");
+            validationException = addValidationError("template is missing", validationException);
+ * this work for additional information regarding copyright
+ */
+    public void setSearchPipeline(String searchPipeline) {
+            if (parser.currentToken() == XContentParser.Token.START_OBJECT) {
+                    validationException.addValidationErrors(ex.validationErrors());
+    }
+        if (request == null) {
+    private boolean simulate = false;
+import org.opensearch.action.search.SearchRequest;
+            if (parser.currentToken() == XContentParser.Token.VALUE_NULL) {
+import org.opensearch.script.ScriptType;
+        } else if (scriptType == ScriptType.INLINE) {
+import org.opensearch.action.IndicesRequest;
+    }
+    public void setExplain(boolean explain) {
+        }
+        this.script = script;
+ */
+    }
+    public String[] indices() {
+            && Objects.equals(script, request1.script)
+    @Override
+    }
+        return request.indicesOptions();
+        }, SEARCH_PIPELINE_FIELD, ObjectParser.ValueType.STRING_OR_NULL);
+            builder.field(SOURCE_FIELD.getPreferredName(), script);
+    public String getScript() {
+            request.setScriptType(ScriptType.INLINE);
+    @Override
+    }
+                }
+            } else {
+    public IndicesRequest indices(String... indices) {
+                    if (validationException == null) {
+        }, ID_FIELD);
+import org.opensearch.core.common.io.stream.StreamOutput;
+            request.setScript(s);
+    private String script;
+        return scriptParams;
+            .field(EXPLAIN_FIELD.getPreferredName(), explain)
+        }
+import org.opensearch.action.CompositeIndicesRequest;
+        out.writeBoolean(profile);
+/*
+                    throw new ParsingException(parser.getTokenLocation(), "Could not parse inline template", e);
+    public SearchTemplateRequest(StreamInput in) throws IOException {
+        if (hasParams) {
+ * Modifications Copyright OpenSearch Contributors. See
+        if (request == null) {
+ * SPDX-License-Identifier: Apache-2.0
+        return validationException;
+        this.scriptParams = scriptParams;
+        this.searchPipeline = searchPipeline;
+            } else {
+ * not use this file except in compliance with the License.
+            } else {
+        return request;
+        this.request = searchRequest;
+    public IndicesOptions indicesOptions() {
+    }
+        out.writeOptionalString(script);
+        return builder.field(PARAMS_FIELD.getPreferredName(), scriptParams)
+        } else {
+        return request.indices();
+    private static final ObjectParser<SearchTemplateRequest, Void> PARSER;
+    public ScriptType getScriptType() {
+    public boolean isExplain() {
+            request.setScriptType(ScriptType.STORED);
+            validationException = addValidationError("template's script type is missing", validationException);
+        SearchTemplateRequest request1 = (SearchTemplateRequest) o;
+    public static SearchTemplateRequest fromXContent(XContentParser parser) throws IOException {
+        }
+        }
+                if (ex != null) {
+    private boolean explain = false;
+    public int hashCode() {
+        scriptType.writeTo(out);
+    @Override
+ * KIND, either express or implied.  See the License for the
+    @Override
+        }
+    }
+ * Licensed to Elasticsearch under one or more contributor
+    }
+        script = in.readOptionalString();
+    }
+    public ActionRequestValidationException validate() {
+    }
+    private Map<String, Object> scriptParams;
+                    request.setScript(builder.copyCurrentStructure(parser).toString());
+                // convert the template to json which is the only supported XContentType (see CustomMustacheFactory#createEncoder)
+        out.writeBoolean(simulate);
+            && scriptType == request1.scriptType

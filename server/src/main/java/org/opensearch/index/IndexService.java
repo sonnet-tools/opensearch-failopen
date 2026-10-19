@@ -1,2014 +1,1845 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index;
-
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Sort;
-import org.apache.lucene.store.AlreadyClosedException;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.util.Accountable;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.CheckedFunction;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.InternalApi;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Setting.Property;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.common.util.concurrent.AbstractAsyncTask;
-import org.opensearch.common.util.concurrent.AbstractRunnable;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.Assertions;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.indices.breaker.CircuitBreakerService;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.env.NodeEnvironment;
-import org.opensearch.env.ShardLock;
-import org.opensearch.env.ShardLockObtainFailedException;
-import org.opensearch.gateway.MetadataStateFormat;
-import org.opensearch.gateway.WriteStateException;
-import org.opensearch.index.analysis.IndexAnalyzers;
-import org.opensearch.index.cache.IndexCache;
-import org.opensearch.index.cache.bitset.BitsetFilterCache;
-import org.opensearch.index.cache.query.QueryCache;
-import org.opensearch.index.compositeindex.CompositeIndexSettings;
-import org.opensearch.index.engine.Engine;
-import org.opensearch.index.engine.EngineConfigFactory;
-import org.opensearch.index.engine.EngineFactory;
-import org.opensearch.index.engine.MergedSegmentWarmerFactory;
-import org.opensearch.index.engine.dataformat.DataFormat;
-import org.opensearch.index.engine.dataformat.DataFormatRegistry;
-import org.opensearch.index.engine.dataformat.StoreStrategy;
-import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
-import org.opensearch.index.engine.exec.IndexerFactory;
-import org.opensearch.index.fielddata.IndexFieldDataCache;
-import org.opensearch.index.fielddata.IndexFieldDataService;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.query.SearchIndexNameMatcher;
-import org.opensearch.index.remote.RemoteStoreStatsTrackerFactory;
-import org.opensearch.index.remote.RemoteStoreUtils;
-import org.opensearch.index.seqno.RetentionLeaseSyncer;
-import org.opensearch.index.shard.IndexEventListener;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.IndexShardClosedException;
-import org.opensearch.index.shard.IndexingOperationListener;
-import org.opensearch.index.shard.SearchOperationListener;
-import org.opensearch.index.shard.ShardNotFoundException;
-import org.opensearch.index.shard.ShardNotInPrimaryModeException;
-import org.opensearch.index.shard.ShardPath;
-import org.opensearch.index.similarity.SimilarityService;
-import org.opensearch.index.store.DataFormatAwareStoreDirectory;
-import org.opensearch.index.store.DataFormatAwareStoreDirectoryFactory;
-import org.opensearch.index.store.FormatChecksumStrategy;
-import org.opensearch.index.store.RemoteSegmentStoreDirectory;
-import org.opensearch.index.store.RemoteSegmentStoreDirectoryFactory;
-import org.opensearch.index.store.Store;
-import org.opensearch.index.store.remote.filecache.NodeCacheService;
-import org.opensearch.index.translog.Translog;
-import org.opensearch.index.translog.TranslogFactory;
-import org.opensearch.indices.ClusterMergeSchedulerConfig;
-import org.opensearch.indices.IndicesBitsetFilterCache;
-import org.opensearch.indices.RemoteStoreSettings;
-import org.opensearch.indices.cluster.IndicesClusterStateService;
-import org.opensearch.indices.fielddata.cache.IndicesFieldDataCache;
-import org.opensearch.indices.mapper.MapperRegistry;
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.indices.recovery.RecoveryState;
-import org.opensearch.indices.replication.checkpoint.MergedSegmentPublisher;
-import org.opensearch.indices.replication.checkpoint.ReferencedSegmentsPublisher;
-import org.opensearch.indices.replication.checkpoint.SegmentReplicationCheckpointPublisher;
-import org.opensearch.node.remotestore.RemoteStoreNodeAttribute;
-import org.opensearch.plugins.IndexStorePlugin;
-import org.opensearch.plugins.NativeStoreHandle;
-import org.opensearch.repositories.NativeStoreRepository;
-import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.repositories.RepositoryMissingException;
-import org.opensearch.script.ScriptService;
-import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
-import org.opensearch.storage.directory.StoreStrategyRegistry;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.client.Client;
-
-import java.io.Closeable;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BiFunction;
-import java.util.function.BooleanSupplier;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.LongSupplier;
-import java.util.function.Supplier;
-
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.unmodifiableMap;
-import static org.opensearch.common.collect.MapBuilder.newMapBuilder;
-import static org.opensearch.index.remote.RemoteMigrationIndexMetadataUpdater.indexHasRemoteStoreSettings;
-
-/**
- * The main OpenSearch index service
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class IndexService extends AbstractIndexComponent implements IndicesClusterStateService.AllocatedIndex<IndexShard> {
-
-    private final IndexEventListener eventListener;
-    private final IndexFieldDataService indexFieldData;
-    private final BitsetFilterCache bitsetFilterCache;
-    private final NodeEnvironment nodeEnv;
-    private final ShardStoreDeleter shardStoreDeleter;
-    private final IndexStorePlugin.DirectoryFactory directoryFactory;
-    private final IndexStorePlugin.CompositeDirectoryFactory compositeDirectoryFactory;
-    private final DataFormatAwareStoreDirectoryFactory dataFormatAwareStoreDirectoryFactory;
-    private final IndexStorePlugin.DirectoryFactory remoteDirectoryFactory;
-    private final IndexStorePlugin.RecoveryStateFactory recoveryStateFactory;
-    private final CheckedFunction<DirectoryReader, DirectoryReader, IOException> readerWrapper;
-    private final IndexCache indexCache;
-    private final MapperService mapperService;
-    private final NamedXContentRegistry xContentRegistry;
-    private final NamedWriteableRegistry namedWriteableRegistry;
-    private final SimilarityService similarityService;
-    private final IndexerFactory indexerFactory;
-    private final EngineConfigFactory engineConfigFactory;
     private final IndexWarmer warmer;
-    private volatile Map<Integer, IndexShard> shards = emptyMap();
-    private final AtomicBoolean closed = new AtomicBoolean(false);
-    private final AtomicBoolean deleted = new AtomicBoolean(false);
-    private final IndexSettings indexSettings;
-    private final List<SearchOperationListener> searchOperationListeners;
-    private final List<IndexingOperationListener> indexingOperationListeners;
-    private final BooleanSupplier allowExpensiveQueries;
-    private volatile AsyncRefreshTask refreshTask;
-    private volatile AsyncTranslogFSync fsyncTask;
-    private volatile AsyncGlobalCheckpointTask globalCheckpointTask;
-    private volatile AsyncRetentionLeaseSyncTask retentionLeaseSyncTask;
-    private volatile AsyncReplicationTask asyncReplicationTask;
-    private volatile AsyncPublishReferencedSegmentsTask asyncPublishReferencedSegmentsTask;
-
-    // don't convert to Setting<> and register... we only set this in tests and register via a plugin
-    private final String INDEX_TRANSLOG_RETENTION_CHECK_INTERVAL_SETTING = "index.translog.retention.check_interval";
-
-    private final AsyncTrimTranslogTask trimTranslogTask;
-    private final ThreadPool threadPool;
-    private final BigArrays bigArrays;
-    private final ScriptService scriptService;
-    private final ClusterService clusterService;
-    private final Client client;
-    private final CircuitBreakerService circuitBreakerService;
-    private final IndexNameExpressionResolver expressionResolver;
-    private final Supplier<Sort> indexSortSupplier;
-    private final ValuesSourceRegistry valuesSourceRegistry;
-    private final BiFunction<IndexSettings, ShardRouting, TranslogFactory> translogFactorySupplier;
-    private final Supplier<TimeValue> clusterDefaultRefreshIntervalSupplier;
-    private final Supplier<Boolean> fixedRefreshIntervalSchedulingEnabled;
-    private final RecoverySettings recoverySettings;
-    private final RemoteStoreSettings remoteStoreSettings;
-    private final NodeCacheService nodeCacheService;
-    private final CompositeIndexSettings compositeIndexSettings;
-    private final Consumer<IndexShard> replicator;
-    private final Function<ShardId, ReplicationStats> segmentReplicationStatsProvider;
-    private final Object refreshMutex = new Object();
-    private volatile TimeValue refreshInterval;
-    private volatile boolean shardLevelRefreshEnabled;
-    private final IndexStorePlugin.StoreFactory storeFactory;
-    private final DataFormatRegistry dataFormatRegistry;
-
-    @InternalApi
-    public IndexService(
-        IndexSettings indexSettings,
-        IndexCreationContext indexCreationContext,
-        NodeEnvironment nodeEnv,
-        NamedXContentRegistry xContentRegistry,
-        SimilarityService similarityService,
-        ShardStoreDeleter shardStoreDeleter,
-        IndexAnalyzers indexAnalyzers,
-        IndexerFactory indexerFactory,
-        EngineConfigFactory engineConfigFactory,
-        CircuitBreakerService circuitBreakerService,
-        BigArrays bigArrays,
-        ThreadPool threadPool,
-        ScriptService scriptService,
-        ClusterService clusterService,
-        Client client,
-        QueryCache queryCache,
-        IndexStorePlugin.DirectoryFactory directoryFactory,
-        IndexStorePlugin.CompositeDirectoryFactory compositeDirectoryFactory,
-        IndexStorePlugin.DirectoryFactory remoteDirectoryFactory,
-        IndexStorePlugin.StoreFactory storeFactory,
-        IndexEventListener eventListener,
-        Function<IndexService, CheckedFunction<DirectoryReader, DirectoryReader, IOException>> wrapperFactory,
-        MapperRegistry mapperRegistry,
-        IndicesFieldDataCache indicesFieldDataCache,
-        IndicesBitsetFilterCache indicesBitsetFilterCache,
-        List<SearchOperationListener> searchOperationListeners,
-        List<IndexingOperationListener> indexingOperationListeners,
-        NamedWriteableRegistry namedWriteableRegistry,
-        BooleanSupplier idFieldDataEnabled,
-        BooleanSupplier allowExpensiveQueries,
-        IndexNameExpressionResolver expressionResolver,
-        ValuesSourceRegistry valuesSourceRegistry,
-        IndexStorePlugin.RecoveryStateFactory recoveryStateFactory,
-        BiFunction<IndexSettings, ShardRouting, TranslogFactory> translogFactorySupplier,
-        Supplier<TimeValue> clusterDefaultRefreshIntervalSupplier,
-        Supplier<Boolean> fixedRefreshIntervalSchedulingEnabled,
-        boolean shardLevelRefreshEnabled,
-        RecoverySettings recoverySettings,
-        RemoteStoreSettings remoteStoreSettings,
-        CompositeIndexSettings compositeIndexSettings,
-        Consumer<IndexShard> replicator,
-        Function<ShardId, ReplicationStats> segmentReplicationStatsProvider,
-        Supplier<Integer> clusterDefaultMaxMergeAtOnceSupplier,
-        ClusterMergeSchedulerConfig clusterMergeSchedulerConfig,
-        DataFormatRegistry dataFormatRegistry,
-        DataFormatAwareStoreDirectoryFactory dataFormatAwareStoreDirectoryFactory,
-        NodeCacheService nodeCacheService
-    ) {
-        super(indexSettings);
-        this.storeFactory = storeFactory;
-        this.allowExpensiveQueries = allowExpensiveQueries;
-        this.indexSettings = indexSettings;
-        this.xContentRegistry = xContentRegistry;
-        this.similarityService = similarityService;
-        this.namedWriteableRegistry = namedWriteableRegistry;
-        this.circuitBreakerService = circuitBreakerService;
-        this.expressionResolver = expressionResolver;
-        this.valuesSourceRegistry = valuesSourceRegistry;
-        if (needsMapperService(indexSettings, indexCreationContext)) {
-            assert indexAnalyzers != null;
-            this.mapperService = new MapperService(
-                indexSettings,
-                indexAnalyzers,
-                xContentRegistry,
-                similarityService,
-                mapperRegistry,
-                // we parse all percolator queries as they would be parsed on shard 0
-                () -> newQueryShardContext(0, null, System::currentTimeMillis, null),
-                idFieldDataEnabled,
-                scriptService,
-                dataFormatRegistry
-            );
-            this.indexFieldData = new IndexFieldDataService(
-                indexSettings,
-                indicesFieldDataCache,
-                circuitBreakerService,
-                mapperService,
-                threadPool
-            );
-            if (indexSettings.getIndexSortConfig().hasIndexSort()) {
-                // we delay the actual creation of the sort order for this index because the mapping has not been merged yet.
-                // The sort order is validated right after the merge of the mapping later in the process.
-                boolean shouldWidenIndexSortType = this.indexSettings.shouldWidenIndexSortType();
-                this.indexSortSupplier = () -> indexSettings.getIndexSortConfig()
-                    .buildIndexSort(
-                        shouldWidenIndexSortType,
-                        mapperService::fieldType,
-                        (fieldType, searchLookup) -> indexFieldData.getForField(fieldType, indexFieldData.index().getName(), searchLookup)
-                    );
-            } else {
-                this.indexSortSupplier = () -> null;
-            }
-            indexFieldData.setListener(new FieldDataCacheListener(this));
-            indexFieldData.setShardIdentityResolver(shardId -> {
-                final IndexShard shard = getShardOrNull(shardId.id());
-                return shard == null ? IndicesFieldDataCache.Key.NO_SHARD_IDENTITY : System.identityHashCode(shard);
-            });
-            this.bitsetFilterCache = new BitsetFilterCache(indexSettings, indicesBitsetFilterCache, new BitsetCacheListener(this));
-            this.warmer = new IndexWarmer(
-                threadPool,
-                indexFieldData,
-                indicesBitsetFilterCache != null ? indicesBitsetFilterCache.createListener(threadPool) : null
-            );
-            this.indexCache = new IndexCache(indexSettings, queryCache, bitsetFilterCache);
-        } else {
-            assert indexAnalyzers == null;
-            this.mapperService = null;
-            this.indexFieldData = null;
-            this.indexSortSupplier = () -> null;
-            this.bitsetFilterCache = null;
-            this.warmer = null;
-            this.indexCache = null;
-        }
-
-        this.shardStoreDeleter = shardStoreDeleter;
-        this.bigArrays = bigArrays;
-        this.threadPool = threadPool;
-        this.scriptService = scriptService;
-        this.clusterService = clusterService;
-        this.client = client;
-        this.eventListener = eventListener;
-        this.nodeEnv = nodeEnv;
-        this.directoryFactory = directoryFactory;
-        this.compositeDirectoryFactory = compositeDirectoryFactory;
-        this.dataFormatAwareStoreDirectoryFactory = dataFormatAwareStoreDirectoryFactory;
-        this.remoteDirectoryFactory = remoteDirectoryFactory;
-        this.recoveryStateFactory = recoveryStateFactory;
-        this.indexerFactory = Objects.requireNonNull(indexerFactory);
-        this.engineConfigFactory = Objects.requireNonNull(engineConfigFactory);
-        // initialize this last -- otherwise if the wrapper requires any other member to be non-null we fail with an NPE
-        this.readerWrapper = wrapperFactory.apply(this);
-        this.searchOperationListeners = Collections.unmodifiableList(searchOperationListeners);
-        this.indexingOperationListeners = Collections.unmodifiableList(indexingOperationListeners);
-        this.clusterDefaultRefreshIntervalSupplier = clusterDefaultRefreshIntervalSupplier;
-        this.fixedRefreshIntervalSchedulingEnabled = fixedRefreshIntervalSchedulingEnabled;
-        this.shardLevelRefreshEnabled = shardLevelRefreshEnabled;
-        this.refreshInterval = getRefreshInterval();
-        // kick off async ops for the first shard in this index
-        this.trimTranslogTask = new AsyncTrimTranslogTask(this);
-        // disable these checks for ingestion source engine
-        if (!indexSettings.getIndexMetadata().useIngestionSource()) {
-            this.globalCheckpointTask = new AsyncGlobalCheckpointTask(this);
-            this.retentionLeaseSyncTask = new AsyncRetentionLeaseSyncTask(this);
-        }
-        this.asyncReplicationTask = new AsyncReplicationTask(this);
-        this.asyncPublishReferencedSegmentsTask = new AsyncPublishReferencedSegmentsTask(this);
-
-        this.translogFactorySupplier = translogFactorySupplier;
-        this.recoverySettings = recoverySettings;
-        this.remoteStoreSettings = remoteStoreSettings;
-        this.compositeIndexSettings = compositeIndexSettings;
-        this.nodeCacheService = nodeCacheService;
-        this.replicator = replicator;
-        this.segmentReplicationStatsProvider = segmentReplicationStatsProvider;
-        indexSettings.setDefaultMaxMergesAtOnce(clusterDefaultMaxMergeAtOnceSupplier.get());
-        if (clusterMergeSchedulerConfig != null) {
-            indexSettings.setDefaultMaxThreadAndMergeCount(
-                clusterMergeSchedulerConfig.getClusterMaxThreadCount(),
-                clusterMergeSchedulerConfig.getClusterMaxMergeCount()
-            );
-            indexSettings.setDefaultAutoThrottleEnabled(clusterMergeSchedulerConfig.getClusterMergeAutoThrottleEnabled());
-        }
-        updateFsyncTaskIfNecessary();
-        synchronized (refreshMutex) {
-            if (shardLevelRefreshEnabled == false) {
-                logger.debug("shard level refresh is disabled for index [{}]", indexSettings.getIndex().getName());
-                startIndexLevelRefreshTask();
-            }
-        }
-        this.dataFormatRegistry = dataFormatRegistry;
-    }
-
-    @InternalApi
-    public IndexService(
-        IndexSettings indexSettings,
-        IndexCreationContext indexCreationContext,
-        NodeEnvironment nodeEnv,
-        NamedXContentRegistry xContentRegistry,
-        SimilarityService similarityService,
-        ShardStoreDeleter shardStoreDeleter,
-        IndexAnalyzers indexAnalyzers,
-        IndexerFactory indexerFactory,
-        EngineConfigFactory engineConfigFactory,
-        CircuitBreakerService circuitBreakerService,
-        BigArrays bigArrays,
-        ThreadPool threadPool,
-        ScriptService scriptService,
-        ClusterService clusterService,
-        Client client,
-        QueryCache queryCache,
-        IndexStorePlugin.DirectoryFactory directoryFactory,
-        IndexStorePlugin.DirectoryFactory remoteDirectoryFactory,
-        IndexStorePlugin.StoreFactory storeFactory,
-        IndexEventListener eventListener,
-        Function<IndexService, CheckedFunction<DirectoryReader, DirectoryReader, IOException>> wrapperFactory,
-        MapperRegistry mapperRegistry,
-        IndicesFieldDataCache indicesFieldDataCache,
-        List<SearchOperationListener> searchOperationListeners,
-        List<IndexingOperationListener> indexingOperationListeners,
-        NamedWriteableRegistry namedWriteableRegistry,
-        BooleanSupplier idFieldDataEnabled,
-        BooleanSupplier allowExpensiveQueries,
-        IndexNameExpressionResolver expressionResolver,
-        ValuesSourceRegistry valuesSourceRegistry,
-        IndexStorePlugin.RecoveryStateFactory recoveryStateFactory,
-        BiFunction<IndexSettings, ShardRouting, TranslogFactory> translogFactorySupplier,
-        Supplier<TimeValue> clusterDefaultRefreshIntervalSupplier,
-        Supplier<Boolean> fixedRefreshIntervalSchedulingEnabled,
-        boolean shardLevelRefreshEnabled,
-        RecoverySettings recoverySettings,
-        RemoteStoreSettings remoteStoreSettings,
-        Supplier<Integer> clusterDefaultMaxMergeAtOnce,
-        ClusterMergeSchedulerConfig clusterMergeSchedulerConfig
-    ) {
-        this(
-            indexSettings,
-            indexCreationContext,
-            nodeEnv,
-            xContentRegistry,
-            similarityService,
-            shardStoreDeleter,
-            indexAnalyzers,
-            indexerFactory,
-            engineConfigFactory,
-            circuitBreakerService,
-            bigArrays,
-            threadPool,
-            scriptService,
-            clusterService,
-            client,
-            queryCache,
-            directoryFactory,
-            null,
-            remoteDirectoryFactory,
-            storeFactory,
-            eventListener,
-            wrapperFactory,
-            mapperRegistry,
-            indicesFieldDataCache,
-            null,
-            searchOperationListeners,
-            indexingOperationListeners,
-            namedWriteableRegistry,
-            idFieldDataEnabled,
-            allowExpensiveQueries,
-            expressionResolver,
-            valuesSourceRegistry,
-            recoveryStateFactory,
-            translogFactorySupplier,
-            clusterDefaultRefreshIntervalSupplier,
-            fixedRefreshIntervalSchedulingEnabled,
-            shardLevelRefreshEnabled,
-            recoverySettings,
+                    remoteDirectory,
+                    () -> new ParameterizedMessage("[{}] failed to close store on shard removal (reason: [{}])", shardId, reason),
+                    store.close();
+                this.indexSettings,
+    final class AsyncRetentionLeaseSyncTask extends BaseAsyncTask {
             remoteStoreSettings,
-            null,
-            s -> {},
-            (shardId) -> ReplicationStats.empty(),
-            clusterDefaultMaxMergeAtOnce,
-            clusterMergeSchedulerConfig,
-            null,
-            null,
-            null
-        );
-    }
-
-    static boolean needsMapperService(IndexSettings indexSettings, IndexCreationContext indexCreationContext) {
-        return false == (indexSettings.getIndexMetadata().getState() == IndexMetadata.State.CLOSE
-            && indexCreationContext == IndexCreationContext.CREATE_INDEX); // metadata verification needs a mapper service
-    }
-
-    // visible for tests
-    AsyncReplicationTask getReplicationTask() {
-        return asyncReplicationTask;
-    }
-
-    // visible for tests
-    AsyncPublishReferencedSegmentsTask getPublishReferencedSegmentsTask() {
-        return asyncPublishReferencedSegmentsTask;
-    }
-
+        CompositeIndexSettings compositeIndexSettings,
+import org.opensearch.gateway.WriteStateException;
+        protected String getThreadPool() {
+import org.opensearch.cluster.routing.ShardRouting;
     /**
-     * Context for index creation
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public enum IndexCreationContext {
-        CREATE_INDEX,
-        METADATA_VERIFICATION
-    }
-
-    public int numberOfShards() {
-        return shards.size();
-    }
-
-    public IndexEventListener getIndexEventListener() {
-        return this.eventListener;
-    }
-
-    @Override
-    public Iterator<IndexShard> iterator() {
+                path = ShardPath.loadShardPath(logger, nodeEnv, shardId, this.indexSettings.customDataPath());
+import org.opensearch.index.engine.dataformat.DataFormatRegistry;
         return shards.values().iterator();
     }
-
-    public boolean hasShard(int shardId) {
-        return shards.containsKey(shardId);
-    }
-
-    /**
-     * Return the shard with the provided id, or null if there is no such shard.
-     */
-    @Override
-    @Nullable
-    public IndexShard getShardOrNull(int shardId) {
-        return shards.get(shardId);
-    }
-
-    /**
-     * Return the shard with the provided id, or throw an exception if it doesn't exist.
-     */
-    public IndexShard getShard(int shardId) {
-        IndexShard indexShard = getShardOrNull(shardId);
-        if (indexShard == null) {
-            throw new ShardNotFoundException(new ShardId(index(), shardId));
-        }
-        return indexShard;
-    }
-
-    public Set<Integer> shardIds() {
-        return shards.keySet();
-    }
-
-    public IndexCache cache() {
-        return indexCache;
-    }
-
-    public IndexAnalyzers getIndexAnalyzers() {
-        return this.mapperService.getIndexAnalyzers();
-    }
-
-    public MapperService mapperService() {
-        return mapperService;
-    }
-
-    public NamedXContentRegistry xContentRegistry() {
-        return xContentRegistry;
-    }
-
-    public SimilarityService similarityService() {
-        return similarityService;
-    }
-
-    public Supplier<Sort> getIndexSortSupplier() {
-        return indexSortSupplier;
-    }
-
-    public synchronized void close(final String reason, boolean delete) throws IOException {
-        if (closed.compareAndSet(false, true)) {
-            deleted.compareAndSet(false, delete);
-            try {
-                final Set<Integer> shardIds = shardIds();
-                for (final int shardId : shardIds) {
-                    try {
-                        removeShard(shardId, reason);
-                    } catch (Exception e) {
-                        logger.warn("failed to close shard", e);
-                    }
-                }
-            } finally {
-                IOUtils.close(
-                    bitsetFilterCache,
-                    indexCache,
-                    indexFieldData,
-                    mapperService,
-                    refreshTask,
-                    fsyncTask,
-                    trimTranslogTask,
-                    globalCheckpointTask,
-                    retentionLeaseSyncTask
-                );
-            }
-        }
-    }
-
-    // method is synchronized so that IndexService can't be closed while we're writing out dangling indices information
-    public synchronized void writeDanglingIndicesInfo() {
-        if (closed.get()) {
-            return;
-        }
-        try {
-            IndexMetadata.FORMAT.writeAndCleanup(getMetadata(), nodeEnv.indexPaths(index()));
-        } catch (WriteStateException e) {
-            logger.warn(() -> new ParameterizedMessage("failed to write dangling indices state for index {}", index()), e);
-        }
-    }
-
-    // method is synchronized so that IndexService can't be closed while we're deleting dangling indices information
-    public synchronized void deleteDanglingIndicesInfo() {
-        if (closed.get()) {
-            return;
-        }
-        try {
-            MetadataStateFormat.deleteMetaState(nodeEnv.indexPaths(index()));
-        } catch (IOException e) {
-            logger.warn(() -> new ParameterizedMessage("failed to delete dangling indices state for index {}", index()), e);
-        }
-    }
-
-    public String indexUUID() {
-        return indexSettings.getUUID();
-    }
-
-    // NOTE: O(numShards) cost, but numShards should be smallish?
-    private long getAvgShardSizeInBytes() throws IOException {
-        long sum = 0;
-        int count = 0;
-        for (IndexShard indexShard : this) {
-            sum += indexShard.store().stats(0L).sizeInBytes();
-            count++;
-        }
-        if (count == 0) {
-            return -1L;
-        } else {
-            return sum / count;
-        }
-    }
-
-    @Deprecated(forRemoval = true)
-    public synchronized IndexShard createShard(
-        final ShardRouting routing,
-        final Consumer<ShardId> globalCheckpointSyncer,
-        final RetentionLeaseSyncer retentionLeaseSyncer,
-        final SegmentReplicationCheckpointPublisher checkpointPublisher,
-        final RemoteStoreStatsTrackerFactory remoteStoreStatsTrackerFactory,
-        final RepositoriesService repositoriesService,
-        final DiscoveryNode targetNode,
-        @Nullable DiscoveryNode sourceNode,
-        DiscoveryNodes discoveryNodes,
-        MergedSegmentWarmerFactory mergedSegmentWarmerFactory
-    ) throws IOException {
-        return createShard(
-            routing,
-            globalCheckpointSyncer,
-            retentionLeaseSyncer,
-            checkpointPublisher,
-            remoteStoreStatsTrackerFactory,
-            repositoriesService,
-            targetNode,
-            sourceNode,
-            discoveryNodes,
-            mergedSegmentWarmerFactory,
-            null,
-            null
-        );
-    }
-
-    public synchronized IndexShard createShard(
-        final ShardRouting routing,
-        final Consumer<ShardId> globalCheckpointSyncer,
-        final RetentionLeaseSyncer retentionLeaseSyncer,
-        final SegmentReplicationCheckpointPublisher checkpointPublisher,
-        final RemoteStoreStatsTrackerFactory remoteStoreStatsTrackerFactory,
-        final RepositoriesService repositoriesService,
-        final DiscoveryNode targetNode,
-        @Nullable DiscoveryNode sourceNode,
-        DiscoveryNodes discoveryNodes,
-        MergedSegmentWarmerFactory mergedSegmentWarmerFactory,
-        MergedSegmentPublisher mergedSegmentPublisher,
-        ReferencedSegmentsPublisher referencedSegmentsPublisher
-    ) throws IOException {
-        Objects.requireNonNull(retentionLeaseSyncer);
-        /*
-         * TODO: we execute this in parallel but it's a synced method. Yet, we might
-         * be able to serialize the execution via the cluster state in the future. for now we just
-         * keep it synced.
-         */
-        if (closed.get()) {
-            throw new IllegalStateException("Can't create shard " + routing.shardId() + ", closed");
-        }
-        final Settings indexSettings = this.indexSettings.getSettings();
-        final ShardId shardId = routing.shardId();
-        boolean success = false;
-        Store store = null;
-        IndexShard indexShard = null;
-        ShardLock lock = null;
-        try {
-            lock = nodeEnv.shardLock(shardId, "starting shard", TimeUnit.SECONDS.toMillis(5));
-            eventListener.beforeIndexShardCreated(shardId, indexSettings);
-            ShardPath path = getShardPath(routing, shardId, lock);
-            logger.debug("creating shard_id {}", shardId);
-            // if we are on a shared FS we only own the shard (i.e. we can safely delete it) if we are the primary.
-            final Engine.Warmer engineWarmer = (reader) -> {
-                IndexShard shard = getShardOrNull(shardId.getId());
-                if (shard != null) {
-                    warmer.warm(reader, shard, IndexService.this.indexSettings);
-                }
-            };
-            Store remoteStore = null;
-            Directory remoteDirectory = null;
-            boolean seedRemote = false;
-            if (targetNode.isRemoteSegmentStoreNode()) {
-                if (this.indexSettings.isRemoteStoreEnabled()) {
-                    remoteDirectory = remoteDirectoryFactory.newDirectory(this.indexSettings, path);
-                } else {
-                    if (sourceNode == null || sourceNode.isRemoteSegmentStoreNode() == false) {
-                        if (routing.primary() == false) {
-                            throw new IllegalStateException("Can't migrate a remote shard to replica before primary " + routing.shardId());
-                        }
-                        logger.info("DocRep shard {} is migrating to remote", shardId);
-                        seedRemote = true;
-                    }
-
-                    remoteDirectory = ((RemoteSegmentStoreDirectoryFactory) remoteDirectoryFactory).newDirectory(
-                        RemoteStoreNodeAttribute.getRemoteStoreSegmentRepo(this.indexSettings.getNodeSettings()),
-                        this.indexSettings.getUUID(),
-                        shardId,
-                        this.indexSettings.getRemoteStorePathStrategy(),
-                        this.indexSettings.getRemoteStoreSegmentPathPrefix(),
-                        RemoteStoreUtils.isServerSideEncryptionEnabledIndex(this.indexSettings.getIndexMetadata())
-                    );
-                }
-                // When an instance of Store is created, a shardlock is created which is released on closing the instance of store.
-                // Currently, we create 2 instances of store for remote store backed indices: store and remoteStore.
-                // As there can be only one shardlock acquired for a given shard, the lock is shared between store and remoteStore.
-                // This creates an issue when we are deleting the index as it results in closing both store and remoteStore.
-                // Sample test failure: https://github.com/opensearch-project/OpenSearch/issues/13871
-                // The following method provides ShardLock that is not maintained by NodeEnvironment.
-                // As part of https://github.com/opensearch-project/OpenSearch/issues/13075, we want to move away from keeping 2
-                // store instances.
-                ShardLock remoteStoreLock = new ShardLock(shardId) {
-                    @Override
-                    protected void closeInternal() {
-                        // Do nothing for shard lock on remote store
-                    }
-                };
-                remoteStore = new Store(
-                    shardId,
-                    this.indexSettings,
-                    remoteDirectory,
-                    remoteStoreLock,
-                    Store.OnClose.EMPTY,
-                    path,
-                    directoryFactory
-                );
-            } else {
-                // Disallow shards with remote store based settings to be created on non-remote store enabled nodes
-                // Even though we have `RemoteStoreMigrationAllocationDecider` in place to prevent something like this from happening at the
-                // allocation level,
-                // keeping this defensive check in place
-                // TODO: Remove this once remote to docrep migration is supported
-                if (indexHasRemoteStoreSettings(indexSettings)) {
-                    throw new IllegalStateException(
-                        "[{" + routing.shardId() + "}] Cannot initialize shards with remote store index settings on non-remote store nodes"
-                    );
-                }
-            }
-
-            Directory directory = null;
-            Map<String, FormatChecksumStrategy> checksumStrategies = Collections.emptyMap();
-            Map<DataFormat, NativeStoreHandle> dataformatAwareStoreHandles = Map.of();
-            if (this.indexSettings.isPluggableDataFormatEnabled() && dataFormatRegistry != null) {
-                checksumStrategies = dataFormatRegistry.createChecksumStrategies(this.indexSettings);
-            }
-            if (FeatureFlags.isEnabled(FeatureFlags.WRITABLE_WARM_INDEX_SETTING)
-                && this.indexSettings.isWarmIndex()
-                && this.indexSettings.isPluggableDataFormatEnabled()
-                && this.dataFormatAwareStoreDirectoryFactory != null) {
-                // Warm + format-aware: create StoreStrategyRegistry here so we can
-                // extract native store handles for the Store before passing to the factory.
-                Map<DataFormat, StoreStrategy> storeStrategies = dataFormatRegistry.getStoreStrategies(this.indexSettings);
-                NativeStoreRepository nativeStore = resolveNativeStore(repositoriesService);
-                StoreStrategyRegistry storeStrategyRegistry = null;
-                try {
-                    storeStrategyRegistry = StoreStrategyRegistry.open(
-                        path,
-                        true,
-                        nativeStore,
-                        storeStrategies,
-                        (RemoteSegmentStoreDirectory) remoteDirectory,
-                        nodeCacheService
-                    );
-                    dataformatAwareStoreHandles = storeStrategyRegistry.getFormatStoreHandles();
-                    directory = dataFormatAwareStoreDirectoryFactory.newDataFormatAwareStoreDirectory(
-                        this.indexSettings,
-                        shardId,
-                        path,
-                        directoryFactory,
-                        checksumStrategies,
-                        storeStrategyRegistry,
-                        (RemoteSegmentStoreDirectory) remoteDirectory,
-                        nodeCacheService != null ? nodeCacheService.fileCache() : null,
-                        threadPool
-                    );
-                } catch (Exception e) {
-                    IOUtils.closeWhileHandlingException(storeStrategyRegistry);
-                    throw e;
-                }
-            } else if (FeatureFlags.isEnabled(FeatureFlags.WRITABLE_WARM_INDEX_SETTING) &&
-            // TODO : Need to remove this check after support for hot indices is added in Composite Directory
-                this.indexSettings.isWarmIndex()) {
-                    directory = compositeDirectoryFactory.newDirectory(
-                        this.indexSettings,
-                        path,
-                        directoryFactory,
-                        remoteDirectory,
-                        nodeCacheService != null ? nodeCacheService.fileCache() : null,
-                        threadPool
-                    );
-                } else if (this.indexSettings.isPluggableDataFormatEnabled() == false) {
-                    directory = directoryFactory.newDirectory(this.indexSettings, path);
-                } else {
-                    // Will be enabled in case of formatAware indices.
-                    directory = createDataFormatAwareStoreDirectory(shardId, path, checksumStrategies);
-                }
-            store = storeFactory.newStore(
-                shardId,
-                this.indexSettings,
-                directory,
-                lock,
-                new StoreCloseListener(shardId, () -> eventListener.onStoreClosed(shardId)),
-                path,
-                directoryFactory
-            );
-            store.setDataformatAwareStoreHandles(dataformatAwareStoreHandles);
-            eventListener.onStoreCreated(shardId);
-            indexShard = new IndexShard(
-                routing,
-                this.indexSettings,
-                path,
-                store,
-                indexSortSupplier,
-                indexCache,
-                mapperService,
-                similarityService,
-                indexerFactory,
-                engineConfigFactory,
-                eventListener,
-                readerWrapper,
-                threadPool,
-                bigArrays,
-                engineWarmer,
-                searchOperationListeners,
-                indexingOperationListeners,
-                () -> globalCheckpointSyncer.accept(shardId),
-                retentionLeaseSyncer,
-                circuitBreakerService,
-                translogFactorySupplier,
-                this.indexSettings.isSegRepEnabledOrRemoteNode() ? checkpointPublisher : null,
-                remoteStore,
-                remoteStoreStatsTrackerFactory,
-                nodeEnv.nodeId(),
-                recoverySettings,
-                remoteStoreSettings,
-                seedRemote,
-                discoveryNodes,
-                segmentReplicationStatsProvider,
-                mergedSegmentWarmerFactory,
-                shardLevelRefreshEnabled,
-                fixedRefreshIntervalSchedulingEnabled,
-                this::getRefreshInterval,
-                refreshMutex,
-                clusterService.getClusterApplierService(),
-                this.indexSettings.isSegRepEnabledOrRemoteNode() ? mergedSegmentPublisher : null,
-                this.indexSettings.isSegRepEnabledOrRemoteNode() ? referencedSegmentsPublisher : null,
-                checksumStrategies,
-                dataFormatRegistry
-            );
-            eventListener.indexShardStateChanged(indexShard, null, indexShard.state(), "shard created");
-            eventListener.afterIndexShardCreated(indexShard);
-            shards = newMapBuilder(shards).put(shardId.id(), indexShard).immutableMap();
-            success = true;
-            return indexShard;
-        } catch (ShardLockObtainFailedException e) {
-            throw new IOException("failed to obtain in-memory shard lock", e);
-        } finally {
-            if (success == false) {
-                if (lock != null) {
-                    IOUtils.closeWhileHandlingException(lock);
-                }
-                closeShard("initialization failed", shardId, indexShard, store, eventListener);
-            }
-        }
-    }
-
-    /*
-      Fetches the shard path based on the index type -
-      For a remote snapshot index, the cache path is used to initialize the shards.
-      For a local index, a local shard path is loaded or a new path is calculated.
-     */
-    private ShardPath getShardPath(ShardRouting routing, ShardId shardId, ShardLock lock) throws IOException {
-        ShardPath path;
-        if (this.indexSettings.isRemoteSnapshot()) {
-            path = ShardPath.loadFileCachePath(nodeEnv, shardId);
-        } else {
-            try {
-                path = ShardPath.loadShardPath(logger, nodeEnv, shardId, this.indexSettings.customDataPath());
-            } catch (IllegalStateException ex) {
-                logger.warn("{} failed to load shard path, trying to remove leftover", shardId);
-                try {
-                    ShardPath.deleteLeftoverShardDirectory(logger, nodeEnv, lock, this.indexSettings);
-                    path = ShardPath.loadShardPath(logger, nodeEnv, shardId, this.indexSettings.customDataPath());
-                } catch (Exception inner) {
-                    ex.addSuppressed(inner);
-                    throw ex;
-                }
-            }
-
-            if (path == null) {
-                // TODO: we should, instead, hold a "bytes reserved" of how large we anticipate this shard will be, e.g. for a shard
-                // that's being relocated/replicated we know how large it will become once it's done copying:
-                // Count up how many shards are currently on each data path:
-                Map<Path, Integer> dataPathToShardCount = new HashMap<>();
-                for (IndexShard shard : this) {
-                    Path dataPath = shard.shardPath().getRootStatePath();
-                    Integer curCount = dataPathToShardCount.get(dataPath);
-                    if (curCount == null) {
-                        curCount = 0;
-                    }
-                    dataPathToShardCount.put(dataPath, curCount + 1);
-                }
-                path = ShardPath.selectNewPathForShard(
-                    nodeEnv,
-                    shardId,
-                    this.indexSettings,
-                    routing.getExpectedShardSize() == ShardRouting.UNAVAILABLE_EXPECTED_SHARD_SIZE
-                        ? getAvgShardSizeInBytes()
-                        : routing.getExpectedShardSize(),
-                    dataPathToShardCount
-                );
-                logger.debug("{} creating using a new path [{}]", shardId, path);
-            } else {
-                logger.debug("{} creating using an existing path [{}]", shardId, path);
-            }
-        }
-
-        if (shards.containsKey(shardId.id())) {
-            throw new IllegalStateException(shardId + " already exists");
-        }
-        return path;
-    }
-
-    @Override
-    public synchronized void removeShard(int shardId, String reason) {
-        final ShardId sId = new ShardId(index(), shardId);
-        final IndexShard indexShard;
-        if (shards.containsKey(shardId) == false) {
-            return;
-        }
-        logger.debug("[{}] closing... (reason: [{}])", shardId, reason);
-        HashMap<Integer, IndexShard> newShards = new HashMap<>(shards);
-        indexShard = newShards.remove(shardId);
-        shards = unmodifiableMap(newShards);
-        closeShard(reason, sId, indexShard, indexShard.store(), indexShard.getIndexEventListener());
-        logger.debug("[{}] closed (reason: [{}])", shardId, reason);
-    }
-
-    private void closeShard(String reason, ShardId sId, IndexShard indexShard, Store store, IndexEventListener listener) {
-        final int shardId = sId.id();
-        final Settings indexSettings = this.getIndexSettings().getSettings();
-        Store remoteStore = null;
-        if (indexShard != null) {
-            remoteStore = indexShard.remoteStore();
-        }
-        if (store != null) {
-            store.beforeClose();
-        }
-        try {
-            try {
-                listener.beforeIndexShardClosed(sId, indexShard, indexSettings);
-            } finally {
-                // this logic is tricky, we want to close the engine so we rollback the changes done to it
-                // and close the shard so no operations are allowed to it
-                if (indexShard != null) {
-                    try {
-                        // only flush if we are closed (closed index or shutdown) and if we are not deleted
-                        final boolean flushEngine = deleted.get() == false && closed.get();
-                        indexShard.close(reason, flushEngine, deleted.get());
-                    } catch (Exception e) {
-                        logger.debug(() -> new ParameterizedMessage("[{}] failed to close index shard", shardId), e);
-                        // ignore
-                    }
-                }
-                // call this before we close the store, so we can release resources for it
-                listener.afterIndexShardClosed(sId, indexShard, indexSettings);
-            }
-        } finally {
-            try {
-                if (store != null) {
-                    store.close();
-                } else {
-                    logger.trace("[{}] store not initialized prior to closing shard, nothing to close", shardId);
-                }
-
-                if (remoteStore != null && indexShard.isPrimaryMode() && deleted.get()) {
-                    remoteStore.close();
-                }
-
-            } catch (Exception e) {
-                logger.warn(
-                    () -> new ParameterizedMessage("[{}] failed to close store on shard removal (reason: [{}])", shardId, reason),
-                    e
-                );
-            }
-        }
-    }
-
-    private void onShardClose(ShardLock lock) {
-        if (deleted.get()) { // we remove that shards content if this index has been deleted
-            try {
-                try {
-                    eventListener.beforeIndexShardDeleted(lock.getShardId(), indexSettings.getSettings());
-                } finally {
-                    shardStoreDeleter.deleteShardStore("delete index", lock, indexSettings);
-                    eventListener.afterIndexShardDeleted(lock.getShardId(), indexSettings.getSettings());
-                }
-            } catch (IOException e) {
-                shardStoreDeleter.addPendingDelete(lock.getShardId(), indexSettings);
-                logger.debug(
-                    () -> new ParameterizedMessage("[{}] failed to delete shard content - scheduled a retry", lock.getShardId().id()),
-                    e
-                );
-            }
-        }
-    }
-
-    public RecoveryState createRecoveryState(ShardRouting shardRouting, DiscoveryNode targetNode, DiscoveryNode sourceNode) {
-        return recoveryStateFactory.newRecoveryState(shardRouting, targetNode, sourceNode);
-    }
-
-    @Override
-    public IndexSettings getIndexSettings() {
-        return indexSettings;
-    }
-
-    /**
-     * Creates a new QueryShardContext.
-     * <p>
-     * Passing a {@code null} {@link IndexSearcher} will return a valid context, however it won't be able to make
-     * {@link IndexReader}-specific optimizations, such as rewriting containing range queries.
-     */
-    public QueryShardContext newQueryShardContext(int shardId, IndexSearcher searcher, LongSupplier nowInMillis, String clusterAlias) {
-        return newQueryShardContext(shardId, searcher, nowInMillis, clusterAlias, false);
-    }
-
-    /**
-     * Creates a new QueryShardContext.
-     * <p>
-     * Passing a {@code null} {@link IndexSearcher} will return a valid context, however it won't be able to make
-     * {@link IndexReader}-specific optimizations, such as rewriting containing range queries.
-     */
-    public QueryShardContext newQueryShardContext(
-        int shardId,
-        IndexSearcher searcher,
-        LongSupplier nowInMillis,
-        String clusterAlias,
-        boolean validate,
-        boolean keywordIndexOrDocValuesEnabled
-    ) {
-        final SearchIndexNameMatcher indexNameMatcher = new SearchIndexNameMatcher(
-            index().getName(),
-            clusterAlias,
-            clusterService,
-            expressionResolver
-        );
-        return new QueryShardContext(
-            shardId,
-            indexSettings,
-            bigArrays,
-            indexCache.bitsetFilterCache(),
-            indexFieldData::getForField,
-            mapperService(),
-            similarityService(),
-            scriptService,
-            xContentRegistry,
-            namedWriteableRegistry,
-            client,
-            searcher,
-            nowInMillis,
-            clusterAlias,
-            indexNameMatcher,
-            allowExpensiveQueries,
-            valuesSourceRegistry,
-            validate,
-            keywordIndexOrDocValuesEnabled
-        );
-    }
-
-    /**
-     * Creates a new QueryShardContext.
-     * <p>
-     * Passing a {@code null} {@link IndexSearcher} will return a valid context, however it won't be able to make
-     * {@link IndexReader}-specific optimizations, such as rewriting containing range queries.
-     */
-    public QueryShardContext newQueryShardContext(
-        int shardId,
-        IndexSearcher searcher,
-        LongSupplier nowInMillis,
-        String clusterAlias,
-        boolean validate
-    ) {
-        return newQueryShardContext(shardId, searcher, nowInMillis, clusterAlias, validate, false);
-    }
-
-    /**
-     * The {@link ThreadPool} to use for this index.
-     */
-    public ThreadPool getThreadPool() {
-        return threadPool;
-    }
-
-    /**
-     * The {@link BigArrays} to use for this index.
-     */
-    public BigArrays getBigArrays() {
-        return bigArrays;
-    }
-
-    /**
-     * The {@link ScriptService} to use for this index.
-     */
-    public ScriptService getScriptService() {
-        return scriptService;
-    }
-
-    List<IndexingOperationListener> getIndexOperationListeners() { // pkg private for testing
-        return indexingOperationListeners;
-    }
-
-    List<SearchOperationListener> getSearchOperationListener() { // pkg private for testing
-        return searchOperationListeners;
-    }
-
-    @Override
-    public boolean updateMapping(final IndexMetadata currentIndexMetadata, final IndexMetadata newIndexMetadata) throws IOException {
-        if (mapperService == null) {
-            return false;
-        }
-        return mapperService.updateMapping(currentIndexMetadata, newIndexMetadata);
-    }
-
-    private class StoreCloseListener implements Store.OnClose {
-        private final ShardId shardId;
-        private final Closeable[] toClose;
-
-        StoreCloseListener(ShardId shardId, Closeable... toClose) {
-            this.shardId = shardId;
-            this.toClose = toClose;
-        }
-
-        @Override
-        public void accept(ShardLock lock) {
-            try {
-                assert lock.getShardId().equals(shardId) : "shard id mismatch, expected: " + shardId + " but got: " + lock.getShardId();
-                onShardClose(lock);
-            } finally {
-                try {
-                    IOUtils.close(toClose);
-                } catch (IOException ex) {
-                    logger.debug("failed to close resource", ex);
-                }
-            }
-
-        }
-    }
-
-    /**
-     * Cache listener for bitsets
-     *
-     * @opensearch.internal
-     */
-    private static final class BitsetCacheListener implements BitsetFilterCache.Listener {
-        final IndexService indexService;
-
-        private BitsetCacheListener(IndexService indexService) {
-            this.indexService = indexService;
-        }
-
-        @Override
-        public void onCache(ShardId shardId, Accountable accountable) {
-            if (shardId != null) {
-                final IndexShard shard = indexService.getShardOrNull(shardId.id());
-                if (shard != null) {
-                    long ramBytesUsed = accountable != null ? accountable.ramBytesUsed() : 0L;
-                    shard.shardBitsetFilterCache().onCached(ramBytesUsed);
-                }
-            }
-        }
-
-        @Override
-        public void onRemoval(ShardId shardId, Accountable accountable) {
-            if (shardId != null) {
-                final IndexShard shard = indexService.getShardOrNull(shardId.id());
-                if (shard != null) {
-                    long ramBytesUsed = accountable != null ? accountable.ramBytesUsed() : 0L;
-                    shard.shardBitsetFilterCache().onRemoval(ramBytesUsed);
-                }
-            }
-        }
-    }
-
-    private final class FieldDataCacheListener implements IndexFieldDataCache.Listener {
-        final IndexService indexService;
-
-        FieldDataCacheListener(IndexService indexService) {
-            this.indexService = indexService;
-        }
-
-        @Override
-        public void onCache(ShardId shardId, String fieldName, Accountable ramUsage) {
-            if (shardId != null) {
-                final IndexShard shard = indexService.getShardOrNull(shardId.id());
-                if (shard != null) {
-                    shard.fieldData().onCache(shardId, fieldName, ramUsage);
-                }
-            }
-        }
-
-        @Override
-        public void onRemoval(ShardId shardId, String fieldName, boolean wasEvicted, long sizeInBytes) {
-            if (shardId != null) {
-                final IndexShard shard = indexService.getShardOrNull(shardId.id());
-                if (shard != null) {
-                    shard.fieldData().onRemoval(shardId, fieldName, wasEvicted, sizeInBytes);
-                }
-            }
-        }
-    }
-
-    public IndexMetadata getMetadata() {
-        return indexSettings.getIndexMetadata();
-    }
-
-    private final CopyOnWriteArrayList<Consumer<IndexMetadata>> metadataListeners = new CopyOnWriteArrayList<>();
-
-    public void addMetadataListener(Consumer<IndexMetadata> listener) {
-        metadataListeners.add(listener);
-    }
-
-    @Override
-    public synchronized void updateMetadata(final IndexMetadata currentIndexMetadata, final IndexMetadata newIndexMetadata) {
-        final boolean updateIndexSettings = indexSettings.updateIndexMetadata(newIndexMetadata);
-
-        if (Assertions.ENABLED && currentIndexMetadata != null) {
-            final long currentSettingsVersion = currentIndexMetadata.getSettingsVersion();
-            final long newSettingsVersion = newIndexMetadata.getSettingsVersion();
-            if (currentSettingsVersion == newSettingsVersion) {
-                assert updateIndexSettings == false;
-            } else {
-                assert updateIndexSettings;
-                assert currentSettingsVersion < newSettingsVersion : "expected current settings version ["
-                    + currentSettingsVersion
-                    + "] "
-                    + "to be less than new settings version ["
-                    + newSettingsVersion
-                    + "]";
-            }
-        }
-
-        if (updateIndexSettings) {
-            for (final IndexShard shard : this.shards.values()) {
-                try {
-                    shard.onSettingsChanged();
-                } catch (Exception e) {
-                    logger.warn(
-                        () -> new ParameterizedMessage("[{}] failed to notify shard about setting change", shard.shardId().id()),
-                        e
-                    );
-                }
-            }
-            onRefreshIntervalChange();
-            updateFsyncTaskIfNecessary();
-            updateReplicationTask();
-            updatePublishReferencedSegmentsTask();
-        }
-
-        metadataListeners.forEach(c -> c.accept(newIndexMetadata));
-    }
-
-    private void updateReplicationTask() {
-        try {
-            asyncReplicationTask.close();
-        } finally {
-            asyncReplicationTask = new AsyncReplicationTask(this);
-        }
-    }
-
-    private void updatePublishReferencedSegmentsTask() {
-        if (getIndexSettings().getPublishReferencedSegmentsInterval().equals(asyncPublishReferencedSegmentsTask.getInterval())) {
-            return;
-        }
-        try {
-            asyncPublishReferencedSegmentsTask.close();
-        } finally {
-            asyncPublishReferencedSegmentsTask = new AsyncPublishReferencedSegmentsTask(this);
-        }
-    }
-
-    /**
-     * Called whenever the cluster level {@code cluster.default.index.max_merge_at_once} changes.
-     */
-    public void onDefaultMaxMergeAtOnceChanged(int newDefaultMaxMergeAtOnce) {
-        indexSettings.setDefaultMaxMergesAtOnce(newDefaultMaxMergeAtOnce);
-    }
-
-    /**
-     * Called when the cluster level settings: {@code cluster.default.index.merge.scheduler.max_merge_count} OR
-     * {@code cluster.default.index.merge.scheduler.max_thread_count} change.
-     */
-    public void onDefaultMaxMergeOrThreadCountUpdate(int maxThreadCount, int maxMergeCount) {
-        indexSettings.setDefaultMaxThreadAndMergeCount(maxThreadCount, maxMergeCount);
-    }
-
-    /**
-     * Called whenever the cluster level {@code cluster.default.index.merge.scheduler.auto_throttle} changes.
-     */
-    public void onDefaultAutoThrottleEnabledUpdate(boolean enabled) {
-        indexSettings.setDefaultAutoThrottleEnabled(enabled);
-    }
-
-    /**
-     * Called whenever the cluster level {@code cluster.merge.scheduler.max_force_merge_mb_per_sec} changes.
-     * The change is only applied if the index doesn't have its own explicit force merge MB per sec setting.
-     *
-     * @param maxForceMergeMBPerSec the updated cluster max force merge MB per second rate.
-     */
-    public void onClusterLevelForceMergeMBPerSecUpdate(double maxForceMergeMBPerSec) {
-        if (!MergeSchedulerConfig.MAX_FORCE_MERGE_MB_PER_SEC_SETTING.exists(indexSettings.getSettings())) {
-            indexSettings.getMergeSchedulerConfig().setMaxForceMergeMBPerSec(maxForceMergeMBPerSec);
-        }
-    }
-
-    /**
-     * Called whenever the refresh interval changes. This can happen in 2 cases -
-     * 1. {@code cluster.default.index.refresh_interval} cluster setting changes. The change would only happen for
-     * indexes relying on cluster default.
-     * 2. {@code index.refresh_interval} index setting changes.
-     */
-    public void onRefreshIntervalChange() {
-        if (refreshInterval.equals(getRefreshInterval())) {
-            return;
-        }
-        refreshInterval = getRefreshInterval();
-        // once we change the refresh interval we schedule yet another refresh
-        // to ensure we are in a clean and predictable state.
-        // it doesn't matter if we move from or to <code>-1</code> in both cases we want
-        // docs to become visible immediately. This also flushes all pending indexing / search requests
-        // that are waiting for a refresh.
-        threadPool.executor(ThreadPool.Names.REFRESH).execute(new AbstractRunnable() {
-            @Override
-            public void onFailure(Exception e) {
-                logger.warn("forced refresh failed after interval change", e);
-            }
-
-            @Override
-            protected void doRun() throws Exception {
-                maybeRefreshEngine(true);
-            }
-
-            @Override
-            public boolean isForceExecution() {
-                return true;
-            }
-        });
-        rescheduleRefreshTasks();
-    }
-
-    /**
-     * Creates DataFormatAwareStoreDirectory using the factory if available, otherwise fallback to Store's internal creation.
-     * This method centralizes the directory creation logic and enables plugin-based format discovery.
-     */
-    private DataFormatAwareStoreDirectory createDataFormatAwareStoreDirectory(
-        ShardId shardId,
-        ShardPath shardPath,
-        Map<String, FormatChecksumStrategy> checksumStrategies
-    ) throws IOException {
-        if (dataFormatAwareStoreDirectoryFactory != null) {
-            logger.debug("Using DataFormatAwareStoreDirectoryFactory to create directory for shard path: {}", shardPath);
-            return dataFormatAwareStoreDirectoryFactory.newDataFormatAwareStoreDirectory(
-                indexSettings,
-                shardId,
-                shardPath,
-                directoryFactory,
-                checksumStrategies
-            );
-        }
-
-        logger.debug("No DataFormatAwareStoreDirectoryFactory available, Store will handle internal creation for: {}", shardPath);
-        return null;
-    }
-
-    /**
-     * Resolves the native object store for the index's remote store repository.
-     * Returns {@link NativeStoreRepository#EMPTY} when no repository is configured
-     * or the repository is missing.
-     *
-     * @param repositoriesService the repositories service, may be {@code null}
-     * @return a live native store or {@link NativeStoreRepository#EMPTY}
-     */
-    private NativeStoreRepository resolveNativeStore(RepositoriesService repositoriesService) {
-        String repoName = this.indexSettings.getRemoteStoreRepository();
-        if (repoName == null || repositoriesService == null) {
-            return NativeStoreRepository.EMPTY;
-        }
-        try {
-            return repositoriesService.repository(repoName).getNativeStore();
-        } catch (RepositoryMissingException e) {
-            logger.warn("Native store not available for repository [{}]", repoName);
-            return NativeStoreRepository.EMPTY;
-        }
-    }
-
-    private void updateFsyncTaskIfNecessary() {
-        if (indexSettings.getTranslogDurability() == Translog.Durability.REQUEST) {
-            try {
-                if (fsyncTask != null) {
-                    fsyncTask.close();
-                }
-            } finally {
-                fsyncTask = null;
-            }
-        } else if (fsyncTask == null) {
-            fsyncTask = new AsyncTranslogFSync(this);
-        } else {
-            fsyncTask.updateIfNeeded();
-        }
-    }
-
-    private void rescheduleRefreshTasks() {
-        synchronized (refreshMutex) {
-            if (shardLevelRefreshEnabled) {
-                try {
-                    stopShardLevelRefreshTasks();
-                } finally {
-                    startShardLevelRefreshTasks();
-                }
-            } else {
-                try {
-                    stopIndexLevelRefreshTask();
-                } finally {
-                    startIndexLevelRefreshTask();
-                }
-            }
-        }
-    }
-
-    public CompositeIndexSettings getCompositeIndexSettings() {
-        return compositeIndexSettings;
-    }
-
-    /**
-     * Shard Store Deleter Interface
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public interface ShardStoreDeleter {
+                        shouldWidenIndexSortType,
+        this.shardLevelRefreshEnabled = shardLevelRefreshEnabled;
+    private final Supplier<TimeValue> clusterDefaultRefreshIntervalSupplier;
         void deleteShardStore(String reason, ShardLock lock, IndexSettings indexSettings) throws IOException;
-
-        void addPendingDelete(ShardId shardId, IndexSettings indexSettings);
-    }
-
-    public final IndexerFactory getIndexerFactory() {
-        return indexerFactory;
-    }
-
-    public final EngineFactory getEngineFactory() {
-        if (indexerFactory instanceof EngineBackedIndexerFactory) {
-            return ((EngineBackedIndexerFactory) indexerFactory).getEngineFactory();
-        }
-        throw new UnsupportedOperationException("Engine Factory doesn't exist for current index.");
-    }
-
-    final CheckedFunction<DirectoryReader, DirectoryReader, IOException> getReaderWrapper() {
-        return readerWrapper;
-    } // pkg private for testing
-
-    final IndexStorePlugin.DirectoryFactory getDirectoryFactory() {
-        return directoryFactory;
-    } // pkg private for testing
-
-    private void maybeFSyncTranslogs() {
-        if (indexSettings.getTranslogDurability() == Translog.Durability.ASYNC) {
-            for (IndexShard shard : this.shards.values()) {
-                try {
-                    if (shard.isSyncNeeded()) {
-                        shard.sync();
-                    }
-                } catch (AlreadyClosedException ex) {
-                    // fine - continue;
-                } catch (IOException e) {
-                    logger.warn("failed to sync translog", e);
-                }
-            }
+            translogFactorySupplier,
+                final IndexShard shard = indexService.getShardOrNull(shardId.id());
+        boolean success = false;
+        protected void runInternal() {
+    /**
+                } else if (this.indexSettings.isPluggableDataFormatEnabled() == false) {
+                eventListener,
+                for (final int shardId : shardIds) {
+                logger.debug("{} creating using an existing path [{}]", shardId, path);
         }
     }
-
-    private void maybeRefreshEngine(boolean force) {
-        if (getRefreshInterval().millis() > 0 || force) {
-            for (IndexShard shard : this.shards.values()) {
-                try {
-                    shard.scheduledRefresh();
-                } catch (IndexShardClosedException | AlreadyClosedException ex) {
-                    // fine - continue;
-                }
-            }
-        }
     }
-
-    private void maybeTrimTranslog() {
-        for (IndexShard shard : this.shards.values()) {
-            switch (shard.state()) {
-                case CREATED:
-                case RECOVERING:
+            threadPool,
                 case CLOSED:
-                    continue;
-                case POST_RECOVERY:
-                case STARTED:
-                    try {
-                        shard.trimTranslog();
-                    } catch (IndexShardClosedException | AlreadyClosedException ex) {
-                        // fine - continue;
-                    }
-                    continue;
-                default:
-                    throw new IllegalStateException("unknown state: " + shard.state());
-            }
-        }
-    }
-
-    private void maybeSyncGlobalCheckpoints() {
-        sync(is -> is.maybeSyncGlobalCheckpoint("background"), "global checkpoint");
-    }
-
-    private void syncRetentionLeases() {
-        sync(IndexShard::syncRetentionLeases, "retention lease");
-    }
-
-    private void sync(final Consumer<IndexShard> sync, final String source) {
-        for (final IndexShard shard : this.shards.values()) {
-            if (shard.routingEntry().active() && shard.routingEntry().primary()) {
-                switch (shard.state()) {
-                    case CLOSED:
-                    case CREATED:
-                    case RECOVERING:
-                        continue;
-                    case POST_RECOVERY:
-                        assert false : "shard " + shard.shardId() + " is in post-recovery but marked as active";
-                        continue;
-                    case STARTED:
-                        try {
-                            shard.runUnderPrimaryPermit(() -> sync.accept(shard), e -> {
-                                if (e instanceof AlreadyClosedException == false
-                                    && e instanceof IndexShardClosedException == false
-                                    && e instanceof ShardNotInPrimaryModeException == false) {
-                                    logger.warn(new ParameterizedMessage("{} failed to execute {} sync", shard.shardId(), source), e);
-                                }
-                            }, ThreadPool.Names.SAME, source + " sync");
-                        } catch (final AlreadyClosedException | IndexShardClosedException e) {
-                            // the shard was closed concurrently, continue
-                        }
-                        continue;
-                    default:
-                        throw new IllegalStateException("unknown state [" + shard.state() + "]");
-                }
-            }
-        }
-    }
-
-    /**
-     * Gets the refresh interval seen by the index service. Index setting overrides takes the highest precedence.
-     * @return the refresh interval.
-     */
-    private TimeValue getRefreshInterval() {
-        if (getIndexSettings().isExplicitRefresh()) {
-            return getIndexSettings().getRefreshInterval();
-        }
-        return clusterDefaultRefreshIntervalSupplier.get();
-    }
-
-    /**
-     * Base asynchronous task
-     *
-     * @opensearch.internal
-     */
-    abstract static class BaseAsyncTask extends AbstractAsyncTask {
-
-        protected final IndexService indexService;
-
-        BaseAsyncTask(final IndexService indexService, final TimeValue interval) {
-            this(indexService, interval, () -> Boolean.FALSE);
-        }
-
-        BaseAsyncTask(final IndexService indexService, final TimeValue interval, Supplier<Boolean> fixedIntervalSchedulingEnabled) {
-            super(indexService.logger, indexService.threadPool, interval, true, fixedIntervalSchedulingEnabled);
-            this.indexService = indexService;
-            rescheduleIfNecessary();
-        }
-
-        @Override
-        protected boolean mustReschedule() {
-            // don't re-schedule if the IndexService instance is closed or if the index is closed
-            return indexService.closed.get() == false
-                && indexService.indexSettings.getIndexMetadata().getState() == IndexMetadata.State.OPEN;
-        }
-    }
-
-    /**
-     * FSyncs the translog for all shards of this index in a defined interval.
-     *
-     * @opensearch.internal
-     */
-    static final class AsyncTranslogFSync extends BaseAsyncTask {
-
-        AsyncTranslogFSync(IndexService indexService) {
-            super(indexService, indexService.getIndexSettings().getTranslogSyncInterval());
-        }
-
-        @Override
-        protected String getThreadPool() {
-            return ThreadPool.Names.FLUSH;
-        }
-
-        @Override
-        protected void runInternal() {
-            indexService.maybeFSyncTranslogs();
-        }
-
-        void updateIfNeeded() {
-            final TimeValue newInterval = indexService.getIndexSettings().getTranslogSyncInterval();
-            if (newInterval.equals(getInterval()) == false) {
-                setInterval(newInterval);
-            }
-        }
-
-        @Override
-        public String toString() {
-            return "translog_sync";
-        }
-    }
-
-    final class AsyncRefreshTask extends BaseAsyncTask {
-
-        AsyncRefreshTask(IndexService indexService) {
-            super(indexService, indexService.getRefreshInterval(), fixedRefreshIntervalSchedulingEnabled);
-        }
-
-        @Override
-        protected void runInternal() {
-            indexService.maybeRefreshEngine(false);
-        }
-
-        @Override
-        protected String getThreadPool() {
-            return ThreadPool.Names.REFRESH;
-        }
-
-        @Override
-        public String toString() {
-            return "refresh";
-        }
-    }
-
-    final class AsyncReplicationTask extends BaseAsyncTask {
-
-        AsyncReplicationTask(IndexService indexService) {
-            super(indexService, indexService.getRefreshInterval());
-        }
-
-        @Override
-        protected void runInternal() {
-            if (shouldRun()) {
-                indexService.maybeSyncSegments(false);
-            }
-        }
-
-        @Override
-        protected String getThreadPool() {
-            return ThreadPool.Names.GENERIC;
-        }
-
-        @Override
-        public String toString() {
-            return "replication";
-        }
-
-        @Override
-        protected boolean mustReschedule() {
-            return indexSettings.isSegRepEnabledOrRemoteNode() && super.mustReschedule();
-        }
-
-        // visible for tests
-        protected boolean shouldRun() {
-            return false == indexSettings.getIndexMetadata()
-                .getSettings()
-                .getAsBoolean(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), false);
-        }
-    }
-
-    private void maybeSyncSegments(boolean force) {
-        if (getRefreshInterval().millis() > 0 || force) {
-            for (IndexShard shard : this.shards.values()) {
-                try {
-                    if (shard.routingEntry().isSearchOnly() && shard.routingEntry().active()) {
-                        replicator.accept(shard);
-                    }
-                } catch (IndexShardClosedException | AlreadyClosedException ex) {
-                    // do nothing
-                }
-            }
-        }
-    }
-
-    /**
-     * Publish primary shard referenced segments in a defined interval.
-     *
-     * @opensearch.internal
-     */
-    final class AsyncPublishReferencedSegmentsTask extends BaseAsyncTask {
-
-        AsyncPublishReferencedSegmentsTask(IndexService indexService) {
-            super(indexService, indexService.getIndexSettings().getPublishReferencedSegmentsInterval());
-        }
-
-        @Override
-        protected void runInternal() {
-            if (shouldRun()) {
+        Function<IndexService, CheckedFunction<DirectoryReader, DirectoryReader, IOException>> wrapperFactory,
+import org.opensearch.common.settings.Setting.Property;
                 indexService.maybePublishReferencedSegments();
-            }
-        }
-
-        @Override
-        protected String getThreadPool() {
-            return ThreadPool.Names.GENERIC;
-        }
-
-        @Override
-        public String toString() {
-            return "publish_primary_referenced_segments";
-        }
-
-        @Override
-        protected boolean mustReschedule() {
-            return indexSettings.isSegRepEnabledOrRemoteNode() && super.mustReschedule();
-        }
-
-        // visible for tests
-        protected boolean shouldRun() {
-            return (indexSettings.isSegRepLocalEnabled() || indexSettings.isRemoteStoreEnabled())
-                // ToDo: remove the isPluggableDataFromatEnabled check once MergedSegment replication flow is integrated for DataFormatAware
-                // indices.
-                && recoverySettings.isMergedSegmentReplicationWarmerEnabled()
-                && indexSettings.isPluggableDataFormatEnabled() == false;
-        }
-    }
-
-    private void maybePublishReferencedSegments() {
-        for (IndexShard shard : this.shards.values()) {
+        try {
             try {
-                // Only the primary shard publish referenced segments.
-                // The replicas cleans up the redundant pending merge segments according to the primary shard request.
-                if (shard.isPrimaryMode() && shard.routingEntry().active()) {
-                    shard.publishReferencedSegments();
-                }
-            } catch (IOException ex) {
-                logger.warn(() -> new ParameterizedMessage("failed to publish primary referenced segments"), ex);
+                        // ignore
             }
-        }
+                case RECOVERING:
+        if (closed.compareAndSet(false, true)) {
+                }
     }
-
-    final class AsyncTrimTranslogTask extends BaseAsyncTask {
-
-        AsyncTrimTranslogTask(IndexService indexService) {
-            super(
-                indexService,
-                indexService.getIndexSettings()
-                    .getSettings()
-                    .getAsTime(INDEX_TRANSLOG_RETENTION_CHECK_INTERVAL_SETTING, TimeValue.timeValueMinutes(10))
-            );
+                threadPool,
+        final SegmentReplicationCheckpointPublisher checkpointPublisher,
+                        } catch (final AlreadyClosedException | IndexShardClosedException e) {
+                routing,
+            null,
         }
-
-        @Override
-        protected boolean mustReschedule() {
-            return indexService.closed.get() == false;
+     * @opensearch.internal
+                closeShard("initialization failed", shardId, indexShard, store, eventListener);
+        this.client = client;
+                    .buildIndexSort(
+import org.opensearch.index.cache.bitset.BitsetFilterCache;
+        public void onCache(ShardId shardId, String fieldName, Accountable ramUsage) {
+    private final SimilarityService similarityService;
+        HashMap<Integer, IndexShard> newShards = new HashMap<>(shards);
+        indexSettings.setDefaultMaxMergesAtOnce(newDefaultMaxMergeAtOnce);
+ * @opensearch.api
+                onShardClose(lock);
+        IndexerFactory indexerFactory,
+    private final IndexEventListener eventListener;
+    public static final Setting<TimeValue> GLOBAL_CHECKPOINT_SYNC_INTERVAL_SETTING = Setting.timeSetting(
+        return trimTranslogTask;
+     */
+                bigArrays,
+    private final List<SearchOperationListener> searchOperationListeners;
+import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
+import java.util.function.BiFunction;
+        "index.soft_deletes.retention_lease.sync_interval",
+                translogFactorySupplier,
+        Function<ShardId, ReplicationStats> segmentReplicationStatsProvider,
+                // only clear caches relating to the specified fields
+    public enum IndexCreationContext {
+            if (success == false) {
+import org.opensearch.index.shard.IndexShardClosedException;
+            super(indexService, RETENTION_LEASE_SYNC_INTERVAL_SETTING.get(indexService.getIndexSettings().getSettings()));
+                        mapperService::fieldType,
+            };
+            scriptService,
+        EngineConfigFactory engineConfigFactory,
+            assert indexAnalyzers == null;
         }
-
-        @Override
-        protected void runInternal() {
-            indexService.maybeTrimTranslog();
+                    e
+     * Return the shard with the provided id, or throw an exception if it doesn't exist.
+    private final Consumer<IndexShard> replicator;
+            final long currentSettingsVersion = currentIndexMetadata.getSettingsVersion();
+        this.translogFactorySupplier = translogFactorySupplier;
+    ) {
+                    fsyncTask,
+            return "translog_sync";
+     * Called whenever the cluster level {@code cluster.default.index.merge.scheduler.auto_throttle} changes.
+    }
+                );
+                shardId,
+    }
         }
-
-        @Override
+                );
+            indexFieldData.setListener(new FieldDataCacheListener(this));
+ * this file be licensed under the Apache-2.0 license or a
+        if (deleted.get()) { // we remove that shards content if this index has been deleted
+import org.opensearch.common.util.BigArrays;
         protected String getThreadPool() {
             return ThreadPool.Names.GENERIC;
+        assert Thread.holdsLock(refreshMutex);
+                    eventListener.beforeIndexShardDeleted(lock.getShardId(), indexSettings.getSettings());
+            } catch (IllegalStateException ex) {
         }
-
-        @Override
-        public String toString() {
+ * The OpenSearch Contributors require contributions made to
+        IndexSettings indexSettings,
+import org.opensearch.env.ShardLockObtainFailedException;
+                    } finally {
+                // Sample test failure: https://github.com/opensearch-project/OpenSearch/issues/13871
+            }
+                indexCache,
+                // we parse all percolator queries as they would be parsed on shard 0
+    // this setting is intentionally not registered, it is only used in tests
             return "trim_translog";
+                listener.beforeIndexShardClosed(sId, indexShard, indexSettings);
+                        RemoteStoreNodeAttribute.getRemoteStoreSegmentRepo(this.indexSettings.getNodeSettings()),
+            );
+        return indexerFactory;
+                remoteStoreStatsTrackerFactory,
+                seedRemote,
+                    Path dataPath = shard.shardPath().getRootStatePath();
+        IndexStorePlugin.DirectoryFactory directoryFactory,
+        if (store != null) {
+    @Deprecated(forRemoval = true)
+        @Override
+    private final Client client;
         }
+    private void rescheduleRefreshTasks() {
     }
-
-    // this setting is intentionally not registered, it is only used in tests
-    public static final Setting<TimeValue> GLOBAL_CHECKPOINT_SYNC_INTERVAL_SETTING = Setting.timeSetting(
-        "index.global_checkpoint_sync.interval",
-        new TimeValue(30, TimeUnit.SECONDS),
-        new TimeValue(0, TimeUnit.MILLISECONDS),
-        Property.Dynamic,
-        Property.IndexScope
-    );
-
-    // this setting is intentionally not registered, it is only used in tests
-    public static final Setting<TimeValue> RETENTION_LEASE_SYNC_INTERVAL_SETTING = Setting.timeSetting(
-        "index.soft_deletes.retention_lease.sync_interval",
-        new TimeValue(30, TimeUnit.SECONDS),
-        new TimeValue(0, TimeUnit.MILLISECONDS),
-        Property.Dynamic,
-        Property.IndexScope
-    );
-
-    /**
-     * Background task that syncs the global checkpoint to replicas.
+                mapperService,
+        if (getIndexSettings().isExplicitRefresh()) {
+        assert Thread.holdsLock(refreshMutex);
+        }
+            null
      */
-    final class AsyncGlobalCheckpointTask extends BaseAsyncTask {
-
-        AsyncGlobalCheckpointTask(final IndexService indexService) {
-            // index.global_checkpoint_sync_interval is not a real setting, it is only registered in tests
+        public void onRemoval(ShardId shardId, Accountable accountable) {
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+    }
+    }
+                if (newShardLevelRefreshVal) {
+                    shard.scheduledRefresh();
+        ClusterMergeSchedulerConfig clusterMergeSchedulerConfig
+                        path,
+        BigArrays bigArrays,
+            eventListener.afterIndexShardCreated(indexShard);
+     * @opensearch.internal
+    }
+                            shard.runUnderPrimaryPermit(() -> sync.accept(shard), e -> {
+                logger.debug(
+                maybeRefreshEngine(true);
+         */
+        }
+        }
+            );
+    }
+                indexerFactory,
+                // and close the shard so no operations are allowed to it
+                // TODO: we should, instead, hold a "bytes reserved" of how large we anticipate this shard will be, e.g. for a shard
+            this.indexFieldData = new IndexFieldDataService(
+            remoteStore = indexShard.remoteStore();
+        ValuesSourceRegistry valuesSourceRegistry,
+import org.apache.lucene.search.Sort;
+        sync(is -> is.maybeSyncGlobalCheckpoint("background"), "global checkpoint");
+        if (clusterMergeSchedulerConfig != null) {
+        return this.mapperService.getIndexAnalyzers();
+        }
+                }
+import static org.opensearch.index.remote.RemoteMigrationIndexMetadataUpdater.indexHasRemoteStoreSettings;
+     * Base asynchronous task
+        boolean validate,
+     * Context for index creation
+                shardPath,
+    public IndexShard getShard(int shardId) {
+        }
+                }
+     * Return the shard with the provided id, or null if there is no such shard.
+    }
+import org.opensearch.common.util.io.IOUtils;
+                this::getRefreshInterval,
+        Property.IndexScope
+                new StoreCloseListener(shardId, () -> eventListener.onStoreClosed(shardId)),
+                        replicator.accept(shard);
+            // if we are on a shared FS we only own the shard (i.e. we can safely delete it) if we are the primary.
+                this.indexSortSupplier = () -> null;
+                    );
+                    IOUtils.closeWhileHandlingException(storeStrategyRegistry);
+import org.opensearch.indices.mapper.MapperRegistry;
+                    );
+    }
+     * @param maxForceMergeMBPerSec the updated cluster max force merge MB per second rate.
+                setInterval(newInterval);
+        Function<IndexService, CheckedFunction<DirectoryReader, DirectoryReader, IOException>> wrapperFactory,
+                        true,
+        @Override
+        IndicesFieldDataCache indicesFieldDataCache,
+    /**
+        }
+            }
+    }
+    public ScriptService getScriptService() {
+    static final class AsyncTranslogFSync extends BaseAsyncTask {
+        if (count == 0) {
+        RemoteStoreSettings remoteStoreSettings,
+        this.allowExpensiveQueries = allowExpensiveQueries;
+        ShardId shardId,
+                    remoteDirectory = ((RemoteSegmentStoreDirectoryFactory) remoteDirectoryFactory).newDirectory(
+        boolean keywordIndexOrDocValuesEnabled
+                    // do nothing
+    }
+    }
+        final ShardRouting routing,
+    private final IndexStorePlugin.DirectoryFactory remoteDirectoryFactory;
+            eventListener.indexShardStateChanged(indexShard, null, indexShard.state(), "shard created");
+     */
+        }
+     * Creates DataFormatAwareStoreDirectory using the factory if available, otherwise fallback to Store's internal creation.
+    /**
+import org.opensearch.index.engine.EngineConfigFactory;
+        String clusterAlias,
+        final Settings indexSettings = this.indexSettings.getSettings();
+            validate,
+        return xContentRegistry;
+            directoryFactory,
+    final class AsyncReplicationTask extends BaseAsyncTask {
+            try {
+                }
+                this.indexSortSupplier = () -> indexSettings.getIndexSortConfig()
+                if (indexShard != null) {
+            if (indexSettings.getIndexSortConfig().hasIndexSort()) {
+        if (closed.get()) {
+    /**
+            clusterDefaultRefreshIntervalSupplier,
+import org.opensearch.index.query.SearchIndexNameMatcher;
+        AsyncTrimTranslogTask(IndexService indexService) {
+            if (path == null) {
+                this.indexSettings,
+    @Override
+        assert Objects.nonNull(refreshTask);
+        }
+            if (shardLevelRefreshEnabled == false) {
+    }
+    }
+        }
+        Store remoteStore = null;
+                    shard.fieldData().onRemoval(shardId, fieldName, wasEvicted, sizeInBytes);
+            eventListener.onStoreCreated(shardId);
+        metadataListeners.add(listener);
+        BooleanSupplier allowExpensiveQueries,
+                }
+                refreshMutex,
+                                if (e instanceof AlreadyClosedException == false
+     * @return the refresh interval.
+            remoteStoreStatsTrackerFactory,
+                        this.indexSettings,
+            try {
+    private void stopShardLevelRefreshTasks() {
+    public IndexMetadata getMetadata() {
+        @Override
+                        nodeCacheService
+    // this setting is intentionally not registered, it is only used in tests
+        }
+            // TODO : Need to remove this check after support for hot indices is added in Composite Directory
+            protected void doRun() throws Exception {
+    private final RecoverySettings recoverySettings;
+            return -1L;
+    @PublicApi(since = "1.0.0")
+import org.opensearch.indices.fielddata.cache.IndicesFieldDataCache;
+    public IndexAnalyzers getIndexAnalyzers() {
+        final IndexShard indexShard;
+                indicesFieldDataCache,
+     */
+import org.opensearch.common.unit.TimeValue;
+            fsyncTask.updateIfNeeded();
+    }
+        /*
+        IndexAnalyzers indexAnalyzers,
+import org.opensearch.index.cache.query.QueryCache;
+            try {
+            }
+                    throw new IllegalStateException(
+    ) {
+        for (IndexShard shard : this.shards.values()) {
+                    + "] "
+        String clusterAlias,
+                checksumStrategies,
+                // TODO: Remove this once remote to docrep migration is supported
+import static java.util.Collections.unmodifiableMap;
+import org.opensearch.index.engine.EngineFactory;
+                        threadPool
+import org.opensearch.cluster.node.DiscoveryNode;
+            throw new IllegalStateException(shardId + " already exists");
+        Supplier<Integer> clusterDefaultMaxMergeAtOnceSupplier,
+    private final IndexStorePlugin.CompositeDirectoryFactory compositeDirectoryFactory;
+    private volatile boolean shardLevelRefreshEnabled;
+                        ? getAvgShardSizeInBytes()
+            logger.warn(() -> new ParameterizedMessage("failed to write dangling indices state for index {}", index()), e);
+        @Override
+    List<IndexingOperationListener> getIndexOperationListeners() { // pkg private for testing
+                    ShardPath.deleteLeftoverShardDirectory(logger, nodeEnv, lock, this.indexSettings);
+                return true;
+                    startShardLevelRefreshTasks();
+    public String indexUUID() {
+import org.opensearch.common.Nullable;
+        void addPendingDelete(ShardId shardId, IndexSettings indexSettings);
+        Supplier<Boolean> fixedRefreshIntervalSchedulingEnabled,
+        final RepositoriesService repositoriesService,
+        protected void runInternal() {
+     *
+    /**
+            } finally {
+                discoveryNodes,
+    }
+    }
+                // When an instance of Store is created, a shardlock is created which is released on closing the instance of store.
+import org.opensearch.index.store.RemoteSegmentStoreDirectoryFactory;
+        }
+                    remoteStoreLock,
+                            }, ThreadPool.Names.SAME, source + " sync");
+        this.indexingOperationListeners = Collections.unmodifiableList(indexingOperationListeners);
+        } catch (ShardLockObtainFailedException e) {
+            );
+                try {
+    }
+import java.util.Objects;
+    private final IndexerFactory indexerFactory;
+     */
+            throw new IOException("failed to obtain in-memory shard lock", e);
+                retentionLeaseSyncer,
+                similarityService,
+                // Disallow shards with remote store based settings to be created on non-remote store enabled nodes
+        int count = 0;
+                directoryFactory,
+            this.bitsetFilterCache = new BitsetFilterCache(indexSettings, indicesBitsetFilterCache, new BitsetCacheListener(this));
+        @Override
+                } catch (IOException ex) {
+            && indexCreationContext == IndexCreationContext.CREATE_INDEX); // metadata verification needs a mapper service
+        DiscoveryNodes discoveryNodes,
+        @Override
+    public synchronized void close(final String reason, boolean delete) throws IOException {
+            boolean seedRemote = false;
+            this.indexFieldData = null;
+                        nodeCacheService != null ? nodeCacheService.fileCache() : null,
+            null,
+    public synchronized IndexShard createShard(
+    public Supplier<Sort> getIndexSortSupplier() {
+     * Passing a {@code null} {@link IndexSearcher} will return a valid context, however it won't be able to make
+    abstract static class BaseAsyncTask extends AbstractAsyncTask {
+    }
+        RemoteStoreSettings remoteStoreSettings,
+                for (String field : fields) {
+                    trimTranslogTask,
+        }
+        return false == (indexSettings.getIndexMetadata().getState() == IndexMetadata.State.CLOSE
+        this.replicator = replicator;
+                        this.indexSettings.getRemoteStoreSegmentPathPrefix(),
+            rescheduleIfNecessary();
+        final Settings indexSettings = this.getIndexSettings().getSettings();
+                .getAsBoolean(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), false);
+                        try {
+                    indexFieldData.clearField(field);
+                indexFieldData.clear();
+                    if (curCount == null) {
+    }
+    private volatile AsyncReplicationTask asyncReplicationTask;
+                    } catch (Exception e) {
+        if (mapperService == null) {
+import java.util.function.Function;
+        public void onRemoval(ShardId shardId, String fieldName, boolean wasEvicted, long sizeInBytes) {
+    private TimeValue getRefreshInterval() {
+        final RetentionLeaseSyncer retentionLeaseSyncer,
+        final Consumer<ShardId> globalCheckpointSyncer,
+        ShardLock lock = null;
+        return mapperService.updateMapping(currentIndexMetadata, newIndexMetadata);
+        BaseAsyncTask(final IndexService indexService, final TimeValue interval, Supplier<Boolean> fixedIntervalSchedulingEnabled) {
+        ValuesSourceRegistry valuesSourceRegistry,
+                circuitBreakerService,
+        METADATA_VERIFICATION
+    // NOTE: O(numShards) cost, but numShards should be smallish?
+     */
+import org.opensearch.index.seqno.RetentionLeaseSyncer;
+        ScriptService scriptService,
+                // Currently, we create 2 instances of store for remote store backed indices: store and remoteStore.
+                Map<DataFormat, StoreStrategy> storeStrategies = dataFormatRegistry.getStoreStrategies(this.indexSettings);
+            valuesSourceRegistry,
+ * GitHub history for details.
+        return indexCache;
+    /**
+                    path,
+    // Visible for test
+import java.util.concurrent.atomic.AtomicBoolean;
+        MapperRegistry mapperRegistry,
+                    + newSettingsVersion
+        long sum = 0;
+            super(indexService, indexService.getRefreshInterval(), fixedRefreshIntervalSchedulingEnabled);
+        this.expressionResolver = expressionResolver;
+        MergedSegmentWarmerFactory mergedSegmentWarmerFactory,
+        }
+        }
+                }
+                switch (shard.state()) {
+                } else {
+    }
+                    e
+     * Creates a new QueryShardContext.
+                if (indexHasRemoteStoreSettings(indexSettings)) {
+        IndexShard indexShard = null;
+                        shardId,
+        IndexStorePlugin.StoreFactory storeFactory,
+                if (shard.isPrimaryMode() && shard.routingEntry().active()) {
+      For a remote snapshot index, the cache path is used to initialize the shards.
+        }
+        protected void runInternal() {
+    private final Function<ShardId, ReplicationStats> segmentReplicationStatsProvider;
+                    dataPathToShardCount.put(dataPath, curCount + 1);
+            fsyncTask = new AsyncTranslogFSync(this);
+        IndexStorePlugin.StoreFactory storeFactory,
+import org.opensearch.index.analysis.IndexAnalyzers;
+        protected boolean shouldRun() {
+            fixedRefreshIntervalSchedulingEnabled,
+                    indexFieldData.clearField(field);
+            keywordIndexOrDocValuesEnabled
+        final ShardId shardId = routing.shardId();
+        BooleanSupplier idFieldDataEnabled,
+        }
+    public boolean clearCaches(boolean queryCache, boolean fieldDataCache, String... fields) {
+     * <p>
+        public String toString() {
+                if (shard != null) {
+                    @Override
+import org.opensearch.common.util.FeatureFlags;
+        CircuitBreakerService circuitBreakerService,
+                remoteStore,
+        @Override
+                    } catch (IndexShardClosedException | AlreadyClosedException ex) {
+    AsyncTrimTranslogTask getTrimTranslogTask() { // for tests
+package org.opensearch.index;
+        return this.eventListener;
+    public synchronized void writeDanglingIndicesInfo() {
+            this.indexService = indexService;
+     * Creates a new QueryShardContext.
+                // Warm + format-aware: create StoreStrategyRegistry here so we can
+    private final BooleanSupplier allowExpensiveQueries;
+                // keeping this defensive check in place
+ * ownership. Elasticsearch licenses this file to you under
+    private volatile AsyncRefreshTask refreshTask;
+        }
+                // The sort order is validated right after the merge of the mapping later in the process.
+    private final List<IndexingOperationListener> indexingOperationListeners;
+        throw new UnsupportedOperationException("Engine Factory doesn't exist for current index.");
+                    try {
+        protected final IndexService indexService;
+        IndexAnalyzers indexAnalyzers,
+    }
+                    throw e;
+        }
+        return recoveryStateFactory.newRecoveryState(shardRouting, targetNode, sourceNode);
+        ShardStoreDeleter shardStoreDeleter,
+                            // the shard was closed concurrently, continue
+                    fsyncTask.close();
+            count++;
+                        logger.info("DocRep shard {} is migrating to remote", shardId);
+        try {
+                // allocation level,
+        }
+        @Nullable DiscoveryNode sourceNode,
+                    try {
+            this.globalCheckpointTask = new AsyncGlobalCheckpointTask(this);
+    }
+            return indexService.closed.get() == false
+    /**
+        this.asyncPublishReferencedSegmentsTask = new AsyncPublishReferencedSegmentsTask(this);
+            logger.debug("creating shard_id {}", shardId);
+                } catch (IOException e) {
+                    }
+        for (IndexShard shard : this.shards.values()) {
+    }
+import org.opensearch.index.shard.ShardPath;
+    public IndexCache cache() {
+        AsyncTranslogFSync(IndexService indexService) {
+            expressionResolver
+        } finally {
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+            client,
+                        shard.trimTranslog();
+        return indexSettings.getIndexMetadata();
+        QueryCache queryCache,
+                try {
+                        startIndexLevelRefreshTask();
+                if (lock != null) {
+        synchronized (refreshMutex) {
+import org.opensearch.index.shard.SearchOperationListener;
+                    + "]";
+            clearedAtLeastOne = true;
+            throw new IllegalStateException("Can't create shard " + routing.shardId() + ", closed");
+            } else {
+                    eventListener.afterIndexShardDeleted(lock.getShardId(), indexSettings.getSettings());
+            final Engine.Warmer engineWarmer = (reader) -> {
+    }
+        }
+     * @opensearch.api
+                Map<Path, Integer> dataPathToShardCount = new HashMap<>();
+    /**
+    private final RemoteStoreSettings remoteStoreSettings;
+                        storeStrategyRegistry,
+            return NativeStoreRepository.EMPTY;
+        ClusterMergeSchedulerConfig clusterMergeSchedulerConfig,
+        return null;
+/*
+                if (shard != null) {
+import org.opensearch.index.similarity.SimilarityService;
+    private final NodeCacheService nodeCacheService;
+        this.recoverySettings = recoverySettings;
+import org.opensearch.gateway.MetadataStateFormat;
+    public ThreadPool getThreadPool() {
+            return "global_checkpoint_sync";
+    private void onShardClose(ShardLock lock) {
+                this.indexSettings.isSegRepEnabledOrRemoteNode() ? checkpointPublisher : null,
+                        : routing.getExpectedShardSize(),
+                shardStoreDeleter.addPendingDelete(lock.getShardId(), indexSettings);
+            indexService.maybeTrimTranslog();
+                    );
+import org.opensearch.index.fielddata.IndexFieldDataService;
+    private void startIndexLevelRefreshTask() {
+        }
+     * <p>
+    private final IndexStorePlugin.DirectoryFactory directoryFactory;
+        }
+            if (currentSettingsVersion == newSettingsVersion) {
+            checkpointPublisher,
+    public void onDefaultMaxMergeOrThreadCountUpdate(int maxThreadCount, int maxMergeCount) {
+import org.opensearch.common.annotation.InternalApi;
+        }
+     */
+            indexService.maybeFSyncTranslogs();
+                indexFieldData,
+            }
+        public String toString() {
+    /**
+        boolean shardLevelRefreshEnabled,
+            if (fields.length == 0) {
+        } finally {
+                    if (sourceNode == null || sourceNode.isRemoteSegmentStoreNode() == false) {
+        }
+    private final IndexFieldDataService indexFieldData;
+ */
+            routing,
+import org.opensearch.repositories.NativeStoreRepository;
+            indexService.maybeRefreshEngine(false);
+            } catch (Exception e) {
+                assert updateIndexSettings;
+import org.opensearch.index.shard.IndexShard;
+            clusterService,
+        }
+            return "publish_primary_referenced_segments";
+                startIndexLevelRefreshTask();
+                StoreStrategyRegistry storeStrategyRegistry = null;
+     *
+        for (IndexShard indexShard : this) {
+        @Override
+        @Override
+        final IndexService indexService;
+    }
+    private final ClusterService clusterService;
+                try {
+                boolean shouldWidenIndexSortType = this.indexSettings.shouldWidenIndexSortType();
+                    case STARTED:
+    }
+        this.indexerFactory = Objects.requireNonNull(indexerFactory);
+        for (IndexShard shard : this.shards.values()) {
+ * KIND, either express or implied.  See the License for the
+        for (final IndexShard shard : this.shards.values()) {
+    public TimeValue getRefreshTaskInterval() {
+/*
+            }
+        ShardPath path;
+            }
+            sourceNode,
+                        }
+        shards = unmodifiableMap(newShards);
+            null
+        @Override
+    @InternalApi
+                threadPool,
+                segmentReplicationStatsProvider,
+            }
+        BigArrays bigArrays,
+                        shardId,
+     */
+    }
+            mapperService(),
+    }
+                        // Do nothing for shard lock on remote store
+      Fetches the shard path based on the index type -
+                // As part of https://github.com/opensearch-project/OpenSearch/issues/13075, we want to move away from keeping 2
+    }
+    private final BitsetFilterCache bitsetFilterCache;
+                fsyncTask = null;
+    ) throws IOException {
+        this.similarityService = similarityService;
+    private final MapperService mapperService;
+        return indexShard;
+import org.opensearch.common.CheckedFunction;
+        new TimeValue(0, TimeUnit.MILLISECONDS),
+        return shardLevelRefreshEnabled;
+            );
+        threadPool.executor(ThreadPool.Names.REFRESH).execute(new AbstractRunnable() {
+        }
+    private final ScriptService scriptService;
+    private class StoreCloseListener implements Store.OnClose {
+    }
+                // ToDo: remove the isPluggableDataFromatEnabled check once MergedSegment replication flow is integrated for DataFormatAware
+     */
+     * The {@link BigArrays} to use for this index.
+        LongSupplier nowInMillis,
+        Supplier<TimeValue> clusterDefaultRefreshIntervalSupplier,
+            indexCreationContext,
+        }
+        this.namedWriteableRegistry = namedWriteableRegistry;
+            throw new ShardNotFoundException(new ShardId(index(), shardId));
+        BiFunction<IndexSettings, ShardRouting, TranslogFactory> translogFactorySupplier,
+                    nodeEnv,
+                assert updateIndexSettings == false;
+        return fsyncTask;
+ * this work for additional information regarding copyright
+        if (indexerFactory instanceof EngineBackedIndexerFactory) {
+    }
+            );
+                        (RemoteSegmentStoreDirectory) remoteDirectory,
+        Supplier<Integer> clusterDefaultMaxMergeAtOnce,
+        protected boolean mustReschedule() {
+                        (RemoteSegmentStoreDirectory) remoteDirectory,
+                && indexService.indexSettings.getIndexMetadata().getState() == IndexMetadata.State.OPEN;
+                } catch (IndexShardClosedException | AlreadyClosedException ex) {
+        for (IndexShard shard : this.shards.values()) {
+        AsyncRetentionLeaseSyncTask(final IndexService indexService) {
+            );
+        return clearedAtLeastOne;
+            return (indexSettings.isSegRepLocalEnabled() || indexSettings.isRemoteStoreEnabled())
+ * The main OpenSearch index service
+                    shardId,
+                    try {
+}
+                    indexCache,
+            null,
+    /**
+        public void onCache(ShardId shardId, Accountable accountable) {
+                circuitBreakerService,
+        // kick off async ops for the first shard in this index
+     */
+        closeShard(reason, sId, indexShard, indexShard.store(), indexShard.getIndexEventListener());
+                // call this before we close the store, so we can release resources for it
+                        if (routing.primary() == false) {
+                    continue;
+                    // Will be enabled in case of formatAware indices.
+                for (String field : fields) {
+    }
+import org.opensearch.core.Assertions;
+        }
+        }
+        this.readerWrapper = wrapperFactory.apply(this);
+                indexSettings,
+        this.directoryFactory = directoryFactory;
+    private void startShardLevelRefreshTasks() {
+        }
+    private final ShardStoreDeleter shardStoreDeleter;
+                () -> globalCheckpointSyncer.accept(shardId),
+import static java.util.Collections.emptyMap;
+import org.opensearch.repositories.RepositoriesService;
+        }
+    // method is synchronized so that IndexService can't be closed while we're deleting dangling indices information
+            allowExpensiveQueries,
+            if (shouldRun()) {
+    private final BigArrays bigArrays;
+        if (dataFormatAwareStoreDirectoryFactory != null) {
+                case CREATED:
+                    case CREATED:
+        }
+                    }
+    }
+                            throw new IllegalStateException("Can't migrate a remote shard to replica before primary " + routing.shardId());
+ * specific language governing permissions and limitations
+    /**
+    public void onRefreshIntervalChange() {
+    private void updateReplicationTask() {
+                // Only the primary shard publish referenced segments.
+                    + currentSettingsVersion
+            }
+    private final IndexNameExpressionResolver expressionResolver;
+                                }
+         * keep it synced.
+        @Override
+    private final DataFormatRegistry dataFormatRegistry;
+            return ThreadPool.Names.REFRESH;
+        logger.debug("No DataFormatAwareStoreDirectoryFactory available, Store will handle internal creation for: {}", shardPath);
+        }
+        @Override
+            if (this.indexSettings.isPluggableDataFormatEnabled() && dataFormatRegistry != null) {
+    private void maybeTrimTranslog() {
+        refreshInterval = getRefreshInterval();
+            if (shardId != null) {
+import org.opensearch.core.index.shard.ShardId;
+                                    && e instanceof ShardNotInPrimaryModeException == false) {
+            deleted.compareAndSet(false, delete);
+            sum += indexShard.store().stats(0L).sizeInBytes();
+                directoryFactory
+    }
+    }
+                    () -> new ParameterizedMessage("[{}] failed to delete shard content - scheduled a retry", lock.getShardId().id()),
+        return shards.containsKey(shardId);
+                        nativeStore,
+        return asyncReplicationTask;
+        this.compositeDirectoryFactory = compositeDirectoryFactory;
+                    stopShardLevelRefreshTasks();
+        indexSettings.setDefaultAutoThrottleEnabled(enabled);
+        if (needsMapperService(indexSettings, indexCreationContext)) {
+        IndexSettings indexSettings,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    }
+        } else {
+        return compositeIndexSettings;
+/**
+                        startShardLevelRefreshTasks();
+        if (indexSettings.getTranslogDurability() == Translog.Durability.REQUEST) {
+        MergedSegmentPublisher mergedSegmentPublisher,
+    }
+            }
+            return;
+import org.opensearch.plugins.NativeStoreHandle;
+import org.opensearch.index.store.FormatChecksumStrategy;
+    ) throws IOException {
+            }
+                        removeShard(shardId, reason);
+import org.opensearch.index.query.QueryShardContext;
+        return mapperService;
+        RecoverySettings recoverySettings,
+     */
+        }
+        this.indexSettings = indexSettings;
+            super(indexService.logger, indexService.threadPool, interval, true, fixedIntervalSchedulingEnabled);
+        this.scriptService = scriptService;
+        StoreCloseListener(ShardId shardId, Closeable... toClose) {
+      For a local index, a local shard path is loaded or a new path is calculated.
+            return "refresh";
+        ClusterService clusterService,
+        int shardId,
+            s -> {},
+    }
             super(indexService, GLOBAL_CHECKPOINT_SYNC_INTERVAL_SETTING.get(indexService.getIndexSettings().getSettings()));
         }
-
-        @Override
-        protected void runInternal() {
-            indexService.maybeSyncGlobalCheckpoints();
+    private volatile AsyncPublishReferencedSegmentsTask asyncPublishReferencedSegmentsTask;
+        IndexNameExpressionResolver expressionResolver,
+    private final AtomicBoolean deleted = new AtomicBoolean(false);
+import org.opensearch.index.store.Store;
+        if (updateIndexSettings) {
+        assert Thread.holdsLock(refreshMutex);
+                    }
+                readerWrapper,
+            indexerFactory,
+        if (getRefreshInterval().millis() > 0 || force) {
+    @PublicApi(since = "1.0.0")
+        assert Thread.holdsLock(refreshMutex);
+        indexShard = newShards.remove(shardId);
+        IndexSearcher searcher,
+    /*
         }
-
+        BooleanSupplier idFieldDataEnabled,
         @Override
-        protected String getThreadPool() {
+    public SimilarityService similarityService() {
+                final IndexShard shard = getShardOrNull(shardId.id());
+                clusterMergeSchedulerConfig.getClusterMaxMergeCount()
+     * Background task that syncs the global checkpoint to replicas.
+import org.opensearch.script.ScriptService;
+        IndexEventListener eventListener,
+            }
+    // Visible for testing
+                        storeStrategies,
+    ) throws IOException {
+    private ShardPath getShardPath(ShardRouting routing, ShardId shardId, ShardLock lock) throws IOException {
+            // index.global_checkpoint_sync_interval is not a real setting, it is only registered in tests
+    }
+            repositoriesService,
+                    remoteStore.close();
+    final class AsyncRefreshTask extends BaseAsyncTask {
+        FieldDataCacheListener(IndexService indexService) {
+import org.opensearch.indices.recovery.RecoveryState;
+            recoveryStateFactory,
+     * {@link IndexReader}-specific optimizations, such as rewriting containing range queries.
+        ThreadPool threadPool,
+                    refreshTask,
+import java.io.Closeable;
+            logger.debug("Using DataFormatAwareStoreDirectoryFactory to create directory for shard path: {}", shardPath);
             return ThreadPool.Names.GENERIC;
-        }
-
-        @Override
-        public String toString() {
-            return "global_checkpoint_sync";
-        }
-    }
-
-    final class AsyncRetentionLeaseSyncTask extends BaseAsyncTask {
-
-        AsyncRetentionLeaseSyncTask(final IndexService indexService) {
-            super(indexService, RETENTION_LEASE_SYNC_INTERVAL_SETTING.get(indexService.getIndexSettings().getSettings()));
-        }
-
-        @Override
-        protected void runInternal() {
-            indexService.syncRetentionLeases();
-        }
-
-        @Override
-        protected String getThreadPool() {
-            return ThreadPool.Names.MANAGEMENT;
-        }
-
-        @Override
-        public String toString() {
-            return "retention_lease_sync";
-        }
-
-    }
-
-    AsyncRefreshTask getRefreshTask() { // for tests
-        return refreshTask;
-    }
-
-    // Visible for test
-    public TimeValue getRefreshTaskInterval() {
-        return refreshTask.getInterval();
-    }
-
-    AsyncTranslogFSync getFsyncTask() { // for tests
-        return fsyncTask;
-    }
-
-    AsyncTrimTranslogTask getTrimTranslogTask() { // for tests
-        return trimTranslogTask;
-    }
-
-    /**
-     * Clears the caches for the given shard id if the shard is still allocated on this node
-     */
-    public boolean clearCaches(boolean queryCache, boolean fieldDataCache, String... fields) {
-        boolean clearedAtLeastOne = false;
-        if (queryCache) {
-            clearedAtLeastOne = true;
-            indexCache.query().clear("api");
-        }
-        if (fieldDataCache) {
-            clearedAtLeastOne = true;
-            if (fields.length == 0) {
-                indexFieldData.clear();
-            } else {
-                for (String field : fields) {
-                    indexFieldData.clearField(field);
-                }
-            }
-        }
-        if (clearedAtLeastOne == false) {
-            if (fields.length == 0) {
-                indexCache.clear("api");
-                indexFieldData.clear();
-            } else {
-                // only clear caches relating to the specified fields
-                for (String field : fields) {
-                    indexFieldData.clearField(field);
-                }
-            }
-        }
-        return clearedAtLeastOne;
-    }
-
-    /**
-     * This method is called when the refresh level is changed from index level to shard level or vice versa.
-     */
-    public void onRefreshLevelChange(boolean newShardLevelRefreshVal) {
-        synchronized (refreshMutex) {
-            if (this.shardLevelRefreshEnabled != newShardLevelRefreshVal) {
-                boolean prevShardLevelRefreshVal = this.shardLevelRefreshEnabled;
-                this.shardLevelRefreshEnabled = newShardLevelRefreshVal;
-                // The refresh mode has changed from index level to shard level and vice versa
-                logger.info("refresh tasks rescheduled oldVal={} newVal={}", prevShardLevelRefreshVal, newShardLevelRefreshVal);
-                if (newShardLevelRefreshVal) {
-                    try {
-                        stopIndexLevelRefreshTask();
-                    } finally {
-                        startShardLevelRefreshTasks();
-                    }
-                } else {
-                    try {
-                        stopShardLevelRefreshTasks();
-                    } finally {
-                        startIndexLevelRefreshTask();
-                    }
-                }
-            }
-        }
-    }
-
-    private void stopIndexLevelRefreshTask() {
-        assert Thread.holdsLock(refreshMutex);
+            final long newSettingsVersion = newIndexMetadata.getSettingsVersion();
+import org.opensearch.index.mapper.MapperService;
         // The refresh task is expected to be non-null at this point.
-        assert Objects.nonNull(refreshTask);
-        refreshTask.close();
-        refreshTask = null;
-    }
-
-    private void startShardLevelRefreshTasks() {
-        assert Thread.holdsLock(refreshMutex);
-        for (IndexShard shard : this.shards.values()) {
-            shard.startRefreshTask();
+    private final NamedWriteableRegistry namedWriteableRegistry;
+                        final boolean flushEngine = deleted.get() == false && closed.get();
+    private final AsyncTrimTranslogTask trimTranslogTask;
+    private final AtomicBoolean closed = new AtomicBoolean(false);
+            }
+        }
+import org.opensearch.common.annotation.PublicApi;
+        IndexCreationContext indexCreationContext,
+            asyncReplicationTask.close();
+                dataFormatRegistry
         }
     }
-
-    private void stopShardLevelRefreshTasks() {
-        assert Thread.holdsLock(refreshMutex);
-        for (IndexShard shard : this.shards.values()) {
-            shard.stopRefreshTask();
+import org.opensearch.index.shard.IndexingOperationListener;
+        final ShardId sId = new ShardId(index(), shardId);
+        synchronized (refreshMutex) {
+                try {
+     * Called when the cluster level settings: {@code cluster.default.index.merge.scheduler.max_merge_count} OR
+        @Override
+        this.dataFormatAwareStoreDirectoryFactory = dataFormatAwareStoreDirectoryFactory;
+        this.engineConfigFactory = Objects.requireNonNull(engineConfigFactory);
+    AsyncPublishReferencedSegmentsTask getPublishReferencedSegmentsTask() {
+                    default:
+    private void stopIndexLevelRefreshTask() {
+        @Override
+import org.opensearch.index.engine.MergedSegmentWarmerFactory;
+            IndexMetadata.FORMAT.writeAndCleanup(getMetadata(), nodeEnv.indexPaths(index()));
+            indexCache.bitsetFilterCache(),
+        private final Closeable[] toClose;
         }
+                assert lock.getShardId().equals(shardId) : "shard id mismatch, expected: " + shardId + " but got: " + lock.getShardId();
+                    long ramBytesUsed = accountable != null ? accountable.ramBytesUsed() : 0L;
+                if (shard != null) {
+        }
+                indexAnalyzers,
+    private final Supplier<Boolean> fixedRefreshIntervalSchedulingEnabled;
+            }
+        protected String getThreadPool() {
+            return ThreadPool.Names.FLUSH;
+    private void maybeSyncSegments(boolean force) {
+     * Gets the refresh interval seen by the index service. Index setting overrides takes the highest precedence.
+                    shardId,
+            path = ShardPath.loadFileCachePath(nodeEnv, shardId);
+                }
+            this.indexCache = null;
+    @Override
+    private NativeStoreRepository resolveNativeStore(RepositoriesService repositoriesService) {
+                        continue;
+import org.opensearch.indices.ClusterMergeSchedulerConfig;
+ */
+                try {
+            clusterAlias,
+                && this.indexSettings.isWarmIndex()
+            namedWriteableRegistry,
+                final IndexShard shard = indexService.getShardOrNull(shardId.id());
+        }
+            recoverySettings,
     }
-
-    private void startIndexLevelRefreshTask() {
-        assert Thread.holdsLock(refreshMutex);
-        // The refresh task is expected to be null at this point.
-        assert Objects.isNull(refreshTask);
+        SimilarityService similarityService,
+        final SearchIndexNameMatcher indexNameMatcher = new SearchIndexNameMatcher(
+                }
+     * Called whenever the cluster level {@code cluster.default.index.max_merge_at_once} changes.
+    private final class FieldDataCacheListener implements IndexFieldDataCache.Listener {
+        try {
+        if (shards.containsKey(shardId) == false) {
+            success = true;
+import java.util.function.Supplier;
+        }
+    @Override
+    }
+        final Consumer<ShardId> globalCheckpointSyncer,
+                }
+                }
+        boolean shardLevelRefreshEnabled,
+        public String toString() {
+    }
+                .getSettings()
+    private final CompositeIndexSettings compositeIndexSettings;
+            return "retention_lease_sync";
+                indexSortSupplier,
+        this.remoteDirectoryFactory = remoteDirectoryFactory;
+        } finally {
+    ) {
+import org.opensearch.index.cache.IndexCache;
+                    );
+import org.opensearch.indices.cluster.IndicesClusterStateService;
         refreshTask = new AsyncRefreshTask(this);
+                    } catch (Exception e) {
+import org.opensearch.cluster.node.DiscoveryNodes;
+                }
+            return ((EngineBackedIndexerFactory) indexerFactory).getEngineFactory();
+            for (IndexShard shard : this.shards.values()) {
+import org.apache.lucene.search.IndexSearcher;
+     * 1. {@code cluster.default.index.refresh_interval} cluster setting changes. The change would only happen for
+                        // only flush if we are closed (closed index or shutdown) and if we are not deleted
+            }
+                // The following method provides ShardLock that is not maintained by NodeEnvironment.
+            Store remoteStore = null;
+                    IOUtils.close(toClose);
+        }
+        final DiscoveryNode targetNode,
+                } catch (IndexShardClosedException | AlreadyClosedException ex) {
+        return newQueryShardContext(shardId, searcher, nowInMillis, clusterAlias, validate, false);
+    public MapperService mapperService() {
+     * Shard Store Deleter Interface
+import java.io.IOException;
+        final ShardRouting routing,
+        List<IndexingOperationListener> indexingOperationListeners,
+        indexSettings.setDefaultMaxThreadAndMergeCount(maxThreadCount, maxMergeCount);
+                } else {
+            lock = nodeEnv.shardLock(shardId, "starting shard", TimeUnit.SECONDS.toMillis(5));
+                idFieldDataEnabled,
+        metadataListeners.forEach(c -> c.accept(newIndexMetadata));
+            return indexService.closed.get() == false;
+        }
+        @Override
+        private final ShardId shardId;
+            }
+            circuitBreakerService,
+                    );
+    public boolean updateMapping(final IndexMetadata currentIndexMetadata, final IndexMetadata newIndexMetadata) throws IOException {
     }
-
-    // Visible for testing
+        DiscoveryNodes discoveryNodes,
+        final RetentionLeaseSyncer retentionLeaseSyncer,
+                    protected void closeInternal() {
+     */
+            } catch (IOException e) {
+                path = ShardPath.selectNewPathForShard(
+            Map<DataFormat, NativeStoreHandle> dataformatAwareStoreHandles = Map.of();
     boolean isShardLevelRefreshEnabled() {
-        return shardLevelRefreshEnabled;
+    final IndexStorePlugin.DirectoryFactory getDirectoryFactory() {
+     */
+                    throw ex;
+                    routing.getExpectedShardSize() == ShardRouting.UNAVAILABLE_EXPECTED_SHARD_SIZE
+                if (shard != null) {
+        RecoverySettings recoverySettings,
+            return;
+            }
+import org.opensearch.index.engine.Engine;
+ *
+                    directory = createDataFormatAwareStoreDirectory(shardId, path, checksumStrategies);
+            if (shard.routingEntry().active() && shard.routingEntry().primary()) {
+            null,
+     * @opensearch.internal
+            expressionResolver,
+                        path,
+        public String toString() {
+            } else {
+        if (getIndexSettings().getPublishReferencedSegmentsInterval().equals(asyncPublishReferencedSegmentsTask.getInterval())) {
+        Supplier<TimeValue> clusterDefaultRefreshIntervalSupplier,
+        if (fieldDataCache) {
+            similarityService,
+        }
     }
-
-    // Visible for testing
-    public Object getRefreshMutex() {
+        BooleanSupplier allowExpensiveQueries,
+            return indexShard;
+            indexAnalyzers,
+                checksumStrategies = dataFormatRegistry.createChecksumStrategies(this.indexSettings);
+    public static final Setting<TimeValue> RETENTION_LEASE_SYNC_INTERVAL_SETTING = Setting.timeSetting(
+        }
+                        checksumStrategies,
+        if (closed.get()) {
+            null,
+                        () -> new ParameterizedMessage("[{}] failed to notify shard about setting change", shard.shardId().id()),
+            if (newInterval.equals(getInterval()) == false) {
+        boolean validate
+    /**
+        // visible for tests
+            targetNode,
+                logger.warn("{} failed to load shard path, trying to remove leftover", shardId);
+    private volatile AsyncGlobalCheckpointTask globalCheckpointTask;
+ * software distributed under the License is distributed on an
+    }
+            }
+        int shardId,
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                && recoverySettings.isMergedSegmentReplicationWarmerEnabled()
+        // once we change the refresh interval we schedule yet another refresh
+     * Passing a {@code null} {@link IndexSearcher} will return a valid context, however it won't be able to make
+            }
+            null,
+     * @param repositoriesService the repositories service, may be {@code null}
+                    shard.fieldData().onCache(shardId, fieldName, ramUsage);
+        this.eventListener = eventListener;
+        return indexingOperationListeners;
+    public NamedXContentRegistry xContentRegistry() {
+                    shard.onSettingsChanged();
+            retentionLeaseSyncer,
+    private final Object refreshMutex = new Object();
+        return indexSortSupplier;
+        @Override
+            this.warmer = null;
+            idFieldDataEnabled,
+            similarityService(),
+    @Override
+                } catch (Exception e) {
+                // This creates an issue when we are deleting the index as it results in closing both store and remoteStore.
+            indexCache.query().clear("api");
+        ClusterService clusterService,
+    }
+        boolean clearedAtLeastOne = false;
+                        nodeCacheService != null ? nodeCacheService.fileCache() : null,
+            } catch (IOException ex) {
+    final class AsyncPublishReferencedSegmentsTask extends BaseAsyncTask {
+                for (IndexShard shard : this) {
+            try {
+ *
+        Store store = null;
+        protected void runInternal() {
+    final class AsyncGlobalCheckpointTask extends BaseAsyncTask {
+                        indexShard.close(reason, flushEngine, deleted.get());
+            if (targetNode.isRemoteSegmentStoreNode()) {
+                    remoteDirectory = remoteDirectoryFactory.newDirectory(this.indexSettings, path);
+ * not use this file except in compliance with the License.
+                    if (shard.routingEntry().isSearchOnly() && shard.routingEntry().active()) {
+        MapperRegistry mapperRegistry,
+        return shards.size();
+        new TimeValue(30, TimeUnit.SECONDS),
+    } // pkg private for testing
+                mergedSegmentWarmerFactory,
+                        this.indexSettings.getUUID(),
+        try {
+    /**
+                lock,
+                    logger.warn("failed to sync translog", e);
+            searchOperationListeners,
+        }
+                if (store != null) {
+import org.opensearch.index.engine.dataformat.StoreStrategy;
+                // Even though we have `RemoteStoreMigrationAllocationDecider` in place to prevent something like this from happening at the
+        }
+    public synchronized void deleteDanglingIndicesInfo() {
+                try {
+    }
+        Client client,
+import org.opensearch.index.engine.exec.IndexerFactory;
+                    case CLOSED:
+                    dataformatAwareStoreHandles = storeStrategyRegistry.getFormatStoreHandles();
+            } else {
+            for (IndexShard shard : this.shards.values()) {
+            allowExpensiveQueries,
+            valuesSourceRegistry,
+                && this.indexSettings.isPluggableDataFormatEnabled()
+            (shardId) -> ReplicationStats.empty(),
+                listener.afterIndexShardClosed(sId, indexShard, indexSettings);
+import java.util.Set;
+            clusterService,
+        if (refreshInterval.equals(getRefreshInterval())) {
+    public CompositeIndexSettings getCompositeIndexSettings() {
+                // store instances.
+        }
+            engineConfigFactory,
+        IndexShard indexShard = getShardOrNull(shardId);
+                    stopIndexLevelRefreshTask();
+                    try {
+    final class AsyncTrimTranslogTask extends BaseAsyncTask {
+        } else if (fsyncTask == null) {
+            // don't re-schedule if the IndexService instance is closed or if the index is closed
+        Property.Dynamic,
+                if (remoteStore != null && indexShard.isPrimaryMode() && deleted.get()) {
+                    // fine - continue;
+    public void onDefaultAutoThrottleEnabledUpdate(boolean enabled) {
+        final IndexService indexService;
+    private void closeShard(String reason, ShardId sId, IndexShard indexShard, Store store, IndexEventListener listener) {
+import org.opensearch.index.shard.IndexEventListener;
+            this.shardId = shardId;
+        }
+        final boolean updateIndexSettings = indexSettings.updateIndexMetadata(newIndexMetadata);
+        if (repoName == null || repositoriesService == null) {
+            return ThreadPool.Names.GENERIC;
+    static boolean needsMapperService(IndexSettings indexSettings, IndexCreationContext indexCreationContext) {
+        }
+        @Override
+    }
+            this.indexCache = new IndexCache(indexSettings, queryCache, bitsetFilterCache);
+                    }
+     */
+                () -> newQueryShardContext(0, null, System::currentTimeMillis, null),
+    private final ThreadPool threadPool;
+        logger.debug("[{}] closing... (reason: [{}])", shardId, reason);
+                case STARTED:
+                // indices.
+                if (this.indexSettings.isRemoteStoreEnabled()) {
         return refreshMutex;
+     */
+     */
+    public BigArrays getBigArrays() {
+                }
     }
-}
+                default:
+                }
+        protected boolean shouldRun() {
+            return repositoriesService.repository(repoName).getNativeStore();
+                IndexShard shard = getShardOrNull(shardId.getId());
+                final IndexShard shard = indexService.getShardOrNull(shardId.id());
+            } else if (FeatureFlags.isEnabled(FeatureFlags.WRITABLE_WARM_INDEX_SETTING) &&
+                IOUtils.close(
+        IndexStorePlugin.DirectoryFactory remoteDirectoryFactory,
+            this.retentionLeaseSyncTask = new AsyncRetentionLeaseSyncTask(this);
+    }
+        this.asyncReplicationTask = new AsyncReplicationTask(this);
+    private final Supplier<Sort> indexSortSupplier;
+    );
+                );
+            }
+                } catch (AlreadyClosedException ex) {
+        this.dataFormatRegistry = dataFormatRegistry;
+        if (!indexSettings.getIndexMetadata().useIngestionSource()) {
+            return indexSettings.isSegRepEnabledOrRemoteNode() && super.mustReschedule();
+                    logger.trace("[{}] store not initialized prior to closing shard, nothing to close", shardId);
+        refreshTask.close();
+    }
+        this.refreshInterval = getRefreshInterval();
+                    throw new IllegalStateException("unknown state: " + shard.state());
+                indexSettings,
+            this.indexSortSupplier = () -> null;
+                };
+        if (getRefreshInterval().millis() > 0 || force) {
+        }
+        CircuitBreakerService circuitBreakerService,
+                indexCache.clear("api");
+        IndexStorePlugin.RecoveryStateFactory recoveryStateFactory,
+        }
+        super(indexSettings);
+    private void maybeSyncGlobalCheckpoints() {
+ * Modifications Copyright OpenSearch Contributors. See
+                    + "to be less than new settings version ["
+                } catch (Exception e) {
+                shardLevelRefreshEnabled,
+                    mapperService,
+ */
+                } else {
+        });
+        List<IndexingOperationListener> indexingOperationListeners,
+                xContentRegistry,
+     * This method centralizes the directory creation logic and enables plugin-based format discovery.
+    }
+        SimilarityService similarityService,
+        if (indexShard == null) {
+     * The {@link ThreadPool} to use for this index.
+        if (clearedAtLeastOne == false) {
+    }
+            discoveryNodes,
+    public int numberOfShards() {
+                directory,
+                    path = ShardPath.loadShardPath(logger, nodeEnv, shardId, this.indexSettings.customDataPath());
+        // that are waiting for a refresh.
+        private BitsetCacheListener(IndexService indexService) {
+                assert currentSettingsVersion < newSettingsVersion : "expected current settings version ["
+    /**
+     *
+        public void accept(ShardLock lock) {
+     * @return a live native store or {@link NativeStoreRepository#EMPTY}
+                fixedRefreshIntervalSchedulingEnabled,
+import org.opensearch.index.store.remote.filecache.NodeCacheService;
+            this.toClose = toClose;
+            }
+ *
+import org.opensearch.index.store.DataFormatAwareStoreDirectory;
+        ShardPath shardPath,
+    public synchronized IndexShard createShard(
+            }
+    }
+    }
+ * SPDX-License-Identifier: Apache-2.0
+    }
+import org.opensearch.indices.replication.checkpoint.MergedSegmentPublisher;
+            clusterAlias,
+                        directoryFactory,
+    }
+        @Override
+            indexingOperationListeners,
+                mapperRegistry,
+        protected String getThreadPool() {
+        protected void runInternal() {
+                    directory = directoryFactory.newDirectory(this.indexSettings, path);
+     * Called whenever the cluster level {@code cluster.merge.scheduler.max_force_merge_mb_per_sec} changes.
+        }
+        }
+            }
+                    long ramBytesUsed = accountable != null ? accountable.ramBytesUsed() : 0L;
+    }
+                // As there can be only one shardlock acquired for a given shard, the lock is shared between store and remoteStore.
+            ShardPath path = getShardPath(routing, shardId, lock);
+    private void updateFsyncTaskIfNecessary() {
+            Directory directory = null;
+            this.mapperService = new MapperService(
+                    case POST_RECOVERY:
+            indexSettings.getMergeSchedulerConfig().setMaxForceMergeMBPerSec(maxForceMergeMBPerSec);
+            store.beforeClose();
+            remoteDirectoryFactory,
+        this.circuitBreakerService = circuitBreakerService;
+        IndexEventListener eventListener,
+        ShardStoreDeleter shardStoreDeleter,
+        IndexStorePlugin.RecoveryStateFactory recoveryStateFactory,
+                searchOperationListeners,
+     * Resolves the native object store for the index's remote store repository.
+                if (fsyncTask != null) {
+                final Set<Integer> shardIds = shardIds();
+    }
+        ReferencedSegmentsPublisher referencedSegmentsPublisher
+        IndexStorePlugin.CompositeDirectoryFactory compositeDirectoryFactory,
+    public IndexService(
+     *
+                    );
+        }
+            bigArrays,
+            indexSettings,
+                                    && e instanceof IndexShardClosedException == false
+        @Nullable DiscoveryNode sourceNode,
+            store = storeFactory.newStore(
+    }
+        final RemoteStoreStatsTrackerFactory remoteStoreStatsTrackerFactory,
+        this.storeFactory = storeFactory;
+                } finally {
+import java.util.Collections;
+            if (shardId != null) {
+            public boolean isForceExecution() {
+    }
+                    if (shard.isSyncNeeded()) {
+        final int shardId = sId.id();
+            shard.stopRefreshTask();
+ * the Apache License, Version 2.0 (the "License"); you may
+        IndexCreationContext indexCreationContext,
+     */
+        ScriptService scriptService,
+        }
+            }
+import org.opensearch.common.util.concurrent.AbstractAsyncTask;
+    private volatile Map<Integer, IndexShard> shards = emptyMap();
+    }
+        return similarityService;
+        protected boolean mustReschedule() {
+                        path,
+            indexSettings,
+                threadPool
+        this.trimTranslogTask = new AsyncTrimTranslogTask(this);
+import org.apache.logging.log4j.message.ParameterizedMessage;
+    // don't convert to Setting<> and register... we only set this in tests and register via a plugin
+     */
+import org.apache.lucene.util.Accountable;
+                );
+                indicesBitsetFilterCache != null ? indicesBitsetFilterCache.createListener(threadPool) : null
+     */
+        return shards.keySet();
+        BiFunction<IndexSettings, ShardRouting, TranslogFactory> translogFactorySupplier,
+            clusterMergeSchedulerConfig,
+        return directoryFactory;
+            asyncReplicationTask = new AsyncReplicationTask(this);
+        }
+        synchronized (refreshMutex) {
+import org.opensearch.storage.directory.StoreStrategyRegistry;
+                    shard.publishReferencedSegments();
+            shards = newMapBuilder(shards).put(shardId.id(), indexShard).immutableMap();
+        Consumer<IndexShard> replicator,
+                }
+    public QueryShardContext newQueryShardContext(int shardId, IndexSearcher searcher, LongSupplier nowInMillis, String clusterAlias) {
+            try {
+                indexService,
+import org.opensearch.index.translog.Translog;
+                && indexSettings.isPluggableDataFormatEnabled() == false;
+        return shards.get(shardId);
+            indexShard = new IndexShard(
+            MetadataStateFormat.deleteMetaState(nodeEnv.indexPaths(index()));
+        @Override
+     *
+        try {
+                    case RECOVERING:
+        @Override
+        this.fixedRefreshIntervalSchedulingEnabled = fixedRefreshIntervalSchedulingEnabled;
+            return indexSettings.isSegRepEnabledOrRemoteNode() && super.mustReschedule();
+            switch (shard.state()) {
+    private final String INDEX_TRANSLOG_RETENTION_CHECK_INTERVAL_SETTING = "index.translog.retention.check_interval";
+            if (shardLevelRefreshEnabled) {
+        @Override
+import org.opensearch.cluster.service.ClusterService;
+                if (shard != null) {
+            globalCheckpointSyncer,
+    private static final class BitsetCacheListener implements BitsetFilterCache.Listener {
+            }
+import org.opensearch.indices.recovery.RecoverySettings;
+    private final IndexStorePlugin.StoreFactory storeFactory;
+        protected boolean mustReschedule() {
+            this.warmer = new IndexWarmer(
+                    // fine - continue;
+        public String toString() {
+                                    logger.warn(new ParameterizedMessage("{} failed to execute {} sync", shard.shardId(), source), e);
+            if (shardId != null) {
+    private volatile TimeValue refreshInterval;
+            }
+        return refreshTask;
+    public void onClusterLevelForceMergeMBPerSecUpdate(double maxForceMergeMBPerSec) {
+                indexService.getIndexSettings()
+    private void syncRetentionLeases() {
+ */
+        }
+/*
+        }
+                    directoryFactory
+     * This method is called when the refresh level is changed from index level to shard level or vice versa.
+        @Override
+import java.util.concurrent.CopyOnWriteArrayList;
+        // to ensure we are in a clean and predictable state.
+    private final IndexSettings indexSettings;
+        IndexStorePlugin.DirectoryFactory directoryFactory,
+                        threadPool
+        @Override
+        }
+            if (shardId != null) {
+import org.opensearch.indices.RemoteStoreSettings;
+    // visible for tests
+                    ex.addSuppressed(inner);
+    public IndexService(
+                logger.warn(
+                // The refresh mode has changed from index level to shard level and vice versa
+            shard.startRefreshTask();
+    /**
+                        curCount = 0;
+            super(indexService, indexService.getIndexSettings().getPublishReferencedSegmentsInterval());
+    private void maybePublishReferencedSegments() {
+            nodeEnv,
+                        logger.warn("failed to close shard", e);
+     * <p>
+                );
+            }
+            queryCache,
+    AsyncRefreshTask getRefreshTask() { // for tests
+        return bigArrays;
+        // initialize this last -- otherwise if the wrapper requires any other member to be non-null we fail with an NPE
+        }
+            } else {
+        this.threadPool = threadPool;
+                }
+            shardLevelRefreshEnabled,
+            clusterDefaultMaxMergeAtOnce,
+            store.setDataformatAwareStoreHandles(dataformatAwareStoreHandles);
+        return newQueryShardContext(shardId, searcher, nowInMillis, clusterAlias, false);
+    public Object getRefreshMutex() {
+import java.util.HashMap;
+        Objects.requireNonNull(retentionLeaseSyncer);
+            xContentRegistry,
+        BaseAsyncTask(final IndexService indexService, final TimeValue interval) {
+                boolean prevShardLevelRefreshVal = this.shardLevelRefreshEnabled;
+                this.indexSettings.isWarmIndex()) {
+                        stopShardLevelRefreshTasks();
+                    indexFieldData,
+        this.recoveryStateFactory = recoveryStateFactory;
+    private void updatePublishReferencedSegmentsTask() {
+import org.opensearch.env.NodeEnvironment;
+        refreshTask = null;
+    List<SearchOperationListener> getSearchOperationListener() { // pkg private for testing
+        protected void runInternal() {
+    public boolean hasShard(int shardId) {
+                    this.indexSettings,
+        protected boolean mustReschedule() {
+    private volatile AsyncTranslogFSync fsyncTask;
+    @Override
+        Property.Dynamic,
+        Property.IndexScope
+                }
+        } catch (RepositoryMissingException e) {
+                    logger.warn(
+            indexService.maybeSyncGlobalCheckpoints();
+        // docs to become visible immediately. This also flushes all pending indexing / search requests
+                try {
+    private void maybeFSyncTranslogs() {
+     * The {@link ScriptService} to use for this index.
+import org.opensearch.common.settings.Setting;
+                        "[{" + routing.shardId() + "}] Cannot initialize shards with remote store index settings on non-remote store nodes"
+        }
+        protected void runInternal() {
+    private volatile AsyncRetentionLeaseSyncTask retentionLeaseSyncTask;
+                indexFieldData.clear();
+import org.opensearch.indices.replication.checkpoint.ReferencedSegmentsPublisher;
+     */
+import java.util.function.BooleanSupplier;
+        protected String getThreadPool() {
+                        continue;
+        if (indexShard != null) {
+    public final IndexerFactory getIndexerFactory() {
+        if (shards.containsKey(shardId.id())) {
+import java.util.Map;
+                }
+            }
+            index().getName(),
+    // visible for tests
+                    } finally {
+import org.opensearch.node.remotestore.RemoteStoreNodeAttribute;
+        String repoName = this.indexSettings.getRemoteStoreRepository();
+                store,
+        } finally {
+                logger.warn("forced refresh failed after interval change", e);
+ * You may obtain a copy of the License at
+            assert indexAnalyzers != null;
+        @Override
+            super(indexService, indexService.getIndexSettings().getTranslogSyncInterval());
+                    }
+            this.indexService = indexService;
+            return dataFormatAwareStoreDirectoryFactory.newDataFormatAwareStoreDirectory(
+            for (final IndexShard shard : this.shards.values()) {
+                }
+            }
+                logger.debug("shard level refresh is disabled for index [{}]", indexSettings.getIndex().getName());
+     * {@link IndexReader}-specific optimizations, such as rewriting containing range queries.
+                        seedRemote = true;
+import java.util.Iterator;
+            asyncPublishReferencedSegmentsTask = new AsyncPublishReferencedSegmentsTask(this);
+                    shard.shardBitsetFilterCache().onRemoval(ramBytesUsed);
+     */
+    private final CopyOnWriteArrayList<Consumer<IndexMetadata>> metadataListeners = new CopyOnWriteArrayList<>();
+                    directory = compositeDirectoryFactory.newDirectory(
+        List<SearchOperationListener> searchOperationListeners,
+public class IndexService extends AbstractIndexComponent implements IndicesClusterStateService.AllocatedIndex<IndexShard> {
+        rescheduleRefreshTasks();
+        }
+            if (this.shardLevelRefreshEnabled != newShardLevelRefreshVal) {
+                clusterMergeSchedulerConfig.getClusterMaxThreadCount(),
+                    }
+import org.opensearch.index.fielddata.IndexFieldDataCache;
+        NamedXContentRegistry xContentRegistry,
+    public interface ShardStoreDeleter {
+                    warmer.warm(reader, shard, IndexService.this.indexSettings);
+            }
+        QueryCache queryCache,
+        }
+        final DiscoveryNode targetNode,
+        CREATE_INDEX,
+    }
+                }
+@PublicApi(since = "1.0.0")
+        this(
+     * @opensearch.internal
+    }
+    /**
+        "index.global_checkpoint_sync.interval",
+    final CheckedFunction<DirectoryReader, DirectoryReader, IOException> getReaderWrapper() {
+            } else {
+        }
+    }
+    }
+            shardStoreDeleter,
+            indexSettings.setDefaultAutoThrottleEnabled(clusterMergeSchedulerConfig.getClusterMergeAutoThrottleEnabled());
+import java.util.List;
+                }
+            indicesFieldDataCache,
+                nodeEnv.nodeId(),
+        if (closed.get()) {
+     * Called whenever the refresh interval changes. This can happen in 2 cases -
+        ThreadPool threadPool,
+            @Override
+        return threadPool;
+            } finally {
+        AsyncGlobalCheckpointTask(final IndexService indexService) {
+import org.opensearch.index.remote.RemoteStoreUtils;
+        this.segmentReplicationStatsProvider = segmentReplicationStatsProvider;
+ * Licensed to Elasticsearch under one or more contributor
+                    retentionLeaseSyncTask
+import java.util.function.Consumer;
+        Client client,
+    public final EngineFactory getEngineFactory() {
+        this.nodeEnv = nodeEnv;
+    @Nullable
+        final RepositoriesService repositoriesService,
+        );
+    /**
+                // extract native store handles for the Store before passing to the factory.
+        this.clusterDefaultRefreshIntervalSupplier = clusterDefaultRefreshIntervalSupplier;
+        this.compositeIndexSettings = compositeIndexSettings;
+            if (FeatureFlags.isEnabled(FeatureFlags.WRITABLE_WARM_INDEX_SETTING)
+        EngineConfigFactory engineConfigFactory,
+    public void onRefreshLevelChange(boolean newShardLevelRefreshVal) {
+        }
+        }
+import org.opensearch.index.store.DataFormatAwareStoreDirectoryFactory;
+        protected String getThreadPool() {
+                // The replicas cleans up the redundant pending merge segments according to the primary shard request.
+                logger.warn(() -> new ParameterizedMessage("failed to publish primary referenced segments"), ex);
+                path,
+        MergedSegmentWarmerFactory mergedSegmentWarmerFactory
+        try {
+                    IOUtils.closeWhileHandlingException(lock);
+        }
+            logger.warn("Native store not available for repository [{}]", repoName);
+        NamedWriteableRegistry namedWriteableRegistry,
+                        this.indexSettings.getRemoteStorePathStrategy(),
+        } else {
+     * Creates a new QueryShardContext.
+        return searchOperationListeners;
+    public Iterator<IndexShard> iterator() {
+                try {
+        );
+            clearedAtLeastOne = true;
+     * or the repository is missing.
+    /**
+    /**
+import java.nio.file.Path;
+        indexSettings.setDefaultMaxMergesAtOnce(clusterDefaultMaxMergeAtOnceSupplier.get());
+                } catch (Exception inner) {
+    // method is synchronized so that IndexService can't be closed while we're writing out dangling indices information
+    /**
+                } finally {
+        assert Objects.isNull(refreshTask);
+            for (IndexShard shard : this.shards.values()) {
+            storeFactory,
+        return indexSettings.getUUID();
+        }
+        this.xContentRegistry = xContentRegistry;
+    // Visible for testing
+        this.shardStoreDeleter = shardStoreDeleter;
+                }
+        return clusterDefaultRefreshIntervalSupplier.get();
+                    startIndexLevelRefreshTask();
+            scriptService,
+    public QueryShardContext newQueryShardContext(
+                remoteStore = new Store(
+            return getIndexSettings().getRefreshInterval();
+        }
+            if (fields.length == 0) {
+        }
+                this.indexSettings.isSegRepEnabledOrRemoteNode() ? mergedSegmentPublisher : null,
+            nowInMillis,
+            }
+            } finally {
+     *
+            @Override
+                    shard.shardBitsetFilterCache().onCached(ramBytesUsed);
+     * Cache listener for bitsets
+     */
+            }
+                    logger.debug("failed to close resource", ex);
+                case POST_RECOVERY:
+                        this.indexSettings,
+        if (indexSettings.getTranslogDurability() == Translog.Durability.ASYNC) {
+    private final EngineConfigFactory engineConfigFactory;
+    /**
+        @Override
+     */
+        return readerWrapper;
+            try {
+    private final CircuitBreakerService circuitBreakerService;
+                        continue;
+    private long getAvgShardSizeInBytes() throws IOException {
+            return NativeStoreRepository.EMPTY;
+                    bitsetFilterCache,
+            return;
+                }
+        return new QueryShardContext(
+                    dataPathToShardCount
+    private final NamedXContentRegistry xContentRegistry;
+    }
+    private final NodeEnvironment nodeEnv;
+                    directory = dataFormatAwareStoreDirectoryFactory.newDataFormatAwareStoreDirectory(
+                try {
+        sync(IndexShard::syncRetentionLeases, "retention lease");
+                } finally {
+                try {
+    }
+            return false == indexSettings.getIndexMetadata()
+import org.opensearch.env.ShardLock;
+    }
+                        assert false : "shard " + shard.shardId() + " is in post-recovery but marked as active";
+        return scriptService;
+                        directoryFactory,
+import org.opensearch.repositories.RepositoryMissingException;
+                    shardStoreDeleter.deleteShardStore("delete index", lock, indexSettings);
+            asyncPublishReferencedSegmentsTask.close();
+                    Store.OnClose.EMPTY,
+import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
+    }
+    /**
+            bigArrays,
+                    }
+    public QueryShardContext newQueryShardContext(
+     * Passing a {@code null} {@link IndexSearcher} will return a valid context, however it won't be able to make
+                    }
+            indexService.syncRetentionLeases();
+            this.mapperService = null;
+                shardId,
+    private final IndexCache indexCache;
+        Supplier<Boolean> fixedRefreshIntervalSchedulingEnabled,
+    }
+        return path;
+            } else {
+import org.opensearch.index.store.RemoteSegmentStoreDirectory;
+            return ThreadPool.Names.GENERIC;
+                checksumStrategies
+        LongSupplier nowInMillis,
+        NodeEnvironment nodeEnv,
+            return "replication";
+    }
+import org.apache.lucene.store.Directory;
+        new TimeValue(0, TimeUnit.MILLISECONDS),
+                }
+                    storeStrategyRegistry = StoreStrategyRegistry.open(
+            xContentRegistry,
+     */
+        );
+                remoteStoreSettings,
+                } else {
+         * be able to serialize the execution via the cluster state in the future. for now we just
+     */
+        if (!MergeSchedulerConfig.MAX_FORCE_MERGE_MB_PER_SEC_SETTING.exists(indexSettings.getSettings())) {
+    }
+            super(indexService, indexService.getRefreshInterval());
+                // that's being relocated/replicated we know how large it will become once it's done copying:
+     * FSyncs the translog for all shards of this index in a defined interval.
+    }
+            Map<String, FormatChecksumStrategy> checksumStrategies = Collections.emptyMap();
+        } else {
+import org.opensearch.indices.replication.checkpoint.SegmentReplicationCheckpointPublisher;
+            this.bitsetFilterCache = null;
+            indexSettings.setDefaultMaxThreadAndMergeCount(
+            return;
+            return false;
+        this.bigArrays = bigArrays;
+import org.opensearch.core.indices.breaker.CircuitBreakerService;
+        } catch (WriteStateException e) {
+            }
+        this.nodeCacheService = nodeCacheService;
+            this.indexService = indexService;
+        }
+                scriptService,
+import org.opensearch.common.util.concurrent.AbstractRunnable;
+                && this.dataFormatAwareStoreDirectoryFactory != null) {
+    public synchronized void updateMetadata(final IndexMetadata currentIndexMetadata, final IndexMetadata newIndexMetadata) {
+        protected String getThreadPool() {
+        DataFormatAwareStoreDirectoryFactory dataFormatAwareStoreDirectoryFactory,
+        NodeEnvironment nodeEnv,
+        }
+                }
+     * The change is only applied if the index doesn't have its own explicit force merge MB per sec setting.
+import static org.opensearch.common.collect.MapBuilder.newMapBuilder;
+    @InternalApi
+            public void onFailure(Exception e) {
+            });
+                NativeStoreRepository nativeStore = resolveNativeStore(repositoriesService);
+import org.opensearch.threadpool.ThreadPool;
+            return sum / count;
+            shardId,
+ * compatible open source license.
+                indexSettings,
+        NodeCacheService nodeCacheService
+import org.opensearch.index.translog.TranslogFactory;
+import org.opensearch.index.engine.dataformat.DataFormat;
+    }
+        @Override
+                this.indexSettings.isSegRepEnabledOrRemoteNode() ? referencedSegmentsPublisher : null,
+        return indexSettings;
+    public IndexSettings getIndexSettings() {
+    public Set<Integer> shardIds() {
+                }
+                engineConfigFactory,
+                    );
+            return ThreadPool.Names.MANAGEMENT;
+     * {@code cluster.default.index.merge.scheduler.max_thread_count} change.
+    AsyncTranslogFSync getFsyncTask() { // for tests
+import org.opensearch.transport.client.Client;
+        IndexSearcher searcher,
+    /**
+                return shard == null ? IndicesFieldDataCache.Key.NO_SHARD_IDENTITY : System.identityHashCode(shard);
+                similarityService,
+     *
+    private final CheckedFunction<DirectoryReader, DirectoryReader, IOException> readerWrapper;
+    } // pkg private for testing
+        );
+                // we delay the actual creation of the sort order for this index because the mapping has not been merged yet.
+        DataFormatRegistry dataFormatRegistry,
+            );
+                mapperService,
+                ShardLock remoteStoreLock = new ShardLock(shardId) {
+        NamedWriteableRegistry namedWriteableRegistry,
+import java.util.function.LongSupplier;
+    private final BiFunction<IndexSettings, ShardRouting, TranslogFactory> translogFactorySupplier;
+        // The refresh task is expected to be null at this point.
+            wrapperFactory,
+    public void onDefaultMaxMergeAtOnceChanged(int newDefaultMaxMergeAtOnce) {
+        this.remoteStoreSettings = remoteStoreSettings;
+     * @opensearch.api
+                }
+    }
+            final TimeValue newInterval = indexService.getIndexSettings().getTranslogSyncInterval();
+        public String toString() {
+            super(
+import org.opensearch.index.remote.RemoteStoreStatsTrackerFactory;
+        }
+        IndexerFactory indexerFactory,
+            this(indexService, interval, () -> Boolean.FALSE);
+    public void addMetadataListener(Consumer<IndexMetadata> listener) {
+        this.clusterService = clusterService;
+                path,
+    public IndexEventListener getIndexEventListener() {
+    private final DataFormatAwareStoreDirectoryFactory dataFormatAwareStoreDirectoryFactory;
+            Directory remoteDirectory = null;
+        }
+import org.opensearch.plugins.IndexStorePlugin;
+        final SegmentReplicationCheckpointPublisher checkpointPublisher,
+import org.opensearch.index.shard.ShardNotFoundException;
+    AsyncReplicationTask getReplicationTask() {
+    private DataFormatAwareStoreDirectory createDataFormatAwareStoreDirectory(
+    }
+                }
+                        // fine - continue;
+        final RemoteStoreStatsTrackerFactory remoteStoreStatsTrackerFactory,
+                recoverySettings,
+import org.apache.lucene.index.IndexReader;
+                        }
+                }
+        updateFsyncTaskIfNecessary();
+        this.searchOperationListeners = Collections.unmodifiableList(searchOperationListeners);
+import org.apache.lucene.index.DirectoryReader;
+        AsyncRefreshTask(IndexService indexService) {
+                logger.debug("{} creating using a new path [{}]", shardId, path);
+    }
+                indexService.maybeSyncSegments(false);
+            eventListener,
+            } finally {
+                dataFormatRegistry
+    }
+            @Override
+    @Override
+         * TODO: we execute this in parallel but it's a synced method. Yet, we might
+import org.opensearch.common.settings.Settings;
+            indexNameMatcher,
+            }
+                }
+                    this.indexSettings,
+ * license agreements. See the NOTICE file distributed with
+     */
+                    continue;
+        }
+    );
+                engineWarmer,
+    public RecoveryState createRecoveryState(ShardRouting shardRouting, DiscoveryNode targetNode, DiscoveryNode sourceNode) {
+                    }
+                    globalCheckpointTask,
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+        if (this.indexSettings.isRemoteSnapshot()) {
+    }
+     * 2. {@code index.refresh_interval} index setting changes.
+import org.apache.lucene.store.AlreadyClosedException;
+    ) {
+            onRefreshIntervalChange();
+     * {@link IndexReader}-specific optimizations, such as rewriting containing range queries.
+        this.valuesSourceRegistry = valuesSourceRegistry;
+        }
+    }
+import org.opensearch.indices.IndicesBitsetFilterCache;
+        AsyncPublishReferencedSegmentsTask(IndexService indexService) {
+                        e
+            updateFsyncTaskIfNecessary();
+    }
+                    .getSettings()
+    }
+        return refreshTask.getInterval();
+            if (shouldRun()) {
+            updateReplicationTask();
+     * Clears the caches for the given shard id if the shard is still allocated on this node
+        }
+    private void sync(final Consumer<IndexShard> sync, final String source) {
+        return createShard(
+        IndicesFieldDataCache indicesFieldDataCache,
+ *
+                this.shardLevelRefreshEnabled = newShardLevelRefreshVal;
+        Map<String, FormatChecksumStrategy> checksumStrategies
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.index.compositeindex.CompositeIndexSettings;
+            mergedSegmentWarmerFactory,
+        } else {
+        void updateIfNeeded() {
+        if (queryCache) {
+        IndexStorePlugin.DirectoryFactory remoteDirectoryFactory,
+            logger.warn(() -> new ParameterizedMessage("failed to delete dangling indices state for index {}", index()), e);
+        }
+        // disable these checks for ingestion source engine
+                // this logic is tricky, we want to close the engine so we rollback the changes done to it
+            namedWriteableRegistry,
+            return;
+            updatePublishReferencedSegmentsTask();
+            } else {
+            indexFieldData.setShardIdentityResolver(shardId -> {
+        } catch (IOException e) {
+    /**
+                indexingOperationListeners,
+                        shard.sync();
+        NamedXContentRegistry xContentRegistry,
+            mapperRegistry,
+        IndexNameExpressionResolver expressionResolver,
+        }
+        @Override
+        }
+    private final ValuesSourceRegistry valuesSourceRegistry;
+        }
+            }
+                }
+        if (Assertions.ENABLED && currentIndexMetadata != null) {
+        }
+        try {
+                final IndexShard shard = indexService.getShardOrNull(shardId.id());
+                        logger.debug(() -> new ParameterizedMessage("[{}] failed to close index shard", shardId), e);
+        AsyncReplicationTask(IndexService indexService) {
+    public synchronized void removeShard(int shardId, String reason) {
+            eventListener.beforeIndexShardCreated(shardId, indexSettings);
+     *
+                    Integer curCount = dataPathToShardCount.get(dataPath);
+    }
+        public String toString() {
+ * under the License.
+        }
+        new TimeValue(30, TimeUnit.SECONDS),
+        @Override
+                        RemoteStoreUtils.isServerSideEncryptionEnabledIndex(this.indexSettings.getIndexMetadata())
+    private final IndexStorePlugin.RecoveryStateFactory recoveryStateFactory;
+                        (fieldType, searchLookup) -> indexFieldData.getForField(fieldType, indexFieldData.index().getName(), searchLookup)
+            indexFieldData::getForField,
+            try {
+        // visible for tests
+            client,
+    }
+                logger.info("refresh tasks rescheduled oldVal={} newVal={}", prevShardLevelRefreshVal, newShardLevelRefreshVal);
+                        stopIndexLevelRefreshTask();
+                // Count up how many shards are currently on each data path:
+        // it doesn't matter if we move from or to <code>-1</code> in both cases we want
+        }
+    public IndexShard getShardOrNull(int shardId) {
+        IndicesBitsetFilterCache indicesBitsetFilterCache,
+     * Publish primary shard referenced segments in a defined interval.
+     * indexes relying on cluster default.
+                clusterService.getClusterApplierService(),
+        logger.debug("[{}] closed (reason: [{}])", shardId, reason);
+                        remoteDirectory,
+            searcher,
+        }
+                    try {
+     * Returns {@link NativeStoreRepository#EMPTY} when no repository is configured
+import java.util.concurrent.TimeUnit;
+        @Override
+                    }
+        List<SearchOperationListener> searchOperationListeners,
+    private void maybeRefreshEngine(boolean force) {
+                    .getAsTime(INDEX_TRANSLOG_RETENTION_CHECK_INTERVAL_SETTING, TimeValue.timeValueMinutes(10))
+            );
+ * Unless required by applicable law or agreed to in writing,
+                        throw new IllegalStateException("unknown state [" + shard.state() + "]");
+import org.opensearch.index.shard.ShardNotInPrimaryModeException;
+        return asyncPublishReferencedSegmentsTask;

@@ -1,229 +1,213 @@
+ * You may obtain a copy of the License at
+ * software distributed under the License is distributed on an
+                    "test"
+        final long primaryTerm = randomNonNegativeLong();
+    public void testWhenLocalCheckpointOfSafeCommitDictatesThePolicy() {
+        assert minimumRetainingSequenceNumber.isPresent() : leases;
+        final AtomicLong[] retainingSequenceNumbers = new AtomicLong[randomIntBetween(0, 8)];
+ * Modifications Copyright OpenSearch Contributors. See
+            final List<RetentionLease> leases = new ArrayList<>(retainingSequenceNumbers.length);
+package org.opensearch.index.engine;
+ * this file be licensed under the Apache-2.0 license or a
+    }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.index.seqno.RetentionLeases;
+ */
+        final Supplier<RetentionLeases> retentionLeasesSupplier = () -> {
+        assertThat(policy.getMinRetainedSeqNo(), equalTo(minRetainedSeqNo));
+        final SoftDeletesPolicy policy = new SoftDeletesPolicy(globalCheckpoint::get, 0, retentionOperations, leasesSupplier);
+        for (int i = 0; i < retainingSequenceNumbers.length; i++) {
+            leases.add(
+ *
+            // setup leases where the minimum retained sequence number is more than the policy dictated by the global checkpoint
+            retainingSequenceNumbers[i] = new AtomicLong();
+        final long localCheckpointOfSafeCommit = randomLongBetween(1 + globalCheckpoint.get() - retentionOperations + 1, Long.MAX_VALUE);
+    public void testWhenGlobalCheckpointDictatesThePolicy() {
+import java.util.ArrayList;
+                final long minimumRetainingSequenceNumber = Arrays.stream(retainingSequenceNumbers)
+        final int numberOfLeases = randomIntBetween(1, 16);
+            final Query query = policy.getRetentionQuery();
+        final AtomicLong globalCheckpoint = new AtomicLong(
+            Collections.unmodifiableCollection(new ArrayList<>(leases))
+import org.opensearch.common.lease.Releasable;
+    /**
+            for (int i = 0; i < retainingSequenceNumbers.length; i++) {
+        };
+        final Collection<RetentionLease> leases = new ArrayList<>();
+        final int numberOfLeases = randomIntBetween(0, 16);
+            primaryTerm,
+        long minRetainedSeqNo = policy.getMinRetainedSeqNo();
+        final long minimumRetainingSequenceNumber = Arrays.stream(retainingSequenceNumbers)
+    }
+        }
+            policy.setLocalCheckpointOfSafeCommit(safeCommitCheckpoint);
+        for (int i = 0; i < iters; i++) {
+                retainingSequenceNumber.set(randomLongBetween(retainingSequenceNumber.get(), Math.max(globalCheckpoint.get(), 0L)));
+        );
+                    randomNonNegativeLong(),
 /*
+public class SoftDeletesPolicyTests extends OpenSearchTestCase {
+            version,
+        long safeCommitCheckpoint = globalCheckpoint.get();
+        }
+ * ownership. Elasticsearch licenses this file to you under
+        locks.forEach(Releasable::close);
+     * Makes sure we won't advance the retained seq# if the retention lock is held
+        long retainedOps = between(0, 10000);
+                )
+        minRetainedSeqNo = Math.max(minRetainedSeqNo, retainedSeqNo);
+ * license agreements. See the NOTICE file distributed with
+            leases.add(
+        long retainedSeqNo = Math.min(
+                leases.add(new RetentionLease(Integer.toString(i), retainingSequenceNumbers[i].get(), 0L, "test"));
+        final int retentionOperations = randomIntBetween(0, 1024);
+            version,
+    }
+            // Release some locks
+                    randomNonNegativeLong(),
+        );
+                    Integer.toString(i),
+                    "test"
+        for (int i = 0; i < numberOfLeases; i++) {
+            randomLongBetween(Math.max(0, localCheckpointOfSafeCommit + retentionOperations), Long.MAX_VALUE - 1)
+            if (randomBoolean()) {
+        AtomicLong globalCheckpoint = new AtomicLong(NO_OPS_PERFORMED);
+import java.util.List;
+        final SoftDeletesPolicy policy = new SoftDeletesPolicy(globalCheckpoint::get, 0, retentionOperations, leasesSupplier);
+ * compatible open source license.
+            );
+            for (final AtomicLong retainingSequenceNumber : retainingSequenceNumbers) {
+            .orElse(Long.MAX_VALUE);
+        int iters = scaledRandomIntBetween(10, 1000);
+ * not use this file except in compliance with the License.
+import java.util.Arrays;
+        List<Releasable> locks = new ArrayList<>();
+            releasingLocks.forEach(Releasable::close);
+        for (int i = 0; i < numberOfLeases; i++) {
+            .min()
+        final Supplier<RetentionLeases> leasesSupplier = () -> new RetentionLeases(
+        final Collection<RetentionLease> leases = new ArrayList<>();
+            }
+            // getting the query has side effects, updating the internal state of the policy
+ */
+                long retainedSeqNo = Math.min(
+        for (int i = 0; i < numberOfLeases; i++) {
+            // Advances the global checkpoint and the local checkpoint of a safe commit
+            if (locks.isEmpty()) {
+import java.util.Collections;
+            return new RetentionLeases(1, 1, leases);
+}
+                    randomLongBetween(0, Long.MAX_VALUE - retentionOperations - 1),
+                    "test"
+ */
+            assertThat(policy.getMinRetainedSeqNo(), equalTo(minRetainedSeqNo));
+            globalCheckpoint.addAndGet(between(0, 1000));
+            primaryTerm,
+                );
+        );
  * SPDX-License-Identifier: Apache-2.0
+        );
+                    Integer.toString(i),
  *
  * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.engine;
-
-import org.apache.lucene.document.LongPoint;
-import org.apache.lucene.search.PointRangeQuery;
-import org.apache.lucene.search.Query;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.index.seqno.RetentionLease;
-import org.opensearch.index.seqno.RetentionLeases;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.OptionalLong;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Supplier;
-
-import static org.opensearch.index.seqno.SequenceNumbers.NO_OPS_PERFORMED;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
-
-public class SoftDeletesPolicyTests extends OpenSearchTestCase {
-
-    /**
-     * Makes sure we won't advance the retained seq# if the retention lock is held
-     */
-    public void testSoftDeletesRetentionLock() {
-        long retainedOps = between(0, 10000);
-        AtomicLong globalCheckpoint = new AtomicLong(NO_OPS_PERFORMED);
-        final AtomicLong[] retainingSequenceNumbers = new AtomicLong[randomIntBetween(0, 8)];
-        for (int i = 0; i < retainingSequenceNumbers.length; i++) {
-            retainingSequenceNumbers[i] = new AtomicLong();
         }
-        final Supplier<RetentionLeases> retentionLeasesSupplier = () -> {
-            final List<RetentionLease> leases = new ArrayList<>(retainingSequenceNumbers.length);
-            for (int i = 0; i < retainingSequenceNumbers.length; i++) {
-                leases.add(new RetentionLease(Integer.toString(i), retainingSequenceNumbers[i].get(), 0L, "test"));
-            }
-            return new RetentionLeases(1, 1, leases);
-        };
-        long safeCommitCheckpoint = globalCheckpoint.get();
         SoftDeletesPolicy policy = new SoftDeletesPolicy(globalCheckpoint::get, between(1, 10000), retainedOps, retentionLeasesSupplier);
-        long minRetainedSeqNo = policy.getMinRetainedSeqNo();
-        List<Releasable> locks = new ArrayList<>();
-        int iters = scaledRandomIntBetween(10, 1000);
-        for (int i = 0; i < iters; i++) {
-            if (randomBoolean()) {
-                locks.add(policy.acquireRetentionLock());
-            }
-            // Advances the global checkpoint and the local checkpoint of a safe commit
-            globalCheckpoint.addAndGet(between(0, 1000));
-            for (final AtomicLong retainingSequenceNumber : retainingSequenceNumbers) {
-                retainingSequenceNumber.set(randomLongBetween(retainingSequenceNumber.get(), Math.max(globalCheckpoint.get(), 0L)));
-            }
-            safeCommitCheckpoint = randomLongBetween(safeCommitCheckpoint, globalCheckpoint.get());
-            policy.setLocalCheckpointOfSafeCommit(safeCommitCheckpoint);
-            if (rarely()) {
-                retainedOps = between(0, 10000);
-                policy.setRetentionOperations(retainedOps);
-            }
-            // Release some locks
-            List<Releasable> releasingLocks = randomSubsetOf(locks);
-            locks.removeAll(releasingLocks);
-            releasingLocks.forEach(Releasable::close);
-
-            // getting the query has side effects, updating the internal state of the policy
-            final Query query = policy.getRetentionQuery();
-            assertThat(query, instanceOf(PointRangeQuery.class));
-            final PointRangeQuery retentionQuery = (PointRangeQuery) query;
-
-            // we only expose the minimum sequence number to the merge policy if the retention lock is not held
-            if (locks.isEmpty()) {
-                final long minimumRetainingSequenceNumber = Arrays.stream(retainingSequenceNumbers)
-                    .mapToLong(AtomicLong::get)
-                    .min()
-                    .orElse(Long.MAX_VALUE);
-                long retainedSeqNo = Math.min(
-                    1 + safeCommitCheckpoint,
-                    Math.min(minimumRetainingSequenceNumber, 1 + globalCheckpoint.get() - retainedOps)
-                );
-                minRetainedSeqNo = Math.max(minRetainedSeqNo, retainedSeqNo);
-            }
-            assertThat(retentionQuery.getNumDims(), equalTo(1));
-            assertThat(LongPoint.decodeDimension(retentionQuery.getLowerPoint(), 0), equalTo(minRetainedSeqNo));
-            assertThat(LongPoint.decodeDimension(retentionQuery.getUpperPoint(), 0), equalTo(Long.MAX_VALUE));
-            assertThat(policy.getMinRetainedSeqNo(), equalTo(minRetainedSeqNo));
-        }
-
-        locks.forEach(Releasable::close);
-        final long minimumRetainingSequenceNumber = Arrays.stream(retainingSequenceNumbers)
-            .mapToLong(AtomicLong::get)
-            .min()
-            .orElse(Long.MAX_VALUE);
-        long retainedSeqNo = Math.min(
             1 + safeCommitCheckpoint,
+        final OptionalLong minimumRetainingSequenceNumber = leases.stream().mapToLong(RetentionLease::retainingSequenceNumber).min();
+import java.util.OptionalLong;
+        }
+                retainedOps = between(0, 10000);
+                    randomNonNegativeLong(),
+        policy.setLocalCheckpointOfSafeCommit(localCheckpointOfSafeCommit);
+            }
+    public void testSoftDeletesRetentionLock() {
+     */
+            }
+            final PointRangeQuery retentionQuery = (PointRangeQuery) query;
+                )
+        final SoftDeletesPolicy policy = new SoftDeletesPolicy(globalCheckpoint::get, 0, retentionOperations, leasesSupplier);
+ * Licensed to Elasticsearch under one or more contributor
+            if (rarely()) {
+        final int retentionOperations = randomIntBetween(0, 1024);
+            List<Releasable> releasingLocks = randomSubsetOf(locks);
+        final long version = randomNonNegativeLong();
+ * this work for additional information regarding copyright
+        final long primaryTerm = randomNonNegativeLong();
             Math.min(minimumRetainingSequenceNumber, 1 + globalCheckpoint.get() - retainedOps)
-        );
-        minRetainedSeqNo = Math.max(minRetainedSeqNo, retainedSeqNo);
-        assertThat(policy.getMinRetainedSeqNo(), equalTo(minRetainedSeqNo));
-    }
-
-    public void testWhenGlobalCheckpointDictatesThePolicy() {
-        final int retentionOperations = randomIntBetween(0, 1024);
-        final AtomicLong globalCheckpoint = new AtomicLong(randomLongBetween(0, Long.MAX_VALUE - 2));
-        final Collection<RetentionLease> leases = new ArrayList<>();
-        final int numberOfLeases = randomIntBetween(0, 16);
-        for (int i = 0; i < numberOfLeases; i++) {
-            // setup leases where the minimum retained sequence number is more than the policy dictated by the global checkpoint
-            leases.add(
-                new RetentionLease(
-                    Integer.toString(i),
+import org.apache.lucene.search.PointRangeQuery;
+ * KIND, either express or implied.  See the License for the
+                    1 + safeCommitCheckpoint,
                     randomLongBetween(1 + globalCheckpoint.get() - retentionOperations + 1, Long.MAX_VALUE),
-                    randomNonNegativeLong(),
-                    "test"
-                )
-            );
-        }
-        final long primaryTerm = randomNonNegativeLong();
-        final long version = randomNonNegativeLong();
-        final Supplier<RetentionLeases> leasesSupplier = () -> new RetentionLeases(
-            primaryTerm,
+ * under the License.
+import java.util.Collection;
+import java.util.function.Supplier;
+        final long localCheckpointOfSafeCommit = randomLongBetween(minimumRetainingSequenceNumber.getAsLong(), Long.MAX_VALUE - 1);
+            randomLongBetween(minimumRetainingSequenceNumber.getAsLong() + retentionOperations, Long.MAX_VALUE - 1)
             version,
-            Collections.unmodifiableCollection(new ArrayList<>(leases))
-        );
-        final SoftDeletesPolicy policy = new SoftDeletesPolicy(globalCheckpoint::get, 0, retentionOperations, leasesSupplier);
-        // set the local checkpoint of the safe commit to more than the policy dicated by the global checkpoint
-        final long localCheckpointOfSafeCommit = randomLongBetween(1 + globalCheckpoint.get() - retentionOperations + 1, Long.MAX_VALUE);
-        policy.setLocalCheckpointOfSafeCommit(localCheckpointOfSafeCommit);
-        assertThat(policy.getMinRetainedSeqNo(), equalTo(1 + globalCheckpoint.get() - retentionOperations));
-    }
-
-    public void testWhenLocalCheckpointOfSafeCommitDictatesThePolicy() {
+                    .min()
         final int retentionOperations = randomIntBetween(0, 1024);
+            assertThat(retentionQuery.getNumDims(), equalTo(1));
         final long localCheckpointOfSafeCommit = randomLongBetween(-1, Long.MAX_VALUE - retentionOperations - 1);
-        final AtomicLong globalCheckpoint = new AtomicLong(
-            randomLongBetween(Math.max(0, localCheckpointOfSafeCommit + retentionOperations), Long.MAX_VALUE - 1)
-        );
-        final Collection<RetentionLease> leases = new ArrayList<>();
-        final int numberOfLeases = randomIntBetween(0, 16);
-        for (int i = 0; i < numberOfLeases; i++) {
-            leases.add(
-                new RetentionLease(
-                    Integer.toString(i),
                     randomLongBetween(1 + localCheckpointOfSafeCommit + 1, Long.MAX_VALUE), // leases are for more than the local checkpoint
-                    randomNonNegativeLong(),
-                    "test"
-                )
-            );
-        }
-        final long primaryTerm = randomNonNegativeLong();
-        final long version = randomNonNegativeLong();
-        final Supplier<RetentionLeases> leasesSupplier = () -> new RetentionLeases(
+            }
+        // set the local checkpoint of the safe commit to more than the policy dicated by the global checkpoint
+import static org.hamcrest.Matchers.equalTo;
             primaryTerm,
-            version,
-            Collections.unmodifiableCollection(new ArrayList<>(leases))
+            .mapToLong(AtomicLong::get)
+                minRetainedSeqNo = Math.max(minRetainedSeqNo, retainedSeqNo);
+                new RetentionLease(
         );
-
-        final SoftDeletesPolicy policy = new SoftDeletesPolicy(globalCheckpoint::get, 0, retentionOperations, leasesSupplier);
-        policy.setLocalCheckpointOfSafeCommit(localCheckpointOfSafeCommit);
+        );
+            }
+import org.opensearch.index.seqno.RetentionLease;
+                new RetentionLease(
+        final AtomicLong globalCheckpoint = new AtomicLong(
+ * specific language governing permissions and limitations
+            assertThat(LongPoint.decodeDimension(retentionQuery.getLowerPoint(), 0), equalTo(minRetainedSeqNo));
+            locks.removeAll(releasingLocks);
+        final Supplier<RetentionLeases> leasesSupplier = () -> new RetentionLeases(
         assertThat(policy.getMinRetainedSeqNo(), equalTo(1 + localCheckpointOfSafeCommit));
     }
-
-    public void testWhenRetentionLeasesDictateThePolicy() {
-        final int retentionOperations = randomIntBetween(0, 1024);
-        final Collection<RetentionLease> leases = new ArrayList<>();
-        final int numberOfLeases = randomIntBetween(1, 16);
-        for (int i = 0; i < numberOfLeases; i++) {
-            leases.add(
-                new RetentionLease(
-                    Integer.toString(i),
-                    randomLongBetween(0, Long.MAX_VALUE - retentionOperations - 1),
-                    randomNonNegativeLong(),
-                    "test"
-                )
-            );
-        }
-        final OptionalLong minimumRetainingSequenceNumber = leases.stream().mapToLong(RetentionLease::retainingSequenceNumber).min();
-        assert minimumRetainingSequenceNumber.isPresent() : leases;
-        final long localCheckpointOfSafeCommit = randomLongBetween(minimumRetainingSequenceNumber.getAsLong(), Long.MAX_VALUE - 1);
-        final AtomicLong globalCheckpoint = new AtomicLong(
-            randomLongBetween(minimumRetainingSequenceNumber.getAsLong() + retentionOperations, Long.MAX_VALUE - 1)
-        );
-        final long primaryTerm = randomNonNegativeLong();
-        final long version = randomNonNegativeLong();
-        final Supplier<RetentionLeases> leasesSupplier = () -> new RetentionLeases(
-            primaryTerm,
-            version,
-            Collections.unmodifiableCollection(new ArrayList<>(leases))
-        );
-        final SoftDeletesPolicy policy = new SoftDeletesPolicy(globalCheckpoint::get, 0, retentionOperations, leasesSupplier);
-        policy.setLocalCheckpointOfSafeCommit(localCheckpointOfSafeCommit);
         assertThat(policy.getMinRetainedSeqNo(), equalTo(minimumRetainingSequenceNumber.getAsLong()));
-    }
-
-}
+                    .mapToLong(AtomicLong::get)
+        final Supplier<RetentionLeases> leasesSupplier = () -> new RetentionLeases(
+        final long version = randomNonNegativeLong();
+import java.util.concurrent.atomic.AtomicLong;
+        policy.setLocalCheckpointOfSafeCommit(localCheckpointOfSafeCommit);
+            safeCommitCheckpoint = randomLongBetween(safeCommitCheckpoint, globalCheckpoint.get());
+/*
+import org.apache.lucene.document.LongPoint;
+            Collections.unmodifiableCollection(new ArrayList<>(leases))
+        assertThat(policy.getMinRetainedSeqNo(), equalTo(1 + globalCheckpoint.get() - retentionOperations));
+/*
+                locks.add(policy.acquireRetentionLock());
+ * GitHub history for details.
+                    Integer.toString(i),
+import static org.hamcrest.Matchers.instanceOf;
+            );
+            Collections.unmodifiableCollection(new ArrayList<>(leases))
+            assertThat(LongPoint.decodeDimension(retentionQuery.getUpperPoint(), 0), equalTo(Long.MAX_VALUE));
+            leases.add(
+ * Unless required by applicable law or agreed to in writing,
+                policy.setRetentionOperations(retainedOps);
+import static org.opensearch.index.seqno.SequenceNumbers.NO_OPS_PERFORMED;
+        policy.setLocalCheckpointOfSafeCommit(localCheckpointOfSafeCommit);
+    public void testWhenRetentionLeasesDictateThePolicy() {
+                    .orElse(Long.MAX_VALUE);
+        final Collection<RetentionLease> leases = new ArrayList<>();
+            assertThat(query, instanceOf(PointRangeQuery.class));
+import org.apache.lucene.search.Query;
+import org.opensearch.test.OpenSearchTestCase;
+                    Math.min(minimumRetainingSequenceNumber, 1 + globalCheckpoint.get() - retainedOps)
+            );
+ * the Apache License, Version 2.0 (the "License"); you may
+        final long version = randomNonNegativeLong();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        }
+        final long primaryTerm = randomNonNegativeLong();
+                )
+            // we only expose the minimum sequence number to the merge policy if the retention lock is not held
+ *
+                new RetentionLease(
+        final int numberOfLeases = randomIntBetween(0, 16);
+        final AtomicLong globalCheckpoint = new AtomicLong(randomLongBetween(0, Long.MAX_VALUE - 2));

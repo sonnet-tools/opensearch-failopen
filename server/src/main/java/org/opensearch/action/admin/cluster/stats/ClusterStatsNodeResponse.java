@@ -1,250 +1,220 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.cluster.stats;
-
-import org.opensearch.Version;
-import org.opensearch.action.admin.cluster.node.info.NodeInfo;
-import org.opensearch.action.admin.cluster.node.stats.NodeStats;
-import org.opensearch.action.admin.indices.stats.CommonStats;
-import org.opensearch.action.admin.indices.stats.ShardStats;
-import org.opensearch.action.support.nodes.BaseNodeResponse;
-import org.opensearch.cluster.health.ClusterHealthStatus;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.index.cache.query.QueryCacheStats;
-import org.opensearch.index.engine.SegmentsStats;
-import org.opensearch.index.fielddata.FieldDataStats;
-import org.opensearch.index.shard.DocsStats;
-import org.opensearch.index.store.StoreStats;
-import org.opensearch.search.suggest.completion.CompletionStats;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-
-/**
- * Transport action for obtaining cluster stats from node level
- *
- * @opensearch.internal
- */
-public class ClusterStatsNodeResponse extends BaseNodeResponse {
-
-    private final NodeInfo nodeInfo;
-    private final NodeStats nodeStats;
-    private final ShardStats[] shardsStats;
-    private ClusterHealthStatus clusterStatus;
-    private AggregatedNodeLevelStats aggregatedNodeLevelStats;
-
-    public ClusterStatsNodeResponse(StreamInput in) throws IOException {
-        super(in);
-        clusterStatus = null;
-        if (in.readBoolean()) {
-            clusterStatus = ClusterHealthStatus.fromValue(in.readByte());
-        }
-        this.nodeInfo = new NodeInfo(in);
-        this.nodeStats = new NodeStats(in);
+            super(in);
+        this.clusterStatus = clusterStatus;
         if (in.getVersion().onOrAfter(Version.V_2_16_0)) {
-            this.shardsStats = in.readOptionalArray(ShardStats::new, ShardStats[]::new);
-            this.aggregatedNodeLevelStats = in.readOptionalWriteable(AggregatedNodeLevelStats::new);
-        } else {
-            this.shardsStats = in.readArray(ShardStats::new, ShardStats[]::new);
-        }
+import java.util.HashMap;
+import org.opensearch.index.store.StoreStats;
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+                CommonStats shardCommonStats = shardStats.getStats();
+    private final ShardStats[] shardsStats;
+        public void writeTo(StreamOutput out) throws IOException {
+ * not use this file except in compliance with the License.
+/**
+import org.opensearch.action.admin.cluster.node.info.NodeInfo;
     }
-
-    public ClusterStatsNodeResponse(
-        DiscoveryNode node,
-        @Nullable ClusterHealthStatus clusterStatus,
-        NodeInfo nodeInfo,
-        NodeStats nodeStats,
-        ShardStats[] shardsStats
-    ) {
-        super(node);
-        this.nodeInfo = nodeInfo;
+import org.opensearch.common.annotation.PublicApi;
+ * license agreements. See the NOTICE file distributed with
+    public class AggregatedNodeLevelStats extends BaseNodeResponse {
+            out.writeArray(shardsStats);
+            }
+ * software distributed under the License is distributed on an
         this.nodeStats = nodeStats;
-        this.shardsStats = shardsStats;
-        this.clusterStatus = clusterStatus;
-    }
-
-    public ClusterStatsNodeResponse(
-        DiscoveryNode node,
-        @Nullable ClusterHealthStatus clusterStatus,
-        NodeInfo nodeInfo,
-        NodeStats nodeStats,
-        ShardStats[] shardsStats,
-        boolean useAggregatedNodeLevelResponses
-    ) {
-        super(node);
-        this.nodeInfo = nodeInfo;
-        this.nodeStats = nodeStats;
-        if (useAggregatedNodeLevelResponses) {
-            this.aggregatedNodeLevelStats = new AggregatedNodeLevelStats(node, shardsStats);
-        }
-        this.shardsStats = shardsStats;
-        this.clusterStatus = clusterStatus;
-    }
-
-    public NodeInfo nodeInfo() {
-        return this.nodeInfo;
-    }
-
-    public NodeStats nodeStats() {
-        return this.nodeStats;
-    }
-
-    /**
-     * Cluster Health Status, only populated on cluster-manager nodes.
+            }
+ *
+                if (indexShardStats == null) {
      */
-    @Nullable
-    public ClusterHealthStatus clusterStatus() {
+    }
+    public static ClusterStatsNodeResponse readNodeResponse(StreamInput in) throws IOException {
+    @Override
+        }
+        }
+        return this.nodeStats;
+import org.opensearch.common.Nullable;
+    public AggregatedNodeLevelStats getAggregatedNodeLevelStats() {
+ */
+/*
+        return new ClusterStatsNodeResponse(in);
+                    indexShardStats = new AggregatedIndexStats();
+            this.commonStats.store = new StoreStats();
+            out.writeVInt(primaries);
+        if (clusterStatus == null) {
+import org.opensearch.core.common.io.stream.Writeable;
+            out.writeBoolean(false);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    private final NodeInfo nodeInfo;
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.core.common.io.stream.StreamOutput;
+/*
+            out.writeMap(indexStatsMap, StreamOutput::writeString, (stream, stats) -> stats.writeTo(stream));
+ * Transport action for obtaining cluster stats from node level
+            super.writeTo(out);
+        this.nodeStats = new NodeStats(in);
+            this.shardsStats = in.readArray(ShardStats::new, ShardStats[]::new);
+     */
+        Map<String, AggregatedIndexStats> indexStatsMap;
+    }
+import org.opensearch.search.suggest.completion.CompletionStats;
+    @PublicApi(since = "2.16.0")
+    }
+                this.commonStats.completion.add(shardCommonStats.completion);
+            out.writeVInt(total);
+ * under the License.
+        }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import org.opensearch.action.admin.indices.stats.ShardStats;
+            clusterStatus = ClusterHealthStatus.fromValue(in.readByte());
+        public AggregatedIndexStats(StreamInput in) throws IOException {
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+     * Node level statistics used for ClusterStatsIndices for _cluster/stats call.
+        if (out.getVersion().onOrAfter(Version.V_2_16_0)) {
+        DiscoveryNode node,
+    public NodeInfo nodeInfo() {
+            // Index Level Stats
+        }
+import java.io.IOException;
+import org.opensearch.index.cache.query.QueryCacheStats;
+ *
+            this.commonStats = new CommonStats();
+            this.aggregatedNodeLevelStats = new AggregatedNodeLevelStats(node, shardsStats);
         return clusterStatus;
     }
-
-    public ShardStats[] shardsStats() {
-        return this.shardsStats;
-    }
-
-    public AggregatedNodeLevelStats getAggregatedNodeLevelStats() {
-        return aggregatedNodeLevelStats;
-    }
-
-    public static ClusterStatsNodeResponse readNodeResponse(StreamInput in) throws IOException {
-        return new ClusterStatsNodeResponse(in);
-    }
-
-    @Override
+        } else {
+        public AggregatedIndexStats() {}
+        this.nodeStats = nodeStats;
+            this.commonStats.docs = new DocsStats();
+import org.opensearch.index.fielddata.FieldDataStats;
+ */
+        NodeStats nodeStats,
+            this.aggregatedNodeLevelStats = in.readOptionalWriteable(AggregatedNodeLevelStats::new);
     public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        if (clusterStatus == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            out.writeByte(clusterStatus.value());
-        }
-        nodeInfo.writeTo(out);
-        nodeStats.writeTo(out);
-        if (out.getVersion().onOrAfter(Version.V_2_16_0)) {
-            if (aggregatedNodeLevelStats != null) {
-                out.writeOptionalArray(null);
-                out.writeOptionalWriteable(aggregatedNodeLevelStats);
-            } else {
-                out.writeOptionalArray(shardsStats);
-                out.writeOptionalWriteable(null);
-            }
-        } else {
-            out.writeArray(shardsStats);
-        }
+        super(node);
+        boolean useAggregatedNodeLevelResponses
+            this.commonStats.fieldData = new FieldDataStats();
+import java.util.Map;
     }
-
+ *
+        super.writeTo(out);
+                out.writeOptionalWriteable(null);
+                this.commonStats.segments.add(shardCommonStats.segments);
     /**
-     * Node level statistics used for ClusterStatsIndices for _cluster/stats call.
-     */
-    public class AggregatedNodeLevelStats extends BaseNodeResponse {
-
-        CommonStats commonStats;
-        Map<String, AggregatedIndexStats> indexStatsMap;
-
+package org.opensearch.action.admin.cluster.stats;
+        if (in.readBoolean()) {
+import org.opensearch.action.admin.cluster.node.stats.NodeStats;
+ * @opensearch.internal
+        super(in);
+    public NodeStats nodeStats() {
+import org.opensearch.cluster.node.DiscoveryNode;
+                AggregatedIndexStats indexShardStats = this.indexStatsMap.get(shardStats.getShardRouting().getIndexName());
+                }
+ * specific language governing permissions and limitations
+ *
+    private AggregatedNodeLevelStats aggregatedNodeLevelStats;
+    ) {
+    }
         protected AggregatedNodeLevelStats(StreamInput in) throws IOException {
-            super(in);
-            commonStats = in.readOptionalWriteable(CommonStats::new);
+        nodeInfo.writeTo(out);
+        } else {
+    public ClusterStatsNodeResponse(
+     * Node level statistics used for ClusterStatsIndices for _cluster/stats call.
+/*
+            primaries = in.readVInt();
+        public void writeTo(StreamOutput out) throws IOException {
+    public ClusterStatsNodeResponse(StreamInput in) throws IOException {
+        this.shardsStats = shardsStats;
+        }
+        }
+                if (shardStats.getShardRouting().primary()) {
+    }
+    public ClusterStatsNodeResponse(
+ * Modifications Copyright OpenSearch Contributors. See
+        this.nodeInfo = nodeInfo;
+ * The OpenSearch Contributors require contributions made to
+                    this.indexStatsMap.put(shardStats.getShardRouting().getIndexName(), indexShardStats);
+        return this.shardsStats;
+ * GitHub history for details.
+                out.writeOptionalArray(shardsStats);
+            out.writeBoolean(true);
+            this.shardsStats = in.readOptionalArray(ShardStats::new, ShardStats[]::new);
+import org.opensearch.action.admin.indices.stats.CommonStats;
+        NodeInfo nodeInfo,
+                }
+    /**
+        public int primaries = 0;
+     */
+ */
+ * You may obtain a copy of the License at
+            total = in.readVInt();
+        public int total = 0;
+}
+        this.nodeInfo = nodeInfo;
+            if (aggregatedNodeLevelStats != null) {
+ * Licensed to Elasticsearch under one or more contributor
+        } else {
+            this.commonStats.queryCache = new QueryCacheStats();
+    private final NodeStats nodeStats;
+        this.shardsStats = shardsStats;
+            this.indexStatsMap = new HashMap<>();
+ * this work for additional information regarding copyright
+        nodeStats.writeTo(out);
+        @Override
+ */
+    }
+import org.opensearch.core.common.io.stream.StreamInput;
+            this.commonStats.segments = new SegmentsStats();
+                this.commonStats.queryCache.add(shardCommonStats.queryCache);
+        ShardStats[] shardsStats,
+import org.opensearch.index.shard.DocsStats;
             indexStatsMap = in.readMap(StreamInput::readString, AggregatedIndexStats::new);
         }
-
-        protected AggregatedNodeLevelStats(DiscoveryNode node, ShardStats[] indexShardsStats) {
             super(node);
-            this.commonStats = new CommonStats();
-            this.commonStats.docs = new DocsStats();
-            this.commonStats.store = new StoreStats();
-            this.commonStats.fieldData = new FieldDataStats();
-            this.commonStats.queryCache = new QueryCacheStats();
-            this.commonStats.completion = new CompletionStats();
-            this.commonStats.segments = new SegmentsStats();
-            this.indexStatsMap = new HashMap<>();
-
-            // Index Level Stats
-            for (org.opensearch.action.admin.indices.stats.ShardStats shardStats : indexShardsStats) {
-                AggregatedIndexStats indexShardStats = this.indexStatsMap.get(shardStats.getShardRouting().getIndexName());
-                if (indexShardStats == null) {
-                    indexShardStats = new AggregatedIndexStats();
-                    this.indexStatsMap.put(shardStats.getShardRouting().getIndexName(), indexShardStats);
-                }
-
-                indexShardStats.total++;
-
-                CommonStats shardCommonStats = shardStats.getStats();
-
-                if (shardStats.getShardRouting().primary()) {
-                    indexShardStats.primaries++;
-                    this.commonStats.docs.add(shardCommonStats.docs);
-                }
-                this.commonStats.store.add(shardCommonStats.store);
-                this.commonStats.fieldData.add(shardCommonStats.fieldData);
-                this.commonStats.queryCache.add(shardCommonStats.queryCache);
-                this.commonStats.completion.add(shardCommonStats.completion);
-                this.commonStats.segments.add(shardCommonStats.segments);
-            }
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);
+    }
+    public ClusterHealthStatus clusterStatus() {
+        NodeStats nodeStats,
             out.writeOptionalWriteable(commonStats);
-            out.writeMap(indexStatsMap, StreamOutput::writeString, (stream, stats) -> stats.writeTo(stream));
-        }
+                this.commonStats.store.add(shardCommonStats.store);
+        NodeInfo nodeInfo,
+    ) {
+import org.opensearch.Version;
+            commonStats = in.readOptionalWriteable(CommonStats::new);
     }
-
-    /**
-     * Node level statistics used for ClusterStatsIndices for _cluster/stats call.
-     */
-    @PublicApi(since = "2.16.0")
-    public static class AggregatedIndexStats implements Writeable {
-        public int total = 0;
-        public int primaries = 0;
-
-        public AggregatedIndexStats(StreamInput in) throws IOException {
-            total = in.readVInt();
-            primaries = in.readVInt();
-        }
-
-        public AggregatedIndexStats() {}
-
+        if (useAggregatedNodeLevelResponses) {
+                this.commonStats.fieldData.add(shardCommonStats.fieldData);
+            out.writeByte(clusterStatus.value());
+        CommonStats commonStats;
+        return aggregatedNodeLevelStats;
+        @Nullable ClusterHealthStatus clusterStatus,
+        super(node);
+    private ClusterHealthStatus clusterStatus;
+ * compatible open source license.
+        @Nullable ClusterHealthStatus clusterStatus,
+     * Cluster Health Status, only populated on cluster-manager nodes.
+            } else {
+    @Nullable
+import org.opensearch.cluster.health.ClusterHealthStatus;
+                    this.commonStats.docs.add(shardCommonStats.docs);
         @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeVInt(total);
-            out.writeVInt(primaries);
+    public ShardStats[] shardsStats() {
+                out.writeOptionalArray(null);
+        this.clusterStatus = clusterStatus;
+        return this.nodeInfo;
+                out.writeOptionalWriteable(aggregatedNodeLevelStats);
+    /**
+            for (org.opensearch.action.admin.indices.stats.ShardStats shardStats : indexShardsStats) {
+        ShardStats[] shardsStats
+        protected AggregatedNodeLevelStats(DiscoveryNode node, ShardStats[] indexShardsStats) {
+        this.nodeInfo = new NodeInfo(in);
         }
+    public static class AggregatedIndexStats implements Writeable {
+            this.commonStats.completion = new CompletionStats();
+import org.opensearch.action.support.nodes.BaseNodeResponse;
+        DiscoveryNode node,
+import org.opensearch.index.engine.SegmentsStats;
+public class ClusterStatsNodeResponse extends BaseNodeResponse {
+        }
+ * Unless required by applicable law or agreed to in writing,
+ * ownership. Elasticsearch licenses this file to you under
+                    indexShardStats.primaries++;
+                indexShardStats.total++;
+        clusterStatus = null;
     }
-}

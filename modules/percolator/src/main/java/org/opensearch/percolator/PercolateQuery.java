@@ -1,330 +1,287 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.percolator;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.BooleanClause.Occur;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.Explanation;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.QueryVisitor;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.ScorerSupplier;
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.search.TwoPhaseIterator;
-import org.apache.lucene.search.Weight;
-import org.apache.lucene.util.Accountable;
-import org.apache.lucene.util.Bits;
-import org.opensearch.common.CheckedFunction;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.core.common.bytes.BytesReference;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Objects;
-
-final class PercolateQuery extends Query implements Accountable {
-
-    // cost of matching the query against the document, arbitrary as it would be really complex to estimate
-    private static final float MATCH_COST = 1000;
-
-    private final String name;
-    private final QueryStore queryStore;
-    private final List<BytesReference> documents;
-    private final Query candidateMatchesQuery;
-    private final Query verifiedMatchesQuery;
-    private final IndexSearcher percolatorIndexSearcher;
-    private final Query nonNestedDocsFilter;
-
-    PercolateQuery(
-        String name,
-        QueryStore queryStore,
-        List<BytesReference> documents,
-        Query candidateMatchesQuery,
-        IndexSearcher percolatorIndexSearcher,
-        Query nonNestedDocsFilter,
-        Query verifiedMatchesQuery
-    ) {
-        this.name = name;
-        this.documents = Objects.requireNonNull(documents);
-        this.candidateMatchesQuery = Objects.requireNonNull(candidateMatchesQuery);
-        this.queryStore = Objects.requireNonNull(queryStore);
-        this.percolatorIndexSearcher = Objects.requireNonNull(percolatorIndexSearcher);
-        this.nonNestedDocsFilter = nonNestedDocsFilter;
-        this.verifiedMatchesQuery = Objects.requireNonNull(verifiedMatchesQuery);
-    }
-
-    @Override
-    public Query rewrite(IndexSearcher searcher) throws IOException {
-        Query rewritten = candidateMatchesQuery.rewrite(searcher);
-        if (rewritten != candidateMatchesQuery) {
-            return new PercolateQuery(
-                name,
-                queryStore,
-                documents,
-                rewritten,
-                percolatorIndexSearcher,
-                nonNestedDocsFilter,
-                verifiedMatchesQuery
-            );
-        } else {
-            return this;
-        }
-    }
-
-    @Override
-    public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
-        final Weight verifiedMatchesWeight = verifiedMatchesQuery.createWeight(searcher, ScoreMode.COMPLETE_NO_SCORES, boost);
-        final Weight candidateMatchesWeight = candidateMatchesQuery.createWeight(searcher, ScoreMode.COMPLETE_NO_SCORES, boost);
-        return new Weight(this) {
-
-            @Override
-            public Explanation explain(LeafReaderContext leafReaderContext, int docId) throws IOException {
-                Scorer scorer = scorer(leafReaderContext);
-                if (scorer != null) {
-                    TwoPhaseIterator twoPhaseIterator = scorer.twoPhaseIterator();
-                    int result = twoPhaseIterator.approximation().advance(docId);
-                    if (result == docId) {
-                        if (twoPhaseIterator.matches()) {
-                            if (scoreMode.needsScores()) {
-                                CheckedFunction<Integer, Query, IOException> percolatorQueries = queryStore.getQueries(leafReaderContext);
-                                Query query = percolatorQueries.apply(docId);
-                                Explanation detail = percolatorIndexSearcher.explain(query, 0);
-                                return Explanation.match(scorer.score(), "PercolateQuery", detail);
-                            } else {
-                                return Explanation.match(scorer.score(), "PercolateQuery");
-                            }
-                        }
-                    }
-                }
-                return Explanation.noMatch("PercolateQuery");
-            }
-
-            @Override
-            public ScorerSupplier scorerSupplier(LeafReaderContext leafReaderContext) throws IOException {
-                final Scorer approximation = candidateMatchesWeight.scorer(leafReaderContext);
-                if (approximation == null) {
-                    return null;
-                }
-
-                final CheckedFunction<Integer, Query, IOException> percolatorQueries = queryStore.getQueries(leafReaderContext);
-                if (scoreMode.needsScores()) {
-                    return new DefaultScorerSupplier(new BaseScorer(this, approximation) {
-
-                        float score;
-
-                        @Override
-                        boolean matchDocId(int docId) throws IOException {
-                            Query query = percolatorQueries.apply(docId);
-                            if (query != null) {
-                                if (nonNestedDocsFilter != null) {
-                                    query = new BooleanQuery.Builder().add(query, Occur.MUST)
-                                        .add(nonNestedDocsFilter, Occur.FILTER)
-                                        .build();
-                                }
-                                TopDocs topDocs = percolatorIndexSearcher.search(query, 1);
-                                if (topDocs.scoreDocs.length > 0) {
-                                    score = topDocs.scoreDocs[0].score;
-                                    return true;
-                                } else {
-                                    return false;
-                                }
-                            } else {
-                                return false;
-                            }
-                        }
-
-                        @Override
-                        public float score() throws IOException {
-                            return score;
-                        }
-                    });
-                } else {
-                    ScorerSupplier verifiedDocsScorer = verifiedMatchesWeight.scorerSupplier(leafReaderContext);
-                    Bits verifiedDocsBits = Lucene.asSequentialAccessBits(leafReaderContext.reader().maxDoc(), verifiedDocsScorer);
-                    return new DefaultScorerSupplier(new BaseScorer(this, approximation) {
-
-                        @Override
-                        public float score() throws IOException {
-                            return 0f;
-                        }
-
-                        boolean matchDocId(int docId) throws IOException {
-                            // We use the verifiedDocsBits to skip the expensive MemoryIndex verification.
                             // If docId also appears in the verifiedDocsBits then that means during indexing
-                            // we were able to extract all query terms and for this candidate match
-                            // and we determined based on the nature of the query that it is safe to skip
-                            // the MemoryIndex verification.
-                            if (verifiedDocsBits.get(docId)) {
-                                return true;
-                            }
-                            Query query = percolatorQueries.apply(docId);
-                            if (query == null) {
-                                return false;
-                            }
-                            if (nonNestedDocsFilter != null) {
-                                query = new BooleanQuery.Builder().add(query, Occur.MUST).add(nonNestedDocsFilter, Occur.FILTER).build();
-                            }
-                            return Lucene.exists(percolatorIndexSearcher, query);
-                        }
-                    });
-                }
-            }
-
+import org.opensearch.core.common.bytes.BytesReference;
+import java.util.Objects;
+                        @Override
+            return Float.MAX_VALUE;
+                                        .add(nonNestedDocsFilter, Occur.FILTER)
+import org.apache.lucene.util.Bits;
+            ramUsed += document.ramBytesUsed();
             @Override
-            public boolean isCacheable(LeafReaderContext ctx) {
-                // This query uses a significant amount of memory, let's never
-                // cache it or compound queries that wrap it.
-                return false;
-            }
-        };
-    }
-
-    String getName() {
-        return name;
-    }
-
-    IndexSearcher getPercolatorIndexSearcher() {
-        return percolatorIndexSearcher;
-    }
-
-    boolean excludesNestedDocs() {
-        return nonNestedDocsFilter != null;
-    }
-
-    List<BytesReference> getDocuments() {
-        return documents;
-    }
-
-    QueryStore getQueryStore() {
-        return queryStore;
-    }
-
-    Query getCandidateMatchesQuery() {
-        return candidateMatchesQuery;
-    }
-
-    Query getVerifiedMatchesQuery() {
-        return verifiedMatchesQuery;
-    }
-
     @Override
-    public void visit(QueryVisitor visitor) {
-        visitor.visitLeaf(this);
-    }
-
-    // Comparing identity here to avoid being cached
-    // Note that in theory if the same instance gets used multiple times it could still get cached,
-    // however since we create a new query instance each time we this query this shouldn't happen and thus
-    // this risk neglectable.
-    @Override
-    public boolean equals(Object o) {
-        return this == o;
-    }
-
-    // Computing hashcode based on identity to avoid caching.
-    @Override
-    public int hashCode() {
-        return System.identityHashCode(this);
-    }
-
-    @Override
-    public String toString(String s) {
-        StringBuilder sources = new StringBuilder();
+ */
+/*
+                                if (nonNestedDocsFilter != null) {
+        public final TwoPhaseIterator twoPhaseIterator() {
+                    return new DefaultScorerSupplier(new BaseScorer(this, approximation) {
         for (BytesReference document : documents) {
+    // however since we create a new query instance each time we this query this shouldn't happen and thus
+                public float matchCost() {
+                    });
+    @Override
+                public boolean matches() throws IOException {
+ * this file be licensed under the Apache-2.0 license or a
+                                return true;
+                                return false;
+                @Override
             sources.append(document.utf8ToString());
-            sources.append('\n');
-        }
-        return "PercolateQuery{document_sources={" + sources + "},inner={" + candidateMatchesQuery.toString(s) + "}}";
+        this.percolatorIndexSearcher = Objects.requireNonNull(percolatorIndexSearcher);
     }
-
+        if (rewritten != candidateMatchesQuery) {
+                }
+                            if (nonNestedDocsFilter != null) {
+    }
+                        }
+            }
+        String name,
+                            if (query == null) {
+                final Scorer approximation = candidateMatchesWeight.scorer(leafReaderContext);
+                                CheckedFunction<Integer, Query, IOException> percolatorQueries = queryStore.getQueries(leafReaderContext);
+    abstract static class BaseScorer extends Scorer {
+        return System.identityHashCode(this);
+        return candidateMatchesQuery;
+ *
+import org.apache.lucene.search.ScoreMode;
+                        if (twoPhaseIterator.matches()) {
+        this.verifiedMatchesQuery = Objects.requireNonNull(verifiedMatchesQuery);
+ * KIND, either express or implied.  See the License for the
+                            Query query = percolatorQueries.apply(docId);
+                nonNestedDocsFilter,
+ * under the License.
+        Query candidateMatchesQuery,
+        this.candidateMatchesQuery = Objects.requireNonNull(candidateMatchesQuery);
+                @Override
+ * SPDX-License-Identifier: Apache-2.0
+                                TopDocs topDocs = percolatorIndexSearcher.search(query, 1);
+    private final List<BytesReference> documents;
+            public ScorerSupplier scorerSupplier(LeafReaderContext leafReaderContext) throws IOException {
+                            }
+                                return Explanation.match(scorer.score(), "PercolateQuery");
+    private final String name;
+                                if (topDocs.scoreDocs.length > 0) {
+        @Override
+        return queryStore;
+                    return matchDocId(approximation.docID());
+                            // We use the verifiedDocsBits to skip the expensive MemoryIndex verification.
+        QueryStore queryStore,
+package org.opensearch.percolator;
+import org.apache.lucene.search.BooleanClause.Occur;
+ * license agreements. See the NOTICE file distributed with
+                            Query query = percolatorQueries.apply(docId);
+            return new TwoPhaseIterator(approximation.iterator()) {
+    }
+ * compatible open source license.
+    Query getCandidateMatchesQuery() {
+ * the Apache License, Version 2.0 (the "License"); you may
+    private final IndexSearcher percolatorIndexSearcher;
+        return new Weight(this) {
+                if (scoreMode.needsScores()) {
+                // This query uses a significant amount of memory, let's never
+        IndexSearcher percolatorIndexSearcher,
+    public Query rewrite(IndexSearcher searcher) throws IOException {
+        this.nonNestedDocsFilter = nonNestedDocsFilter;
+        Query rewritten = candidateMatchesQuery.rewrite(searcher);
+    @Override
+ */
+    public void visit(QueryVisitor visitor) {
+    // Comparing identity here to avoid being cached
+ * specific language governing permissions and limitations
+                                return Explanation.match(scorer.score(), "PercolateQuery", detail);
     @Override
     public long ramBytesUsed() {
-        long ramUsed = 0L;
+                        }
+        @Override
+    @Override
+        return this == o;
+        this.queryStore = Objects.requireNonNull(queryStore);
+import org.apache.lucene.index.LeafReaderContext;
+                    int result = twoPhaseIterator.approximation().advance(docId);
+                    ScorerSupplier verifiedDocsScorer = verifiedMatchesWeight.scorerSupplier(leafReaderContext);
+            @Override
+        }
+        }
+import org.apache.lucene.search.Scorer;
+                                query = new BooleanQuery.Builder().add(query, Occur.MUST).add(nonNestedDocsFilter, Occur.FILTER).build();
+        } else {
+                    return null;
+        return name;
+    Query getVerifiedMatchesQuery() {
         for (BytesReference document : documents) {
-            ramUsed += document.ramBytesUsed();
-        }
-        return ramUsed;
     }
-
-    @FunctionalInterface
-    interface QueryStore {
-        CheckedFunction<Integer, Query, IOException> getQueries(LeafReaderContext ctx) throws IOException;
-    }
-
-    abstract static class BaseScorer extends Scorer {
-
-        final Scorer approximation;
-
-        BaseScorer(Weight weight, Scorer approximation) {
-            super();
-            this.approximation = approximation;
-        }
-
-        @Override
-        public final DocIdSetIterator iterator() {
-            return TwoPhaseIterator.asDocIdSetIterator(twoPhaseIterator());
-        }
-
-        @Override
-        public final TwoPhaseIterator twoPhaseIterator() {
-            return new TwoPhaseIterator(approximation.iterator()) {
-                @Override
-                public boolean matches() throws IOException {
-                    return matchDocId(approximation.docID());
+                            }
                 }
-
-                @Override
-                public float matchCost() {
+        }
                     return MATCH_COST;
-                }
-            };
-        }
-
-        @Override
-        public final int docID() {
-            return approximation.docID();
-        }
-
-        abstract boolean matchDocId(int docId) throws IOException;
-
-        @Override
-        public float getMaxScore(int upTo) throws IOException {
-            return Float.MAX_VALUE;
-        }
     }
-
+        }
+        final Scorer approximation;
+                                    query = new BooleanQuery.Builder().add(query, Occur.MUST)
+    }
+                rewritten,
+            return approximation.docID();
+                percolatorIndexSearcher,
+    }
+    public int hashCode() {
+                        boolean matchDocId(int docId) throws IOException {
+                }
+    private static final float MATCH_COST = 1000;
+    @FunctionalInterface
+    // this risk neglectable.
+                            if (verifiedDocsBits.get(docId)) {
+                        boolean matchDocId(int docId) throws IOException {
+    boolean excludesNestedDocs() {
+        this.documents = Objects.requireNonNull(documents);
+                                return false;
+                Scorer scorer = scorer(leafReaderContext);
+                        public float score() throws IOException {
+        }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                            }
+            );
+                    Bits verifiedDocsBits = Lucene.asSequentialAccessBits(leafReaderContext.reader().maxDoc(), verifiedDocsScorer);
+                            }
+                // cache it or compound queries that wrap it.
+        final Weight candidateMatchesWeight = candidateMatchesQuery.createWeight(searcher, ScoreMode.COMPLETE_NO_SCORES, boost);
+    @Override
+                            return 0f;
+    // Note that in theory if the same instance gets used multiple times it could still get cached,
+                        }
+            public Explanation explain(LeafReaderContext leafReaderContext, int docId) throws IOException {
+ * software distributed under the License is distributed on an
+        BaseScorer(Weight weight, Scorer approximation) {
+        return "PercolateQuery{document_sources={" + sources + "},inner={" + candidateMatchesQuery.toString(s) + "}}";
+    }
+        }
+            super();
+                queryStore,
+                verifiedMatchesQuery
+                } else {
+    private final Query verifiedMatchesQuery;
+        return ramUsed;
+        CheckedFunction<Integer, Query, IOException> getQueries(LeafReaderContext ctx) throws IOException;
+                            if (query != null) {
+import org.opensearch.common.CheckedFunction;
+        final Weight verifiedMatchesWeight = verifiedMatchesQuery.createWeight(searcher, ScoreMode.COMPLETE_NO_SCORES, boost);
+    ) {
+/*
+import org.apache.lucene.search.Query;
+                        @Override
+                                Explanation detail = percolatorIndexSearcher.explain(query, 0);
+                            } else {
+                    });
+import org.apache.lucene.search.Weight;
+                            } else {
+    }
+            @Override
+                        float score;
+            }
+                    }
+ * Licensed to Elasticsearch under one or more contributor
+        Query verifiedMatchesQuery
+            sources.append('\n');
+                                    return false;
+            return this;
+ *
+                                    return true;
+import org.apache.lucene.search.QueryVisitor;
+ * not use this file except in compliance with the License.
+        this.name = name;
+                return Explanation.noMatch("PercolateQuery");
+        };
+                            // the MemoryIndex verification.
+        StringBuilder sources = new StringBuilder();
+        public float getMaxScore(int upTo) throws IOException {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.apache.lucene.util.Accountable;
+    private final QueryStore queryStore;
+        return nonNestedDocsFilter != null;
+                    return new DefaultScorerSupplier(new BaseScorer(this, approximation) {
+                                }
+    String getName() {
+                            // we were able to extract all query terms and for this candidate match
+import org.apache.lucene.search.ScorerSupplier;
+    interface QueryStore {
+ *
+import org.apache.lucene.search.TwoPhaseIterator;
+final class PercolateQuery extends Query implements Accountable {
+    }
+import org.apache.lucene.search.IndexSearcher;
+                name,
+    }
+            return TwoPhaseIterator.asDocIdSetIterator(twoPhaseIterator());
+ * Modifications Copyright OpenSearch Contributors. See
+    @Override
+        Query nonNestedDocsFilter,
+        return percolatorIndexSearcher;
+                            return Lucene.exists(percolatorIndexSearcher, query);
+ */
+        long ramUsed = 0L;
+                                Query query = percolatorQueries.apply(docId);
+import org.apache.lucene.search.Explanation;
+        public final DocIdSetIterator iterator() {
+    }
+    public String toString(String s) {
+            return new PercolateQuery(
+                        public float score() throws IOException {
+                            }
+    // Computing hashcode based on identity to avoid caching.
+    public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
+    }
+    }
+    private final Query nonNestedDocsFilter;
+                documents,
+                    if (result == docId) {
+                        }
+/*
+ * this work for additional information regarding copyright
+    }
+import org.opensearch.common.lucene.Lucene;
+import org.apache.lucene.search.DocIdSetIterator;
+        abstract boolean matchDocId(int docId) throws IOException;
+ * ownership. Elasticsearch licenses this file to you under
+            public boolean isCacheable(LeafReaderContext ctx) {
+    List<BytesReference> getDocuments() {
+                if (approximation == null) {
+            };
+    PercolateQuery(
+import java.util.List;
+                        }
+    }
+        @Override
+                }
+import java.io.IOException;
+                                        .build();
+            }
+    QueryStore getQueryStore() {
+                            // and we determined based on the nature of the query that it is safe to skip
+    }
+    private final Query candidateMatchesQuery;
+                }
+        public final int docID() {
+                                    score = topDocs.scoreDocs[0].score;
+    IndexSearcher getPercolatorIndexSearcher() {
+        return documents;
+                return false;
+    // cost of matching the query against the document, arbitrary as it would be really complex to estimate
+        List<BytesReference> documents,
+import org.apache.lucene.search.TopDocs;
+ * The OpenSearch Contributors require contributions made to
+        visitor.visitLeaf(this);
+import org.apache.lucene.search.BooleanQuery;
+                            if (scoreMode.needsScores()) {
+                        @Override
+ * You may obtain a copy of the License at
+ * GitHub history for details.
+                                }
+                final CheckedFunction<Integer, Query, IOException> percolatorQueries = queryStore.getQueries(leafReaderContext);
+        return verifiedMatchesQuery;
+            this.approximation = approximation;
+        @Override
+        }
+                            return score;
+                if (scorer != null) {
+ * Unless required by applicable law or agreed to in writing,
+                                } else {
+    public boolean equals(Object o) {
+        }
 }
+                    TwoPhaseIterator twoPhaseIterator = scorer.twoPhaseIterator();

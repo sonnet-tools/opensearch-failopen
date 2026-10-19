@@ -1,1626 +1,1458 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.suggest;
-
-import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
-import com.carrotsearch.randomizedtesting.generators.RandomStrings;
-
-import org.apache.lucene.analysis.TokenStreamToAutomaton;
-import org.apache.lucene.search.suggest.document.ContextSuggestField;
-import org.apache.lucene.tests.util.LuceneTestCase.SuppressCodecs;
-import org.opensearch.action.admin.indices.forcemerge.ForceMergeResponse;
-import org.opensearch.action.admin.indices.segments.IndexShardSegments;
-import org.opensearch.action.admin.indices.segments.ShardSegments;
-import org.opensearch.action.admin.indices.stats.IndicesStatsResponse;
-import org.opensearch.action.index.IndexRequestBuilder;
-import org.opensearch.action.search.SearchPhaseExecutionException;
-import org.opensearch.action.search.SearchResponse;
+                new SuggestBuilder().addSuggestion(
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+                    )
+        for (int i = 1; i <= numDocs; i++) {
+                .setId("1")
+        }
 import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.common.FieldMemoryStats;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.Fuzziness;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.mapper.MapperParsingException;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.search.aggregations.AggregationBuilders;
-import org.opensearch.search.aggregations.Aggregator.SubAggCollectionMode;
-import org.opensearch.search.sort.FieldSortBuilder;
-import org.opensearch.search.suggest.completion.CompletionStats;
-import org.opensearch.search.suggest.completion.CompletionSuggestion;
-import org.opensearch.search.suggest.completion.CompletionSuggestionBuilder;
-import org.opensearch.search.suggest.completion.FuzzyOptions;
-import org.opensearch.search.suggest.completion.context.CategoryContextMapping;
-import org.opensearch.search.suggest.completion.context.ContextMapping;
-import org.opensearch.search.suggest.completion.context.GeoContextMapping;
-import org.opensearch.test.InternalSettingsPlugin;
-import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-
-import static org.opensearch.action.support.WriteRequest.RefreshPolicy.IMMEDIATE;
-import static org.opensearch.action.support.WriteRequest.RefreshPolicy.WAIT_UNTIL;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SHARDS;
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
-import static org.opensearch.core.common.util.CollectionUtils.iterableAsArrayList;
-import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAllSuccessful;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.hasId;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.hasScore;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.notNullValue;
-
-@SuppressCodecs("*") // requires custom completion format
-public class CompletionSuggestSearchIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
-    public CompletionSuggestSearchIT(Settings settings) {
-        super(settings);
-    }
-
-    @ParametersFactory
-    public static Collection<Object[]> parameters() {
-        return Arrays.asList(
-            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },
-            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() }
-        );
-    }
-
-    private final String INDEX = RandomStrings.randomAsciiOfLength(random(), 10).toLowerCase(Locale.ROOT);
-    private final String FIELD = RandomStrings.randomAsciiOfLength(random(), 10).toLowerCase(Locale.ROOT);
-    private final CompletionMappingBuilder completionMappingBuilder = new CompletionMappingBuilder();
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Arrays.asList(InternalSettingsPlugin.class);
-    }
-
-    public void testTieBreak() throws Exception {
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
-        mapping.indexAnalyzer("keyword");
-        createIndexAndMapping(mapping);
-
-        int numDocs = randomIntBetween(3, 50);
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        String[] entries = new String[numDocs];
-        for (int i = 0; i < numDocs; i++) {
-            String value = "a" + randomAlphaOfLengthBetween(1, 10);
-            entries[i] = value;
-            indexRequestBuilders.add(
-                client().prepareIndex(INDEX)
-                    .setId("" + i)
-                    .setSource(
-                        jsonBuilder().startObject().startObject(FIELD).field("input", value).field("weight", 10).endObject().endObject()
-                    )
-            );
-        }
-        Arrays.sort(entries);
-        indexRandom(true, indexRequestBuilders);
-        for (int i = 1; i < numDocs; i++) {
-            CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("a").size(i);
-            String[] topEntries = Arrays.copyOfRange(entries, 0, i);
-            assertSuggestions("foo", prefix, topEntries);
-        }
-    }
-
-    public void testPrefix() throws Exception {
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
-        createIndexAndMapping(mapping);
-        int numDocs = 10;
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 1; i <= numDocs; i++) {
-            indexRequestBuilders.add(
-                client().prepareIndex(INDEX)
-                    .setId("" + i)
-                    .setSource(
-                        jsonBuilder().startObject()
-                            .startObject(FIELD)
-                            .field("input", "suggestion" + i)
-                            .field("weight", i)
-                            .endObject()
-                            .endObject()
-                    )
-            );
-        }
-        indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg");
-        assertSuggestions("foo", prefix, "suggestion10", "suggestion9", "suggestion8", "suggestion7", "suggestion6");
-    }
-
-    /**
-     * test that suggestion works if prefix is either provided via {@link CompletionSuggestionBuilder#text(String)} or
-     * {@link SuggestBuilder#setGlobalText(String)}
-     */
-    public void testTextAndGlobalText() throws Exception {
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
-        createIndexAndMapping(mapping);
-        int numDocs = 10;
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 1; i <= numDocs; i++) {
-            indexRequestBuilders.add(
-                client().prepareIndex(INDEX)
-                    .setId("" + i)
-                    .setSource(
-                        jsonBuilder().startObject()
-                            .startObject(FIELD)
-                            .field("input", "suggestion" + i)
-                            .field("weight", i)
-                            .endObject()
-                            .endObject()
-                    )
-            );
-        }
-        indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder noText = SuggestBuilders.completionSuggestion(FIELD);
-        SearchResponse searchResponse = client().prepareSearch(INDEX)
-            .suggest(new SuggestBuilder().addSuggestion("foo", noText).setGlobalText("sugg"))
-            .get();
-        assertSuggestions(searchResponse, "foo", "suggestion10", "suggestion9", "suggestion8", "suggestion7", "suggestion6");
-
-        CompletionSuggestionBuilder withText = SuggestBuilders.completionSuggestion(FIELD).text("sugg");
-        searchResponse = client().prepareSearch(INDEX).suggest(new SuggestBuilder().addSuggestion("foo", withText)).get();
-        assertSuggestions(searchResponse, "foo", "suggestion10", "suggestion9", "suggestion8", "suggestion7", "suggestion6");
-
-        // test that suggestion text takes precedence over global text
-        searchResponse = client().prepareSearch(INDEX)
-            .suggest(new SuggestBuilder().addSuggestion("foo", withText).setGlobalText("bogus"))
-            .get();
-        assertSuggestions(searchResponse, "foo", "suggestion10", "suggestion9", "suggestion8", "suggestion7", "suggestion6");
-    }
-
-    public void testRegex() throws Exception {
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
-        createIndexAndMapping(mapping);
-        int numDocs = 10;
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 1; i <= numDocs; i++) {
-            indexRequestBuilders.add(
-                client().prepareIndex(INDEX)
-                    .setId("" + i)
-                    .setSource(
-                        jsonBuilder().startObject()
-                            .startObject(FIELD)
-                            .field("input", "sugg" + i + "estion")
-                            .field("weight", i)
-                            .endObject()
-                            .endObject()
-                    )
-            );
-        }
-        indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).regex("sugg.*es");
-        assertSuggestions("foo", prefix, "sugg10estion", "sugg9estion", "sugg8estion", "sugg7estion", "sugg6estion");
-    }
-
-    public void testFuzzy() throws Exception {
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
-        createIndexAndMapping(mapping);
-        int numDocs = 10;
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 1; i <= numDocs; i++) {
-            indexRequestBuilders.add(
-                client().prepareIndex(INDEX)
-                    .setId("" + i)
-                    .setSource(
-                        jsonBuilder().startObject()
-                            .startObject(FIELD)
-                            .field("input", "sugxgestion" + i)
-                            .field("weight", i)
-                            .endObject()
-                            .endObject()
-                    )
-            );
-        }
-        indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg", Fuzziness.ONE);
-        assertSuggestions("foo", prefix, "sugxgestion10", "sugxgestion9", "sugxgestion8", "sugxgestion7", "sugxgestion6");
-    }
-
-    public void testEarlyTermination() throws Exception {
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
-        createIndexAndMapping(mapping);
-        int numDocs = atLeast(100);
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 0; i < numDocs; i++) {
-            indexRequestBuilders.add(
-                client().prepareIndex(INDEX)
-                    .setId("" + i)
-                    .setSource(
-                        jsonBuilder().startObject()
-                            .startObject(FIELD)
-                            .field("input", "suggestion" + (numDocs - i))
-                            .field("weight", numDocs - i)
-                            .endObject()
-                            .endObject()
-                    )
-            );
-        }
-        indexRandom(true, indexRequestBuilders);
-        int size = randomIntBetween(3, 10);
-        String[] outputs = new String[size];
-        for (int i = 0; i < size; i++) {
-            outputs[i] = "suggestion" + (numDocs - i);
-        }
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sug").size(size);
-        assertSuggestions("foo", prefix, outputs);
-
-        CompletionSuggestionBuilder regex = SuggestBuilders.completionSuggestion(FIELD).regex("su[g|s]g").size(size);
-        assertSuggestions("foo", regex, outputs);
-
-        CompletionSuggestionBuilder fuzzyPrefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg", Fuzziness.ONE).size(size);
-        assertSuggestions("foo", fuzzyPrefix, outputs);
-    }
-
-    public void testSuggestDocument() throws Exception {
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
-        createIndexAndMapping(mapping);
-        int numDocs = randomIntBetween(10, 100);
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 1; i <= numDocs; i++) {
-            indexRequestBuilders.add(
-                client().prepareIndex(INDEX)
-                    .setId("" + i)
-                    .setSource(
-                        jsonBuilder().startObject()
-                            .startObject(FIELD)
-                            .field("input", "suggestion" + i)
-                            .field("weight", i)
-                            .endObject()
-                            .endObject()
-                    )
-            );
-        }
-        indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg").size(numDocs);
-
-        SearchResponse searchResponse = client().prepareSearch(INDEX).suggest(new SuggestBuilder().addSuggestion("foo", prefix)).get();
-        CompletionSuggestion completionSuggestion = searchResponse.getSuggest().getSuggestion("foo");
-        CompletionSuggestion.Entry options = completionSuggestion.getEntries().get(0);
-        assertThat(options.getOptions().size(), equalTo(numDocs));
-        int id = numDocs;
-        for (CompletionSuggestion.Entry.Option option : options) {
             assertThat(option.getText().toString(), equalTo("suggestion" + id));
-            assertThat(option.getHit(), hasId("" + id));
-            assertThat(option.getHit(), hasScore((id)));
-            assertNotNull(option.getHit().getSourceAsMap());
-            id--;
-        }
-    }
-
-    public void testSuggestDocumentNoSource() throws Exception {
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
-        createIndexAndMapping(mapping);
-        int numDocs = randomIntBetween(10, 100);
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 1; i <= numDocs; i++) {
-            indexRequestBuilders.add(
-                client().prepareIndex(INDEX)
-                    .setId("" + i)
-                    .setSource(
-                        jsonBuilder().startObject()
-                            .startObject(FIELD)
-                            .field("input", "suggestion" + i)
-                            .field("weight", i)
-                            .endObject()
-                            .endObject()
-                    )
-            );
-        }
-        indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg").size(numDocs);
-
-        SearchResponse searchResponse = client().prepareSearch(INDEX)
-            .suggest(new SuggestBuilder().addSuggestion("foo", prefix))
-            .setFetchSource(false)
             .get();
-        CompletionSuggestion completionSuggestion = searchResponse.getSuggest().getSuggestion("foo");
-        CompletionSuggestion.Entry options = completionSuggestion.getEntries().get(0);
-        assertThat(options.getOptions().size(), equalTo(numDocs));
-        int id = numDocs;
-        for (CompletionSuggestion.Entry.Option option : options) {
-            assertThat(option.getText().toString(), equalTo("suggestion" + id));
-            assertThat(option.getHit(), hasId("" + id));
-            assertThat(option.getHit(), hasScore((id)));
-            assertNull(option.getHit().getSourceAsMap());
-            id--;
-        }
-    }
-
-    public void testSuggestDocumentSourceFiltering() throws Exception {
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
-        createIndexAndMapping(mapping);
-        int numDocs = randomIntBetween(10, 100);
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 1; i <= numDocs; i++) {
-            indexRequestBuilders.add(
-                client().prepareIndex(INDEX)
-                    .setId("" + i)
-                    .setSource(
-                        jsonBuilder().startObject()
-                            .startObject(FIELD)
-                            .field("input", "suggestion" + i)
-                            .field("weight", i)
-                            .endObject()
-                            .field("a", "include")
-                            .field("b", "exclude")
-                            .endObject()
-                    )
-            );
-        }
-        indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg").size(numDocs);
-
-        SearchResponse searchResponse = client().prepareSearch(INDEX)
-            .suggest(new SuggestBuilder().addSuggestion("foo", prefix))
-            .setFetchSource("a", "b")
-            .get();
-        CompletionSuggestion completionSuggestion = searchResponse.getSuggest().getSuggestion("foo");
-        CompletionSuggestion.Entry options = completionSuggestion.getEntries().get(0);
-        assertThat(options.getOptions().size(), equalTo(numDocs));
-        int id = numDocs;
-        for (CompletionSuggestion.Entry.Option option : options) {
-            assertThat(option.getText().toString(), equalTo("suggestion" + id));
-            assertThat(option.getHit(), hasId("" + id));
-            assertThat(option.getHit(), hasScore((id)));
-            assertNotNull(option.getHit().getSourceAsMap());
-            Set<String> sourceFields = option.getHit().getSourceAsMap().keySet();
-            assertThat(sourceFields, contains("a"));
-            assertThat(sourceFields, not(contains("b")));
-            id--;
-        }
-    }
-
-    /**
-     * Suggestions run on an empty index should return a suggest element as part of the response. See #42473 for details.
-     */
-    public void testSuggestEmptyIndex() throws IOException, InterruptedException {
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
-        createIndexAndMapping(mapping);
-
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("v");
-        SearchResponse searchResponse = client().prepareSearch(INDEX)
-            .suggest(new SuggestBuilder().addSuggestion("foo", prefix))
-            .setFetchSource("a", "b")
-            .get();
-        Suggest suggest = searchResponse.getSuggest();
-        assertNotNull(suggest);
-        CompletionSuggestion completionSuggestion = suggest.getSuggestion("foo");
-        CompletionSuggestion.Entry options = completionSuggestion.getEntries().get(0);
-        assertEquals("v", options.getText().string());
-        assertEquals(1, options.getLength());
-        assertEquals(0, options.getOffset());
-        assertEquals(0, options.options.size());
-    }
-
-    public void testThatWeightsAreWorking() throws Exception {
-        createIndexAndMapping(completionMappingBuilder);
-
-        List<String> similarNames = Arrays.asList("the", "The Prodigy", "The Verve", "The the");
-        // the weight is 1000 divided by string length, so the results are easy to to check
-        for (String similarName : similarNames) {
-            client().prepareIndex(INDEX)
-                .setId(similarName)
-                .setSource(
-                    jsonBuilder().startObject()
-                        .startObject(FIELD)
-                        .startArray("input")
-                        .value(similarName)
-                        .endArray()
-                        .field("weight", 1000 / similarName.length())
-                        .endObject()
-                        .endObject()
-                )
-                .get();
-        }
-
-        refresh();
-
-        assertSuggestions("the", "the", "The the", "The Verve", "The Prodigy");
-    }
-
-    public void testThatWeightMustBeAnInteger() throws Exception {
-        createIndexAndMapping(completionMappingBuilder);
-
-        MapperParsingException e = expectThrows(
-            MapperParsingException.class,
-            () -> client().prepareIndex(INDEX)
-                .setId("1")
-                .setSource(
-                    jsonBuilder().startObject()
-                        .startObject(FIELD)
-                        .startArray("input")
-                        .value("sth")
-                        .endArray()
-                        .field("weight", 2.5)
-                        .endObject()
-                        .endObject()
-                )
-                .get()
-        );
-        assertThat(e.toString(), containsString("2.5"));
-    }
-
-    public void testThatWeightCanBeAString() throws Exception {
-        createIndexAndMapping(completionMappingBuilder);
-
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(
-                jsonBuilder().startObject()
-                    .startObject(FIELD)
-                    .startArray("input")
-                    .value("testing")
-                    .endArray()
-                    .field("weight", "10")
-                    .endObject()
-                    .endObject()
-            )
-            .get();
-
-        refresh();
-
-        SearchResponse searchResponse = client().prepareSearch(INDEX)
-            .suggest(new SuggestBuilder().addSuggestion("testSuggestions", new CompletionSuggestionBuilder(FIELD).text("test").size(10)))
-            .get();
-
-        assertSuggestions(searchResponse, "testSuggestions", "testing");
-        Suggest.Suggestion.Entry.Option option = searchResponse.getSuggest()
-            .getSuggestion("testSuggestions")
-            .getEntries()
-            .get(0)
-            .getOptions()
-            .get(0);
-        assertThat(option, is(instanceOf(CompletionSuggestion.Entry.Option.class)));
-        CompletionSuggestion.Entry.Option prefixOption = (CompletionSuggestion.Entry.Option) option;
-
-        assertThat(prefixOption.getText().string(), equalTo("testing"));
-        assertThat((long) prefixOption.getScore(), equalTo(10L));
-    }
-
-    public void testThatWeightMustNotBeANonNumberString() throws Exception {
-        createIndexAndMapping(completionMappingBuilder);
-
-        MapperParsingException e = expectThrows(
-            MapperParsingException.class,
-            () -> client().prepareIndex(INDEX)
-                .setId("1")
-                .setSource(
-                    jsonBuilder().startObject()
-                        .startObject(FIELD)
-                        .startArray("input")
-                        .value("sth")
-                        .endArray()
-                        .field("weight", "thisIsNotValid")
-                        .endObject()
-                        .endObject()
-                )
-                .get()
-        );
-        assertThat(e.toString(), containsString("thisIsNotValid"));
-    }
-
-    public void testThatWeightAsStringMustBeInt() throws Exception {
-        createIndexAndMapping(completionMappingBuilder);
-
-        String weight = String.valueOf(Long.MAX_VALUE - 4);
-
-        MapperParsingException e = expectThrows(
-            MapperParsingException.class,
-            () -> client().prepareIndex(INDEX)
-                .setId("1")
-                .setSource(
-                    jsonBuilder().startObject()
-                        .startObject(FIELD)
-                        .startArray("input")
-                        .value("testing")
-                        .endArray()
-                        .field("weight", weight)
-                        .endObject()
-                        .endObject()
-                )
-                .get()
-        );
-        assertThat(e.toString(), containsString(weight));
-    }
-
-    public void testThatInputCanBeAStringInsteadOfAnArray() throws Exception {
-        createIndexAndMapping(completionMappingBuilder);
-
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(jsonBuilder().startObject().startObject(FIELD).field("input", "Foo Fighters").endObject().endObject())
-            .get();
-
-        refresh();
-
-        assertSuggestions("f", "Foo Fighters");
-    }
-
-    public void testDisabledPreserveSeparators() throws Exception {
-        completionMappingBuilder.preserveSeparators(false);
-        createIndexAndMapping(completionMappingBuilder);
-
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(
-                jsonBuilder().startObject()
-                    .startObject(FIELD)
-                    .startArray("input")
-                    .value("Foo Fighters")
-                    .endArray()
-                    .field("weight", 10)
-                    .endObject()
-                    .endObject()
-            )
-            .get();
-
-        client().prepareIndex(INDEX)
-            .setId("2")
-            .setSource(
-                jsonBuilder().startObject()
-                    .startObject(FIELD)
-                    .startArray("input")
-                    .value("Foof")
-                    .endArray()
-                    .field("weight", 20)
-                    .endObject()
-                    .endObject()
-            )
-            .get();
-
-        refresh();
-
-        assertSuggestions("foof", "Foof", "Foo Fighters");
-    }
-
-    public void testEnabledPreserveSeparators() throws Exception {
-        completionMappingBuilder.preserveSeparators(true);
-        createIndexAndMapping(completionMappingBuilder);
-
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(
-                jsonBuilder().startObject().startObject(FIELD).startArray("input").value("Foo Fighters").endArray().endObject().endObject()
-            )
-            .get();
-
-        client().prepareIndex(INDEX)
-            .setId("2")
-            .setSource(jsonBuilder().startObject().startObject(FIELD).startArray("input").value("Foof").endArray().endObject().endObject())
-            .get();
-
-        refresh();
-
-        assertSuggestions("foof", "Foof");
-    }
-
-    public void testThatMultipleInputsAreSupported() throws Exception {
-        createIndexAndMapping(completionMappingBuilder);
-
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(
-                jsonBuilder().startObject()
-                    .startObject(FIELD)
-                    .startArray("input")
-                    .value("Foo Fighters")
-                    .value("Fu Fighters")
-                    .endArray()
-                    .endObject()
-                    .endObject()
-            )
-            .get();
-
-        refresh();
-
-        assertSuggestions("foo", "Foo Fighters");
-        assertSuggestions("fu", "Fu Fighters");
-    }
-
-    public void testThatShortSyntaxIsWorking() throws Exception {
-        createIndexAndMapping(completionMappingBuilder);
-
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(
-                jsonBuilder().startObject().startArray(FIELD).value("The Prodigy Firestarter").value("Firestarter").endArray().endObject()
-            )
-            .get();
-
-        refresh();
-
-        assertSuggestions("t", "The Prodigy Firestarter");
-        assertSuggestions("f", "Firestarter");
-    }
-
-    public void testThatDisablingPositionIncrementsWorkForStopwords() throws Exception {
-        // analyzer which removes stopwords... so may not be the simple one
-        completionMappingBuilder.searchAnalyzer("classic").indexAnalyzer("classic").preservePositionIncrements(false);
-        createIndexAndMapping(completionMappingBuilder);
-
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(
-                jsonBuilder().startObject().startObject(FIELD).startArray("input").value("The Beatles").endArray().endObject().endObject()
-            )
-            .get();
-
-        refresh();
-
-        assertSuggestions("b", "The Beatles");
-    }
-
-    public void testThatUpgradeToMultiFieldsWorks() throws Exception {
-        final XContentBuilder mapping = jsonBuilder().startObject()
-            .startObject("properties")
-            .startObject(FIELD)
-            .field("type", "text")
-            .endObject()
-            .endObject()
-            .endObject();
-        assertAcked(prepareCreate(INDEX).setMapping(mapping));
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setRefreshPolicy(IMMEDIATE)
-            .setSource(jsonBuilder().startObject().field(FIELD, "Foo Fighters").endObject())
-            .get();
-        ensureGreen(INDEX);
-
-        AcknowledgedResponse putMappingResponse = client().admin()
-            .indices()
-            .preparePutMapping(INDEX)
-            .setSource(
-                jsonBuilder().startObject()
-                    .startObject(MapperService.SINGLE_MAPPING_NAME)
-                    .startObject("properties")
-                    .startObject(FIELD)
-                    .field("type", "text")
-                    .startObject("fields")
-                    .startObject("suggest")
-                    .field("type", "completion")
-                    .field("analyzer", "simple")
-                    .endObject()
-                    .endObject()
-                    .endObject()
-                    .endObject()
-                    .endObject()
-                    .endObject()
-            )
-            .get();
-        assertThat(putMappingResponse.isAcknowledged(), is(true));
-
-        SearchResponse searchResponse = client().prepareSearch(INDEX)
-            .suggest(
-                new SuggestBuilder().addSuggestion("suggs", SuggestBuilders.completionSuggestion(FIELD + ".suggest").text("f").size(10))
-            )
-            .get();
-        assertSuggestions(searchResponse, "suggs");
-
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setRefreshPolicy(IMMEDIATE)
-            .setSource(jsonBuilder().startObject().field(FIELD, "Foo Fighters").endObject())
-            .get();
-        ensureGreen(INDEX);
-
-        SearchResponse afterReindexingResponse = client().prepareSearch(INDEX)
-            .suggest(
-                new SuggestBuilder().addSuggestion("suggs", SuggestBuilders.completionSuggestion(FIELD + ".suggest").text("f").size(10))
-            )
-            .get();
-        assertSuggestions(afterReindexingResponse, "suggs", "Foo Fighters");
-    }
-
-    public void testThatFuzzySuggesterWorks() throws Exception {
-        createIndexAndMapping(completionMappingBuilder);
-
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(
-                jsonBuilder().startObject().startObject(FIELD).startArray("input").value("Nirvana").endArray().endObject().endObject()
-            )
-            .get();
-
-        refresh();
-
-        SearchResponse searchResponse = client().prepareSearch(INDEX)
-            .suggest(new SuggestBuilder().addSuggestion("foo", SuggestBuilders.completionSuggestion(FIELD).prefix("Nirv").size(10)))
-            .get();
-        assertSuggestions(searchResponse, false, "foo", "Nirvana");
-
-        searchResponse = client().prepareSearch(INDEX)
-            .suggest(
-                new SuggestBuilder().addSuggestion(
-                    "foo",
-                    SuggestBuilders.completionSuggestion(FIELD).prefix("Nirw", Fuzziness.ONE).size(10)
-                )
-            )
-            .get();
-        assertSuggestions(searchResponse, false, "foo", "Nirvana");
-    }
-
-    public void testThatFuzzySuggesterSupportsEditDistances() throws Exception {
-        createIndexAndMapping(completionMappingBuilder);
-
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(
-                jsonBuilder().startObject().startObject(FIELD).startArray("input").value("Nirvana").endArray().endObject().endObject()
-            )
-            .get();
-
-        refresh();
-
-        // edit distance 1
-        SearchResponse searchResponse = client().prepareSearch(INDEX)
-            .suggest(
-                new SuggestBuilder().addSuggestion(
-                    "foo",
-                    SuggestBuilders.completionSuggestion(FIELD).prefix("Norw", Fuzziness.ONE).size(10)
-                )
-            )
-            .get();
-        assertSuggestions(searchResponse, false, "foo");
-
-        // edit distance 2
-        searchResponse = client().prepareSearch(INDEX)
-            .suggest(
-                new SuggestBuilder().addSuggestion(
-                    "foo",
-                    SuggestBuilders.completionSuggestion(FIELD).prefix("Norw", Fuzziness.TWO).size(10)
-                )
-            )
-            .get();
-        assertSuggestions(searchResponse, false, "foo", "Nirvana");
-    }
-
-    public void testThatFuzzySuggesterSupportsTranspositions() throws Exception {
-        createIndexAndMapping(completionMappingBuilder);
-
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(
-                jsonBuilder().startObject().startObject(FIELD).startArray("input").value("Nirvana").endArray().endObject().endObject()
-            )
-            .get();
-
-        refresh();
-
-        SearchResponse searchResponse = client().prepareSearch(INDEX)
-            .suggest(
-                new SuggestBuilder().addSuggestion(
-                    "foo",
-                    SuggestBuilders.completionSuggestion(FIELD)
-                        .prefix("Nriv", FuzzyOptions.builder().setTranspositions(false).build())
-                        .size(10)
-                )
-            )
-            .get();
-        assertSuggestions(searchResponse, false, "foo");
-
-        searchResponse = client().prepareSearch(INDEX)
-            .suggest(
-                new SuggestBuilder().addSuggestion(
-                    "foo",
-                    SuggestBuilders.completionSuggestion(FIELD).prefix("Nriv", Fuzziness.ONE).size(10)
-                )
-            )
-            .get();
-        assertSuggestions(searchResponse, false, "foo", "Nirvana");
-    }
-
-    public void testThatFuzzySuggesterSupportsMinPrefixLength() throws Exception {
-        createIndexAndMapping(completionMappingBuilder);
-
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(
-                jsonBuilder().startObject().startObject(FIELD).startArray("input").value("Nirvana").endArray().endObject().endObject()
-            )
-            .get();
-
-        refresh();
-
-        SearchResponse searchResponse = client().prepareSearch(INDEX)
-            .suggest(
-                new SuggestBuilder().addSuggestion(
-                    "foo",
-                    SuggestBuilders.completionSuggestion(FIELD)
-                        .prefix("Nriva", FuzzyOptions.builder().setFuzzyMinLength(6).build())
-                        .size(10)
-                )
-            )
-            .get();
-        assertSuggestions(searchResponse, false, "foo");
-
-        searchResponse = client().prepareSearch(INDEX)
-            .suggest(
-                new SuggestBuilder().addSuggestion(
-                    "foo",
-                    SuggestBuilders.completionSuggestion(FIELD)
-                        .prefix("Nrivan", FuzzyOptions.builder().setFuzzyMinLength(6).build())
-                        .size(10)
-                )
-            )
-            .get();
-        assertSuggestions(searchResponse, false, "foo", "Nirvana");
-    }
-
-    public void testThatFuzzySuggesterSupportsNonPrefixLength() throws Exception {
-        createIndexAndMapping(completionMappingBuilder);
-
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(
-                jsonBuilder().startObject().startObject(FIELD).startArray("input").value("Nirvana").endArray().endObject().endObject()
-            )
-            .get();
-
-        refresh();
-
-        SearchResponse searchResponse = client().prepareSearch(INDEX)
-            .suggest(
-                new SuggestBuilder().addSuggestion(
-                    "foo",
-                    SuggestBuilders.completionSuggestion(FIELD)
-                        .prefix("Nirw", FuzzyOptions.builder().setFuzzyPrefixLength(4).build())
-                        .size(10)
-                )
-            )
-            .get();
-        assertSuggestions(searchResponse, false, "foo");
-
-        searchResponse = client().prepareSearch(INDEX)
-            .suggest(
-                new SuggestBuilder().addSuggestion(
-                    "foo",
-                    SuggestBuilders.completionSuggestion(FIELD)
-                        .prefix("Nirvo", FuzzyOptions.builder().setFuzzyPrefixLength(4).build())
-                        .size(10)
-                )
-            )
-            .get();
-        assertSuggestions(searchResponse, false, "foo", "Nirvana");
-    }
-
-    public void testThatFuzzySuggesterIsUnicodeAware() throws Exception {
-        createIndexAndMapping(completionMappingBuilder);
-
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(jsonBuilder().startObject().startObject(FIELD).startArray("input").value("ööööö").endArray().endObject().endObject())
-            .get();
-
-        refresh();
-
-        // suggestion with a character, which needs unicode awareness
-        org.opensearch.search.suggest.completion.CompletionSuggestionBuilder completionSuggestionBuilder = SuggestBuilders
-            .completionSuggestion(FIELD)
-            .prefix("öööи", FuzzyOptions.builder().setUnicodeAware(true).build())
-            .size(10);
-
-        SearchResponse searchResponse = client().prepareSearch(INDEX)
-            .suggest(new SuggestBuilder().addSuggestion("foo", completionSuggestionBuilder))
-            .get();
-        assertSuggestions(searchResponse, false, "foo", "ööööö");
-
-        // removing unicode awareness leads to no result
-        completionSuggestionBuilder = SuggestBuilders.completionSuggestion(FIELD)
-            .prefix("öööи", FuzzyOptions.builder().setUnicodeAware(false).build())
-            .size(10);
-        searchResponse = client().prepareSearch(INDEX)
-            .suggest(new SuggestBuilder().addSuggestion("foo", completionSuggestionBuilder))
-            .get();
-        assertSuggestions(searchResponse, false, "foo");
-
-        // increasing edit distance instead of unicode awareness works again, as this is only a single character
-        completionSuggestionBuilder = SuggestBuilders.completionSuggestion(FIELD)
-            .prefix("öööи", FuzzyOptions.builder().setUnicodeAware(false).setFuzziness(Fuzziness.TWO).build())
-            .size(10);
-        searchResponse = client().prepareSearch(INDEX)
-            .suggest(new SuggestBuilder().addSuggestion("foo", completionSuggestionBuilder))
-            .get();
-        assertSuggestions(searchResponse, false, "foo", "ööööö");
-    }
-
-    public void testThatStatsAreWorking() throws Exception {
         String otherField = "testOtherField";
-        client().admin()
-            .indices()
-            .prepareCreate(INDEX)
-            .setSettings(Settings.builder().put("index.number_of_replicas", 0).put("index.number_of_shards", 2))
-            .get();
-        ensureGreen();
-        AcknowledgedResponse putMappingResponse = client().admin()
-            .indices()
-            .preparePutMapping(INDEX)
-            .setSource(
-                jsonBuilder().startObject()
-                    .startObject(MapperService.SINGLE_MAPPING_NAME)
-                    .startObject("properties")
-                    .startObject(FIELD)
-                    .field("type", "completion")
-                    .field("analyzer", "simple")
-                    .endObject()
-                    .startObject(otherField)
-                    .field("type", "completion")
-                    .field("analyzer", "simple")
-                    .endObject()
-                    .endObject()
-                    .endObject()
-                    .endObject()
-            )
-            .get();
-        assertThat(putMappingResponse.isAcknowledged(), is(true));
-
-        // Index two entities
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(jsonBuilder().startObject().field(FIELD, "Foo Fighters").field(otherField, "WHATEVER").endObject())
-            .get();
-        client().prepareIndex(INDEX)
-            .setId("2")
-            .setSource(jsonBuilder().startObject().field(FIELD, "Bar Fighters").field(otherField, "WHATEVER2").endObject())
-            .get();
-
-        refresh();
-        ensureGreen();
-        // load the fst index into ram
-        client().prepareSearch(INDEX)
-            .suggest(new SuggestBuilder().addSuggestion("foo", SuggestBuilders.completionSuggestion(FIELD).prefix("f")))
-            .get();
-        client().prepareSearch(INDEX)
-            .suggest(new SuggestBuilder().addSuggestion("foo", SuggestBuilders.completionSuggestion(otherField).prefix("f")))
-            .get();
-
-        // Get all stats
-        IndicesStatsResponse indicesStatsResponse = client().admin()
-            .indices()
-            .prepareStats(INDEX)
-            .setIndices(INDEX)
-            .setCompletion(true)
-            .get();
-        CompletionStats completionStats = indicesStatsResponse.getIndex(INDEX).getPrimaries().completion;
-        assertThat(completionStats, notNullValue());
-        long totalSizeInBytes = completionStats.getSizeInBytes();
-        assertThat(totalSizeInBytes, is(greaterThan(0L)));
-
-        IndicesStatsResponse singleFieldStats = client().admin()
-            .indices()
-            .prepareStats(INDEX)
-            .setIndices(INDEX)
-            .setCompletion(true)
-            .setCompletionFields(FIELD)
-            .get();
-        long singleFieldSizeInBytes = singleFieldStats.getIndex(INDEX).getPrimaries().completion.getFields().get(FIELD);
-        IndicesStatsResponse otherFieldStats = client().admin()
-            .indices()
-            .prepareStats(INDEX)
-            .setIndices(INDEX)
-            .setCompletion(true)
-            .setCompletionFields(otherField)
-            .get();
-        long otherFieldSizeInBytes = otherFieldStats.getIndex(INDEX).getPrimaries().completion.getFields().get(otherField);
-        assertThat(singleFieldSizeInBytes + otherFieldSizeInBytes, is(totalSizeInBytes));
-
-        // regexes
-        IndicesStatsResponse regexFieldStats = client().admin()
-            .indices()
-            .prepareStats(INDEX)
-            .setIndices(INDEX)
-            .setCompletion(true)
-            .setCompletionFields("*")
-            .get();
-        FieldMemoryStats fields = regexFieldStats.getIndex(INDEX).getPrimaries().completion.getFields();
-        long regexSizeInBytes = fields.get(FIELD) + fields.get(otherField);
-        assertThat(regexSizeInBytes, is(totalSizeInBytes));
-    }
-
-    public void testThatSortingOnCompletionFieldReturnsUsefulException() throws Exception {
-        createIndexAndMapping(completionMappingBuilder);
-
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(
-                jsonBuilder().startObject().startObject(FIELD).startArray("input").value("Nirvana").endArray().endObject().endObject()
-            )
-            .get();
-
-        refresh();
-
-        SearchPhaseExecutionException e = expectThrows(
-            SearchPhaseExecutionException.class,
-            () -> client().prepareSearch(INDEX).addSort(new FieldSortBuilder(FIELD)).get()
-        );
-        assertThat(e.status().getStatus(), is(400));
-        assertThat(e.toString(), containsString("Fielddata is not supported on field [" + FIELD + "] of type [completion]"));
-    }
-
-    public void testThatSuggestStopFilterWorks() throws Exception {
-        Settings.Builder settingsBuilder = Settings.builder()
-            .put("index.analysis.analyzer.stoptest.tokenizer", "standard")
-            .putList("index.analysis.analyzer.stoptest.filter", "suggest_stop_filter")
-            .put("index.analysis.filter.suggest_stop_filter.type", "stop")
-            .put("index.analysis.filter.suggest_stop_filter.remove_trailing", false);
-
-        CompletionMappingBuilder completionMappingBuilder = new CompletionMappingBuilder();
-        completionMappingBuilder.preserveSeparators(true).preservePositionIncrements(true);
-        completionMappingBuilder.searchAnalyzer("stoptest");
-        completionMappingBuilder.indexAnalyzer("simple");
-        createIndexAndMappingAndSettings(settingsBuilder.build(), completionMappingBuilder);
-
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(
-                jsonBuilder().startObject()
-                    .startObject(FIELD)
-                    .startArray("input")
-                    .value("Feed trolls")
-                    .endArray()
-                    .field("weight", 5)
-                    .endObject()
-                    .endObject()
-            )
-            .get();
-
-        // Higher weight so it's ranked first:
-        client().prepareIndex(INDEX)
-            .setId("2")
-            .setSource(
-                jsonBuilder().startObject()
-                    .startObject(FIELD)
-                    .startArray("input")
-                    .value("Feed the trolls")
-                    .endArray()
-                    .field("weight", 10)
-                    .endObject()
-                    .endObject()
-            )
-            .get();
-
-        refresh();
-
-        assertSuggestions("f", "Feed the trolls", "Feed trolls");
-        assertSuggestions("fe", "Feed the trolls", "Feed trolls");
-        assertSuggestions("fee", "Feed the trolls", "Feed trolls");
-        assertSuggestions("feed", "Feed the trolls", "Feed trolls");
-        assertSuggestions("feed t", "Feed the trolls", "Feed trolls");
-        assertSuggestions("feed the", "Feed the trolls");
-        // stop word complete, gets ignored on query time, makes it "feed" only
-        assertSuggestions("feed the ", "Feed the trolls", "Feed trolls");
-        // stopword gets removed, but position increment kicks in, which doesnt work for the prefix suggester
-        assertSuggestions("feed the t");
-    }
-
-    public void testThatIndexingInvalidFieldsInCompletionFieldResultsInException() throws Exception {
-        CompletionMappingBuilder completionMappingBuilder = new CompletionMappingBuilder();
-        createIndexAndMapping(completionMappingBuilder);
-
-        try {
-            client().prepareIndex(INDEX)
-                .setId("1")
-                .setSource(
-                    jsonBuilder().startObject()
-                        .startObject(FIELD)
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg", Fuzziness.ONE);
+        assertSuggestions("foo", regex, outputs);
+                        .field("type", "completion")
                         .startArray("FRIGGININVALID")
-                        .value("Nirvana")
-                        .endArray()
-                        .endObject()
-                        .endObject()
-                )
-                .get();
-            fail("Expected MapperParsingException");
-        } catch (MapperParsingException e) {
-            assertThat(e.getMessage(), containsString("failed to parse"));
         }
-    }
-
-    public void testSkipDuplicates() throws Exception {
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
-        createIndexAndMapping(mapping);
-        int numDocs = randomIntBetween(10, 100);
-        int numUnique = randomIntBetween(1, numDocs);
-        logger.info("Suggestion duplicate parameters: numDocs {} numUnique {}", numDocs, numUnique);
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        int[] weights = new int[numUnique];
-        Integer[] termIds = new Integer[numUnique];
-        for (int i = 1; i <= numDocs; i++) {
-            int id = i % numUnique;
-            termIds[id] = id;
-            int weight = randomIntBetween(0, 100);
-            weights[id] = Math.max(weight, weights[id]);
-            String suggestion = "suggestion-" + String.format(Locale.ENGLISH, "%03d", id);
-            logger.info("Creating {}, i {}, id {}, weight {}", suggestion, i, id, weight);
-            indexRequestBuilders.add(
-                client().prepareIndex(INDEX)
-                    .setRefreshPolicy(WAIT_UNTIL)
+        CompletionSuggestionBuilder fuzzyPrefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg", Fuzziness.ONE).size(size);
+            .setSource(
+            .setId("2")
+                            .field("input", "suggestion" + i)
+        assertSuggestions("feed", "Feed the trolls", "Feed trolls");
                     .setSource(
-                        jsonBuilder().startObject()
-                            .startObject(FIELD)
-                            .field("input", suggestion)
-                            .field("weight", weight)
-                            .endObject()
-                            .endObject()
-                    )
-            );
-        }
-        indexRandom(true, indexRequestBuilders);
-
-        Arrays.sort(termIds, Comparator.comparingInt(o -> weights[(int) o]).reversed().thenComparingInt(a -> (int) a));
-        logger.info("Expected terms id ordered {}", Arrays.toString(termIds));
-        String[] expected = new String[numUnique];
-        for (int i = 0; i < termIds.length; i++) {
-            expected[i] = "suggestion-" + String.format(Locale.ENGLISH, "%03d", termIds[i]);
-        }
-        logger.info("Expected suggestions field values {}", Arrays.toString(expected));
-        CompletionSuggestionBuilder completionSuggestionBuilder = SuggestBuilders.completionSuggestion(FIELD)
-            .prefix("sugg")
-            .skipDuplicates(true)
-            .size(numUnique);
-
-        SearchResponse searchResponse = client().prepareSearch(INDEX)
-            .suggest(new SuggestBuilder().addSuggestion("suggestions", completionSuggestionBuilder))
-            .get();
-        logger.info("Search Response with Suggestions {}", searchResponse);
-        assertSuggestions(searchResponse, true, "suggestions", expected);
-    }
-
-    public void assertSuggestions(String suggestionName, SuggestionBuilder<?> suggestBuilder, String... suggestions) {
-        SearchResponse searchResponse = client().prepareSearch(INDEX)
-            .suggest(new SuggestBuilder().addSuggestion(suggestionName, suggestBuilder))
-            .get();
-        assertSuggestions(searchResponse, suggestionName, suggestions);
-    }
-
-    public void assertSuggestions(String suggestion, String... suggestions) {
-        String suggestionName = RandomStrings.randomAsciiOfLength(random(), 10);
-        CompletionSuggestionBuilder suggestionBuilder = SuggestBuilders.completionSuggestion(FIELD).text(suggestion).size(10);
-        assertSuggestions(suggestionName, suggestionBuilder, suggestions);
-    }
-
-    public void assertSuggestionsNotInOrder(String suggestString, String... suggestions) {
-        String suggestionName = RandomStrings.randomAsciiOfLength(random(), 10);
-        SearchResponse searchResponse = client().prepareSearch(INDEX)
-            .suggest(
-                new SuggestBuilder().addSuggestion(suggestionName, SuggestBuilders.completionSuggestion(FIELD).text(suggestString).size(10))
-            )
-            .get();
-
-        assertSuggestions(searchResponse, false, suggestionName, suggestions);
-    }
-
-    static void assertSuggestions(SearchResponse searchResponse, String name, String... suggestions) {
-        assertSuggestions(searchResponse, true, name, suggestions);
-    }
-
-    private static void assertSuggestions(
-        SearchResponse searchResponse,
-        boolean suggestionOrderStrict,
-        String name,
-        String... suggestions
-    ) {
-        assertAllSuccessful(searchResponse);
-
-        List<String> suggestionNames = new ArrayList<>();
-        for (Suggest.Suggestion<
-            ? extends Suggest.Suggestion.Entry<? extends Suggest.Suggestion.Entry.Option>> suggestion : iterableAsArrayList(
-                searchResponse.getSuggest()
-            )) {
-            suggestionNames.add(suggestion.getName());
-        }
-        String expectFieldInResponseMsg = String.format(
-            Locale.ROOT,
-            "Expected suggestion named %s in response, got %s",
-            name,
-            suggestionNames
-        );
-        assertThat(expectFieldInResponseMsg, searchResponse.getSuggest().getSuggestion(name), is(notNullValue()));
-
-        Suggest.Suggestion<Suggest.Suggestion.Entry<Suggest.Suggestion.Entry.Option>> suggestion = searchResponse.getSuggest()
-            .getSuggestion(name);
-
-        List<String> suggestionList = getNames(suggestion.getEntries().get(0));
-        List<Suggest.Suggestion.Entry.Option> options = suggestion.getEntries().get(0).getOptions();
-
-        String assertMsg = String.format(
-            Locale.ROOT,
-            "Expected options %s length to be %s, but was %s",
-            suggestionList,
-            suggestions.length,
-            options.size()
-        );
-        assertThat(assertMsg, options.size(), is(suggestions.length));
-        if (suggestionOrderStrict) {
-            for (int i = 0; i < suggestions.length; i++) {
-                String errMsg = String.format(
-                    Locale.ROOT,
-                    "Expected elem %s in list %s to be [%s] score: %s",
-                    i,
-                    suggestionList,
-                    suggestions[i],
-                    options.get(i).getScore()
-                );
-                assertThat(errMsg, options.get(i).getText().toString(), is(suggestions[i]));
-            }
-        } else {
-            for (String expectedSuggestion : suggestions) {
-                String errMsg = String.format(Locale.ROOT, "Expected elem %s to be in list %s", expectedSuggestion, suggestionList);
-                assertThat(errMsg, suggestionList, hasItem(expectedSuggestion));
-            }
-        }
-    }
-
-    private static List<String> getNames(Suggest.Suggestion.Entry<Suggest.Suggestion.Entry.Option> suggestEntry) {
-        List<String> names = new ArrayList<>();
-        for (Suggest.Suggestion.Entry.Option entry : suggestEntry.getOptions()) {
-            names.add(entry.getText().string());
-        }
-        return names;
-    }
-
-    private void createIndexAndMappingAndSettings(Settings settings, CompletionMappingBuilder completionMappingBuilder) throws IOException {
-        XContentBuilder mapping = jsonBuilder().startObject()
-            .startObject("properties")
-            .startObject("test_field")
-            .field("type", "keyword")
-            .endObject()
-            .startObject("title")
-            .field("type", "keyword")
-            .endObject()
-            .startObject(FIELD)
-            .field("type", "completion")
-            .field("analyzer", completionMappingBuilder.indexAnalyzer)
-            .field("search_analyzer", completionMappingBuilder.searchAnalyzer)
-            .field("preserve_separators", completionMappingBuilder.preserveSeparators)
-            .field("preserve_position_increments", completionMappingBuilder.preservePositionIncrements);
-
-        if (completionMappingBuilder.contextMappings != null) {
-            mapping = mapping.startArray("contexts");
-            for (Map.Entry<String, ContextMapping<?>> contextMapping : completionMappingBuilder.contextMappings.entrySet()) {
-                mapping = mapping.startObject()
-                    .field("name", contextMapping.getValue().name())
-                    .field("type", contextMapping.getValue().type().name());
-                switch (contextMapping.getValue().type()) {
-                    case CATEGORY:
-                        mapping = mapping.field("path", ((CategoryContextMapping) contextMapping.getValue()).getFieldName());
-                        break;
-                    case GEO:
-                        mapping = mapping.field("path", ((GeoContextMapping) contextMapping.getValue()).getFieldName())
-                            .field("precision", ((GeoContextMapping) contextMapping.getValue()).getPrecision());
-                        break;
-                }
-
-                mapping = mapping.endObject();
-            }
-
-            mapping = mapping.endArray();
-        }
-        mapping = mapping.endObject().endObject().endObject();
-
-        assertAcked(
-            client().admin()
-                .indices()
-                .prepareCreate(INDEX)
-                .setSettings(Settings.builder().put(indexSettings()).put(settings))
-                .setMapping(mapping)
-                .get()
-        );
-    }
-
-    private void createIndexAndMapping(CompletionMappingBuilder completionMappingBuilder) throws IOException {
-        createIndexAndMappingAndSettings(Settings.EMPTY, completionMappingBuilder);
-    }
-
-    // see #3555
-    public void testPrunedSegments() throws IOException {
-        createIndexAndMappingAndSettings(
-            Settings.builder().put(SETTING_NUMBER_OF_SHARDS, 1).put(SETTING_NUMBER_OF_REPLICAS, 0).build(),
-            completionMappingBuilder
-        );
-
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(
-                jsonBuilder().startObject().startObject(FIELD).startArray("input").value("The Beatles").endArray().endObject().endObject()
-            )
-            .get();
-        client().prepareIndex(INDEX).setId("2").setSource(jsonBuilder().startObject().field("somefield", "somevalue").endObject()).get();
-        ForceMergeResponse actionGet = client().admin().indices().prepareForceMerge().setFlush(true).setMaxNumSegments(1).get();
-        assertAllSuccessful(actionGet);
-        refresh();
-        // update the first one and then merge.. the target segment will have no value in FIELD
-        client().prepareIndex(INDEX).setId("1").setSource(jsonBuilder().startObject().field("somefield", "somevalue").endObject()).get();
-        actionGet = client().admin().indices().prepareForceMerge().setFlush(true).setMaxNumSegments(1).get();
-        assertAllSuccessful(actionGet);
-        refresh();
-
-        assertSuggestions("b");
-        assertThat(2L, equalTo(client().prepareSearch(INDEX).setSize(0).get().getHits().getTotalHits().value()));
-        for (IndexShardSegments seg : client().admin().indices().prepareSegments().get().getIndices().get(INDEX)) {
-            ShardSegments[] shards = seg.getShards();
-            for (ShardSegments shardSegments : shards) {
-                assertThat(shardSegments.getSegments().size(), equalTo(1));
-            }
-        }
-    }
-
-    // see #3596
-    public void testVeryLongInput() throws IOException {
-        assertAcked(
-            client().admin()
-                .indices()
-                .prepareCreate(INDEX)
-                .setMapping(
-                    jsonBuilder().startObject()
-                        .startObject("properties")
-                        .startObject(FIELD)
-                        .field("type", "completion")
-                        .endObject()
-                        .endObject()
-                        .endObject()
-                )
-                .get()
-        );
-        // can cause stack overflow without the default max_input_length
-        String longString = replaceReservedChars(randomRealisticUnicodeOfLength(randomIntBetween(5000, 10000)), (char) 0x01);
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(
-                jsonBuilder().startObject().startObject(FIELD).startArray("input").value(longString).endArray().endObject().endObject()
-            )
-            .setRefreshPolicy(IMMEDIATE)
-            .get();
-
-    }
-
-    // see #3648
-    public void testReservedChars() throws IOException {
-        assertAcked(
-            client().admin()
-                .indices()
-                .prepareCreate(INDEX)
-                .setMapping(
-                    jsonBuilder().startObject()
-                        .startObject("properties")
-                        .startObject(FIELD)
-                        .field("type", "completion")
-                        .endObject()
-                        .endObject()
-                        .endObject()
-                )
-                .get()
-        );
-        // can cause stack overflow without the default max_input_length
-        String string = "foo" + (char) 0x00 + "bar";
-        MapperParsingException e = expectThrows(
-            MapperParsingException.class,
-            () -> client().prepareIndex(INDEX)
-                .setId("1")
                 .setSource(
-                    jsonBuilder().startObject()
-                        .startObject(FIELD)
-                        .startArray("input")
-                        .value(string)
-                        .endArray()
-                        .field("output", "foobar")
-                        .endObject()
-                        .endObject()
-                )
-                .get()
-        );
-        assertThat(e.getMessage(), containsString("failed to parse"));
-    }
-
-    // see #5930
-    public void testIssue5930() throws IOException {
-        assertAcked(
-            client().admin()
-                .indices()
-                .prepareCreate(INDEX)
-                .setMapping(
-                    jsonBuilder().startObject()
-                        .startObject("properties")
-                        .startObject(FIELD)
-                        .field("type", "completion")
-                        .endObject()
-                        .endObject()
-                        .endObject()
-                )
-                .get()
-        );
-        String string = "foo bar";
-        client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(jsonBuilder().startObject().field(FIELD, string).endObject())
-            .setRefreshPolicy(IMMEDIATE)
-            .get();
-
-        SearchPhaseExecutionException e = expectThrows(
-            SearchPhaseExecutionException.class,
-            () -> client().prepareSearch(INDEX)
-                .addAggregation(
-                    AggregationBuilders.terms("suggest_agg").field(FIELD).collectMode(randomFrom(SubAggCollectionMode.values()))
-                )
-                .get()
-        );
-        assertThat(e.toString(), containsString("Fielddata is not supported on field [" + FIELD + "] of type [completion]"));
-    }
-
-    public void testMultiDocSuggestions() throws Exception {
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
-        createIndexAndMapping(mapping);
-        int numDocs = 10;
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 1; i <= numDocs; i++) {
-            indexRequestBuilders.add(
-                client().prepareIndex(INDEX)
-                    .setId("" + i)
-                    .setSource(
-                        jsonBuilder().startObject()
-                            .startObject(FIELD)
-                            .array("input", "suggestion" + i, "suggestions" + i, "suggester" + i)
+        public CompletionMappingBuilder searchAnalyzer(String searchAnalyzer) {
                             .field("weight", i)
-                            .endObject()
-                            .endObject()
-                    )
-            );
-        }
+        Arrays.sort(termIds, Comparator.comparingInt(o -> weights[(int) o]).reversed().thenComparingInt(a -> (int) a));
+            .setId("1")
+                );
+                            .field("input", "suggestion" + i)
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
+                            .field("input", "suggestion" + i)
+import org.opensearch.search.suggest.completion.CompletionSuggestion;
+            .setRefreshPolicy(IMMEDIATE)
+        assertSuggestions(searchResponse, false, "foo", "Nirvana");
+            .setCompletion(true)
+            .indices()
+            .get();
+        // increasing edit distance instead of unicode awareness works again, as this is only a single character
+            .get();
+    private final String FIELD = RandomStrings.randomAsciiOfLength(random(), 10).toLowerCase(Locale.ROOT);
+        assertThat(putMappingResponse.isAcknowledged(), is(true));
+            .setId("1")
+            () -> client().prepareIndex(INDEX)
+        searchResponse = client().prepareSearch(INDEX)
+        indexRandom(true, indexRequestBuilders);
+import com.carrotsearch.randomizedtesting.generators.RandomStrings;
+            )
+            .endObject();
+                client().prepareIndex(INDEX)
+        searchResponse = client().prepareSearch(INDEX)
+            .get();
+                    .value("Feed trolls")
+    public void testDisabledPreserveSeparators() throws Exception {
+        refresh();
+        createIndexAndMapping(completionMappingBuilder);
+            this.contextMappings = contextMappings;
+            .get();
+            .suggest(
+    }
+        int numDocs = randomIntBetween(10, 100);
+                        .endArray()
+            .put("index.analysis.filter.suggest_stop_filter.type", "stop")
+        FieldMemoryStats fields = regexFieldStats.getIndex(INDEX).getPrimaries().completion.getFields();
+                        .endObject()
+        SearchResponse searchResponse = client().prepareSearch(INDEX)
+        int numDocs = 10;
+    private void createIndexAndMappingAndSettings(Settings settings, CompletionMappingBuilder completionMappingBuilder) throws IOException {
+            .setSource(
+        searchResponse = client().prepareSearch(INDEX)
+                    .endArray()
+            .suggest(
+ *
+        int[] weights = new int[numUnique];
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+        builders.add(client().prepareIndex(INDEX).setSource(FIELD, "apple"));
+                .get()
+        assertSuggestions(searchResponse, false, "foo");
+        mapping.indexAnalyzer("keyword");
+            .field("search_analyzer", completionMappingBuilder.searchAnalyzer)
+        client().prepareIndex(INDEX)
         indexRandom(true, indexRequestBuilders);
         CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg").shardSize(15);
-        assertSuggestions("foo", prefix, "suggester10", "suggester9", "suggester8", "suggester7", "suggester6");
-    }
-
-    public void testSuggestWithFieldAlias() throws Exception {
-        XContentBuilder mapping = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject("properties")
-            .startObject(FIELD)
-            .field("type", "completion")
-            .endObject()
-            .startObject("alias")
-            .field("type", "alias")
-            .field("path", FIELD)
-            .endObject()
-            .endObject()
-            .endObject();
-        assertAcked(prepareCreate(INDEX).setMapping(mapping));
-
-        List<IndexRequestBuilder> builders = new ArrayList<>();
-        builders.add(client().prepareIndex(INDEX).setSource(FIELD, "apple"));
-        builders.add(client().prepareIndex(INDEX).setSource(FIELD, "mango"));
-        builders.add(client().prepareIndex(INDEX).setSource(FIELD, "papaya"));
-        indexRandom(true, false, builders);
-
-        CompletionSuggestionBuilder suggestionBuilder = SuggestBuilders.completionSuggestion("alias").text("app");
-        assertSuggestions("suggestion", suggestionBuilder, "apple");
-    }
-
-    public void testSuggestOnlyExplain() throws Exception {
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
-        createIndexAndMapping(mapping);
-        int numDocs = 10;
         List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+            .preparePutMapping(INDEX)
+            )
+            .setId("2")
+        assertSuggestions(searchResponse, true, name, suggestions);
+                    .field("weight", 10)
+        assertSuggestions("foo", prefix, "suggestion10", "suggestion9", "suggestion8", "suggestion7", "suggestion6");
+            assertThat(option.getHit(), hasId("" + id));
+    }
+        for (String similarName : similarNames) {
+    public void testFuzzy() throws Exception {
+            .setExplain(true)
+                    SuggestBuilders.completionSuggestion(FIELD).prefix("Norw", Fuzziness.ONE).size(10)
+            .get();
+        actionGet = client().admin().indices().prepareForceMerge().setFlush(true).setMaxNumSegments(1).get();
+                    .field("type", "completion")
+            SearchPhaseExecutionException.class,
         for (int i = 1; i <= numDocs; i++) {
-            indexRequestBuilders.add(
-                client().prepareIndex(INDEX)
-                    .setId("" + i)
-                    .setSource(
-                        jsonBuilder().startObject()
+            )
+                        .prefix("Nrivan", FuzzyOptions.builder().setFuzzyMinLength(6).build())
+                    .endObject()
+                    .field("type", "completion")
+        int numDocs = 10;
+        SearchResponse searchResponse = client().prepareSearch(INDEX)
+            .setId("1")
+            )
+                            .endObject()
+        refresh();
+    public void testThatFuzzySuggesterWorks() throws Exception {
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+}
+            )
+        assertSuggestions(searchResponse, false, suggestionName, suggestions);
+            .getSuggestion("testSuggestions")
+    public void testThatFuzzySuggesterSupportsEditDistances() throws Exception {
+        assertEquals(1, options.getLength());
+                            .field("precision", ((GeoContextMapping) contextMapping.getValue()).getPrecision());
+            .setSource(
+            )
+                        .endObject()
+        String weight = String.valueOf(Long.MAX_VALUE - 4);
+    private void createIndexAndMapping(CompletionMappingBuilder completionMappingBuilder) throws IOException {
                             .startObject(FIELD)
-                            .field("input", "suggestion" + i)
-                            .field("weight", i)
-                            .endObject()
-                            .endObject()
+    public void testSuggestDocumentSourceFiltering() throws Exception {
+            client().admin()
+        );
+        client().prepareIndex(INDEX)
+    }
+        public CompletionMappingBuilder preservePositionIncrements(Boolean preservePositionIncrements) {
                     )
+    }
+                    SuggestBuilders.completionSuggestion(FIELD).prefix("Nirw", Fuzziness.ONE).size(10)
+                            .endObject()
+                    .startObject(FIELD)
+                    .startObject(FIELD)
+        MapperParsingException e = expectThrows(
+            suggestions.length,
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+                    .startObject("fields")
+            .prefix("öööи", FuzzyOptions.builder().setUnicodeAware(false).setFuzziness(Fuzziness.TWO).build())
+                        .endObject()
+            .get();
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg").size(numDocs);
+        int size = randomIntBetween(3, 10);
+            )
+        );
+import org.opensearch.action.admin.indices.forcemerge.ForceMergeResponse;
+        int id = numDocs;
+            .suggest(
+                        .endObject()
+        Integer[] termIds = new Integer[numUnique];
+                    .endObject()
+                .setSource(
+            .endObject()
+ */
+    }
+            completionMappingBuilder
+        MapperParsingException e = expectThrows(
+                        jsonBuilder().startObject()
+        Suggest.Suggestion.Entry.Option option = searchResponse.getSuggest()
+            int id = i % numUnique;
+        String[] outputs = new String[size];
+                .get();
+                    AggregationBuilders.terms("suggest_agg").field(FIELD).collectMode(randomFrom(SubAggCollectionMode.values()))
+                        .endArray()
+        List<String> names = new ArrayList<>();
+        assertThat(options.getOptions().size(), equalTo(numDocs));
+    }
+            .setSource(jsonBuilder().startObject().field(FIELD, "Foo Fighters").field(otherField, "WHATEVER").endObject())
+                    .endObject()
+        assertSuggestions("feed t", "Feed the trolls", "Feed trolls");
+        client().prepareIndex(INDEX)
+                    .field("weight", 5)
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+            .size(10);
+        refresh();
+        assertSuggestions(searchResponse, "foo", "suggestion10", "suggestion9", "suggestion8", "suggestion7", "suggestion6");
+            .prefix("sugg")
+        createIndexAndMapping(completionMappingBuilder);
+        char[] charArray = input.toCharArray();
+        // Get all stats
+        public CompletionMappingBuilder preserveSeparators(Boolean preserveSeparators) {
+        int numDocs = randomIntBetween(10, 100);
+            client().prepareIndex(INDEX)
+        assertSuggestions("fe", "Feed the trolls", "Feed trolls");
+            )
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("v");
+            .field("preserve_position_increments", completionMappingBuilder.preservePositionIncrements);
+import org.opensearch.search.suggest.completion.context.CategoryContextMapping;
+        assertThat(options.getOptions().size(), equalTo(numDocs));
+                    .endObject()
+        assertThat(e.toString(), containsString("Fielddata is not supported on field [" + FIELD + "] of type [completion]"));
+            }
+            .get();
+                client().prepareIndex(INDEX)
+import org.opensearch.search.suggest.completion.context.ContextMapping;
+            CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("a").size(i);
+        Arrays.sort(entries);
+                )
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+        assertAcked(
+                    .startObject("properties")
+        assertSuggestions("suggestion", suggestionBuilder, "apple");
+                            .field("weight", numDocs - i)
+            .preparePutMapping(INDEX)
+        for (int i = 1; i <= numDocs; i++) {
+            case ContextSuggestField.CONTEXT_SEPARATOR:
+            .indices()
+        assertAcked(
+        }
+                    .setSource(
+ * Unless required by applicable law or agreed to in writing,
+import java.util.ArrayList;
+        assertAllSuccessful(actionGet);
+import static org.opensearch.core.common.util.CollectionUtils.iterableAsArrayList;
+            .get();
+            client().admin()
+    static void assertSuggestions(SearchResponse searchResponse, String name, String... suggestions) {
+            .get();
+        ensureGreen();
+        refresh();
+            .prefix("öööи", FuzzyOptions.builder().setUnicodeAware(false).build())
+                        .field("weight", 1000 / similarName.length())
+    }
+            assertThat(option.getHit(), hasScore((id)));
+            client().prepareIndex(INDEX)
+                    .setId("" + i)
+                }
+            logger.info("Creating {}, i {}, id {}, weight {}", suggestion, i, id, weight);
+        client().admin()
+            .setCompletion(true)
+        indexRandom(true, indexRequestBuilders);
+import org.opensearch.action.search.SearchPhaseExecutionException;
+    // see #3648
+    }
+        );
+        createIndexAndMapping(completionMappingBuilder);
+        for (Suggest.Suggestion<
+        SearchPhaseExecutionException e = expectThrows(
+                        .endObject()
+            .putList("index.analysis.analyzer.stoptest.filter", "suggest_stop_filter")
+        SearchResponse searchResponse = client().prepareSearch(INDEX)
+        client().prepareIndex(INDEX).setId("1").setSource(jsonBuilder().startObject().field("somefield", "somevalue").endObject()).get();
+                )
+        List<String> suggestionNames = new ArrayList<>();
+            .setId("1")
+            .field("type", "alias")
+                    .endObject()
+    }
+                jsonBuilder().startObject().startObject(FIELD).startArray("input").value("Nirvana").endArray().endObject().endObject()
+                    .endObject()
+                    .endObject()
+                assertThat(shardSegments.getSegments().size(), equalTo(1));
+import static org.hamcrest.Matchers.containsString;
+            entries[i] = value;
+                .setSource(
+            fail("Expected MapperParsingException");
+                        .startArray("input")
+                            .field("input", "sugxgestion" + i)
+        CompletionSuggestion.Entry.Option prefixOption = (CompletionSuggestion.Entry.Option) option;
+        // Index two entities
+    }
+                    .setSource(
+        createIndexAndMapping(mapping);
+        refresh();
+    // see #3596
+            .size(10);
+ * Licensed to Elasticsearch under one or more contributor
+        assertThat(e.toString(), containsString("thisIsNotValid"));
+        List<IndexRequestBuilder> builders = new ArrayList<>();
+                )
+            .setSource(
+        for (int i = 1; i < numDocs; i++) {
+    public void testThatSuggestStopFilterWorks() throws Exception {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                    .startObject("suggest")
+        client().prepareIndex(INDEX)
+        long totalSizeInBytes = completionStats.getSizeInBytes();
+                    .field("weight", "10")
+        assertThat(options.getOptions().size(), equalTo(numDocs));
+            .get();
+            Locale.ROOT,
+                    .endObject()
+            .getSuggestion(name);
+                        .endArray()
+        for (int i = 1; i <= numDocs; i++) {
+                    case GEO:
+        client().prepareIndex(INDEX)
+                    .endObject()
+        for (int i = 1; i <= numDocs; i++) {
+        String[] expected = new String[numUnique];
+        createIndexAndMapping(mapping);
+        int id = numDocs;
+                            .array("input", "suggestion" + i, "suggestions" + i, "suggester" + i)
+import org.apache.lucene.search.suggest.document.ContextSuggestField;
+        createIndexAndMapping(completionMappingBuilder);
+    public void testIssue5930() throws IOException {
+        for (int i = 1; i <= numDocs; i++) {
+        assertSuggestions("the", "the", "The the", "The Verve", "The Prodigy");
+                assertThat(errMsg, suggestionList, hasItem(expectedSuggestion));
+            suggestionNames.add(suggestion.getName());
+                )
+        assertSuggestions("f", "Feed the trolls", "Feed trolls");
+            .get();
+            .getEntries()
+    }
+        createIndexAndMapping(completionMappingBuilder);
+        assertThat(prefixOption.getText().string(), equalTo("testing"));
+        completionMappingBuilder.preserveSeparators(true);
+            .setIndices(INDEX)
+    public void testThatWeightMustNotBeANonNumberString() throws Exception {
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
+        // test that suggestion text takes precedence over global text
+            .setSource(jsonBuilder().startObject().field(FIELD, string).endObject())
+            )
+        ensureGreen(INDEX);
+        refresh();
+                .setId("1")
+                            .endObject()
+        client().prepareIndex(INDEX)
+                    )
+                    jsonBuilder().startObject()
+                        jsonBuilder().startObject()
+                )
+import org.opensearch.search.suggest.completion.CompletionStats;
+            .startObject("title")
+                    .field("type", contextMapping.getValue().type().name());
+                        .endObject()
+                        .prefix("Nriva", FuzzyOptions.builder().setFuzzyMinLength(6).build())
+            )
+                new SuggestBuilder().addSuggestion(
+        indexRandom(true, indexRequestBuilders);
+                jsonBuilder().startObject().startObject(FIELD).startArray("input").value("Nirvana").endArray().endObject().endObject()
+            .setSource(
+        refresh();
+            .startObject("alias")
+            }
+                            .field("input", suggestion)
+        builders.add(client().prepareIndex(INDEX).setSource(FIELD, "mango"));
+                            .field("input", "sugg" + i + "estion")
+            .setId("1")
+                        .field("type", "completion")
+            () -> client().prepareIndex(INDEX)
+            .setCompletionFields(FIELD)
+        searchResponse = client().prepareSearch(INDEX).suggest(new SuggestBuilder().addSuggestion("foo", withText)).get();
+ * the Apache License, Version 2.0 (the "License"); you may
+            );
+            .setId("1")
+                    "foo",
+    public void testThatStatsAreWorking() throws Exception {
+                client().prepareIndex(INDEX)
+        AcknowledgedResponse putMappingResponse = client().admin()
+                new SuggestBuilder().addSuggestion("suggs", SuggestBuilders.completionSuggestion(FIELD + ".suggest").text("f").size(10))
+import org.opensearch.common.unit.Fuzziness;
+                    .field("analyzer", "simple")
+import java.util.Collection;
+            .setSettings(Settings.builder().put("index.number_of_replicas", 0).put("index.number_of_shards", 2))
+            indexRequestBuilders.add(
+            .setId("1")
+            )
+        // stopword gets removed, but position increment kicks in, which doesnt work for the prefix suggester
+                    .value("Foo Fighters")
+                    .field("weight", 10)
+            .endObject()
+            .get();
+            .get();
+                            .field("weight", i)
+        }
+                    .endArray()
+            .get();
+ * software distributed under the License is distributed on an
+            .get();
+        searchResponse = client().prepareSearch(INDEX)
+            .get();
+        assertSuggestions(searchResponse, "suggs");
+        }
+        String suggestionName = RandomStrings.randomAsciiOfLength(random(), 10);
+            .setFetchSource(false)
+            assertSuggestions("foo", prefix, topEntries);
+    }
+        refresh();
+            .setId("1")
+            .field("type", "keyword")
+            .prefix("öööи", FuzzyOptions.builder().setUnicodeAware(true).build())
+            .suggest(
+        assertSuggestions(searchResponse, false, "foo");
+            assertThat(e.getMessage(), containsString("failed to parse"));
+                    jsonBuilder().startObject()
+        int numDocs = 10;
+            )
+        String assertMsg = String.format(
+        mapping = mapping.endObject().endObject().endObject();
+ *
+                String errMsg = String.format(
+    }
+        CompletionSuggestionBuilder withText = SuggestBuilders.completionSuggestion(FIELD).text("sugg");
+        if (completionMappingBuilder.contextMappings != null) {
+                jsonBuilder().startObject()
+    public void testVeryLongInput() throws IOException {
+                            .endObject()
+        String string = "foo bar";
+import static org.opensearch.action.support.WriteRequest.RefreshPolicy.IMMEDIATE;
+            );
+            .get(0)
+                    suggestionList,
+        Suggest suggest = searchResponse.getSuggest();
+                .setSource(
+                .setSource(
+        createIndexAndMapping(completionMappingBuilder);
+    public void testReservedChars() throws IOException {
+                        .startObject(FIELD)
+    public void testSuggestOnlyExplain() throws Exception {
+        client().prepareIndex(INDEX)
+        for (int i = 0; i < charArray.length; i++) {
+                    .startArray("input")
+            .suggest(new SuggestBuilder().addSuggestion("foo", completionSuggestionBuilder))
+        IndicesStatsResponse regexFieldStats = client().admin()
+            .setRefreshPolicy(IMMEDIATE)
+import org.opensearch.search.suggest.completion.CompletionSuggestionBuilder;
+            indexRequestBuilders.add(
+    private final String INDEX = RandomStrings.randomAsciiOfLength(random(), 10).toLowerCase(Locale.ROOT);
+        assertThat(2L, equalTo(client().prepareSearch(INDEX).setSize(0).get().getHits().getTotalHits().value()));
+            .get(0);
+     */
+                .get()
+                client().prepareIndex(INDEX)
+        assertSuggestions(searchResponse, false, "foo");
+            assertThat(option.getHit(), hasScore((id)));
+                client().prepareIndex(INDEX)
+        assertThat(completionStats, notNullValue());
+                .addAggregation(
+            .get();
+        return new String(charArray);
+        org.opensearch.search.suggest.completion.CompletionSuggestionBuilder completionSuggestionBuilder = SuggestBuilders
+    public void testEnabledPreserveSeparators() throws Exception {
+                    .startArray("input")
+                    .startObject(FIELD)
+                        jsonBuilder().startObject()
+            .setId("2")
+        assertSuggestions("f", "Foo Fighters");
+                    .startObject(FIELD)
+        assertSuggestions(searchResponse, "foo", "suggestion10", "suggestion9", "suggestion8", "suggestion7", "suggestion6");
+                        .startObject(FIELD)
+        int numDocs = randomIntBetween(10, 100);
+        }
+        client().prepareIndex(INDEX)
+            )
+                .get()
+        ensureGreen();
+@SuppressCodecs("*") // requires custom completion format
+    public void assertSuggestionsNotInOrder(String suggestString, String... suggestions) {
+                client().prepareIndex(INDEX)
+            .suggest(new SuggestBuilder().addSuggestion("foo", SuggestBuilders.completionSuggestion(FIELD).prefix("Nirv").size(10)))
+            .setSource(
+            expected[i] = "suggestion-" + String.format(Locale.ENGLISH, "%03d", termIds[i]);
+                .setSettings(Settings.builder().put(indexSettings()).put(settings))
+        int numDocs = randomIntBetween(10, 100);
+    }
+                .get();
+                    )
+        LinkedHashMap<String, ContextMapping<?>> contextMappings = null;
+                jsonBuilder().startObject().startObject(FIELD).startArray("input").value("Foo Fighters").endArray().endObject().endObject()
+                        .startObject("properties")
+        assertSuggestions("foo", fuzzyPrefix, outputs);
+                jsonBuilder().startObject()
+        refresh();
+                )
+                return true;
+                    .startObject(MapperService.SINGLE_MAPPING_NAME)
+                        mapping = mapping.field("path", ((CategoryContextMapping) contextMapping.getValue()).getFieldName());
+                    .endObject()
+            .setSource(
+            .setCompletionFields("*")
+        Settings.Builder settingsBuilder = Settings.builder()
+import org.opensearch.index.mapper.MapperParsingException;
+                    jsonBuilder().startObject()
+    public CompletionSuggestSearchIT(Settings settings) {
+        int numDocs = atLeast(100);
+            indexRequestBuilders.add(
+                    .endObject()
+                    .setSource(
+                        .value("sth")
+            )
+            .setId("2")
+                )
+                    .endObject()
+        );
+            case '\u001F':
+        createIndexAndMapping(completionMappingBuilder);
+        completionMappingBuilder.preserveSeparators(false);
+            id--;
+                            .field("weight", i)
+        assertThat(expectFieldInResponseMsg, searchResponse.getSuggest().getSuggestion(name), is(notNullValue()));
+            .setSource(jsonBuilder().startObject().field(FIELD, "Bar Fighters").field(otherField, "WHATEVER2").endObject())
+                    .setSource(
+        boolean suggestionOrderStrict,
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
+        createIndexAndMappingAndSettings(Settings.EMPTY, completionMappingBuilder);
+            .endObject()
+                        jsonBuilder().startObject()
+            )
+            .get();
+                        .endArray()
+            return this;
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+                            .field("weight", i)
+        assertSuggestions(searchResponse, false, "foo", "Nirvana");
+            .get();
+            .setSource(
+        assertSuggestions("foo", prefix, "suggester10", "suggester9", "suggester8", "suggester7", "suggester6");
+        indexRandom(true, false, builders);
+        assertSuggestions("t", "The Prodigy Firestarter");
+    public void testTextAndGlobalText() throws Exception {
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
+            .prepareStats(INDEX)
+        MapperParsingException e = expectThrows(
+        );
+            )
+        }
+import org.opensearch.search.aggregations.AggregationBuilders;
+            indexRequestBuilders.add(
+                    case CATEGORY:
+        CompletionSuggestionBuilder regex = SuggestBuilders.completionSuggestion(FIELD).regex("su[g|s]g").size(size);
+            client().admin()
+                .get()
+    }
+        CompletionMappingBuilder completionMappingBuilder = new CompletionMappingBuilder();
+            )
+        refresh();
+        createIndexAndMappingAndSettings(settingsBuilder.build(), completionMappingBuilder);
+                        jsonBuilder().startObject()
+                            .endObject()
+            this.preserveSeparators = preserveSeparators;
+        XContentBuilder mapping = jsonBuilder().startObject()
+                )
+        client().prepareIndex(INDEX).setId("2").setSource(jsonBuilder().startObject().field("somefield", "somevalue").endObject()).get();
+            .get();
+                jsonBuilder().startObject().startObject(FIELD).startArray("input").value("Nirvana").endArray().endObject().endObject()
+ * You may obtain a copy of the License at
+                return false;
+    }
+                        .startArray("input")
+            )
+            .get();
+        assertSuggestions("b");
+            .get();
+            id--;
+        int numDocs = 10;
+import static org.hamcrest.Matchers.greaterThan;
+                            .field("input", "suggestion" + (numDocs - i))
+            .get();
+                        .startObject(FIELD)
+        assertSuggestions(searchResponse, "foo", "suggestion10", "suggestion9", "suggestion8", "suggestion7", "suggestion6");
+        ForceMergeResponse actionGet = client().admin().indices().prepareForceMerge().setFlush(true).setMaxNumSegments(1).get();
+        for (int i = 1; i <= numDocs; i++) {
+            .suggest(new SuggestBuilder().addSuggestion("foo", prefix))
+                        .endObject()
+                    .startObject(FIELD)
+        CompletionSuggestion.Entry options = completionSuggestion.getEntries().get(0);
+        refresh();
+import static org.hamcrest.Matchers.is;
+        }
+                    suggestions[i],
+            .startObject("test_field")
+            .setSource(
+            );
+            );
+            .get();
+import java.util.Set;
+                    )
+                client().prepareIndex(INDEX)
+                    jsonBuilder().startObject()
+        Suggest.Suggestion<Suggest.Suggestion.Entry<Suggest.Suggestion.Entry.Option>> suggestion = searchResponse.getSuggest()
+                            .startObject(FIELD)
+            for (Map.Entry<String, ContextMapping<?>> contextMapping : completionMappingBuilder.contextMappings.entrySet()) {
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).regex("sugg.*es");
+                            .field("input", "suggestion" + i)
+/*
+        assertSuggestions("foof", "Foof");
+    }
+                    options.get(i).getScore()
+                            .endObject()
+        CompletionSuggestionBuilder completionSuggestionBuilder = SuggestBuilders.completionSuggestion(FIELD)
+            .setId("1")
+                            .endObject()
+                            .endObject()
+                    "foo",
+            .indices()
+        logger.info("Expected suggestions field values {}", Arrays.toString(expected));
+                client().prepareIndex(INDEX)
+                jsonBuilder().startObject()
+        for (Suggest.Suggestion.Entry.Option entry : suggestEntry.getOptions()) {
+            assertThat(option.getHit(), hasId("" + id));
+            .suggest(
+        }
+        int numUnique = randomIntBetween(1, numDocs);
+    public void testSuggestDocumentNoSource() throws Exception {
+import static org.hamcrest.Matchers.contains;
+            indexRequestBuilders.add(
+    public void testThatFuzzySuggesterIsUnicodeAware() throws Exception {
+        refresh();
+            .get();
+        assertSuggestions(searchResponse, false, "foo", "Nirvana");
+            .get();
+                        .field("weight", weight)
+            return this;
+        assertThat(e.getMessage(), containsString("failed to parse"));
+ * specific language governing permissions and limitations
+            .get();
+                client().prepareIndex(INDEX)
+                    .setSource(
+                    .setSource(
+            if (isReservedChar(charArray[i])) {
+                .setSource(
+        assertEquals("v", options.getText().string());
+    public void testThatMultipleInputsAreSupported() throws Exception {
+            .suggest(new SuggestBuilder().addSuggestion("foo", SuggestBuilders.completionSuggestion(otherField).prefix("f")))
+        long otherFieldSizeInBytes = otherFieldStats.getIndex(INDEX).getPrimaries().completion.getFields().get(otherField);
+        client().prepareIndex(INDEX)
+        client().prepareIndex(INDEX)
+                .prepareCreate(INDEX)
+    }
+                        .startObject("properties")
+ */
+                jsonBuilder().startObject().startArray(FIELD).value("The Prodigy Firestarter").value("Firestarter").endArray().endObject()
+        );
+        SearchResponse searchResponse = client().prepareSearch(INDEX)
+        SearchResponse searchResponse = client().prepareSearch(INDEX)
+    }
+    }
+        completionSuggestionBuilder = SuggestBuilders.completionSuggestion(FIELD)
+                    .value("Fu Fighters")
+                .prepareCreate(INDEX)
+        );
+    private static List<String> getNames(Suggest.Suggestion.Entry<Suggest.Suggestion.Entry.Option> suggestEntry) {
+                    .endObject()
+        IndicesStatsResponse singleFieldStats = client().admin()
+        assertSuggestions("fu", "Fu Fighters");
+        createIndexAndMapping(completionMappingBuilder);
+        int numDocs = randomIntBetween(3, 50);
+        client().prepareIndex(INDEX)
+                        .endObject()
+            .suggest(new SuggestBuilder().addSuggestion("foo", prefix))
+                jsonBuilder().startObject()
+                new SuggestBuilder().addSuggestion(
+                    SuggestBuilders.completionSuggestion(FIELD)
+            .setCompletion(true)
+        CompletionSuggestion.Entry options = completionSuggestion.getEntries().get(0);
+        refresh();
+            MapperParsingException.class,
+            .endObject();
+        // Higher weight so it's ranked first:
+                            .endObject()
+            .startObject(FIELD)
+            .field("analyzer", completionMappingBuilder.indexAnalyzer)
+import org.opensearch.plugins.Plugin;
+        assertThat(e.status().getStatus(), is(400));
             );
         }
-        indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg");
-        SearchResponse searchResponse = client().prepareSearch(INDEX)
-            .setExplain(true)
-            .suggest(new SuggestBuilder().addSuggestion("foo", prefix))
+import org.opensearch.test.InternalSettingsPlugin;
             .get();
-        assertSuggestions(searchResponse, "foo", "suggestion10", "suggestion9", "suggestion8", "suggestion7", "suggestion6");
+        // the weight is 1000 divided by string length, so the results are easy to to check
+ * The OpenSearch Contributors require contributions made to
+                new SuggestBuilder().addSuggestion("suggs", SuggestBuilders.completionSuggestion(FIELD + ".suggest").text("f").size(10))
+        client().prepareIndex(INDEX)
+            .suggest(new SuggestBuilder().addSuggestion("foo", noText).setGlobalText("sugg"))
+                .indices()
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
+        assertAcked(prepareCreate(INDEX).setMapping(mapping));
+            .get();
+        assertSuggestions(searchResponse, true, "suggestions", expected);
+    ) {
+        assertThat(option, is(instanceOf(CompletionSuggestion.Entry.Option.class)));
+                )
+        IndicesStatsResponse indicesStatsResponse = client().admin()
+            .get();
+        for (int i = 0; i < numDocs; i++) {
     }
-
-    public static boolean isReservedChar(char c) {
-        switch (c) {
-            case '\u001F':
-            case TokenStreamToAutomaton.HOLE:
-            case 0x0:
-            case ContextSuggestField.CONTEXT_SEPARATOR:
-                return true;
-            default:
-                return false;
+            .setCompletionFields(otherField)
+        ensureGreen(INDEX);
         }
-    }
-
-    private static String replaceReservedChars(String input, char replacement) {
-        char[] charArray = input.toCharArray();
-        for (int i = 0; i < charArray.length; i++) {
-            if (isReservedChar(charArray[i])) {
-                charArray[i] = replacement;
             }
-        }
-        return new String(charArray);
+        );
+                        .endObject()
+        SearchResponse searchResponse = client().prepareSearch(INDEX)
+                    .setSource(
+        indexRandom(true, indexRequestBuilders);
     }
-
-    static class CompletionMappingBuilder {
-        String searchAnalyzer = "simple";
-        String indexAnalyzer = "simple";
-        Boolean preserveSeparators = random().nextBoolean();
-        Boolean preservePositionIncrements = random().nextBoolean();
-        LinkedHashMap<String, ContextMapping<?>> contextMappings = null;
-
-        public CompletionMappingBuilder searchAnalyzer(String searchAnalyzer) {
-            this.searchAnalyzer = searchAnalyzer;
-            return this;
+            ? extends Suggest.Suggestion.Entry<? extends Suggest.Suggestion.Entry.Option>> suggestion : iterableAsArrayList(
+            .suggest(new SuggestBuilder().addSuggestion("foo", SuggestBuilders.completionSuggestion(FIELD).prefix("f")))
+                        .field("output", "foobar")
+                )
+                String errMsg = String.format(Locale.ROOT, "Expected elem %s to be in list %s", expectedSuggestion, suggestionList);
+                        .size(10)
+        assertSuggestions(searchResponse, false, "foo", "ööööö");
+                        .prefix("Nriv", FuzzyOptions.builder().setTranspositions(false).build())
+        assertThat(e.toString(), containsString("2.5"));
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg");
+            weights[id] = Math.max(weight, weights[id]);
+        assertAcked(
+                client().prepareIndex(INDEX)
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+                    .startObject(MapperService.SINGLE_MAPPING_NAME)
+                        .startObject(FIELD)
+    }
+    }
+                .setMapping(
+                        .endObject()
+            .get();
+        searchResponse = client().prepareSearch(INDEX)
+        CompletionSuggestion.Entry options = completionSuggestion.getEntries().get(0);
+                    "foo",
+            () -> client().prepareSearch(INDEX).addSort(new FieldSortBuilder(FIELD)).get()
+            () -> client().prepareIndex(INDEX)
+            }
+            .indices()
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg").size(numDocs);
+            .setCompletion(true)
+            .setRefreshPolicy(IMMEDIATE)
+        client().prepareIndex(INDEX)
+    public void testPrefix() throws Exception {
+    public void assertSuggestions(String suggestion, String... suggestions) {
+            id--;
+    public static Collection<Object[]> parameters() {
+                )
+                new SuggestBuilder().addSuggestion(
+        CompletionSuggestionBuilder suggestionBuilder = SuggestBuilders.completionSuggestion(FIELD).text(suggestion).size(10);
+        client().prepareIndex(INDEX)
         }
-
-        public CompletionMappingBuilder indexAnalyzer(String indexAnalyzer) {
-            this.indexAnalyzer = indexAnalyzer;
-            return this;
+        SearchResponse searchResponse = client().prepareSearch(INDEX)
+                            .startObject(FIELD)
+            .endObject()
+        createIndexAndMapping(mapping);
+            mapping = mapping.endArray();
+        createIndexAndMapping(completionMappingBuilder);
+                    .field("weight", 20)
+    @ParametersFactory
+        assertSuggestions(afterReindexingResponse, "suggs", "Foo Fighters");
+                            .endObject()
+            );
+import java.util.Locale;
+            .indices()
+                        .endObject()
         }
-
-        public CompletionMappingBuilder preserveSeparators(Boolean preserveSeparators) {
-            this.preserveSeparators = preserveSeparators;
-            return this;
+            .setFetchSource("a", "b")
+            .suggest(new SuggestBuilder().addSuggestion("foo", completionSuggestionBuilder))
         }
-
-        public CompletionMappingBuilder preservePositionIncrements(Boolean preservePositionIncrements) {
+                            .startObject(FIELD)
+        createIndexAndMapping(completionMappingBuilder);
+            .get();
+import org.opensearch.action.index.IndexRequestBuilder;
+        createIndexAndMapping(mapping);
+            )
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SHARDS;
+                    .startObject(otherField)
+                            .endObject()
+    public void testThatUpgradeToMultiFieldsWorks() throws Exception {
+                        .value(string)
             this.preservePositionIncrements = preservePositionIncrements;
-            return this;
-        }
-
-        public CompletionMappingBuilder context(LinkedHashMap<String, ContextMapping<?>> contextMappings) {
-            this.contextMappings = contextMappings;
-            return this;
-        }
+                    SuggestBuilders.completionSuggestion(FIELD).prefix("Nriv", Fuzziness.ONE).size(10)
+        createIndexAndMapping(completionMappingBuilder);
+                .get()
+        completionMappingBuilder.preserveSeparators(true).preservePositionIncrements(true);
+        String expectFieldInResponseMsg = String.format(
+            .suggest(new SuggestBuilder().addSuggestion("suggestions", completionSuggestionBuilder))
+                        .endObject()
+            .suggest(new SuggestBuilder().addSuggestion("foo", prefix))
+                        .startArray("input")
+    public void testEarlyTermination() throws Exception {
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
+            .suggest(
+            .get();
+                        .value("testing")
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
     }
-}
+        builders.add(client().prepareIndex(INDEX).setSource(FIELD, "papaya"));
+                    "foo",
+import org.apache.lucene.analysis.TokenStreamToAutomaton;
+            suggestionList,
+                        .startObject(FIELD)
+        int id = numDocs;
+        }
+                        .endObject()
+        client().prepareIndex(INDEX)
+                        .startArray("input")
+            .get();
+            MapperParsingException.class,
+        for (CompletionSuggestion.Entry.Option option : options) {
+            .prepareStats(INDEX)
+            options.size()
+        assertSuggestions("feed the ", "Feed the trolls", "Feed trolls");
+            )
+    @Override
+        assertSuggestions("foo", prefix, "sugxgestion10", "sugxgestion9", "sugxgestion8", "sugxgestion7", "sugxgestion6");
+                        jsonBuilder().startObject()
+ * Modifications Copyright OpenSearch Contributors. See
+        client().prepareSearch(INDEX)
+import java.util.LinkedHashMap;
+            assertNotNull(option.getHit().getSourceAsMap());
+                            .endObject()
+        long regexSizeInBytes = fields.get(FIELD) + fields.get(otherField);
+                )
+            "Expected options %s length to be %s, but was %s",
+                )
+                    .setId("" + i)
+            client().admin()
+            assertThat(option.getText().toString(), equalTo("suggestion" + id));
+import static org.hamcrest.Matchers.hasItem;
+                    SuggestBuilders.completionSuggestion(FIELD)
+ * not use this file except in compliance with the License.
+        createIndexAndMapping(mapping);
+    private static String replaceReservedChars(String input, char replacement) {
+        }
+        completionMappingBuilder.indexAnalyzer("simple");
+                    .startArray("input")
+        createIndexAndMapping(completionMappingBuilder);
+            "Expected suggestion named %s in response, got %s",
+                        .prefix("Nirw", FuzzyOptions.builder().setFuzzyPrefixLength(4).build())
+    }
+                        .endArray()
+            .field("type", "completion")
+                    SuggestBuilders.completionSuggestion(FIELD).prefix("Norw", Fuzziness.TWO).size(10)
+        assertSuggestions("b", "The Beatles");
+                    .setId("" + i)
+ * ownership. Elasticsearch licenses this file to you under
+            case TokenStreamToAutomaton.HOLE:
+        );
+    public void testRegex() throws Exception {
+import org.opensearch.index.mapper.MapperService;
+                    .endObject()
+                        break;
+            .suggest(new SuggestBuilder().addSuggestion(suggestionName, suggestBuilder))
+        assertAcked(
+        client().prepareIndex(INDEX)
+    }
+            .setSource(jsonBuilder().startObject().field(FIELD, "Foo Fighters").endObject())
+        }
+                    .endObject()
+            .indices()
+        }
+        );
+            .setId("1")
+            .indices()
+            MapperParsingException.class,
+            indexRequestBuilders.add(
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+        SearchResponse searchResponse = client().prepareSearch(INDEX)
+        return Arrays.asList(InternalSettingsPlugin.class);
+                        mapping = mapping.field("path", ((GeoContextMapping) contextMapping.getValue()).getFieldName())
+import java.io.IOException;
+                .prepareCreate(INDEX)
+                        .value("sth")
+        searchResponse = client().prepareSearch(INDEX)
+                    )
+        indexRandom(true, indexRequestBuilders);
+                    "Expected elem %s in list %s to be [%s] score: %s",
+        SearchResponse searchResponse = client().prepareSearch(INDEX)
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
+        assertSuggestions(searchResponse, false, "foo", "ööööö");
+            .get();
+import static org.hamcrest.Matchers.instanceOf;
+                .get()
+                .setMapping(
+                        .size(10)
+import java.util.Comparator;
+            );
+                searchResponse.getSuggest()
+        assertThat(putMappingResponse.isAcknowledged(), is(true));
+                    .field("analyzer", "simple")
+        Boolean preservePositionIncrements = random().nextBoolean();
+                        .startObject("properties")
+            );
+                .indices()
+                        .size(10)
+            .suggest(new SuggestBuilder().addSuggestion("foo", completionSuggestionBuilder))
+    /**
+                jsonBuilder().startObject()
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
+        assertThat(singleFieldSizeInBytes + otherFieldSizeInBytes, is(totalSizeInBytes));
+                        .endObject()
+                    .startObject(FIELD)
+        assertSuggestions("feed the t");
+                        jsonBuilder().startObject()
+        createIndexAndMapping(mapping);
+    }
+        CompletionSuggestion completionSuggestion = searchResponse.getSuggest().getSuggestion("foo");
+        public CompletionMappingBuilder indexAnalyzer(String indexAnalyzer) {
+        }
+        assertThat(e.toString(), containsString(weight));
+        IndicesStatsResponse otherFieldStats = client().admin()
+            () -> client().prepareIndex(INDEX)
+                    .endObject()
+        );
+    public void testSuggestWithFieldAlias() throws Exception {
+        for (CompletionSuggestion.Entry.Option option : options) {
+            .suggest(new SuggestBuilder().addSuggestion("foo", prefix))
+import org.opensearch.search.suggest.completion.FuzzyOptions;
+                    .setId("" + i)
+import org.opensearch.core.xcontent.XContentBuilder;
+        for (CompletionSuggestion.Entry.Option option : options) {
+                    SuggestBuilders.completionSuggestion(FIELD)
+                        .startObject(FIELD)
+    public void testTieBreak() throws Exception {
+    }
+                    .startObject(FIELD)
+import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
+            return this;
+                    "foo",
+                    .endArray()
+        // load the fst index into ram
+                        .startObject(FIELD)
+        List<String> similarNames = Arrays.asList("the", "The Prodigy", "The Verve", "The the");
+        String longString = replaceReservedChars(randomRealisticUnicodeOfLength(randomIntBetween(5000, 10000)), (char) 0x01);
+        } else {
+    }
+        createIndexAndMapping(completionMappingBuilder);
+                            .startObject(FIELD)
+        assertSuggestions("foo", "Foo Fighters");
+            .get();
+        SearchResponse searchResponse,
+        return Arrays.asList(
+                            .field("b", "exclude")
+        assertThat(assertMsg, options.size(), is(suggestions.length));
+            outputs[i] = "suggestion" + (numDocs - i);
+                        .size(10)
+            .setId("1")
+    public void testThatShortSyntaxIsWorking() throws Exception {
+                assertThat(errMsg, options.get(i).getText().toString(), is(suggestions[i]));
+                    .endObject()
+                        .value(similarName)
+                    )
+            );
+        assertSuggestions(suggestionName, suggestionBuilder, suggestions);
+                            .startObject(FIELD)
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+        completionMappingBuilder.searchAnalyzer("stoptest");
+                .indices()
+                jsonBuilder().startObject()
+                    )
+            indexRequestBuilders.add(
+import java.util.Arrays;
+ */
+                new SuggestBuilder().addSuggestion(
+            for (ShardSegments shardSegments : shards) {
+                new SuggestBuilder().addSuggestion(
+                            .endObject()
+            .setSource(jsonBuilder().startObject().field(FIELD, "Foo Fighters").endObject())
+            .setIndices(INDEX)
+                jsonBuilder().startObject().startObject(FIELD).startArray("input").value("The Beatles").endArray().endObject().endObject()
+                    .endObject()
+            .setSource(
+                    .field("type", "completion")
+            .prepareCreate(INDEX)
+        SearchResponse searchResponse = client().prepareSearch(INDEX)
+                        .endArray()
+        switch (c) {
+            for (String expectedSuggestion : suggestions) {
+            .suggest(
+    /**
+import org.opensearch.common.settings.Settings;
+        client().prepareIndex(INDEX)
+            .suggest(
+        assertSuggestions("foof", "Foof", "Foo Fighters");
+import org.opensearch.common.FieldMemoryStats;
+                .get()
+ * KIND, either express or implied.  See the License for the
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
+                new SuggestBuilder().addSuggestion(
+        // stop word complete, gets ignored on query time, makes it "feed" only
+        CompletionStats completionStats = indicesStatsResponse.getIndex(INDEX).getPrimaries().completion;
+    public void testThatIndexingInvalidFieldsInCompletionFieldResultsInException() throws Exception {
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
+            .get();
+    }
+        completionMappingBuilder.searchAnalyzer("classic").indexAnalyzer("classic").preservePositionIncrements(false);
+                jsonBuilder().startObject().startObject(FIELD).startArray("input").value("Nirvana").endArray().endObject().endObject()
+            .setSource(
+        assertSuggestions(searchResponse, false, "foo");
+            .field("path", FIELD)
+                    .endArray()
+            .setId("1")
+                    .startArray("input")
+        SearchResponse searchResponse = client().prepareSearch(INDEX)
+            assertThat(sourceFields, contains("a"));
+            .field("type", "completion")
+     * Suggestions run on an empty index should return a suggest element as part of the response. See #42473 for details.
+                    .value("Foo Fighters")
+        // removing unicode awareness leads to no result
+                    jsonBuilder().startObject()
+                .prepareCreate(INDEX)
+                            .startObject(FIELD)
+            indexRequestBuilders.add(
+            indexRequestBuilders.add(
+        }
+            assertThat(option.getHit(), hasId("" + id));
+        refresh();
+                        .startObject(FIELD)
+        // update the first one and then merge.. the target segment will have no value in FIELD
+                )
+        createIndexAndMapping(completionMappingBuilder);
+            .suggest(
+import org.opensearch.action.admin.indices.stats.IndicesStatsResponse;
+        createIndexAndMapping(mapping);
+    }
+            .setIndices(INDEX)
+            .put("index.analysis.filter.suggest_stop_filter.remove_trailing", false);
+        // can cause stack overflow without the default max_input_length
+     */
+        // edit distance 2
+import java.util.Map;
+    public void assertSuggestions(String suggestionName, SuggestionBuilder<?> suggestBuilder, String... suggestions) {
+                        break;
+            .get();
+                jsonBuilder().startObject()
+            .setId("1")
+    public void testThatWeightCanBeAString() throws Exception {
+            .startObject(FIELD)
+            .get();
+            )
+            .startObject()
+                            .startObject(FIELD)
+        }
+                    .field("analyzer", "simple")
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
+            )
+            String[] topEntries = Arrays.copyOfRange(entries, 0, i);
+                        .endObject()
+    }
+                    .setId("" + i)
+        client().prepareIndex(INDEX)
+            .suggest(new SuggestBuilder().addSuggestion("foo", withText).setGlobalText("bogus"))
+            .setSource(jsonBuilder().startObject().startObject(FIELD).startArray("input").value("ööööö").endArray().endObject().endObject())
+                new SuggestBuilder().addSuggestion(
+        );
+            .setId("1")
+            .setSource(
+                charArray[i] = replacement;
+        AcknowledgedResponse putMappingResponse = client().admin()
+        List<String> suggestionList = getNames(suggestion.getEntries().get(0));
+        long singleFieldSizeInBytes = singleFieldStats.getIndex(INDEX).getPrimaries().completion.getFields().get(FIELD);
+            .size(10);
+                            .endObject()
+        SearchResponse searchResponse = client().prepareSearch(INDEX)
+     * test that suggestion works if prefix is either provided via {@link CompletionSuggestionBuilder#text(String)} or
+                mapping = mapping.startObject()
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAllSuccessful;
+        client().prepareIndex(INDEX)
+        assertSuggestions(searchResponse, false, "foo", "Nirvana");
+                .setId("1")
+                .setId("1")
+                    .value("Feed the trolls")
+            .suggest(
+                .setMapping(mapping)
+                .setMapping(
+            mapping = mapping.startArray("contexts");
+    }
+            )
+            return this;
+                client().prepareIndex(INDEX)
+                        .startArray("input")
+        }
+            .setId("1")
+                .setId("1")
+        for (int i = 1; i <= numDocs; i++) {
+            .suggest(new SuggestBuilder().addSuggestion("testSuggestions", new CompletionSuggestionBuilder(FIELD).text("test").size(10)))
+        assertSuggestions("feed the", "Feed the trolls");
+    }
+                    jsonBuilder().startObject()
+        assertNotNull(suggest);
+                    jsonBuilder().startObject()
+    public void testThatInputCanBeAStringInsteadOfAnArray() throws Exception {
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() }
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
+        assertSuggestions(searchResponse, "foo", "suggestion10", "suggestion9", "suggestion8", "suggestion7", "suggestion6");
+                    .startObject(FIELD)
+    static class CompletionMappingBuilder {
+                            .endObject()
+    }
+        int numDocs = 10;
+        MapperParsingException e = expectThrows(
+import org.opensearch.common.xcontent.XContentFactory;
+                client().prepareIndex(INDEX)
+            .setSource(jsonBuilder().startObject().startObject(FIELD).field("input", "Foo Fighters").endObject().endObject())
+    public void testSuggestEmptyIndex() throws IOException, InterruptedException {
+                        .endObject()
+                            .field("weight", i)
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.hasId;
+            .get();
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.hasScore;
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+                            .field("weight", i)
+        indexRandom(true, indexRequestBuilders);
+            .setSource(
+        // can cause stack overflow without the default max_input_length
+        CompletionSuggestionBuilder suggestionBuilder = SuggestBuilders.completionSuggestion("alias").text("app");
+        indexRandom(true, indexRequestBuilders);
+                    .setSource(
+    public void testPrunedSegments() throws IOException {
+                jsonBuilder().startObject().startObject(FIELD).startArray("input").value("Nirvana").endArray().endObject().endObject()
+                        jsonBuilder().startObject()
+    public void testThatWeightMustBeAnInteger() throws Exception {
+        createIndexAndMapping(mapping);
+                        .endObject()
+                    )
+        client().prepareIndex(INDEX)
+                        .startObject(FIELD)
+public class CompletionSuggestSearchIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
+            .endObject()
+        createIndexAndMapping(mapping);
+                            .field("weight", i)
+ * compatible open source license.
+        client().prepareIndex(INDEX)
+                    "foo",
+        client().prepareIndex(INDEX)
+        String name,
+        CompletionSuggestionBuilder noText = SuggestBuilders.completionSuggestion(FIELD);
+                jsonBuilder().startObject()
+            .get();
+        for (int i = 1; i <= numDocs; i++) {
+import org.opensearch.search.aggregations.Aggregator.SubAggCollectionMode;
+        // suggestion with a character, which needs unicode awareness
+                    .value("testing")
+import static org.hamcrest.Matchers.equalTo;
+        CompletionSuggestion completionSuggestion = searchResponse.getSuggest().getSuggestion("foo");
+                            .field("weight", i)
+import java.util.List;
+            .setId("1")
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+            () -> client().prepareSearch(INDEX)
+            names.add(entry.getText().string());
+                    Locale.ROOT,
+        assertThat(totalSizeInBytes, is(greaterThan(0L)));
+        List<Suggest.Suggestion.Entry.Option> options = suggestion.getEntries().get(0).getOptions();
+            .setFetchSource("a", "b")
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+    }
+                    .endObject()
+            .setId("1")
+        }
+        client().prepareIndex(INDEX)
+            )
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sug").size(size);
+        assertSuggestions("fee", "Feed the trolls", "Feed trolls");
+                    jsonBuilder().startObject()
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },
+            .field("type", "keyword")
+    // see #3555
+        assertThat(regexSizeInBytes, is(totalSizeInBytes));
+        } catch (MapperParsingException e) {
+        createIndexAndMapping(mapping);
+    }
+                    .setSource(
+        String suggestionName = RandomStrings.randomAsciiOfLength(random(), 10);
+                        .field("weight", 2.5)
+            int weight = randomIntBetween(0, 100);
+                    jsonBuilder().startObject()
+                )
+import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
+                .setId(similarName)
+            .startObject("properties")
+                            .startObject(FIELD)
+            .setSource(jsonBuilder().startObject().startObject(FIELD).startArray("input").value("Foof").endArray().endObject().endObject())
+            Settings.builder().put(SETTING_NUMBER_OF_SHARDS, 1).put(SETTING_NUMBER_OF_REPLICAS, 0).build(),
+            .field("preserve_separators", completionMappingBuilder.preserveSeparators)
+            .prepareStats(INDEX)
+            .put("index.analysis.analyzer.stoptest.tokenizer", "standard")
+            .skipDuplicates(true)
+        refresh();
+            .get();
+                            .endObject()
+            .setSource(
+        String[] entries = new String[numDocs];
+        // analyzer which removes stopwords... so may not be the simple one
+                            .field("weight", i)
+            .completionSuggestion(FIELD)
+                    .field("name", contextMapping.getValue().name())
+            .get();
+                            .field("input", "suggestion" + i)
+                    .setSource(
+            .setSource(
+        assertSuggestions(searchResponse, suggestionName, suggestions);
+        SearchResponse searchResponse = client().prepareSearch(INDEX).suggest(new SuggestBuilder().addSuggestion("foo", prefix)).get();
+import org.opensearch.action.search.SearchResponse;
+            .setSource(
+        SearchResponse searchResponse = client().prepareSearch(INDEX)
+        }
+            )
+    }
+    public void testSkipDuplicates() throws Exception {
+            .endObject()
+        final XContentBuilder mapping = jsonBuilder().startObject()
+            .get();
+        assertThat((long) prefixOption.getScore(), equalTo(10L));
+            this.indexAnalyzer = indexAnalyzer;
+            assertThat(option.getHit(), hasScore((id)));
+        }
+                            .endObject()
+            SearchPhaseExecutionException.class,
+        String searchAnalyzer = "simple";
+        SearchPhaseExecutionException e = expectThrows(
+                            .field("weight", weight)
+ * this file be licensed under the Apache-2.0 license or a
+        logger.info("Suggestion duplicate parameters: numDocs {} numUnique {}", numDocs, numUnique);
+    }
+                            .endObject()
+        assertEquals(0, options.options.size());
+        try {
+            )
+    }
+package org.opensearch.search.suggest;
+        client().prepareSearch(INDEX)
+                    .setId("" + i)
+        createIndexAndMapping(completionMappingBuilder);
+                            .field("a", "include")
+        createIndexAndMapping(completionMappingBuilder);
+                        .endObject()
+            .getOptions()
+                            .endObject()
+        CompletionSuggestion completionSuggestion = searchResponse.getSuggest().getSuggestion("foo");
+                )
+            );
+            .get();
+import org.opensearch.action.admin.indices.segments.ShardSegments;
+        }
+                    SuggestBuilders.completionSuggestion(FIELD)
+                    .startObject("properties")
+        // regexes
+        }
+import static org.opensearch.action.support.WriteRequest.RefreshPolicy.WAIT_UNTIL;
+                )
+            termIds[id] = id;
+            return this;
+        completionSuggestionBuilder = SuggestBuilders.completionSuggestion(FIELD)
+                        .field("type", "completion")
+                    )
+            .setSource(
+                        jsonBuilder().startObject().startObject(FIELD).field("input", value).field("weight", 10).endObject().endObject()
+                jsonBuilder().startObject().startObject(FIELD).startArray("input").value(longString).endArray().endObject().endObject()
+                new SuggestBuilder().addSuggestion(suggestionName, SuggestBuilders.completionSuggestion(FIELD).text(suggestString).size(10))
+                    .endObject()
+                    .startArray("input")
+    public void testThatSortingOnCompletionFieldReturnsUsefulException() throws Exception {
+        assertSuggestions(searchResponse, false, "foo");
+                jsonBuilder().startObject().startObject(FIELD).startArray("input").value("The Beatles").endArray().endObject().endObject()
+    }
+                        .prefix("Nirvo", FuzzyOptions.builder().setFuzzyPrefixLength(4).build())
+        CompletionSuggestion completionSuggestion = suggest.getSuggestion("foo");
+            .get();
+            name,
+            String value = "a" + randomAlphaOfLengthBetween(1, 10);
+    public void testThatWeightAsStringMustBeInt() throws Exception {
+ *
+    }
+            )
+            .setId("1")
+                            .field("input", "suggestion" + i)
+import org.opensearch.search.sort.FieldSortBuilder;
+        logger.info("Expected terms id ordered {}", Arrays.toString(termIds));
+                    "foo",
+                    .setRefreshPolicy(WAIT_UNTIL)
+        assertThat(e.toString(), containsString("Fielddata is not supported on field [" + FIELD + "] of type [completion]"));
+                    .setId("" + i)
+                        .endObject()
+    }
+import org.opensearch.search.suggest.completion.context.GeoContextMapping;
+            .startObject("properties")
+        assertSuggestions("f", "Firestarter");
+            .get();
+        String... suggestions
+        createIndexAndMapping(mapping);
+                    .endArray()
+        }
+            )
+    }
+        );
+                            .endObject()
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
+        assertAcked(prepareCreate(INDEX).setMapping(mapping));
+        SearchResponse searchResponse = client().prepareSearch(INDEX)
+                    .startArray("input")
+                            .endObject()
+        indexRandom(true, indexRequestBuilders);
+                    SuggestBuilders.completionSuggestion(FIELD)
+            this.searchAnalyzer = searchAnalyzer;
+            .get();
+            .get();
+/*
+        CompletionSuggestion.Entry options = completionSuggestion.getEntries().get(0);
+        createIndexAndMapping(mapping);
+    public void testMultiDocSuggestions() throws Exception {
+                    "foo",
+            ShardSegments[] shards = seg.getShards();
+        for (int i = 0; i < numDocs; i++) {
+        assertSuggestions("foo", prefix, "sugg10estion", "sugg9estion", "sugg8estion", "sugg7estion", "sugg6estion");
+        return names;
+        searchResponse = client().prepareSearch(INDEX)
+            )) {
+                        .endObject()
+        if (suggestionOrderStrict) {
+    }
+            indexRequestBuilders.add(
+/*
+            assertThat(sourceFields, not(contains("b")));
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg").size(numDocs);
+    public void testThatDisablingPositionIncrementsWorkForStopwords() throws Exception {
+                    .endObject()
+            .get();
+            .get();
+                    i,
+        assertAllSuccessful(searchResponse);
+                            .endObject()
+ * GitHub history for details.
+                )
+        searchResponse = client().prepareSearch(INDEX)
+     * {@link SuggestBuilder#setGlobalText(String)}
+                    .setId("" + i)
+        }
+        public CompletionMappingBuilder context(LinkedHashMap<String, ContextMapping<?>> contextMappings) {
+                    )
+                    .setId("" + i)
+    private final CompletionMappingBuilder completionMappingBuilder = new CompletionMappingBuilder();
+    }
+        refresh();
+    }
+        );
+            .get();
+            .get();
+                        jsonBuilder().startObject()
+        assertSuggestions("foo", prefix, outputs);
+                switch (contextMapping.getValue().type()) {
+        refresh();
+    }
+            .setId("1")
+                .indices()
+            .startObject(FIELD)
+                    .setSource(
+                new SuggestBuilder().addSuggestion(
+        createIndexAndMapping(completionMappingBuilder);
+            assertThat(option.getText().toString(), equalTo("suggestion" + id));
+ * this work for additional information regarding copyright
+            .startObject("properties")
+            .endObject()
+        assertSuggestions(searchResponse, false, "foo", "Nirvana");
+                        jsonBuilder().startObject()
+        client().prepareIndex(INDEX)
+        assertSuggestions(searchResponse, "testSuggestions", "testing");
+            for (int i = 0; i < suggestions.length; i++) {
+        }
+            MapperParsingException.class,
+        indexRandom(true, indexRequestBuilders);
+ * SPDX-License-Identifier: Apache-2.0
+        createIndexAndMapping(completionMappingBuilder);
+            );
+            .get();
+        String string = "foo" + (char) 0x00 + "bar";
+            suggestionNames
+            .setSource(
+    public static boolean isReservedChar(char c) {
+        for (int i = 0; i < termIds.length; i++) {
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg");
+            .size(numUnique);
+            .setSource(
+                .get()
+            assertNotNull(option.getHit().getSourceAsMap());
+            case 0x0:
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            .setId("1")
+        assertSuggestions(searchResponse, false, "foo", "Nirvana");
+        createIndexAndMapping(mapping);
+                jsonBuilder().startObject().startObject(FIELD).startArray("input").value("Nirvana").endArray().endObject().endObject()
+        createIndexAndMappingAndSettings(
+                    .field("type", "text")
+    }
+ * license agreements. See the NOTICE file distributed with
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
+            )
+    public void testSuggestDocument() throws Exception {
+        refresh();
+    }
+        refresh();
+            .field("type", "text")
+    public void testThatFuzzySuggesterSupportsTranspositions() throws Exception {
+            .setId("1")
+        indexRandom(true, indexRequestBuilders);
+            indexRequestBuilders.add(
+            assertNull(option.getHit().getSourceAsMap());
+                    .value("Foof")
+            .setIndices(INDEX)
+        assertAllSuccessful(actionGet);
+    }
+    public void testThatWeightsAreWorking() throws Exception {
+            .setRefreshPolicy(IMMEDIATE)
+            String suggestion = "suggestion-" + String.format(Locale.ENGLISH, "%03d", id);
+                    .setId("" + i)
+        // edit distance 1
+    }
+                        .endObject()
+                .get()
+        for (int i = 1; i <= numDocs; i++) {
+        SearchResponse searchResponse = client().prepareSearch(INDEX)
+                    "foo",
+    public void testThatFuzzySuggesterSupportsNonPrefixLength() throws Exception {
+            default:
+import org.opensearch.action.admin.indices.segments.IndexShardSegments;
+            indexRequestBuilders.add(
+import org.apache.lucene.tests.util.LuceneTestCase.SuppressCodecs;
+            .get();
+            )
+            )
+        assertEquals(0, options.getOffset());
+        }
+        super(settings);
+                    )
+            );
+        logger.info("Search Response with Suggestions {}", searchResponse);
+    }
+                    .setId("" + i)
+    private static void assertSuggestions(
+        SearchResponse afterReindexingResponse = client().prepareSearch(INDEX)
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+            Locale.ROOT,
+        Boolean preserveSeparators = random().nextBoolean();
+        String indexAnalyzer = "simple";
+                        .value("Nirvana")
+        int numDocs = 10;
+            .prepareStats(INDEX)
+                        .size(10)
+                    .endArray()
+        }
+        SearchResponse searchResponse = client().prepareSearch(INDEX)
+                mapping = mapping.endObject();
+                )
+                    .endObject()
+ * under the License.
+        CompletionMappingBuilder completionMappingBuilder = new CompletionMappingBuilder();
+                    .endObject()
+        createIndexAndMapping(completionMappingBuilder);
+                            .startObject(FIELD)
+        indexRandom(true, indexRequestBuilders);
+            Set<String> sourceFields = option.getHit().getSourceAsMap().keySet();
+            .suggest(
+            .get();
+                        .field("weight", "thisIsNotValid")
+            .suggest(
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.notNullValue;
+    // see #5930
+            .get();
+            .get();
+        for (IndexShardSegments seg : client().admin().indices().prepareSegments().get().getIndices().get(INDEX)) {
+    public void testThatFuzzySuggesterSupportsMinPrefixLength() throws Exception {
+        for (int i = 0; i < size; i++) {
+            }
+                        jsonBuilder().startObject()
+        client().prepareIndex(INDEX)
+                            .startObject(FIELD)

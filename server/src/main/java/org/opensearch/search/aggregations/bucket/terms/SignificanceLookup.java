@@ -1,228 +1,205 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.terms;
-
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.PostingsEnum;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermsEnum;
-import org.apache.lucene.search.BooleanClause.Occur;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.lucene.index.FilterableTermsEnum;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.BytesRefHash;
-import org.opensearch.common.util.LongArray;
-import org.opensearch.common.util.LongHash;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.CardinalityUpperBound;
-import org.opensearch.search.aggregations.bucket.terms.heuristic.SignificanceHeuristic;
-
-import java.io.IOException;
-
-/**
- * Looks up values used for {@link SignificanceHeuristic}s.
- *
- * @opensearch.internal
- */
-class SignificanceLookup {
-    /**
-     * Lookup frequencies for {@link BytesRef} terms.
-     */
-    interface BackgroundFrequencyForBytes extends Releasable {
-        long freq(BytesRef term) throws IOException;
-    }
-
-    /**
-     * Lookup frequencies for {@code long} terms.
-     */
-    interface BackgroundFrequencyForLong extends Releasable {
-        long freq(long term) throws IOException;
-    }
-
-    private final QueryShardContext context;
-    private final MappedFieldType fieldType;
-    private final DocValueFormat format;
-    private final Query backgroundFilter;
-    private final int supersetNumDocs;
-    private TermsEnum termsEnum;
-
-    SignificanceLookup(QueryShardContext context, MappedFieldType fieldType, DocValueFormat format, QueryBuilder backgroundFilter)
-        throws IOException {
-        this.context = context;
-        this.fieldType = fieldType;
-        this.format = format;
-        this.backgroundFilter = backgroundFilter == null ? null : backgroundFilter.toQuery(context);
-        /*
-         * We need to use a superset size that includes deleted docs or we
-         * could end up blowing up with bad statistics that cause us to blow
-         * up later on.
-         */
-        IndexSearcher searcher = context.searcher();
-        supersetNumDocs = backgroundFilter == null ? searcher.getIndexReader().maxDoc() : searcher.count(this.backgroundFilter);
-    }
-
-    /**
-     * Get the number of docs in the superset.
-     */
-    long supersetSize() {
-        return supersetNumDocs;
-    }
-
-    /**
-     * Get the background frequency of a {@link BytesRef} term.
-     */
-    BackgroundFrequencyForBytes bytesLookup(BigArrays bigArrays, CardinalityUpperBound cardinality) {
-        if (cardinality == CardinalityUpperBound.ONE) {
-            return new BackgroundFrequencyForBytes() {
-                @Override
-                public long freq(BytesRef term) throws IOException {
-                    return getBackgroundFrequency(term);
-                }
-
-                @Override
-                public void close() {}
-            };
-        }
-        return new BackgroundFrequencyForBytes() {
-            private final BytesRefHash termToPosition = new BytesRefHash(bigArrays);
-            private LongArray positionToFreq = bigArrays.newLongArray(1, false);
-
-            @Override
-            public long freq(BytesRef term) throws IOException {
-                long position = termToPosition.add(term);
-                if (position < 0) {
-                    return positionToFreq.get(-1 - position);
-                }
-                long freq = getBackgroundFrequency(term);
-                positionToFreq = bigArrays.grow(positionToFreq, position + 1);
-                positionToFreq.set(position, freq);
-                return freq;
-            }
-
-            @Override
-            public void close() {
-                Releasables.close(termToPosition, positionToFreq);
-            }
-        };
-    }
-
-    /**
-     * Get the background frequency of a {@link BytesRef} term.
-     */
-    private long getBackgroundFrequency(BytesRef term) throws IOException {
-        return getBackgroundFrequency(fieldType.termQuery(format.format(term).toString(), context));
-    }
-
-    /**
-     * Get the background frequency of a {@code long} term.
-     */
-    BackgroundFrequencyForLong longLookup(BigArrays bigArrays, CardinalityUpperBound cardinality) {
-        if (cardinality == CardinalityUpperBound.ONE) {
-            return new BackgroundFrequencyForLong() {
-                @Override
-                public long freq(long term) throws IOException {
-                    return getBackgroundFrequency(term);
-                }
-
-                @Override
-                public void close() {}
-            };
-        }
-        return new BackgroundFrequencyForLong() {
-            private final LongHash termToPosition = new LongHash(1, bigArrays);
-            private LongArray positionToFreq = bigArrays.newLongArray(1, false);
-
-            @Override
-            public long freq(long term) throws IOException {
-                long position = termToPosition.add(term);
-                if (position < 0) {
-                    return positionToFreq.get(-1 - position);
-                }
-                long freq = getBackgroundFrequency(term);
-                positionToFreq = bigArrays.grow(positionToFreq, position + 1);
-                positionToFreq.set(position, freq);
-                return freq;
-            }
-
-            @Override
-            public void close() {
-                Releasables.close(termToPosition, positionToFreq);
-            }
-        };
-    }
-
-    /**
-     * Get the background frequency of a {@code long} term.
-     */
-    private long getBackgroundFrequency(long term) throws IOException {
-        return getBackgroundFrequency(fieldType.termQuery(format.format(term).toString(), context));
-    }
-
-    private long getBackgroundFrequency(Query query) throws IOException {
-        if (query instanceof TermQuery) {
-            // for types that use the inverted index, we prefer using a terms
-            // enum that will do a better job at reusing index inputs
-            Term term = ((TermQuery) query).getTerm();
-            TermsEnum termsEnum = getTermsEnum(term.field());
-            if (termsEnum.seekExact(term.bytes())) {
                 return termsEnum.docFreq();
-            }
-            return 0;
+                long freq = getBackgroundFrequency(term);
+        long freq(BytesRef term) throws IOException;
+                return freq;
+ * GitHub history for details.
+import org.apache.lucene.search.TermQuery;
         }
+                positionToFreq.set(position, freq);
+                }
+            return termsEnum;
+ * the Apache License, Version 2.0 (the "License"); you may
+        this.backgroundFilter = backgroundFilter == null ? null : backgroundFilter.toQuery(context);
+import org.opensearch.index.mapper.MappedFieldType;
+ * license agreements. See the NOTICE file distributed with
+                }
+            private LongArray positionToFreq = bigArrays.newLongArray(1, false);
+ * The OpenSearch Contributors require contributions made to
+         * We need to use a superset size that includes deleted docs or we
+    /**
+    private final QueryShardContext context;
+import org.apache.lucene.search.BooleanClause.Occur;
+        if (query instanceof TermQuery) {
+    private TermsEnum termsEnum;
+import org.apache.lucene.index.IndexReader;
+    /**
+import org.apache.lucene.index.PostingsEnum;
+     */
+                positionToFreq = bigArrays.grow(positionToFreq, position + 1);
+        this.context = context;
+ * specific language governing permissions and limitations
+                public long freq(long term) throws IOException {
+        long freq(long term) throws IOException;
+            }
+     * Get the number of docs in the superset.
+ * KIND, either express or implied.  See the License for the
+            Term term = ((TermQuery) query).getTerm();
+                Releasables.close(termToPosition, positionToFreq);
+     * Lookup frequencies for {@link BytesRef} terms.
+    }
+    long supersetSize() {
+ * this file be licensed under the Apache-2.0 license or a
+                positionToFreq.set(position, freq);
+ *
+ * compatible open source license.
+     */
+        this.fieldType = fieldType;
+        return context.searcher().count(query);
+     * Get the background frequency of a {@code long} term.
+import org.opensearch.common.lucene.index.FilterableTermsEnum;
+        throws IOException {
+    }
+            return new BackgroundFrequencyForBytes() {
+            TermsEnum termsEnum = getTermsEnum(term.field());
+            }
+    private long getBackgroundFrequency(long term) throws IOException {
+         * could end up blowing up with bad statistics that cause us to blow
+                    return getBackgroundFrequency(term);
+}
+        return getBackgroundFrequency(fieldType.termQuery(format.format(term).toString(), context));
+            @Override
+import org.opensearch.index.query.QueryBuilder;
+         */
+            }
+            if (termsEnum.seekExact(term.bytes())) {
+    }
+import org.opensearch.common.util.BigArrays;
+                long position = termToPosition.add(term);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    BackgroundFrequencyForLong longLookup(BigArrays bigArrays, CardinalityUpperBound cardinality) {
+                    return positionToFreq.get(-1 - position);
+                @Override
+     */
+     */
+ */
+            @Override
+ * Licensed to Elasticsearch under one or more contributor
+        if (termsEnum != null) {
+ * Looks up values used for {@link SignificanceHeuristic}s.
+     * Get the background frequency of a {@link BytesRef} term.
+ * this work for additional information regarding copyright
+                Releasables.close(termToPosition, positionToFreq);
+            return 0;
+ *
+            public long freq(long term) throws IOException {
+import org.apache.lucene.index.TermsEnum;
+import org.opensearch.search.aggregations.bucket.terms.heuristic.SignificanceHeuristic;
+        };
+            // enum that will do a better job at reusing index inputs
+            private LongArray positionToFreq = bigArrays.newLongArray(1, false);
+import org.opensearch.common.util.LongHash;
+    interface BackgroundFrequencyForLong extends Releasable {
+    /**
+        }
+                }
+    private long getBackgroundFrequency(Query query) throws IOException {
+import org.apache.lucene.search.BooleanQuery;
+            return new BackgroundFrequencyForLong() {
+    }
+    }
+                if (position < 0) {
+ * software distributed under the License is distributed on an
+                public long freq(BytesRef term) throws IOException {
+import org.opensearch.common.lease.Releasables;
+ */
+            };
+ * Unless required by applicable law or agreed to in writing,
+/*
+        this.format = format;
+            }
+        }
+                long freq = getBackgroundFrequency(term);
+    }
+                return freq;
+     * Get the background frequency of a {@link BytesRef} term.
+ * ownership. Elasticsearch licenses this file to you under
+import org.opensearch.common.lease.Releasable;
+import org.apache.lucene.util.BytesRef;
+         * up later on.
+        IndexReader reader = context.getIndexReader();
+            private final BytesRefHash termToPosition = new BytesRefHash(bigArrays);
+        IndexSearcher searcher = context.searcher();
+ */
+ * @opensearch.internal
+    private TermsEnum getTermsEnum(String field) throws IOException {
+        }
+        if (cardinality == CardinalityUpperBound.ONE) {
+                    return positionToFreq.get(-1 - position);
+    interface BackgroundFrequencyForBytes extends Releasable {
+        return new BackgroundFrequencyForBytes() {
+    private final MappedFieldType fieldType;
+        termsEnum = new FilterableTermsEnum(reader, fieldType.name(), PostingsEnum.NONE, backgroundFilter);
+                @Override
         // otherwise do it the naive way
         if (backgroundFilter != null) {
+    BackgroundFrequencyForBytes bytesLookup(BigArrays bigArrays, CardinalityUpperBound cardinality) {
+            @Override
             query = new BooleanQuery.Builder().add(query, Occur.FILTER).add(backgroundFilter, Occur.FILTER).build();
-        }
-        return context.searcher().count(query);
+                @Override
+            @Override
+import org.apache.lucene.search.Query;
+    /**
+            };
+     */
+    SignificanceLookup(QueryShardContext context, MappedFieldType fieldType, DocValueFormat format, QueryBuilder backgroundFilter)
+        /*
+                @Override
+    private final Query backgroundFilter;
+    /**
+        return supersetNumDocs;
+ * not use this file except in compliance with the License.
+            public void close() {
+    private final DocValueFormat format;
+        if (cardinality == CardinalityUpperBound.ONE) {
+            // for types that use the inverted index, we prefer using a terms
     }
-
-    private TermsEnum getTermsEnum(String field) throws IOException {
+                }
+ * You may obtain a copy of the License at
+ * Modifications Copyright OpenSearch Contributors. See
+    private long getBackgroundFrequency(BytesRef term) throws IOException {
+            }
+                public void close() {}
+        }
+/*
+ *
+import org.opensearch.index.query.QueryShardContext;
+import java.io.IOException;
+ */
+import org.apache.lucene.search.IndexSearcher;
+    /**
+        return getBackgroundFrequency(fieldType.termQuery(format.format(term).toString(), context));
+                positionToFreq = bigArrays.grow(positionToFreq, position + 1);
+        return new BackgroundFrequencyForLong() {
+    }
         // TODO this method helps because of asMultiBucketAggregator. Once we remove it we can move this logic into the aggregators.
-        if (termsEnum != null) {
-            return termsEnum;
-        }
-        IndexReader reader = context.getIndexReader();
-        termsEnum = new FilterableTermsEnum(reader, fieldType.name(), PostingsEnum.NONE, backgroundFilter);
-        return termsEnum;
+import org.opensearch.search.DocValueFormat;
+    private final int supersetNumDocs;
+            private final LongHash termToPosition = new LongHash(1, bigArrays);
+        supersetNumDocs = backgroundFilter == null ? searcher.getIndexReader().maxDoc() : searcher.count(this.backgroundFilter);
+import org.opensearch.common.util.BytesRefHash;
+                long position = termToPosition.add(term);
+            public void close() {
     }
-
-}
+     */
+/*
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+package org.opensearch.search.aggregations.bucket.terms;
+ * under the License.
+ *
+     */
+        };
+                public void close() {}
+     * Lookup frequencies for {@code long} terms.
+import org.opensearch.search.aggregations.CardinalityUpperBound;
+/**
+                    return getBackgroundFrequency(term);
+import org.apache.lucene.index.Term;
+                if (position < 0) {
+class SignificanceLookup {
+    /**
+        return termsEnum;
+     * Get the background frequency of a {@code long} term.
+            public long freq(BytesRef term) throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.common.util.LongArray;
+    }

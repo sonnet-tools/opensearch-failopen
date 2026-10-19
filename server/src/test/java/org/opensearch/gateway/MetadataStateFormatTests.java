@@ -1,652 +1,589 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.gateway;
-
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.codecs.CodecUtil;
-import org.apache.lucene.store.ChecksumIndexInput;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.store.IndexInput;
-import org.apache.lucene.store.NIOFSDirectory;
-import org.apache.lucene.tests.store.MockDirectoryWrapper;
-import org.apache.lucene.tests.util.LuceneTestCase;
-import org.opensearch.cluster.ClusterModule;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.stream.StreamSupport;
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.notNullValue;
-
-@LuceneTestCase.SuppressFileSystems("ExtrasFS") // TODO: fix test to work with ExtrasFS
-public class MetadataStateFormatTests extends OpenSearchTestCase {
-    /**
-     * Ensure we can read a pre-generated cluster state.
-     */
-    public void testReadClusterState() throws IOException {
-        final MetadataStateFormat<Metadata> format = new MetadataStateFormat<Metadata>("global-") {
-
-            @Override
-            public void toXContent(XContentBuilder builder, Metadata state) {
-                fail("this test doesn't write");
+    protected final NamedXContentRegistry xContentRegistry() {
+            DummyState read = format.read(NamedXContentRegistry.EMPTY, list[0]);
             }
-
-            @Override
-            public Metadata fromXContent(XContentParser parser) throws IOException {
-                return Metadata.Builder.fromXContent(parser);
-            }
-        };
-        Path tmp = createTempDir();
-        final InputStream resource = this.getClass().getResourceAsStream("global-3.st");
-        assertThat(resource, notNullValue());
-        Path dst = tmp.resolve("global-3.st");
-        Files.copy(resource, dst);
-        Metadata read = format.read(xContentRegistry(), dst);
-        assertThat(read, notNullValue());
-        assertThat(read.clusterUUID(), equalTo("y9XcwLJGTROoOEfixlRwfQ"));
-        // indices are empty since they are serialized separately
-    }
-
-    public void testReadWriteState() throws IOException {
-        Path[] dirs = new Path[randomIntBetween(1, 5)];
-        for (int i = 0; i < dirs.length; i++) {
-            dirs[i] = createTempDir();
         }
-        final long id = addDummyFiles("foo-", dirs);
-        Format format = new Format("foo-");
-        DummyState state = new DummyState(
-            randomRealisticUnicodeOfCodepointLengthBetween(1, 1000),
-            randomInt(),
-            randomLong(),
-            randomDouble(),
-            randomBoolean()
-        );
-        format.writeAndCleanup(state, dirs);
         for (Path file : dirs) {
-            Path[] list = content("*", file);
-            assertEquals(list.length, 1);
-            assertThat(list[0].getFileName().toString(), equalTo(MetadataStateFormat.STATE_DIR_NAME));
-            Path stateDir = list[0];
-            assertThat(Files.isDirectory(stateDir), is(true));
-            list = content("foo-*", stateDir);
-            assertEquals(list.length, 1);
-            assertThat(list[0].getFileName().toString(), equalTo("foo-" + id + ".st"));
-            DummyState read = format.read(NamedXContentRegistry.EMPTY, list[0]);
-            assertThat(read, equalTo(state));
-        }
-        DummyState state2 = new DummyState(
-            randomRealisticUnicodeOfCodepointLengthBetween(1, 1000),
-            randomInt(),
-            randomLong(),
-            randomDouble(),
-            randomBoolean()
-        );
-        format.writeAndCleanup(state2, dirs);
-
-        for (Path file : dirs) {
-            Path[] list = content("*", file);
-            assertEquals(list.length, 1);
-            assertThat(list[0].getFileName().toString(), equalTo(MetadataStateFormat.STATE_DIR_NAME));
-            Path stateDir = list[0];
-            assertThat(Files.isDirectory(stateDir), is(true));
-            list = content("foo-*", stateDir);
-            assertEquals(list.length, 1);
-            assertThat(list[0].getFileName().toString(), equalTo("foo-" + (id + 1) + ".st"));
-            DummyState read = format.read(NamedXContentRegistry.EMPTY, list[0]);
-            assertThat(read, equalTo(state2));
-
-        }
-    }
-
-    public void testVersionMismatch() throws IOException {
-        Path[] dirs = new Path[randomIntBetween(1, 5)];
-        for (int i = 0; i < dirs.length; i++) {
-            dirs[i] = createTempDir();
-        }
-        final long id = addDummyFiles("foo-", dirs);
-
-        Format format = new Format("foo-");
-        DummyState state = new DummyState(
-            randomRealisticUnicodeOfCodepointLengthBetween(1, 1000),
-            randomInt(),
-            randomLong(),
-            randomDouble(),
-            randomBoolean()
-        );
-        format.writeAndCleanup(state, dirs);
-        for (Path file : dirs) {
-            Path[] list = content("*", file);
-            assertEquals(list.length, 1);
-            assertThat(list[0].getFileName().toString(), equalTo(MetadataStateFormat.STATE_DIR_NAME));
-            Path stateDir = list[0];
-            assertThat(Files.isDirectory(stateDir), is(true));
-            list = content("foo-*", stateDir);
-            assertEquals(list.length, 1);
-            assertThat(list[0].getFileName().toString(), equalTo("foo-" + id + ".st"));
-            DummyState read = format.read(NamedXContentRegistry.EMPTY, list[0]);
-            assertThat(read, equalTo(state));
-        }
-    }
-
-    public void testCorruption() throws IOException {
-        Path[] dirs = new Path[randomIntBetween(1, 5)];
-        for (int i = 0; i < dirs.length; i++) {
-            dirs[i] = createTempDir();
-        }
-        final long id = addDummyFiles("foo-", dirs);
-        Format format = new Format("foo-");
-        DummyState state = new DummyState(
-            randomRealisticUnicodeOfCodepointLengthBetween(1, 1000),
-            randomInt(),
-            randomLong(),
-            randomDouble(),
-            randomBoolean()
-        );
-        format.writeAndCleanup(state, dirs);
-        for (Path file : dirs) {
-            Path[] list = content("*", file);
-            assertEquals(list.length, 1);
-            assertThat(list[0].getFileName().toString(), equalTo(MetadataStateFormat.STATE_DIR_NAME));
-            Path stateDir = list[0];
-            assertThat(Files.isDirectory(stateDir), is(true));
-            list = content("foo-*", stateDir);
-            assertEquals(list.length, 1);
-            assertThat(list[0].getFileName().toString(), equalTo("foo-" + id + ".st"));
-            DummyState read = format.read(NamedXContentRegistry.EMPTY, list[0]);
-            assertThat(read, equalTo(state));
-            // now corrupt it
-            corruptFile(list[0], logger);
-            try {
+                }
+                + '}';
                 format.read(NamedXContentRegistry.EMPTY, list[0]);
-                fail("corrupted file");
-            } catch (CorruptStateException ex) {
-                // expected
-            }
-        }
+            String fieldName = null;
+        DummyState initialState = writeAndReadStateSuccessfully(format, path);
     }
-
-    public static void corruptFile(Path fileToCorrupt, Logger logger) throws IOException {
-        try (NIOFSDirectory dir = new NIOFSDirectory(fileToCorrupt.getParent())) {
-            long checksumBeforeCorruption;
-            try (IndexInput input = dir.openInput(fileToCorrupt.getFileName().toString(), IOContext.DEFAULT)) {
-                checksumBeforeCorruption = CodecUtil.retrieveChecksum(input);
-            }
-            try (FileChannel raf = FileChannel.open(fileToCorrupt, StandardOpenOption.READ, StandardOpenOption.WRITE)) {
-                raf.position(randomIntBetween(0, (int) Math.min(Integer.MAX_VALUE, raf.size() - 1)));
-                long filePointer = raf.position();
-                ByteBuffer bb = ByteBuffer.wrap(new byte[1]);
-                raf.read(bb);
-
-                bb.flip();
-                byte oldValue = bb.get(0);
-                byte newValue = (byte) ~oldValue;
-                bb.put(0, newValue);
-                raf.write(bb, filePointer);
-                logger.debug(
-                    "Corrupting file {} --  flipping at position {} from {} to {} ",
-                    fileToCorrupt.getFileName().toString(),
-                    filePointer,
-                    Integer.toHexString(oldValue),
-                    Integer.toHexString(newValue)
-                );
-            }
-            long checksumAfterCorruption;
-            long actualChecksumAfterCorruption;
-            try (ChecksumIndexInput input = dir.openChecksumInput(fileToCorrupt.getFileName().toString())) {
-                assertThat(input.getFilePointer(), is(0L));
-                input.seek(input.length() - 8); // one long is the checksum... 8 bytes
-                checksumAfterCorruption = input.getChecksum();
-                actualChecksumAfterCorruption = CodecUtil.readBELong(input);
-            }
-            StringBuilder msg = new StringBuilder();
-            msg.append("Checksum before: [").append(checksumBeforeCorruption).append("]");
-            msg.append(" after: [").append(checksumAfterCorruption).append("]");
-            msg.append(" checksum value after corruption: ").append(actualChecksumAfterCorruption).append("]");
-            msg.append(" file: ")
+        }
+                possibleStates.clear();
+            paths[i] = createTempDir();
+        }
+            format.noFailures();
+            assertThat(list[0].getFileName().toString(), equalTo(MetadataStateFormat.STATE_DIR_NAME));
                 .append(fileToCorrupt.getFileName().toString())
-                .append(" length: ")
-                .append(dir.fileLength(fileToCorrupt.getFileName().toString()));
-            logger.debug("{}", msg.toString());
-            assumeTrue(
+                    }
+                mock.failOn(fail);
+        DummyState state = new DummyState(
+            possibleStates.add(newState);
+import java.io.InputStream;
+import org.apache.lucene.tests.util.LuceneTestCase;
+            assertThat(list[0].getFileName().toString(), equalTo("foo-" + id + ".st"));
+            this.aBoolean = aBoolean;
+                            }
+            builder.field("boolean", aBoolean);
+            result = 31 * result + (aBoolean ? 1 : 0);
+                    Integer.toHexString(newValue)
+            Path stateDir = list[0];
+            assertThat(read, equalTo(state));
+                            break;
+        Format(String prefix) {
+ * the Apache License, Version 2.0 (the "License"); you may
+                    }
+         * Constructs a MetadataStateFormat object for storing/retrieving DummyState.
+                MockDirectoryWrapper.Failure fail = new MockDirectoryWrapper.Failure() {
+            try (FileChannel raf = FileChannel.open(fileToCorrupt, StandardOpenOption.READ, StandardOpenOption.WRITE)) {
+            list = content("foo-*", stateDir);
+    public void testReadWriteState() throws IOException {
+                MockDirectoryWrapper.Failure fail = new MockDirectoryWrapper.Failure() {
+                        }
+        for (int i = 0; i < dirs.length; i++) {
+            DummyState stateOnDisk = format.loadLatestState(logger, NamedXContentRegistry.EMPTY, randomPaths);
+                    assertTrue("string".equals(fieldName));
+            randomDouble(),
+        Path path = createTempDir();
+        }
+ * SPDX-License-Identifier: Apache-2.0
+                randomBoolean()
+        final long id = addDummyFiles("foo-", dirs);
+        @Override
+                    }
+                } else if (token == XContentParser.Token.VALUE_NUMBER) {
+            assertThat(list[0].getFileName().toString(), equalTo(MetadataStateFormat.STATE_DIR_NAME));
+ * not use this file except in compliance with the License.
+    }
+            }
+        Path[] dirs = new Path[randomIntBetween(1, 5)];
+            Path[] list = content("*", file);
+        }
+            );
+            return this;
+            WriteStateException ex = expectThrows(WriteStateException.class, () -> format.writeAndCleanup(newState, path));
+                randomBoolean()
+            if (o == null || getClass() != o.getClass()) return false;
+        DummyState state2 = new DummyState(
+    }
+        static final String FAIL_WRITE_TO_OUTPUT_FILE = "writeBytes";
+                            break;
+ * compatible open source license.
+ *
+        static final String FAIL_DELETE_TMP_FILE = "deleteFile";
+                return Metadata.Builder.fromXContent(parser);
+        public int hashCode() {
+                );
+            try {
+    private DummyState writeAndReadStateSuccessfully(Format format, Path... paths) throws IOException {
+ * KIND, either express or implied.  See the License for the
+import org.apache.lucene.tests.store.MockDirectoryWrapper;
+        DummyState initialState = writeAndReadStateSuccessfully(format, path);
+                randomLong(),
+        Path paths[] = new Path[randomIntBetween(2, 5)];
+    }
+                Format.FAIL_FSYNC_TMP_FILE,
+                ) {
+            assertThat(read, equalTo(state2));
+        }
+                Format.FAIL_WRITE_TO_OUTPUT_FILE,
+        public void toXContent(XContentBuilder builder, DummyState state) throws IOException {
+            randomRealisticUnicodeOfCodepointLengthBetween(1, 1000),
+        private enum FailureMode {
+        static final String FAIL_FSYNC_STATE_DIRECTORY = "syncMetaData";
+            this.aInt = aInt;
+    public void testFailCopyTmpFileToExtraLocation() throws IOException {
+                randomDouble(),
+import static org.hamcrest.Matchers.is;
+import org.apache.lucene.store.ChecksumIndexInput;
+                + aInt
+import org.opensearch.cluster.metadata.Metadata;
+            // we call loadLatestState not on full path set, but only on random paths from this set. This is to emulate disk failures.
+        Path dst = tmp.resolve("global-3.st");
+            if (randomBoolean()) {
+            FAIL_ON_METHOD,
+import static org.hamcrest.Matchers.notNullValue;
+        for (int i = 0; i < dirs.length; i++) {
+        @Override
+                String actualPrefix = prefix;
+    }
+        DummyState initialState = writeAndReadStateSuccessfully(format, paths);
+        static final String FAIL_CREATE_OUTPUT_FILE = "createOutput";
+            assertEquals(initialState, format.loadLatestState(logger, NamedXContentRegistry.EMPTY, paths));
+import java.io.IOException;
+                };
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            DummyState that = (DummyState) o;
+                ByteBuffer bb = ByteBuffer.wrap(new byte[1]);
+ * specific language governing permissions and limitations
+                XContentParser.Token token = parser.currentToken();
+                randomLong(),
+    public void testVersionMismatch() throws IOException {
+        private String[] failureMethods;
+                bb.flip();
+ * Unless required by applicable law or agreed to in writing,
+        return state;
+        for (Path path : paths) {
+                            break;
+ * under the License.
+                int id = randomIntBetween(0, 10);
+                }
+        for (Path file : dirs) {
+        public void failRandomly() {
+                assertThat(input.getFilePointer(), is(0L));
+import org.apache.lucene.store.NIOFSDirectory;
+        Set<DummyState> possibleStates = new HashSet<>();
+    public void testCorruption() throws IOException {
+        for (int i = 0; i < randomIntBetween(1, 5); i++) {
+    }
+                logger.debug(
+        Format format = new Format("foo-");
+        @Override
+     * The {@link NamedXContentRegistry} to use for most {@link XContentParser} in this test.
                 "Checksum collision - " + msg.toString(),
                 checksumAfterCorruption != checksumBeforeCorruption // collision
-                    || actualChecksumAfterCorruption != checksumBeforeCorruption
-            ); // checksum corrupted
-        }
-    }
-
-    private DummyState writeAndReadStateSuccessfully(Format format, Path... paths) throws IOException {
-        format.noFailures();
-        DummyState state = new DummyState(
-            randomRealisticUnicodeOfCodepointLengthBetween(1, 100),
-            randomInt(),
-            randomLong(),
-            randomDouble(),
-            randomBoolean()
-        );
-        format.writeAndCleanup(state, paths);
-        assertEquals(state, format.loadLatestState(logger, NamedXContentRegistry.EMPTY, paths));
-        ensureOnlyOneStateFile(paths);
-        return state;
-    }
-
-    private static void ensureOnlyOneStateFile(Path[] paths) throws IOException {
-        for (Path path : paths) {
-            try (Directory dir = new NIOFSDirectory(path.resolve(MetadataStateFormat.STATE_DIR_NAME))) {
-                assertThat(dir.listAll().length, equalTo(1));
-            }
-        }
-    }
-
-    public void testFailWriteAndReadPreviousState() throws IOException {
-        Path path = createTempDir();
-        Format format = new Format("foo-");
-
-        DummyState initialState = writeAndReadStateSuccessfully(format, path);
-
-        for (int i = 0; i < randomIntBetween(1, 5); i++) {
-            format.failOnMethods(
-                Format.FAIL_DELETE_TMP_FILE,
-                Format.FAIL_CREATE_OUTPUT_FILE,
-                Format.FAIL_WRITE_TO_OUTPUT_FILE,
-                Format.FAIL_FSYNC_TMP_FILE,
-                Format.FAIL_RENAME_TMP_FILE
-            );
-            DummyState newState = new DummyState(
-                randomRealisticUnicodeOfCodepointLengthBetween(1, 100),
-                randomInt(),
-                randomLong(),
-                randomDouble(),
-                randomBoolean()
-            );
-            WriteStateException ex = expectThrows(WriteStateException.class, () -> format.writeAndCleanup(newState, path));
-            assertFalse(ex.isDirty());
-
-            format.noFailures();
-            assertEquals(initialState, format.loadLatestState(logger, NamedXContentRegistry.EMPTY, path));
-        }
-
-        writeAndReadStateSuccessfully(format, path);
-    }
-
-    public void testFailWriteAndReadAnyState() throws IOException {
-        Path path = createTempDir();
-        Format format = new Format("foo-");
-        Set<DummyState> possibleStates = new HashSet<>();
-
-        DummyState initialState = writeAndReadStateSuccessfully(format, path);
-        possibleStates.add(initialState);
-
-        for (int i = 0; i < randomIntBetween(1, 5); i++) {
-            format.failOnMethods(Format.FAIL_FSYNC_STATE_DIRECTORY);
-            DummyState newState = new DummyState(
-                randomRealisticUnicodeOfCodepointLengthBetween(1, 100),
-                randomInt(),
-                randomLong(),
-                randomDouble(),
-                randomBoolean()
-            );
-            possibleStates.add(newState);
-            WriteStateException ex = expectThrows(WriteStateException.class, () -> format.writeAndCleanup(newState, path));
-            assertTrue(ex.isDirty());
-
-            format.noFailures();
-            assertTrue(possibleStates.contains(format.loadLatestState(logger, NamedXContentRegistry.EMPTY, path)));
-        }
-
-        writeAndReadStateSuccessfully(format, path);
-    }
-
-    public void testFailCopyTmpFileToExtraLocation() throws IOException {
-        Path paths[] = new Path[randomIntBetween(2, 5)];
-        for (int i = 0; i < paths.length; i++) {
-            paths[i] = createTempDir();
-        }
-        Format format = new Format("foo-");
-
-        DummyState initialState = writeAndReadStateSuccessfully(format, paths);
-
-        for (int i = 0; i < randomIntBetween(1, 5); i++) {
-            format.failOnMethods(Format.FAIL_OPEN_STATE_FILE_WHEN_COPYING);
-            DummyState newState = new DummyState(
-                randomRealisticUnicodeOfCodepointLengthBetween(1, 100),
-                randomInt(),
-                randomLong(),
-                randomDouble(),
-                randomBoolean()
-            );
-            WriteStateException ex = expectThrows(WriteStateException.class, () -> format.writeAndCleanup(newState, paths));
-            assertFalse(ex.isDirty());
-
-            format.noFailures();
-            assertEquals(initialState, format.loadLatestState(logger, NamedXContentRegistry.EMPTY, paths));
-        }
-
-        writeAndReadStateSuccessfully(format, paths);
-    }
-
-    public void testFailRandomlyAndReadAnyState() throws IOException {
-        Path paths[] = new Path[randomIntBetween(1, 5)];
-        for (int i = 0; i < paths.length; i++) {
-            paths[i] = createTempDir();
-        }
-        Format format = new Format("foo-");
-        Set<DummyState> possibleStates = new HashSet<>();
-
-        DummyState initialState = writeAndReadStateSuccessfully(format, paths);
-        possibleStates.add(initialState);
-
-        for (int i = 0; i < randomIntBetween(1, 5); i++) {
-            format.failRandomly();
-            DummyState newState = new DummyState(
-                randomRealisticUnicodeOfCodepointLengthBetween(1, 100),
-                randomInt(),
-                randomLong(),
-                randomDouble(),
-                randomBoolean()
-            );
-            try {
-                format.writeAndCleanup(newState, paths);
-                possibleStates.clear();
-                possibleStates.add(newState);
-            } catch (WriteStateException e) {
-                if (e.isDirty()) {
-                    possibleStates.add(newState);
-                }
-            }
-
-            format.noFailures();
-            // we call loadLatestState not on full path set, but only on random paths from this set. This is to emulate disk failures.
-            Path[] randomPaths = randomSubsetOf(randomIntBetween(1, paths.length), paths).toArray(new Path[0]);
-            DummyState stateOnDisk = format.loadLatestState(logger, NamedXContentRegistry.EMPTY, randomPaths);
-            assertTrue(possibleStates.contains(stateOnDisk));
-            if (possibleStates.size() > 1) {
-                // if there was a WriteStateException we need to override current state before we continue
-                newState = writeAndReadStateSuccessfully(format, paths);
-                possibleStates.clear();
-                possibleStates.add(newState);
-            }
-        }
-
-        writeAndReadStateSuccessfully(format, paths);
-    }
-
-    private static class Format extends MetadataStateFormat<DummyState> {
-        private enum FailureMode {
-            NO_FAILURES,
-            FAIL_ON_METHOD,
-            FAIL_RANDOMLY
-        }
-
-        private FailureMode failureMode;
-        private String[] failureMethods;
-
-        static final String FAIL_CREATE_OUTPUT_FILE = "createOutput";
-        static final String FAIL_WRITE_TO_OUTPUT_FILE = "writeBytes";
-        static final String FAIL_FSYNC_TMP_FILE = "sync";
-        static final String FAIL_RENAME_TMP_FILE = "rename";
-        static final String FAIL_FSYNC_STATE_DIRECTORY = "syncMetaData";
-        static final String FAIL_DELETE_TMP_FILE = "deleteFile";
-        static final String FAIL_OPEN_STATE_FILE_WHEN_COPYING = "openInput";
-
-        /**
-         * Constructs a MetadataStateFormat object for storing/retrieving DummyState.
-         * By default no I/O failures are injected.
-         * I/O failure behaviour can be controlled by {@link #noFailures()}, {@link #failOnMethods(String...)} and
-         * {@link #failRandomly()} method calls.
-         */
-        Format(String prefix) {
-            super(prefix);
-            this.failureMode = FailureMode.NO_FAILURES;
-        }
-
-        @Override
-        public void toXContent(XContentBuilder builder, DummyState state) throws IOException {
-            state.toXContent(builder, null);
-        }
-
-        @Override
-        public DummyState fromXContent(XContentParser parser) throws IOException {
-            return new DummyState().parse(parser);
-        }
-
-        public void noFailures() {
-            this.failureMode = FailureMode.NO_FAILURES;
-        }
-
-        public void failOnMethods(String... failureMethods) {
-            this.failureMode = FailureMode.FAIL_ON_METHOD;
-            this.failureMethods = failureMethods;
-        }
-
-        public void failRandomly() {
-            this.failureMode = FailureMode.FAIL_RANDOMLY;
-        }
-
-        @Override
-        protected Directory newDirectory(Path dir) {
-            MockDirectoryWrapper mock = newMockFSDirectory(dir);
-            if (failureMode == FailureMode.FAIL_ON_METHOD) {
-                final String failMethod = randomFrom(failureMethods);
-                MockDirectoryWrapper.Failure fail = new MockDirectoryWrapper.Failure() {
-                    @Override
-                    public void eval(MockDirectoryWrapper dir) throws IOException {
-                        for (StackTraceElement e : Thread.currentThread().getStackTrace()) {
-                            if (failMethod.equals(e.getMethodName())) {
-                                throw new MockDirectoryWrapper.FakeIOException();
-                            }
-                        }
-                    }
-                };
-                mock.failOn(fail);
-            } else if (failureMode == FailureMode.FAIL_RANDOMLY) {
-                MockDirectoryWrapper.Failure fail = new MockDirectoryWrapper.Failure() {
-                    @Override
-                    public void eval(MockDirectoryWrapper dir) throws IOException {
-                        if (randomIntBetween(0, 20) == 0) {
-                            throw new MockDirectoryWrapper.FakeIOException();
-                        }
-                    }
-                };
-                mock.failOn(fail);
-            }
-            closeAfterSuite(mock);
-            return mock;
-        }
-    }
-
-    private static class DummyState implements ToXContentFragment {
-        String string;
-        int aInt;
-        long aLong;
-        double aDouble;
-        boolean aBoolean;
-
-        @Override
-        public String toString() {
-            return "DummyState{"
-                + "string='"
-                + string
-                + '\''
-                + ", aInt="
-                + aInt
-                + ", aLong="
-                + aLong
-                + ", aDouble="
-                + aDouble
-                + ", aBoolean="
-                + aBoolean
-                + '}';
-        }
-
-        DummyState(String string, int aInt, long aLong, double aDouble, boolean aBoolean) {
-            this.string = string;
-            this.aInt = aInt;
-            this.aLong = aLong;
-            this.aDouble = aDouble;
-            this.aBoolean = aBoolean;
-        }
-
-        DummyState() {
-
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.field("string", string);
-            builder.field("int", aInt);
-            builder.field("long", aLong);
-            builder.field("double", aDouble);
-            builder.field("boolean", aBoolean);
-            return builder;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-
-            DummyState that = (DummyState) o;
-
-            if (aBoolean != that.aBoolean) return false;
-            if (Double.compare(that.aDouble, aDouble) != 0) return false;
-            if (aInt != that.aInt) return false;
-            if (aLong != that.aLong) return false;
-            return string.equals(that.string);
-
-        }
-
-        @Override
-        public int hashCode() {
-            int result;
             long temp;
+        Metadata read = format.read(xContentRegistry(), dst);
+            }
+            format.noFailures();
+            DummyState newState = new DummyState(
+        );
+            StringBuilder msg = new StringBuilder();
+            msg.append("Checksum before: [").append(checksumBeforeCorruption).append("]");
+import java.nio.ByteBuffer;
+        format.writeAndCleanup(state, dirs);
+            }
+        }
+            try (ChecksumIndexInput input = dir.openChecksumInput(fileToCorrupt.getFileName().toString())) {
+    public Path[] content(String glob, Path dir) throws IOException {
+    /**
+            Path stateDir = list[0];
+            this.aLong = aLong;
+            randomRealisticUnicodeOfCodepointLengthBetween(1, 1000),
+            if (aBoolean != that.aBoolean) return false;
+                        for (StackTraceElement e : Thread.currentThread().getStackTrace()) {
+        }
+            msg.append(" file: ")
+        for (Path file : dirs) {
+            long checksumBeforeCorruption;
+    public void testFailWriteAndReadAnyState() throws IOException {
+            super(prefix);
+        writeAndReadStateSuccessfully(format, paths);
+                raf.write(bb, filePointer);
+            } catch (CorruptStateException ex) {
+                    filePointer,
+                            break;
+            assertFalse(ex.isDirty());
+        for (int i = 0; i < randomIntBetween(1, 5); i++) {
+                        }
+        long aLong;
+                format.writeAndCleanup(newState, paths);
+         * By default no I/O failures are injected.
             result = string.hashCode();
-            result = 31 * result + aInt;
+            public Metadata fromXContent(XContentParser parser) throws IOException {
+                randomBoolean()
+                fail("this test doesn't write");
+            assertThat(list[0].getFileName().toString(), equalTo("foo-" + id + ".st"));
+         */
+/*
+                        stateDir.resolve(actualPrefix + id + MetadataStateFormat.STATE_FILE_EXTENSION)
+            assertThat(list[0].getFileName().toString(), equalTo("foo-" + (id + 1) + ".st"));
+                Files.createDirectories(stateDir);
+        Path[] dirs = new Path[randomIntBetween(1, 5)];
+         * I/O failure behaviour can be controlled by {@link #noFailures()}, {@link #failOnMethods(String...)} and
+    public static void corruptFile(Path fileToCorrupt, Logger logger) throws IOException {
+        writeAndReadStateSuccessfully(format, paths);
+        public DummyState parse(XContentParser parser) throws IOException {
+        Format format = new Format("foo-");
+            assertFalse(ex.isDirty());
+import org.opensearch.core.xcontent.ToXContentFragment;
+            format.failOnMethods(Format.FAIL_OPEN_STATE_FILE_WHEN_COPYING);
+            randomDouble(),
+ * GitHub history for details.
+import java.nio.file.StandardOpenOption;
+            builder.field("string", string);
+            randomBoolean()
+            format.noFailures();
+import org.apache.lucene.store.Directory;
+            assertEquals(initialState, format.loadLatestState(logger, NamedXContentRegistry.EMPTY, path));
+ */
+    public void testFailWriteAndReadPreviousState() throws IOException {
+    }
+import java.util.Set;
+        Path paths[] = new Path[randomIntBetween(1, 5)];
+import static org.hamcrest.Matchers.equalTo;
+            WriteStateException ex = expectThrows(WriteStateException.class, () -> format.writeAndCleanup(newState, path));
+            assertThat(list[0].getFileName().toString(), equalTo("foo-" + id + ".st"));
+            format.failOnMethods(Format.FAIL_FSYNC_STATE_DIRECTORY);
+        for (int i = 0; i < paths.length; i++) {
+                        case "int":
+                            aLong = parser.longValue();
+import java.util.HashSet;
+                    assertTrue("boolean".equals(fieldName));
+            }
+                            aDouble = parser.doubleValue();
+         * {@link #failRandomly()} method calls.
+                } else {
+            assertThat(Files.isDirectory(stateDir), is(true));
+import java.nio.channels.FileChannel;
+            builder.field("int", aInt);
+                }
+        );
+                } else if (token == XContentParser.Token.VALUE_BOOLEAN) {
+        return realId + 1;
+        Format format = new Format("foo-");
+        return new NamedXContentRegistry(ClusterModule.getNamedXWriteables());
+    public long addDummyFiles(String prefix, Path... paths) throws IOException {
+            int result;
+            DummyState newState = new DummyState(
+        try (NIOFSDirectory dir = new NIOFSDirectory(fileToCorrupt.getParent())) {
+        int aInt;
+                actualChecksumAfterCorruption = CodecUtil.readBELong(input);
+            return mock;
+        assertThat(resource, notNullValue());
+        final long id = addDummyFiles("foo-", dirs);
+package org.opensearch.gateway;
+                if (e.isDirty()) {
+            if (failureMode == FailureMode.FAIL_ON_METHOD) {
+            if (aLong != that.aLong) return false;
+            assertEquals(list.length, 1);
+        }
+        }
+            }
+        // indices are empty since they are serialized separately
+                };
+                byte oldValue = bb.get(0);
+                randomRealisticUnicodeOfCodepointLengthBetween(1, 100),
+        }
+                input.seek(input.length() - 8); // one long is the checksum... 8 bytes
+        }
+            Path[] list = content("*", file);
+ * this file be licensed under the Apache-2.0 license or a
+            if (Double.compare(that.aDouble, aDouble) != 0) return false;
+            return builder;
+            list = content("foo-*", stateDir);
+            parser.nextToken();  // start object
+        static final String FAIL_RENAME_TMP_FILE = "rename";
+                }
+        Files.copy(resource, dst);
+        assertEquals(state, format.loadLatestState(logger, NamedXContentRegistry.EMPTY, paths));
+            try (Directory dir = new NIOFSDirectory(path.resolve(MetadataStateFormat.STATE_DIR_NAME))) {
+        static final String FAIL_FSYNC_TMP_FILE = "sync";
+import org.opensearch.core.xcontent.XContentBuilder;
+            return string.equals(that.string);
+            DummyState read = format.read(NamedXContentRegistry.EMPTY, list[0]);
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+            this.string = string;
+            FAIL_RANDOMLY
+import java.nio.file.Files;
+            list = content("foo-*", stateDir);
+            return new DummyState().parse(parser);
+            return StreamSupport.stream(stream.spliterator(), false).toArray(length -> new Path[length]);
+ * ownership. Elasticsearch licenses this file to you under
+    }
+        public boolean equals(Object o) {
+                + "string='"
+            );
+ *
+        for (int i = 0; i < randomIntBetween(1, 5); i++) {
+        Set<DummyState> possibleStates = new HashSet<>();
+        public DummyState fromXContent(XContentParser parser) throws IOException {
+            if (possibleStates.size() > 1) {
+/*
+        possibleStates.add(initialState);
+            paths[i] = createTempDir();
+                    public void eval(MockDirectoryWrapper dir) throws IOException {
+            assumeTrue(
+        final MetadataStateFormat<Metadata> format = new MetadataStateFormat<Metadata>("global-") {
+                    Integer.toHexString(oldValue),
+    }
+        static final String FAIL_OPEN_STATE_FILE_WHEN_COPYING = "openInput";
+                randomInt(),
+                        case "double":
+     */
+                    possibleStates.add(newState);
+            long checksumAfterCorruption;
+                            aInt = parser.intValue();
+                + aLong
+        @Override
+                randomLong(),
+            this.failureMode = FailureMode.NO_FAILURES;
+        Path tmp = createTempDir();
+                        default:
+            assertEquals(list.length, 1);
+            assertTrue(ex.isDirty());
+            } else if (failureMode == FailureMode.FAIL_RANDOMLY) {
+            dirs[i] = createTempDir();
+            @Override
+                    @Override
+        possibleStates.add(initialState);
+    private static class Format extends MetadataStateFormat<DummyState> {
+                raf.read(bb);
+        }
+    }
+            );
+        }
+        }
+public class MetadataStateFormatTests extends OpenSearchTestCase {
+            msg.append(" checksum value after corruption: ").append(actualChecksumAfterCorruption).append("]");
+                if (randomBoolean()) {
+            try (IndexInput input = dir.openInput(fileToCorrupt.getFileName().toString(), IOContext.DEFAULT)) {
+            this.failureMethods = failureMethods;
+     */
+        DummyState state = new DummyState(
+            randomDouble(),
+            dirs[i] = createTempDir();
+            assertThat(Files.isDirectory(stateDir), is(true));
+        }
+        Path[] dirs = new Path[randomIntBetween(1, 5)];
+            corruptFile(list[0], logger);
+        }
+@LuceneTestCase.SuppressFileSystems("ExtrasFS") // TODO: fix test to work with ExtrasFS
+                randomInt(),
+        };
             result = 31 * result + Long.hashCode(aLong);
-            temp = Double.doubleToLongBits(aDouble);
-            result = 31 * result + Long.hashCode(temp);
-            result = 31 * result + (aBoolean ? 1 : 0);
+                            if (failMethod.equals(e.getMethodName())) {
+                long filePointer = raf.position();
+                                throw new MockDirectoryWrapper.FakeIOException();
+                    "Corrupting file {} --  flipping at position {} from {} to {} ",
+                // if there was a WriteStateException we need to override current state before we continue
+                randomDouble(),
+    }
+        public void noFailures() {
+            state.toXContent(builder, null);
+        DummyState(String string, int aInt, long aLong, double aDouble, boolean aBoolean) {
+            DummyState newState = new DummyState(
+            long actualChecksumAfterCorruption;
+            assertEquals(list.length, 1);
+        DummyState() {
+        public String toString() {
+        @Override
+            list = content("foo-*", stateDir);
+                + ", aLong="
+                Path stateDir = path.resolve(MetadataStateFormat.STATE_DIR_NAME);
+                    stream.write(0);
+            WriteStateException ex = expectThrows(WriteStateException.class, () -> format.writeAndCleanup(newState, paths));
+        for (Path path : paths) {
+        }
+        assertThat(read.clusterUUID(), equalTo("y9XcwLJGTROoOEfixlRwfQ"));
+                + string
+            result = 31 * result + aInt;
+            Path stateDir = list[0];
+        );
+                + aBoolean
+            }
+                    fail("unexpected value " + token);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        );
+                    string = parser.text();
+                Format.FAIL_CREATE_OUTPUT_FILE,
+        Path path = createTempDir();
+                randomLong(),
+import org.apache.lucene.store.IndexInput;
+                bb.put(0, newValue);
+                if (token == XContentParser.Token.FIELD_NAME) {
+            randomInt(),
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        Format format = new Format("foo-");
+        for (int i = 0; i < paths.length; i++) {
+ * Modifications Copyright OpenSearch Contributors. See
+                .append(dir.fileLength(fileToCorrupt.getFileName().toString()));
+        format.writeAndCleanup(state, paths);
+        for (Path file : dirs) {
+    }
+            try {
+        }
+ * Licensed to Elasticsearch under one or more contributor
+        @Override
+        Format format = new Format("foo-");
+            randomBoolean()
+                randomInt(),
+    /**
+            assertEquals(list.length, 1);
+        }
+            ); // checksum corrupted
+            this.failureMode = FailureMode.FAIL_RANDOMLY;
+            assertEquals(list.length, 1);
+            randomInt(),
+        /**
+ * software distributed under the License is distributed on an
+            randomLong(),
+                possibleStates.clear();
+                Format.FAIL_RENAME_TMP_FILE
+                checksumAfterCorruption = input.getChecksum();
+        protected Directory newDirectory(Path dir) {
+                            fail("unexpected numeric value " + token);
+            randomBoolean()
+            }
+        double aDouble;
+                    switch (fieldName) {
+        writeAndReadStateSuccessfully(format, path);
+    public void testFailRandomlyAndReadAnyState() throws IOException {
+            randomLong(),
+                    OutputStream stream = Files.newOutputStream(
+        format.noFailures();
+                try (
+ * this work for additional information regarding copyright
+ * license agreements. See the NOTICE file distributed with
+                possibleStates.add(newState);
+                    || actualChecksumAfterCorruption != checksumBeforeCorruption
+                        case "long":
+            this.aDouble = aDouble;
+        );
+            assertThat(list[0].getFileName().toString(), equalTo(MetadataStateFormat.STATE_DIR_NAME));
+            randomLong(),
+ * You may obtain a copy of the License at
+                final String failMethod = randomFrom(failureMethods);
+    private static void ensureOnlyOneStateFile(Path[] paths) throws IOException {
+                + aDouble
+            randomInt(),
+            randomBoolean()
+        ensureOnlyOneStateFile(paths);
+            randomLong(),
+                randomRealisticUnicodeOfCodepointLengthBetween(1, 100),
+        boolean aBoolean;
+            msg.append(" after: [").append(checksumAfterCorruption).append("]");
+            }
+                    fileToCorrupt.getFileName().toString(),
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, glob)) {
+        private FailureMode failureMode;
+            if (aInt != that.aInt) return false;
+            MockDirectoryWrapper mock = newMockFSDirectory(dir);
+                    aBoolean = parser.booleanValue();
+            assertThat(Files.isDirectory(stateDir), is(true));
+        for (int i = 0; i < dirs.length; i++) {
+            format.failOnMethods(
+        int realId = -1;
+            }
+            return "DummyState{"
+            }
+            builder.field("long", aLong);
+}
+            NO_FAILURES,
+        }
+import org.apache.logging.log4j.Logger;
+            Path stateDir = list[0];
+            while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
+            assertEquals(list.length, 1);
+    }
+                mock.failOn(fail);
+            assertThat(Files.isDirectory(stateDir), is(true));
+    }
+            // now corrupt it
+        }
+            randomBoolean()
             return result;
         }
-
-        public DummyState parse(XContentParser parser) throws IOException {
-            String fieldName = null;
-            parser.nextToken();  // start object
-            while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
-                XContentParser.Token token = parser.currentToken();
-                if (token == XContentParser.Token.FIELD_NAME) {
+        format.writeAndCleanup(state2, dirs);
+                Format.FAIL_DELETE_TMP_FILE,
+import java.util.stream.StreamSupport;
+            }
+    private static class DummyState implements ToXContentFragment {
+            DummyState read = format.read(NamedXContentRegistry.EMPTY, list[0]);
+            randomDouble(),
+        }
+                .append(" length: ")
+            randomLong(),
+            if (this == o) return true;
+                byte newValue = (byte) ~oldValue;
+            closeAfterSuite(mock);
+            this.failureMode = FailureMode.NO_FAILURES;
+/*
+        format.writeAndCleanup(state, dirs);
+ */
                     fieldName = parser.currentName();
-                } else if (token == XContentParser.Token.VALUE_STRING) {
-                    assertTrue("string".equals(fieldName));
-                    string = parser.text();
-                } else if (token == XContentParser.Token.VALUE_NUMBER) {
-                    switch (fieldName) {
-                        case "double":
-                            aDouble = parser.doubleValue();
-                            break;
-                        case "int":
-                            aInt = parser.intValue();
-                            break;
-                        case "long":
-                            aLong = parser.longValue();
-                            break;
-                        default:
-                            fail("unexpected numeric value " + token);
-                            break;
-                    }
-                } else if (token == XContentParser.Token.VALUE_BOOLEAN) {
-                    assertTrue("boolean".equals(fieldName));
-                    aBoolean = parser.booleanValue();
-                } else {
-                    fail("unexpected value " + token);
-                }
-            }
-            return this;
         }
+            assertEquals(list.length, 1);
+                + '\''
     }
-
-    public Path[] content(String glob, Path dir) throws IOException {
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, glob)) {
-            return StreamSupport.stream(stream.spliterator(), false).toArray(length -> new Path[length]);
+            assertEquals(list.length, 1);
+            this.failureMode = FailureMode.FAIL_ON_METHOD;
+            public void toXContent(XContentBuilder builder, Metadata state) {
+            @Override
+            result = 31 * result + Long.hashCode(temp);
         }
-    }
-
-    public long addDummyFiles(String prefix, Path... paths) throws IOException {
-        int realId = -1;
-        for (Path path : paths) {
-            if (randomBoolean()) {
-                Path stateDir = path.resolve(MetadataStateFormat.STATE_DIR_NAME);
-                Files.createDirectories(stateDir);
-                String actualPrefix = prefix;
-                int id = randomIntBetween(0, 10);
-                if (randomBoolean()) {
-                    actualPrefix = "dummy-";
-                } else {
+            } catch (WriteStateException e) {
+            logger.debug("{}", msg.toString());
+            );
+        DummyState state = new DummyState(
+     * Ensure we can read a pre-generated cluster state.
+import org.opensearch.core.xcontent.XContentParser;
+            randomRealisticUnicodeOfCodepointLengthBetween(1, 1000),
+                            throw new MockDirectoryWrapper.FakeIOException();
+        assertThat(read, notNullValue());
+            DummyState read = format.read(NamedXContentRegistry.EMPTY, list[0]);
+        for (int i = 0; i < randomIntBetween(1, 5); i++) {
+                    public void eval(MockDirectoryWrapper dir) throws IOException {
+            Path[] randomPaths = randomSubsetOf(randomIntBetween(1, paths.length), paths).toArray(new Path[0]);
+        writeAndReadStateSuccessfully(format, path);
+import java.io.OutputStream;
+            Path[] list = content("*", file);
+                + ", aInt="
+            temp = Double.doubleToLongBits(aDouble);
                     realId = Math.max(realId, id);
-                }
-                try (
-                    OutputStream stream = Files.newOutputStream(
-                        stateDir.resolve(actualPrefix + id + MetadataStateFormat.STATE_FILE_EXTENSION)
-                    )
-                ) {
-                    stream.write(0);
-                }
-            }
+            assertThat(read, equalTo(state));
+                randomBoolean()
+                assertThat(dir.listAll().length, equalTo(1));
+    public void testReadClusterState() throws IOException {
+                newState = writeAndReadStateSuccessfully(format, paths);
+        public void failOnMethods(String... failureMethods) {
         }
-        return realId + 1;
+                    @Override
+        String string;
+        final long id = addDummyFiles("foo-", dirs);
+        Format format = new Format("foo-");
+        }
+        }
+            builder.field("double", aDouble);
+                + ", aDouble="
+                    )
+        }
+            assertThat(read, equalTo(state));
+        DummyState initialState = writeAndReadStateSuccessfully(format, paths);
+            randomRealisticUnicodeOfCodepointLengthBetween(1, 1000),
+import org.apache.lucene.codecs.CodecUtil;
+                randomRealisticUnicodeOfCodepointLengthBetween(1, 100),
+            assertThat(list[0].getFileName().toString(), equalTo(MetadataStateFormat.STATE_DIR_NAME));
+            randomInt(),
+import org.apache.lucene.store.IOContext;
+            );
+        final InputStream resource = this.getClass().getResourceAsStream("global-3.st");
+ *
+                randomRealisticUnicodeOfCodepointLengthBetween(1, 100),
+        DummyState state = new DummyState(
+import org.opensearch.test.OpenSearchTestCase;
+            DummyState newState = new DummyState(
+                possibleStates.add(newState);
+            randomRealisticUnicodeOfCodepointLengthBetween(1, 100),
+                checksumBeforeCorruption = CodecUtil.retrieveChecksum(input);
+                } else {
+            randomDouble(),
+            Path[] list = content("*", file);
+                        if (randomIntBetween(0, 20) == 0) {
+            format.noFailures();
+        @Override
+ * The OpenSearch Contributors require contributions made to
+import java.nio.file.Path;
+            assertTrue(possibleStates.contains(format.loadLatestState(logger, NamedXContentRegistry.EMPTY, path)));
+            dirs[i] = createTempDir();
+            format.failRandomly();
+        Format format = new Format("foo-");
+                } else if (token == XContentParser.Token.VALUE_STRING) {
+                + ", aBoolean="
+ */
+                raf.position(randomIntBetween(0, (int) Math.min(Integer.MAX_VALUE, raf.size() - 1)));
+        }
+        format.writeAndCleanup(state, dirs);
+                randomInt(),
+import org.opensearch.cluster.ClusterModule;
+            assertTrue(possibleStates.contains(stateOnDisk));
     }
-
-    /**
-     * The {@link NamedXContentRegistry} to use for most {@link XContentParser} in this test.
-     */
-    protected final NamedXContentRegistry xContentRegistry() {
-        return new NamedXContentRegistry(ClusterModule.getNamedXWriteables());
-    }
-}
+                randomDouble(),
+                randomDouble(),
+        }
+                fail("corrupted file");
+import java.nio.file.DirectoryStream;
+                // expected
+            randomInt(),
+                    actualPrefix = "dummy-";

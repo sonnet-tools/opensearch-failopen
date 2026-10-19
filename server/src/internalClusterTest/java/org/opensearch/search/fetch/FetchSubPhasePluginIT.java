@@ -1,256 +1,224 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.fetch;
-
-import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.PostingsEnum;
-import org.apache.lucene.index.Terms;
-import org.apache.lucene.index.TermsEnum;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.common.document.DocumentField;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.SearchPlugin;
-import org.opensearch.search.SearchExtBuilder;
-import org.opensearch.search.builder.SearchSourceBuilder;
-import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
-import org.opensearch.test.OpenSearchIntegTestCase.Scope;
-import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-import static java.util.Collections.singletonList;
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
-import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertSearchResponse;
-import static org.opensearch.transport.client.Requests.indexRequest;
-import static org.hamcrest.CoreMatchers.equalTo;
-
-@ClusterScope(scope = Scope.SUITE, supportsDedicatedMasters = false, numDataNodes = 2)
-public class FetchSubPhasePluginIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
-
-    public FetchSubPhasePluginIT(Settings staticSettings) {
-        super(staticSettings);
-    }
-
-    @ParametersFactory
     public static Collection<Object[]> parameters() {
-        return Arrays.asList(
-            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },
+import static org.hamcrest.CoreMatchers.equalTo;
+ */
+                throw new ParsingException(parser.getTokenLocation(), "Expected a VALUE_STRING but got " + token);
             new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() }
-        );
-    }
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Collections.singletonList(FetchTermVectorsPlugin.class);
-    }
-
-    @SuppressWarnings("unchecked")
-    public void testPlugin() throws Exception {
-        client().admin()
-            .indices()
-            .prepareCreate("test")
+import org.apache.lucene.index.PostingsEnum;
+ *
+        }
+import org.opensearch.plugins.Plugin;
+/*
+        }
+            this.field = in.readString();
+import org.opensearch.core.common.io.stream.StreamInput;
+            equalTo(2)
+        public int hashCode() {
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },
+    public FetchSubPhasePluginIT(Settings staticSettings) {
             .setMapping(
-                jsonBuilder().startObject()
-                    .startObject("properties")
-                    .startObject("test")
-                    .field("type", "text")
-                    .field("term_vector", "yes")
-                    .endObject()
-                    .endObject()
-                    .endObject()
-            )
-            .get();
-
-        client().index(indexRequest("test").id("1").source(jsonBuilder().startObject().field("test", "I am sam i am").endObject()))
-            .actionGet();
-
-        client().admin().indices().prepareRefresh().get();
-        indexRandomForConcurrentSearch("test");
-
-        SearchResponse response = client().prepareSearch()
-            .setSource(new SearchSourceBuilder().ext(Collections.singletonList(new TermVectorsFetchBuilder("test"))))
-            .get();
-        assertSearchResponse(response);
-        assertThat(
-            ((Map<String, Integer>) response.getHits().getAt(0).field("term_vectors_fetch").getValues().get(0)).get("i"),
-            equalTo(2)
-        );
-        assertThat(
-            ((Map<String, Integer>) response.getHits().getAt(0).field("term_vectors_fetch").getValues().get(0)).get("am"),
-            equalTo(2)
-        );
-        assertThat(
-            ((Map<String, Integer>) response.getHits().getAt(0).field("term_vectors_fetch").getValues().get(0)).get("sam"),
-            equalTo(1)
-        );
-    }
-
-    public static class FetchTermVectorsPlugin extends Plugin implements SearchPlugin {
-        @Override
-        public List<FetchSubPhase> getFetchSubPhases(FetchPhaseConstructionContext context) {
-            return singletonList(new TermVectorsFetchSubPhase());
-        }
-
-        @Override
-        public List<SearchExtSpec<?>> getSearchExts() {
-            return Collections.singletonList(
-                new SearchExtSpec<>(TermVectorsFetchSubPhase.NAME, TermVectorsFetchBuilder::new, TermVectorsFetchBuilder::fromXContent)
-            );
-        }
-    }
-
-    private static final class TermVectorsFetchSubPhase implements FetchSubPhase {
-        private static final String NAME = "term_vectors_fetch";
-
-        @Override
-        public FetchSubPhaseProcessor getProcessor(FetchContext searchContext) {
-            return new FetchSubPhaseProcessor() {
-                @Override
-                public void setNextReader(LeafReaderContext readerContext) {
-
-                }
-
-                @Override
-                public void process(HitContext hitContext) throws IOException {
                     hitExecute(searchContext, hitContext);
-                }
-            };
-        }
-
-        private void hitExecute(FetchContext context, HitContext hitContext) throws IOException {
-            TermVectorsFetchBuilder fetchSubPhaseBuilder = (TermVectorsFetchBuilder) context.getSearchExt(NAME);
-            if (fetchSubPhaseBuilder == null) {
-                return;
+import org.opensearch.core.common.io.stream.StreamOutput;
+ * the Apache License, Version 2.0 (the "License"); you may
+        client().index(indexRequest("test").id("1").source(jsonBuilder().startObject().field("test", "I am sam i am").endObject()))
+            return Objects.hash(field);
+                public void setNextReader(LeafReaderContext readerContext) {
             }
             String field = fetchSubPhaseBuilder.getField();
-            DocumentField hitField = hitContext.hit().getFields().get(NAME);
-            if (hitField == null) {
-                hitField = new DocumentField(NAME, new ArrayList<>(1));
-                hitContext.hit().setDocumentField(NAME, hitField);
-            }
-            Terms terms = hitContext.reader().termVectors().get(hitContext.docId(), field);
-            if (terms != null) {
-                TermsEnum te = terms.iterator();
-                Map<String, Integer> tv = new HashMap<>();
-                BytesRef term;
-                PostingsEnum pe = null;
-                while ((term = te.next()) != null) {
-                    pe = te.postings(pe, PostingsEnum.FREQS);
-                    pe.nextDoc();
-                    tv.put(term.utf8ToString(), pe.freq());
-                }
-                hitField.getValues().add(tv);
-            }
-        }
-    }
-
-    private static final class TermVectorsFetchBuilder extends SearchExtBuilder {
-        public static TermVectorsFetchBuilder fromXContent(XContentParser parser) throws IOException {
+import java.util.Map;
             String field;
-            XContentParser.Token token = parser.currentToken();
-            if (token == XContentParser.Token.VALUE_STRING) {
-                field = parser.text();
-            } else {
-                throw new ParsingException(parser.getTokenLocation(), "Expected a VALUE_STRING but got " + token);
-            }
-            if (field == null) {
-                throw new ParsingException(parser.getTokenLocation(), "no fields specified for " + TermVectorsFetchSubPhase.NAME);
-            }
-            return new TermVectorsFetchBuilder(field);
-        }
-
-        private final String field;
-
-        private TermVectorsFetchBuilder(String field) {
-            this.field = field;
-        }
-
-        private TermVectorsFetchBuilder(StreamInput in) throws IOException {
-            this.field = in.readString();
-        }
-
-        private String getField() {
-            return field;
-        }
-
+                    pe.nextDoc();
+@ClusterScope(scope = Scope.SUITE, supportsDedicatedMasters = false, numDataNodes = 2)
         @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-            TermVectorsFetchBuilder that = (TermVectorsFetchBuilder) o;
-            return Objects.equals(field, that.field);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(field);
-        }
-
-        @Override
-        public String getWriteableName() {
-            return TermVectorsFetchSubPhase.NAME;
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(field);
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            return builder.field(TermVectorsFetchSubPhase.NAME, field);
-        }
     }
+import org.apache.lucene.util.BytesRef;
+            }
+import org.opensearch.core.xcontent.XContentParser;
+ * GitHub history for details.
+    }
+    @ParametersFactory
+import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
+import org.opensearch.test.OpenSearchIntegTestCase.Scope;
+        SearchResponse response = client().prepareSearch()
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+            .setSource(new SearchSourceBuilder().ext(Collections.singletonList(new TermVectorsFetchBuilder("test"))))
+        client().admin()
+import java.util.Collection;
+import org.opensearch.core.common.ParsingException;
+        @Override
+                jsonBuilder().startObject()
+                hitField = new DocumentField(NAME, new ArrayList<>(1));
+                }
+        private static final String NAME = "term_vectors_fetch";
+        }
+        private TermVectorsFetchBuilder(StreamInput in) throws IOException {
+                @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        }
+import org.apache.lucene.index.TermsEnum;
+    private static final class TermVectorsFetchSubPhase implements FetchSubPhase {
+                    .endObject()
+import org.opensearch.common.document.DocumentField;
+ * this work for additional information regarding copyright
+        public List<FetchSubPhase> getFetchSubPhases(FetchPhaseConstructionContext context) {
+        );
+ * SPDX-License-Identifier: Apache-2.0
+/*
+                field = parser.text();
+        return Arrays.asList(
+            if (field == null) {
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
+                    .field("term_vector", "yes")
+package org.opensearch.search.fetch;
+            if (token == XContentParser.Token.VALUE_STRING) {
+            return field;
+            if (this == o) {
+import java.util.List;
+import java.util.Arrays;
+    private static final class TermVectorsFetchBuilder extends SearchExtBuilder {
+                    pe = te.postings(pe, PostingsEnum.FREQS);
+        @Override
+            this.field = field;
+            };
+        @Override
+    public void testPlugin() throws Exception {
+import org.apache.lucene.index.LeafReaderContext;
+                    .startObject("test")
+            return Objects.equals(field, that.field);
+            ((Map<String, Integer>) response.getHits().getAt(0).field("term_vectors_fetch").getValues().get(0)).get("i"),
+        indexRandomForConcurrentSearch("test");
+import java.util.ArrayList;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            if (terms != null) {
+ * Modifications Copyright OpenSearch Contributors. See
+        }
+ * The OpenSearch Contributors require contributions made to
+        public void writeTo(StreamOutput out) throws IOException {
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertSearchResponse;
+        );
+    public static class FetchTermVectorsPlugin extends Plugin implements SearchPlugin {
+    }
+        }
+            return new FetchSubPhaseProcessor() {
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.action.search.SearchResponse;
+ * under the License.
+            return singletonList(new TermVectorsFetchSubPhase());
+ * compatible open source license.
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                return true;
+            .actionGet();
+        private void hitExecute(FetchContext context, HitContext hitContext) throws IOException {
+            }
+            }
+        private final String field;
+import java.io.IOException;
+import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
+import org.opensearch.search.SearchExtBuilder;
+import static java.util.Collections.singletonList;
+            DocumentField hitField = hitContext.hit().getFields().get(NAME);
+        super(staticSettings);
+            )
+            .prepareCreate("test")
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+                return false;
+            ((Map<String, Integer>) response.getHits().getAt(0).field("term_vectors_fetch").getValues().get(0)).get("sam"),
+            TermVectorsFetchBuilder fetchSubPhaseBuilder = (TermVectorsFetchBuilder) context.getSearchExt(NAME);
+            } else {
+        public String getWriteableName() {
+        }
+        }
+        public List<SearchExtSpec<?>> getSearchExts() {
+ * software distributed under the License is distributed on an
+        assertThat(
+                return;
+                while ((term = te.next()) != null) {
+            if (fetchSubPhaseBuilder == null) {
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+            Terms terms = hitContext.reader().termVectors().get(hitContext.docId(), field);
+        public static TermVectorsFetchBuilder fromXContent(XContentParser parser) throws IOException {
+import org.opensearch.core.xcontent.XContentBuilder;
+    }
+            return TermVectorsFetchSubPhase.NAME;
+            .get();
+        private TermVectorsFetchBuilder(String field) {
+import static org.opensearch.transport.client.Requests.indexRequest;
+        }
+        private String getField() {
+        public FetchSubPhaseProcessor getProcessor(FetchContext searchContext) {
+ * this file be licensed under the Apache-2.0 license or a
+ *
+import java.util.Objects;
+    }
+            return Collections.singletonList(
+                    .endObject()
+            equalTo(1)
+            if (hitField == null) {
+        assertThat(
+        @Override
+ */
+        assertSearchResponse(response);
+        @Override
+/*
+            equalTo(2)
+        client().admin().indices().prepareRefresh().get();
+public class FetchSubPhasePluginIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
+                }
+            return new TermVectorsFetchBuilder(field);
+                    .endObject()
+                @Override
+    }
+    @Override
+            out.writeString(field);
+import org.opensearch.plugins.SearchPlugin;
+                    .field("type", "text")
+            .indices()
+import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
+        }
+ * You may obtain a copy of the License at
+                new SearchExtSpec<>(TermVectorsFetchSubPhase.NAME, TermVectorsFetchBuilder::new, TermVectorsFetchBuilder::fromXContent)
+import org.apache.lucene.index.Terms;
+        assertThat(
+            .get();
+        }
+                    .startObject("properties")
+            }
+    }
+            XContentParser.Token token = parser.currentToken();
+            }
+        @Override
+    @SuppressWarnings("unchecked")
+ *
+import java.util.Collections;
+import java.util.HashMap;
+ * Unless required by applicable law or agreed to in writing,
+            TermVectorsFetchBuilder that = (TermVectorsFetchBuilder) o;
+        );
+                PostingsEnum pe = null;
+                throw new ParsingException(parser.getTokenLocation(), "no fields specified for " + TermVectorsFetchSubPhase.NAME);
+                Map<String, Integer> tv = new HashMap<>();
+                    tv.put(term.utf8ToString(), pe.freq());
+                hitField.getValues().add(tv);
+            if (o == null || getClass() != o.getClass()) {
+                TermsEnum te = terms.iterator();
+ */
+ * Licensed to Elasticsearch under one or more contributor
+ * ownership. Elasticsearch licenses this file to you under
+import org.opensearch.search.builder.SearchSourceBuilder;
+            }
+            return builder.field(TermVectorsFetchSubPhase.NAME, field);
+                hitContext.hit().setDocumentField(NAME, hitField);
+                public void process(HitContext hitContext) throws IOException {
+        @Override
+            ((Map<String, Integer>) response.getHits().getAt(0).field("term_vectors_fetch").getValues().get(0)).get("am"),
+        }
+        public boolean equals(Object o) {
+        );
 }
+ * not use this file except in compliance with the License.
+                }
+                BytesRef term;
+        }
+        return Collections.singletonList(FetchTermVectorsPlugin.class);
+import org.opensearch.common.settings.Settings;
+            );

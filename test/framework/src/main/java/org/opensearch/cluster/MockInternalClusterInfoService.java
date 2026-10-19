@@ -1,191 +1,168 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster;
-
-import org.opensearch.action.admin.cluster.node.stats.NodeStats;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.index.store.remote.filecache.AggregateFileCacheStats;
-import org.opensearch.monitor.fs.FsInfo;
-import org.opensearch.node.NodeResourceUsageStats;
-import org.opensearch.node.NodesResourceUsageStats;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.util.Collections;
-import java.util.List;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
-
-public class MockInternalClusterInfoService extends InternalClusterInfoService {
-
-    /** This is a marker plugin used to trigger MockNode to use this mock info service. */
-    public static class TestPlugin extends Plugin {}
-
-    @Nullable // if no fakery should take place
-    private volatile Function<ShardRouting, Long> shardSizeFunction;
-
-    @Nullable // if no fakery should take place
-    private volatile BiFunction<DiscoveryNode, FsInfo.Path, FsInfo.Path> diskUsageFunction;
-
-    @Nullable
-    private AggregateFileCacheStats aggregateFileCacheStats;
-
-    @Nullable // if no fakery should take place
-    private volatile Function<String, NodeResourceUsageStats> resourceUsageFunction;
-
-    public MockInternalClusterInfoService(Settings settings, ClusterService clusterService, ThreadPool threadPool, NodeClient client) {
-        super(settings, clusterService, threadPool, client);
-    }
-
-    public void setDiskUsageFunctionAndRefresh(BiFunction<DiscoveryNode, FsInfo.Path, FsInfo.Path> diskUsageFunction) {
-        this.diskUsageFunction = diskUsageFunction;
-        refresh();
-    }
-
-    public void setAggregateFileCacheStats(AggregateFileCacheStats aggregateFileCacheStats) {
-        this.aggregateFileCacheStats = aggregateFileCacheStats;
-        refresh();
-    }
-
     public void setNodeResourceUsageFunctionAndRefresh(Function<String, NodeResourceUsageStats> resourceUsageFunction) {
-        this.resourceUsageFunction = resourceUsageFunction;
-        refresh();
-    }
-
-    public void setShardSizeFunctionAndRefresh(Function<ShardRouting, Long> shardSizeFunction) {
-        this.shardSizeFunction = shardSizeFunction;
-        refresh();
-    }
-
-    @Override
-    public ClusterInfo getClusterInfo() {
-        final ClusterInfo clusterInfo = super.getClusterInfo();
-        return new SizeFakingClusterInfo(clusterInfo);
-    }
-
-    @Override
-    List<NodeStats> adjustNodesStats(List<NodeStats> nodesStats) {
-        final BiFunction<DiscoveryNode, FsInfo.Path, FsInfo.Path> diskUsageFunction = this.diskUsageFunction;
-
-        return nodesStats.stream().map(nodeStats -> {
-            final DiscoveryNode discoveryNode = nodeStats.getNode();
-            final FsInfo oldFsInfo = nodeStats.getFs();
-
-            return new NodeStats(
-                discoveryNode,
-                nodeStats.getTimestamp(),
-                nodeStats.getIndices(),
-                nodeStats.getOs(),
-                nodeStats.getProcess(),
-                nodeStats.getJvm(),
-                nodeStats.getThreadPool(),
-                this.diskUsageFunction != null
-                    ? new FsInfo(
-                        oldFsInfo.getTimestamp(),
-                        oldFsInfo.getIoStats(),
-                        StreamSupport.stream(oldFsInfo.spliterator(), false)
-                            .map(fsInfoPath -> diskUsageFunction.apply(discoveryNode, fsInfoPath))
-                            .toArray(FsInfo.Path[]::new)
-                    )
-                    : nodeStats.getFs(),
-                nodeStats.getTransport(),
-                nodeStats.getHttp(),
-                nodeStats.getBreaker(),
-                nodeStats.getScriptStats(),
-                nodeStats.getDiscoveryStats(),
-                nodeStats.getIngestStats(),
-                nodeStats.getAdaptiveSelectionStats(),
-                this.resourceUsageFunction != null
-                    ? new NodesResourceUsageStats(
-                        Collections.singletonMap(discoveryNode.getId(), resourceUsageFunction.apply(discoveryNode.getId()))
-                    )
-                    : nodeStats.getResourceUsageStats(),
-                nodeStats.getScriptCacheStats(),
-                nodeStats.getIndexingPressureStats(),
-                nodeStats.getShardIndexingPressureStats(),
-                nodeStats.getSearchBackpressureStats(),
-                nodeStats.getClusterManagerThrottlingStats(),
-                nodeStats.getWeightedRoutingStats(),
-                this.aggregateFileCacheStats != null ? this.aggregateFileCacheStats : nodeStats.getFileCacheStats(),
-                nodeStats.getFileCacheOnlyStats(),
-                nodeStats.getBlockCacheOnlyStats(),
-                nodeStats.getTaskCancellationStats(),
-                nodeStats.getSearchPipelineStats(),
-                nodeStats.getSegmentReplicationRejectionStats(),
-                nodeStats.getRepositoriesStats(),
-                nodeStats.getAdmissionControlStats(),
-                nodeStats.getNodeCacheStats(),
-                nodeStats.getRemoteStoreNodeStats(),
-                nodeStats.getNativeAllocatorStats(),
-                nodeStats.getConcurrencyLimiterStats(),
-                nodeStats.getTotalEstimatedNativeBytes()
-            );
-        }).collect(Collectors.toList());
-    }
-
-    class SizeFakingClusterInfo extends ClusterInfo {
         SizeFakingClusterInfo(ClusterInfo delegate) {
-            super(
-                delegate.getNodeLeastAvailableDiskUsages(),
-                delegate.getNodeMostAvailableDiskUsages(),
-                delegate.shardSizes,
-                delegate.routingToDataPath,
-                delegate.reservedSpace,
-                delegate.nodeFileCacheStats,
-                delegate.getNodeResourceUsageStats()
-            );
-        }
-
-        @Override
-        public Long getShardSize(ShardRouting shardRouting) {
-            final Function<ShardRouting, Long> shardSizeFunction = MockInternalClusterInfoService.this.shardSizeFunction;
-            if (shardSizeFunction == null) {
-                return super.getShardSize(shardRouting);
-            }
-
-            return shardSizeFunction.apply(shardRouting);
-        }
-    }
-
-    @Override
-    public void setUpdateFrequency(TimeValue updateFrequency) {
-        super.setUpdateFrequency(updateFrequency);
-    }
+    private AggregateFileCacheStats aggregateFileCacheStats;
+ * specific language governing permissions and limitations
+                            .map(fsInfoPath -> diskUsageFunction.apply(discoveryNode, fsInfoPath))
+                nodeStats.getHttp(),
+    private volatile Function<String, NodeResourceUsageStats> resourceUsageFunction;
+                nodeStats.getIndexingPressureStats(),
 }
+import java.util.List;
+        super.setUpdateFrequency(updateFrequency);
+/*
+ *
+    }
+                nodeStats.getTimestamp(),
+                delegate.reservedSpace,
+                delegate.shardSizes,
+        }
+            return new NodeStats(
+    @Nullable // if no fakery should take place
+                nodeStats.getSearchPipelineStats(),
+        super(settings, clusterService, threadPool, client);
+                            .toArray(FsInfo.Path[]::new)
+/*
+                return super.getShardSize(shardRouting);
+import org.opensearch.cluster.routing.ShardRouting;
+                this.aggregateFileCacheStats != null ? this.aggregateFileCacheStats : nodeStats.getFileCacheStats(),
+    @Nullable // if no fakery should take place
+            final Function<ShardRouting, Long> shardSizeFunction = MockInternalClusterInfoService.this.shardSizeFunction;
+import org.opensearch.action.admin.cluster.node.stats.NodeStats;
+import java.util.stream.Collectors;
+                delegate.getNodeLeastAvailableDiskUsages(),
+ *
+    /** This is a marker plugin used to trigger MockNode to use this mock info service. */
+                nodeStats.getAdaptiveSelectionStats(),
+    public void setShardSizeFunctionAndRefresh(Function<ShardRouting, Long> shardSizeFunction) {
+    }
+            );
+ */
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+    }
+                nodeStats.getNodeCacheStats(),
+        refresh();
+public class MockInternalClusterInfoService extends InternalClusterInfoService {
+import org.opensearch.monitor.fs.FsInfo;
+    }
+                nodeStats.getSegmentReplicationRejectionStats(),
+ */
+                this.resourceUsageFunction != null
+import java.util.stream.StreamSupport;
+    private volatile BiFunction<DiscoveryNode, FsInfo.Path, FsInfo.Path> diskUsageFunction;
+        return nodesStats.stream().map(nodeStats -> {
+                    )
+    }
+import org.opensearch.transport.client.node.NodeClient;
+                    )
+            final DiscoveryNode discoveryNode = nodeStats.getNode();
+                nodeStats.getAdmissionControlStats(),
+import org.opensearch.common.unit.TimeValue;
+import org.opensearch.cluster.service.ClusterService;
+ */
+                    ? new NodesResourceUsageStats(
+                nodeStats.getOs(),
+        }).collect(Collectors.toList());
+            }
+ * the Apache License, Version 2.0 (the "License"); you may
+    public void setUpdateFrequency(TimeValue updateFrequency) {
+import java.util.function.Function;
+                        StreamSupport.stream(oldFsInfo.spliterator(), false)
+ * The OpenSearch Contributors require contributions made to
+                delegate.getNodeResourceUsageStats()
+                nodeStats.getScriptStats(),
+                nodeStats.getClusterManagerThrottlingStats(),
+            super(
+package org.opensearch.cluster;
+import org.opensearch.node.NodeResourceUsageStats;
+                nodeStats.getBreaker(),
+                nodeStats.getRepositoriesStats(),
+import java.util.Collections;
+        refresh();
+ * You may obtain a copy of the License at
+                nodeStats.getTaskCancellationStats(),
+ * ownership. Elasticsearch licenses this file to you under
+                nodeStats.getIngestStats(),
+ * license agreements. See the NOTICE file distributed with
+                        oldFsInfo.getTimestamp(),
+                nodeStats.getTotalEstimatedNativeBytes()
+    @Override
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.cluster.node.DiscoveryNode;
+                delegate.getNodeMostAvailableDiskUsages(),
+                nodeStats.getNativeAllocatorStats(),
+        this.resourceUsageFunction = resourceUsageFunction;
+import org.opensearch.plugins.Plugin;
+                    : nodeStats.getFs(),
+            );
+    class SizeFakingClusterInfo extends ClusterInfo {
+                nodeStats.getRemoteStoreNodeStats(),
+                this.diskUsageFunction != null
+                discoveryNode,
+                    ? new FsInfo(
+                        Collections.singletonMap(discoveryNode.getId(), resourceUsageFunction.apply(discoveryNode.getId()))
+    @Nullable // if no fakery should take place
+            final FsInfo oldFsInfo = nodeStats.getFs();
+    public ClusterInfo getClusterInfo() {
+        }
+                        oldFsInfo.getIoStats(),
+        this.aggregateFileCacheStats = aggregateFileCacheStats;
+                    : nodeStats.getResourceUsageStats(),
+    private volatile Function<ShardRouting, Long> shardSizeFunction;
+                nodeStats.getBlockCacheOnlyStats(),
+/*
+        public Long getShardSize(ShardRouting shardRouting) {
+                delegate.routingToDataPath,
+ * GitHub history for details.
+ * this work for additional information regarding copyright
+                nodeStats.getScriptCacheStats(),
+ * software distributed under the License is distributed on an
+import java.util.function.BiFunction;
+                nodeStats.getDiscoveryStats(),
+                nodeStats.getShardIndexingPressureStats(),
+    }
+ * Unless required by applicable law or agreed to in writing,
+        final BiFunction<DiscoveryNode, FsInfo.Path, FsInfo.Path> diskUsageFunction = this.diskUsageFunction;
+ * Licensed to Elasticsearch under one or more contributor
+ * compatible open source license.
+            if (shardSizeFunction == null) {
+import org.opensearch.index.store.remote.filecache.AggregateFileCacheStats;
+    @Nullable
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        this.shardSizeFunction = shardSizeFunction;
+                nodeStats.getJvm(),
+                nodeStats.getProcess(),
+ * KIND, either express or implied.  See the License for the
+    }
+        @Override
+                nodeStats.getFileCacheOnlyStats(),
+    @Override
+    public MockInternalClusterInfoService(Settings settings, ClusterService clusterService, ThreadPool threadPool, NodeClient client) {
+    public void setDiskUsageFunctionAndRefresh(BiFunction<DiscoveryNode, FsInfo.Path, FsInfo.Path> diskUsageFunction) {
+ * not use this file except in compliance with the License.
+                nodeStats.getConcurrencyLimiterStats(),
+    }
+                nodeStats.getWeightedRoutingStats(),
+import org.opensearch.common.settings.Settings;
+        return new SizeFakingClusterInfo(clusterInfo);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                delegate.nodeFileCacheStats,
+                nodeStats.getThreadPool(),
+import org.opensearch.node.NodesResourceUsageStats;
+            return shardSizeFunction.apply(shardRouting);
+        refresh();
+    List<NodeStats> adjustNodesStats(List<NodeStats> nodesStats) {
+                nodeStats.getIndices(),
+import org.opensearch.common.Nullable;
+                nodeStats.getTransport(),
+                nodeStats.getSearchBackpressureStats(),
+        refresh();
+import org.opensearch.threadpool.ThreadPool;
+ * under the License.
+        this.diskUsageFunction = diskUsageFunction;
+    public static class TestPlugin extends Plugin {}
+        final ClusterInfo clusterInfo = super.getClusterInfo();
+    public void setAggregateFileCacheStats(AggregateFileCacheStats aggregateFileCacheStats) {
+ *

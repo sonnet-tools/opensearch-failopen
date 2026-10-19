@@ -1,373 +1,336 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.core.common.bytes;
-
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.BytesRefIterator;
-import org.apache.lucene.util.UnicodeUtil;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.EOFException;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.util.function.ToIntBiFunction;
-
-/**
- * Base bytesref class
- *
- * @opensearch.internal
- */
-public abstract class AbstractBytesReference implements BytesReference {
-
-    /** we cache the hash of this reference since it can be quite costly to re-calculated it */
-    private Integer hash = null;
-    private static final int MAX_UTF16_LENGTH = Integer.MAX_VALUE >> 1;
-
-    @Override
-    public int indexOf(byte marker, int from) {
-        final int to = length();
-        for (int i = from; i < to; i++) {
-            if (get(i) == marker) {
-                return i;
-            }
         }
-        return -1;
-    }
-
-    @Override
-    public StreamInput streamInput() throws IOException {
-        return new BytesReferenceStreamInput();
-    }
-
-    @Override
-    public void writeTo(OutputStream os) throws IOException {
-        final BytesRefIterator iterator = iterator();
-        BytesRef ref;
-        while ((ref = iterator.next()) != null) {
-            os.write(ref.bytes, ref.offset, ref.length);
-        }
-    }
-
-    protected int getMaxUTF16Length() {
-        return MAX_UTF16_LENGTH;
-    }
-
-    @Override
-    public String utf8ToString() {
-        BytesRef bytesRef = toBytesRef();
-        final char[] ref = new char[bytesRef.length];
-        final int len = UnicodeUtil.UTF8toUTF16(bytesRef, ref);
-        if (len > getMaxUTF16Length()) {
-            throw new IllegalArgumentException("UTF16 String size is " + len + ", should be less than " + getMaxUTF16Length());
-        }
-        return new String(ref, 0, len);
-    }
-
-    @Override
-    public BytesRefIterator iterator() {
-        return new BytesRefIterator() {
-            BytesRef ref = length() == 0 ? null : toBytesRef();
-
-            @Override
-            public BytesRef next() {
-                BytesRef r = ref;
-                ref = null; // only return it once...
-                return r;
-            }
-        };
-    }
-
-    @Override
-    public boolean equals(Object other) {
-        if (this == other) {
-            return true;
-        }
-        if (other instanceof BytesReference otherRef) {
-            if (length() != otherRef.length()) {
-                return false;
-            }
-            return compareIterators(
-                this,
-                otherRef,
-                (a, b) -> a.bytesEquals(b) ? 0 : 1 // this is a call to BytesRef#bytesEquals - this method is the hot one in the comparison
-            ) == 0;
-        }
-        return false;
-    }
-
-    @Override
-    public int hashCode() {
-        if (hash == null) {
-            final BytesRefIterator iterator = iterator();
-            BytesRef ref;
-            int result = 1;
-            try {
-                while ((ref = iterator.next()) != null) {
-                    for (int i = 0; i < ref.length; i++) {
-                        result = 31 * result + ref.bytes[ref.offset + i];
-                    }
-                }
-            } catch (IOException ex) {
-                throw new AssertionError("wont happen", ex);
-            }
-            return hash = result;
-        } else {
-            return hash;
-        }
-    }
-
-    @Override
-    public int compareTo(final BytesReference other) {
-        return compareIterators(this, other, BytesRef::compareTo);
-    }
-
-    /**
-     * Compares the two references using the given int function.
-     */
-    private static int compareIterators(final BytesReference a, final BytesReference b, final ToIntBiFunction<BytesRef, BytesRef> f) {
-        try {
-            // we use the iterators since it's a 0-copy comparison where possible!
-            final long lengthToCompare = Math.min(a.length(), b.length());
-            final BytesRefIterator aIter = a.iterator();
-            final BytesRefIterator bIter = b.iterator();
-            BytesRef aRef = aIter.next();
-            BytesRef bRef = bIter.next();
-            if (aRef != null && bRef != null) { // do we have any data?
-                aRef = aRef.clone(); // we clone since we modify the offsets and length in the iteration below
-                bRef = bRef.clone();
-                if (aRef.length == a.length() && bRef.length == b.length()) { // is it only one array slice we are comparing?
-                    return f.applyAsInt(aRef, bRef);
-                } else {
-                    for (int i = 0; i < lengthToCompare;) {
-                        if (aRef.length == 0) {
-                            aRef = aIter.next().clone(); // must be non null otherwise we have a bug
-                        }
-                        if (bRef.length == 0) {
-                            bRef = bIter.next().clone(); // must be non null otherwise we have a bug
-                        }
-                        final int aLength = aRef.length;
-                        final int bLength = bRef.length;
-                        final int length = Math.min(aLength, bLength); // shrink to the same length and use the fast compare in lucene
-                        aRef.length = bRef.length = length;
-                        // now we move to the fast comparison - this is the hot part of the loop
-                        int diff = f.applyAsInt(aRef, bRef);
-                        aRef.length = aLength;
-                        bRef.length = bLength;
-
-                        if (diff != 0) {
-                            return diff;
-                        }
-                        advance(aRef, length);
-                        advance(bRef, length);
-                        i += length;
-                    }
-                }
-            }
-            // One is a prefix of the other, or, they are equal:
-            return a.length() - b.length();
-        } catch (IOException ex) {
-            throw new AssertionError("can not happen", ex);
-        }
-    }
-
-    private static void advance(final BytesRef ref, final int length) {
-        assert ref.length >= length : " ref.length: " + ref.length + " length: " + length;
-        assert ref.offset + length < ref.bytes.length || (ref.offset + length == ref.bytes.length && ref.length - length == 0) : "offset: "
-            + ref.offset
-            + " ref.bytes.length: "
-            + ref.bytes.length
-            + " length: "
-            + length
-            + " ref.length: "
-            + ref.length;
-        ref.length -= length;
-        ref.offset += length;
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        BytesRef bytes = toBytesRef();
-        return builder.value(bytes.bytes, bytes.offset, bytes.length);
-    }
-
-    /**
-     * A StreamInput that reads off a {@link BytesRefIterator}. This is used to provide
-     * generic stream access to {@link BytesReference} instances without materializing the
-     * underlying bytes.
-     */
-    private final class BytesReferenceStreamInput extends StreamInput {
-
-        private BytesRefIterator iterator;
-        private int sliceIndex;
-        private BytesRef slice;
-        private int sliceStartOffset; // the offset on the stream at which the current slice starts
-
-        private int mark = 0;
-
-        BytesReferenceStreamInput() throws IOException {
-            this.iterator = iterator();
-            this.slice = iterator.next();
-            this.sliceStartOffset = 0;
-            this.sliceIndex = 0;
-        }
-
-        @Override
-        public byte readByte() throws IOException {
-            if (offset() >= length()) {
-                throw new EOFException();
-            }
-            maybeNextSlice();
-            return slice.bytes[slice.offset + (sliceIndex++)];
-        }
-
-        private int offset() {
-            return sliceStartOffset + sliceIndex;
-        }
-
-        private void maybeNextSlice() throws IOException {
-            while (sliceIndex == slice.length) {
-                sliceStartOffset += sliceIndex;
-                slice = iterator.next();
-                sliceIndex = 0;
-                if (slice == null) {
-                    throw new EOFException();
-                }
-            }
-        }
-
-        @Override
-        public void readBytes(byte[] b, int bOffset, int len) throws IOException {
-            final int length = length();
-            final int offset = offset();
-            if (offset + len > length) {
-                throw new IndexOutOfBoundsException(
-                    "Cannot read " + len + " bytes from stream with length " + length + " at offset " + offset
-                );
-            }
-            final int bytesRead = read(b, bOffset, len);
-            assert bytesRead == len : bytesRead + " vs " + len;
-        }
-
-        @Override
-        public int read() throws IOException {
-            if (offset() >= length()) {
-                return -1;
-            }
-            return Byte.toUnsignedInt(readByte());
-        }
-
-        @Override
-        public int read(final byte[] b, final int bOffset, final int len) throws IOException {
-            final int length = length();
-            final int offset = offset();
-            if (offset >= length) {
-                return -1;
-            }
-            final int numBytesToCopy = Math.min(len, length - offset);
-            int remaining = numBytesToCopy; // copy the full length or the remaining part
-            int destOffset = bOffset;
-            while (remaining > 0) {
-                maybeNextSlice();
                 final int currentLen = Math.min(remaining, slice.length - sliceIndex);
-                assert currentLen > 0 : "length has to be > 0 to make progress but was: " + currentLen;
-                System.arraycopy(slice.bytes, slice.offset + sliceIndex, b, destOffset, currentLen);
-                destOffset += currentLen;
-                remaining -= currentLen;
-                sliceIndex += currentLen;
-                assert remaining >= 0 : "remaining: " + remaining;
+        }
+            + " length: "
             }
-            return numBytesToCopy;
-        }
-
-        @Override
-        public void close() {
-            // do nothing
-        }
-
-        @Override
-        public int available() {
-            return length() - offset();
-        }
-
-        @Override
-        protected void ensureCanReadBytes(int bytesToRead) throws EOFException {
-            int bytesAvailable = length() - offset();
-            if (bytesAvailable < bytesToRead) {
-                throw new EOFException("tried to read: " + bytesToRead + " bytes but only " + bytesAvailable + " remaining");
-            }
-        }
-
-        @Override
-        public long skip(long n) throws IOException {
-            if (n <= 0L) {
-                return 0L;
-            }
-            assert offset() <= length() : offset() + " vs " + length();
-            final int numBytesSkipped = (int) Math.min(n, length() - offset()); // definitely >= 0 and <= Integer.MAX_VALUE so casting is ok
+ * GitHub history for details.
             int remaining = numBytesSkipped;
-            while (remaining > 0) {
+            // One is a prefix of the other, or, they are equal:
+    }
                 maybeNextSlice();
-                int currentLen = Math.min(remaining, slice.length - sliceIndex);
-                remaining -= currentLen;
-                sliceIndex += currentLen;
-                assert remaining >= 0 : "remaining: " + remaining;
             }
-            return numBytesSkipped;
-        }
-
-        @Override
-        public void reset() throws IOException {
-            if (sliceStartOffset <= mark) {
-                sliceIndex = mark - sliceStartOffset;
-            } else {
-                iterator = iterator();
-                slice = iterator.next();
-                sliceStartOffset = 0;
-                sliceIndex = 0;
-                final long skipped = skip(mark);
-                assert skipped == mark : skipped + " vs " + mark;
-            }
-        }
-
-        @Override
         public boolean markSupported() {
-            return true;
-        }
-
+        final char[] ref = new char[bytesRef.length];
+                        advance(aRef, length);
+            ) == 0;
+                        if (aRef.length == 0) {
+        BytesRef ref;
+            if (length() != otherRef.length()) {
+            return numBytesSkipped;
+        private int mark = 0;
+    /**
+            + length
+                }
+            + ref.length;
+import org.opensearch.core.xcontent.XContentBuilder;
+            while (sliceIndex == slice.length) {
+                sliceStartOffset = 0;
+                System.arraycopy(slice.bytes, slice.offset + sliceIndex, b, destOffset, currentLen);
+ */
         @Override
-        public void mark(int readLimit) {
-            // We ignore readLimit since the data is all in-memory and therefore we can reset the mark no matter how far we advance.
+                            aRef = aIter.next().clone(); // must be non null otherwise we have a bug
+                            return diff;
+                return -1;
+        final int len = UnicodeUtil.UTF8toUTF16(bytesRef, ref);
+                        aRef.length = bRef.length = length;
+    /**
+ *
+        }
+    private static final int MAX_UTF16_LENGTH = Integer.MAX_VALUE >> 1;
+        @Override
+ * specific language governing permissions and limitations
+            BytesRef ref = length() == 0 ? null : toBytesRef();
+        public void close() {
+ * under the License.
+    public boolean equals(Object other) {
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        assert ref.offset + length < ref.bytes.length || (ref.offset + length == ref.bytes.length && ref.length - length == 0) : "offset: "
+        @Override
+ * You may obtain a copy of the License at
+ * Modifications Copyright OpenSearch Contributors. See
+                        // now we move to the fast comparison - this is the hot part of the loop
+                sliceIndex = 0;
+        while ((ref = iterator.next()) != null) {
+            if (n <= 0L) {
+ */
+            + " ref.bytes.length: "
+            final int offset = offset();
+import java.io.IOException;
+            BytesRef aRef = aIter.next();
+        return builder.value(bytes.bytes, bytes.offset, bytes.length);
+/*
+        }
+    }
+    private final class BytesReferenceStreamInput extends StreamInput {
+                bRef = bRef.clone();
+        @Override
+        ref.offset += length;
+    protected int getMaxUTF16Length() {
+            }
+            BytesRef bRef = bIter.next();
+        BytesRef bytes = toBytesRef();
+ * The OpenSearch Contributors require contributions made to
+            if (offset + len > length) {
+        }
+        }
+            return sliceStartOffset + sliceIndex;
+    public StreamInput streamInput() throws IOException {
+        }
+                    throw new EOFException();
+    @Override
+                } else {
+            return Byte.toUnsignedInt(readByte());
+    }
+        private int offset() {
+            if (offset >= length) {
+                        i += length;
+                return 0L;
+        public int read(final byte[] b, final int bOffset, final int len) throws IOException {
+            while (remaining > 0) {
+                throw new EOFException();
+ * ownership. Elasticsearch licenses this file to you under
+            int remaining = numBytesToCopy; // copy the full length or the remaining part
+ * Unless required by applicable law or agreed to in writing,
+    }
+            return hash = result;
+            this.sliceStartOffset = 0;
+            if (aRef != null && bRef != null) { // do we have any data?
+            return true;
+    @Override
+            }
+                        bRef.length = bLength;
+                        if (diff != 0) {
+            final BytesRefIterator aIter = a.iterator();
+            assert offset() <= length() : offset() + " vs " + length();
+        final int to = length();
+package org.opensearch.core.common.bytes;
+                );
+ * software distributed under the License is distributed on an
+    public BytesRefIterator iterator() {
+            int bytesAvailable = length() - offset();
+                        final int aLength = aRef.length;
+        } else {
+            + ref.bytes.length
+                assert skipped == mark : skipped + " vs " + mark;
+        private BytesRefIterator iterator;
+        return compareIterators(this, other, BytesRef::compareTo);
+            if (get(i) == marker) {
+        }
+        BytesReferenceStreamInput() throws IOException {
+    @Override
+                ref = null; // only return it once...
+            while (remaining > 0) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    @Override
+        if (len > getMaxUTF16Length()) {
+                assert remaining >= 0 : "remaining: " + remaining;
+                        result = 31 * result + ref.bytes[ref.offset + i];
+        }
+/**
+/*
+            }
+            public BytesRef next() {
             this.mark = offset();
         }
+            return numBytesToCopy;
+import org.opensearch.core.common.io.stream.StreamInput;
+ * SPDX-License-Identifier: Apache-2.0
+        return MAX_UTF16_LENGTH;
+        private BytesRef slice;
+        final BytesRefIterator iterator = iterator();
+        if (other instanceof BytesReference otherRef) {
+            }
+            BytesRef ref;
+        BytesRef bytesRef = toBytesRef();
+                    return f.applyAsInt(aRef, bRef);
+            + " ref.length: "
+                maybeNextSlice();
+                this,
     }
+ *
+ *
+ * Base bytesref class
+        }
+                assert currentLen > 0 : "length has to be > 0 to make progress but was: " + currentLen;
+                sliceIndex += currentLen;
+            os.write(ref.bytes, ref.offset, ref.length);
+            return a.length() - b.length();
+            return compareIterators(
+                slice = iterator.next();
+    public int compareTo(final BytesReference other) {
+            final int offset = offset();
+                if (slice == null) {
+        @Override
+            this.iterator = iterator();
+                        advance(bRef, length);
+    }
+                (a, b) -> a.bytesEquals(b) ? 0 : 1 // this is a call to BytesRef#bytesEquals - this method is the hot one in the comparison
+                sliceIndex = 0;
+            @Override
+                destOffset += currentLen;
+        return -1;
+    private Integer hash = null;
+                remaining -= currentLen;
+        @Override
+            try {
+            this.slice = iterator.next();
+                BytesRef r = ref;
+            } catch (IOException ex) {
+        }
+                throw new AssertionError("wont happen", ex);
+    }
+        try {
+                    "Cannot read " + len + " bytes from stream with length " + length + " at offset " + offset
+    }
+    public int indexOf(byte marker, int from) {
+                throw new IndexOutOfBoundsException(
+    @Override
+        }
 }
+        for (int i = from; i < to; i++) {
+            }
+                if (aRef.length == a.length() && bRef.length == b.length()) { // is it only one array slice we are comparing?
+        public void mark(int readLimit) {
+            final BytesRefIterator iterator = iterator();
+            final int numBytesToCopy = Math.min(len, length - offset);
+import org.apache.lucene.util.BytesRefIterator;
+                            bRef = bIter.next().clone(); // must be non null otherwise we have a bug
+            if (sliceStartOffset <= mark) {
+     * generic stream access to {@link BytesReference} instances without materializing the
+                slice = iterator.next();
+        }
+                sliceIndex += currentLen;
+            // do nothing
+                    }
+                        final int length = Math.min(aLength, bLength); // shrink to the same length and use the fast compare in lucene
+    public void writeTo(OutputStream os) throws IOException {
+            int result = 1;
+import java.io.EOFException;
+import org.apache.lucene.util.UnicodeUtil;
+        }
+            throw new AssertionError("can not happen", ex);
+    private static int compareIterators(final BytesReference a, final BytesReference b, final ToIntBiFunction<BytesRef, BytesRef> f) {
+        private void maybeNextSlice() throws IOException {
+        @Override
+                otherRef,
+                return false;
+                }
+            if (offset() >= length()) {
+            }
+                return i;
+        @Override
+                int currentLen = Math.min(remaining, slice.length - sliceIndex);
+        public int read() throws IOException {
+        }
+    @Override
+                        }
+                    for (int i = 0; i < ref.length; i++) {
+        public byte readByte() throws IOException {
+            // We ignore readLimit since the data is all in-memory and therefore we can reset the mark no matter how far we advance.
+            if (bytesAvailable < bytesToRead) {
+ * this file be licensed under the Apache-2.0 license or a
+                        int diff = f.applyAsInt(aRef, bRef);
+            final int bytesRead = read(b, bOffset, len);
+ * @opensearch.internal
+            }
+        private int sliceStartOffset; // the offset on the stream at which the current slice starts
+ * this work for additional information regarding copyright
+        assert ref.length >= length : " ref.length: " + ref.length + " length: " + length;
+    @Override
+ * compatible open source license.
+public abstract class AbstractBytesReference implements BytesReference {
+    }
+                sliceIndex = mark - sliceStartOffset;
+                sliceStartOffset += sliceIndex;
+            }
+                while ((ref = iterator.next()) != null) {
+        @Override
+ *
+            throw new IllegalArgumentException("UTF16 String size is " + len + ", should be less than " + getMaxUTF16Length());
+            }
+     * Compares the two references using the given int function.
+import java.util.function.ToIntBiFunction;
+        }
+        }
+            // we use the iterators since it's a 0-copy comparison where possible!
+            } else {
+                aRef = aRef.clone(); // we clone since we modify the offsets and length in the iteration below
+        @Override
+            this.sliceIndex = 0;
+ * the Apache License, Version 2.0 (the "License"); you may
+        private int sliceIndex;
+                throw new EOFException("tried to read: " + bytesToRead + " bytes but only " + bytesAvailable + " remaining");
+            }
+/*
+                return r;
+        public void readBytes(byte[] b, int bOffset, int len) throws IOException {
+            }
+            final int length = length();
+            + ref.offset
+                remaining -= currentLen;
+     */
+                        final int bLength = bRef.length;
+            if (offset() >= length()) {
+        protected void ensureCanReadBytes(int bytesToRead) throws EOFException {
+     */
+                }
+        return false;
+        };
+        return new BytesReferenceStreamInput();
+            }
+                iterator = iterator();
+     * A StreamInput that reads off a {@link BytesRefIterator}. This is used to provide
+            assert bytesRead == len : bytesRead + " vs " + len;
+                    }
+    public int hashCode() {
+                        }
+import java.io.OutputStream;
+            final int length = length();
+ * Licensed to Elasticsearch under one or more contributor
+ */
+        return new BytesRefIterator() {
+            final int numBytesSkipped = (int) Math.min(n, length() - offset()); // definitely >= 0 and <= Integer.MAX_VALUE so casting is ok
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+ */
+            return slice.bytes[slice.offset + (sliceIndex++)];
+                        if (bRef.length == 0) {
+ * KIND, either express or implied.  See the License for the
+        @Override
+            }
+    @Override
+    @Override
+                return -1;
+        public void reset() throws IOException {
+        if (hash == null) {
+            int destOffset = bOffset;
+import org.apache.lucene.util.BytesRef;
+    /** we cache the hash of this reference since it can be quite costly to re-calculated it */
+    private static void advance(final BytesRef ref, final int length) {
+            maybeNextSlice();
+    }
+    public String utf8ToString() {
+            final long lengthToCompare = Math.min(a.length(), b.length());
+        } catch (IOException ex) {
+            return length() - offset();
+                final long skipped = skip(mark);
+        return new String(ref, 0, len);
+        ref.length -= length;
+        public int available() {
+            return true;
+ * not use this file except in compliance with the License.
+                        aRef.length = aLength;
+        }
+        }
+                        }
+    }
+                assert remaining >= 0 : "remaining: " + remaining;
+        }
+            final BytesRefIterator bIter = b.iterator();
+                    for (int i = 0; i < lengthToCompare;) {
+        if (this == other) {
+            return hash;
+    }
+     * underlying bytes.
+        public long skip(long n) throws IOException {

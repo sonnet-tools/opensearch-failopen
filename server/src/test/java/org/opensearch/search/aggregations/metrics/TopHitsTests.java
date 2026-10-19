@@ -1,221 +1,211 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+                } else {
+        }
+    protected final TopHitsAggregationBuilder createTestAggregatorBuilder() {
+        }
+        if (randomBoolean()) {
+                List<String> fields = new ArrayList<>(fieldsSize);
+                }
+                    case 5:
  * under the License.
+            + "      \"aggs\": {\n"
+        Exception e = expectThrows(AggregationInitializationException.class, () -> AggregatorFactories.parseAggregators(parser));
  */
-
+            + "          \"aggs\": {\n"
+                    fetchSourceContext = new FetchSourceContext(true, includes, excludes);
+ * not use this file except in compliance with the License.
+                        factory.sort(SortBuilders.scoreSort().order(randomFrom(SortOrder.values())));
+            }
+ * the Apache License, Version 2.0 (the "License"); you may
+                if (randomBoolean()) {
+            factory.explain(randomBoolean());
+            + "        \"field\": \"tags\"\n"
+        if (randomBoolean()) {
+        }
+            case 3:
+ *
+                factory.storedFields(fields);
+            + "              }\n"
+            factory.from(randomIntBetween(0, 10000));
+                    case 4:
+import org.opensearch.search.sort.SortOrder;
+                    break;
+                        factory.sort(SortBuilders.fieldSort(randomAlphaOfLengthBetween(5, 20)).order(randomFrom(SortOrder.values())));
+ * this work for additional information regarding copyright
+            + "                \"field\": \"age\"\n"
+                    fetchSourceContext = new FetchSourceContext(
+                        break;
+        TopHitsAggregationBuilder factory = new TopHitsAggregationBuilder(randomAlphaOfLengthBetween(3, 10));
+                for (int i = 0; i < fieldsSize; i++) {
+        }
+            // parent test shuffles xContent, we need to make sure highlight fields are ordered
+        if (randomBoolean()) {
+                        factory.sort(randomAlphaOfLengthBetween(5, 20), randomFrom(SortOrder.values()));
+        }
+                    throw new IllegalStateException();
+                        );
+                default:
+            + "            \"max\": {\n"
+import org.opensearch.search.sort.ScriptSortBuilder.ScriptSortType;
+                    break;
+            for (int i = 0; i < scriptFieldsSize; i++) {
+                            SortBuilders.geoDistanceSort(randomAlphaOfLengthBetween(5, 20), AbstractQueryTestCase.randomGeohash(1, 12))
+ * Licensed to Elasticsearch under one or more contributor
+}
+            + "          }\n"
+                    fields.add(randomAlphaOfLengthBetween(5, 50));
+                case 1:
+ * license agreements. See the NOTICE file distributed with
+        }
+            String[] includes = new String[randomIntBetween(0, 20)];
+            factory.version(randomBoolean());
+                    factory.scriptField(randomAlphaOfLengthBetween(5, 50), mockScript("foo"), randomBoolean());
+            + "      },\n"
+                factory.storedField("_none_");
+import java.util.Collections;
+        if (randomBoolean()) {
+                factory.docValueField(randomAlphaOfLengthBetween(5, 50));
+import org.opensearch.search.aggregations.BaseAggregationTestCase;
+ *
+            + "}";
+                throw new IllegalStateException();
+/*
+import org.opensearch.search.aggregations.AggregatorFactories;
+                switch (branch) {
+            factory.seqNoAndPrimaryTerm(randomBoolean());
+    public void testFailWithSubAgg() throws Exception {
+package org.opensearch.search.aggregations.metrics;
+            int scriptFieldsSize = randomInt(25);
+        assertSame(XContentParser.Token.START_OBJECT, parser.nextToken());
+        }
+            + "      \"terms\": {\n"
+                }
+public class TopHitsTests extends BaseAggregationTestCase<TopHitsAggregationBuilder> {
+                break;
+        if (randomBoolean()) {
+                    fetchSourceContext = new FetchSourceContext(true, includes, null);
+            + "        \"top_tags_hits\": {\n"
+            FetchSourceContext fetchSourceContext;
+        }
+            for (int i = 0; i < fetchFieldsSize; i++) {
+            int numSorts = randomIntBetween(1, 5);
+        }
+                    break;
+        return factory;
+import java.util.ArrayList;
+        assertThat(e.toString(), containsString("Aggregator [top_tags_hits] of type [top_hits] cannot accept sub-aggregations"));
+            case 0:
+ * KIND, either express or implied.  See the License for the
+ * SPDX-License-Identifier: Apache-2.0
+            int fetchFieldsSize = randomInt(25);
+import org.opensearch.common.xcontent.json.JsonXContent;
+            switch (branch) {
 /*
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.aggregations.AggregationInitializationException;
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.BaseAggregationTestCase;
-import org.opensearch.search.fetch.subphase.FetchSourceContext;
-import org.opensearch.search.fetch.subphase.highlight.HighlightBuilderTests;
-import org.opensearch.search.sort.ScriptSortBuilder.ScriptSortType;
-import org.opensearch.search.sort.SortBuilders;
-import org.opensearch.search.sort.SortOrder;
-import org.opensearch.test.AbstractQueryTestCase;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
-import static org.hamcrest.Matchers.containsString;
-
-public class TopHitsTests extends BaseAggregationTestCase<TopHitsAggregationBuilder> {
-
-    @Override
-    protected final TopHitsAggregationBuilder createTestAggregatorBuilder() {
-        TopHitsAggregationBuilder factory = new TopHitsAggregationBuilder(randomAlphaOfLengthBetween(3, 10));
-        if (randomBoolean()) {
-            factory.from(randomIntBetween(0, 10000));
-        }
-        if (randomBoolean()) {
-            factory.size(randomIntBetween(0, 10000));
-        }
-        if (randomBoolean()) {
-            factory.explain(randomBoolean());
-        }
-        if (randomBoolean()) {
-            factory.version(randomBoolean());
-        }
-        if (randomBoolean()) {
-            factory.seqNoAndPrimaryTerm(randomBoolean());
-        }
-        if (randomBoolean()) {
-            factory.trackScores(randomBoolean());
-        }
-        switch (randomInt(3)) {
-            case 0:
-                break;
-            case 1:
-                factory.storedField("_none_");
-                break;
-            case 2:
-                factory.storedFields(Collections.emptyList());
-                break;
-            case 3:
-                int fieldsSize = randomInt(25);
-                List<String> fields = new ArrayList<>(fieldsSize);
-                for (int i = 0; i < fieldsSize; i++) {
-                    fields.add(randomAlphaOfLengthBetween(5, 50));
-                }
-                factory.storedFields(fields);
-                break;
-            default:
-                throw new IllegalStateException();
-        }
-        if (randomBoolean()) {
-            int fieldDataFieldsSize = randomInt(25);
-            for (int i = 0; i < fieldDataFieldsSize; i++) {
-                factory.docValueField(randomAlphaOfLengthBetween(5, 50));
-            }
-        }
-        if (randomBoolean()) {
-            int fetchFieldsSize = randomInt(25);
-            for (int i = 0; i < fetchFieldsSize; i++) {
-                factory.fetchField(randomAlphaOfLengthBetween(5, 50));
-            }
-        }
-        if (randomBoolean()) {
-            int scriptFieldsSize = randomInt(25);
-            for (int i = 0; i < scriptFieldsSize; i++) {
-                if (randomBoolean()) {
-                    factory.scriptField(randomAlphaOfLengthBetween(5, 50), mockScript("foo"), randomBoolean());
-                } else {
-                    factory.scriptField(randomAlphaOfLengthBetween(5, 50), mockScript("foo"));
-                }
-            }
-        }
-        if (randomBoolean()) {
-            FetchSourceContext fetchSourceContext;
-            int branch = randomInt(5);
-            String[] includes = new String[randomIntBetween(0, 20)];
-            for (int i = 0; i < includes.length; i++) {
-                includes[i] = randomAlphaOfLengthBetween(5, 20);
-            }
-            String[] excludes = new String[randomIntBetween(0, 20)];
-            for (int i = 0; i < excludes.length; i++) {
-                excludes[i] = randomAlphaOfLengthBetween(5, 20);
-            }
-            switch (branch) {
-                case 0:
-                    fetchSourceContext = randomBoolean() ? FetchSourceContext.FETCH_SOURCE : FetchSourceContext.DO_NOT_FETCH_SOURCE;
-                    break;
-                case 1:
-                    fetchSourceContext = new FetchSourceContext(true, includes, excludes);
-                    break;
-                case 2:
-                    fetchSourceContext = new FetchSourceContext(
-                        true,
-                        new String[] { randomAlphaOfLengthBetween(5, 20) },
-                        new String[] { randomAlphaOfLengthBetween(5, 20) }
+                        );
                     );
-                    break;
-                case 3:
-                    fetchSourceContext = new FetchSourceContext(true, includes, excludes);
-                    break;
-                case 4:
-                    fetchSourceContext = new FetchSourceContext(true, includes, null);
-                    break;
-                case 5:
-                    fetchSourceContext = new FetchSourceContext(true, new String[] { randomAlphaOfLengthBetween(5, 20) }, null);
-                    break;
-                default:
-                    throw new IllegalStateException();
-            }
-            factory.fetchSource(fetchSourceContext);
-        }
-        if (randomBoolean()) {
-            int numSorts = randomIntBetween(1, 5);
-            for (int i = 0; i < numSorts; i++) {
-                int branch = randomInt(5);
-                switch (branch) {
-                    case 0:
-                        factory.sort(SortBuilders.fieldSort(randomAlphaOfLengthBetween(5, 20)).order(randomFrom(SortOrder.values())));
-                        break;
-                    case 1:
-                        factory.sort(
-                            SortBuilders.geoDistanceSort(randomAlphaOfLengthBetween(5, 20), AbstractQueryTestCase.randomGeohash(1, 12))
-                                .order(randomFrom(SortOrder.values()))
-                        );
-                        break;
-                    case 2:
-                        factory.sort(SortBuilders.scoreSort().order(randomFrom(SortOrder.values())));
-                        break;
-                    case 3:
-                        factory.sort(
                             SortBuilders.scriptSort(mockScript("foo"), ScriptSortType.NUMBER).order(randomFrom(SortOrder.values()))
-                        );
-                        break;
-                    case 4:
-                        factory.sort(randomAlphaOfLengthBetween(5, 20));
-                        break;
-                    case 5:
-                        factory.sort(randomAlphaOfLengthBetween(5, 20), randomFrom(SortOrder.values()));
-                        break;
-                }
-            }
-        }
+ */
         if (randomBoolean()) {
-            // parent test shuffles xContent, we need to make sure highlight fields are ordered
-            factory.highlighter(HighlightBuilderTests.randomHighlighterBuilder().useExplicitFieldOrder(true));
-        }
-        return factory;
-    }
-
-    public void testFailWithSubAgg() throws Exception {
-        String source = "{\n"
-            + "    \"top-tags\": {\n"
-            + "      \"terms\": {\n"
-            + "        \"field\": \"tags\"\n"
-            + "      },\n"
-            + "      \"aggs\": {\n"
-            + "        \"top_tags_hits\": {\n"
-            + "          \"top_hits\": {},\n"
-            + "          \"aggs\": {\n"
-            + "            \"max\": {\n"
-            + "              \"max\": {\n"
-            + "                \"field\": \"age\"\n"
-            + "              }\n"
-            + "            }\n"
-            + "          }\n"
+                    fetchSourceContext = randomBoolean() ? FetchSourceContext.FETCH_SOURCE : FetchSourceContext.DO_NOT_FETCH_SOURCE;
+            factory.trackScores(randomBoolean());
+        if (randomBoolean()) {
+            }
             + "        }\n"
-            + "      }\n"
+ * GitHub history for details.
+        }
+ * software distributed under the License is distributed on an
+import static org.hamcrest.Matchers.containsString;
+                int branch = randomInt(5);
+                        new String[] { randomAlphaOfLengthBetween(5, 20) }
+                excludes[i] = randomAlphaOfLengthBetween(5, 20);
+            factory.size(randomIntBetween(0, 10000));
+            int branch = randomInt(5);
+            for (int i = 0; i < fieldDataFieldsSize; i++) {
+                        break;
+            factory.fetchSource(fetchSourceContext);
+            + "          \"top_hits\": {},\n"
+                }
+            case 1:
+ */
+import org.opensearch.search.fetch.subphase.FetchSourceContext;
+ * specific language governing permissions and limitations
+            + "              \"max\": {\n"
+            }
+                case 2:
             + "    }\n"
-            + "}";
-        XContentParser parser = createParser(JsonXContent.jsonXContent, source);
-        assertSame(XContentParser.Token.START_OBJECT, parser.nextToken());
-        Exception e = expectThrows(AggregationInitializationException.class, () -> AggregatorFactories.parseAggregators(parser));
-        assertThat(e.toString(), containsString("Aggregator [top_tags_hits] of type [top_hits] cannot accept sub-aggregations"));
+        if (randomBoolean()) {
+                case 3:
+import org.opensearch.core.xcontent.XContentParser;
+        if (randomBoolean()) {
+import org.opensearch.search.sort.SortBuilders;
+        }
+                    break;
+                        break;
+            + "      }\n"
+            for (int i = 0; i < numSorts; i++) {
+    @Override
+ * You may obtain a copy of the License at
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                case 0:
+                break;
     }
-
-}
+                        true,
+        if (randomBoolean()) {
+ * The OpenSearch Contributors require contributions made to
+                        break;
+            for (int i = 0; i < includes.length; i++) {
+                    break;
+import org.opensearch.search.aggregations.AggregationInitializationException;
+                    fetchSourceContext = new FetchSourceContext(true, includes, excludes);
+        }
+import java.util.List;
+                        factory.sort(
+            String[] excludes = new String[randomIntBetween(0, 20)];
+                includes[i] = randomAlphaOfLengthBetween(5, 20);
+                        break;
+                case 4:
+ * Unless required by applicable law or agreed to in writing,
+                                .order(randomFrom(SortOrder.values()))
+ * this file be licensed under the Apache-2.0 license or a
+            }
+            for (int i = 0; i < excludes.length; i++) {
+        if (randomBoolean()) {
+                case 5:
+            int fieldDataFieldsSize = randomInt(25);
+                factory.storedFields(Collections.emptyList());
+/*
+                        factory.sort(randomAlphaOfLengthBetween(5, 20));
+    }
+                    case 1:
+            }
+            + "    \"top-tags\": {\n"
+            + "            }\n"
+                        break;
+            }
+                    break;
+                    factory.scriptField(randomAlphaOfLengthBetween(5, 50), mockScript("foo"));
+        switch (randomInt(3)) {
+        if (randomBoolean()) {
+            case 2:
+ * compatible open source license.
+                    case 0:
+            }
+                        factory.sort(
+import org.opensearch.search.fetch.subphase.highlight.HighlightBuilderTests;
+            default:
+                    fetchSourceContext = new FetchSourceContext(true, new String[] { randomAlphaOfLengthBetween(5, 20) }, null);
+ *
+ * ownership. Elasticsearch licenses this file to you under
+        String source = "{\n"
+                break;
+                int fieldsSize = randomInt(25);
+        }
+                break;
+            factory.highlighter(HighlightBuilderTests.randomHighlighterBuilder().useExplicitFieldOrder(true));
+                    case 3:
+        XContentParser parser = createParser(JsonXContent.jsonXContent, source);
+                    case 2:
+                        new String[] { randomAlphaOfLengthBetween(5, 20) },
+import org.opensearch.test.AbstractQueryTestCase;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                factory.fetchField(randomAlphaOfLengthBetween(5, 50));

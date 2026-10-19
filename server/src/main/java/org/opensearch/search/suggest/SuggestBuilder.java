@@ -1,225 +1,205 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.suggest;
-
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.lucene.BytesRefs;
 import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.suggest.SuggestionSearchContext.SuggestionContext;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Objects;
-
-/**
- * Defines how to perform suggesting. This builders allows a number of global options to be specified and
- * an arbitrary number of {@link SuggestionBuilder} instances.
- * <p>
- * Suggesting works by suggesting terms/phrases that appear in the suggest text that are similar compared
- * to the terms in provided text. These suggestions are based on several options described in this class.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class SuggestBuilder implements Writeable, ToXContentObject {
-    protected static final ParseField GLOBAL_TEXT_FIELD = new ParseField("text");
-
-    private String globalText;
-    private final Map<String, SuggestionBuilder<?>> suggestions = new HashMap<>();
-
-    /**
-     * Build an empty SuggestBuilder.
-     */
-    public SuggestBuilder() {}
-
-    /**
-     * Read from a stream.
-     */
-    public SuggestBuilder(StreamInput in) throws IOException {
-        globalText = in.readOptionalString();
-        final int size = in.readVInt();
-        for (int i = 0; i < size; i++) {
-            suggestions.put(in.readString(), in.readNamedWriteable(SuggestionBuilder.class));
         }
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeOptionalString(globalText);
-        final int size = suggestions.size();
-        out.writeVInt(size);
-        for (Entry<String, SuggestionBuilder<?>> suggestion : suggestions.entrySet()) {
-            out.writeString(suggestion.getKey());
-            out.writeNamedWriteable(suggestion.getValue());
-        }
-    }
-
-    /**
-     * Sets the text to provide suggestions for. The suggest text is a required option that needs
-     * to be set either via this setter or via the {@link org.opensearch.search.suggest.SuggestionBuilder#text(String)} method.
-     * <p>
-     * The suggest text gets analyzed by the suggest analyzer or the suggest field search analyzer.
      * For each analyzed token, suggested terms are suggested if possible.
-     */
-    public SuggestBuilder setGlobalText(@Nullable String globalText) {
-        this.globalText = globalText;
-        return this;
-    }
-
-    /**
-     * Gets the global suggest text
-     */
-    @Nullable
-    public String getGlobalText() {
-        return globalText;
-    }
-
-    /**
-     * Adds an {@link org.opensearch.search.suggest.SuggestionBuilder} instance under a user defined name.
-     * The order in which the <code>Suggestions</code> are added, is the same as in the response.
-     * @throws IllegalArgumentException if two suggestions added have the same name
-     */
-    public SuggestBuilder addSuggestion(String name, SuggestionBuilder<?> suggestion) {
-        Objects.requireNonNull(name, "every suggestion needs a name");
-        if (suggestions.get(name) == null) {
-            suggestions.put(name, suggestion);
-        } else {
-            throw new IllegalArgumentException("already added another suggestion with name [" + name + "]");
-        }
-        return this;
-    }
-
-    /**
-     * Get all the <code>Suggestions</code> that were added to the global {@link SuggestBuilder},
+    public boolean equals(Object other) {
+ */
+        out.writeVInt(size);
+            out.writeNamedWriteable(suggestion.getValue());
+ * Defines how to perform suggesting. This builders allows a number of global options to be specified and
      * together with their names
+    private String globalText;
+     * to be set either via this setter or via the {@link org.opensearch.search.suggest.SuggestionBuilder#text(String)} method.
+        for (Entry<String, SuggestionBuilder<?>> suggestion : suggestions.entrySet()) {
+                throw new ParsingException(parser.getTokenLocation(), "unexpected token [" + token + "] after [" + fieldName + "]");
+    }
      */
-    public Map<String, SuggestionBuilder<?>> getSuggestions() {
+import org.opensearch.index.query.QueryShardContext;
+ * SPDX-License-Identifier: Apache-2.0
+            }
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+import org.opensearch.core.common.io.stream.Writeable;
+        return suggestBuilder;
+        }
+                if (globalText == null) {
+                }
+ * under the License.
+            if (suggestionContext.getText() == null) {
+    public static SuggestBuilder fromXContent(XContentParser parser) throws IOException {
+import org.opensearch.common.lucene.BytesRefs;
+import org.opensearch.core.common.io.stream.StreamInput;
+ */
+        if (suggestions.get(name) == null) {
+import org.opensearch.search.suggest.SuggestionSearchContext.SuggestionContext;
+        for (int i = 0; i < size; i++) {
+        Objects.requireNonNull(name, "every suggestion needs a name");
+            } else {
+        XContentParser.Token token;
+/*
+     * <p>
+                    throw new IllegalArgumentException("[suggest] does not support [" + fieldName + "]");
+     */
+            suggestion.getValue().toXContent(builder, params);
+                fieldName = parser.currentName();
+import org.opensearch.core.common.ParsingException;
+     * Sets the text to provide suggestions for. The suggest text is a required option that needs
+                suggestionContext.setText(BytesRefs.toBytesRef(globalText));
+    }
         return suggestions;
     }
-
+    /**
+        return Objects.equals(globalText, o.globalText) && Objects.equals(suggestions, o.suggestions);
     @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        if (globalText != null) {
-            builder.field("text", globalText);
-        }
-        for (Entry<String, SuggestionBuilder<?>> suggestion : suggestions.entrySet()) {
-            builder.startObject(suggestion.getKey());
-            suggestion.getValue().toXContent(builder, params);
-            builder.endObject();
-        }
-        builder.endObject();
-        return builder;
-    }
-
-    public static SuggestBuilder fromXContent(XContentParser parser) throws IOException {
-        SuggestBuilder suggestBuilder = new SuggestBuilder();
+ * Unless required by applicable law or agreed to in writing,
+            if (token == XContentParser.Token.FIELD_NAME) {
         String fieldName = null;
-
+        return Strings.toString(MediaTypeRegistry.JSON, this, true, true);
+public class SuggestBuilder implements Writeable, ToXContentObject {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    }
+ * GitHub history for details.
+        }
+    @Nullable
+    }
         if (parser.currentToken() == null) {
-            // when we parse from RestSuggestAction the current token is null, advance the token
+import org.opensearch.common.annotation.PublicApi;
+            builder.field("text", globalText);
+     */
+        for (Entry<String, SuggestionBuilder<?>> suggestion : suggestions.entrySet()) {
+    /**
+     * Build an empty SuggestBuilder.
+        SuggestBuilder suggestBuilder = new SuggestBuilder();
             parser.nextToken();
         }
-        assert parser.currentToken() == XContentParser.Token.START_OBJECT : "current token must be a start object";
-        XContentParser.Token token;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {
-                fieldName = parser.currentName();
-            } else if (token.isValue()) {
-                if (GLOBAL_TEXT_FIELD.match(fieldName, parser.getDeprecationHandler())) {
-                    suggestBuilder.setGlobalText(parser.text());
-                } else {
-                    throw new IllegalArgumentException("[suggest] does not support [" + fieldName + "]");
-                }
-            } else if (token == XContentParser.Token.START_OBJECT) {
-                String suggestionName = fieldName;
-                if (suggestionName == null) {
-                    throw new IllegalArgumentException("suggestion must have name");
-                }
-                suggestBuilder.addSuggestion(suggestionName, SuggestionBuilder.fromXContent(parser));
-            } else {
-                throw new ParsingException(parser.getTokenLocation(), "unexpected token [" + token + "] after [" + fieldName + "]");
-            }
-        }
-        return suggestBuilder;
-    }
-
-    public SuggestionSearchContext build(QueryShardContext context) throws IOException {
-        SuggestionSearchContext suggestionSearchContext = new SuggestionSearchContext();
-        for (Entry<String, SuggestionBuilder<?>> suggestion : suggestions.entrySet()) {
-            SuggestionContext suggestionContext = suggestion.getValue().build(context);
-            if (suggestionContext.getText() == null) {
-                if (globalText == null) {
-                    throw new IllegalArgumentException("The required text option is missing");
-                }
-                suggestionContext.setText(BytesRefs.toBytesRef(globalText));
-            }
-            suggestionSearchContext.addSuggestion(suggestion.getKey(), suggestionContext);
-        }
-        return suggestionSearchContext;
-    }
-
-    @Override
-    public boolean equals(Object other) {
-        if (this == other) {
-            return true;
-        }
+ * <p>
+        final int size = suggestions.size();
         if (other == null || getClass() != other.getClass()) {
-            return false;
+        this.globalText = globalText;
+     */
+import java.util.Map;
+        out.writeOptionalString(globalText);
+     * @throws IllegalArgumentException if two suggestions added have the same name
         }
-        SuggestBuilder o = (SuggestBuilder) other;
-        return Objects.equals(globalText, o.globalText) && Objects.equals(suggestions, o.suggestions);
-    }
-
-    @Override
     public int hashCode() {
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.core.common.Strings;
+                }
+    @Override
+    /**
+        if (globalText != null) {
+        if (this == other) {
+ */
+ * software distributed under the License is distributed on an
+        SuggestBuilder o = (SuggestBuilder) other;
+        return this;
+            builder.startObject(suggestion.getKey());
+        return suggestionSearchContext;
+import org.opensearch.core.xcontent.XContentParser;
+            } else if (token == XContentParser.Token.START_OBJECT) {
+/**
+        builder.startObject();
+                } else {
+ * You may obtain a copy of the License at
+        SuggestionSearchContext suggestionSearchContext = new SuggestionSearchContext();
+import java.util.Map.Entry;
+import org.opensearch.core.common.io.stream.StreamOutput;
+     * Gets the global suggest text
+ * Modifications Copyright OpenSearch Contributors. See
+            }
+    private final Map<String, SuggestionBuilder<?>> suggestions = new HashMap<>();
+        } else {
+ * compatible open source license.
+            suggestions.put(in.readString(), in.readNamedWriteable(SuggestionBuilder.class));
+                }
+    }
+        }
+        globalText = in.readOptionalString();
+ * The OpenSearch Contributors require contributions made to
+                    throw new IllegalArgumentException("The required text option is missing");
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    public void writeTo(StreamOutput out) throws IOException {
+ * to the terms in provided text. These suggestions are based on several options described in this class.
+ * Licensed to Elasticsearch under one or more contributor
+    public SuggestBuilder(StreamInput in) throws IOException {
+    public SuggestBuilder() {}
+    protected static final ParseField GLOBAL_TEXT_FIELD = new ParseField("text");
+ * Suggesting works by suggesting terms/phrases that appear in the suggest text that are similar compared
+    }
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+    }
+ * @opensearch.api
+package org.opensearch.search.suggest;
+    @Override
+            builder.endObject();
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+    public SuggestBuilder addSuggestion(String name, SuggestionBuilder<?> suggestion) {
+            out.writeString(suggestion.getKey());
+ *
+    public Map<String, SuggestionBuilder<?>> getSuggestions() {
+     * Read from a stream.
+            // when we parse from RestSuggestAction the current token is null, advance the token
+            return true;
+        return this;
+    public SuggestionSearchContext build(QueryShardContext context) throws IOException {
+    /**
+    }
+        return builder;
+                String suggestionName = fieldName;
+    }
+/*
+            suggestions.put(name, suggestion);
+import java.io.IOException;
+        }
+ */
+}
+    /**
+            return false;
+    }
+     */
+/*
+     * Adds an {@link org.opensearch.search.suggest.SuggestionBuilder} instance under a user defined name.
+        }
+     */
+    /**
+import org.opensearch.core.xcontent.XContentBuilder;
+    public String toString() {
+                if (GLOBAL_TEXT_FIELD.match(fieldName, parser.getDeprecationHandler())) {
+        for (Entry<String, SuggestionBuilder<?>> suggestion : suggestions.entrySet()) {
+import org.opensearch.core.xcontent.ToXContentObject;
+            } else if (token.isValue()) {
+@PublicApi(since = "1.0.0")
+            SuggestionContext suggestionContext = suggestion.getValue().build(context);
+     * Get all the <code>Suggestions</code> that were added to the global {@link SuggestBuilder},
+                    suggestBuilder.setGlobalText(parser.text());
+        final int size = in.readVInt();
+    public SuggestBuilder setGlobalText(@Nullable String globalText) {
+            throw new IllegalArgumentException("already added another suggestion with name [" + name + "]");
+        builder.endObject();
+                    throw new IllegalArgumentException("suggestion must have name");
+ * ownership. Elasticsearch licenses this file to you under
+                if (suggestionName == null) {
         return Objects.hash(globalText, suggestions);
     }
-
     @Override
-    public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this, true, true);
-    }
-}
+     * The order in which the <code>Suggestions</code> are added, is the same as in the response.
+import java.util.Objects;
+ * specific language governing permissions and limitations
+                suggestBuilder.addSuggestion(suggestionName, SuggestionBuilder.fromXContent(parser));
+ *
+        return globalText;
+        }
+ * this work for additional information regarding copyright
+    public String getGlobalText() {
+ *
+    @Override
+ * not use this file except in compliance with the License.
+ *
+ * this file be licensed under the Apache-2.0 license or a
+     * The suggest text gets analyzed by the suggest analyzer or the suggest field search analyzer.
+            suggestionSearchContext.addSuggestion(suggestion.getKey(), suggestionContext);
+ * license agreements. See the NOTICE file distributed with
+import java.util.HashMap;
+ * an arbitrary number of {@link SuggestionBuilder} instances.
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+        assert parser.currentToken() == XContentParser.Token.START_OBJECT : "current token must be a start object";
+import org.opensearch.common.Nullable;

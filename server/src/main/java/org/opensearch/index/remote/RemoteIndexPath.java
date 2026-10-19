@@ -1,176 +1,162 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.remote;
-
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.remote.RemoteStoreEnums.DataCategory;
-import org.opensearch.index.remote.RemoteStoreEnums.DataType;
-import org.opensearch.index.remote.RemoteStoreEnums.PathHashAlgorithm;
-import org.opensearch.index.remote.RemoteStoreEnums.PathType;
-import org.opensearch.index.remote.RemoteStorePathStrategy.PathInput;
-import org.opensearch.index.remote.RemoteStorePathStrategy.ShardDataPathInput;
-import org.opensearch.indices.RemoteStoreSettings;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
-
-import static org.opensearch.index.remote.RemoteStoreEnums.DataCategory.SEGMENTS;
-import static org.opensearch.index.remote.RemoteStoreEnums.DataCategory.TRANSLOG;
-import static org.opensearch.index.remote.RemoteStoreEnums.DataType.DATA;
-import static org.opensearch.index.remote.RemoteStoreEnums.DataType.METADATA;
-import static org.opensearch.index.remote.RemoteStorePathStrategy.isCompatible;
-
-/**
- * Remote index path information.
- *
- * @opensearch.internal
- */
-@ExperimentalApi
-public class RemoteIndexPath implements ToXContentFragment {
-
-    public static final Map<DataCategory, List<DataType>> TRANSLOG_PATH = Map.of(TRANSLOG, List.of(DATA, METADATA));
-    public static final Map<DataCategory, List<DataType>> SEGMENT_PATH = Map.of(SEGMENTS, List.of(DataType.values()));
-    public static final Map<DataCategory, List<DataType>> COMBINED_PATH;
-
-    static {
-        Map<DataCategory, List<DataType>> combinedPath = new HashMap<>();
-        combinedPath.putAll(TRANSLOG_PATH);
-        combinedPath.putAll(SEGMENT_PATH);
-        COMBINED_PATH = Collections.unmodifiableMap(combinedPath);
-    }
-    public static final String DEFAULT_VERSION = "1";
-    public static final String DIR = "remote-index-path";
-    public static final String FILE_NAME_FORMAT = "remote_path_%s";
-    static final String KEY_VERSION = "version";
-    static final String KEY_INDEX_UUID = "index_uuid";
-    static final String KEY_SHARD_COUNT = "shard_count";
-    static final String KEY_PATH_CREATION_MAP = "path_creation_map";
-    static final String KEY_PATHS = "paths";
-
-    private final String version;
-    private final String indexUUID;
-    private final int shardCount;
-    private final Iterable<String> basePath;
-    private final PathType pathType;
-    private final PathHashAlgorithm pathHashAlgorithm;
-    private final RemoteStoreSettings remoteStoreSettings;
-
-    /**
-     * This keeps the map of paths that would be present in the content of the index path file. For eg - It is possible
-     * that segment and translog repository can be different. For this use case, we have either segment or translog as the
-     * key, and list of data, metadata, and lock_files (only for segment) as the value.
-     */
-    private final Map<DataCategory, List<DataType>> pathCreationMap;
-
     public RemoteIndexPath(
-        String indexUUID,
+import java.util.Map;
         int shardCount,
-        Iterable<String> basePath,
-        PathType pathType,
-        PathHashAlgorithm pathHashAlgorithm,
-        Map<DataCategory, List<DataType>> pathCreationMap,
-        RemoteStoreSettings remoteStoreSettings
-    ) {
-        if (Objects.isNull(pathCreationMap)
-            || Objects.isNull(pathType)
-            || isCompatible(pathType, pathHashAlgorithm) == false
-            || shardCount < 1
-            || Objects.isNull(basePath)
-            || pathCreationMap.isEmpty()
-            || pathCreationMap.keySet().stream().anyMatch(k -> pathCreationMap.get(k).isEmpty())) {
-            ParameterizedMessage parameterizedMessage = new ParameterizedMessage(
-                "Invalid input in RemoteIndexPath constructor indexUUID={} shardCount={} basePath={} pathType={}"
-                    + " pathHashAlgorithm={} pathCreationMap={}",
-                indexUUID,
-                shardCount,
-                basePath,
-                pathType,
-                pathHashAlgorithm,
-                pathCreationMap
-            );
-            throw new IllegalArgumentException(parameterizedMessage.getFormattedMessage());
-        }
-        boolean validMap = pathCreationMap.keySet()
-            .stream()
-            .allMatch(k -> pathCreationMap.get(k).stream().allMatch(k::isSupportedDataType));
-        if (validMap == false) {
-            throw new IllegalArgumentException(
-                new ParameterizedMessage("pathCreationMap={} is having illegal combination of category and type", pathCreationMap)
-                    .getFormattedMessage()
-            );
-        }
-        this.version = DEFAULT_VERSION;
-        this.indexUUID = indexUUID;
-        this.shardCount = shardCount;
         this.basePath = basePath;
-        this.pathType = pathType;
-        this.pathHashAlgorithm = pathHashAlgorithm;
-        this.pathCreationMap = pathCreationMap;
-        this.remoteStoreSettings = remoteStoreSettings;
+        Map<DataCategory, List<DataType>> combinedPath = new HashMap<>();
     }
-
-    @Override
+import static org.opensearch.index.remote.RemoteStoreEnums.DataType.DATA;
+import static org.opensearch.index.remote.RemoteStoreEnums.DataCategory.SEGMENTS;
+import org.opensearch.index.remote.RemoteStorePathStrategy.PathInput;
+    private final Iterable<String> basePath;
+ * compatible open source license.
+        }
+    static {
+        builder.startArray(KEY_PATHS);
+        builder.field(KEY_PATH_CREATION_MAP);
+    private final String indexUUID;
+ * @opensearch.internal
+        }
+        PathType pathType,
+            throw new IllegalArgumentException(
+     * that segment and translog repository can be different. For this use case, we have either segment or translog as the
+        }
+            }
+            DataCategory dataCategory = entry.getKey();
+import org.opensearch.core.xcontent.XContentParser;
+        Map<DataCategory, List<DataType>> pathCreationMap,
+        boolean validMap = pathCreationMap.keySet()
+    private final Map<DataCategory, List<DataType>> pathCreationMap;
+    public static RemoteIndexPath fromXContent(XContentParser ignored) {
+/*
+        Map<String, List<String>> pathMap = new HashMap<>();
+public class RemoteIndexPath implements ToXContentFragment {
+    static final String KEY_PATH_CREATION_MAP = "path_creation_map";
+            || pathCreationMap.isEmpty()
+        PathHashAlgorithm pathHashAlgorithm,
+package org.opensearch.index.remote;
+            .allMatch(k -> pathCreationMap.get(k).stream().allMatch(k::isSupportedDataType));
+        throw new UnsupportedOperationException("RemoteIndexPath.fromXContent() is not supported");
+                }
+        builder.map(pathMap);
+                    .getFormattedMessage()
+    private final PathType pathType;
+import java.util.List;
+            || shardCount < 1
+import org.opensearch.core.xcontent.ToXContentFragment;
+        combinedPath.putAll(SEGMENT_PATH);
+    public static final Map<DataCategory, List<DataType>> COMBINED_PATH;
+import static org.opensearch.index.remote.RemoteStorePathStrategy.isCompatible;
+        if (Objects.nonNull(pathHashAlgorithm)) {
+import org.opensearch.common.blobstore.BlobPath;
+import static org.opensearch.index.remote.RemoteStoreEnums.DataType.METADATA;
+import org.opensearch.indices.RemoteStoreSettings;
+            );
+        this.pathHashAlgorithm = pathHashAlgorithm;
+import org.opensearch.index.remote.RemoteStoreEnums.DataCategory;
+    private final RemoteStoreSettings remoteStoreSettings;
+                        .basePath(new BlobPath().add(basePath))
+import org.opensearch.core.xcontent.XContentBuilder;
+     * This keeps the map of paths that would be present in the content of the index path file. For eg - It is possible
+        combinedPath.putAll(TRANSLOG_PATH);
+        this.shardCount = shardCount;
+        this.remoteStoreSettings = remoteStoreSettings;
+                        .build();
+import org.opensearch.index.remote.RemoteStoreEnums.PathHashAlgorithm;
+import java.io.IOException;
+    ) {
+/**
+@ExperimentalApi
+    }
+ */
+        return version;
+        builder.field(PathType.NAME, pathType.name());
+        this.pathType = pathType;
+                        )
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.field(KEY_VERSION, version);
+        for (Map.Entry<DataCategory, List<DataType>> entry : pathCreationMap.entrySet()) {
+    static final String KEY_VERSION = "version";
+                                ? remoteStoreSettings.getTranslogPathFixedPrefix()
+                        .fixedPrefix(
+import static org.opensearch.index.remote.RemoteStoreEnums.DataCategory.TRANSLOG;
+        COMBINED_PATH = Collections.unmodifiableMap(combinedPath);
+                new ParameterizedMessage("pathCreationMap={} is having illegal combination of category and type", pathCreationMap)
+import java.util.HashMap;
+            );
+    public static final String DIR = "remote-index-path";
+import java.util.Collections;
+                "Invalid input in RemoteIndexPath constructor indexUUID={} shardCount={} basePath={} pathType={}"
+        return builder;
+import org.opensearch.index.remote.RemoteStoreEnums.DataType;
+ */
+            pathMap.put(entry.getKey().getName(), entry.getValue().stream().map(DataType::getName).collect(Collectors.toList()));
+ * The OpenSearch Contributors require contributions made to
+            || isCompatible(pathType, pathHashAlgorithm) == false
+ * SPDX-License-Identifier: Apache-2.0
+        builder.endArray();
+        }
+    private final String version;
+    static final String KEY_SHARD_COUNT = "shard_count";
+        this.version = DEFAULT_VERSION;
+        this.pathCreationMap = pathCreationMap;
+                        .shardId(Integer.toString(shardNo))
+import org.opensearch.index.remote.RemoteStorePathStrategy.ShardDataPathInput;
+import org.apache.logging.log4j.message.ParameterizedMessage;
+    static final String KEY_INDEX_UUID = "index_uuid";
+        this.indexUUID = indexUUID;
+        if (Objects.isNull(pathCreationMap)
+import java.util.Objects;
+                shardCount,
+                    PathInput pathInput = ShardDataPathInput.builder()
+    }
+ *
+    public static final String FILE_NAME_FORMAT = "remote_path_%s";
+            || pathCreationMap.keySet().stream().anyMatch(k -> pathCreationMap.get(k).isEmpty())) {
+    private final int shardCount;
+            builder.field(PathHashAlgorithm.NAME, pathHashAlgorithm.name());
+    public static final Map<DataCategory, List<DataType>> TRANSLOG_PATH = Map.of(TRANSLOG, List.of(DATA, METADATA));
+            for (DataType type : entry.getValue()) {
         builder.field(KEY_INDEX_UUID, indexUUID);
         builder.field(KEY_SHARD_COUNT, shardCount);
-        builder.field(PathType.NAME, pathType.name());
-        if (Objects.nonNull(pathHashAlgorithm)) {
-            builder.field(PathHashAlgorithm.NAME, pathHashAlgorithm.name());
-        }
-
-        Map<String, List<String>> pathMap = new HashMap<>();
-        for (Map.Entry<DataCategory, List<DataType>> entry : pathCreationMap.entrySet()) {
-            pathMap.put(entry.getKey().getName(), entry.getValue().stream().map(DataType::getName).collect(Collectors.toList()));
-        }
-        builder.field(KEY_PATH_CREATION_MAP);
-        builder.map(pathMap);
-        builder.startArray(KEY_PATHS);
-        for (Map.Entry<DataCategory, List<DataType>> entry : pathCreationMap.entrySet()) {
-            DataCategory dataCategory = entry.getKey();
-            for (DataType type : entry.getValue()) {
-                for (int shardNo = 0; shardNo < shardCount; shardNo++) {
-                    PathInput pathInput = ShardDataPathInput.builder()
-                        .basePath(new BlobPath().add(basePath))
-                        .indexUUID(indexUUID)
-                        .shardId(Integer.toString(shardNo))
-                        .dataCategory(dataCategory)
-                        .dataType(type)
-                        .fixedPrefix(
-                            dataCategory == TRANSLOG
-                                ? remoteStoreSettings.getTranslogPathFixedPrefix()
-                                : remoteStoreSettings.getSegmentsPathFixedPrefix()
-                        )
-                        .build();
-                    builder.value(pathType.path(pathInput, pathHashAlgorithm).buildAsString());
-                }
-            }
-        }
-        builder.endArray();
-        return builder;
-    }
-
-    public static RemoteIndexPath fromXContent(XContentParser ignored) {
-        throw new UnsupportedOperationException("RemoteIndexPath.fromXContent() is not supported");
-    }
-
-    String getVersion() {
-        return version;
     }
 }
+                pathHashAlgorithm,
+import org.opensearch.common.annotation.ExperimentalApi;
+                        .indexUUID(indexUUID)
+                        .dataCategory(dataCategory)
+    public static final String DEFAULT_VERSION = "1";
+                indexUUID,
+        for (Map.Entry<DataCategory, List<DataType>> entry : pathCreationMap.entrySet()) {
+    static final String KEY_PATHS = "paths";
+    }
+                    builder.value(pathType.path(pathInput, pathHashAlgorithm).buildAsString());
+        RemoteStoreSettings remoteStoreSettings
+     */
+                for (int shardNo = 0; shardNo < shardCount; shardNo++) {
+                                : remoteStoreSettings.getSegmentsPathFixedPrefix()
+ * Remote index path information.
+        }
+                        .dataType(type)
+     * key, and list of data, metadata, and lock_files (only for segment) as the value.
+ * this file be licensed under the Apache-2.0 license or a
+            ParameterizedMessage parameterizedMessage = new ParameterizedMessage(
+    /**
+ *
+        builder.field(KEY_VERSION, version);
+            || Objects.isNull(basePath)
+    @Override
+                basePath,
+    String getVersion() {
+            throw new IllegalArgumentException(parameterizedMessage.getFormattedMessage());
+                pathCreationMap
+    public static final Map<DataCategory, List<DataType>> SEGMENT_PATH = Map.of(SEGMENTS, List.of(DataType.values()));
+        if (validMap == false) {
+            || Objects.isNull(pathType)
+import org.opensearch.index.remote.RemoteStoreEnums.PathType;
+                pathType,
+        String indexUUID,
+                    + " pathHashAlgorithm={} pathCreationMap={}",
+            .stream()
+                            dataCategory == TRANSLOG
+        Iterable<String> basePath,
+    private final PathHashAlgorithm pathHashAlgorithm;
+import java.util.stream.Collectors;

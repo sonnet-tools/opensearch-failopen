@@ -1,183 +1,160 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.example.stream;
-
-import org.apache.arrow.vector.IntVector;
-import org.apache.arrow.vector.VarCharVector;
-import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.types.pojo.Field;
-import org.opensearch.arrow.allocator.ArrowBasePlugin;
-import org.opensearch.arrow.flight.transport.FlightStreamPlugin;
-import org.opensearch.arrow.transport.ArrowBatchResponseHandler;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.StreamTransportService;
-import org.opensearch.transport.TransportException;
-import org.opensearch.transport.TransportRequestOptions;
-import org.opensearch.transport.stream.StreamTransportResponse;
-
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-
-import static org.opensearch.common.util.FeatureFlags.STREAM_TRANSPORT;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.SUITE, minNumDataNodes = 2, maxNumDataNodes = 2)
-public class NativeArrowStreamTransportExampleIT extends OpenSearchIntegTestCase {
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        internalCluster().ensureAtLeastNumDataNodes(2);
-    }
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return List.of(StreamTransportExamplePlugin.class, ArrowBasePlugin.class, FlightStreamPlugin.class);
-    }
-
-    @AwaitsFix(bugUrl = "")
-    @LockFeatureFlag(STREAM_TRANSPORT)
-    public void testNativeArrowSingleBatch() throws Exception {
-        for (DiscoveryNode node : getClusterState().nodes()) {
-            StreamTransportService sts = internalCluster().getInstance(StreamTransportService.class);
-            List<ReceivedBatch> batches = new ArrayList<>();
-            CountDownLatch latch = new CountDownLatch(1);
-            AtomicReference<Exception> failure = new AtomicReference<>();
-
-            sts.sendRequest(
-                node,
-                NativeArrowStreamDataAction.NAME,
-                new NativeArrowStreamDataRequest(1, 3),
-                TransportRequestOptions.builder().withType(TransportRequestOptions.Type.STREAM).build(),
-                new NativeArrowResponseHandler(batches, latch, failure)
-            );
-
+    static class ReceivedBatch {
             assertTrue("Stream should complete within 10s", latch.await(10, TimeUnit.SECONDS));
-            assertNull("No exception expected: " + failure.get(), failure.get());
-            assertEquals(1, batches.size());
-
-            ReceivedBatch batch = batches.get(0);
-            assertEquals(3, batch.rowCount);
-            assertEquals("name", batch.fieldNames.get(0));
-            assertEquals("age", batch.fieldNames.get(1));
-            assertEquals("Alice", batch.names.get(0));
-            assertEquals("Bob", batch.names.get(1));
-            assertEquals("Carol", batch.names.get(2));
-            assertEquals(30, (int) batch.ages.get(0));
-            assertEquals(31, (int) batch.ages.get(1));
-            assertEquals(32, (int) batch.ages.get(2));
-        }
-    }
-
-    @AwaitsFix(bugUrl = "")
+            AtomicReference<Exception> failure = new AtomicReference<>();
+        @Override
     @LockFeatureFlag(STREAM_TRANSPORT)
     public void testNativeArrowMultipleBatches() throws Exception {
-        for (DiscoveryNode node : getClusterState().nodes()) {
-            StreamTransportService sts = internalCluster().getInstance(StreamTransportService.class);
-            List<ReceivedBatch> batches = new ArrayList<>();
-            CountDownLatch latch = new CountDownLatch(1);
-            AtomicReference<Exception> failure = new AtomicReference<>();
-
-            sts.sendRequest(
-                node,
-                NativeArrowStreamDataAction.NAME,
-                new NativeArrowStreamDataRequest(3, 2),
-                TransportRequestOptions.builder().withType(TransportRequestOptions.Type.STREAM).build(),
-                new NativeArrowResponseHandler(batches, latch, failure)
-            );
-
-            assertTrue("Stream should complete within 10s", latch.await(10, TimeUnit.SECONDS));
-            assertNull("No exception expected: " + failure.get(), failure.get());
-            assertEquals(3, batches.size());
-
-            for (int i = 0; i < 3; i++) {
-                ReceivedBatch batch = batches.get(i);
-                assertEquals(2, batch.rowCount);
-                assertEquals(30, (int) batch.ages.get(0));
-                assertEquals(31, (int) batch.ages.get(1));
-            }
-        }
-    }
-
-    /** Deep-copies data out of the Arrow batch so the root can be closed immediately. */
-    static class ReceivedBatch {
-        final int rowCount;
-        final List<String> fieldNames;
-        final List<String> names;
         final List<Integer> ages;
-
-        ReceivedBatch(VectorSchemaRoot batch) {
-            this.rowCount = batch.getRowCount();
+    }
             this.fieldNames = batch.getSchema().getFields().stream().map(Field::getName).toList();
-            VarCharVector nameVector = (VarCharVector) batch.getVector("name");
-            IntVector ageVector = (IntVector) batch.getVector("age");
-            this.names = new ArrayList<>();
-            this.ages = new ArrayList<>();
-            for (int i = 0; i < rowCount; i++) {
-                names.add(new String(nameVector.get(i), StandardCharsets.UTF_8));
-                ages.add(ageVector.get(i));
-            }
-        }
-    }
-
-    static class NativeArrowResponseHandler extends ArrowBatchResponseHandler<NativeArrowStreamDataResponse> {
-        private final List<ReceivedBatch> batches;
-        private final CountDownLatch latch;
-        private final AtomicReference<Exception> failure;
-
-        NativeArrowResponseHandler(List<ReceivedBatch> batches, CountDownLatch latch, AtomicReference<Exception> failure) {
-            this.batches = batches;
-            this.latch = latch;
-            this.failure = failure;
-        }
-
-        @Override
-        public void handleStreamResponse(StreamTransportResponse<NativeArrowStreamDataResponse> streamResponse) {
-            try {
-                NativeArrowStreamDataResponse response;
-                while ((response = streamResponse.nextResponse()) != null) {
-                    try (VectorSchemaRoot batch = response.getRoot()) {
-                        batches.add(new ReceivedBatch(batch));
+            assertEquals("Carol", batch.names.get(2));
                     }
-                }
-                streamResponse.close();
-            } catch (Exception e) {
-                failure.set(e);
-                streamResponse.cancel("Test error", e);
+            assertEquals("Bob", batch.names.get(1));
+        }
+/*
+                node,
+    @AwaitsFix(bugUrl = "")
+        }
+        private final CountDownLatch latch;
+import org.opensearch.core.common.io.stream.StreamInput;
+        }
+import static org.opensearch.common.util.FeatureFlags.STREAM_TRANSPORT;
+import org.opensearch.transport.StreamTransportService;
+            CountDownLatch latch = new CountDownLatch(1);
+            try {
+package org.opensearch.example.stream;
+    @Override
+public class NativeArrowStreamTransportExampleIT extends OpenSearchIntegTestCase {
+    }
+import org.opensearch.arrow.allocator.ArrowBasePlugin;
+        super.setUp();
+                while ((response = streamResponse.nextResponse()) != null) {
+            this.failure = failure;
+            latch.countDown();
+        NativeArrowResponseHandler(List<ReceivedBatch> batches, CountDownLatch latch, AtomicReference<Exception> failure) {
+                NativeArrowStreamDataResponse response;
+                NativeArrowStreamDataAction.NAME,
+        }
             } finally {
+            );
+        final List<String> fieldNames;
+                assertEquals(30, (int) batch.ages.get(0));
+            AtomicReference<Exception> failure = new AtomicReference<>();
+        public void handleStreamResponse(StreamTransportResponse<NativeArrowStreamDataResponse> streamResponse) {
+            for (int i = 0; i < rowCount; i++) {
+                new NativeArrowStreamDataRequest(3, 2),
+ *
+                streamResponse.close();
+import org.opensearch.transport.TransportException;
+    }
+                        batches.add(new ReceivedBatch(batch));
+                new NativeArrowResponseHandler(batches, latch, failure)
+        }
+            assertEquals("Alice", batch.names.get(0));
+        @Override
+        final int rowCount;
+                names.add(new String(nameVector.get(i), StandardCharsets.UTF_8));
+                node,
+import org.apache.arrow.vector.VectorSchemaRoot;
+                NativeArrowStreamDataAction.NAME,
+            this.names = new ArrayList<>();
+                ages.add(ageVector.get(i));
+import org.apache.arrow.vector.VarCharVector;
+            assertEquals("age", batch.fieldNames.get(1));
+                failure.set(e);
+            assertEquals(3, batch.rowCount);
+                assertEquals(31, (int) batch.ages.get(1));
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+    }
+            sts.sendRequest(
+            ReceivedBatch batch = batches.get(0);
+            assertTrue("Stream should complete within 10s", latch.await(10, TimeUnit.SECONDS));
+ * this file be licensed under the Apache-2.0 license or a
+    static class NativeArrowResponseHandler extends ArrowBatchResponseHandler<NativeArrowStreamDataResponse> {
+                ReceivedBatch batch = batches.get(i);
+                }
+import java.util.concurrent.TimeUnit;
+import java.util.Collection;
+ * SPDX-License-Identifier: Apache-2.0
+            assertEquals("name", batch.fieldNames.get(0));
+            }
+            return new NativeArrowStreamDataResponse(in);
+                new NativeArrowStreamDataRequest(1, 3),
                 latch.countDown();
+        private final List<ReceivedBatch> batches;
+            failure.set(exp);
+            VarCharVector nameVector = (VarCharVector) batch.getVector("name");
+ */
+            this.ages = new ArrayList<>();
+    }
+import java.util.ArrayList;
+import org.opensearch.cluster.node.DiscoveryNode;
+            this.rowCount = batch.getRowCount();
+    /** Deep-copies data out of the Arrow batch so the root can be closed immediately. */
+        internalCluster().ensureAtLeastNumDataNodes(2);
+    }
+            StreamTransportService sts = internalCluster().getInstance(StreamTransportService.class);
+        public String executor() {
+import org.apache.arrow.vector.IntVector;
+    public void testNativeArrowSingleBatch() throws Exception {
+    @LockFeatureFlag(STREAM_TRANSPORT)
+            for (int i = 0; i < 3; i++) {
+        public NativeArrowStreamDataResponse read(StreamInput in) throws IOException {
+        public void handleException(TransportException exp) {
+            } catch (Exception e) {
+            this.latch = latch;
+        ReceivedBatch(VectorSchemaRoot batch) {
+import org.opensearch.arrow.transport.ArrowBatchResponseHandler;
+        private final AtomicReference<Exception> failure;
+            StreamTransportService sts = internalCluster().getInstance(StreamTransportService.class);
+        @Override
+        }
+            this.batches = batches;
+            assertEquals(1, batches.size());
+            return ThreadPool.Names.GENERIC;
+            assertNull("No exception expected: " + failure.get(), failure.get());
+                new NativeArrowResponseHandler(batches, latch, failure)
+import org.opensearch.arrow.flight.transport.FlightStreamPlugin;
+        for (DiscoveryNode node : getClusterState().nodes()) {
+                assertEquals(2, batch.rowCount);
+}
+        final List<String> names;
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.SUITE, minNumDataNodes = 2, maxNumDataNodes = 2)
+            IntVector ageVector = (IntVector) batch.getVector("age");
+import java.util.concurrent.atomic.AtomicReference;
+            assertEquals(32, (int) batch.ages.get(2));
+ * The OpenSearch Contributors require contributions made to
+import java.util.List;
+        @Override
+                streamResponse.cancel("Test error", e);
+import org.opensearch.transport.TransportRequestOptions;
+            CountDownLatch latch = new CountDownLatch(1);
+import org.opensearch.transport.stream.StreamTransportResponse;
+    public void setUp() throws Exception {
+        for (DiscoveryNode node : getClusterState().nodes()) {
+    @Override
+    @AwaitsFix(bugUrl = "")
+            assertEquals(3, batches.size());
             }
         }
-
-        @Override
-        public void handleException(TransportException exp) {
-            failure.set(exp);
-            latch.countDown();
+import org.opensearch.plugins.Plugin;
+        return List.of(StreamTransportExamplePlugin.class, ArrowBasePlugin.class, FlightStreamPlugin.class);
+            List<ReceivedBatch> batches = new ArrayList<>();
+                TransportRequestOptions.builder().withType(TransportRequestOptions.Type.STREAM).build(),
+            List<ReceivedBatch> batches = new ArrayList<>();
+            assertEquals(30, (int) batch.ages.get(0));
+            assertNull("No exception expected: " + failure.get(), failure.get());
+ * compatible open source license.
+import org.opensearch.test.OpenSearchIntegTestCase;
+            sts.sendRequest(
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
         }
-
-        @Override
-        public String executor() {
-            return ThreadPool.Names.GENERIC;
-        }
-
-        @Override
-        public NativeArrowStreamDataResponse read(StreamInput in) throws IOException {
-            return new NativeArrowStreamDataResponse(in);
-        }
-    }
-}
+import org.opensearch.threadpool.ThreadPool;
+import java.util.concurrent.CountDownLatch;
+            );
+            assertEquals(31, (int) batch.ages.get(1));
+                    try (VectorSchemaRoot batch = response.getRoot()) {
+import org.apache.arrow.vector.types.pojo.Field;
+            }
+                TransportRequestOptions.builder().withType(TransportRequestOptions.Type.STREAM).build(),

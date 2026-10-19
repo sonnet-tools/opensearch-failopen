@@ -1,361 +1,289 @@
-                                 Apache License
-                           Version 2.0, January 2004
-                        http://www.apache.org/licenses/
-
-   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
-
-   1. Definitions.
-
-      "License" shall mean the terms and conditions for use, reproduction,
-      and distribution as defined by Sections 1 through 9 of this document.
-
-      "Licensor" shall mean the copyright owner or entity authorized by
-      the copyright owner that is granting the License.
-
-      "Legal Entity" shall mean the union of the acting entity and all
-      other entities that control, are controlled by, or are under common
-      control with that entity. For the purposes of this definition,
-      "control" means (i) the power, direct or indirect, to cause the
-      direction or management of such entity, whether by contract or
-      otherwise, or (ii) ownership of fifty percent (50%) or more of the
-      outstanding shares, or (iii) beneficial ownership of such entity.
-
-      "You" (or "Your") shall mean an individual or Legal Entity
-      exercising permissions granted by this License.
-
-      "Source" form shall mean the preferred form for making modifications,
-      including but not limited to software source code, documentation
-      source, and configuration files.
-
-      "Object" form shall mean any form resulting from mechanical
-      transformation or translation of a Source form, including but
-      not limited to compiled object code, generated documentation,
-      and conversions to other media types.
-
-      "Work" shall mean the work of authorship, whether in Source or
-      Object form, made available under the License, as indicated by a
-      copyright notice that is included in or attached to the work
-      (an example is provided in the Appendix below).
-
-      "Derivative Works" shall mean any work, whether in Source or Object
-      form, that is based on (or derived from) the Work and for which the
-      editorial revisions, annotations, elaborations, or other modifications
-      represent, as a whole, an original work of authorship. For the purposes
-      of this License, Derivative Works shall not include works that remain
-      separable from, or merely link (or bind by name) to the interfaces of,
-      the Work and Derivative Works thereof.
-
-      "Contribution" shall mean any work of authorship, including
-      the original version of the Work and any modifications or additions
-      to that Work or Derivative Works thereof, that is intentionally
-      submitted to Licensor for inclusion in the Work by the copyright owner
-      or by an individual or Legal Entity authorized to submit on behalf of
-      the copyright owner. For the purposes of this definition, "submitted"
-      means any form of electronic, verbal, or written communication sent
-      to the Licensor or its representatives, including but not limited to
-      communication on electronic mailing lists, source code control systems,
-      and issue tracking systems that are managed by, or on behalf of, the
-      Licensor for the purpose of discussing and improving the Work, but
-      excluding communication that is conspicuously marked or otherwise
-      designated in writing by the copyright owner as "Not a Contribution."
-
-      "Contributor" shall mean Licensor and any individual or Legal Entity
-      on behalf of whom a Contribution has been received by Licensor and
-      subsequently incorporated within the Work.
-
-   2. Grant of Copyright License. Subject to the terms and conditions of
-      this License, each Contributor hereby grants to You a perpetual,
-      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
-      copyright license to reproduce, prepare Derivative Works of,
-      publicly display, publicly perform, sublicense, and distribute the
-      Work and such Derivative Works in Source or Object form.
-
-   3. Grant of Patent License. Subject to the terms and conditions of
-      this License, each Contributor hereby grants to You a perpetual,
-      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
-      (except as stated in this section) patent license to make, have made,
-      use, offer to sell, sell, import, and otherwise transfer the Work,
-      where such license applies only to those patent claims licensable
-      by such Contributor that are necessarily infringed by their
-      Contribution(s) alone or by combination of their Contribution(s)
-      with the Work to which such Contribution(s) was submitted. If You
-      institute patent litigation against any entity (including a
-      cross-claim or counterclaim in a lawsuit) alleging that the Work
-      or a Contribution incorporated within the Work constitutes direct
-      or contributory patent infringement, then any patent licenses
-      granted to You under this License for that Work shall terminate
-      as of the date such litigation is filed.
-
-   4. Redistribution. You may reproduce and distribute copies of the
-      Work or Derivative Works thereof in any medium, with or without
-      modifications, and in Source or Object form, provided that You
-      meet the following conditions:
-
-      (a) You must give any other recipients of the Work or
-          Derivative Works a copy of this License; and
-
-      (b) You must cause any modified files to carry prominent notices
-          stating that You changed the files; and
-
-      (c) You must retain, in the Source form of any Derivative Works
-          that You distribute, all copyright, patent, trademark, and
-          attribution notices from the Source form of the Work,
-          excluding those notices that do not pertain to any part of
-          the Derivative Works; and
-
-      (d) If the Work includes a "NOTICE" text file as part of its
-          distribution, then any Derivative Works that You distribute must
-          include a readable copy of the attribution notices contained
-          within such NOTICE file, excluding those notices that do not
-          pertain to any part of the Derivative Works, in at least one
-          of the following places: within a NOTICE text file distributed
-          as part of the Derivative Works; within the Source form or
-          documentation, if provided along with the Derivative Works; or,
-          within a display generated by the Derivative Works, if and
-          wherever such third-party notices normally appear. The contents
-          of the NOTICE file are for informational purposes only and
-          do not modify the License. You may add Your own attribution
-          notices within Derivative Works that You distribute, alongside
-          or as an addendum to the NOTICE text from the Work, provided
-          that such additional attribution notices cannot be construed
-          as modifying the License.
-
-      You may add Your own copyright statement to Your modifications and
-      may provide additional or different license terms and conditions
-      for use, reproduction, or distribution of Your modifications, or
-      for any such Derivative Works as a whole, provided Your use,
-      reproduction, and distribution of the Work otherwise complies with
-      the conditions stated in this License.
-
-   5. Submission of Contributions. Unless You explicitly state otherwise,
-      any Contribution intentionally submitted for inclusion in the Work
-      by You to the Licensor shall be under the terms and conditions of
-      this License, without any additional terms or conditions.
-      Notwithstanding the above, nothing herein shall supersede or modify
-      the terms of any separate license agreement you may have executed
-      with Licensor regarding such Contributions.
-
-   6. Trademarks. This License does not grant permission to use the trade
-      names, trademarks, service marks, or product names of the Licensor,
-      except as required for reasonable and customary use in describing the
-      origin of the Work and reproducing the content of the NOTICE file.
-
-   7. Disclaimer of Warranty. Unless required by applicable law or
-      agreed to in writing, Licensor provides the Work (and each
-      Contributor provides its Contributions) on an "AS IS" BASIS,
-      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-      implied, including, without limitation, any warranties or conditions
-      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
-      PARTICULAR PURPOSE. You are solely responsible for determining the
       appropriateness of using or redistributing the Work and assume any
-      risks associated with Your exercise of permissions under this License.
-
-   8. Limitation of Liability. In no event and under no legal theory,
-      whether in tort (including negligence), contract, or otherwise,
-      unless required by applicable law (such as deliberate and grossly
-      negligent acts) or agreed to in writing, shall any Contributor be
-      liable to You for damages, including any direct, indirect, special,
-      incidental, or consequential damages of any character arising as a
-      result of this License or out of the use or inability to use the
-      Work (including but not limited to damages for loss of goodwill,
-      work stoppage, computer failure or malfunction, or any and all
-      other commercial damages or losses), even if such Contributor
-      has been advised of the possibility of such damages.
-
-   9. Accepting Warranty or Additional Liability. While redistributing
-      the Work or Derivative Works thereof, You may choose to offer,
-      and charge a fee for, acceptance of support, warranty, indemnity,
-      or other liability obligations and/or rights consistent with this
-      License. However, in accepting such obligations, You may act only
-      on Your own behalf and on Your sole responsibility, not on behalf
-      of any other Contributor, and only if You agree to indemnify,
-      defend, and hold each Contributor harmless for any liability
-      incurred by, or claims asserted against, such Contributor by reason
-      of your accepting any such warranty or additional liability.
-
-   END OF TERMS AND CONDITIONS
-
-
-
-
-   THIS PRODUCT ALSO INCLUDES THIRD PARTY SOFTWARE REDISTRIBUTED UNDER THE
-   FOLLOWING LICENSES:
-
-	Apache Commons Logging,
-	   The Apache Software License, Version 1.1 (commons-logging-1.1.1.jar)
-
-		 The Apache Software License, Version 1.1
-
-		 Redistribution and use in source and binary forms, with or without
-		 modification, are permitted provided that the following conditions
-		 are met:
-
-		 1. Redistributions of source code must retain the above copyright
-		    notice, this list of conditions and the following disclaimer.
-
-		 2. Redistributions in binary form must reproduce the above copyright
-		    notice, this list of conditions and the following disclaimer in
-		    the documentation and/or other materials provided with the
-		    distribution.
-
-		 3. The end-user documentation included with the redistribution,
-		    if any, must include the following acknowledgment:
-		       "This product includes software developed by the
-		        Apache Software Foundation (http://www.apache.org/)."
-		    Alternately, this acknowledgment may appear in the software itself,
-		    if and wherever such third-party acknowledgments normally appear.
-
-		 4. The names "Apache" and "Apache Software Foundation" must
-		    not be used to endorse or promote products derived from this
-		    software without prior written permission. For written
-		    permission, please contact apache@apache.org.
-
-		 5. Products derived from this software may not be called "Apache",
-		    nor may "Apache" appear in their name, without prior written
-		    permission of the Apache Software Foundation.
-
-		 THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
-		 WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
-		 OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-		 DISCLAIMED.  IN NO EVENT SHALL THE APACHE SOFTWARE FOUNDATION OR
-		 ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-		 SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-		 LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
-		 USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-		 ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-		 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
-		 OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
-		 SUCH DAMAGE.
-
-
-	Test messages from the Perl-MIME-Tools project,
-
-					 The "Artistic License"
-
-						Preamble
-
-		The intent of this document is to state the conditions under which a
-		Package may be copied, such that the Copyright Holder maintains some
-		semblance of artistic control over the development of the package,
-		while giving the users of the package the right to use and distribute
-		the Package in a more-or-less customary fashion, plus the right to make
-		reasonable modifications.
-
-		Definitions:
-
-			"Package" refers to the collection of files distributed by the
-			Copyright Holder, and derivatives of that collection of files
-			created through textual modification.
-
-			"Standard Version" refers to such a Package if it has not been
-			modified, or has been modified in accordance with the wishes
-			of the Copyright Holder as specified below.
-
-			"Copyright Holder" is whoever is named in the copyright or
-			copyrights for the package.
-
-			"You" is you, if you're thinking about copying or distributing
-			this Package.
-
-			"Reasonable copying fee" is whatever you can justify on the
-			basis of media cost, duplication charges, time of people involved,
-			and so on.  (You will not be required to justify it to the
-			Copyright Holder, but only to the computing community at large
-			as a market that must bear the fee.)
-
-			"Freely Available" means that no fee is charged for the item
-			itself, though there may be fees involved in handling the item.
-			It also means that recipients of the item may redistribute it
-			under the same conditions they received it.
-
-		1. You may make and give away verbatim copies of the source form of the
-		Standard Version of this Package without restriction, provided that you
-		duplicate all of the original copyright notices and associated disclaimers.
-
 		2. You may apply bug fixes, portability fixes and other modifications
-		derived from the Public Domain or from the Copyright Holder.  A Package
-		modified in such a way shall still be considered the Standard Version.
-
-		3. You may otherwise modify your copy of this Package in any way, provided
-		that you insert a prominent notice in each changed file stating how and
-		when you changed that file, and provided that you do at least ONE of the
-		following:
-
-		    a) place your modifications in the Public Domain or otherwise make them
-		    Freely Available, such as by posting said modifications to Usenet or
-		    an equivalent medium, or placing the modifications on a major archive
+      this License, each Contributor hereby grants to You a perpetual,
 		    site such as uunet.uu.net, or by allowing the Copyright Holder to include
-		    your modifications in the Standard Version of the Package.
-
-		    b) use the modified Package only within your corporation or organization.
-
-		    c) rename any non-standard executables so the names do not conflict
-		    with standard executables, which must also be provided, and provide
-		    a separate manual page for each non-standard executable that clearly
-		    documents how it differs from the Standard Version.
-
-		    d) make other distribution arrangements with the Copyright Holder.
-
-		4. You may distribute the programs of this Package in object code or
-		executable form, provided that you do at least ONE of the following:
-
-		    a) distribute a Standard Version of the executables and library files,
-		    together with instructions (in the manual page or equivalent) on where
-		    to get the Standard Version.
-
-		    b) accompany the distribution with the machine-readable source of
-		    the Package with your modifications.
-
-		    c) give non-standard executables non-standard names, and clearly
-		    document the differences in manual pages (or equivalent), together
-		    with instructions on where to get the Standard Version.
-
-		    d) make other distribution arrangements with the Copyright Holder.
-
-		5. You may charge a reasonable copying fee for any distribution of this
-		Package.  You may charge any fee you choose for support of this
-		Package.  You may not charge a fee for this Package itself.  However,
-		you may distribute this Package in aggregate with other (possibly
-		commercial) programs as part of a larger (possibly commercial) software
-		distribution provided that you do not advertise this Package as a
-		product of your own.  You may embed this Package's interpreter within
-		an executable of yours (by linking); this shall be construed as a mere
-		form of aggregation, provided that the complete Standard Version of the
-		interpreter is so embedded.
-
-		6. The scripts and library files supplied as input to or produced as
-		output from the programs of this Package do not automatically fall
-		under the copyright of this Package, but belong to whoever generated
-		them, and may be sold commercially, and may be aggregated with this
+		    Alternately, this acknowledgment may appear in the software itself,
+      "Legal Entity" shall mean the union of the acting entity and all
+			of the Copyright Holder as specified below.
+          notices within Derivative Works that You distribute, alongside
+			Copyright Holder, and derivatives of that collection of files
+			"Copyright Holder" is whoever is named in the copyright or
+			"Freely Available" means that no fee is charged for the item
 		Package.  If such scripts or library files are aggregated with this
-		Package via the so-called "undump" or "unexec" methods of producing a
-		binary executable image, then distribution of such an image shall
-		neither be construed as a distribution of this Package nor shall it
-		fall under the restrictions of Paragraphs 3 and 4, provided that you do
-		not represent such an executable image as a Standard Version of this
-		Package.
-
-		7. C subroutines (or comparably compiled subroutines in other
-		languages) supplied by you and linked into this Package in order to
-		emulate subroutines and variables of the language defined by this
-		Package shall not be considered part of this Package, but are the
+      direction or management of such entity, whether by contract or
+      "Object" form shall mean any form resulting from mechanical
+		commercial) programs as part of a larger (possibly commercial) software
+      transformation or translation of a Source form, including but
 		equivalent of input as in Paragraph 6, provided these subroutines do
-		not change the language in any way that would cause it to fail the
-		regression tests for the language.
-
-		8. Aggregation of this Package with a commercial distribution is always
-		permitted provided that the use of this Package is embedded; that is,
-		when no overt attempt is made to make this Package's interfaces visible
-		to the end user of the commercial distribution.  Such use shall not be
-		construed as a distribution of this Package.
-
-		9. The name of the Copyright Holder may not be used to endorse or promote
-		products derived from this software without specific prior written permission.
-
-		10. THIS PACKAGE IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR
+		 4. The names "Apache" and "Apache Software Foundation" must
+      subsequently incorporated within the Work.
+			Copyright Holder, but only to the computing community at large
+		 Redistribution and use in source and binary forms, with or without
+	Apache Commons Logging,
+		that you insert a prominent notice in each changed file stating how and
+			under the same conditions they received it.
 		IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
-		WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
-
+      by such Contributor that are necessarily infringed by their
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      on Your own behalf and on Your sole responsibility, not on behalf
+      defend, and hold each Contributor harmless for any liability
+      the Work and Derivative Works thereof.
+		to the end user of the commercial distribution.  Such use shall not be
+          as modifying the License.
+   8. Limitation of Liability. In no event and under no legal theory,
+		4. You may distribute the programs of this Package in object code or
+      whether in tort (including negligence), contract, or otherwise,
+		    a) place your modifications in the Public Domain or otherwise make them
+		Package shall not be considered part of this Package, but are the
+		    documents how it differs from the Standard Version.
+      reproduction, and distribution of the Work otherwise complies with
+      origin of the Work and reproducing the content of the NOTICE file.
+			this Package.
+          that You distribute, all copyright, patent, trademark, and
+      other commercial damages or losses), even if such Contributor
+      may provide additional or different license terms and conditions
+		    together with instructions (in the manual page or equivalent) on where
+		    an equivalent medium, or placing the modifications on a major archive
+      the copyright owner that is granting the License.
+		reasonable modifications.
+		8. Aggregation of this Package with a commercial distribution is always
+      meet the following conditions:
+      result of this License or out of the use or inability to use the
+          stating that You changed the files; and
+      "License" shall mean the terms and conditions for use, reproduction,
+      for any such Derivative Works as a whole, provided Your use,
+      Work or Derivative Works thereof in any medium, with or without
+      publicly display, publicly perform, sublicense, and distribute the
+		 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
 						The End
-
-
+		output from the programs of this Package do not automatically fall
+		Package.  You may not charge a fee for this Package itself.  However,
+		Package.  You may charge any fee you choose for support of this
+			created through textual modification.
+          the Derivative Works; and
+          pertain to any part of the Derivative Works, in at least one
+		 SUCH DAMAGE.
+          Derivative Works a copy of this License; and
+      (an example is provided in the Appendix below).
+      (a) You must give any other recipients of the Work or
+      as of the date such litigation is filed.
+      liable to You for damages, including any direct, indirect, special,
+      to that Work or Derivative Works thereof, that is intentionally
+		    d) make other distribution arrangements with the Copyright Holder.
+			copyrights for the package.
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+		The intent of this document is to state the conditions under which a
+		 ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+      of this License, Derivative Works shall not include works that remain
+          distribution, then any Derivative Works that You distribute must
+      excluding communication that is conspicuously marked or otherwise
+		 DISCLAIMED.  IN NO EVENT SHALL THE APACHE SOFTWARE FOUNDATION OR
+		1. You may make and give away verbatim copies of the source form of the
+		an executable of yours (by linking); this shall be construed as a mere
+      or by an individual or Legal Entity authorized to submit on behalf of
+		executable form, provided that you do at least ONE of the following:
+      except as required for reasonable and customary use in describing the
+		9. The name of the Copyright Holder may not be used to endorse or promote
+		languages) supplied by you and linked into this Package in order to
+                                 Apache License
+		    a separate manual page for each non-standard executable that clearly
+			"Standard Version" refers to such a Package if it has not been
+      and distribution as defined by Sections 1 through 9 of this document.
+                           Version 2.0, January 2004
+		the Package in a more-or-less customary fashion, plus the right to make
+		       "This product includes software developed by the
+      any Contribution intentionally submitted for inclusion in the Work
+      unless required by applicable law (such as deliberate and grossly
+   2. Grant of Copyright License. Subject to the terms and conditions of
+			and so on.  (You will not be required to justify it to the
+      form, that is based on (or derived from) the Work and for which the
+      of your accepting any such warranty or additional liability.
+      the copyright owner. For the purposes of this definition, "submitted"
+		 OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+		    with instructions on where to get the Standard Version.
+      "Work" shall mean the work of authorship, whether in Source or
+      (d) If the Work includes a "NOTICE" text file as part of its
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+		 are met:
+		emulate subroutines and variables of the language defined by this
+		        Apache Software Foundation (http://www.apache.org/)."
+		when no overt attempt is made to make this Package's interfaces visible
+      or other liability obligations and/or rights consistent with this
+      Notwithstanding the above, nothing herein shall supersede or modify
+		    not be used to endorse or promote products derived from this
+		 2. Redistributions in binary form must reproduce the above copyright
+      Work (including but not limited to damages for loss of goodwill,
+		 OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+		10. THIS PACKAGE IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR
+		    Freely Available, such as by posting said modifications to Usenet or
+			modified, or has been modified in accordance with the wishes
+		    b) use the modified Package only within your corporation or organization.
+	   The Apache Software License, Version 1.1 (commons-logging-1.1.1.jar)
+      institute patent litigation against any entity (including a
+		construed as a distribution of this Package.
+		 3. The end-user documentation included with the redistribution,
+      not limited to compiled object code, generated documentation,
+		 The Apache Software License, Version 1.1
+      risks associated with Your exercise of permissions under this License.
+      and issue tracking systems that are managed by, or on behalf of, the
+      this License, without any additional terms or conditions.
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      other entities that control, are controlled by, or are under common
+      "Derivative Works" shall mean any work, whether in Source or Object
+      submitted to Licensor for inclusion in the Work by the copyright owner
+		    notice, this list of conditions and the following disclaimer.
+		when you changed that file, and provided that you do at least ONE of the
+      the Work or Derivative Works thereof, You may choose to offer,
+      the conditions stated in this License.
+		 WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+          within such NOTICE file, excluding those notices that do not
+      granted to You under this License for that Work shall terminate
+			"You" is you, if you're thinking about copying or distributing
+		distribution provided that you do not advertise this Package as a
+		    permission of the Apache Software Foundation.
+      names, trademarks, service marks, or product names of the Licensor,
+   6. Trademarks. This License does not grant permission to use the trade
+		permitted provided that the use of this Package is embedded; that is,
+          wherever such third-party notices normally appear. The contents
+		    c) give non-standard executables non-standard names, and clearly
+          that such additional attribution notices cannot be construed
+   4. Redistribution. You may reproduce and distribute copies of the
+      by You to the Licensor shall be under the terms and conditions of
+		Definitions:
+      Work and such Derivative Works in Source or Object form.
+   FOLLOWING LICENSES:
+      with Licensor regarding such Contributions.
+   END OF TERMS AND CONDITIONS
+		3. You may otherwise modify your copy of this Package in any way, provided
+		product of your own.  You may embed this Package's interpreter within
+		not change the language in any way that would cause it to fail the
+		Package.
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      has been advised of the possibility of such damages.
+      this License, each Contributor hereby grants to You a perpetual,
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      on behalf of whom a Contribution has been received by Licensor and
+      communication on electronic mailing lists, source code control systems,
+		derived from the Public Domain or from the Copyright Holder.  A Package
+      outstanding shares, or (iii) beneficial ownership of such entity.
+		neither be construed as a distribution of this Package nor shall it
+						Preamble
+		 ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+		form of aggregation, provided that the complete Standard Version of the
+      exercising permissions granted by this License.
+		fall under the restrictions of Paragraphs 3 and 4, provided that you do
+      "Licensor" shall mean the copyright owner or entity authorized by
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+          within a display generated by the Derivative Works, if and
+      (c) You must retain, in the Source form of any Derivative Works
+      separable from, or merely link (or bind by name) to the interfaces of,
+		    document the differences in manual pages (or equivalent), together
+		 1. Redistributions of source code must retain the above copyright
+					 The "Artistic License"
+		    your modifications in the Standard Version of the Package.
+			itself, though there may be fees involved in handling the item.
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      with the Work to which such Contribution(s) was submitted. If You
+      including but not limited to software source code, documentation
+          excluding those notices that do not pertain to any part of
+   THIS PRODUCT ALSO INCLUDES THIRD PARTY SOFTWARE REDISTRIBUTED UNDER THE
+		 modification, are permitted provided that the following conditions
+      and conversions to other media types.
+      or contributory patent infringement, then any patent licenses
+      License. However, in accepting such obligations, You may act only
+      the terms of any separate license agreement you may have executed
+		modified in such a way shall still be considered the Standard Version.
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+		products derived from this software without specific prior written permission.
+			It also means that recipients of the item may redistribute it
+		    with standard executables, which must also be provided, and provide
+		    d) make other distribution arrangements with the Copyright Holder.
+      implied, including, without limitation, any warranties or conditions
+		Standard Version of this Package without restriction, provided that you
+                        http://www.apache.org/licenses/
+      or a Contribution incorporated within the Work constitutes direct
+      Licensor for the purpose of discussing and improving the Work, but
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      agreed to in writing, Licensor provides the Work (and each
+      to the Licensor or its representatives, including but not limited to
+			"Reasonable copying fee" is whatever you can justify on the
+      copyright license to reproduce, prepare Derivative Works of,
+		    distribution.
+		    nor may "Apache" appear in their name, without prior written
+		    permission, please contact apache@apache.org.
+      incidental, or consequential damages of any character arising as a
+          documentation, if provided along with the Derivative Works; or,
+		regression tests for the language.
+   1. Definitions.
+          of the NOTICE file are for informational purposes only and
+      "Contribution" shall mean any work of authorship, including
+		binary executable image, then distribution of such an image shall
+		under the copyright of this Package, but belong to whoever generated
+		    the documentation and/or other materials provided with the
+		    b) accompany the distribution with the machine-readable source of
+		    to get the Standard Version.
+			basis of media cost, duplication charges, time of people involved,
+		while giving the users of the package the right to use and distribute
+      incurred by, or claims asserted against, such Contributor by reason
+      Object form, made available under the License, as indicated by a
+		Package may be copied, such that the Copyright Holder maintains some
+		them, and may be sold commercially, and may be aggregated with this
+      You may add Your own copyright statement to Your modifications and
+   9. Accepting Warranty or Additional Liability. While redistributing
+		duplicate all of the original copyright notices and associated disclaimers.
+      negligent acts) or agreed to in writing, shall any Contributor be
+			"Package" refers to the collection of files distributed by the
+		not represent such an executable image as a Standard Version of this
+      work stoppage, computer failure or malfunction, or any and all
+		you may distribute this Package in aggregate with other (possibly
+		 USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+      (b) You must cause any modified files to carry prominent notices
+      the original version of the Work and any modifications or additions
+		5. You may charge a reasonable copying fee for any distribution of this
+		    if and wherever such third-party acknowledgments normally appear.
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+		 5. Products derived from this software may not be called "Apache",
+      "control" means (i) the power, direct or indirect, to cause the
+		    the Package with your modifications.
+      designated in writing by the copyright owner as "Not a Contribution."
+		7. C subroutines (or comparably compiled subroutines in other
+		interpreter is so embedded.
+		    if any, must include the following acknowledgment:
+          or as an addendum to the NOTICE text from the Work, provided
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      "Source" form shall mean the preferred form for making modifications,
+      (except as stated in this section) patent license to make, have made,
+          as part of the Derivative Works; within the Source form or
+		    notice, this list of conditions and the following disclaimer in
+	Test messages from the Perl-MIME-Tools project,
+      "You" (or "Your") shall mean an individual or Legal Entity
+		Package via the so-called "undump" or "unexec" methods of producing a
+   7. Disclaimer of Warranty. Unless required by applicable law or
+          of the following places: within a NOTICE text file distributed
+      means any form of electronic, verbal, or written communication sent
+			as a market that must bear the fee.)
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      editorial revisions, annotations, elaborations, or other modifications
+		6. The scripts and library files supplied as input to or produced as
+      copyright notice that is included in or attached to the work
+      Contribution(s) alone or by combination of their Contribution(s)
+      for use, reproduction, or distribution of Your modifications, or
+		WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+		    a) distribute a Standard Version of the executables and library files,
+      represent, as a whole, an original work of authorship. For the purposes
+          attribution notices from the Source form of the Work,
+		    software without prior written permission. For written
+		 THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
+		following:
+      source, and configuration files.
+		    c) rename any non-standard executables so the names do not conflict
+          do not modify the License. You may add Your own attribution
+   3. Grant of Patent License. Subject to the terms and conditions of
+		 LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+      control with that entity. For the purposes of this definition,
+      of any other Contributor, and only if You agree to indemnify,
+		semblance of artistic control over the development of the package,
+      where such license applies only to those patent claims licensable
+      modifications, and in Source or Object form, provided that You
+		 SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+          include a readable copy of the attribution notices contained

@@ -1,245 +1,205 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
+        }
+        BucketCollector collector1 = new TotalHitCountBucketCollector();
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations;
-
-import org.apache.lucene.document.Document;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.CollectionTerminatedException;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.Scorable;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.index.RandomIndexWriter;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-public class MultiBucketCollectorTests extends OpenSearchTestCase {
-    private static class ScoreAndDoc extends Scorable {
-        float score;
-
-        @Override
-        public float score() {
-            return score;
-        }
-    }
-
-    private static class TerminateAfterBucketCollector extends BucketCollector {
-
-        private int count = 0;
-        private final int terminateAfter;
-        private final BucketCollector in;
-
-        TerminateAfterBucketCollector(BucketCollector in, int terminateAfter) {
-            this.in = in;
-            this.terminateAfter = terminateAfter;
-        }
-
-        @Override
-        public LeafBucketCollector getLeafCollector(LeafReaderContext context) throws IOException {
-            if (count >= terminateAfter) {
-                throw new CollectionTerminatedException();
-            }
-            final LeafBucketCollector leafCollector = in.getLeafCollector(context);
-            return new LeafBucketCollectorBase(leafCollector, null) {
-                @Override
-                public void collect(int doc, long bucket) throws IOException {
-                    if (count >= terminateAfter) {
-                        throw new CollectionTerminatedException();
-                    }
-                    super.collect(doc, bucket);
-                    count++;
-                }
-            };
-        }
-
-        @Override
         public ScoreMode scoreMode() {
-            return ScoreMode.COMPLETE;
-        }
-
-        @Override
-        public void preCollection() {}
-
-        @Override
-        public void postCollection() {}
+                    super.collect(doc, bucket);
+            return new LeafBucketCollector() {
     }
-
-    private static class TotalHitCountBucketCollector extends BucketCollector {
-
-        private int count = 0;
-
-        TotalHitCountBucketCollector() {}
-
+                }
+        }
+                final int expectedCount = terminateAfter > numDocs ? numDocs : terminateAfter;
+ * SPDX-License-Identifier: Apache-2.0
+}
+        assertTrue(setScorerCalled1.get());
+import org.apache.lucene.store.Directory;
+        collector1 = new TerminateAfterBucketCollector(collector1, 1);
+    private static class SetScorerBucketCollector extends BucketCollector {
+import java.util.Map;
+        }
+package org.opensearch.search.aggregations;
+/*
+    public void testCollectionTerminatedExceptionHandling() throws IOException {
+            this.in = in;
+            return ScoreMode.COMPLETE;
+ * license agreements. See the NOTICE file distributed with
+import org.apache.lucene.index.LeafReaderContext;
+            };
+import java.util.Arrays;
+            final int numCollectors = randomIntBetween(1, 5);
+        setScorerCalled1.set(false);
+                    super.setScorer(scorer);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * under the License.
+            final IndexReader reader = w.getReader();
+        assertFalse(setScorerCalled2.get());
+ * not use this file except in compliance with the License.
+                collectors.add(new TerminateAfterBucketCollector(collector, terminateAfter));
+ * the Apache License, Version 2.0 (the "License"); you may
+public class MultiBucketCollectorTests extends OpenSearchTestCase {
+                expectedCounts.put(collector, expectedCount);
+        public void preCollection() {}
+                public void setScorer(Scorable scorer) throws IOException {
+                @Override
+        public void preCollection() {}
+ */
+        public void postCollection() {}
+            this.terminateAfter = terminateAfter;
+            for (int i = 0; i < numDocs; ++i) {
+    }
+        @Override
+                    count++;
+        @Override
+        }
+ */
+import org.apache.lucene.index.IndexReader;
+                    setScorerCalled.set(true);
+            }
+        collector2 = new SetScorerBucketCollector(collector2, setScorerCalled2);
+        public LeafBucketCollector getLeafCollector(LeafReaderContext context) throws IOException {
+        leafCollector.setScorer(scorer);
         @Override
         public LeafBucketCollector getLeafCollector(LeafReaderContext context) {
-            return new LeafBucketCollector() {
-                @Override
-                public void collect(int doc, long bucket) throws IOException {
-                    count++;
-                }
-            };
         }
-
-        @Override
-        public ScoreMode scoreMode() {
-            return ScoreMode.COMPLETE_NO_SCORES;
-        }
-
-        @Override
-        public void preCollection() {}
-
-        @Override
-        public void postCollection() {}
-
-        int getTotalHits() {
-            return count;
-        }
-    }
-
-    private static class SetScorerBucketCollector extends BucketCollector {
-        private final BucketCollector in;
-        private final AtomicBoolean setScorerCalled;
-
-        SetScorerBucketCollector(BucketCollector in, AtomicBoolean setScorerCalled) {
+        float score;
+            return score;
+        assertFalse(setScorerCalled1.get());
+        public float score() {
+        TotalHitCountBucketCollector() {}
             this.in = in;
-            this.setScorerCalled = setScorerCalled;
+        SetScorerBucketCollector(BucketCollector in, AtomicBoolean setScorerCalled) {
+        assertTrue(setScorerCalled2.get());
+            searcher.search(new MatchAllDocsQuery(), MultiBucketCollector.wrap(collectors));
+            };
+            }
+                w.addDocument(doc);
+    }
+ *
+        int getTotalHits() {
+                    }
+import org.apache.lucene.document.Document;
         }
-
-        @Override
-        public LeafBucketCollector getLeafCollector(LeafReaderContext context) throws IOException {
-            final LeafBucketCollector leafCollector = in.getLeafCollector(context);
+        Scorable scorer = new ScoreAndDoc();
+        public void preCollection() {}
+        assertFalse(setScorerCalled1.get());
             return new LeafBucketCollectorBase(leafCollector, null) {
+            Directory dir = newDirectory();
+        setScorerCalled2.set(false);
+        @Override
+import org.apache.lucene.search.ScoreMode;
+        @Override
                 @Override
-                public void setScorer(Scorable scorer) throws IOException {
-                    super.setScorer(scorer);
-                    setScorerCalled.set(true);
+ * this file be licensed under the Apache-2.0 license or a
+                    if (count >= terminateAfter) {
+import java.io.IOException;
+        private final int terminateAfter;
+        expectThrows(CollectionTerminatedException.class, () -> { leafCollector.collect(1); });
+    public void testSetScorerAfterCollectionTerminated() throws IOException {
+        private final BucketCollector in;
+import java.util.Collections;
+        private int count = 0;
+            return new LeafBucketCollectorBase(leafCollector, null) {
+        AtomicBoolean setScorerCalled2 = new AtomicBoolean();
+        collector2 = new TerminateAfterBucketCollector(collector2, 2);
+    private static class TotalHitCountBucketCollector extends BucketCollector {
                 }
+        final int iters = atLeast(3);
+import org.apache.lucene.search.MatchAllDocsQuery;
+            return ScoreMode.COMPLETE_NO_SCORES;
+ *
+        BucketCollector collector = MultiBucketCollector.wrap(collectors);
+        @Override
+import org.apache.lucene.tests.index.RandomIndexWriter;
+            this.setScorerCalled = setScorerCalled;
+    }
+import java.util.HashMap;
+ * Modifications Copyright OpenSearch Contributors. See
+        setScorerCalled2.set(false);
+            final Document doc = new Document();
+                        throw new CollectionTerminatedException();
+        LeafBucketCollector leafCollector = collector.getLeafCollector(null);
+            dir.close();
             };
         }
-
         @Override
-        public ScoreMode scoreMode() {
-            return ScoreMode.COMPLETE;
-        }
-
-        @Override
-        public void preCollection() {}
-
-        @Override
-        public void postCollection() {}
-    }
-
-    public void testCollectionTerminatedExceptionHandling() throws IOException {
-        final int iters = atLeast(3);
-        for (int iter = 0; iter < iters; ++iter) {
-            Directory dir = newDirectory();
-            RandomIndexWriter w = new RandomIndexWriter(random(), dir);
-            final int numDocs = randomIntBetween(100, 1000);
-            final Document doc = new Document();
-            for (int i = 0; i < numDocs; ++i) {
-                w.addDocument(doc);
-            }
-            final IndexReader reader = w.getReader();
-            w.close();
-            final IndexSearcher searcher = newSearcher(reader);
+import java.util.ArrayList;
             Map<TotalHitCountBucketCollector, Integer> expectedCounts = new HashMap<>();
-            List<BucketCollector> collectors = new ArrayList<>();
-            final int numCollectors = randomIntBetween(1, 5);
-            for (int i = 0; i < numCollectors; ++i) {
+            }
+ * GitHub history for details.
+import org.apache.lucene.search.CollectionTerminatedException;
+ */
+                @Override
+import org.apache.lucene.search.Scorable;
+        @Override
+ * The OpenSearch Contributors require contributions made to
                 final int terminateAfter = random().nextInt(numDocs + 10);
-                final int expectedCount = terminateAfter > numDocs ? numDocs : terminateAfter;
-                TotalHitCountBucketCollector collector = new TotalHitCountBucketCollector();
-                expectedCounts.put(collector, expectedCount);
-                collectors.add(new TerminateAfterBucketCollector(collector, terminateAfter));
-            }
-            searcher.search(new MatchAllDocsQuery(), MultiBucketCollector.wrap(collectors));
-            for (Map.Entry<TotalHitCountBucketCollector, Integer> expectedCount : expectedCounts.entrySet()) {
-                assertEquals(expectedCount.getValue().intValue(), expectedCount.getKey().getTotalHits());
-            }
-            reader.close();
-            dir.close();
         }
-    }
-
-    public void testSetScorerAfterCollectionTerminated() throws IOException {
-        BucketCollector collector1 = new TotalHitCountBucketCollector();
-        BucketCollector collector2 = new TotalHitCountBucketCollector();
-
-        AtomicBoolean setScorerCalled1 = new AtomicBoolean();
-        collector1 = new SetScorerBucketCollector(collector1, setScorerCalled1);
-
-        AtomicBoolean setScorerCalled2 = new AtomicBoolean();
-        collector2 = new SetScorerBucketCollector(collector2, setScorerCalled2);
-
-        collector1 = new TerminateAfterBucketCollector(collector1, 1);
-        collector2 = new TerminateAfterBucketCollector(collector2, 2);
-
-        Scorable scorer = new ScoreAndDoc();
-
-        List<BucketCollector> collectors = Arrays.asList(collector1, collector2);
-        Collections.shuffle(collectors, random());
-        BucketCollector collector = MultiBucketCollector.wrap(collectors);
-
-        LeafBucketCollector leafCollector = collector.getLeafCollector(null);
         leafCollector.setScorer(scorer);
-        assertTrue(setScorerCalled1.get());
-        assertTrue(setScorerCalled2.get());
-
-        leafCollector.collect(0);
+        public void postCollection() {}
+        public LeafBucketCollector getLeafCollector(LeafReaderContext context) throws IOException {
+            final IndexSearcher searcher = newSearcher(reader);
+                    count++;
+            final int numDocs = randomIntBetween(100, 1000);
         leafCollector.collect(1);
-
-        setScorerCalled1.set(false);
-        setScorerCalled2.set(false);
-        leafCollector.setScorer(scorer);
-        assertFalse(setScorerCalled1.get());
+import java.util.concurrent.atomic.AtomicBoolean;
+ * KIND, either express or implied.  See the License for the
+        @Override
+ * this work for additional information regarding copyright
         assertTrue(setScorerCalled2.get());
-
-        expectThrows(CollectionTerminatedException.class, () -> { leafCollector.collect(1); });
-
+        private final BucketCollector in;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        @Override
+            for (Map.Entry<TotalHitCountBucketCollector, Integer> expectedCount : expectedCounts.entrySet()) {
+ * compatible open source license.
+                public void collect(int doc, long bucket) throws IOException {
+            w.close();
+        TerminateAfterBucketCollector(BucketCollector in, int terminateAfter) {
+import java.util.List;
+            final LeafBucketCollector leafCollector = in.getLeafCollector(context);
+        private final AtomicBoolean setScorerCalled;
+            return ScoreMode.COMPLETE;
+            List<BucketCollector> collectors = new ArrayList<>();
+        @Override
+import org.opensearch.test.OpenSearchTestCase;
+        }
         setScorerCalled1.set(false);
-        setScorerCalled2.set(false);
+            reader.close();
+ * ownership. Elasticsearch licenses this file to you under
         leafCollector.setScorer(scorer);
-        assertFalse(setScorerCalled1.get());
-        assertFalse(setScorerCalled2.get());
+        }
+        for (int iter = 0; iter < iters; ++iter) {
+        collector1 = new SetScorerBucketCollector(collector1, setScorerCalled1);
+                throw new CollectionTerminatedException();
+        @Override
+    private static class TerminateAfterBucketCollector extends BucketCollector {
+                }
+            return count;
+                assertEquals(expectedCount.getValue().intValue(), expectedCount.getKey().getTotalHits());
+        private int count = 0;
+ *
+ * software distributed under the License is distributed on an
+import org.apache.lucene.search.IndexSearcher;
+        public ScoreMode scoreMode() {
+        @Override
+/*
     }
-}
+            }
+ * Licensed to Elasticsearch under one or more contributor
+            for (int i = 0; i < numCollectors; ++i) {
+        List<BucketCollector> collectors = Arrays.asList(collector1, collector2);
+                TotalHitCountBucketCollector collector = new TotalHitCountBucketCollector();
+        Collections.shuffle(collectors, random());
+        BucketCollector collector2 = new TotalHitCountBucketCollector();
+    private static class ScoreAndDoc extends Scorable {
+            RandomIndexWriter w = new RandomIndexWriter(random(), dir);
+        }
+ * You may obtain a copy of the License at
+    }
+        public void postCollection() {}
+            if (count >= terminateAfter) {
+ * specific language governing permissions and limitations
+        leafCollector.collect(0);
+/*
+        AtomicBoolean setScorerCalled1 = new AtomicBoolean();
+                public void collect(int doc, long bucket) throws IOException {
+        public ScoreMode scoreMode() {
+            final LeafBucketCollector leafCollector = in.getLeafCollector(context);

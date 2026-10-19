@@ -1,302 +1,275 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.composite;
-
-import org.apache.lucene.document.IntPoint;
-import org.apache.lucene.document.LongPoint;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.SortedNumericDocValues;
-import org.apache.lucene.search.BoostQuery;
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.FieldExistsQuery;
-import org.apache.lucene.search.IndexOrDocValuesQuery;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.PointRangeQuery;
-import org.apache.lucene.search.Query;
-import org.opensearch.common.CheckedFunction;
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.BitArray;
-import org.opensearch.common.util.LongArray;
-import org.opensearch.index.mapper.DateFieldMapper;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.NumberFieldMapper;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.LeafBucketCollector;
-import org.opensearch.search.aggregations.bucket.missing.MissingOrder;
-
-import java.io.IOException;
-import java.util.Objects;
-import java.util.function.LongUnaryOperator;
-import java.util.function.ToLongFunction;
-
-/**
- * A {@link SingleDimensionValuesSource} for longs.
- *
- * @opensearch.internal
- */
-public class LongValuesSource extends SingleDimensionValuesSource<Long> {
-    private final BigArrays bigArrays;
-    private final CheckedFunction<LeafReaderContext, SortedNumericDocValues, IOException> docValuesFunc;
-    private final LongUnaryOperator rounding;
-
-    private BitArray bits;
-    private LongArray values;
-    private long currentValue;
-    private boolean missingCurrentValue;
-
-    public LongValuesSource(
-        BigArrays bigArrays,
-        MappedFieldType fieldType,
-        CheckedFunction<LeafReaderContext, SortedNumericDocValues, IOException> docValuesFunc,
-        LongUnaryOperator rounding,
-        DocValueFormat format,
-        boolean missingBucket,
-        MissingOrder missingOrder,
-        int size,
-        int reverseMul
-    ) {
-        super(bigArrays, format, fieldType, missingBucket, missingOrder, size, reverseMul);
-        this.bigArrays = bigArrays;
-        this.docValuesFunc = docValuesFunc;
-        this.rounding = rounding;
-        this.bits = missingBucket ? new BitArray(Math.min(size, 100), bigArrays) : null;
-        this.values = bigArrays.newLongArray(Math.min(size, 100), false);
-    }
-
     @Override
-    void copyCurrent(int slot) {
-        values = bigArrays.grow(values, slot + 1);
-        if (missingBucket && missingCurrentValue) {
-            bits.clear(slot);
-        } else {
-            assert missingCurrentValue == false;
-            if (missingBucket) {
-                bits.set(slot);
-            }
-            values.set(slot, currentValue);
-        }
     }
-
-    @Override
-    int compare(int from, int to) {
-        if (missingBucket) {
-            int result = missingOrder.compare(() -> bits.get(from) == false, () -> bits.get(to) == false, reverseMul);
-            if (MissingOrder.unknownOrder(result) == false) {
-                return result;
-            }
-        }
-        return compareValues(values.get(from), values.get(to));
-    }
-
-    @Override
-    int compareCurrent(int slot) {
-        if (missingBucket) {
-            int result = missingOrder.compare(() -> missingCurrentValue, () -> bits.get(slot) == false, reverseMul);
-            if (MissingOrder.unknownOrder(result) == false) {
-                return result;
-            }
-        }
-        return compareValues(currentValue, values.get(slot));
-    }
-
-    @Override
-    int compareCurrentWithAfter() {
-        if (missingBucket) {
-            int result = missingOrder.compare(() -> missingCurrentValue, () -> Objects.isNull(afterValue), reverseMul);
-            if (MissingOrder.unknownOrder(result) == false) {
-                return result;
-            }
-        }
-        return compareValues(currentValue, afterValue);
-    }
-
-    @Override
-    int hashCode(int slot) {
-        if (missingBucket && bits.get(slot) == false) {
-            return 0;
-        } else {
-            return Long.hashCode(values.get(slot));
-        }
-    }
-
-    @Override
-    int hashCodeCurrent() {
-        if (missingCurrentValue) {
-            return 0;
-        } else {
-            return Long.hashCode(currentValue);
-        }
-    }
-
-    private int compareValues(long v1, long v2) {
-        return Long.compare(v1, v2) * reverseMul;
-    }
-
-    @Override
-    protected void setAfter(Comparable value) {
-        if (missingBucket && value == null) {
-            afterValue = null;
-        } else {
-            // parse the value from a string in case it is a date or a formatted unsigned long.
-            afterValue = format.parseLong(value.toString(), false, () -> {
-                throw new IllegalArgumentException("now() is not supported in [after] key");
-            });
-        }
-    }
-
-    @Override
-    Long toComparable(int slot) {
-        if (missingBucket && bits.get(slot) == false) {
-            return null;
-        }
-        return values.get(slot);
-    }
-
-    @Override
-    LeafBucketCollector getLeafCollector(LeafReaderContext context, LeafBucketCollector next) throws IOException {
-        final SortedNumericDocValues dvs = docValuesFunc.apply(context);
-        return new LeafBucketCollector() {
-            @Override
-            public void collect(int doc, long bucket) throws IOException {
-                if (dvs.advanceExact(doc)) {
-                    int num = dvs.docValueCount();
-                    for (int i = 0; i < num; i++) {
-                        currentValue = dvs.nextValue();
-                        missingCurrentValue = false;
-                        next.collect(doc, bucket);
-                    }
-                } else if (missingBucket) {
-                    missingCurrentValue = true;
-                    next.collect(doc, bucket);
-                }
-            }
-        };
-    }
-
-    @Override
-    LeafBucketCollector getLeafCollector(Comparable value, LeafReaderContext context, LeafBucketCollector next) {
-        if (value.getClass() != Long.class) {
-            throw new IllegalArgumentException("Expected Long, got " + value.getClass());
-        }
-        currentValue = (Long) value;
-        return new LeafBucketCollector() {
-            @Override
-            public void collect(int doc, long bucket) throws IOException {
-                next.collect(doc, bucket);
-            }
-        };
-    }
-
-    static Query extractQuery(Query query) {
-        if (query instanceof BoostQuery) {
-            return extractQuery(((BoostQuery) query).getQuery());
-        } else if (query instanceof IndexOrDocValuesQuery) {
-            return extractQuery(((IndexOrDocValuesQuery) query).getIndexQuery());
-        } else if (query instanceof ConstantScoreQuery) {
-            return extractQuery(((ConstantScoreQuery) query).getQuery());
-        } else {
-            return query;
-        }
-    }
-
-    /**
-     * Returns true if we can use <code>query</code> with a {@link SortedDocsProducer} on <code>fieldName</code>.
-     */
-    static boolean checkMatchAllOrRangeQuery(Query query, String fieldName) {
-        if (query == null) {
-            return true;
-        } else if (query.getClass() == MatchAllDocsQuery.class) {
-            return true;
-        } else if (query instanceof PointRangeQuery) {
-            PointRangeQuery pointQuery = (PointRangeQuery) query;
-            return fieldName.equals(pointQuery.getField());
-        } else if (query instanceof FieldExistsQuery) {
-            FieldExistsQuery existsQuery = (FieldExistsQuery) query;
-            return fieldName.equals(existsQuery.getField());
-        } else {
-            return false;
-        }
-    }
-
-    @Override
-    SortedDocsProducer createSortedDocsProducerOrNull(IndexReader reader, Query query) {
-        query = extractQuery(query);
-        if (checkIfSortedDocsIsApplicable(reader, fieldType) == false || checkMatchAllOrRangeQuery(query, fieldType.name()) == false) {
-            return null;
-        }
-        final byte[] lowerPoint;
-        final byte[] upperPoint;
-        if (query instanceof PointRangeQuery) {
-            final PointRangeQuery rangeQuery = (PointRangeQuery) query;
-            lowerPoint = rangeQuery.getLowerPoint();
-            upperPoint = rangeQuery.getUpperPoint();
-        } else {
-            lowerPoint = null;
-            upperPoint = null;
-        }
-
-        if (fieldType.unwrap() instanceof NumberFieldMapper.NumberFieldType) {
-            NumberFieldMapper.NumberFieldType ft = (NumberFieldMapper.NumberFieldType) fieldType;
-            final ToLongFunction<byte[]> toBucketFunction;
-
-            switch (ft.typeName()) {
-                case "long":
-                    toBucketFunction = (value) -> rounding.applyAsLong(LongPoint.decodeDimension(value, 0));
-                    break;
-
-                case "int":
-                case "short":
-                case "byte":
-                    toBucketFunction = (value) -> rounding.applyAsLong(IntPoint.decodeDimension(value, 0));
-                    break;
-
-                default:
-                    return null;
-            }
-            return new PointsSortedDocsProducer(fieldType.name(), toBucketFunction, lowerPoint, upperPoint);
-        } else if (fieldType.unwrap() instanceof DateFieldMapper.DateFieldType) {
             ToLongFunction<byte[]> decode = ((DateFieldMapper.DateFieldType) fieldType).resolution()::parsePointAsMillis;
+                    return null;
+    public void close() {
+ * software distributed under the License is distributed on an
+        final SortedNumericDocValues dvs = docValuesFunc.apply(context);
+                    break;
+            int result = missingOrder.compare(() -> missingCurrentValue, () -> bits.get(slot) == false, reverseMul);
+            int result = missingOrder.compare(() -> missingCurrentValue, () -> Objects.isNull(afterValue), reverseMul);
+            });
             ToLongFunction<byte[]> toBucketFunction = value -> rounding.applyAsLong(decode.applyAsLong(value));
-            return new PointsSortedDocsProducer(fieldType.name(), toBucketFunction, lowerPoint, upperPoint);
+        }
+ * not use this file except in compliance with the License.
+                        currentValue = dvs.nextValue();
+ *
+        return values.get(slot);
+            return fieldName.equals(existsQuery.getField());
+        Releasables.close(values, bits);
+            }
+    }
+                    int num = dvs.docValueCount();
+            final PointRangeQuery rangeQuery = (PointRangeQuery) query;
+        LongUnaryOperator rounding,
+    ) {
+        this.values = bigArrays.newLongArray(Math.min(size, 100), false);
+            throw new IllegalArgumentException("Expected Long, got " + value.getClass());
+                    }
+import org.opensearch.search.DocValueFormat;
+    @Override
+            upperPoint = rangeQuery.getUpperPoint();
+        if (query == null) {
+        DocValueFormat format,
+            afterValue = null;
+    int hashCodeCurrent() {
+    private BitArray bits;
+                } else if (missingBucket) {
+        };
+    @Override
+        BigArrays bigArrays,
+ * the Apache License, Version 2.0 (the "License"); you may
+    int hashCode(int slot) {
+            PointRangeQuery pointQuery = (PointRangeQuery) query;
+    @Override
+            return extractQuery(((IndexOrDocValuesQuery) query).getIndexQuery());
+    @Override
+        if (missingBucket) {
+    LeafBucketCollector getLeafCollector(Comparable value, LeafReaderContext context, LeafBucketCollector next) {
+            }
+import java.util.function.LongUnaryOperator;
+                case "short":
+import org.apache.lucene.search.Query;
+            if (MissingOrder.unknownOrder(result) == false) {
+            return Long.hashCode(values.get(slot));
+            NumberFieldMapper.NumberFieldType ft = (NumberFieldMapper.NumberFieldType) fieldType;
+                default:
+        } else if (query instanceof PointRangeQuery) {
+package org.opensearch.search.aggregations.bucket.composite;
+import org.opensearch.search.aggregations.LeafBucketCollector;
+                    toBucketFunction = (value) -> rounding.applyAsLong(IntPoint.decodeDimension(value, 0));
+import org.apache.lucene.document.LongPoint;
+import org.apache.lucene.search.BoostQuery;
         } else {
+            @Override
+        }
+        } else {
+            switch (ft.typeName()) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * You may obtain a copy of the License at
+        if (value.getClass() != Long.class) {
+    }
+ * Unless required by applicable law or agreed to in writing,
+    }
+    }
+    LeafBucketCollector getLeafCollector(LeafReaderContext context, LeafBucketCollector next) throws IOException {
+public class LongValuesSource extends SingleDimensionValuesSource<Long> {
+                case "int":
+    }
+/*
+        this.docValuesFunc = docValuesFunc;
+ *
+import java.io.IOException;
+import org.opensearch.common.CheckedFunction;
+            assert missingCurrentValue == false;
+            if (MissingOrder.unknownOrder(result) == false) {
+        return compareValues(currentValue, afterValue);
+            return query;
+import org.apache.lucene.index.LeafReaderContext;
+/**
+    }
+    private boolean missingCurrentValue;
+        }
+        } else {
+        int size,
+        return compareValues(currentValue, values.get(slot));
+        if (checkIfSortedDocsIsApplicable(reader, fieldType) == false || checkMatchAllOrRangeQuery(query, fieldType.name()) == false) {
+        if (query instanceof PointRangeQuery) {
+                return result;
+import java.util.function.ToLongFunction;
+        if (missingBucket && bits.get(slot) == false) {
+        } else if (query instanceof IndexOrDocValuesQuery) {
+    }
+                bits.set(slot);
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+    private final LongUnaryOperator rounding;
+        return Long.compare(v1, v2) * reverseMul;
+    @Override
+        currentValue = (Long) value;
+ * specific language governing permissions and limitations
+    private final BigArrays bigArrays;
+ *
+        if (missingBucket) {
+        } else if (fieldType.unwrap() instanceof DateFieldMapper.DateFieldType) {
+import org.apache.lucene.search.MatchAllDocsQuery;
+        } else {
+    Long toComparable(int slot) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        } else if (query instanceof ConstantScoreQuery) {
+import org.opensearch.index.mapper.NumberFieldMapper;
+        } else if (query instanceof FieldExistsQuery) {
+                    for (int i = 0; i < num; i++) {
+                if (dvs.advanceExact(doc)) {
+ */
+import org.opensearch.search.aggregations.bucket.missing.MissingOrder;
+            return null;
+        this.bits = missingBucket ? new BitArray(Math.min(size, 100), bigArrays) : null;
+        } else {
+    }
+    int compareCurrentWithAfter() {
+ * @opensearch.internal
+        final byte[] upperPoint;
+ * license agreements. See the NOTICE file distributed with
+        } else if (query.getClass() == MatchAllDocsQuery.class) {
+            }
+    static Query extractQuery(Query query) {
+ * SPDX-License-Identifier: Apache-2.0
+        }
+     * Returns true if we can use <code>query</code> with a {@link SortedDocsProducer} on <code>fieldName</code>.
+            if (missingBucket) {
+ * Licensed to Elasticsearch under one or more contributor
+        super(bigArrays, format, fieldType, missingBucket, missingOrder, size, reverseMul);
+            lowerPoint = null;
+            afterValue = format.parseLong(value.toString(), false, () -> {
+            return true;
+            return 0;
+                next.collect(doc, bucket);
+                    break;
+ * A {@link SingleDimensionValuesSource} for longs.
+    int compareCurrent(int slot) {
+    }
+import org.opensearch.common.util.LongArray;
+        } else {
+        return compareValues(values.get(from), values.get(to));
+            return extractQuery(((BoostQuery) query).getQuery());
+            return null;
+            upperPoint = null;
+import org.opensearch.common.util.BitArray;
+ * GitHub history for details.
+    @Override
+        }
+        if (missingCurrentValue) {
+                case "byte":
+    }
+        MissingOrder missingOrder,
+    private final CheckedFunction<LeafReaderContext, SortedNumericDocValues, IOException> docValuesFunc;
+    static boolean checkMatchAllOrRangeQuery(Query query, String fieldName) {
+    }
+                }
+            public void collect(int doc, long bucket) throws IOException {
+    public LongValuesSource(
+            return 0;
+        boolean missingBucket,
+        final byte[] lowerPoint;
+        query = extractQuery(query);
+            return extractQuery(((ConstantScoreQuery) query).getQuery());
+        }
+            }
+ */
+            @Override
+            // parse the value from a string in case it is a date or a formatted unsigned long.
+            }
+    @Override
+ * compatible open source license.
+import org.apache.lucene.search.IndexOrDocValuesQuery;
+ */
+            return false;
+import org.apache.lucene.search.ConstantScoreQuery;
+            return fieldName.equals(pointQuery.getField());
+        }
+ * KIND, either express or implied.  See the License for the
+/*
+                return result;
+        if (missingBucket && value == null) {
+            if (MissingOrder.unknownOrder(result) == false) {
+    private long currentValue;
+                    missingCurrentValue = true;
+        }
+    @Override
+            final ToLongFunction<byte[]> toBucketFunction;
+     */
+            return new PointsSortedDocsProducer(fieldType.name(), toBucketFunction, lowerPoint, upperPoint);
+    @Override
+            return new PointsSortedDocsProducer(fieldType.name(), toBucketFunction, lowerPoint, upperPoint);
+            FieldExistsQuery existsQuery = (FieldExistsQuery) query;
+        CheckedFunction<LeafReaderContext, SortedNumericDocValues, IOException> docValuesFunc,
+/*
+        int reverseMul
+        }
+            return true;
+            lowerPoint = rangeQuery.getLowerPoint();
+            int result = missingOrder.compare(() -> bits.get(from) == false, () -> bits.get(to) == false, reverseMul);
+import java.util.Objects;
+import org.opensearch.common.lease.Releasables;
+        values = bigArrays.grow(values, slot + 1);
+        MappedFieldType fieldType,
             return null;
         }
+                case "long":
+import org.apache.lucene.search.PointRangeQuery;
+ *
+        }
+    /**
+    void copyCurrent(int slot) {
+        if (missingBucket && missingCurrentValue) {
     }
-
+        }
+ * The OpenSearch Contributors require contributions made to
+        this.rounding = rounding;
+    }
+        } else {
+            values.set(slot, currentValue);
     @Override
-    public void close() {
-        Releasables.close(values, bits);
+                        next.collect(doc, bucket);
+    protected void setAfter(Comparable value) {
+                    next.collect(doc, bucket);
+        return new LeafBucketCollector() {
+        if (fieldType.unwrap() instanceof NumberFieldMapper.NumberFieldType) {
+        } else {
+    int compare(int from, int to) {
+            return Long.hashCode(currentValue);
+ * this work for additional information regarding copyright
+    private LongArray values;
+import org.opensearch.index.mapper.MappedFieldType;
+import org.opensearch.index.mapper.DateFieldMapper;
+    @Override
+            public void collect(int doc, long bucket) throws IOException {
     }
+import org.apache.lucene.document.IntPoint;
+ * this file be licensed under the Apache-2.0 license or a
+        }
+import org.opensearch.common.util.BigArrays;
+    SortedDocsProducer createSortedDocsProducerOrNull(IndexReader reader, Query query) {
+            }
+                        missingCurrentValue = false;
+            bits.clear(slot);
+                throw new IllegalArgumentException("now() is not supported in [after] key");
+import org.apache.lucene.search.FieldExistsQuery;
+ * ownership. Elasticsearch licenses this file to you under
 }
+ * under the License.
+import org.apache.lucene.index.IndexReader;
+        if (missingBucket && bits.get(slot) == false) {
+        this.bigArrays = bigArrays;
+        }
+        if (missingBucket) {
+    private int compareValues(long v1, long v2) {
+                return result;
+            }
+        if (query instanceof BoostQuery) {
+ */
+import org.apache.lucene.index.SortedNumericDocValues;
+        };
+                    toBucketFunction = (value) -> rounding.applyAsLong(LongPoint.decodeDimension(value, 0));
+        return new LeafBucketCollector() {

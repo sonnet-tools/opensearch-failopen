@@ -1,220 +1,193 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.semver;
-
-import org.opensearch.Version;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.semver.expr.Caret;
-import org.opensearch.semver.expr.Equal;
-import org.opensearch.semver.expr.Expression;
-import org.opensearch.semver.expr.Range;
-import org.opensearch.semver.expr.Tilde;
-
-import java.io.IOException;
-import java.util.Locale;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import static java.util.Arrays.stream;
-
-/**
- * Represents a single semver range that allows for specifying which {@code org.opensearch.Version}s satisfy the range.
- * It is composed of a range version and a range operator. Following are the supported operators:
- * <ul>
- *     <li>'=' Requires exact match with the range version. For example, =1.2.3 range would match only 1.2.3</li>
- *     <li>'~' Allows for patch version variability starting from the range version. For example, ~1.2.3 range would match versions greater than or equal to 1.2.3 but less than 1.3.0</li>
- *     <li>'^' Allows for patch and minor version variability starting from the range version. For example, ^1.2.3 range would match versions greater than or equal to 1.2.3 but less than 2.0.0</li>
- *     <li>Explicit ranges: [2.0.0,3.0.0], (2.0.0,3.0.0), [2.0.0,3.0.0), (2.0.0,3.0.0]</li>
- * </ul>
- *
- * @opensearch.api
- */
-@PublicApi(since = "2.13.0")
-public class SemverRange implements ToXContentFragment {
-
-    public static final Pattern RANGE_PATTERN = Pattern.compile("([\\[\\(])([\\d.]+)\\s*,\\s*([\\d.]+)([\\]\\)])");
-
-    private final Version rangeVersion;
-    private final RangeOperator rangeOperator;
-    private final Expression expression;
-
-    public SemverRange(final Version rangeVersion, final RangeOperator rangeOperator) {
-        this.rangeVersion = rangeVersion;
-        this.rangeOperator = rangeOperator;
-        this.expression = rangeOperator.expression;
-    }
-
-    /**
-     * Constructs a {@code SemverRange} from its string representation.
-     * @param range given range
-     * @return a {@code SemverRange}
-     */
-    public static SemverRange fromString(final String range) {
+    @Override
         // Check if it's a range expression
-        Matcher matcher = RANGE_PATTERN.matcher(range);
-        if (matcher.matches()) {
-            char leftBracket = matcher.group(1).charAt(0);
-            String lowerVersionStr = matcher.group(2);
-            String upperVersionStr = matcher.group(3);
-            char rightBracket = matcher.group(4).charAt(0);
-
-            Version lowerVersion = Version.fromString(matcher.group(2));
-            Version upperVersion = Version.fromString(matcher.group(3));
-            boolean includeLower = leftBracket == '[';
-            boolean includeUpper = rightBracket == ']';
-
-            Range rangeExpression = new Range(lowerVersion, upperVersion, includeLower, includeUpper);
-            return new SemverRange(lowerVersion, RangeOperator.RANGE, rangeExpression);
-        }
-
-        RangeOperator rangeOperator = RangeOperator.fromRange(range);
-        String version = range.replaceFirst(rangeOperator.asEscapedString(), "");
-        if (!Strings.hasLength(version)) {
-            throw new IllegalArgumentException("Version cannot be empty");
-        }
-        return new SemverRange(Version.fromString(version), rangeOperator);
-    }
-
-    public SemverRange(Version rangeVersion, RangeOperator operator, Expression customExpression) {
-        this.rangeVersion = rangeVersion;
-        this.rangeOperator = operator;
-        this.expression = customExpression;
-    }
-
-    /**
-     * Return the range operator for this range.
-     * @return range operator
-     */
-    public RangeOperator getRangeOperator() {
-        return rangeOperator;
-    }
-
-    /**
-     * Return the version for this range.
-     * @return the range version
-     */
-    public Version getRangeVersion() {
-        return rangeVersion;
-    }
-
-    /**
-     * Check if range is satisfied by given version string.
-     *
-     * @param versionToEvaluate version to check
-     * @return {@code true} if range is satisfied by version, {@code false} otherwise
-     */
-    public boolean isSatisfiedBy(final String versionToEvaluate) {
-        return isSatisfiedBy(Version.fromString(versionToEvaluate));
-    }
-
-    /**
-     * Check if range is satisfied by given version.
-     *
-     * @param versionToEvaluate version to check
-     * @return {@code true} if range is satisfied by version, {@code false} otherwise
-     * @see #isSatisfiedBy(String)
-     */
-    public boolean isSatisfiedBy(final Version versionToEvaluate) {
-        return this.expression.evaluate(this.rangeVersion, versionToEvaluate);
-    }
-
-    @Override
-    public boolean equals(@Nullable final Object o) {
         if (this == o) {
-            return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        SemverRange range = (SemverRange) o;
-        return Objects.equals(rangeVersion, range.rangeVersion)
-            && rangeOperator == range.rangeOperator
-            && Objects.equals(expression, range.expression);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(rangeVersion, rangeOperator, expression);
-    }
-
-    @Override
-    public String toString() {
-        if (rangeOperator == RangeOperator.RANGE && expression instanceof Range) {
-            Range range = (Range) expression;
-            return String.format(
-                Locale.ROOT,
-                "%s%s,%s%s",
-                range.isIncludeLower() ? "[" : "(",
+    public static final Pattern RANGE_PATTERN = Pattern.compile("([\\[\\(])([\\d.]+)\\s*,\\s*([\\d.]+)([\\]\\)])");
+        return rangeOperator.asString() + rangeVersion;
+     */
+            this.expression = expression;
+    /**
+ */
+import java.io.IOException;
+            char leftBracket = matcher.group(1).charAt(0);
+        private final Expression expression;
+            this.operator = operator;
+            String upperVersionStr = matcher.group(3);
+ * Represents a single semver range that allows for specifying which {@code org.opensearch.Version}s satisfy the range.
+     */
+     * Return the version for this range.
+        return rangeOperator;
+        Matcher matcher = RANGE_PATTERN.matcher(range);
                 range.getLowerBound(),
-                range.getUpperBound(),
-                range.isIncludeUpper() ? "]" : ")"
+            char rightBracket = matcher.group(4).charAt(0);
+        this.rangeVersion = rangeVersion;
+     * @return the range version
+            String lowerVersionStr = matcher.group(2);
+        }
+        EQ("=", new Equal()),
+        public String asString() {
+        DEFAULT("", new Equal());
+ * this file be licensed under the Apache-2.0 license or a
+    }
+            boolean includeUpper = rightBracket == ']';
+     *
+    public enum RangeOperator {
+ *     <li>'~' Allows for patch version variability starting from the range version. For example, ~1.2.3 range would match versions greater than or equal to 1.2.3 but less than 1.3.0</li>
+ * compatible open source license.
+         */
+ */
+         */
+    /**
+    }
+        this.rangeVersion = rangeVersion;
+     * Check if range is satisfied by given version string.
+     * @return range operator
+         *
+    private final Expression expression;
+            return rangeOperator.orElse(DEFAULT);
+    }
+        CARET("^", new Caret()),
+    private final Version rangeVersion;
+import java.util.Optional;
+ *     <li>Explicit ranges: [2.0.0,3.0.0], (2.0.0,3.0.0), [2.0.0,3.0.0), (2.0.0,3.0.0]</li>
+    /**
+import org.opensearch.common.annotation.PublicApi;
+        RangeOperator rangeOperator = RangeOperator.fromRange(range);
+            return operator;
+            ).findFirst();
+     * @see #isSatisfiedBy(String)
+            return false;
+@PublicApi(since = "2.13.0")
+import java.util.regex.Pattern;
+     */
+            && rangeOperator == range.rangeOperator
+import org.opensearch.core.common.Strings;
+import java.util.regex.Matcher;
+import static java.util.Arrays.stream;
+        return builder.value(toString());
+import org.opensearch.semver.expr.Range;
+        this.rangeOperator = operator;
+     * Constructs a {@code SemverRange} from its string representation.
+        }
+                range.isIncludeLower() ? "[" : "(",
+        }
+         * @return range operator as escaped string, if operator is a regex character
+import java.util.Objects;
+        RANGE("range", new Range()),
+     * Return the range operator for this range.
+         * @return range operator as string
+         * if operator is a regex character.
+            return true;
+            return new SemverRange(lowerVersion, RangeOperator.RANGE, rangeExpression);
+    }
+         * Escaped string representation of the range operator,
+    }
+        RangeOperator(final String operator, final Expression expression) {
+    @Override
+    /**
+/**
+            return String.format(
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.semver.expr.Expression;
+ * The OpenSearch Contributors require contributions made to
+        TILDE("~", new Tilde()),
+     * A range operator.
+        this.expression = customExpression;
+                return "\\^";
+    public static SemverRange fromString(final String range) {
+            && Objects.equals(expression, range.expression);
+        /**
+        return Objects.hash(rangeVersion, rangeOperator, expression);
+public class SemverRange implements ToXContentFragment {
+     *
+        }
+ *     <li>'=' Requires exact match with the range version. For example, =1.2.3 range would match only 1.2.3</li>
+ * <ul>
+    public String toString() {
+    private final RangeOperator rangeOperator;
+    @Override
+}
+    public int hashCode() {
+    public SemverRange(final Version rangeVersion, final RangeOperator rangeOperator) {
+    public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
+    @Override
+        String version = range.replaceFirst(rangeOperator.asEscapedString(), "");
+/*
+    public boolean equals(@Nullable final Object o) {
+    }
+            Range range = (Range) expression;
+        }
+    public boolean isSatisfiedBy(final Version versionToEvaluate) {
+     */
+import org.opensearch.core.xcontent.ToXContentFragment;
+    /**
+        if (rangeOperator == RangeOperator.RANGE && expression instanceof Range) {
+     * @param versionToEvaluate version to check
+    public RangeOperator getRangeOperator() {
+         * String representation of the range operator.
+     * @param range given range
+import org.opensearch.semver.expr.Equal;
+ * @opensearch.api
+        return Objects.equals(rangeVersion, range.rangeVersion)
+import org.opensearch.core.xcontent.XContentBuilder;
+        if (matcher.matches()) {
+    }
+import org.opensearch.semver.expr.Tilde;
             );
         }
-        return rangeOperator.asString() + rangeVersion;
-    }
-
-    @Override
-    public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
-        return builder.value(toString());
-    }
-
-    /**
-     * A range operator.
-     */
-    public enum RangeOperator {
-        EQ("=", new Equal()),
-        TILDE("~", new Tilde()),
-        CARET("^", new Caret()),
-        RANGE("range", new Range()),
-        DEFAULT("", new Equal());
-
+        return new SemverRange(Version.fromString(version), rangeOperator);
+     * Check if range is satisfied by given version.
+                "%s%s,%s%s",
         private final String operator;
-        private final Expression expression;
-
-        RangeOperator(final String operator, final Expression expression) {
-            this.operator = operator;
-            this.expression = expression;
-        }
-
-        /**
-         * String representation of the range operator.
-         *
-         * @return range operator as string
-         */
-        public String asString() {
-            return operator;
-        }
-
-        /**
-         * Escaped string representation of the range operator,
-         * if operator is a regex character.
-         *
-         * @return range operator as escaped string, if operator is a regex character
-         */
-        public String asEscapedString() {
-            if (Objects.equals(operator, "^")) {
-                return "\\^";
-            }
-            return operator;
-        }
-
-        public static RangeOperator fromRange(final String range) {
-            Optional<RangeOperator> rangeOperator = stream(values()).filter(
-                operator -> operator != DEFAULT && range.startsWith(operator.asString())
-            ).findFirst();
-            return rangeOperator.orElse(DEFAULT);
-        }
+        if (!Strings.hasLength(version)) {
+    public SemverRange(Version rangeVersion, RangeOperator operator, Expression customExpression) {
     }
-}
+    }
+            Version upperVersion = Version.fromString(matcher.group(3));
+            throw new IllegalArgumentException("Version cannot be empty");
+        public static RangeOperator fromRange(final String range) {
+                operator -> operator != DEFAULT && range.startsWith(operator.asString())
+     */
+        return isSatisfiedBy(Version.fromString(versionToEvaluate));
+        }
+            return operator;
+     * @return {@code true} if range is satisfied by version, {@code false} otherwise
+        SemverRange range = (SemverRange) o;
+        this.expression = rangeOperator.expression;
+                Locale.ROOT,
+        return this.expression.evaluate(this.rangeVersion, versionToEvaluate);
+     * @return a {@code SemverRange}
+ * </ul>
+    }
+            Range rangeExpression = new Range(lowerVersion, upperVersion, includeLower, includeUpper);
+            }
+     * @return {@code true} if range is satisfied by version, {@code false} otherwise
+            Version lowerVersion = Version.fromString(matcher.group(2));
+            boolean includeLower = leftBracket == '[';
+    public Version getRangeVersion() {
+    public boolean isSatisfiedBy(final String versionToEvaluate) {
+        public String asEscapedString() {
+    }
+import java.util.Locale;
+ *
+    /**
+     */
+        return rangeVersion;
+import org.opensearch.semver.expr.Caret;
+import org.opensearch.Version;
+                range.isIncludeUpper() ? "]" : ")"
+import org.opensearch.common.Nullable;
+        /**
+        if (o == null || getClass() != o.getClass()) {
+    }
+        this.rangeOperator = rangeOperator;
+        }
+ * It is composed of a range version and a range operator. Following are the supported operators:
+         *
+ *     <li>'^' Allows for patch and minor version variability starting from the range version. For example, ^1.2.3 range would match versions greater than or equal to 1.2.3 but less than 2.0.0</li>
+            Optional<RangeOperator> rangeOperator = stream(values()).filter(
+ *
+package org.opensearch.semver;
+            if (Objects.equals(operator, "^")) {
+                range.getUpperBound(),
+     * @param versionToEvaluate version to check

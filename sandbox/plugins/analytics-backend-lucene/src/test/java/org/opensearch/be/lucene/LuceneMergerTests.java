@@ -1,564 +1,484 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.be.lucene;
-
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.SortedNumericDocValuesField;
-import org.apache.lucene.document.StoredField;
-import org.apache.lucene.document.StringField;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.MergeIndexWriter;
-import org.apache.lucene.index.NoMergePolicy;
-import org.apache.lucene.index.SegmentCommitInfo;
-import org.apache.lucene.index.SegmentInfos;
-import org.apache.lucene.index.SerialMergeScheduler;
-import org.apache.lucene.index.SortedNumericDocValues;
-import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.SortField;
-import org.apache.lucene.search.SortedNumericSortField;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.NIOFSDirectory;
-import org.apache.lucene.tests.analysis.MockAnalyzer;
-import org.opensearch.be.lucene.merge.LuceneMerger;
-import org.opensearch.be.lucene.stats.LuceneShardStatsTracker;
-import org.opensearch.index.engine.dataformat.DocumentInput;
-import org.opensearch.index.engine.dataformat.LiveDocs;
-import org.opensearch.index.engine.dataformat.MergeInput;
-import org.opensearch.index.engine.dataformat.MergePreparation;
-import org.opensearch.index.engine.dataformat.MergeResult;
-import org.opensearch.index.engine.dataformat.PackedRowIdMapping;
-import org.opensearch.index.engine.dataformat.RowIdMapping;
-import org.opensearch.index.engine.exec.Segment;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
-import static org.opensearch.be.lucene.index.LuceneWriter.WRITER_GENERATION_ATTRIBUTE;
-
-/**
- * End-to-end tests for {@link LuceneMerger}.
- *
- * <p>These tests create real Lucene segments with {@code writer_generation} attributes
- * and {@code ___row_id} doc values, then exercise the merge path and validate the output.
- */
 public class LuceneMergerTests extends OpenSearchTestCase {
-
-    private static final String ROW_ID_FIELD = DocumentInput.ROW_ID_FIELD;
-
-    private MergeIndexWriter writer;
-    private Directory directory;
-    private Path dataPath;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        dataPath = createTempDir();
-        directory = NIOFSDirectory.open(dataPath);
-        IndexWriterConfig iwc = new IndexWriterConfig(new MockAnalyzer(random()));
-        iwc.setMergeScheduler(new SerialMergeScheduler());
-        iwc.setMergePolicy(NoMergePolicy.INSTANCE);
-        iwc.setIndexSort(new Sort(new SortedNumericSortField(ROW_ID_FIELD, SortField.Type.LONG)));
-        writer = new MergeIndexWriter(directory, iwc);
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        if (writer != null) {
-            writer.close();
-        }
-        if (directory != null) {
-            directory.close();
-        }
-        super.tearDown();
-    }
-
-    // ========== Test Cases ==========
-
-    /**
-     * Merge with empty input returns empty result without error.
-     */
-    public void testMergeWithEmptyInput() throws IOException {
-        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
-        MergeInput input = MergeInput.builder().segments(List.of()).newWriterGeneration(99L).build();
-
-        MergeResult result = merger.merge(input);
-        assertNotNull(result);
-        assertTrue(result.getMergedWriterFileSet().isEmpty());
-    }
-
-    /**
-     * Merge with RowIdMapping remaps ___row_id doc values AND reorders documents.
-     * Verifies that the merged segment has documents sorted by remapped row IDs
-     * and that stored fields follow the documents to their new positions.
-     *
-     * The mapping preserves within-segment order (ascending remapped values within
-     * each generation), matching real Parquet merge behavior where rows within each
-     * source file maintain their relative order in the merged output.
-     */
-    public void testMergeWithRowIdMappingRemapsRowIds() throws IOException {
-        // gen=1: doc_0 (rowId=0), doc_1 (rowId=1), doc_2 (rowId=2)
-        // gen=2: doc_3 (rowId=0), doc_4 (rowId=1)
-        writeSegment(writer, 1L, 0, 3);
-        writeSegment(writer, 2L, 3, 2);
-        writer.commit();
-
-        assertEquals(5, writer.getDocStats().numDocs);
-
-        // Mapping interleaves segments but preserves within-segment order:
-        // gen=1: 0→0, 1→2, 2→4 (ascending within gen=1)
-        // gen=2: 0→1, 1→3 (ascending within gen=2)
-        //
-        // This simulates a Parquet merge that interleaves rows from two files:
-        // merged output: gen1-row0, gen2-row0, gen1-row1, gen2-row1, gen1-row2
-        //
-        // Expected sorted order by remapped rowId:
-        // position 0: rowId=0 → doc_0 (gen=1, original rowId=0)
-        // position 1: rowId=1 → doc_3 (gen=2, original rowId=0)
-        // position 2: rowId=2 → doc_1 (gen=1, original rowId=1)
-        // position 3: rowId=3 → doc_4 (gen=2, original rowId=1)
-        // Build a PackedRowIdMapping for the interleaved merge:
-        // gen=1 has 3 rows (offsets 0,1,2), gen=2 has 2 rows (offsets 3,4)
-        // position 0: rowId=0 → doc_0 (gen=1, original rowId=0)
-        // position 1: rowId=1 → doc_a (gen=2, original rowId=0)
-        // position 2: rowId=2 → doc_1 (gen=1, original rowId=1)
-        // position 3: rowId=3 → doc_b (gen=2, original rowId=1)
-        // position 4: rowId=4 → doc_2 (gen=1, original rowId=2)
-        long[] mappingArray = new long[] { 0, 2, 4, 1, 3 };
-        Map<Long, Integer> genOffsets = Map.of(1L, 0, 2L, 3);
-        Map<Long, Integer> genSizes = Map.of(1L, 3, 2L, 2);
-        RowIdMapping rowIdMapping = new PackedRowIdMapping(mappingArray, genOffsets, genSizes);
-
-        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
-        List<Segment> segments = buildSegments(writer.liveSegmentCommitInfos());
-
-        MergeInput input = MergeInput.builder().segments(segments).rowIdMapping(rowIdMapping).newWriterGeneration(10L).build();
-
-        MergeResult result = merger.merge(input);
-        assertNotNull(result);
-        assertTrue(result.rowIdMapping().isPresent());
-
-        writer.commit();
-
-        // Expected: documents sorted by remapped rowId, with correct stored fields
-        String[] expectedIds = { "doc_0", "doc_3", "doc_1", "doc_4", "doc_2" };
-        long[] expectedRowIds = { 0, 1, 2, 3, 4 };
-
-        try (DirectoryReader reader = DirectoryReader.open(writer)) {
-            // Find the merged segment (should be the largest leaf after old segments are deleted)
-            LeafReaderContext mergedLeaf = null;
-            for (LeafReaderContext ctx : reader.leaves()) {
-                if (mergedLeaf == null || ctx.reader().maxDoc() > mergedLeaf.reader().maxDoc()) {
-                    mergedLeaf = ctx;
-                }
-            }
-            assertNotNull("Should have at least one leaf", mergedLeaf);
-            assertEquals("Merged segment should have 5 docs", 5, mergedLeaf.reader().maxDoc());
-
-            SortedNumericDocValues rowIdDV = mergedLeaf.reader().getSortedNumericDocValues(ROW_ID_FIELD);
-            assertNotNull("___row_id doc values should exist", rowIdDV);
-
-            for (int i = 0; i < 5; i++) {
-                // Verify ___row_id value
-                assertTrue("Should have doc values for doc " + i, rowIdDV.advanceExact(i));
-                long actualRowId = rowIdDV.nextValue();
-                assertEquals("Doc at position " + i + " should have ___row_id=" + expectedRowIds[i], expectedRowIds[i], actualRowId);
-
-                // Verify stored field follows the document
-                Document doc = mergedLeaf.reader().storedFields().document(i);
-                assertEquals("Doc at position " + i + " should be " + expectedIds[i], expectedIds[i], doc.get("id"));
-            }
-        }
-    }
-
-    /**
-     * Merge preserves keyword, numeric, and stored field data integrity.
-     *
-     * <p>Uses an identity {@link RowIdMapping} so the merge exercises the real
-     * secondary-format path; the assertions focus on field-data survival rather
-     * than on row-id remapping (which is covered by
-     * {@link #testMergeWithRowIdMappingRemapsRowIds()}).
-     */
-    public void testMergePreservesFieldDataIntegrity() throws IOException {
-        writeSegmentWithRichFields(writer, 1L, 0, 3);
-        writeSegmentWithRichFields(writer, 2L, 3, 2);
-        writer.commit();
-
-        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
-        List<Segment> segments = buildSegments(writer.liveSegmentCommitInfos());
-
-        // Identity mapping — writeSegmentWithRichFields already writes globally-unique row IDs
-        // (0,1,2 in gen=1 and 3,4 in gen=2), so returning the original row ID is well-formed.
-        long[] identityArray = new long[] { 0, 1, 2, 3, 4 };
-        Map<Long, Integer> identityOffsets = Map.of(1L, 0, 2L, 3);
-        Map<Long, Integer> identitySizes = Map.of(1L, 3, 2L, 2);
-        RowIdMapping identityMapping = new PackedRowIdMapping(identityArray, identityOffsets, identitySizes);
-
-        MergeInput input = MergeInput.builder().segments(segments).rowIdMapping(identityMapping).newWriterGeneration(10L).build();
-        merger.merge(input);
-        writer.commit();
-
-        try (DirectoryReader reader = DirectoryReader.open(writer)) {
-            assertTrue("Should have at least 5 docs after merge", reader.numDocs() >= 5);
-            for (LeafReaderContext ctx : reader.leaves()) {
-                for (int i = 0; i < ctx.reader().maxDoc(); i++) {
-                    Document doc = ctx.reader().storedFields().document(i);
-                    String id = doc.get("id");
-                    assertNotNull("id field missing", id);
-                    String storedData = doc.get("data");
-                    assertNotNull("stored data field missing for " + id, storedData);
-                    assertTrue("data should contain the doc id", storedData.contains(id));
-                    String numericStr = doc.get("score");
-                    assertNotNull("stored numeric field missing for " + id, numericStr);
-                }
-            }
-        }
-    }
-
-    /**
-     * Constructor with null IndexWriter throws IllegalArgumentException.
-     */
-    public void testConstructorWithNullIndexWriterThrows() {
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> new LuceneMerger(null, new LuceneDataFormat(), Path.of("."), new LuceneShardStatsTracker())
-        );
-    }
-
-    /**
-     * Regression guard for the {@code writer_generation} stamping path. Verifies two things:
-     * <ol>
-     *   <li>The merged segment carries the {@code writer_generation} attribute in the live
-     *       {@link SegmentInfos} immediately after the merge completes — catches regressions
-     *       where the {@link org.opensearch.be.lucene.merge.RowIdRemappingOneMerge#setMergeInfo}
-     *       override stops running.</li>
-     *   <li>The attribute is <em>persisted</em> to the {@code .si} file and survives a writer
-     *       reopen — catches regressions that would revert to an in-memory-only stamp (e.g.
-     *       moving the {@code putAttribute} call back to {@code LuceneMerger#merge} after
-     *       {@code executeMerge}, which runs too late to influence the codec write).</li>
-     * </ol>
-     */
-    public void testMergedSegmentWriterGenerationIsPersisted() throws IOException {
-        long newGeneration = 99L;
-
-        writeSegment(writer, 1L, 0, 3);
-        writeSegment(writer, 2L, 3, 2);
-        writer.commit();
-
-        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
-        List<Segment> segments = buildSegments(writer.liveSegmentCommitInfos());
-
-        RowIdMapping identity = new RowIdMapping() {
-            @Override
-            public long getNewRowId(long oldId, long oldGeneration) {
-                return oldId;
-            }
-
-            @Override
-            public long getOldRowId(long newId) {
-                return newId;
-            }
-
-            @Override
-            public boolean isNewToOldSupported() {
-                return true;
-            }
-
-            @Override
-            public int size() {
-                return 0;
-            }
-        };
-        MergeInput input = MergeInput.builder().segments(segments).rowIdMapping(identity).newWriterGeneration(newGeneration).build();
-
-        merger.merge(input);
-
-        // Assertion 1: attribute is set on the live (in-memory) merged SegmentCommitInfo
-        SegmentCommitInfo mergedInMemory = findSegmentWithGeneration(writer.liveSegmentCommitInfos(), newGeneration);
-        assertNotNull("Merged segment must carry writer_generation=" + newGeneration + " in the live SegmentInfos", mergedInMemory);
-
-        // Persist to disk, close the writer, and reopen against the same directory to verify
-        // the attribute survives — i.e. it was stamped before Lucene wrote the .si file.
-        writer.commit();
-        writer.close();
-
-        SegmentInfos onDisk = SegmentInfos.readLatestCommit(directory);
-        SegmentCommitInfo mergedAfterReopen = findSegmentWithGeneration(onDisk.asList(), newGeneration);
-        assertNotNull(
-            "Merged segment must carry writer_generation="
-                + newGeneration
-                + " after reopen — the attribute must be written to the .si file during the merge, "
-                + "not stamped in-memory after executeMerge returns",
-            mergedAfterReopen
-        );
-        assertEquals(
-            "Persisted writer_generation attribute must match the one passed to MergeInput#newWriterGeneration",
-            String.valueOf(newGeneration),
-            mergedAfterReopen.info.getAttribute(WRITER_GENERATION_ATTRIBUTE)
-        );
-
-        // Reopen for the tearDown close() to be a no-op on an already-closed writer.
-        IndexWriterConfig iwc = new IndexWriterConfig(new MockAnalyzer(random()));
-        iwc.setMergeScheduler(new SerialMergeScheduler());
-        iwc.setMergePolicy(NoMergePolicy.INSTANCE);
-        iwc.setIndexSort(new Sort(new SortedNumericSortField(ROW_ID_FIELD, SortField.Type.LONG)));
-        writer = new MergeIndexWriter(directory, iwc);
-    }
-
-    private SegmentCommitInfo findSegmentWithGeneration(List<SegmentCommitInfo> infos, long generation) {
-        String target = String.valueOf(generation);
-        for (SegmentCommitInfo sci : infos) {
-            if (target.equals(sci.info.getAttribute(WRITER_GENERATION_ATTRIBUTE))) {
-                return sci;
-            }
-        }
-        return null;
-    }
-
-    // ========== prepareMerge / MergePreparation ==========
-
-    /** LuceneMerger owns delete state, so it advertises itself as the composite's live-docs producer. */
-    public void testProvidesMergeLiveDocs() {
-        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
-        assertTrue(merger.providesMergeLiveDocs());
-    }
-
-    /** Empty input returns the EMPTY preparation without taking any state. */
-    public void testPrepareMergeWithEmptySegmentsReturnsEmptyPreparation() throws IOException {
-        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
-        MergeInput input = MergeInput.builder().segments(List.of()).newWriterGeneration(99L).build();
-
-        MergePreparation result = merger.prepareMerge(input);
-        assertSame(MergePreparation.EMPTY, result);
-        assertTrue(result.liveDocs().allAlive());
-    }
-
-    /** Calling prepareMerge twice for the same generation trips the double-prepare assertion. */
-    public void testPrepareMergeFailsAssertionOnDoublePrepare() throws IOException {
-        assumeTrue("requires assertions enabled", LuceneMergerTests.class.desiredAssertionStatus());
-        writeSegment(writer, 1L, 0, 3);
-        writeSegment(writer, 2L, 3, 2);
-        writer.commit();
-
-        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
-        List<Segment> segments = buildSegments(writer.liveSegmentCommitInfos());
-
-        long gen = 99L;
-        MergeInput input = MergeInput.builder().segments(segments).newWriterGeneration(gen).build();
-        try (MergePreparation first = merger.prepareMerge(input)) {
-            assertNotSame(MergePreparation.EMPTY, first);
-            AssertionError err = expectThrows(AssertionError.class, () -> merger.prepareMerge(input));
-            assertTrue(err.getMessage(), err.getMessage().contains("already has a prepared merge"));
-        }
-        // try-with-resources released the prepared state before tearDown closes the writer.
-        assertNull(writer.takePreparedMerge(gen));
-    }
-
-    /** Closing the preparation releases the prepared state and is idempotent. */
-    public void testPreparationCloseReleasesState() throws IOException {
-        writeSegment(writer, 1L, 0, 3);
-        writeSegment(writer, 2L, 3, 2);
-        writer.commit();
-
-        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
-        List<Segment> segments = buildSegments(writer.liveSegmentCommitInfos());
-
-        long gen = 99L;
-        MergeInput input = MergeInput.builder().segments(segments).newWriterGeneration(gen).build();
-        MergePreparation preparation = merger.prepareMerge(input);
-        assertNotSame(MergePreparation.EMPTY, preparation);
-
-        preparation.close();
-        assertNull("entry must be drained from preparedMerges", writer.takePreparedMerge(gen));
-
-        // idempotent
-        preparation.close();
-    }
-
-    /** prepareMerge surfaces per-generation live-docs bitmaps reflecting applied deletes. */
     public void testPrepareMergeReturnsLiveDocsForDeletedRows() throws IOException {
-        writeSegment(writer, 1L, 0, 3); // docs doc_0..doc_2
-        writeSegment(writer, 2L, 3, 2); // docs doc_3..doc_4, no deletes
-        writer.deleteDocuments(new org.apache.lucene.index.Term("id", "doc_1"));
-        writer.commit(); // applies the delete: doc 1 of gen=1 is dead
-
-        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
-        List<Segment> segments = buildSegments(writer.liveSegmentCommitInfos());
-
-        long gen = 99L;
-        MergeInput input = MergeInput.builder().segments(segments).newWriterGeneration(gen).build();
-        try (MergePreparation preparation = merger.prepareMerge(input)) {
-            LiveDocs liveDocs = preparation.liveDocs();
-            assertFalse("segment gen=1 has a delete", liveDocs.allAlive());
-            assertEquals(1, liveDocs.segmentsWithDeletes());
-
-            assertFalse(liveDocs.allAlive(1L));
-            assertTrue(liveDocs.isAlive(1L, 0));
-            assertFalse("deleted doc must be flagged dead", liveDocs.isAlive(1L, 1));
-            assertTrue(liveDocs.isAlive(1L, 2));
-
-            assertTrue("gen=2 has no deletes", liveDocs.allAlive(2L));
-            assertNull(liveDocs.packedBits(2L));
-        }
-        assertNull("close() must have released the prepared state", writer.takePreparedMerge(gen));
     }
-
-    /** merge() consumes the OneMerge prepared by prepareMerge — no fresh OneMerge is created. */
-    public void testMergeConsumesPreparedOneMerge() throws IOException {
-        writeSegment(writer, 1L, 0, 3);
-        writeSegment(writer, 2L, 3, 2);
-        writer.commit();
-
-        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
-        List<Segment> segments = buildSegments(writer.liveSegmentCommitInfos());
-
-        long gen = 99L;
-        try (MergePreparation preparation = merger.prepareMerge(MergeInput.builder().segments(segments).newWriterGeneration(gen).build())) {
-            MergeInput mergeInput = MergeInput.builder()
-                .segments(segments)
-                .rowIdMapping(identityRowIdMapping())
-                .newWriterGeneration(gen)
-                .liveDocs(preparation.liveDocs())
-                .build();
-            MergeResult result = merger.merge(mergeInput);
-
-            assertFalse(result.getMergedWriterFileSet().isEmpty());
-            assertNull("prepared state must be consumed by merge()", writer.takePreparedMerge(gen));
-        }
-        // close() after a consumed merge is a no-op: nothing left to abort.
-    }
-
-    /**
-     * A bitmap with nothing prepared means some primary already dropped rows against a snapshot
-     * this merger never saw. Re-snapshotting would silently misalign the formats, so merge()
-     * refuses instead of falling back to a fresh OneMerge.
-     */
-    public void testMergeRefusesLiveDocsWithoutPreparedMerge() throws IOException {
-        writeSegment(writer, 1L, 0, 3);
-        writeSegment(writer, 2L, 3, 2);
-        writer.commit();
-
-        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
-        List<Segment> segments = buildSegments(writer.liveSegmentCommitInfos());
-
-        long gen = 99L;
-        LiveDocs someBitmap = LiveDocs.fromPackedBits(Map.of(1L, new long[] { 0b101L }));
-        MergeInput mergeInput = MergeInput.builder()
-            .segments(segments)
-            .rowIdMapping(identityRowIdMapping())
-            .newWriterGeneration(gen)
-            .liveDocs(someBitmap)
-            .build();
-
-        IllegalStateException err = expectThrows(IllegalStateException.class, () -> merger.merge(mergeInput));
-        assertTrue(err.getMessage(), err.getMessage().contains("no merge was prepared"));
-        assertEquals("source segments must be untouched", 2, writer.liveSegmentCommitInfos().size());
-    }
-
-    /** With ALL_ALIVE and nothing prepared (Lucene-only engine), merge() still runs on a fresh OneMerge. */
-    public void testMergeWithoutPreparedMergeAllowedWhenAllAlive() throws IOException {
-        writeSegment(writer, 1L, 0, 3);
-        writeSegment(writer, 2L, 3, 2);
-        writer.commit();
-
-        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
-        List<Segment> segments = buildSegments(writer.liveSegmentCommitInfos());
-
-        MergeInput mergeInput = MergeInput.builder()
-            .segments(segments)
-            .rowIdMapping(identityRowIdMapping())
-            .newWriterGeneration(99L)
-            .build(); // liveDocs defaults to ALL_ALIVE
-        MergeResult result = merger.merge(mergeInput);
-        assertFalse(result.getMergedWriterFileSet().isEmpty());
-    }
-
-    private static RowIdMapping identityRowIdMapping() {
-        return new RowIdMapping() {
-            @Override
-            public long getNewRowId(long oldId, long oldGeneration) {
-                return oldId;
-            }
-
-            @Override
-            public long getOldRowId(long newId) {
-                return newId;
-            }
-
-            @Override
+        RowIdMapping identityMapping = new PackedRowIdMapping(identityArray, identityOffsets, identitySizes);
+     * {@link #testMergeWithRowIdMappingRemapsRowIds()}).
+        long newGeneration = 99L;
             public boolean isNewToOldSupported() {
-                return true;
-            }
-
-            @Override
-            public int size() {
-                return 0;
-            }
-        };
-    }
-
-    // ========== Helper Methods ==========
-
-    private void writeSegment(MergeIndexWriter w, long generation, int startRowId, int numDocs) throws IOException {
-        for (int i = 0; i < numDocs; i++) {
-            Document doc = new Document();
-            doc.add(new StringField("id", "doc_" + (startRowId + i), Field.Store.YES));
-            doc.add(new StoredField("data", "value_for_doc_" + (startRowId + i)));
-            // ___row_id is local to the segment: 0, 1, 2, ... (matches how the real system works)
-            doc.add(new SortedNumericDocValuesField(ROW_ID_FIELD, i));
-            w.addDocument(doc);
-        }
-        w.flush();
-        setWriterGenerationOnLatestSegment(w, generation);
-    }
-
+            MergeInput mergeInput = MergeInput.builder()
+     * <p>Uses an identity {@link RowIdMapping} so the merge exercises the real
+    /** merge() consumes the OneMerge prepared by prepareMerge — no fresh OneMerge is created. */
+        // the attribute survives — i.e. it was stamped before Lucene wrote the .si file.
     private void writeSegmentWithRichFields(MergeIndexWriter w, long generation, int startRowId, int numDocs) throws IOException {
-        for (int i = 0; i < numDocs; i++) {
-            int docIdx = startRowId + i;
-            Document doc = new Document();
-            doc.add(new StringField("id", "doc_" + docIdx, Field.Store.YES));
-            doc.add(new StoredField("data", "rich_data_for_doc_" + docIdx));
-            doc.add(new StoredField("score", String.valueOf(docIdx * 10)));
-            doc.add(new SortedNumericDocValuesField(ROW_ID_FIELD, docIdx));
-            doc.add(new SortedNumericDocValuesField("score_dv", docIdx * 10));
-            w.addDocument(doc);
-        }
-        w.flush();
-        setWriterGenerationOnLatestSegment(w, generation);
-    }
-
-    /** Stamps the writer_generation attribute on the newest live segment. */
-    private void setWriterGenerationOnLatestSegment(MergeIndexWriter w, long generation) throws IOException {
-        List<SegmentCommitInfo> live = w.liveSegmentCommitInfos();
-        if (live.isEmpty() == false) {
-            SegmentCommitInfo lastSegment = live.get(live.size() - 1);
-            if (lastSegment.info.getAttribute(WRITER_GENERATION_ATTRIBUTE) == null) {
-                lastSegment.info.putAttribute(WRITER_GENERATION_ATTRIBUTE, String.valueOf(generation));
-            }
-        }
-    }
-
-    private List<Segment> buildSegments(List<SegmentCommitInfo> infos) {
-        List<Segment> segments = new ArrayList<>();
+        Map<Long, Integer> genOffsets = Map.of(1L, 0, 2L, 3);
+        // Build a PackedRowIdMapping for the interleaved merge:
+    public void setUp() throws Exception {
+     * each generation), matching real Parquet merge behavior where rows within each
+        assertNull(writer.takePreparedMerge(gen));
         for (SegmentCommitInfo sci : infos) {
-            String genAttr = sci.info.getAttribute(WRITER_GENERATION_ATTRIBUTE);
+        //
+        List<Segment> segments = buildSegments(writer.liveSegmentCommitInfos());
+ *
+            w.addDocument(doc);
+import org.apache.lucene.document.StoredField;
+     * The mapping preserves within-segment order (ascending remapped values within
+    // ========== Test Cases ==========
+            // ___row_id is local to the segment: 0, 1, 2, ... (matches how the real system works)
+            Document doc = new Document();
+                    assertTrue("data should contain the doc id", storedData.contains(id));
+            LeafReaderContext mergedLeaf = null;
+                    assertNotNull("stored data field missing for " + id, storedData);
+    /** Stamps the writer_generation attribute on the newest live segment. */
+        assertEquals(
+        setWriterGenerationOnLatestSegment(w, generation);
+        setWriterGenerationOnLatestSegment(w, generation);
+        writer.commit();
+        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
+            assertNotNull("___row_id doc values should exist", rowIdDV);
+                return 0;
+     *   <li>The merged segment carries the {@code writer_generation} attribute in the live
+        iwc.setMergePolicy(NoMergePolicy.INSTANCE);
+                assertEquals("Doc at position " + i + " should be " + expectedIds[i], expectedIds[i], doc.get("id"));
+    /** Calling prepareMerge twice for the same generation trips the double-prepare assertion. */
+ * SPDX-License-Identifier: Apache-2.0
+                return oldId;
+        assertTrue(merger.providesMergeLiveDocs());
             if (genAttr != null) {
-                long generation = Long.parseLong(genAttr);
+        writeSegment(writer, 2L, 3, 2);
+import org.opensearch.index.engine.dataformat.PackedRowIdMapping;
+                    Document doc = ctx.reader().storedFields().document(i);
+        // (0,1,2 in gen=1 and 3,4 in gen=2), so returning the original row ID is well-formed.
+import org.opensearch.test.OpenSearchTestCase;
+        long gen = 99L;
+        // close() after a consumed merge is a no-op: nothing left to abort.
+        };
+        writer.commit();
+            public int size() {
+            .liveDocs(someBitmap)
+        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
+        super.tearDown();
+                }
+     * Constructor with null IndexWriter throws IllegalArgumentException.
+        return new RowIdMapping() {
+            mergedAfterReopen
+        iwc.setIndexSort(new Sort(new SortedNumericSortField(ROW_ID_FIELD, SortField.Type.LONG)));
+            }
+        writeSegmentWithRichFields(writer, 2L, 3, 2);
+     *       {@link SegmentInfos} immediately after the merge completes — catches regressions
+        writer.commit();
+    public void testMergeRefusesLiveDocsWithoutPreparedMerge() throws IOException {
+ */
+        // Expected: documents sorted by remapped rowId, with correct stored fields
+        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
+import org.apache.lucene.document.SortedNumericDocValuesField;
+        // position 4: rowId=4 → doc_2 (gen=1, original rowId=2)
+        assumeTrue("requires assertions enabled", LuceneMergerTests.class.desiredAssertionStatus());
+    }
+        iwc.setIndexSort(new Sort(new SortedNumericSortField(ROW_ID_FIELD, SortField.Type.LONG)));
+            @Override
+    public void tearDown() throws Exception {
+                return true;
+            doc.add(new StoredField("data", "value_for_doc_" + (startRowId + i)));
+            w.addDocument(doc);
+import org.apache.lucene.index.SortedNumericDocValues;
+    /**
+        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
+        writeSegment(writer, 2L, 3, 2);
+import org.opensearch.index.engine.exec.Segment;
+    /**
+                .newWriterGeneration(gen)
+    private static final String ROW_ID_FIELD = DocumentInput.ROW_ID_FIELD;
+/**
+        writeSegment(writer, 2L, 3, 2);
+            doc.add(new SortedNumericDocValuesField("score_dv", docIdx * 10));
+    }
+    private void setWriterGenerationOnLatestSegment(MergeIndexWriter w, long generation) throws IOException {
+            directory.close();
+        MergeInput input = MergeInput.builder().segments(segments).newWriterGeneration(gen).build();
+                return newId;
+     *
+    }
+        writeSegment(writer, 1L, 0, 3);
+        for (int i = 0; i < numDocs; i++) {
+            doc.add(new StoredField("score", String.valueOf(docIdx * 10)));
+        MergeInput input = MergeInput.builder().segments(segments).newWriterGeneration(gen).build();
+            .build(); // liveDocs defaults to ALL_ALIVE
+                .build();
+        }
+        LiveDocs someBitmap = LiveDocs.fromPackedBits(Map.of(1L, new long[] { 0b101L }));
+        for (int i = 0; i < numDocs; i++) {
+     *       reopen — catches regressions that would revert to an in-memory-only stamp (e.g.
+     * this merger never saw. Re-snapshotting would silently misalign the formats, so merge()
+import org.apache.lucene.search.SortField;
+            .newWriterGeneration(gen)
+        // Identity mapping — writeSegmentWithRichFields already writes globally-unique row IDs
+    }
+        Map<Long, Integer> identityOffsets = Map.of(1L, 0, 2L, 3);
+    /** Closing the preparation releases the prepared state and is idempotent. */
+        writeSegmentWithRichFields(writer, 1L, 0, 3);
+                    assertNotNull("id field missing", id);
+            @Override
+    /** LuceneMerger owns delete state, so it advertises itself as the composite's live-docs producer. */
+        long gen = 99L;
+                + "not stamped in-memory after executeMerge returns",
+            () -> new LuceneMerger(null, new LuceneDataFormat(), Path.of("."), new LuceneShardStatsTracker())
+ * and {@code ___row_id} doc values, then exercise the merge path and validate the output.
+        long[] identityArray = new long[] { 0, 1, 2, 3, 4 };
+        // position 3: rowId=3 → doc_4 (gen=2, original rowId=1)
+            assertFalse("segment gen=1 has a delete", liveDocs.allAlive());
+            IllegalArgumentException.class,
+    private Directory directory;
+        // position 2: rowId=2 → doc_1 (gen=1, original rowId=1)
+    }
+                return true;
+            assertNull("prepared state must be consumed by merge()", writer.takePreparedMerge(gen));
+            }
+            assertTrue("Should have at least 5 docs after merge", reader.numDocs() >= 5);
+        directory = NIOFSDirectory.open(dataPath);
+            }
+            assertNull(liveDocs.packedBits(2L));
+                    String storedData = doc.get("data");
+            SortedNumericDocValues rowIdDV = mergedLeaf.reader().getSortedNumericDocValues(ROW_ID_FIELD);
+            mergedAfterReopen.info.getAttribute(WRITER_GENERATION_ATTRIBUTE)
+     * than on row-id remapping (which is covered by
+     *       override stops running.</li>
+                    assertNotNull("stored numeric field missing for " + id, numericStr);
+import org.apache.lucene.document.Document;
+ * <p>These tests create real Lucene segments with {@code writer_generation} attributes
+     *   <li>The attribute is <em>persisted</em> to the {@code .si} file and survives a writer
+import org.opensearch.index.engine.dataformat.MergePreparation;
+        merger.merge(input);
+     * Verifies that the merged segment has documents sorted by remapped row IDs
+        IndexWriterConfig iwc = new IndexWriterConfig(new MockAnalyzer(random()));
+                // Verify ___row_id value
+        assertNotNull(
+import org.opensearch.index.engine.dataformat.DocumentInput;
+        writer.commit();
+        }
+    }
+        writeSegment(writer, 1L, 0, 3);
+        iwc.setMergeScheduler(new SerialMergeScheduler());
+        }
+            "Persisted writer_generation attribute must match the one passed to MergeInput#newWriterGeneration",
+        assertEquals("source segments must be untouched", 2, writer.liveSegmentCommitInfos().size());
+    private MergeIndexWriter writer;
+            assertEquals(1, liveDocs.segmentsWithDeletes());
+import org.opensearch.index.engine.dataformat.MergeResult;
+            for (LeafReaderContext ctx : reader.leaves()) {
+        writer.deleteDocuments(new org.apache.lucene.index.Term("id", "doc_1"));
+        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
+        IllegalStateException err = expectThrows(IllegalStateException.class, () -> merger.merge(mergeInput));
+            public long getOldRowId(long newId) {
+            .rowIdMapping(identityRowIdMapping())
+import org.apache.lucene.index.DirectoryReader;
+            assertTrue(liveDocs.isAlive(1L, 0));
+        MergeResult result = merger.merge(input);
+import static org.opensearch.be.lucene.index.LuceneWriter.WRITER_GENERATION_ATTRIBUTE;
+                + newGeneration
+            public long getNewRowId(long oldId, long oldGeneration) {
+                long actualRowId = rowIdDV.nextValue();
+     * Merge with RowIdMapping remaps ___row_id doc values AND reorders documents.
+        }
+        // position 1: rowId=1 → doc_3 (gen=2, original rowId=0)
+import org.apache.lucene.index.IndexWriterConfig;
+            }
+    private Path dataPath;
+        }
+        }
+            assertEquals("Merged segment should have 5 docs", 5, mergedLeaf.reader().maxDoc());
+     *       where the {@link org.opensearch.be.lucene.merge.RowIdRemappingOneMerge#setMergeInfo}
+    public void testPreparationCloseReleasesState() throws IOException {
+        for (SegmentCommitInfo sci : infos) {
+            int docIdx = startRowId + i;
+    private void writeSegment(MergeIndexWriter w, long generation, int startRowId, int numDocs) throws IOException {
+        }
+        List<Segment> segments = buildSegments(writer.liveSegmentCommitInfos());
+            MergeResult result = merger.merge(mergeInput);
+    /**
+            assertFalse(result.getMergedWriterFileSet().isEmpty());
+            }
+            doc.add(new StringField("id", "doc_" + docIdx, Field.Store.YES));
+import org.apache.lucene.tests.analysis.MockAnalyzer;
+        if (live.isEmpty() == false) {
+        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
+     * Merge with empty input returns empty result without error.
+ * compatible open source license.
+    public void testPrepareMergeFailsAssertionOnDoublePrepare() throws IOException {
+        assertTrue(result.rowIdMapping().isPresent());
+        // Assertion 1: attribute is set on the live (in-memory) merged SegmentCommitInfo
+        }
+            doc.add(new StoredField("data", "rich_data_for_doc_" + docIdx));
+        w.flush();
+        try (DirectoryReader reader = DirectoryReader.open(writer)) {
+    }
+            doc.add(new SortedNumericDocValuesField(ROW_ID_FIELD, docIdx));
+    }
+     *       moving the {@code putAttribute} call back to {@code LuceneMerger#merge} after
+        try (MergePreparation preparation = merger.prepareMerge(input)) {
+import org.opensearch.index.engine.dataformat.LiveDocs;
                 segments.add(Segment.builder(generation).build());
             }
+        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
         }
-        return segments;
+        merger.merge(input);
+        IndexWriterConfig iwc = new IndexWriterConfig(new MockAnalyzer(random()));
+import java.nio.file.Path;
+    public void testMergePreservesFieldDataIntegrity() throws IOException {
+import org.opensearch.index.engine.dataformat.RowIdMapping;
+        // position 1: rowId=1 → doc_a (gen=2, original rowId=0)
+        List<SegmentCommitInfo> live = w.liveSegmentCommitInfos();
     }
+        return null;
+                long generation = Long.parseLong(genAttr);
+        MergeInput input = MergeInput.builder().segments(segments).newWriterGeneration(gen).build();
+     */
+        MergeResult result = merger.merge(input);
+            }
+    public void testMergeConsumesPreparedOneMerge() throws IOException {
+        SegmentInfos onDisk = SegmentInfos.readLatestCommit(directory);
+                return oldId;
+        writeSegment(writer, 2L, 3, 2); // docs doc_3..doc_4, no deletes
+import org.apache.lucene.index.SerialMergeScheduler;
+    /**
+        Map<Long, Integer> identitySizes = Map.of(1L, 3, 2L, 2);
+            @Override
+     */
+import org.apache.lucene.index.SegmentInfos;
+        // Persist to disk, close the writer, and reopen against the same directory to verify
+        super.setUp();
+        MergeResult result = merger.merge(mergeInput);
+import org.apache.lucene.store.Directory;
+        writeSegment(writer, 1L, 0, 3);
+ * The OpenSearch Contributors require contributions made to
+        writer.commit();
+        // position 3: rowId=3 → doc_b (gen=2, original rowId=1)
+     * Merge preserves keyword, numeric, and stored field data integrity.
+     * and that stored fields follow the documents to their new positions.
+     * secondary-format path; the assertions focus on field-data survival rather
+    private List<Segment> buildSegments(List<SegmentCommitInfo> infos) {
+        // idempotent
+            AssertionError err = expectThrows(AssertionError.class, () -> merger.prepareMerge(input));
+        Map<Long, Integer> genSizes = Map.of(1L, 3, 2L, 2);
+        // gen=1 has 3 rows (offsets 0,1,2), gen=2 has 2 rows (offsets 3,4)
+        try (MergePreparation first = merger.prepareMerge(input)) {
+import java.util.Map;
+        writeSegment(writer, 1L, 0, 3);
+    public void testMergeWithoutPreparedMergeAllowedWhenAllAlive() throws IOException {
+        RowIdMapping rowIdMapping = new PackedRowIdMapping(mappingArray, genOffsets, genSizes);
+            String.valueOf(newGeneration),
+            }
+        // position 0: rowId=0 → doc_0 (gen=1, original rowId=0)
+        writer.commit();
+    /** Empty input returns the EMPTY preparation without taking any state. */
+        String target = String.valueOf(generation);
+            LiveDocs liveDocs = preparation.liveDocs();
+        assertEquals(5, writer.getDocStats().numDocs);
+        // gen=2: 0→1, 1→3 (ascending within gen=2)
+    // ========== prepareMerge / MergePreparation ==========
+        if (directory != null) {
+     */
+            SegmentCommitInfo lastSegment = live.get(live.size() - 1);
+    }
+            }
+import org.apache.lucene.search.SortedNumericSortField;
+            @Override
+     *
+            // Find the merged segment (should be the largest leaf after old segments are deleted)
+        writeSegment(writer, 1L, 0, 3);
+    private SegmentCommitInfo findSegmentWithGeneration(List<SegmentCommitInfo> infos, long generation) {
+            public boolean isNewToOldSupported() {
+        writeSegment(writer, 2L, 3, 2);
+        List<Segment> segments = buildSegments(writer.liveSegmentCommitInfos());
+        long[] expectedRowIds = { 0, 1, 2, 3, 4 };
+            assertTrue(err.getMessage(), err.getMessage().contains("already has a prepared merge"));
+            public long getNewRowId(long oldId, long oldGeneration) {
+        dataPath = createTempDir();
+        }
+     * Regression guard for the {@code writer_generation} stamping path. Verifies two things:
+                assertTrue("Should have doc values for doc " + i, rowIdDV.advanceExact(i));
+        writer.commit();
+            .newWriterGeneration(99L)
+            }
+        List<Segment> segments = buildSegments(writer.liveSegmentCommitInfos());
+    }
+import org.apache.lucene.index.LeafReaderContext;
+            }
+        // Reopen for the tearDown close() to be a no-op on an already-closed writer.
+            if (lastSegment.info.getAttribute(WRITER_GENERATION_ATTRIBUTE) == null) {
+        String[] expectedIds = { "doc_0", "doc_3", "doc_1", "doc_4", "doc_2" };
+import org.apache.lucene.index.MergeIndexWriter;
+    public void testConstructorWithNullIndexWriterThrows() {
+                for (int i = 0; i < ctx.reader().maxDoc(); i++) {
+ */
+            .build();
+        List<Segment> segments = buildSegments(writer.liveSegmentCommitInfos());
+            assertFalse(liveDocs.allAlive(1L));
+import org.apache.lucene.document.Field;
+        long[] mappingArray = new long[] { 0, 2, 4, 1, 3 };
+        // merged output: gen1-row0, gen2-row0, gen1-row1, gen2-row1, gen1-row2
+        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
+        List<Segment> segments = buildSegments(writer.liveSegmentCommitInfos());
+        List<Segment> segments = new ArrayList<>();
+        SegmentCommitInfo mergedInMemory = findSegmentWithGeneration(writer.liveSegmentCommitInfos(), newGeneration);
+            public long getOldRowId(long newId) {
+        writer.close();
+            "Merged segment must carry writer_generation="
+        assertSame(MergePreparation.EMPTY, result);
 }
+                lastSegment.info.putAttribute(WRITER_GENERATION_ATTRIBUTE, String.valueOf(generation));
+        MergeInput mergeInput = MergeInput.builder()
+import org.opensearch.be.lucene.stats.LuceneShardStatsTracker;
+            assertNotSame(MergePreparation.EMPTY, first);
+    }
+            String genAttr = sci.info.getAttribute(WRITER_GENERATION_ATTRIBUTE);
+            .segments(segments)
+        List<Segment> segments = buildSegments(writer.liveSegmentCommitInfos());
+            doc.add(new SortedNumericDocValuesField(ROW_ID_FIELD, i));
+        };
+        List<Segment> segments = buildSegments(writer.liveSegmentCommitInfos());
+        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
+    }
+            .rowIdMapping(identityRowIdMapping())
+            @Override
+        writer.commit(); // applies the delete: doc 1 of gen=1 is dead
+package org.opensearch.be.lucene;
+        writeSegment(writer, 1L, 0, 3);
+    }
+        MergeInput input = MergeInput.builder().segments(segments).rowIdMapping(rowIdMapping).newWriterGeneration(10L).build();
+        // Expected sorted order by remapped rowId:
+        // try-with-resources released the prepared state before tearDown closes the writer.
+        writeSegment(writer, 2L, 3, 2);
+     * <ol>
+        assertTrue(result.getMergedWriterFileSet().isEmpty());
+import java.util.List;
+            writer.close();
+        // gen=2: doc_3 (rowId=0), doc_4 (rowId=1)
+        preparation.close();
+import org.apache.lucene.index.NoMergePolicy;
+        assertTrue(result.liveDocs().allAlive());
+                .segments(segments)
+        return segments;
+                .rowIdMapping(identityRowIdMapping())
+            assertNotNull("Should have at least one leaf", mergedLeaf);
+        assertTrue(err.getMessage(), err.getMessage().contains("no merge was prepared"));
+    }
+            if (target.equals(sci.info.getAttribute(WRITER_GENERATION_ATTRIBUTE))) {
+        // position 0: rowId=0 → doc_0 (gen=1, original rowId=0)
+    private static RowIdMapping identityRowIdMapping() {
+    public void testMergeWithEmptyInput() throws IOException {
+        assertNull("close() must have released the prepared state", writer.takePreparedMerge(gen));
+                + " after reopen — the attribute must be written to the .si file during the merge, "
+        RowIdMapping identity = new RowIdMapping() {
+            }
+        }
+import java.util.ArrayList;
+        writeSegment(writer, 2L, 3, 2);
+        preparation.close();
+    }
+        writer.commit();
+        // gen=1: 0→0, 1→2, 2→4 (ascending within gen=1)
+    /** With ALL_ALIVE and nothing prepared (Lucene-only engine), merge() still runs on a fresh OneMerge. */
+            }
+import java.io.IOException;
+                // Verify stored field follows the document
+     * source file maintain their relative order in the merged output.
+                Document doc = mergedLeaf.reader().storedFields().document(i);
+    }
+        SegmentCommitInfo mergedAfterReopen = findSegmentWithGeneration(onDisk.asList(), newGeneration);
+        assertNotNull(result);
+    public void testPrepareMergeWithEmptySegmentsReturnsEmptyPreparation() throws IOException {
+    // ========== Helper Methods ==========
+                assertEquals("Doc at position " + i + " should have ___row_id=" + expectedRowIds[i], expectedRowIds[i], actualRowId);
+        MergeInput input = MergeInput.builder().segments(List.of()).newWriterGeneration(99L).build();
+            Document doc = new Document();
+            @Override
+ * End-to-end tests for {@link LuceneMerger}.
+        iwc.setMergeScheduler(new SerialMergeScheduler());
+                return 0;
+        // This simulates a Parquet merge that interleaves rows from two files:
+        writeSegment(writer, 1L, 0, 3);
+                if (mergedLeaf == null || ctx.reader().maxDoc() > mergedLeaf.reader().maxDoc()) {
+        iwc.setMergePolicy(NoMergePolicy.INSTANCE);
+     */
+        assertNotNull(result);
+            assertTrue(liveDocs.isAlive(1L, 2));
+        writeSegment(writer, 2L, 3, 2);
+     */
+            }
+            public int size() {
+        assertNull("entry must be drained from preparedMerges", writer.takePreparedMerge(gen));
+        assertNotSame(MergePreparation.EMPTY, preparation);
+import org.opensearch.be.lucene.merge.LuceneMerger;
+        List<Segment> segments = buildSegments(writer.liveSegmentCommitInfos());
+    }
+        writer.commit();
+        // position 2: rowId=2 → doc_1 (gen=1, original rowId=1)
+import org.opensearch.index.engine.dataformat.MergeInput;
+            .segments(segments)
+    /**
+            @Override
+        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
+     * refuses instead of falling back to a fresh OneMerge.
+    @Override
+     */
+    public void testProvidesMergeLiveDocs() {
+        expectThrows(
+        writer = new MergeIndexWriter(directory, iwc);
+ * this file be licensed under the Apache-2.0 license or a
+     * A bitmap with nothing prepared means some primary already dropped rows against a snapshot
+    @Override
+            @Override
+        writer.commit();
+/*
+        }
+                    String numericStr = doc.get("score");
+import org.apache.lucene.index.SegmentCommitInfo;
+    }
+                    mergedLeaf = ctx;
+    /** prepareMerge surfaces per-generation live-docs bitmaps reflecting applied deletes. */
+        MergeInput input = MergeInput.builder().segments(List.of()).newWriterGeneration(99L).build();
+ *
+                return newId;
+        long gen = 99L;
+        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
+    }
+    public void testMergeWithRowIdMappingRemapsRowIds() throws IOException {
+        if (writer != null) {
+        LuceneMerger merger = new LuceneMerger(writer, new LuceneDataFormat(), dataPath, new LuceneShardStatsTracker());
+import org.apache.lucene.store.NIOFSDirectory;
+        try (DirectoryReader reader = DirectoryReader.open(writer)) {
+        );
+     *       {@code executeMerge}, which runs too late to influence the codec write).</li>
+    /**
+            assertTrue("gen=2 has no deletes", liveDocs.allAlive(2L));
+        assertNotNull("Merged segment must carry writer_generation=" + newGeneration + " in the live SegmentInfos", mergedInMemory);
+import org.apache.lucene.search.Sort;
+        MergePreparation result = merger.prepareMerge(input);
+            assertFalse("deleted doc must be flagged dead", liveDocs.isAlive(1L, 1));
+import org.apache.lucene.document.StringField;
+        //
+     * </ol>
+        assertFalse(result.getMergedWriterFileSet().isEmpty());
+        );
+            for (LeafReaderContext ctx : reader.leaves()) {
+                return sci;
+                }
+                    String id = doc.get("id");
+        );
+        writer.commit();
+        writer = new MergeIndexWriter(directory, iwc);
+            doc.add(new StringField("id", "doc_" + (startRowId + i), Field.Store.YES));
+                .liveDocs(preparation.liveDocs())
+        long gen = 99L;
+        writeSegment(writer, 1L, 0, 3); // docs doc_0..doc_2
+        MergeInput input = MergeInput.builder().segments(segments).rowIdMapping(identity).newWriterGeneration(newGeneration).build();
+        MergeInput mergeInput = MergeInput.builder()
+        // gen=1: doc_0 (rowId=0), doc_1 (rowId=1), doc_2 (rowId=2)
+        try (MergePreparation preparation = merger.prepareMerge(MergeInput.builder().segments(segments).newWriterGeneration(gen).build())) {
+    public void testMergedSegmentWriterGenerationIsPersisted() throws IOException {
+        long gen = 99L;
+        MergePreparation preparation = merger.prepareMerge(input);
+        // Mapping interleaves segments but preserves within-segment order:
+        MergeInput input = MergeInput.builder().segments(segments).rowIdMapping(identityMapping).newWriterGeneration(10L).build();
+        w.flush();
+            for (int i = 0; i < 5; i++) {

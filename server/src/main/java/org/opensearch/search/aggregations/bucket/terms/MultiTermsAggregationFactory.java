@@ -1,221 +1,206 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.search.aggregations.bucket.terms;
-
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.AggregatorFactory;
-import org.opensearch.search.aggregations.BucketOrder;
-import org.opensearch.search.aggregations.CardinalityUpperBound;
-import org.opensearch.search.aggregations.InternalOrder;
-import org.opensearch.search.aggregations.bucket.BucketUtils;
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;
-import org.opensearch.search.aggregations.support.MultiTermsValuesSourceConfig;
-import org.opensearch.search.aggregations.support.ValuesSource;
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;
-import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.startree.StarTreeQueryHelper;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-
-import static org.opensearch.search.aggregations.bucket.terms.MultiTermsAggregationBuilder.REGISTRY_KEY;
-
-/**
- * Factory of {@link MultiTermsAggregator}.
- *
- * @opensearch.internal
- */
-public class MultiTermsAggregationFactory extends AggregatorFactory {
-
-    private final List<Tuple<ValuesSourceConfig, IncludeExclude>> configs;
-    private final List<DocValueFormat> formats;
-    /**
-     * Fields inherent from Terms Aggregation Factory.
-     */
-    private final BucketOrder order;
-    private final Aggregator.SubAggCollectionMode collectMode;
-    private final TermsAggregator.BucketCountThresholds bucketCountThresholds;
-    private final boolean showTermDocCountError;
-    private final List<String> requestFields;
-
-    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {
-        builder.register(REGISTRY_KEY, List.of(CoreValuesSourceType.BYTES, CoreValuesSourceType.IP), config -> {
-            final IncludeExclude.StringFilter filter = config.v2() == null ? null : config.v2().convertToStringFilter(config.v1().format());
-            return MultiTermsAggregator.InternalValuesSourceFactory.bytesValuesSource(config.v1().getValuesSource(), filter);
-        }, true);
-
-        builder.register(
-            REGISTRY_KEY,
             List.of(CoreValuesSourceType.NUMERIC, CoreValuesSourceType.BOOLEAN, CoreValuesSourceType.DATE),
-            config -> {
-                ValuesSourceConfig valuesSourceConfig = config.v1();
-                IncludeExclude includeExclude = config.v2();
+                    if (includeExclude != null) {
+import org.opensearch.search.startree.StarTreeQueryHelper;
+     * Fields inherent from Terms Aggregation Factory.
+            maxOrds[i] = ((ValuesSource.Bytes.WithOrdinals) vs).globalMaxOrd(searchContext.searcher());
+     */
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;
+import org.opensearch.search.internal.SearchContext;
+    }
+        return maxOrds;
+        builder.registerUsage(MultiTermsAggregationBuilder.NAME);
+        return new MultiTermsAggregator(
+        SearchContext searchContext,
+import org.opensearch.search.aggregations.CardinalityUpperBound;
+     * ordinal path is eligible, or {@code null} to fall back to the default byte-key path. Falls back when a
+import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
                 ValuesSource.Numeric valuesSource = ((ValuesSource.Numeric) valuesSourceConfig.getValuesSource());
+        }
+import org.opensearch.search.DocValueFormat;
+    ) throws IOException {
+            showTermDocCountError,
+            metadata,
+        CardinalityUpperBound cardinality
+        long[] ordinalMaxOrds = resolveOrdinalMaxOrds(configs, searchContext, cardinality);
+            // include/exclude is enforced by the byte-key InternalValuesSource collectors, which the
+        Aggregator.SubAggCollectionMode collectMode,
+import org.opensearch.search.aggregations.AggregatorFactories;
+            REGISTRY_KEY,
+}
+    protected Aggregator createInternal(
+            parent,
+                        c.getFormat(),
+            if (config.v2() != null) {
+import java.util.stream.Collectors;
+    private final BucketOrder order;
+    private static long[] resolveOrdinalMaxOrds(
+            ordinalMaxOrds
+                ValuesSourceConfig valuesSourceConfig = config.v1();
+        MultiTermsAggregator.InternalValuesSource build(Tuple<ValuesSourceConfig, IncludeExclude> config);
+            // heuristic to avoid any wrong-ranking caused by distributed
                 IncludeExclude.LongFilter longFilter = null;
-                if (valuesSource.isFloatingPoint()) {
-                    if (includeExclude != null) {
-                        longFilter = includeExclude.convertToDoubleFilter();
-                    }
+package org.opensearch.search.aggregations.bucket.terms;
+    }
+        BucketOrder order,
+import org.opensearch.search.aggregations.support.MultiTermsValuesSourceConfig;
+                    ),
+            true
                     return MultiTermsAggregator.InternalValuesSourceFactory.doubleValueSource(valuesSource, longFilter);
-                } else if (valuesSource.isBigInteger()) {
+ * The OpenSearch Contributors require contributions made to
+            .collect(Collectors.toList());
+import org.opensearch.common.collect.Tuple;
+        Map<String, Object> metadata,
+    }
+                IncludeExclude includeExclude = config.v2();
+        // TODO: Optimize passing too many value source config derived objects to aggregator
+                        queryShardContext,
+        Aggregator parent,
+                    c.getIncludeExclude()
+            // The user has not made a shardSize selection. Use default
+     * Supplier for internal values source
+        if (StarTreeQueryHelper.getSupportedStarTree(searchContext.getQueryShardContext()) != null) {
+                .collect(Collectors.toList()),
+        if (InternalOrder.isKeyOrder(order) == false
+    ) throws IOException {
+            )
+                return null;
+        // Star-tree path writes directly to BytesKeyedBucketOrds; skip ordinal path to avoid split storage.
+            cardinality,
+        super(name, queryShardContext, parent, subFactoriesBuilder, metadata);
                     if (includeExclude != null) {
-                        longFilter = includeExclude.convertToDoubleFilter();
-                    }
-                    return MultiTermsAggregator.InternalValuesSourceFactory.unsignedLongValuesSource(valuesSource, longFilter);
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;
+        for (int i = 0; i < configs.size(); i++) {
+    private final Aggregator.SubAggCollectionMode collectMode;
+            factories,
+            },
+import java.util.Map;
+    public interface InternalValuesSourceSupplier {
+ *
+            // ordinal path does not run; fall back so the filter is still honored.
+    public MultiTermsAggregationFactory(
+            bucketCountThresholds,
                 } else {
-                    if (includeExclude != null) {
-                        longFilter = includeExclude.convertToLongFilter(valuesSourceConfig.format());
+        QueryShardContext queryShardContext,
+import java.util.List;
+    private final List<String> requestFields;
+            Tuple<ValuesSourceConfig, IncludeExclude> config = configs.get(i);
+        builder.register(REGISTRY_KEY, List.of(CoreValuesSourceType.BYTES, CoreValuesSourceType.IP), config -> {
+/*
+        TermsAggregator.BucketCountThresholds bucketCountThresholds = new TermsAggregator.BucketCountThresholds(this.bucketCountThresholds);
                     }
                     return MultiTermsAggregator.InternalValuesSourceFactory.longValuesSource(valuesSource, longFilter);
-                }
-            },
-            true
-        );
-
-        builder.registerUsage(MultiTermsAggregationBuilder.NAME);
-    }
-
-    public MultiTermsAggregationFactory(
-        String name,
-        QueryShardContext queryShardContext,
-        AggregatorFactory parent,
-        AggregatorFactories.Builder subFactoriesBuilder,
-        Map<String, Object> metadata,
-        List<MultiTermsValuesSourceConfig> multiTermConfigs,
-        BucketOrder order,
-        Aggregator.SubAggCollectionMode collectMode,
-        TermsAggregator.BucketCountThresholds bucketCountThresholds,
-        boolean showTermDocCountError
-    ) throws IOException {
-        super(name, queryShardContext, parent, subFactoriesBuilder, metadata);
-        this.configs = multiTermConfigs.stream()
-            .map(
-                c -> new Tuple<ValuesSourceConfig, IncludeExclude>(
-                    ValuesSourceConfig.resolveUnregistered(
-                        queryShardContext,
-                        c.getUserValueTypeHint(),
-                        c.getFieldName(),
-                        c.getScript(),
-                        c.getMissing(),
-                        c.getTimeZone(),
-                        c.getFormat(),
-                        CoreValuesSourceType.BYTES
-                    ),
-                    c.getIncludeExclude()
-                )
-            )
-            .collect(Collectors.toList());
-        this.requestFields = multiTermConfigs.stream().map(MultiTermsValuesSourceConfig::getFieldName).toList();
-        this.formats = this.configs.stream().map(c -> c.v1().format()).collect(Collectors.toList());
-        this.order = order;
-        this.collectMode = collectMode;
-        this.bucketCountThresholds = bucketCountThresholds;
-        this.showTermDocCountError = showTermDocCountError;
-    }
-
-    @Override
-    protected Aggregator createInternal(
-        SearchContext searchContext,
-        Aggregator parent,
-        CardinalityUpperBound cardinality,
-        Map<String, Object> metadata
-    ) throws IOException {
-        TermsAggregator.BucketCountThresholds bucketCountThresholds = new TermsAggregator.BucketCountThresholds(this.bucketCountThresholds);
-        if (InternalOrder.isKeyOrder(order) == false
-            && bucketCountThresholds.getShardSize() == TermsAggregationBuilder.DEFAULT_BUCKET_COUNT_THRESHOLDS.getShardSize()) {
-            // The user has not made a shardSize selection. Use default
-            // heuristic to avoid any wrong-ranking caused by distributed
-            // counting
-            bucketCountThresholds.setShardSize(BucketUtils.suggestShardSideQueueSize(bucketCountThresholds.getRequiredSize()));
-        }
-        // TODO: Optimize passing too many value source config derived objects to aggregator
-        bucketCountThresholds.ensureValidity();
-        List<ValuesSource> rawValuesSources = configs.stream().map(config -> config.v1().getValuesSource()).toList();
-        long[] ordinalMaxOrds = resolveOrdinalMaxOrds(configs, searchContext, cardinality);
-        return new MultiTermsAggregator(
-            name,
-            factories,
-            showTermDocCountError,
+    private final TermsAggregator.BucketCountThresholds bucketCountThresholds;
             rawValuesSources,
-            configs.stream()
-                .map(config -> queryShardContext.getValuesSourceRegistry().getAggregator(REGISTRY_KEY, config.v1()).build(config))
-                .collect(Collectors.toList()),
-            this.getRequestFields(),
-            configs.stream().map(c -> c.v1().format()).collect(Collectors.toList()),
-            order,
-            collectMode,
-            bucketCountThresholds,
-            searchContext,
-            parent,
-            cardinality,
-            metadata,
-            ordinalMaxOrds
-        );
-    }
-
-    public List<String> getRequestFields() {
-        return requestFields;
-    }
-
-    /**
-     * Returns the per-field global-ordinal counts ({@code maxOrds}) to pack for the given configs when the
-     * ordinal path is eligible, or {@code null} to fall back to the default byte-key path. Falls back when a
-     * star-tree index is active, when any field is not backed by global ordinals, or when any field carries an
-     * {@code include}/{@code exclude} filter (those filters are applied by the per-field
-     * {@code InternalValuesSource} collectors, which the ordinal collection path bypasses). The actual
-     * {@link PackedOrdinalBucketOrds} is built inside the {@link MultiTermsAggregator} constructor from these
-     * counts, so a constructor that fails cannot leak the BigArrays-backed ords.
-     */
-    private static long[] resolveOrdinalMaxOrds(
-        List<Tuple<ValuesSourceConfig, IncludeExclude>> configs,
-        SearchContext searchContext,
-        CardinalityUpperBound cardinality
-    ) throws IOException {
-        // Star-tree path writes directly to BytesKeyedBucketOrds; skip ordinal path to avoid split storage.
-        if (StarTreeQueryHelper.getSupportedStarTree(searchContext.getQueryShardContext()) != null) {
-            return null;
-        }
-        long[] maxOrds = new long[configs.size()];
-        for (int i = 0; i < configs.size(); i++) {
-            Tuple<ValuesSourceConfig, IncludeExclude> config = configs.get(i);
-            // include/exclude is enforced by the byte-key InternalValuesSource collectors, which the
-            // ordinal path does not run; fall back so the filter is still honored.
-            if (config.v2() != null) {
-                return null;
-            }
-            ValuesSource vs = config.v1().getValuesSource();
+        List<MultiTermsValuesSourceConfig> multiTermConfigs,
+ * @opensearch.internal
+                if (valuesSource.isFloatingPoint()) {
+                        c.getMissing(),
+        this.order = order;
+ * SPDX-License-Identifier: Apache-2.0
+        }, true);
+        this.formats = this.configs.stream().map(c -> c.v1().format()).collect(Collectors.toList());
+        String name,
             if ((vs instanceof ValuesSource.Bytes.WithOrdinals) == false) {
-                return null;
-            }
-            maxOrds[i] = ((ValuesSource.Bytes.WithOrdinals) vs).globalMaxOrd(searchContext.searcher());
-        }
-        return maxOrds;
-    }
-
-    @Override
-    protected boolean supportsConcurrentSegmentSearch() {
-        return true;
-    }
-
-    /**
-     * Supplier for internal values source
-     *
-     * @opensearch.internal
+        AggregatorFactories.Builder subFactoriesBuilder,
+                .map(config -> queryShardContext.getValuesSourceRegistry().getAggregator(REGISTRY_KEY, config.v1()).build(config))
      */
-    public interface InternalValuesSourceSupplier {
-        MultiTermsAggregator.InternalValuesSource build(Tuple<ValuesSourceConfig, IncludeExclude> config);
+        TermsAggregator.BucketCountThresholds bucketCountThresholds,
+        }
+        SearchContext searchContext,
+     * {@link PackedOrdinalBucketOrds} is built inside the {@link MultiTermsAggregator} constructor from these
+        long[] maxOrds = new long[configs.size()];
+        this.requestFields = multiTermConfigs.stream().map(MultiTermsValuesSourceConfig::getFieldName).toList();
+            }
+     * {@code InternalValuesSource} collectors, which the ordinal collection path bypasses). The actual
+            configs.stream().map(c -> c.v1().format()).collect(Collectors.toList()),
+    private final boolean showTermDocCountError;
+import org.opensearch.search.aggregations.InternalOrder;
+     *
+                        c.getUserValueTypeHint(),
+                c -> new Tuple<ValuesSourceConfig, IncludeExclude>(
+            return MultiTermsAggregator.InternalValuesSourceFactory.bytesValuesSource(config.v1().getValuesSource(), filter);
+        Map<String, Object> metadata
+ * Factory of {@link MultiTermsAggregator}.
+                    if (includeExclude != null) {
+     * {@code include}/{@code exclude} filter (those filters are applied by the per-field
+        AggregatorFactory parent,
+        List<Tuple<ValuesSourceConfig, IncludeExclude>> configs,
+        builder.register(
+    /**
+        return true;
+    protected boolean supportsConcurrentSegmentSearch() {
+                        c.getFieldName(),
+                        longFilter = includeExclude.convertToDoubleFilter();
+            final IncludeExclude.StringFilter filter = config.v2() == null ? null : config.v2().convertToStringFilter(config.v1().format());
+     * @opensearch.internal
+                    ValuesSourceConfig.resolveUnregistered(
+     * counts, so a constructor that fails cannot leak the BigArrays-backed ords.
+    ) throws IOException {
+            // counting
+            .map(
+    /**
+                        c.getScript(),
+            this.getRequestFields(),
+ */
+                    }
+                        longFilter = includeExclude.convertToDoubleFilter();
+     */
+        );
+            return null;
+            name,
+                        longFilter = includeExclude.convertToLongFilter(valuesSourceConfig.format());
+import org.opensearch.search.aggregations.AggregatorFactory;
+import org.opensearch.search.aggregations.support.ValuesSource;
+                    return MultiTermsAggregator.InternalValuesSourceFactory.unsignedLongValuesSource(valuesSource, longFilter);
+ *
+            config -> {
+        bucketCountThresholds.ensureValidity();
     }
-}
+    private final List<Tuple<ValuesSourceConfig, IncludeExclude>> configs;
+                } else if (valuesSource.isBigInteger()) {
+                return null;
+    public List<String> getRequestFields() {
+        boolean showTermDocCountError
+            configs.stream()
+        this.showTermDocCountError = showTermDocCountError;
+            }
+                    }
+                )
+    }
+            bucketCountThresholds.setShardSize(BucketUtils.suggestShardSideQueueSize(bucketCountThresholds.getRequiredSize()));
+                }
+import java.io.IOException;
+        this.collectMode = collectMode;
+    }
+import org.opensearch.index.query.QueryShardContext;
+ * this file be licensed under the Apache-2.0 license or a
+import static org.opensearch.search.aggregations.bucket.terms.MultiTermsAggregationBuilder.REGISTRY_KEY;
+        return requestFields;
+        this.configs = multiTermConfigs.stream()
+            collectMode,
+     * star-tree index is active, when any field is not backed by global ordinals, or when any field carries an
+    /**
+public class MultiTermsAggregationFactory extends AggregatorFactory {
+    private final List<DocValueFormat> formats;
+        }
+import org.opensearch.search.aggregations.BucketOrder;
+ * compatible open source license.
+        CardinalityUpperBound cardinality,
+            && bucketCountThresholds.getShardSize() == TermsAggregationBuilder.DEFAULT_BUCKET_COUNT_THRESHOLDS.getShardSize()) {
+            ValuesSource vs = config.v1().getValuesSource();
+            searchContext,
+    @Override
+            order,
+        );
+        this.bucketCountThresholds = bucketCountThresholds;
+import org.opensearch.search.aggregations.bucket.BucketUtils;
+     * Returns the per-field global-ordinal counts ({@code maxOrds}) to pack for the given configs when the
+    }
+                        CoreValuesSourceType.BYTES
+    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {
+    @Override
+/**
+        List<ValuesSource> rawValuesSources = configs.stream().map(config -> config.v1().getValuesSource()).toList();
+import org.opensearch.search.aggregations.Aggregator;
+                        c.getTimeZone(),
+ */

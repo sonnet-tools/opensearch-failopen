@@ -1,257 +1,246 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.engine;
-
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.common.CheckedBiFunction;
-import org.opensearch.common.CheckedFunction;
-import org.opensearch.common.lucene.uid.Versions;
-import org.opensearch.core.index.AppendOnlyIndexOperationRetryException;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.VersionType;
-import org.opensearch.index.seqno.SequenceNumbers;
-
-import java.io.IOException;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
-import java.util.function.Predicate;
-import java.util.function.Supplier;
-
-/**
- * Plans execution strategies for indexing operations.
- * The planner produces {@link IndexingStrategy} instances that guide the engine's
- * execution of index operations on both primary and replica shards.
- *
- * @opensearch.internal
- */
-public class IndexingStrategyPlanner implements OperationStrategyPlanner<Engine.Index, IndexingStrategy> {
-
-    private final IndexSettings indexSettings;
-    private final ShardId shardId;
-    private final LiveVersionMap versionMap;
-    private final Supplier<Long> maxUnsafeAutoIdTimestampSupplier;
-    private final Supplier<Long> maxSeqNoOfUpdatesOrDeletesSupplier;
-    private final Supplier<Long> processedCheckpointSupplier;
-    private final Predicate<Engine.Operation> hasBeenProcessedBefore;
-    private final CheckedFunction<Engine.Operation, OpVsEngineDocStatus, IOException> opVsEngineDocStatusFunction;
-    private final CheckedBiFunction<Engine.Operation, Boolean, VersionValue, IOException> docVersionSupplier;
-    private final BiConsumer<Long, Boolean> updateAutoIdTimestampConsumer;
-    private final BiFunction<Engine.Operation, Integer, Exception> tryAcquireInFlightDocs;
-
-    public IndexingStrategyPlanner(
-        IndexSettings indexSettings,
-        ShardId shardId,
-        LiveVersionMap versionMap,
-        Supplier<Long> maxUnsafeAutoIdTimestampSupplier,
-        Supplier<Long> maxSeqNoOfUpdatesOrDeletesSupplier,
-        Supplier<Long> processedCheckpointSupplier,
-        Predicate<Engine.Operation> hasBeenProcessedBefore,
-        CheckedFunction<Engine.Operation, OpVsEngineDocStatus, IOException> opVsEngineDocStatusFunction,
-        CheckedBiFunction<Engine.Operation, Boolean, VersionValue, IOException> docVersionSupplier,
-        BiConsumer<Long, Boolean> updateAutoIdTimestampConsumer,
-        BiFunction<Engine.Operation, Integer, Exception> tryAcquireInFlightDocs
-    ) {
-        this.indexSettings = indexSettings;
-        this.shardId = shardId;
         this.versionMap = versionMap;
-        this.maxUnsafeAutoIdTimestampSupplier = maxUnsafeAutoIdTimestampSupplier;
-        this.maxSeqNoOfUpdatesOrDeletesSupplier = maxSeqNoOfUpdatesOrDeletesSupplier;
-        this.processedCheckpointSupplier = processedCheckpointSupplier;
-        this.hasBeenProcessedBefore = hasBeenProcessedBefore;
-        this.opVsEngineDocStatusFunction = opVsEngineDocStatusFunction;
-        this.docVersionSupplier = docVersionSupplier;
-        this.updateAutoIdTimestampConsumer = updateAutoIdTimestampConsumer;
-        this.tryAcquireInFlightDocs = tryAcquireInFlightDocs;
-    }
-
-    @Override
-    public IndexingStrategy planOperationAsPrimary(Engine.Index index) throws IOException {
-        assert index.origin() == Engine.Operation.Origin.PRIMARY : "planing as primary but origin isn't. got " + index.origin();
-        final int reservingDocs = index.parsedDoc().docs().size();
-        final IndexingStrategy plan;
-        // resolve an external operation into an internal one which is safe to replay
-        final boolean canOptimizeAddDocument = canOptimizeAddDocument(index);
-        if (canOptimizeAddDocument && mayHaveBeenIndexedBefore(index) == false) {
-            final Exception reserveError = tryAcquireInFlightDocs.apply(index, reservingDocs);
-            if (reserveError != null) {
-                plan = IndexingStrategy.failAsTooManyDocs(reserveError);
-            } else {
-                plan = IndexingStrategy.optimizedAppendOnly(1L, reservingDocs);
-            }
-        } else {
-            versionMap.enforceSafeAccess();
-            // resolves incoming version
-            final VersionValue versionValue = docVersionSupplier.apply(index, true);
-            final long currentVersion;
-            final boolean currentNotFoundOrDeleted;
-            if (versionValue == null) {
-                currentVersion = Versions.NOT_FOUND;
-                currentNotFoundOrDeleted = true;
-            } else {
-                currentVersion = versionValue.version;
-                currentNotFoundOrDeleted = versionValue.isDelete();
-            }
-            if (index.getIfSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO && currentNotFoundOrDeleted) {
-                final VersionConflictEngineException e = new VersionConflictEngineException(
-                    shardId,
-                    index.id(),
-                    index.getIfSeqNo(),
-                    index.getIfPrimaryTerm(),
-                    SequenceNumbers.UNASSIGNED_SEQ_NO,
-                    SequenceNumbers.UNASSIGNED_PRIMARY_TERM
-                );
-                plan = IndexingStrategy.skipDueToVersionConflict(e, true, currentVersion);
-            } else if (index.getIfSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO
-                && (versionValue.seqNo != index.getIfSeqNo() || versionValue.term != index.getIfPrimaryTerm())) {
-                    final VersionConflictEngineException e = new VersionConflictEngineException(
-                        shardId,
-                        index.id(),
-                        index.getIfSeqNo(),
-                        index.getIfPrimaryTerm(),
-                        versionValue.seqNo,
-                        versionValue.term
-                    );
-                    plan = IndexingStrategy.skipDueToVersionConflict(e, currentNotFoundOrDeleted, currentVersion);
-                } else if (index.versionType().isVersionConflictForWrites(currentVersion, index.version(), currentNotFoundOrDeleted)) {
-                    final VersionConflictEngineException e = new VersionConflictEngineException(
-                        shardId,
-                        index,
-                        currentVersion,
-                        currentNotFoundOrDeleted
-                    );
-                    plan = IndexingStrategy.skipDueToVersionConflict(e, currentNotFoundOrDeleted, currentVersion);
-                } else {
-                    final Exception reserveError = tryAcquireInFlightDocs.apply(index, reservingDocs);
-                    if (reserveError != null) {
-                        plan = IndexingStrategy.failAsTooManyDocs(reserveError);
-                    } else if (currentVersion >= 1 && indexSettings.getIndexMetadata().isAppendOnlyIndex()) {
-                        // Retry happens for indexing requests for append only indices, since we are rejecting update requests
-                        // at Transport layer itself. So for any retry, we are reconstructing response from already indexed
-                        // document version for append only index.
-                        AppendOnlyIndexOperationRetryException retryException = new AppendOnlyIndexOperationRetryException(
-                            "Indexing operation retried for append only indices"
-                        );
-                        final Engine.IndexResult result = new Engine.IndexResult(
-                            retryException,
-                            currentVersion,
-                            versionValue.term,
-                            versionValue.seqNo
-                        );
-                        plan = IndexingStrategy.failAsIndexAppendOnly(result, currentVersion, 0);
-                    } else {
-                        plan = IndexingStrategy.processNormally(
-                            currentNotFoundOrDeleted,
-                            canOptimizeAddDocument ? 1L : index.versionType().updateVersion(currentVersion, index.version()),
-                            reservingDocs
-                        );
-                    }
-                }
-        }
-        return plan;
-    }
-
-    @Override
-    public IndexingStrategy planOperationAsNonPrimary(Engine.Index index) throws IOException {
-        assert assertNonPrimaryOrigin(index);
-        // needs to maintain the auto_id timestamp in case this replica becomes primary
-        if (canOptimizeAddDocument(index)) {
-            mayHaveBeenIndexedBefore(index);
-        }
-        final IndexingStrategy plan;
-        // unlike the primary, replicas don't really care to about creation status of documents
-        // this allows to ignore the case where a document was found in the live version maps in
-        // a delete state and return false for the created flag in favor of code simplicity
-        final long maxSeqNoOfUpdatesOrDeletes = maxSeqNoOfUpdatesOrDeletesSupplier.get();
-        if (hasBeenProcessedBefore.test(index)) {
-            // the operation seq# was processed and thus the same operation was already put into lucene
-            // this can happen during recovery where older operations are sent from the translog that are already
             // part of the lucene commit (either from a peer recovery or a local translog)
-            // or due to concurrent indexing & recovery. For the former it is important to skip lucene as the operation in
-            // question may have been deleted in an out of order op that is not replayed.
-            // See testRecoverFromStoreWithOutOfOrderDelete for an example of local recovery
-            // See testRecoveryWithOutOfOrderDelete for an example of peer recovery
-            plan = IndexingStrategy.processButSkipEngine(false, index.version());
-        } else if (maxSeqNoOfUpdatesOrDeletes <= processedCheckpointSupplier.get()) {
-            // see Engine#getMaxSeqNoOfUpdatesOrDeletes for the explanation of the optimization using sequence numbers
-            assert maxSeqNoOfUpdatesOrDeletes < index.seqNo() : index.seqNo() + ">=" + maxSeqNoOfUpdatesOrDeletes;
-            plan = IndexingStrategy.optimizedAppendOnly(index.version(), 0);
-        } else {
-            boolean segRepEnabled = indexSettings.isSegRepEnabledOrRemoteNode();
-            versionMap.enforceSafeAccess();
-            final OpVsEngineDocStatus opVsEngine = opVsEngineDocStatusFunction.apply(index);
-            if (opVsEngine == OpVsEngineDocStatus.OP_STALE_OR_EQUAL) {
-                if (segRepEnabled) {
-                    // For segrep based indices, we can't completely rely on localCheckpointTracker
-                    // as the preserved checkpoint may not have all the operations present in lucene
+        return true;
+            // this can happen during recovery where older operations are sent from the translog that are already
+        Supplier<Long> maxSeqNoOfUpdatesOrDeletesSupplier,
                     // we don't need to index it again as stale op as it would create multiple documents for same seq no
-                    plan = IndexingStrategy.processButSkipEngine(false, index.version());
-                } else {
-                    plan = IndexingStrategy.processAsStaleOp(index.version());
-                }
-            } else {
-                plan = IndexingStrategy.processNormally(opVsEngine == OpVsEngineDocStatus.DOC_NOT_FOUND, index.version(), 0);
-            }
-        }
-        return plan;
-    }
-
-    protected boolean canOptimizeAddDocument(Engine.Index index) {
-        if (index.getAutoGeneratedIdTimestamp() != IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP) {
-            assert index.getAutoGeneratedIdTimestamp() >= 0 : "autoGeneratedIdTimestamp must be positive but was: "
-                + index.getAutoGeneratedIdTimestamp();
-            switch (index.origin()) {
+ *
+                    final VersionConflictEngineException e = new VersionConflictEngineException(
                 case PRIMARY:
+    private final CheckedBiFunction<Engine.Operation, Boolean, VersionValue, IOException> docVersionSupplier;
+            mayHaveBeenIndexedBefore(index);
+                    SequenceNumbers.UNASSIGNED_PRIMARY_TERM
+        }
+                    // For segrep based indices, we can't completely rely on localCheckpointTracker
+        if (canOptimizeAddDocument(index)) {
+            final boolean currentNotFoundOrDeleted;
+                        versionValue.term
                     assert assertPrimaryCanOptimizeAddDocument(index);
+            } else {
+            // See testRecoveryWithOutOfOrderDelete for an example of peer recovery
+            updateAutoIdTimestampConsumer.accept(index.getAutoGeneratedIdTimestamp(), false);
+                        index.id(),
+        this.shardId = shardId;
+/**
+        assert assertNonPrimaryOrigin(index);
                     return true;
                 case PEER_RECOVERY:
-                case REPLICA:
-                    assert index.version() == 1 && index.versionType() == null : "version: "
-                        + index.version()
-                        + " type: "
-                        + index.versionType();
-                    return true;
-                case LOCAL_TRANSLOG_RECOVERY:
-                case LOCAL_RESET:
-                    assert index.isRetry();
-                    return true; // allow to optimize in order to update the max safe time stamp
-                default:
-                    throw new IllegalArgumentException("unknown origin " + index.origin());
-            }
-        }
-        return false;
-    }
-
-    protected boolean assertPrimaryCanOptimizeAddDocument(final Engine.Index index) {
-        assert (index.version() == Versions.MATCH_DELETED || index.version() == Versions.MATCH_ANY)
-            && index.versionType() == VersionType.INTERNAL : "version: " + index.version() + " type: " + index.versionType();
-        return true;
-    }
-
-    /**
-     * returns true if the indexing operation may have already be processed by this engine.
-     * Note that it is OK to rarely return true even if this is not the case. However a `false`
-     * return value must always be correct.
-     *
-     */
-    private boolean mayHaveBeenIndexedBefore(Engine.Index index) {
-        assert canOptimizeAddDocument(index);
-        final boolean mayHaveBeenIndexBefore;
-        if (index.isRetry()) {
-            mayHaveBeenIndexBefore = true;
             updateAutoIdTimestampConsumer.accept(index.getAutoGeneratedIdTimestamp(), true);
-            assert maxUnsafeAutoIdTimestampSupplier.get() >= index.getAutoGeneratedIdTimestamp();
+    @Override
+                            versionValue.seqNo
+                        // document version for append only index.
+ */
+            plan = IndexingStrategy.optimizedAppendOnly(index.version(), 0);
         } else {
-            // in this case we force
-            mayHaveBeenIndexBefore = maxUnsafeAutoIdTimestampSupplier.get() >= index.getAutoGeneratedIdTimestamp();
-            updateAutoIdTimestampConsumer.accept(index.getAutoGeneratedIdTimestamp(), false);
-        }
-        return mayHaveBeenIndexBefore;
     }
+        this.hasBeenProcessedBefore = hasBeenProcessedBefore;
+        assert (index.version() == Versions.MATCH_DELETED || index.version() == Versions.MATCH_ANY)
+            }
+import org.opensearch.common.CheckedBiFunction;
+    private final BiConsumer<Long, Boolean> updateAutoIdTimestampConsumer;
+                    } else if (currentVersion >= 1 && indexSettings.getIndexMetadata().isAppendOnlyIndex()) {
+        BiFunction<Engine.Operation, Integer, Exception> tryAcquireInFlightDocs
+                currentVersion = Versions.NOT_FOUND;
+        if (hasBeenProcessedBefore.test(index)) {
+        this.docVersionSupplier = docVersionSupplier;
+                        plan = IndexingStrategy.failAsTooManyDocs(reserveError);
+                    );
+    }
+                );
+        if (canOptimizeAddDocument && mayHaveBeenIndexedBefore(index) == false) {
+                        currentVersion,
+    private final Supplier<Long> processedCheckpointSupplier;
+                    return true; // allow to optimize in order to update the max safe time stamp
+                        AppendOnlyIndexOperationRetryException retryException = new AppendOnlyIndexOperationRetryException(
+                currentNotFoundOrDeleted = versionValue.isDelete();
+        this.opVsEngineDocStatusFunction = opVsEngineDocStatusFunction;
+            && index.versionType() == VersionType.INTERNAL : "version: " + index.version() + " type: " + index.versionType();
+                    index.getIfSeqNo(),
+            final VersionValue versionValue = docVersionSupplier.apply(index, true);
+        }
+import org.opensearch.index.seqno.SequenceNumbers;
+                    );
+                    assert index.isRetry();
+            if (opVsEngine == OpVsEngineDocStatus.OP_STALE_OR_EQUAL) {
+ * The planner produces {@link IndexingStrategy} instances that guide the engine's
+            switch (index.origin()) {
+                plan = IndexingStrategy.processNormally(opVsEngine == OpVsEngineDocStatus.DOC_NOT_FOUND, index.version(), 0);
+    private final IndexSettings indexSettings;
+        // this allows to ignore the case where a document was found in the live version maps in
+            final OpVsEngineDocStatus opVsEngine = opVsEngineDocStatusFunction.apply(index);
+    /**
+import java.io.IOException;
+                final VersionConflictEngineException e = new VersionConflictEngineException(
+                        index.getIfPrimaryTerm(),
+        return false;
+        final int reservingDocs = index.parsedDoc().docs().size();
+        if (index.getAutoGeneratedIdTimestamp() != IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP) {
+            final long currentVersion;
+    }
+            if (reserveError != null) {
+    public IndexingStrategy planOperationAsNonPrimary(Engine.Index index) throws IOException {
+                    if (reserveError != null) {
+                case LOCAL_RESET:
+            }
+                        index,
+            if (versionValue == null) {
+                } else {
+    @Override
+            // see Engine#getMaxSeqNoOfUpdatesOrDeletes for the explanation of the optimization using sequence numbers
+                    final VersionConflictEngineException e = new VersionConflictEngineException(
+        this.tryAcquireInFlightDocs = tryAcquireInFlightDocs;
+    protected boolean assertPrimaryCanOptimizeAddDocument(final Engine.Index index) {
+import java.util.function.BiConsumer;
+    }
+            // See testRecoverFromStoreWithOutOfOrderDelete for an example of local recovery
+            mayHaveBeenIndexBefore = maxUnsafeAutoIdTimestampSupplier.get() >= index.getAutoGeneratedIdTimestamp();
+     * return value must always be correct.
+                plan = IndexingStrategy.skipDueToVersionConflict(e, true, currentVersion);
+        final long maxSeqNoOfUpdatesOrDeletes = maxSeqNoOfUpdatesOrDeletesSupplier.get();
+        final boolean canOptimizeAddDocument = canOptimizeAddDocument(index);
+import java.util.function.Predicate;
+                            "Indexing operation retried for append only indices"
+            assert index.getAutoGeneratedIdTimestamp() >= 0 : "autoGeneratedIdTimestamp must be positive but was: "
+ * compatible open source license.
+                        + index.version()
+                            retryException,
+            assert maxUnsafeAutoIdTimestampSupplier.get() >= index.getAutoGeneratedIdTimestamp();
+                    // as the preserved checkpoint may not have all the operations present in lucene
+                    return true;
+     */
+                + index.getAutoGeneratedIdTimestamp();
+            mayHaveBeenIndexBefore = true;
+                currentVersion = versionValue.version;
+        Supplier<Long> processedCheckpointSupplier,
+        Supplier<Long> maxUnsafeAutoIdTimestampSupplier,
+                        );
+import java.util.function.Supplier;
+            plan = IndexingStrategy.processButSkipEngine(false, index.version());
+import org.opensearch.index.VersionType;
+                        currentNotFoundOrDeleted
+        // unlike the primary, replicas don't really care to about creation status of documents
+                        shardId,
+                currentNotFoundOrDeleted = true;
+                } else {
+        final boolean mayHaveBeenIndexBefore;
+                    index.getIfPrimaryTerm(),
+                        + " type: "
+                            reservingDocs
+ * The OpenSearch Contributors require contributions made to
+            if (index.getIfSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO && currentNotFoundOrDeleted) {
+ * Plans execution strategies for indexing operations.
+    public IndexingStrategyPlanner(
+                        shardId,
+     * Note that it is OK to rarely return true even if this is not the case. However a `false`
+        }
+    }
+        assert index.origin() == Engine.Operation.Origin.PRIMARY : "planing as primary but origin isn't. got " + index.origin();
+                    final Exception reserveError = tryAcquireInFlightDocs.apply(index, reservingDocs);
+        } else if (maxSeqNoOfUpdatesOrDeletes <= processedCheckpointSupplier.get()) {
+            }
+import org.opensearch.index.IndexSettings;
+        Predicate<Engine.Operation> hasBeenProcessedBefore,
+                    } else {
+    private final ShardId shardId;
+            // or due to concurrent indexing & recovery. For the former it is important to skip lucene as the operation in
+        return mayHaveBeenIndexBefore;
+import org.opensearch.core.index.AppendOnlyIndexOperationRetryException;
+    private boolean mayHaveBeenIndexedBefore(Engine.Index index) {
+ * execution of index operations on both primary and replica shards.
+        // needs to maintain the auto_id timestamp in case this replica becomes primary
+            assert maxSeqNoOfUpdatesOrDeletes < index.seqNo() : index.seqNo() + ">=" + maxSeqNoOfUpdatesOrDeletes;
+ * SPDX-License-Identifier: Apache-2.0
+                plan = IndexingStrategy.failAsTooManyDocs(reserveError);
+        BiConsumer<Long, Boolean> updateAutoIdTimestampConsumer,
+                        index.getIfSeqNo(),
+    ) {
+        LiveVersionMap versionMap,
+        final IndexingStrategy plan;
+    private final Supplier<Long> maxUnsafeAutoIdTimestampSupplier;
+                    plan = IndexingStrategy.processButSkipEngine(false, index.version());
+            } else {
+            versionMap.enforceSafeAccess();
+            // in this case we force
+                        versionValue.seqNo,
+                        final Engine.IndexResult result = new Engine.IndexResult(
+                    plan = IndexingStrategy.skipDueToVersionConflict(e, currentNotFoundOrDeleted, currentVersion);
+                if (segRepEnabled) {
+                        );
+    protected boolean canOptimizeAddDocument(Engine.Index index) {
+                    }
+                        + index.versionType();
+ */
+        this.maxSeqNoOfUpdatesOrDeletesSupplier = maxSeqNoOfUpdatesOrDeletesSupplier;
+                            currentVersion,
+                default:
+                } else if (index.versionType().isVersionConflictForWrites(currentVersion, index.version(), currentNotFoundOrDeleted)) {
+        // a delete state and return false for the created flag in favor of code simplicity
+        if (index.isRetry()) {
+        // resolve an external operation into an internal one which is safe to replay
+    private final CheckedFunction<Engine.Operation, OpVsEngineDocStatus, IOException> opVsEngineDocStatusFunction;
+     * returns true if the indexing operation may have already be processed by this engine.
+                        plan = IndexingStrategy.processNormally(
+                    plan = IndexingStrategy.processAsStaleOp(index.version());
+        return plan;
+            final Exception reserveError = tryAcquireInFlightDocs.apply(index, reservingDocs);
+import org.opensearch.common.CheckedFunction;
+        this.updateAutoIdTimestampConsumer = updateAutoIdTimestampConsumer;
+            boolean segRepEnabled = indexSettings.isSegRepEnabledOrRemoteNode();
+                }
+import org.opensearch.common.lucene.uid.Versions;
+        final IndexingStrategy plan;
+        }
+                    shardId,
+import org.opensearch.core.index.shard.ShardId;
+                    assert index.version() == 1 && index.versionType() == null : "version: "
+            }
+                        // Retry happens for indexing requests for append only indices, since we are rejecting update requests
+                case LOCAL_TRANSLOG_RECOVERY:
+        CheckedBiFunction<Engine.Operation, Boolean, VersionValue, IOException> docVersionSupplier,
+    private final LiveVersionMap versionMap;
+                        // at Transport layer itself. So for any retry, we are reconstructing response from already indexed
+                plan = IndexingStrategy.optimizedAppendOnly(1L, reservingDocs);
+     *
+        assert canOptimizeAddDocument(index);
+ *
+                    index.id(),
+                            currentNotFoundOrDeleted,
+        this.maxUnsafeAutoIdTimestampSupplier = maxUnsafeAutoIdTimestampSupplier;
+        ShardId shardId,
+        IndexSettings indexSettings,
+    private final Predicate<Engine.Operation> hasBeenProcessedBefore;
+                case REPLICA:
+        this.processedCheckpointSupplier = processedCheckpointSupplier;
+public class IndexingStrategyPlanner implements OperationStrategyPlanner<Engine.Index, IndexingStrategy> {
+import org.opensearch.action.index.IndexRequest;
+/*
+                }
+import java.util.function.BiFunction;
+            // question may have been deleted in an out of order op that is not replayed.
+                    throw new IllegalArgumentException("unknown origin " + index.origin());
+    }
+                        plan = IndexingStrategy.failAsIndexAppendOnly(result, currentVersion, 0);
+                            versionValue.term,
+        CheckedFunction<Engine.Operation, OpVsEngineDocStatus, IOException> opVsEngineDocStatusFunction,
+        } else {
+                        );
+            } else if (index.getIfSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO
+            // the operation seq# was processed and thus the same operation was already put into lucene
+        } else {
+    private final Supplier<Long> maxSeqNoOfUpdatesOrDeletesSupplier;
+ * @opensearch.internal
+                    SequenceNumbers.UNASSIGNED_SEQ_NO,
+    public IndexingStrategy planOperationAsPrimary(Engine.Index index) throws IOException {
+    private final BiFunction<Engine.Operation, Integer, Exception> tryAcquireInFlightDocs;
+                && (versionValue.seqNo != index.getIfSeqNo() || versionValue.term != index.getIfPrimaryTerm())) {
+                    plan = IndexingStrategy.skipDueToVersionConflict(e, currentNotFoundOrDeleted, currentVersion);
+            // resolves incoming version
+        }
+ * this file be licensed under the Apache-2.0 license or a
+            } else {
+        return plan;
+        this.indexSettings = indexSettings;
 }
+                            canOptimizeAddDocument ? 1L : index.versionType().updateVersion(currentVersion, index.version()),
+package org.opensearch.index.engine;
+            versionMap.enforceSafeAccess();

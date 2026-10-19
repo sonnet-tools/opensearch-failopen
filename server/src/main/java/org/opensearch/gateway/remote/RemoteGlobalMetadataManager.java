@@ -1,314 +1,296 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.gateway.remote;
-
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.DiffableUtils;
-import org.opensearch.cluster.DiffableUtils.NonDiffableValueSerializer;
-import org.opensearch.cluster.coordination.CoordinationMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.metadata.Metadata.Custom;
-import org.opensearch.cluster.metadata.Metadata.XContentContext;
-import org.opensearch.cluster.metadata.TemplatesMetadata;
-import org.opensearch.common.remote.AbstractClusterMetadataWriteableBlobEntity;
-import org.opensearch.common.remote.AbstractRemoteWritableEntityManager;
-import org.opensearch.common.remote.RemoteWriteableEntityBlobStore;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.compress.Compressor;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.gateway.remote.model.RemoteCoordinationMetadata;
-import org.opensearch.gateway.remote.model.RemoteCustomMetadata;
-import org.opensearch.gateway.remote.model.RemoteGlobalMetadata;
-import org.opensearch.gateway.remote.model.RemoteHashesOfConsistentSettings;
-import org.opensearch.gateway.remote.model.RemotePersistentSettingsMetadata;
-import org.opensearch.gateway.remote.model.RemoteReadResult;
-import org.opensearch.gateway.remote.model.RemoteTemplatesMetadata;
-import org.opensearch.gateway.remote.model.RemoteTransientSettingsMetadata;
-import org.opensearch.index.translog.transfer.BlobStoreTransferService;
-import org.opensearch.repositories.blobstore.BlobStoreRepository;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.stream.Collectors;
-
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.METADATA_NAME_FORMAT;
-
-/**
- * A Manager which provides APIs to write and read Global Metadata attributes to remote store
- *
- * @opensearch.internal
- */
-public class RemoteGlobalMetadataManager extends AbstractRemoteWritableEntityManager {
-
-    public static final TimeValue GLOBAL_METADATA_UPLOAD_TIMEOUT_DEFAULT = TimeValue.timeValueMillis(20000);
-
-    public static final Setting<TimeValue> GLOBAL_METADATA_UPLOAD_TIMEOUT_SETTING = Setting.timeSetting(
-        "cluster.remote_store.state.global_metadata.upload_timeout",
-        GLOBAL_METADATA_UPLOAD_TIMEOUT_DEFAULT,
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope
-    );
-
-    public static final int GLOBAL_METADATA_CURRENT_CODEC_VERSION = 1;
-
-    private volatile TimeValue globalMetadataUploadTimeout;
-    private final Compressor compressor;
-    private final NamedXContentRegistry namedXContentRegistry;
-    private final NamedWriteableRegistry namedWriteableRegistry;
-
-    RemoteGlobalMetadataManager(
-        ClusterSettings clusterSettings,
-        String clusterName,
-        BlobStoreRepository blobStoreRepository,
-        BlobStoreTransferService blobStoreTransferService,
-        NamedWriteableRegistry namedWriteableRegistry,
-        ThreadPool threadpool
-    ) {
-        this.globalMetadataUploadTimeout = clusterSettings.get(GLOBAL_METADATA_UPLOAD_TIMEOUT_SETTING);
-        this.compressor = blobStoreRepository.getCompressor();
-        this.namedXContentRegistry = blobStoreRepository.getNamedXContentRegistry();
-        this.namedWriteableRegistry = namedWriteableRegistry;
-        this.remoteWritableEntityStores.put(
-            RemoteGlobalMetadata.GLOBAL_METADATA,
-            new RemoteWriteableEntityBlobStore<>(
-                blobStoreTransferService,
-                blobStoreRepository,
-                clusterName,
-                threadpool,
-                ThreadPool.Names.REMOTE_STATE_READ,
-                RemoteClusterStateUtils.CLUSTER_STATE_PATH_TOKEN
-            )
-        );
-        this.remoteWritableEntityStores.put(
-            RemoteCoordinationMetadata.COORDINATION_METADATA,
-            new RemoteWriteableEntityBlobStore<>(
-                blobStoreTransferService,
-                blobStoreRepository,
-                clusterName,
-                threadpool,
-                ThreadPool.Names.REMOTE_STATE_READ,
-                RemoteClusterStateUtils.CLUSTER_STATE_PATH_TOKEN
-            )
-        );
-        this.remoteWritableEntityStores.put(
-            RemotePersistentSettingsMetadata.SETTING_METADATA,
-            new RemoteWriteableEntityBlobStore<>(
-                blobStoreTransferService,
-                blobStoreRepository,
-                clusterName,
-                threadpool,
-                ThreadPool.Names.REMOTE_STATE_READ,
-                RemoteClusterStateUtils.CLUSTER_STATE_PATH_TOKEN
-            )
-        );
-        this.remoteWritableEntityStores.put(
-            RemoteTransientSettingsMetadata.TRANSIENT_SETTING_METADATA,
-            new RemoteWriteableEntityBlobStore<>(
-                blobStoreTransferService,
-                blobStoreRepository,
-                clusterName,
-                threadpool,
-                ThreadPool.Names.REMOTE_STATE_READ,
-                RemoteClusterStateUtils.CLUSTER_STATE_PATH_TOKEN
-            )
-        );
-        this.remoteWritableEntityStores.put(
-            RemoteHashesOfConsistentSettings.HASHES_OF_CONSISTENT_SETTINGS,
-            new RemoteWriteableEntityBlobStore<>(
-                blobStoreTransferService,
-                blobStoreRepository,
-                clusterName,
-                threadpool,
-                ThreadPool.Names.REMOTE_STATE_READ,
-                RemoteClusterStateUtils.CLUSTER_STATE_PATH_TOKEN
-            )
-        );
-        this.remoteWritableEntityStores.put(
-            RemoteTemplatesMetadata.TEMPLATES_METADATA,
-            new RemoteWriteableEntityBlobStore<>(
-                blobStoreTransferService,
-                blobStoreRepository,
-                clusterName,
-                threadpool,
-                ThreadPool.Names.REMOTE_STATE_READ,
-                RemoteClusterStateUtils.CLUSTER_STATE_PATH_TOKEN
-            )
-        );
-        this.remoteWritableEntityStores.put(
-            RemoteCustomMetadata.CUSTOM_METADATA,
-            new RemoteWriteableEntityBlobStore<>(
-                blobStoreTransferService,
-                blobStoreRepository,
-                clusterName,
-                threadpool,
-                ThreadPool.Names.REMOTE_STATE_READ,
-                RemoteClusterStateUtils.CLUSTER_STATE_PATH_TOKEN
-            )
-        );
-        clusterSettings.addSettingsUpdateConsumer(GLOBAL_METADATA_UPLOAD_TIMEOUT_SETTING, this::setGlobalMetadataUploadTimeout);
-    }
-
-    @Override
-    protected ActionListener<Void> getWrappedWriteListener(
-        String component,
-        AbstractClusterMetadataWriteableBlobEntity remoteEntity,
-        ActionListener<ClusterMetadataManifest.UploadedMetadata> listener
-    ) {
-        return ActionListener.wrap(
-            resp -> listener.onResponse(remoteEntity.getUploadedMetadata()),
-            ex -> listener.onFailure(new RemoteStateTransferException("Upload failed for " + component, remoteEntity, ex))
-        );
-    }
-
-    @Override
-    protected ActionListener<Object> getWrappedReadListener(
-        String component,
-        AbstractClusterMetadataWriteableBlobEntity remoteEntity,
-        ActionListener<RemoteReadResult> listener
-    ) {
-        return ActionListener.wrap(
-            response -> listener.onResponse(new RemoteReadResult(response, remoteEntity.getType(), component)),
-            ex -> listener.onFailure(new RemoteStateTransferException("Download failed for " + component, remoteEntity, ex))
-        );
-    }
-
-    Metadata getGlobalMetadata(String clusterUUID, ClusterMetadataManifest clusterMetadataManifest) {
-        String globalMetadataFileName = clusterMetadataManifest.getGlobalMetadataFileName();
-        try {
-            // Fetch Global metadata
-            if (globalMetadataFileName != null) {
-                RemoteGlobalMetadata remoteGlobalMetadata = new RemoteGlobalMetadata(
-                    String.format(Locale.ROOT, METADATA_NAME_FORMAT, globalMetadataFileName),
-                    clusterUUID,
-                    compressor,
-                    namedXContentRegistry
-                );
-                return (Metadata) getStore(remoteGlobalMetadata).read(remoteGlobalMetadata);
-            } else if (clusterMetadataManifest.hasMetadataAttributesFiles()) {
-                // from CODEC_V2, we have started uploading all the metadata in granular files instead of a single entity
-                Metadata.Builder builder = new Metadata.Builder();
-                if (clusterMetadataManifest.getCoordinationMetadata().getUploadedFilename() != null) {
-                    RemoteCoordinationMetadata remoteCoordinationMetadata = new RemoteCoordinationMetadata(
-                        clusterMetadataManifest.getCoordinationMetadata().getUploadedFilename(),
-                        clusterUUID,
-                        compressor,
-                        namedXContentRegistry
-                    );
-                    builder.coordinationMetadata(
-                        (CoordinationMetadata) getStore(remoteCoordinationMetadata).read(remoteCoordinationMetadata)
-                    );
-                }
-                if (clusterMetadataManifest.getTemplatesMetadata().getUploadedFilename() != null) {
-                    RemoteTemplatesMetadata remoteTemplatesMetadata = new RemoteTemplatesMetadata(
-                        clusterMetadataManifest.getTemplatesMetadata().getUploadedFilename(),
-                        clusterUUID,
-                        compressor,
-                        namedXContentRegistry
-                    );
-                    builder.templates((TemplatesMetadata) getStore(remoteTemplatesMetadata).read(remoteTemplatesMetadata));
-                }
-                if (clusterMetadataManifest.getSettingsMetadata().getUploadedFilename() != null) {
-                    RemotePersistentSettingsMetadata remotePersistentSettingsMetadata = new RemotePersistentSettingsMetadata(
-                        clusterMetadataManifest.getSettingsMetadata().getUploadedFilename(),
-                        clusterUUID,
-                        compressor,
-                        namedXContentRegistry
-                    );
-                    builder.persistentSettings(
-                        (Settings) getStore(remotePersistentSettingsMetadata).read(remotePersistentSettingsMetadata)
-                    );
-                }
-                builder.clusterUUID(clusterMetadataManifest.getClusterUUID());
-                builder.clusterUUIDCommitted(clusterMetadataManifest.isClusterUUIDCommitted());
-                clusterMetadataManifest.getCustomMetadataMap().forEach((key, value) -> {
-                    try {
-                        RemoteCustomMetadata remoteCustomMetadata = new RemoteCustomMetadata(
-                            value.getUploadedFilename(),
-                            key,
-                            clusterUUID,
                             compressor,
-                            namedWriteableRegistry,
-                            clusterMetadataManifest.getOpensearchVersion()
-                        );
-                        builder.putCustom(key, (Custom) getStore(remoteCustomMetadata).read(remoteCustomMetadata));
-                    } catch (IOException e) {
-                        throw new IllegalStateException(
+                clusterName,
+                blobStoreTransferService,
+                    );
+                ThreadPool.Names.REMOTE_STATE_READ,
+                RemoteClusterStateUtils.CLUSTER_STATE_PATH_TOKEN
                             String.format(Locale.ROOT, "Error while downloading Custom Metadata - %s", value.getUploadedFilename()),
-                            e
+                blobStoreTransferService,
+            resp -> listener.onResponse(remoteEntity.getUploadedMetadata()),
+            } else if (clusterMetadataManifest.hasMetadataAttributesFiles()) {
+    }
+        NamedWriteableRegistry namedWriteableRegistry,
+                DiffableUtils.getStringKeySerializer(),
+            .stream()
+                        clusterUUID,
+                blobStoreTransferService,
+                String.format(Locale.ROOT, "Error while downloading Global Metadata - %s", globalMetadataFileName),
+        boolean firstUploadForSplitGlobalMetadata,
+import org.opensearch.gateway.remote.model.RemoteCustomMetadata;
+    ) {
+import java.util.stream.Collectors;
+            }
+        this.globalMetadataUploadTimeout = clusterSettings.get(GLOBAL_METADATA_UPLOAD_TIMEOUT_SETTING);
+            RemoteCustomMetadata.CUSTOM_METADATA,
+        BlobStoreTransferService blobStoreTransferService,
+                threadpool,
+import org.opensearch.core.action.ActionListener;
+            )
+            new RemoteWriteableEntityBlobStore<>(
+                clusterName,
+                clusterName,
+import org.opensearch.common.remote.RemoteWriteableEntityBlobStore;
+                ThreadPool.Names.REMOTE_STATE_READ,
+import org.opensearch.threadpool.ThreadPool;
+        AbstractClusterMetadataWriteableBlobEntity remoteEntity,
+            return customs;
                         );
                     }
-                });
-                return builder.build();
-            } else {
-                return Metadata.EMPTY_METADATA;
-            }
-        } catch (IOException e) {
-            throw new IllegalStateException(
-                String.format(Locale.ROOT, "Error while downloading Global Metadata - %s", globalMetadataFileName),
-                e
-            );
-        }
-    }
-
-    DiffableUtils.MapDiff<String, Metadata.Custom, Map<String, Metadata.Custom>> getCustomsDiff(
-        ClusterState currentState,
-        ClusterState previousState,
-        boolean firstUploadForSplitGlobalMetadata,
+import java.io.IOException;
+    private final NamedXContentRegistry namedXContentRegistry;
+                RemoteClusterStateUtils.CLUSTER_STATE_PATH_TOKEN
+            new RemoteWriteableEntityBlobStore<>(
+ */
+                builder.clusterUUID(clusterMetadataManifest.getClusterUUID());
+import org.opensearch.gateway.remote.model.RemotePersistentSettingsMetadata;
         boolean isRemotePublicationEnabled
+            RemoteTransientSettingsMetadata.TRANSIENT_SETTING_METADATA,
+                blobStoreTransferService,
+                clusterName,
+    protected ActionListener<Object> getWrappedReadListener(
+        return ActionListener.wrap(
+import java.util.Collections;
+    );
     ) {
-        if (firstUploadForSplitGlobalMetadata) {
-            // For first split global metadata upload, we want to upload all customs
-            return DiffableUtils.diff(
-                Collections.emptyMap(),
-                filterCustoms(currentState.metadata().customs(), isRemotePublicationEnabled),
-                DiffableUtils.getStringKeySerializer(),
-                NonDiffableValueSerializer.getAbstractInstance()
-            );
-        }
-        return DiffableUtils.diff(
-            filterCustoms(previousState.metadata().customs(), isRemotePublicationEnabled),
-            filterCustoms(currentState.metadata().customs(), isRemotePublicationEnabled),
-            DiffableUtils.getStringKeySerializer(),
-            NonDiffableValueSerializer.getAbstractInstance()
-        );
+import org.opensearch.gateway.remote.model.RemoteTransientSettingsMetadata;
+                    builder.coordinationMetadata(
     }
-
-    public static Map<String, Metadata.Custom> filterCustoms(Map<String, Metadata.Custom> customs, boolean isRemotePublicationEnabled) {
-        if (isRemotePublicationEnabled) {
-            return customs;
-        }
-        return customs.entrySet()
-            .stream()
-            .filter(e -> e.getValue().context().contains(XContentContext.GATEWAY))
-            .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
     }
-
-    boolean isGlobalMetadataEqual(ClusterMetadataManifest first, ClusterMetadataManifest second, String clusterName) {
-        Metadata secondGlobalMetadata = getGlobalMetadata(second.getClusterUUID(), second);
         Metadata firstGlobalMetadata = getGlobalMetadata(first.getClusterUUID(), first);
-        return Metadata.isGlobalResourcesMetadataEquals(firstGlobalMetadata, secondGlobalMetadata);
+ */
+                builder.clusterUUIDCommitted(clusterMetadataManifest.isClusterUUIDCommitted());
+            );
+            .filter(e -> e.getValue().context().contains(XContentContext.GATEWAY))
+        this.remoteWritableEntityStores.put(
+                RemoteClusterStateUtils.CLUSTER_STATE_PATH_TOKEN
+        }
+                RemoteClusterStateUtils.CLUSTER_STATE_PATH_TOKEN
+package org.opensearch.gateway.remote;
+        try {
+                        clusterMetadataManifest.getSettingsMetadata().getUploadedFilename(),
+        );
+                        clusterMetadataManifest.getCoordinationMetadata().getUploadedFilename(),
+        }
+    public static Map<String, Metadata.Custom> filterCustoms(Map<String, Metadata.Custom> customs, boolean isRemotePublicationEnabled) {
+import org.opensearch.common.settings.Setting;
+        );
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.METADATA_NAME_FORMAT;
+    DiffableUtils.MapDiff<String, Metadata.Custom, Map<String, Metadata.Custom>> getCustomsDiff(
     }
-
-    private void setGlobalMetadataUploadTimeout(TimeValue newGlobalMetadataUploadTimeout) {
-        this.globalMetadataUploadTimeout = newGlobalMetadataUploadTimeout;
-    }
-
-    public TimeValue getGlobalMetadataUploadTimeout() {
+        GLOBAL_METADATA_UPLOAD_TIMEOUT_DEFAULT,
+            .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+        ActionListener<RemoteReadResult> listener
+        this.remoteWritableEntityStores.put(
+                            clusterMetadataManifest.getOpensearchVersion()
+        return customs.entrySet()
+                    String.format(Locale.ROOT, METADATA_NAME_FORMAT, globalMetadataFileName),
+            ex -> listener.onFailure(new RemoteStateTransferException("Download failed for " + component, remoteEntity, ex))
+                blobStoreRepository,
+                        throw new IllegalStateException(
+    private final NamedWriteableRegistry namedWriteableRegistry;
+import org.opensearch.gateway.remote.model.RemoteHashesOfConsistentSettings;
+import org.opensearch.common.unit.TimeValue;
+import org.opensearch.repositories.blobstore.BlobStoreRepository;
+                threadpool,
+                            key,
+import org.opensearch.cluster.ClusterState;
+        );
+                });
+        clusterSettings.addSettingsUpdateConsumer(GLOBAL_METADATA_UPLOAD_TIMEOUT_SETTING, this::setGlobalMetadataUploadTimeout);
+                RemoteGlobalMetadata remoteGlobalMetadata = new RemoteGlobalMetadata(
+        this.remoteWritableEntityStores.put(
+                filterCustoms(currentState.metadata().customs(), isRemotePublicationEnabled),
+                    RemoteCoordinationMetadata remoteCoordinationMetadata = new RemoteCoordinationMetadata(
+import org.opensearch.gateway.remote.model.RemoteGlobalMetadata;
+            if (globalMetadataFileName != null) {
+ * @opensearch.internal
+        String globalMetadataFileName = clusterMetadataManifest.getGlobalMetadataFileName();
+            RemoteGlobalMetadata.GLOBAL_METADATA,
+            return DiffableUtils.diff(
+import org.opensearch.gateway.remote.model.RemoteCoordinationMetadata;
+                threadpool,
+                blobStoreRepository,
+                threadpool,
+    RemoteGlobalMetadataManager(
+            )
+                ThreadPool.Names.REMOTE_STATE_READ,
+                RemoteClusterStateUtils.CLUSTER_STATE_PATH_TOKEN
+                blobStoreRepository,
+                blobStoreRepository,
+                    builder.persistentSettings(
+        this.compressor = blobStoreRepository.getCompressor();
+        return DiffableUtils.diff(
+        if (isRemotePublicationEnabled) {
+                    );
+        this.remoteWritableEntityStores.put(
+                blobStoreTransferService,
+            RemotePersistentSettingsMetadata.SETTING_METADATA,
         return this.globalMetadataUploadTimeout;
-    }
+        );
+                blobStoreRepository,
+                return builder.build();
+            )
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+    private void setGlobalMetadataUploadTimeout(TimeValue newGlobalMetadataUploadTimeout) {
+                        RemoteCustomMetadata remoteCustomMetadata = new RemoteCustomMetadata(
+                clusterName,
 }
+            RemoteTemplatesMetadata.TEMPLATES_METADATA,
+                    } catch (IOException e) {
+ * compatible open source license.
+        String clusterName,
+        BlobStoreRepository blobStoreRepository,
+                            namedWriteableRegistry,
+                        namedXContentRegistry
+            new RemoteWriteableEntityBlobStore<>(
+                return Metadata.EMPTY_METADATA;
+import java.util.Locale;
+                            clusterUUID,
+    ) {
+                blobStoreRepository,
+                        );
+    @Override
+    public static final Setting<TimeValue> GLOBAL_METADATA_UPLOAD_TIMEOUT_SETTING = Setting.timeSetting(
+            throw new IllegalStateException(
+        Setting.Property.Dynamic,
+                        namedXContentRegistry
+        String component,
+            new RemoteWriteableEntityBlobStore<>(
+                        (Settings) getStore(remotePersistentSettingsMetadata).read(remotePersistentSettingsMetadata)
+            );
+                );
+                        compressor,
+                return (Metadata) getStore(remoteGlobalMetadata).read(remoteGlobalMetadata);
+import org.opensearch.gateway.remote.model.RemoteTemplatesMetadata;
+                        builder.putCustom(key, (Custom) getStore(remoteCustomMetadata).read(remoteCustomMetadata));
+                NonDiffableValueSerializer.getAbstractInstance()
+            )
+        Metadata secondGlobalMetadata = getGlobalMetadata(second.getClusterUUID(), second);
+import org.opensearch.common.settings.ClusterSettings;
+    boolean isGlobalMetadataEqual(ClusterMetadataManifest first, ClusterMetadataManifest second, String clusterName) {
+    private volatile TimeValue globalMetadataUploadTimeout;
+                blobStoreTransferService,
+                threadpool,
+        this.globalMetadataUploadTimeout = newGlobalMetadataUploadTimeout;
+            DiffableUtils.getStringKeySerializer(),
+        return Metadata.isGlobalResourcesMetadataEquals(firstGlobalMetadata, secondGlobalMetadata);
+                    );
+                            value.getUploadedFilename(),
+import org.opensearch.index.translog.transfer.BlobStoreTransferService;
+                }
+    ) {
+                    try {
+        ActionListener<ClusterMetadataManifest.UploadedMetadata> listener
+    protected ActionListener<Void> getWrappedWriteListener(
+        this.namedWriteableRegistry = namedWriteableRegistry;
+ * A Manager which provides APIs to write and read Global Metadata attributes to remote store
+                blobStoreRepository,
+                        (CoordinationMetadata) getStore(remoteCoordinationMetadata).read(remoteCoordinationMetadata)
+        return ActionListener.wrap(
+                    compressor,
+                ThreadPool.Names.REMOTE_STATE_READ,
+        AbstractClusterMetadataWriteableBlobEntity remoteEntity,
+import org.opensearch.cluster.DiffableUtils;
+                if (clusterMetadataManifest.getSettingsMetadata().getUploadedFilename() != null) {
+        this.remoteWritableEntityStores.put(
+                        compressor,
+                    );
+import org.opensearch.common.settings.Settings;
+            )
+import org.opensearch.cluster.metadata.Metadata.Custom;
+            response -> listener.onResponse(new RemoteReadResult(response, remoteEntity.getType(), component)),
+                Collections.emptyMap(),
+        this.remoteWritableEntityStores.put(
+    }
+                clusterMetadataManifest.getCustomMetadataMap().forEach((key, value) -> {
+            )
+/*
+                ThreadPool.Names.REMOTE_STATE_READ,
+    }
+    @Override
+            NonDiffableValueSerializer.getAbstractInstance()
+                RemoteClusterStateUtils.CLUSTER_STATE_PATH_TOKEN
+                        namedXContentRegistry
+        );
+    public TimeValue getGlobalMetadataUploadTimeout() {
+        ClusterState previousState,
+            RemoteCoordinationMetadata.COORDINATION_METADATA,
+                    RemoteTemplatesMetadata remoteTemplatesMetadata = new RemoteTemplatesMetadata(
+        );
+public class RemoteGlobalMetadataManager extends AbstractRemoteWritableEntityManager {
+        "cluster.remote_store.state.global_metadata.upload_timeout",
+ * this file be licensed under the Apache-2.0 license or a
+/**
+    public static final TimeValue GLOBAL_METADATA_UPLOAD_TIMEOUT_DEFAULT = TimeValue.timeValueMillis(20000);
+                if (clusterMetadataManifest.getCoordinationMetadata().getUploadedFilename() != null) {
+    }
+        );
+            RemoteHashesOfConsistentSettings.HASHES_OF_CONSISTENT_SETTINGS,
+                e
+        String component,
+ *
+                threadpool,
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+        this.remoteWritableEntityStores.put(
+        );
+import org.opensearch.common.remote.AbstractRemoteWritableEntityManager;
+            )
+import org.opensearch.cluster.metadata.Metadata;
+    private final Compressor compressor;
+            new RemoteWriteableEntityBlobStore<>(
+    Metadata getGlobalMetadata(String clusterUUID, ClusterMetadataManifest clusterMetadataManifest) {
+            filterCustoms(currentState.metadata().customs(), isRemotePublicationEnabled),
+    }
+                    namedXContentRegistry
+    public static final int GLOBAL_METADATA_CURRENT_CODEC_VERSION = 1;
+                blobStoreTransferService,
+                RemoteClusterStateUtils.CLUSTER_STATE_PATH_TOKEN
+import org.opensearch.cluster.DiffableUtils.NonDiffableValueSerializer;
+import java.util.Map.Entry;
+import org.opensearch.common.remote.AbstractClusterMetadataWriteableBlobEntity;
+            // Fetch Global metadata
+        if (firstUploadForSplitGlobalMetadata) {
+                }
+        ClusterSettings clusterSettings,
+        Setting.Property.NodeScope
+        ClusterState currentState,
+                clusterName,
+                ThreadPool.Names.REMOTE_STATE_READ,
+                // from CODEC_V2, we have started uploading all the metadata in granular files instead of a single entity
+        }
+                if (clusterMetadataManifest.getTemplatesMetadata().getUploadedFilename() != null) {
+                clusterName,
+                        clusterUUID,
+                        clusterUUID,
+            } else {
+                    clusterUUID,
+import org.opensearch.cluster.coordination.CoordinationMetadata;
+                    );
+import java.util.Map;
+                        clusterMetadataManifest.getTemplatesMetadata().getUploadedFilename(),
+        );
+            filterCustoms(previousState.metadata().customs(), isRemotePublicationEnabled),
+            new RemoteWriteableEntityBlobStore<>(
+ *
+            // For first split global metadata upload, we want to upload all customs
+            ex -> listener.onFailure(new RemoteStateTransferException("Upload failed for " + component, remoteEntity, ex))
+ * The OpenSearch Contributors require contributions made to
+    }
+        } catch (IOException e) {
+            new RemoteWriteableEntityBlobStore<>(
+        ThreadPool threadpool
+                }
+import org.opensearch.core.compress.Compressor;
+                ThreadPool.Names.REMOTE_STATE_READ,
+                    builder.templates((TemplatesMetadata) getStore(remoteTemplatesMetadata).read(remoteTemplatesMetadata));
+                Metadata.Builder builder = new Metadata.Builder();
+import org.opensearch.gateway.remote.model.RemoteReadResult;
+        );
+        this.namedXContentRegistry = blobStoreRepository.getNamedXContentRegistry();
+                            e
+                    RemotePersistentSettingsMetadata remotePersistentSettingsMetadata = new RemotePersistentSettingsMetadata(
+                threadpool,
+                        compressor,
+import org.opensearch.cluster.metadata.Metadata.XContentContext;
+import org.opensearch.cluster.metadata.TemplatesMetadata;

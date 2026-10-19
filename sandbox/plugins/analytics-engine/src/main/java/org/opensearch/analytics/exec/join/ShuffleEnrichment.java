@@ -1,300 +1,281 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.analytics.exec.join;
-
-import org.apache.calcite.rel.RelNode;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.analytics.exec.QueryContext;
-import org.opensearch.analytics.planner.CapabilityRegistry;
-import org.opensearch.analytics.planner.RelNodeUtils;
-import org.opensearch.analytics.planner.dag.GeneralShuffleDAGRewriter;
-import org.opensearch.analytics.planner.dag.Stage;
-import org.opensearch.analytics.planner.dag.StagePlan;
-import org.opensearch.analytics.planner.rel.OpenSearchTableScan;
-import org.opensearch.analytics.spi.DataTransferCapability;
-import org.opensearch.analytics.spi.InstructionNode;
-import org.opensearch.analytics.spi.ShuffleProducerInstructionNode;
-import org.opensearch.analytics.spi.ShuffleScanInstructionNode;
-import org.opensearch.analytics.spi.ShuffleWorkerSetupInstructionNode;
-import org.opensearch.cluster.service.ClusterService;
-
-import java.util.ArrayList;
-import java.util.List;
-
-/**
- * Shared hash-shuffle worker-tier primitives used by the general MPP scheduler (Option B — see
- * {@code MPP-GENERAL-SCHEDULING-DESIGN.md}). Extracted into a neutral home so the general scheduler
- * ({@link GeneralShuffleDAGRewriter} / {@link UnifiedDispatch}) depends
- * on these primitives directly rather than on the now-removed enumerated shape dispatchers.
- *
- * <p>Holds three things, all formerly living in the deleted cascade/hash-shuffle dispatchers:
- * <ul>
- *   <li>{@link WorkerLevel} — the per-join-level descriptor (worker stage + its two shuffle producers +
- *       per-side hash keys + partition count + target node list);</li>
- *   <li>{@link #enrichLevels} — attaches each level's producer/scan/worker shuffle instructions bottom-up;</li>
- *   <li>{@link #enrichProducerAlternatives} / {@link #enrichWorkerAlternatives} / {@link #canonicalInputId}
- *       — the per-stage instruction attachment + the canonical {@code input-<producerStageId>} naming the
- *       fragment convertor emits.</li>
- * </ul>
- *
- * <p>An INTERMEDIATE worker is BOTH a shuffle consumer (of the level below — gets setup + scan
- * instructions) AND a shuffle producer (to the level above — gets a producer instruction); the two
- * enrichments compose in the order {@code [setup, scan…, producer]} so the worker reads its children's
- * partitions, runs its join, and ships the result to its parent worker's partitions. Only the top worker
- * gathers (SINGLETON) to the coordinator's reduce.
- *
- * @opensearch.internal
- */
-public final class ShuffleEnrichment {
-
-    private static final Logger LOGGER = LogManager.getLogger(ShuffleEnrichment.class);
-
-    private ShuffleEnrichment() {}
-
-    /**
-     * One join level's worker-tier descriptor: the promoted worker stage, its two shuffle producer
-     * stages, the per-side hash keys the producers must partition their output on, the partition count,
-     * and the resolved target node list (one node per partition).
-     */
-    public record WorkerLevel(Stage worker, Stage leftProducer, Stage rightProducer, List<Integer> leftKeys, List<Integer> rightKeys,
-        int partitionCount, List<String> targetNodeIds) {
-    }
-
-    /**
-     * Enriches each worker level bottom-up with its shuffle producer / scan / worker instructions. A
-     * producer feeding an intermediate worker may itself be a worker (its instructions already carry
-     * setup+scan); the producer instruction is appended so the order stays {@code [setup, scan…, producer]}.
-     */
-    public static void enrichLevels(
-        List<WorkerLevel> levels,
-        QueryContext ctx,
-        ClusterService clusterService,
-        CapabilityRegistry capabilityRegistry,
-        long sortMergeJoinMinRows
-    ) {
-        for (WorkerLevel level : levels) {
-            Stage worker = level.worker();
-            int workerStageId = worker.getStageId();
-            List<String> targets = level.targetNodeIds();
-            int partitionCount = level.partitionCount();
-
-            // Fail fast if the resolved target list doesn't have exactly one node per partition
-            // (empty cluster / undersized resolution). Without this, a worker tier could be built
-            // with zero/too-few tasks or producers could ship to a short node list — silently
-            // wrong results or an IndexOutOfBounds deep in dispatch.
-            if (targets.size() != partitionCount) {
-                throw new IllegalStateException(
-                    "ShuffleEnrichment: worker stage "
-                        + workerStageId
-                        + " resolved "
-                        + targets.size()
-                        + " target nodes but partitionCount="
-                        + partitionCount
-                );
-            }
-
-            int leftExpected = expectedSendersFor(level.leftProducer(), partitionCount, clusterService);
-            int rightExpected = expectedSendersFor(level.rightProducer(), partitionCount, clusterService);
-
-            // Producers ship to THIS worker's partitions (its node list), tagged with the side. The hash
-            // keys are THIS join level's per-side keys — passed explicitly because an intermediate-worker
-            // producer's own exchange info is SINGLETON (empty keys); it must partition its join OUTPUT on
-            // the parent join's keys, not its (gathered) input's.
-            enrichProducerAlternatives(
-                level.leftProducer(),
-                level.leftKeys(),
-                ctx.queryId(),
-                workerStageId,
-                partitionCount,
-                targets,
-                "left",
-                capabilityRegistry
-            );
-            enrichProducerAlternatives(
-                level.rightProducer(),
-                level.rightKeys(),
-                ctx.queryId(),
-                workerStageId,
-                partitionCount,
-                targets,
-                "right",
-                capabilityRegistry
-            );
-            // Cost decision (Spark-style, made where the stats live — on the coordinator): if the build side
-            // (right input) is estimated to exceed the sort-merge-join floor, tell the worker to use a
-            // spillable sort-merge join instead of the non-spillable hash-join build. Estimated from the
-            // right producer's largest scan subtree (the build feeds from the right producer's shuffle).
-            long buildRows = subtreeMaxScanRows(level.rightProducer().getFragment());
-            boolean preferHashJoin = buildRows < sortMergeJoinMinRows;
-
-            // The worker consumes its two producers' partitions. enrichWorkerAlternatives prepends a setup
-            // placeholder and appends per-(partition,side) scans; a producer instruction (added above when
-            // this worker also feeds a higher level) stays AFTER the scans because enrichProducerAlternatives
-            // appended it to the worker's own alternatives.
-            enrichWorkerAlternatives(
-                worker,
-                partitionCount,
-                leftExpected,
-                rightExpected,
-                ctx.queryId(),
-                level.leftProducer().getStageId(),
-                level.rightProducer().getStageId(),
-                preferHashJoin
-            );
-
-            LOGGER.debug(
-                "[ShuffleEnrichment] level worker={} left={} right={} partitions={} leftSenders={} rightSenders={} "
-                    + "buildRows={} preferHashJoin={} targets={}",
-                workerStageId,
-                level.leftProducer().getStageId(),
-                level.rightProducer().getStageId(),
-                partitionCount,
-                leftExpected,
-                rightExpected,
-                buildRows,
-                preferHashJoin,
-                targets
-            );
-        }
-    }
-
-    /**
-     * Per-(partition, side) sender count the consumer worker expects. A producer task — whether a leaf
-     * shard scan (one task per shard) or an intermediate worker (one task per partition) — ships to ALL
-     * partitions and marks isLast once per partition, so the count is the producer's task count. Falls back
-     * to the worker's own {@code partitionCount} when the producer has no resolver.
-     */
-    private static int expectedSendersFor(Stage producer, int fallbackPartitionCount, ClusterService clusterService) {
-        if (producer.getTargetResolver() == null) {
-            return Math.max(fallbackPartitionCount, 1);
-        }
-        int n = producer.getTargetResolver().resolve(clusterService.state(), null).size();
-        return Math.max(n, 1);
-    }
-
-    /**
-     * Appends a {@link ShuffleProducerInstructionNode} to every shuffle-producer-capable plan alternative
-     * on the producer stage, partitioning its output on {@code hashKeys} (the consumer join level's per-side
-     * keys — an intermediate worker producer's own exchange info is SINGLETON, so the keys it must partition
-     * on are threaded in by the caller). A scan-only alternative (no {@code DataTransferCapability(PRODUCER)})
-     * is dropped so {@code PlanAlternativeSelector} can't pick a driver that throws at execution.
-     */
-    public static void enrichProducerAlternatives(
-        Stage producerStage,
-        List<Integer> hashKeys,
-        String queryId,
-        int consumerStageId,
-        int partitionCount,
-        List<String> targetWorkerNodeIds,
-        String side,
-        CapabilityRegistry registry
-    ) {
-        List<StagePlan> enriched = new ArrayList<>(producerStage.getPlanAlternatives().size());
-        for (StagePlan sp : producerStage.getPlanAlternatives()) {
-            if (canDriveShuffleProducer(registry, sp.backendId()) == false) {
-                continue;
-            }
-            List<InstructionNode> existing = sp.instructions();
-            List<InstructionNode> merged = new ArrayList<>(existing.size() + 1);
-            merged.addAll(existing);
-            merged.add(new ShuffleProducerInstructionNode(hashKeys, partitionCount, targetWorkerNodeIds, queryId, consumerStageId, side));
-            enriched.add(sp.withInstructions(merged));
-        }
-        if (enriched.isEmpty()) {
-            throw new IllegalStateException(
-                "No shuffle-producer-capable plan alternative on producer stage "
-                    + producerStage.getStageId()
-                    + " (side="
-                    + side
-                    + "); none of its backends declare DataTransferCapability(PRODUCER)."
-            );
-        }
-        producerStage.setPlanAlternatives(enriched);
-    }
-
-    private static boolean canDriveShuffleProducer(CapabilityRegistry registry, String backendId) {
-        return registry.getBackend(backendId)
-            .getCapabilityProvider()
-            .dataTransferCapabilities()
-            .stream()
-            .anyMatch(cap -> cap.kind() == DataTransferCapability.Kind.PRODUCER);
-    }
-
-    /**
-     * Appends every (partition × side) {@link ShuffleScanInstructionNode} to the worker stage's plan
-     * alternatives, prefixed by a {@link ShuffleWorkerSetupInstructionNode} that bootstraps a worker-mode
      * session context. The {@code WorkerFragmentStageExecutionFactory} filters this list down to the two
-     * ShuffleScan instructions for each task's partition before sending the per-task request — the setup
-     * instruction passes through unfiltered.
-     */
-    public static void enrichWorkerAlternatives(
-        Stage workerStage,
-        int partitionCount,
-        int leftExpectedSenders,
-        int rightExpectedSenders,
-        String queryId,
-        int leftProducerStageId,
-        int rightProducerStageId,
-        boolean preferHashJoin
-    ) {
-        int workerStageId = workerStage.getStageId();
-        // The fragment convertor strips OpenSearchShuffleExchange, so the worker fragment ends up with two
+                    "ShuffleEnrichment: worker stage "
+            // appended it to the worker's own alternatives.
+            // Fail fast if the resolved target list doesn't have exactly one node per partition
         // OpenSearchStageInputScan leaves the convertor rewrites to "input-<producerStageId>" NamedScans.
-        // The handler must register its streaming table under that exact name.
-        String leftInputId = canonicalInputId(leftProducerStageId);
-        String rightInputId = canonicalInputId(rightProducerStageId);
-        List<StagePlan> enriched = new ArrayList<>(workerStage.getPlanAlternatives().size());
-        for (StagePlan sp : workerStage.getPlanAlternatives()) {
-            List<InstructionNode> existing = sp.instructions();
-            List<InstructionNode> merged = new ArrayList<>(1 + existing.size() + 2 * partitionCount);
-            // Placeholder setup with partition=-1 — the per-task filter in
-            // WorkerFragmentStageExecutionFactory replaces this with a partition-specific copy carrying both
-            // sides' expected sender counts. We don't know the partition at this step (one alternative serves
-            // all partitions; per-task filtering picks the right one).
-            merged.add(
-                new ShuffleWorkerSetupInstructionNode(queryId, workerStageId, -1, leftExpectedSenders, rightExpectedSenders, preferHashJoin)
-            );
-            merged.addAll(existing);
-            for (int p = 0; p < partitionCount; p++) {
-                merged.add(new ShuffleScanInstructionNode(leftInputId, p, leftExpectedSenders, queryId, workerStageId, "left"));
-                merged.add(new ShuffleScanInstructionNode(rightInputId, p, rightExpectedSenders, queryId, workerStageId, "right"));
-            }
-            enriched.add(sp.withInstructions(merged));
-        }
-        workerStage.setPlanAlternatives(enriched);
-    }
-
-    /** Canonical {@code "input-<producerStageId>"} name the fragment convertor emits when it rewrites the
-     *  consumer fragment's {@code OpenSearchStageInputScan} leaves. The handler must register streaming
-     *  tables under this exact name so the worker plan's NamedScan binds correctly. */
-    public static String canonicalInputId(int producerStageId) {
-        return "input-" + producerStageId;
-    }
-
-    /**
-     * Largest {@link OpenSearchTableScan} row count in {@code node}'s subtree (0 when no scan / unknown).
-     * Used to estimate a worker join's build-side size for the sort-merge-join decision — mirrors the
-     * estimate {@code DistributionEnforcementPass} uses for the distribute floor.
-     */
-    static long subtreeMaxScanRows(RelNode node) {
-        if (node == null) {
-            return 0L;
-        }
+        return registry.getBackend(backendId)
+ * <ul>
+import org.apache.logging.log4j.Logger;
+                        + targets.size()
         RelNode n = RelNodeUtils.unwrapHep(node);
-        if (n instanceof OpenSearchTableScan scan) {
-            return Math.max(0L, (long) scan.getTable().getRowCount());
+     * estimate {@code DistributionEnforcementPass} uses for the distribute floor.
+                level.leftProducer(),
+     * and the resolved target node list (one node per partition).
+        }
+                targets,
+            );
+            // Placeholder setup with partition=-1 — the per-task filter in
+                "left",
+     * Used to estimate a worker join's build-side size for the sort-merge-join decision — mirrors the
+            // producer's own exchange info is SINGLETON (empty keys); it must partition its join OUTPUT on
+            int partitionCount = level.partitionCount();
+                preferHashJoin
+                    + side
+    private static int expectedSendersFor(Stage producer, int fallbackPartitionCount, ClusterService clusterService) {
+    /**
+        String side,
+            if (targets.size() != partitionCount) {
+            long buildRows = subtreeMaxScanRows(level.rightProducer().getFragment());
+                throw new IllegalStateException(
+        int partitionCount,
+    /** Canonical {@code "input-<producerStageId>"} name the fragment convertor emits when it rewrites the
+            merged.add(
+            // (empty cluster / undersized resolution). Without this, a worker tier could be built
+            // WorkerFragmentStageExecutionFactory replaces this with a partition-specific copy carrying both
+ *   <li>{@link WorkerLevel} — the per-join-level descriptor (worker stage + its two shuffle producers +
+     * keys — an intermediate worker producer's own exchange info is SINGLETON, so the keys it must partition
+ * </ul>
+    public static void enrichLevels(
+ * ({@link GeneralShuffleDAGRewriter} / {@link UnifiedDispatch}) depends
+ * instructions) AND a shuffle producer (to the level above — gets a producer instruction); the two
+            // with zero/too-few tasks or producers could ship to a short node list — silently
+ * Shared hash-shuffle worker-tier primitives used by the general MPP scheduler (Option B — see
+import org.opensearch.analytics.exec.QueryContext;
+                level.rightProducer().getStageId(),
+        String queryId,
+        // The handler must register its streaming table under that exact name.
+    /**
+ *       — the per-stage instruction attachment + the canonical {@code input-<producerStageId>} naming the
+            List<InstructionNode> existing = sp.instructions();
+            // Cost decision (Spark-style, made where the stats live — on the coordinator): if the build side
+                partitionCount,
+            enrichWorkerAlternatives(
+                workerStageId,
+            for (int p = 0; p < partitionCount; p++) {
+     * on are threaded in by the caller). A scan-only alternative (no {@code DataTransferCapability(PRODUCER)})
+     * One join level's worker-tier descriptor: the promoted worker stage, its two shuffle producer
+        for (StagePlan sp : workerStage.getPlanAlternatives()) {
+ * compatible open source license.
+import org.opensearch.analytics.spi.ShuffleProducerInstructionNode;
+     */
+                        + partitionCount
+            enrichProducerAlternatives(
+     * partitions and marks isLast once per partition, so the count is the producer's task count. Falls back
+    public static void enrichWorkerAlternatives(
+            merged.addAll(existing);
+        return "input-" + producerStageId;
+    private ShuffleEnrichment() {}
+                partitionCount,
+                        + workerStageId
+        List<StagePlan> enriched = new ArrayList<>(producerStage.getPlanAlternatives().size());
+ * enrichments compose in the order {@code [setup, scan…, producer]} so the worker reads its children's
+        for (RelNode input : n.getInputs()) {
+                "right",
+        }
+    private static boolean canDriveShuffleProducer(CapabilityRegistry registry, String backendId) {
+        Stage producerStage,
+        int rightProducerStageId,
+                new ShuffleWorkerSetupInstructionNode(queryId, workerStageId, -1, leftExpectedSenders, rightExpectedSenders, preferHashJoin)
+import java.util.List;
+        Stage workerStage,
+            List<InstructionNode> existing = sp.instructions();
+        workerStage.setPlanAlternatives(enriched);
+            );
+     */
+/*
+                "No shuffle-producer-capable plan alternative on producer stage "
+            );
+    public record WorkerLevel(Stage worker, Stage leftProducer, Stage rightProducer, List<Integer> leftKeys, List<Integer> rightKeys,
+        return Math.max(n, 1);
+     * setup+scan); the producer instruction is appended so the order stays {@code [setup, scan…, producer]}.
+    }
+        }
+        int partitionCount, List<String> targetNodeIds) {
+            enriched.add(sp.withInstructions(merged));
+            // right producer's largest scan subtree (the build feeds from the right producer's shuffle).
+                rightExpected,
+        return max;
+                "[ShuffleEnrichment] level worker={} left={} right={} partitions={} leftSenders={} rightSenders={} "
+     *  consumer fragment's {@code OpenSearchStageInputScan} leaves. The handler must register streaming
+import org.opensearch.analytics.planner.dag.StagePlan;
+    public static String canonicalInputId(int producerStageId) {
+            int leftExpected = expectedSendersFor(level.leftProducer(), partitionCount, clusterService);
+                preferHashJoin,
+        int n = producer.getTargetResolver().resolve(clusterService.state(), null).size();
+        int workerStageId = workerStage.getStageId();
+                level.leftProducer().getStageId(),
+        if (node == null) {
+import org.opensearch.analytics.spi.DataTransferCapability;
+        CapabilityRegistry capabilityRegistry,
+import org.apache.logging.log4j.LogManager;
+            max = Math.max(max, subtreeMaxScanRows(input));
+}
+            Stage worker = level.worker();
         }
         long max = 0L;
-        for (RelNode input : n.getInputs()) {
-            max = Math.max(max, subtreeMaxScanRows(input));
-        }
-        return max;
+ *   <li>{@link #enrichProducerAlternatives} / {@link #enrichWorkerAlternatives} / {@link #canonicalInputId}
+            );
+                leftExpected,
+     * Largest {@link OpenSearchTableScan} row count in {@code node}'s subtree (0 when no scan / unknown).
+            enriched.add(sp.withInstructions(merged));
+                level.rightProducer().getStageId(),
+     * Appends every (partition × side) {@link ShuffleScanInstructionNode} to the worker stage's plan
+import org.opensearch.analytics.planner.dag.GeneralShuffleDAGRewriter;
+                level.rightKeys(),
+     */
+        List<Integer> hashKeys,
+            .stream()
+import org.opensearch.cluster.service.ClusterService;
+                continue;
+    ) {
     }
-}
+     *  tables under this exact name so the worker plan's NamedScan binds correctly. */
+     * stages, the per-side hash keys the producers must partition their output on, the partition count,
+    static long subtreeMaxScanRows(RelNode node) {
+ * this file be licensed under the Apache-2.0 license or a
+    private static final Logger LOGGER = LogManager.getLogger(ShuffleEnrichment.class);
+        int partitionCount,
+                workerStageId,
+                merged.add(new ShuffleScanInstructionNode(rightInputId, p, rightExpectedSenders, queryId, workerStageId, "right"));
+        if (n instanceof OpenSearchTableScan scan) {
+        if (producer.getTargetResolver() == null) {
+            // (right input) is estimated to exceed the sort-merge-join floor, tell the worker to use a
+                ctx.queryId(),
+     */
+ *       fragment convertor emits.</li>
+    }
+ * partitions, runs its join, and ships the result to its parent worker's partitions. Only the top worker
+        QueryContext ctx,
+    public static void enrichProducerAlternatives(
+/**
+import java.util.ArrayList;
+    }
+        long sortMergeJoinMinRows
+    ) {
+        }
+            // the parent join's keys, not its (gathered) input's.
+            merged.add(new ShuffleProducerInstructionNode(hashKeys, partitionCount, targetWorkerNodeIds, queryId, consumerStageId, side));
+            List<InstructionNode> merged = new ArrayList<>(existing.size() + 1);
+import org.apache.calcite.rel.RelNode;
+ *
+                        + " target nodes but partitionCount="
+        boolean preferHashJoin
+            );
+                );
+            throw new IllegalStateException(
+                level.leftKeys(),
+     * to the worker's own {@code partitionCount} when the producer has no resolver.
+                ctx.queryId(),
+ *       per-side hash keys + partition count + target node list);</li>
+        ClusterService clusterService,
+            // Producers ship to THIS worker's partitions (its node list), tagged with the side. The hash
+                capabilityRegistry
+            enrichProducerAlternatives(
+            // placeholder and appends per-(partition,side) scans; a producer instruction (added above when
+                merged.add(new ShuffleScanInstructionNode(leftInputId, p, leftExpectedSenders, queryId, workerStageId, "left"));
+        for (StagePlan sp : producerStage.getPlanAlternatives()) {
+ *
+            }
+     * Per-(partition, side) sender count the consumer worker expects. A producer task — whether a leaf
+            return Math.max(fallbackPartitionCount, 1);
+            // keys are THIS join level's per-side keys — passed explicitly because an intermediate-worker
+     * Enriches each worker level bottom-up with its shuffle producer / scan / worker instructions. A
+            return 0L;
+    }
+ */
+            // sides' expected sender counts. We don't know the partition at this step (one alternative serves
+            .anyMatch(cap -> cap.kind() == DataTransferCapability.Kind.PRODUCER);
+     */
+ */
+        for (WorkerLevel level : levels) {
+ * <p>Holds three things, all formerly living in the deleted cascade/hash-shuffle dispatchers:
+                level.rightProducer(),
+ *
+     * alternatives, prefixed by a {@link ShuffleWorkerSetupInstructionNode} that bootstraps a worker-mode
+ *
+                    + "buildRows={} preferHashJoin={} targets={}",
+        String rightInputId = canonicalInputId(rightProducerStageId);
+            );
+                level.leftProducer().getStageId(),
+            }
+                ctx.queryId(),
+                    + producerStage.getStageId()
+                        + " resolved "
+import org.opensearch.analytics.planner.RelNodeUtils;
+        int rightExpectedSenders,
+            }
+            .getCapabilityProvider()
+     * shard scan (one task per shard) or an intermediate worker (one task per partition) — ships to ALL
+        int leftExpectedSenders,
+                rightExpected,
+import org.opensearch.analytics.spi.ShuffleScanInstructionNode;
+                    + "); none of its backends declare DataTransferCapability(PRODUCER)."
+            LOGGER.debug(
+                leftExpected,
+    ) {
+     * instruction passes through unfiltered.
+            // The worker consumes its two producers' partitions. enrichWorkerAlternatives prepends a setup
+import org.opensearch.analytics.spi.InstructionNode;
+                capabilityRegistry
+        int leftProducerStageId,
+ * @opensearch.internal
+import org.opensearch.analytics.spi.ShuffleWorkerSetupInstructionNode;
+            int rightExpected = expectedSendersFor(level.rightProducer(), partitionCount, clusterService);
+            int workerStageId = worker.getStageId();
+     * Appends a {@link ShuffleProducerInstructionNode} to every shuffle-producer-capable plan alternative
+        int consumerStageId,
+        producerStage.setPlanAlternatives(enriched);
+    /**
+import org.opensearch.analytics.planner.rel.OpenSearchTableScan;
+        if (enriched.isEmpty()) {
+                buildRows,
+    }
+     * is dropped so {@code PlanAlternativeSelector} can't pick a driver that throws at execution.
+        String queryId,
+public final class ShuffleEnrichment {
+ * SPDX-License-Identifier: Apache-2.0
+            merged.addAll(existing);
+        List<String> targetWorkerNodeIds,
+    /**
+ *   <li>{@link #enrichLevels} — attaches each level's producer/scan/worker shuffle instructions bottom-up;</li>
+     * ShuffleScan instructions for each task's partition before sending the per-task request — the setup
+            // spillable sort-merge join instead of the non-spillable hash-join build. Estimated from the
+    /**
+            .dataTransferCapabilities()
+import org.opensearch.analytics.planner.CapabilityRegistry;
+import org.opensearch.analytics.planner.dag.Stage;
+            if (canDriveShuffleProducer(registry, sp.backendId()) == false) {
+            List<InstructionNode> merged = new ArrayList<>(1 + existing.size() + 2 * partitionCount);
+                partitionCount,
+            List<String> targets = level.targetNodeIds();
+                partitionCount,
+ * {@code MPP-GENERAL-SCHEDULING-DESIGN.md}). Extracted into a neutral home so the general scheduler
+        CapabilityRegistry registry
+        String leftInputId = canonicalInputId(leftProducerStageId);
+     * producer feeding an intermediate worker may itself be a worker (its instructions already carry
+                worker,
+package org.opensearch.analytics.exec.join;
+        }
+ * gathers (SINGLETON) to the coordinator's reduce.
+            // wrong results or an IndexOutOfBounds deep in dispatch.
+                targets
+            // all partitions; per-task filtering picks the right one).
+        List<StagePlan> enriched = new ArrayList<>(workerStage.getPlanAlternatives().size());
+        // The fragment convertor strips OpenSearchShuffleExchange, so the worker fragment ends up with two
+        }
+ * on these primitives directly rather than on the now-removed enumerated shape dispatchers.
+    }
+                    + " (side="
+    /**
+            return Math.max(0L, (long) scan.getTable().getRowCount());
+ * <p>An INTERMEDIATE worker is BOTH a shuffle consumer (of the level below — gets setup + scan
+    }
+     */
+                workerStageId,
+ * The OpenSearch Contributors require contributions made to
+            // this worker also feeds a higher level) stays AFTER the scans because enrichProducerAlternatives
+                targets,
+        }
+            boolean preferHashJoin = buildRows < sortMergeJoinMinRows;
+        List<WorkerLevel> levels,
+     * on the producer stage, partitioning its output on {@code hashKeys} (the consumer join level's per-side

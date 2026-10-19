@@ -1,269 +1,250 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.test.hamcrest;
-
-import org.opensearch.action.support.broadcast.BroadcastResponse;
-import org.opensearch.cluster.block.ClusterBlock;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.action.support.DefaultShardOperationFailedException;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.RandomObjects;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertBlocked;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertToXContentEquivalent;
-import static org.hamcrest.Matchers.containsString;
-
-public class OpenSearchAssertionsTests extends OpenSearchTestCase {
-
-    public void testAssertXContentEquivalent() throws IOException {
-        try (XContentBuilder original = JsonXContent.contentBuilder()) {
-            original.startObject();
-            for (Object value : RandomObjects.randomStoredFieldValues(random(), original.contentType()).v1()) {
-                original.field(randomAlphaOfLength(10), value);
-            }
-            {
-                original.startObject(randomAlphaOfLength(10));
-                for (Object value : RandomObjects.randomStoredFieldValues(random(), original.contentType()).v1()) {
-                    original.field(randomAlphaOfLength(10), value);
-                }
-                original.endObject();
-            }
-            {
-                original.startArray(randomAlphaOfLength(10));
-                for (Object value : RandomObjects.randomStoredFieldValues(random(), original.contentType()).v1()) {
-                    original.value(value);
-                }
-                original.endArray();
-            }
-            original.endObject();
-
             try (
-                XContentBuilder copy = JsonXContent.contentBuilder();
-                XContentParser parser = createParser(original.contentType().xContent(), BytesReference.bytes(original))
-            ) {
-                parser.nextToken();
-                copy.generator().copyCurrentStructure(parser);
-                try (XContentBuilder copyShuffled = shuffleXContent(copy)) {
-                    assertToXContentEquivalent(BytesReference.bytes(original), BytesReference.bytes(copyShuffled), original.contentType());
-                }
-            }
-        }
-    }
-
-    public void testAssertXContentEquivalentErrors() throws IOException {
-        {
-            XContentBuilder builder = JsonXContent.contentBuilder();
-            builder.startObject();
-            {
                 builder.startObject("foo");
-                {
-                    builder.field("f1", "value1");
-                    builder.field("f2", "value2");
-                }
-                builder.endObject();
-            }
-            builder.endObject();
-
-            XContentBuilder otherBuilder = JsonXContent.contentBuilder();
-            otherBuilder.startObject();
-            {
-                otherBuilder.startObject("foo");
-                {
-                    otherBuilder.field("f1", "value1");
-                }
-                otherBuilder.endObject();
-            }
-            otherBuilder.endObject();
-            AssertionError error = expectThrows(
-                AssertionError.class,
-                () -> assertToXContentEquivalent(BytesReference.bytes(builder), BytesReference.bytes(otherBuilder), builder.contentType())
-            );
-            assertThat(error.getMessage(), containsString("f2: expected [value2] but not found"));
-        }
-        {
-            XContentBuilder builder = JsonXContent.contentBuilder();
-            builder.startObject();
-            {
-                builder.startObject("foo");
-                {
-                    builder.field("f1", "value1");
-                    builder.field("f2", "value2");
-                }
-                builder.endObject();
-            }
-            builder.endObject();
-
-            XContentBuilder otherBuilder = JsonXContent.contentBuilder();
-            otherBuilder.startObject();
-            {
-                otherBuilder.startObject("foo");
-                {
-                    otherBuilder.field("f1", "value1");
-                    otherBuilder.field("f2", "differentValue2");
-                }
-                otherBuilder.endObject();
-            }
-            otherBuilder.endObject();
-            AssertionError error = expectThrows(
-                AssertionError.class,
-                () -> assertToXContentEquivalent(BytesReference.bytes(builder), BytesReference.bytes(otherBuilder), builder.contentType())
-            );
-            assertThat(error.getMessage(), containsString("f2: expected String [value2] but was String [differentValue2]"));
-        }
-        {
-            XContentBuilder builder = JsonXContent.contentBuilder();
-            builder.startObject();
-            {
-                builder.startArray("foo");
-                {
-                    builder.value("one");
-                    builder.value("two");
-                    builder.value("three");
-                }
-                builder.endArray();
-            }
-            builder.field("f1", "value");
-            builder.endObject();
-
-            XContentBuilder otherBuilder = JsonXContent.contentBuilder();
-            otherBuilder.startObject();
-            {
-                otherBuilder.startArray("foo");
-                {
-                    otherBuilder.value("one");
-                    otherBuilder.value("two");
                     otherBuilder.value("four");
-                }
-                otherBuilder.endArray();
-            }
-            otherBuilder.field("f1", "value");
-            otherBuilder.endObject();
-            AssertionError error = expectThrows(
-                AssertionError.class,
-                () -> assertToXContentEquivalent(BytesReference.bytes(builder), BytesReference.bytes(otherBuilder), builder.contentType())
-            );
-            assertThat(error.getMessage(), containsString("2: expected String [three] but was String [four]"));
-        }
-        {
             XContentBuilder builder = JsonXContent.contentBuilder();
-            builder.startObject();
-            {
-                builder.startArray("foo");
                 {
-                    builder.value("one");
+                parser.nextToken();
+                0,
+ *
+            )
+                    otherBuilder.value("two");
                     builder.value("two");
-                    builder.value("three");
-                }
-                builder.endArray();
+ * specific language governing permissions and limitations
+        }
+                0,
+            otherBuilder.endObject();
+                0,
+            builder.endObject();
+                AssertionError.class,
             }
             builder.endObject();
-
-            XContentBuilder otherBuilder = JsonXContent.contentBuilder();
-            otherBuilder.startObject();
-            {
-                otherBuilder.startArray("foo");
+import org.opensearch.action.support.broadcast.BroadcastResponse;
                 {
-                    otherBuilder.value("one");
-                    otherBuilder.value("two");
-                }
-                otherBuilder.endArray();
-            }
-            otherBuilder.endObject();
-            AssertionError error = expectThrows(
-                AssertionError.class,
                 () -> assertToXContentEquivalent(BytesReference.bytes(builder), BytesReference.bytes(otherBuilder), builder.contentType())
-            );
-            assertThat(error.getMessage(), containsString("expected [1] more entries"));
+                {
+        );
+                otherBuilder.startObject("foo");
+        assertBlocked(
+                otherBuilder.startArray("foo");
+ *
+ */
+                builder.endObject();
+            XContentBuilder builder = JsonXContent.contentBuilder();
+            {
+            "test",
+ * The OpenSearch Contributors require contributions made to
+            builder.startObject();
+import java.util.Collections;
+                builder.endArray();
+                try (XContentBuilder copyShuffled = shuffleXContent(copy)) {
+            new BroadcastResponse(
+            }
+            {
+            {
+                1,
+            {
+                Collections.singletonList(new DefaultShardOperationFailedException("test", 0, new ClusterBlockException(indexLevelBlocks)))
+import org.opensearch.cluster.metadata.IndexMetadata;
+                }
         }
-    }
-
-    public void testAssertBlocked() {
-        Map<String, Set<ClusterBlock>> indexLevelBlocks = new HashMap<>();
-
-        indexLevelBlocks.put("test", Collections.singleton(IndexMetadata.INDEX_READ_ONLY_BLOCK));
-        assertBlocked(
-            new BroadcastResponse(
-                1,
-                0,
-                1,
-                Collections.singletonList(new DefaultShardOperationFailedException("test", 0, new ClusterBlockException(indexLevelBlocks)))
-            )
-        );
-
-        indexLevelBlocks.put("test", Collections.singleton(IndexMetadata.INDEX_READ_ONLY_ALLOW_DELETE_BLOCK));
-        assertBlocked(
-            new BroadcastResponse(
-                1,
-                0,
-                1,
-                Collections.singletonList(new DefaultShardOperationFailedException("test", 0, new ClusterBlockException(indexLevelBlocks)))
-            )
-        );
-
+        indexLevelBlocks.put(
+            }
+                    assertToXContentEquivalent(BytesReference.bytes(original), BytesReference.bytes(copyShuffled), original.contentType());
         indexLevelBlocks.put("test", new HashSet<>(Arrays.asList(IndexMetadata.INDEX_READ_BLOCK, IndexMetadata.INDEX_METADATA_BLOCK)));
         assertBlocked(
-            new BroadcastResponse(
-                1,
-                0,
-                1,
+                    otherBuilder.field("f1", "value1");
+            builder.endObject();
+    }
+            }
+            otherBuilder.endObject();
+                }
+            {
                 Collections.singletonList(new DefaultShardOperationFailedException("test", 0, new ClusterBlockException(indexLevelBlocks)))
-            )
+                otherBuilder.startArray("foo");
+    public void testAssertXContentEquivalentErrors() throws IOException {
+                1,
+            {
+                XContentBuilder copy = JsonXContent.contentBuilder();
+            XContentBuilder otherBuilder = JsonXContent.contentBuilder();
+                1,
+import java.util.Set;
+                    original.value(value);
+                }
+            builder.field("f1", "value");
+                otherBuilder.endObject();
+                1,
+                1,
+        {
+ * under the License.
+            );
+                }
+        Map<String, Set<ClusterBlock>> indexLevelBlocks = new HashMap<>();
+ * Modifications Copyright OpenSearch Contributors. See
+                () -> assertToXContentEquivalent(BytesReference.bytes(builder), BytesReference.bytes(otherBuilder), builder.contentType())
+                }
+                original.startObject(randomAlphaOfLength(10));
+                () -> assertToXContentEquivalent(BytesReference.bytes(builder), BytesReference.bytes(otherBuilder), builder.contentType())
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * Unless required by applicable law or agreed to in writing,
+            }
+            builder.endObject();
+            otherBuilder.startObject();
+                copy.generator().copyCurrentStructure(parser);
         );
-
-        indexLevelBlocks.put(
-            "test",
-            new HashSet<>(Arrays.asList(IndexMetadata.INDEX_READ_ONLY_BLOCK, IndexMetadata.INDEX_READ_ONLY_ALLOW_DELETE_BLOCK))
+import org.opensearch.core.common.bytes.BytesReference;
+        }
+                Collections.singletonList(new DefaultShardOperationFailedException("test", 0, new ClusterBlockException(indexLevelBlocks)))
+            AssertionError error = expectThrows(
+                original.field(randomAlphaOfLength(10), value);
         );
+            XContentBuilder otherBuilder = JsonXContent.contentBuilder();
+ * this work for additional information regarding copyright
+                    otherBuilder.field("f2", "differentValue2");
+                    otherBuilder.value("one");
+                otherBuilder.endObject();
+                original.startArray(randomAlphaOfLength(10));
+        );
+        }
+            otherBuilder.startObject();
+            otherBuilder.startObject();
+            {
+            assertThat(error.getMessage(), containsString("2: expected String [three] but was String [four]"));
+            otherBuilder.endObject();
+            }
+                otherBuilder.startObject("foo");
+ * ownership. Elasticsearch licenses this file to you under
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertToXContentEquivalent;
+/*
+                Collections.singletonList(new DefaultShardOperationFailedException("test", 0, new ClusterBlockException(indexLevelBlocks)))
+                original.endObject();
+        indexLevelBlocks.put("test", Collections.singleton(IndexMetadata.INDEX_READ_ONLY_ALLOW_DELETE_BLOCK));
+                AssertionError.class,
+            new BroadcastResponse(
+            XContentBuilder builder = JsonXContent.contentBuilder();
+package org.opensearch.test.hamcrest;
+                builder.startObject("foo");
+            AssertionError error = expectThrows(
+            original.endObject();
+ * the Apache License, Version 2.0 (the "License"); you may
+                XContentParser parser = createParser(original.contentType().xContent(), BytesReference.bytes(original))
+                    builder.field("f2", "value2");
+            XContentBuilder builder = JsonXContent.contentBuilder();
+    }
+                () -> assertToXContentEquivalent(BytesReference.bytes(builder), BytesReference.bytes(otherBuilder), builder.contentType())
+            }
+            assertThat(error.getMessage(), containsString("f2: expected [value2] but not found"));
+                builder.endObject();
+import java.util.Map;
+import org.opensearch.core.xcontent.XContentBuilder;
+                1,
+        );
+        {
+                1,
         assertBlocked(
             new BroadcastResponse(
-                1,
-                0,
-                1,
-                Collections.singletonList(new DefaultShardOperationFailedException("test", 0, new ClusterBlockException(indexLevelBlocks)))
+    public void testAssertXContentEquivalent() throws IOException {
+            {
+                AssertionError.class,
             )
-        );
+                builder.startArray("foo");
+            );
+            ) {
+                }
+ * SPDX-License-Identifier: Apache-2.0
+ * KIND, either express or implied.  See the License for the
+import static org.hamcrest.Matchers.containsString;
+                {
+ */
+                }
+ * compatible open source license.
+                }
+                    otherBuilder.value("two");
+            assertThat(error.getMessage(), containsString("f2: expected String [value2] but was String [differentValue2]"));
+import org.opensearch.cluster.block.ClusterBlock;
     }
+            )
+            );
+        assertBlocked(
+                    builder.value("two");
+import org.opensearch.cluster.block.ClusterBlockException;
+/*
+    public void testAssertBlocked() {
+                }
+                {
+                {
+import java.util.Arrays;
+            assertThat(error.getMessage(), containsString("expected [1] more entries"));
+                    builder.value("three");
+            original.startObject();
+import org.opensearch.test.OpenSearchTestCase;
+import java.io.IOException;
+            for (Object value : RandomObjects.randomStoredFieldValues(random(), original.contentType()).v1()) {
+            );
+            XContentBuilder otherBuilder = JsonXContent.contentBuilder();
+            AssertionError error = expectThrows(
+            otherBuilder.endObject();
+import org.opensearch.core.action.support.DefaultShardOperationFailedException;
+        {
+            }
+            builder.startObject();
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertBlocked;
+                    original.field(randomAlphaOfLength(10), value);
+                builder.endArray();
+                0,
+        indexLevelBlocks.put("test", Collections.singleton(IndexMetadata.INDEX_READ_ONLY_BLOCK));
+                for (Object value : RandomObjects.randomStoredFieldValues(random(), original.contentType()).v1()) {
+            builder.startObject();
+            }
+import org.opensearch.test.RandomObjects;
+ * software distributed under the License is distributed on an
+ * You may obtain a copy of the License at
+            new BroadcastResponse(
+            }
+                    builder.value("one");
+                otherBuilder.endArray();
+        }
+        {
 }
+public class OpenSearchAssertionsTests extends OpenSearchTestCase {
+                    builder.field("f2", "value2");
+            }
+            AssertionError error = expectThrows(
+            {
+            new HashSet<>(Arrays.asList(IndexMetadata.INDEX_READ_ONLY_BLOCK, IndexMetadata.INDEX_READ_ONLY_ALLOW_DELETE_BLOCK))
+                1,
+                }
+                otherBuilder.endArray();
+                builder.startArray("foo");
+                original.endArray();
+            otherBuilder.field("f1", "value");
+                AssertionError.class,
+            {
+            }
+        try (XContentBuilder original = JsonXContent.contentBuilder()) {
+import org.opensearch.common.xcontent.json.JsonXContent;
+import java.util.HashSet;
+                    builder.value("one");
+                {
+            )
+            otherBuilder.startObject();
+            builder.startObject();
+                    otherBuilder.value("one");
+ * not use this file except in compliance with the License.
+ * Licensed to Elasticsearch under one or more contributor
+                }
+                    builder.value("three");
+                    otherBuilder.field("f1", "value1");
+ */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.core.xcontent.XContentParser;
+ *
+            XContentBuilder otherBuilder = JsonXContent.contentBuilder();
+                    builder.field("f1", "value1");
+ * this file be licensed under the Apache-2.0 license or a
+/*
+import java.util.HashMap;
+                {
+                    builder.field("f1", "value1");
+                for (Object value : RandomObjects.randomStoredFieldValues(random(), original.contentType()).v1()) {
+ * GitHub history for details.

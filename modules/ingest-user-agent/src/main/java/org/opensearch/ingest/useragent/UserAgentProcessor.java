@@ -1,417 +1,372 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.ingest.useragent;
-
-import org.opensearch.common.logging.DeprecationLogger;
-import org.opensearch.ingest.AbstractProcessor;
-import org.opensearch.ingest.IngestDocument;
-import org.opensearch.ingest.Processor;
-import org.opensearch.ingest.useragent.UserAgentParser.Details;
-import org.opensearch.ingest.useragent.UserAgentParser.VersionedName;
-
-import java.lang.reflect.Field;
-import java.util.Arrays;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-
-import static org.opensearch.ingest.ConfigurationUtils.newConfigurationException;
-import static org.opensearch.ingest.ConfigurationUtils.readBooleanProperty;
-import static org.opensearch.ingest.ConfigurationUtils.readOptionalList;
-import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
-
-public class UserAgentProcessor extends AbstractProcessor {
-
-    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(UserAgentProcessor.class);
-
-    public static final String TYPE = "user_agent";
-
-    private final String field;
-    private final String targetField;
-    private final Set<Property> properties;
-    private final UserAgentParser parser;
-    private final boolean ignoreMissing;
-    private final boolean useECS;
-
-    public UserAgentProcessor(
-        String tag,
-        String description,
-        String field,
-        String targetField,
-        UserAgentParser parser,
-        Set<Property> properties,
-        boolean ignoreMissing,
-        boolean useECS
-    ) {
-        super(tag, description);
-        this.field = field;
-        this.targetField = targetField;
-        this.parser = parser;
-        this.properties = properties;
-        this.ignoreMissing = ignoreMissing;
-        this.useECS = useECS;
-    }
-
-    boolean isIgnoreMissing() {
-        return ignoreMissing;
-    }
-
-    @Override
-    public IngestDocument execute(IngestDocument ingestDocument) {
-        String userAgent = ingestDocument.getFieldValue(field, String.class, ignoreMissing);
-
-        if (userAgent == null && ignoreMissing) {
-            return ingestDocument;
-        } else if (userAgent == null) {
-            throw new IllegalArgumentException("field [" + field + "] is null, cannot parse user-agent.");
-        }
-
-        Details uaClient = parser.parse(userAgent);
-
-        Map<String, Object> uaDetails = new HashMap<>();
-
+                    case PATCH:
+                sb.append(operatingSystem.minor);
+                );
         if (useECS) {
-            // Parse the user agent in the ECS (Elastic Common Schema) format
-            for (Property property : this.properties) {
-                switch (property) {
-                    case ORIGINAL:
-                        uaDetails.put("original", userAgent);
-                        break;
-                    case NAME:
-                        if (uaClient.userAgent != null && uaClient.userAgent.name != null) {
-                            uaDetails.put("name", uaClient.userAgent.name);
-                        } else {
-                            uaDetails.put("name", "Other");
-                        }
-                        break;
-                    case VERSION:
-                        StringBuilder version = new StringBuilder();
-                        if (uaClient.userAgent != null && uaClient.userAgent.major != null) {
-                            version.append(uaClient.userAgent.major);
-                            if (uaClient.userAgent.minor != null) {
-                                version.append(".").append(uaClient.userAgent.minor);
-                                if (uaClient.userAgent.patch != null) {
-                                    version.append(".").append(uaClient.userAgent.patch);
-                                    if (uaClient.userAgent.build != null) {
-                                        version.append(".").append(uaClient.userAgent.build);
-                                    }
-                                }
-                            }
-                            uaDetails.put("version", version.toString());
-                        }
-                        break;
-                    case OS:
-                        if (uaClient.operatingSystem != null) {
-                            Map<String, String> osDetails = new HashMap<>(3);
-                            if (uaClient.operatingSystem.name != null) {
-                                osDetails.put("name", uaClient.operatingSystem.name);
-                                StringBuilder sb = new StringBuilder();
-                                if (uaClient.operatingSystem.major != null) {
-                                    sb.append(uaClient.operatingSystem.major);
-                                    if (uaClient.operatingSystem.minor != null) {
-                                        sb.append(".").append(uaClient.operatingSystem.minor);
-                                        if (uaClient.operatingSystem.patch != null) {
-                                            sb.append(".").append(uaClient.operatingSystem.patch);
-                                            if (uaClient.operatingSystem.build != null) {
-                                                sb.append(".").append(uaClient.operatingSystem.build);
-                                            }
-                                        }
-                                    }
-                                    osDetails.put("version", sb.toString());
-                                    osDetails.put("full", uaClient.operatingSystem.name + " " + sb.toString());
-                                }
-                                uaDetails.put("os", osDetails);
-                            }
-                        }
-                        break;
-                    case DEVICE:
-                        Map<String, String> deviceDetails = new HashMap<>(1);
-                        if (uaClient.device != null && uaClient.device.name != null) {
-                            deviceDetails.put("name", uaClient.device.name);
-                        } else {
-                            deviceDetails.put("name", "Other");
-                        }
-                        uaDetails.put("device", deviceDetails);
-                        break;
                 }
             }
-        } else {
-            // Deprecated format, removed in 8.0
-            for (Property property : this.properties) {
-                switch (property) {
-                    case NAME:
+            if (propertyNames != null) {
+                    "regex file [" + regexFilename + "] doesn't exist (has to exist at node startup)"
+        public UserAgentProcessor create(
+                throw new IllegalArgumentException(
+    ) {
+                        + "format is deprecated and will be removed in 3.0, set to true or remove to use the non-deprecated format"
+                }
+        OS_MINOR,
+    public UserAgentProcessor(
+        OS_NAME,
                         if (uaClient.userAgent != null && uaClient.userAgent.name != null) {
-                            uaDetails.put("name", uaClient.userAgent.name);
-                        } else {
+                        uaDetails.put("original", userAgent);
+        DEVICE,
+                TYPE,
+ * You may obtain a copy of the License at
+                            uaDetails.put("os_major", uaClient.operatingSystem.major);
+        this.parser = parser;
+import java.util.Set;
+                        }
+        @Deprecated
+                        if (uaClient.operatingSystem != null && uaClient.operatingSystem.minor != null) {
+            }
                             uaDetails.put("name", "Other");
-                        }
-                        break;
-                    case MAJOR:
-                        if (uaClient.userAgent != null && uaClient.userAgent.major != null) {
-                            uaDetails.put("major", uaClient.userAgent.major);
-                        }
-                        break;
-                    case MINOR:
-                        if (uaClient.userAgent != null && uaClient.userAgent.minor != null) {
-                            uaDetails.put("minor", uaClient.userAgent.minor);
-                        }
-                        break;
-                    case PATCH:
-                        if (uaClient.userAgent != null && uaClient.userAgent.patch != null) {
-                            uaDetails.put("patch", uaClient.userAgent.patch);
-                        }
-                        break;
-                    case BUILD:
-                        if (uaClient.userAgent != null && uaClient.userAgent.build != null) {
-                            uaDetails.put("build", uaClient.userAgent.build);
-                        }
-                        break;
+    private final boolean ignoreMissing;
+import static org.opensearch.ingest.ConfigurationUtils.readOptionalList;
+ *
+}
+        if (operatingSystem.major != null) {
+        String targetField,
+        this.field = field;
+            String targetField = readStringProperty(TYPE, processorTag, config, "target_field", "user_agent");
+        Details uaClient = parser.parse(userAgent);
+        }
                     case OS:
-                        if (uaClient.operatingSystem != null) {
-                            uaDetails.put("os", buildFullOSName(uaClient.operatingSystem));
-                        } else {
-                            uaDetails.put("os", "Other");
-                        }
-
-                        break;
-                    case OS_NAME:
+        String tag,
+        String userAgent = ingestDocument.getFieldValue(field, String.class, ignoreMissing);
+                    processorTag,
                         if (uaClient.operatingSystem != null && uaClient.operatingSystem.name != null) {
-                            uaDetails.put("os_name", uaClient.operatingSystem.name);
+    private final boolean useECS;
+ * SPDX-License-Identifier: Apache-2.0
+                                        if (uaClient.operatingSystem.patch != null) {
+    public static final class Factory implements Processor.Factory {
+    public boolean isUseECS() {
+ * Licensed to Elasticsearch under one or more contributor
+    @Override
+                            uaDetails.put("name", uaClient.userAgent.name);
+                if (field.isEnumConstant() && field.isAnnotationPresent(Deprecated.class)) {
+        return field;
+                            uaDetails.put("os", "Other");
+        // Deprecated in 6.7 (superceded by just using OS), to be removed in 8.0
+                                uaDetails.put("os", osDetails);
+    boolean isIgnoreMissing() {
+        }
+                    case BUILD:
+        return ignoreMissing;
+                        if (uaClient.device != null && uaClient.device.name != null) {
+    private final String targetField;
+                    case NAME:
+                                    version.append(".").append(uaClient.userAgent.patch);
+        private final Map<String, UserAgentParser> userAgentParsers;
+        MAJOR,
+        // Deprecated in 6.7 (superceded by VERSION), to be removed in 8.0
+                        break;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                        break;
+                                if (uaClient.operatingSystem.major != null) {
+    private final String field;
+    }
+            for (Property property : this.properties) {
+        } else {
+                    case MAJOR:
+                    case OS_NAME:
+        boolean useECS
+                properties = EnumSet.noneOf(Property.class);
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+    /** To maintain compatibility with logstash-filter-useragent */
+        super(tag, description);
+        OS_MAJOR,
+        }
+                    final String key = "user_agent_processor_property_" + propertyName.replaceAll("[^\\w_]+", "_");
+                    "illegal property value ["
+                IngestUserAgentModulePlugin.DEFAULT_PARSER_NAME
+        }
+                            Map<String, String> osDetails = new HashMap<>(3);
+    UserAgentParser getUaParser() {
+                Property value = valueOf(propertyName.toUpperCase(Locale.ROOT));
+                        }
+ * compatible open source license.
+                            uaDetails.put("device", uaClient.device.name);
+                                        sb.append(".").append(uaClient.operatingSystem.minor);
+            if (useECS == false) {
+                    case OS_MINOR:
+                            if (uaClient.userAgent.minor != null) {
+    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(UserAgentProcessor.class);
+                                osDetails.put("name", uaClient.operatingSystem.name);
+    String getTargetField() {
+            return ingestDocument;
+                                        version.append(".").append(uaClient.userAgent.build);
+ * not use this file except in compliance with the License.
+                for (String fieldName : propertyNames) {
+            UserAgentParser parser = userAgentParsers.get(regexFilename);
+                            if (uaClient.operatingSystem.name != null) {
+                                version.append(".").append(uaClient.userAgent.minor);
+                        break;
+                    deprecationLogger.deprecate(key, "the [{}] property is deprecated for the user-agent processor", propertyName);
+                        break;
+                                        }
+                        break;
+            } catch (IllegalArgumentException e) {
+                        }
+                            }
+    public String getType() {
+                                if (uaClient.userAgent.patch != null) {
+                if (DEPRECATED_PROPERTIES.contains(value)) {
+import java.util.Map;
+                            }
+                        }
+ * this work for additional information regarding copyright
+                    deprecated.add(valueOf(field.getName()));
+                        uaDetails.put("device", deviceDetails);
+ * this file be licensed under the Apache-2.0 license or a
+                "regex_file",
+        ORIGINAL,
+                                }
+package org.opensearch.ingest.useragent;
+    private final UserAgentParser parser;
+    }
+                        break;
+                                            if (uaClient.operatingSystem.build != null) {
+ * GitHub history for details.
+                                            }
+                        break;
+                            uaDetails.put("os_minor", uaClient.operatingSystem.minor);
+                properties = EnumSet.allOf(Property.class);
+        UserAgentParser parser,
+            String processorTag,
+                        if (uaClient.userAgent != null && uaClient.userAgent.minor != null) {
+                        sb.append(operatingSystem.build);
+        if (userAgent == null && ignoreMissing) {
+                            uaDetails.put("major", uaClient.userAgent.major);
+                        break;
                         } else {
+                        if (uaClient.userAgent != null && uaClient.userAgent.build != null) {
+    public IngestDocument execute(IngestDocument ingestDocument) {
+ * The OpenSearch Contributors require contributions made to
+                        throw newConfigurationException(TYPE, processorTag, "properties", e.getMessage());
+        @Deprecated
+ */
+                                StringBuilder sb = new StringBuilder();
+import java.util.HashMap;
+                        if (uaClient.operatingSystem != null && uaClient.operatingSystem.major != null) {
+                        if (uaClient.operatingSystem != null) {
+        Map<String, Object> uaDetails = new HashMap<>();
+        return ingestDocument;
+            }
+                        properties.add(Property.parseProperty(fieldName));
+        }
+                return value;
+        public Factory(Map<String, UserAgentParser> userAgentParsers) {
+            return null;
+            String description,
+                sb.append(".");
+                }
+        StringBuilder sb = new StringBuilder(operatingSystem.name);
+                        if (uaClient.userAgent != null && uaClient.userAgent.major != null) {
+                        }
+    }
+    }
+                    }
+                );
+                        } else {
+    private final Set<Property> properties;
                             uaDetails.put("os_name", "Other");
+ * license agreements. See the NOTICE file distributed with
+/*
+                        + propertyName
+        this.properties = properties;
+            }
+            return new UserAgentProcessor(processorTag, description, field, targetField, parser, properties, ignoreMissing, useECS);
+                        break;
+                        break;
+                        if (uaClient.operatingSystem != null) {
+        @Deprecated
+    }
+            Map<String, Object> config
+        return useECS;
+    }
+        BUILD, // Same deprecated as OS_* above
+            if (operatingSystem.minor != null) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        Set<Property> properties,
+import org.opensearch.ingest.useragent.UserAgentParser.Details;
+import org.opensearch.ingest.AbstractProcessor;
+            boolean useECS = readBooleanProperty(TYPE, processorTag, config, "ecs", true);
+                if (operatingSystem.patch != null) {
+        boolean ignoreMissing,
+    Set<Property> getProperties() {
+                    case VERSION:
+ */
+                        if (uaClient.userAgent != null && uaClient.userAgent.patch != null) {
+                        if (uaClient.userAgent != null && uaClient.userAgent.major != null) {
+                            version.append(uaClient.userAgent.major);
+                            uaDetails.put("minor", uaClient.userAgent.minor);
+            for (Field field : Property.class.getFields()) {
+ *
+/*
+                    case NAME:
+                            deviceDetails.put("name", "Other");
+        PATCH,
+import org.opensearch.ingest.Processor;
+        return properties;
+                }
+import static org.opensearch.ingest.ConfigurationUtils.newConfigurationException;
+                        if (uaClient.userAgent != null && uaClient.userAgent.name != null) {
+                        } else {
+                        }
+            } else {
+        ) throws Exception {
+            String field = readStringProperty(TYPE, processorTag, config, "field");
+ * software distributed under the License is distributed on an
+ * Unless required by applicable law or agreed to in writing,
+                    "ecs_false_non_common_schema",
+        return sb.toString();
+            String regexFilename = readStringProperty(
+import java.util.Locale;
+                                            sb.append(".").append(uaClient.operatingSystem.patch);
+import java.util.Arrays;
+        @Deprecated
+            Set<Property> deprecated = new HashSet<>();
+            throw new IllegalArgumentException("field [" + field + "] is null, cannot parse user-agent.");
+        return parser;
+    }
+                            uaDetails.put("version", version.toString());
+import java.util.HashSet;
+    String getField() {
+            boolean ignoreMissing = readBooleanProperty(TYPE, processorTag, config, "ignore_missing", false);
+        VERSION;
+                                    sb.append(uaClient.operatingSystem.major);
+                        }
+                                    }
+                    case MINOR:
+                            uaDetails.put("name", uaClient.userAgent.name);
+import org.opensearch.ingest.IngestDocument;
+            sb.append(" ");
+    private String buildFullOSName(VersionedName operatingSystem) {
+    }
+                        } else {
+                    case ORIGINAL:
+        private static Set<Property> DEPRECATED_PROPERTIES;
+        String description,
+                                                sb.append(".").append(uaClient.operatingSystem.build);
+        MINOR,
+                            uaDetails.put("patch", uaClient.userAgent.patch);
+import org.opensearch.common.logging.DeprecationLogger;
+                processorTag,
+import org.opensearch.ingest.useragent.UserAgentParser.VersionedName;
+                            uaDetails.put("os_name", uaClient.operatingSystem.name);
+                    if (operatingSystem.build != null) {
+        @Deprecated
+                        StringBuilder version = new StringBuilder();
+                switch (property) {
+        } else if (userAgent == null) {
+                        + Arrays.toString(EnumSet.allOf(Property.class).toArray())
+                        break;
+                                    if (uaClient.operatingSystem.minor != null) {
+        String field,
+        if (operatingSystem == null || operatingSystem.name == null) {
+                        Map<String, String> deviceDetails = new HashMap<>(1);
+                    } catch (IllegalArgumentException e) {
+                            uaDetails.put("os", buildFullOSName(uaClient.operatingSystem));
+        OS,
+                        if (uaClient.device != null && uaClient.device.name != null) {
+            if (parser == null) {
+        public static Property parseProperty(String propertyName) {
+                        sb.append(".");
+                    "setting [ecs] to false for non-common schema "
+                config,
+        static {
+            List<String> propertyNames = readOptionalList(TYPE, processorTag, config, "properties");
+public class UserAgentProcessor extends AbstractProcessor {
+        @Deprecated
+            }
+        return TYPE;
+    }
+                        }
+                            uaDetails.put("build", uaClient.userAgent.build);
+                    sb.append(operatingSystem.patch);
+                        }
+                }
+                        } else {
+            for (Property property : this.properties) {
                         }
                         break;
                     case OS_MAJOR:
-                        if (uaClient.operatingSystem != null && uaClient.operatingSystem.major != null) {
-                            uaDetails.put("os_major", uaClient.operatingSystem.major);
-                        }
-                        break;
-                    case OS_MINOR:
-                        if (uaClient.operatingSystem != null && uaClient.operatingSystem.minor != null) {
-                            uaDetails.put("os_minor", uaClient.operatingSystem.minor);
-                        }
-                        break;
-                    case DEVICE:
-                        if (uaClient.device != null && uaClient.device.name != null) {
-                            uaDetails.put("device", uaClient.device.name);
-                        } else {
-                            uaDetails.put("device", "Other");
-                        }
-                        break;
-                }
-            }
-        }
-
-        ingestDocument.setFieldValue(targetField, uaDetails);
-        return ingestDocument;
-    }
-
-    /** To maintain compatibility with logstash-filter-useragent */
-    private String buildFullOSName(VersionedName operatingSystem) {
-        if (operatingSystem == null || operatingSystem.name == null) {
-            return null;
-        }
-
-        StringBuilder sb = new StringBuilder(operatingSystem.name);
-
-        if (operatingSystem.major != null) {
-            sb.append(" ");
-            sb.append(operatingSystem.major);
-
-            if (operatingSystem.minor != null) {
-                sb.append(".");
-                sb.append(operatingSystem.minor);
-
-                if (operatingSystem.patch != null) {
-                    sb.append(".");
-                    sb.append(operatingSystem.patch);
-
-                    if (operatingSystem.build != null) {
-                        sb.append(".");
-                        sb.append(operatingSystem.build);
-                    }
-                }
-            }
-        }
-
-        return sb.toString();
-    }
-
     @Override
-    public String getType() {
-        return TYPE;
-    }
-
-    String getField() {
-        return field;
-    }
-
-    String getTargetField() {
-        return targetField;
-    }
-
-    Set<Property> getProperties() {
-        return properties;
-    }
-
-    UserAgentParser getUaParser() {
-        return parser;
-    }
-
-    public boolean isUseECS() {
-        return useECS;
-    }
-
-    public static final class Factory implements Processor.Factory {
-
-        private final Map<String, UserAgentParser> userAgentParsers;
-
-        public Factory(Map<String, UserAgentParser> userAgentParsers) {
-            this.userAgentParsers = userAgentParsers;
-        }
-
-        @Override
-        public UserAgentProcessor create(
-            Map<String, Processor.Factory> factories,
-            String processorTag,
-            String description,
-            Map<String, Object> config
-        ) throws Exception {
-            String field = readStringProperty(TYPE, processorTag, config, "field");
-            String targetField = readStringProperty(TYPE, processorTag, config, "target_field", "user_agent");
-            String regexFilename = readStringProperty(
-                TYPE,
-                processorTag,
-                config,
-                "regex_file",
-                IngestUserAgentModulePlugin.DEFAULT_PARSER_NAME
-            );
-            List<String> propertyNames = readOptionalList(TYPE, processorTag, config, "properties");
-            boolean ignoreMissing = readBooleanProperty(TYPE, processorTag, config, "ignore_missing", false);
-            boolean useECS = readBooleanProperty(TYPE, processorTag, config, "ecs", true);
-
-            UserAgentParser parser = userAgentParsers.get(regexFilename);
-            if (parser == null) {
-                throw newConfigurationException(
                     TYPE,
-                    processorTag,
-                    "regex_file",
-                    "regex file [" + regexFilename + "] doesn't exist (has to exist at node startup)"
-                );
-            }
-
-            final Set<Property> properties;
-            if (propertyNames != null) {
-                properties = EnumSet.noneOf(Property.class);
-                for (String fieldName : propertyNames) {
-                    try {
-                        properties.add(Property.parseProperty(fieldName));
-                    } catch (IllegalArgumentException e) {
-                        throw newConfigurationException(TYPE, processorTag, "properties", e.getMessage());
-                    }
-                }
-            } else {
-                properties = EnumSet.allOf(Property.class);
-            }
-
-            if (useECS == false) {
-                deprecationLogger.deprecate(
-                    "ecs_false_non_common_schema",
-                    "setting [ecs] to false for non-common schema "
-                        + "format is deprecated and will be removed in 3.0, set to true or remove to use the non-deprecated format"
-                );
-            }
-
-            return new UserAgentProcessor(processorTag, description, field, targetField, parser, properties, ignoreMissing, useECS);
-        }
-    }
-
-    enum Property {
-
+                    case DEVICE:
+ * under the License.
+                        }
+        this.ignoreMissing = ignoreMissing;
+        this.useECS = useECS;
+            );
         NAME,
-        // Deprecated in 6.7 (superceded by VERSION), to be removed in 8.0
-        @Deprecated
-        MAJOR,
-        @Deprecated
-        MINOR,
-        @Deprecated
-        PATCH,
-        OS,
-        // Deprecated in 6.7 (superceded by just using OS), to be removed in 8.0
-        @Deprecated
-        OS_NAME,
-        @Deprecated
-        OS_MAJOR,
-        @Deprecated
-        OS_MINOR,
-        DEVICE,
-        @Deprecated
-        BUILD, // Same deprecated as OS_* above
-        ORIGINAL,
-        VERSION;
-
-        private static Set<Property> DEPRECATED_PROPERTIES;
-
-        static {
-            Set<Property> deprecated = new HashSet<>();
-            for (Field field : Property.class.getFields()) {
-                if (field.isEnumConstant() && field.isAnnotationPresent(Deprecated.class)) {
-                    deprecated.add(valueOf(field.getName()));
+        @Override
+            this.userAgentParsers = userAgentParsers;
+import java.lang.reflect.Field;
                 }
+        ingestDocument.setFieldValue(targetField, uaDetails);
             }
+            // Parse the user agent in the ECS (Elastic Common Schema) format
             DEPRECATED_PROPERTIES = deprecated;
-        }
-
-        public static Property parseProperty(String propertyName) {
-            try {
-                Property value = valueOf(propertyName.toUpperCase(Locale.ROOT));
-                if (DEPRECATED_PROPERTIES.contains(value)) {
-                    final String key = "user_agent_processor_property_" + propertyName.replaceAll("[^\\w_]+", "_");
-                    deprecationLogger.deprecate(key, "the [{}] property is deprecated for the user-agent processor", propertyName);
-                }
-                return value;
-            } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException(
-                    "illegal property value ["
-                        + propertyName
-                        + "]. valid values are "
-                        + Arrays.toString(EnumSet.allOf(Property.class).toArray())
-                );
+                                    osDetails.put("full", uaClient.operatingSystem.name + " " + sb.toString());
+                                    }
+                            uaDetails.put("device", "Other");
+            final Set<Property> properties;
+import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
             }
-        }
+        return targetField;
+/*
     }
-}
+            }
+                switch (property) {
+    }
+                    sb.append(".");
+                        + "]. valid values are "
+            Map<String, Processor.Factory> factories,
+                    "regex_file",
+            // Deprecated format, removed in 8.0
+        }
+ */
+                    case DEVICE:
+                                    if (uaClient.userAgent.build != null) {
+    public static final String TYPE = "user_agent";
+import java.util.EnumSet;
+    enum Property {
+                deprecationLogger.deprecate(
+import static org.opensearch.ingest.ConfigurationUtils.readBooleanProperty;
+                    case OS:
+                                }
+                            uaDetails.put("name", "Other");
+ * ownership. Elasticsearch licenses this file to you under
+        @Deprecated
+                            deviceDetails.put("name", uaClient.device.name);
+                );
+                        break;
+                        break;
+        this.targetField = targetField;
+                                    osDetails.put("version", sb.toString());
+import java.util.List;
+            try {
+                throw newConfigurationException(
+                        }
+                        } else {
+                        }
+                    try {
+                    }
+        }
+                        break;
+ * Modifications Copyright OpenSearch Contributors. See
+            sb.append(operatingSystem.major);
+ *
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+                        }
+    }

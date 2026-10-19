@@ -1,469 +1,420 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.http;
-
-import org.opensearch.Build;
-import org.opensearch.common.bytes.ReleasableBytesReference;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.io.stream.ReleasableBytesStreamOutput;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.MockBigArrays;
-import org.opensearch.common.util.MockPageCacheRecycler;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.util.ByteArray;
-import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.rest.BytesRestResponse;
-import org.opensearch.rest.RestChannel;
-import org.opensearch.rest.RestRequest;
-import org.opensearch.rest.RestResponse;
-import org.opensearch.tasks.Task;
-import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.junit.After;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.nio.channels.ClosedChannelException;
-import java.nio.charset.StandardCharsets;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-import org.mockito.ArgumentCaptor;
-
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.nullValue;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-
-public class DefaultRestChannelTests extends OpenSearchTestCase {
-
-    private ThreadPool threadPool;
-    private MockBigArrays bigArrays;
-    private HttpChannel httpChannel;
-
-    @Before
-    public void setup() {
-        httpChannel = mock(HttpChannel.class);
-        threadPool = new TestThreadPool("test");
-        bigArrays = new MockBigArrays(new MockPageCacheRecycler(Settings.EMPTY), new NoneCircuitBreakerService());
-    }
-
-    @After
-    public void shutdown() {
-        if (threadPool != null) {
-            threadPool.shutdownNow();
-        }
-    }
-
-    public void testResponse() {
-        final TestHttpResponse response = executeRequest(Settings.EMPTY, "request-host");
-        assertThat(response.content(), equalTo(new TestRestResponse().content()));
-    }
-
-    public void testCorsEnabledWithoutAllowOrigins() {
-        // Set up an HTTP transport with only the CORS enabled setting
-        Settings settings = Settings.builder().put(HttpTransportSettings.SETTING_CORS_ENABLED.getKey(), true).build();
-        TestHttpResponse response = executeRequest(settings, "request-host");
-        assertThat(response.headers().get(CorsHandler.ACCESS_CONTROL_ALLOW_ORIGIN), nullValue());
-    }
-
-    public void testCorsEnabledWithAllowOrigins() {
-        final String originValue = "remote-host";
-        final String pattern;
-        if (randomBoolean()) {
+ *
             pattern = originValue;
-        } else {
-            pattern = "/remote-hos.+/";
+    }
+        DefaultRestChannel channel = new DefaultRestChannel(
+            verify(httpChannel, times(0)).close();
+ */
+        ActionListener<Void> listener = listenerCaptor.getValue();
+        assertEquals(customHeaderValue, headers.get(customHeader).get(0));
+            }
+            handlingSettings,
+            request,
+            httpChannel,
+    }
+    }
+    }
+            threadPool.getThreadContext(),
+import org.opensearch.test.OpenSearchTestCase;
         }
-        // create an HTTP transport with CORS enabled and allow origin configured
-        Settings settings = Settings.builder()
+        DefaultRestChannel channel = new DefaultRestChannel(
+ *
+        }
+            httpChannel,
+                builder.startObject().endObject();
+        final String httpConnectionHeaderValue = close ? DefaultRestChannel.CLOSE : DefaultRestChannel.KEEP_ALIVE;
+                throw new IllegalArgumentException("test");
+        // Set up an HTTP transport with only the CORS enabled setting
+        DefaultRestChannel channel = new DefaultRestChannel(
+        }
+        assertThat(headers.get(DefaultRestChannel.SET_COOKIE), hasItem("cookie2"));
+import java.io.IOException;
+        final TestHttpResponse response = executeRequest(Settings.EMPTY, "request-host");
+        if (randomBoolean()) {
             .put(HttpTransportSettings.SETTING_CORS_ENABLED.getKey(), true)
-            .put(HttpTransportSettings.SETTING_CORS_ALLOW_ORIGIN.getKey(), pattern)
-            .build();
-        TestHttpResponse response = executeRequest(settings, originValue, "https://127.0.0.1");
+            httpChannel,
+        // OpenSearchTestCase#after will invoke ensureAllArraysAreReleased which will fail if the response content was not released
+        Class<ActionListener<Void>> listenerClass = (Class<ActionListener<Void>>) (Class) ActionListener.class;
         assertEquals(originValue, response.headers().get(CorsHandler.ACCESS_CONTROL_ALLOW_ORIGIN).get(0));
-        assertThat(response.headers().get(CorsHandler.VARY), containsInAnyOrder(CorsHandler.ORIGIN));
-    }
-
-    public void testCorsEnabledWithAllowOriginsAndAllowCredentials() {
-        final String originValue = "remote-host";
+        if (close) {
+                RestRequest.Method.GET,
         // create an HTTP transport with CORS enabled and allow origin configured
-        Settings settings = Settings.builder()
-            .put(HttpTransportSettings.SETTING_CORS_ENABLED.getKey(), true)
-            .put(HttpTransportSettings.SETTING_CORS_ALLOW_ORIGIN.getKey(), CorsHandler.ANY_ORIGIN)
-            .put(HttpTransportSettings.SETTING_CORS_ALLOW_CREDENTIALS.getKey(), true)
-            .build();
-        TestHttpResponse response = executeRequest(settings, originValue, "https://127.0.0.1");
-        assertEquals(originValue, response.headers().get(CorsHandler.ACCESS_CONTROL_ALLOW_ORIGIN).get(0));
-        assertEquals(CorsHandler.ORIGIN, response.headers().get(CorsHandler.VARY).get(0));
-        assertEquals("true", response.headers().get(CorsHandler.ACCESS_CONTROL_ALLOW_CREDENTIALS).get(0));
-    }
-
+        httpRequest.getHeaders().put(CorsHandler.HOST, Collections.singletonList(host));
+        public RestStatus status() {
+            httpChannel,
+        } else {
+    public void shutdown() {
+    private ThreadPool threadPool;
+    private TestHttpResponse executeRequest(final Settings settings, final String originValue, final String host) {
+        }
+    @After
+        );
     public void testThatAnyOriginWorks() {
-        final String originValue = CorsHandler.ANY_ORIGIN;
-        Settings settings = Settings.builder()
-            .put(HttpTransportSettings.SETTING_CORS_ENABLED.getKey(), true)
-            .put(HttpTransportSettings.SETTING_CORS_ALLOW_ORIGIN.getKey(), originValue)
-            .build();
-        TestHttpResponse response = executeRequest(settings, originValue, "https://127.0.0.1");
-        assertEquals(originValue, response.headers().get(CorsHandler.ACCESS_CONTROL_ALLOW_ORIGIN).get(0));
-        assertNull(response.headers().get(CorsHandler.VARY));
-    }
-
+import org.mockito.ArgumentCaptor;
+            httpRequest,
+        private final BytesReference content;
+        }
+        return responseCaptor.getValue();
+            httpRequest,
+import static org.hamcrest.Matchers.hasItem;
+        final RestRequest request = RestRequest.request(xContentRegistry(), httpRequest, httpChannel);
+    private static class TestRestResponse extends RestResponse {
+        );
     public void testHeadersSet() {
-        Settings settings = Settings.builder().build();
-        final TestHttpRequest httpRequest = new TestHttpRequest(HttpRequest.HttpVersion.HTTP_1_1, RestRequest.Method.GET, "/");
+import org.junit.After;
+            listener.onFailure(new ClosedChannelException());
+        } else {
+        if (originValue != null) {
+            .put(HttpTransportSettings.SETTING_CORS_ALLOW_CREDENTIALS.getKey(), true)
+            null
+            request,
+        channel.sendResponse(response);
+        final String customHeader = "custom-header";
+    public void testUnsupportedHttpMethod() {
+import org.opensearch.rest.RestChannel;
+            pattern = "/remote-hos.+/";
+                // do something builder
+            request,
+        TestHttpResponse nioResponse = responseCaptor.getValue();
+ * Licensed to Elasticsearch under one or more contributor
+            null
+        resp.addHeader(customHeader, customHeaderValue);
+ * specific language governing permissions and limitations
+        HttpRequest httpRequest = new TestHttpRequest(HttpRequest.HttpVersion.HTTP_1_1, RestRequest.Method.GET, "/");
+        final BytesRestResponse response = new BytesRestResponse(
+    public void testCookiesSet() {
+        final String pattern;
+import static org.hamcrest.Matchers.instanceOf;
+    private HttpChannel httpChannel;
+        HttpHandlingSettings handlingSettings = HttpHandlingSettings.fromSettings(settings);
+            threadPool.getThreadContext(),
+        if (randomBoolean()) {
+ * Unless required by applicable law or agreed to in writing,
+        Settings settings = Settings.builder().put(HttpTransportSettings.SETTING_CORS_ENABLED.getKey(), true).build();
+        assertEquals("abc", headers.get(Task.X_OPAQUE_ID).get(0));
+            listener.onResponse(null);
+        }
+            null
+        bigArrays = new MockBigArrays(new MockPageCacheRecycler(Settings.EMPTY), new NoneCircuitBreakerService());
+ * KIND, either express or implied.  See the License for the
+ * this file be licensed under the Apache-2.0 license or a
+            request.getHttpRequest(),
+        assertEquals(Integer.toString(resp.content().length()), headers.get(DefaultRestChannel.CONTENT_LENGTH).get(0));
+import java.util.Objects;
+import org.opensearch.common.io.stream.ReleasableBytesStreamOutput;
+        assertNull(headers.get("non-existent-header"));
+            verify(httpChannel, times(0)).close();
+        ArgumentCaptor<TestHttpResponse> responseCaptor = ArgumentCaptor.forClass(TestHttpResponse.class);
+        Class<ActionListener<Void>> listenerClass = (Class<ActionListener<Void>>) (Class) ActionListener.class;
+        public BytesReference content() {
+        if (close) {
+    }
+        } else {
+            threadPool.shutdownNow();
+import static org.hamcrest.Matchers.nullValue;
+import org.opensearch.common.util.MockPageCacheRecycler;
+    }
+            CorsHandler.fromSettings(settings),
+        final BigArrays bigArrays = new MockBigArrays(new MockPageCacheRecycler(Settings.EMPTY), new NoneCircuitBreakerService());
+        if (randomBoolean()) {
+            listener.onFailure(new ClosedChannelException());
+        // ensure we have reserved bytes
+        }
+    }
+/*
+            request,
+import static org.mockito.Mockito.any;
+/*
+        DefaultRestChannel channel = new DefaultRestChannel(
+    public void testConnectionClose() throws Exception {
+            JsonXContent.contentBuilder().startObject().endObject()
+    private MockBigArrays bigArrays;
+            threadPool.getThreadContext(),
+import org.opensearch.rest.RestRequest;
+            httpRequest,
+            httpRequest.getHeaders().put(CorsHandler.ORIGIN, Collections.singletonList(originValue));
+                httpRequest.getHeaders().put(DefaultRestChannel.CONNECTION, Collections.singletonList(DefaultRestChannel.CLOSE));
+    public void testCorsEnabledWithAllowOrigins() {
+        assertNull(response.headers().get(CorsHandler.VARY));
+            verify(httpChannel, times(0)).close();
+        verify(httpChannel).sendResponse(any(), listenerCaptor.capture());
+import org.opensearch.common.util.BigArrays;
+            @Override
+ * license agreements. See the NOTICE file distributed with
+            handlingSettings,
+        final BytesReference content = new ReleasableBytesReference(BytesReference.fromByteArray(byteArray, 0), byteArray);
+import static org.mockito.Mockito.mock;
+        );
+            httpRequest = new TestHttpRequest(HttpRequest.HttpVersion.HTTP_1_1, RestRequest.Method.GET, "/");
+}
+            .build();
+        ArgumentCaptor<TestHttpResponse> responseCaptor = ArgumentCaptor.forClass(TestHttpResponse.class);
+        TestRestResponse(final RestStatus status, final BytesReference content) {
+            .put(HttpTransportSettings.SETTING_CORS_ALLOW_ORIGIN.getKey(), pattern)
+        ArgumentCaptor<TestHttpResponse> responseCaptor = ArgumentCaptor.forClass(TestHttpResponse.class);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        httpChannel = mock(HttpChannel.class);
+        channel.sendResponse(new TestRestResponse(RestStatus.METHOD_NOT_ALLOWED, content));
+        final RestRequest request = RestRequest.request(xContentRegistry(), httpRequest, httpChannel);
+                () -> { throw new IllegalArgumentException("Can't parse HTTP version"); },
+ * software distributed under the License is distributed on an
+        private final RestStatus status;
+ * Modifications Copyright OpenSearch Contributors. See
+        channel.sendResponse(resp);
+            if (close) {
+        final RestRequest request = RestRequest.request(xContentRegistry(), new TestHttpRequest(httpVersion, null, "/") {
+        }, httpChannel);
+            null
+import org.opensearch.common.util.MockBigArrays;
+            verify(httpChannel, times(1)).close();
+    @SuppressWarnings("unchecked")
+            request.getHttpRequest(),
+            }
+import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
+        // inspect what was written
+import org.opensearch.common.lease.Releasable;
+    }
+import org.opensearch.common.settings.Settings;
+            .put(HttpTransportSettings.SETTING_CORS_ENABLED.getKey(), true)
+            }
+        request.getHttpRequest().getHeaders().put(DefaultRestChannel.CONNECTION, Collections.singletonList(httpConnectionHeaderValue));
+import static org.hamcrest.Matchers.containsInAnyOrder;
+        } else {
+        if (randomBoolean()) {
+        }
+            HttpHandlingSettings.fromSettings(Settings.EMPTY),
+        verify(httpChannel, atLeastOnce()).sendResponse(responseCaptor.capture(), any());
+            threadPool.getThreadContext(),
         httpRequest.getHeaders().put(Task.X_OPAQUE_ID, Collections.singletonList("abc"));
+    }
+        Settings settings = Settings.builder().put(HttpTransportSettings.SETTING_HTTP_RESET_COOKIES.getKey(), true).build();
+import static org.mockito.Mockito.times;
+/*
+        assertEquals(originValue, response.headers().get(CorsHandler.ACCESS_CONTROL_ALLOW_ORIGIN).get(0));
+        expectThrows(IllegalArgumentException.class, () -> channel.sendResponse(new TestRestResponse(RestStatus.OK, content)));
+        verify(httpChannel).sendResponse(responseCaptor.capture(), any());
+        final HttpRequest.HttpVersion httpVersion = close ? HttpRequest.HttpVersion.HTTP_1_0 : HttpRequest.HttpVersion.HTTP_1_1;
+import org.opensearch.rest.RestResponse;
+        channel.sendResponse(new TestRestResponse());
+ * ownership. Elasticsearch licenses this file to you under
+        final String originValue = "remote-host";
+        verify(httpChannel).sendResponse(any(), listenerCaptor.capture());
+ * under the License.
+        HttpHandlingSettings httpHandlingSettings = HttpHandlingSettings.fromSettings(settings);
+    }
+        // send a response
+        }
+        );
+        final boolean close = brokenRequest || randomBoolean();
+            httpChannel,
+        TestRestResponse resp = new TestRestResponse();
+        } else {
+import org.opensearch.core.common.util.ByteArray;
+        } else {
+import static org.hamcrest.Matchers.equalTo;
+    @SuppressWarnings("unchecked")
+        if (randomBoolean()) {
+        final ByteArray byteArray = bigArrays.newByteArray(0, false);
+        Settings settings = Settings.builder()
+        );
+        // create an HTTP transport with CORS enabled and allow origin configured
+            .put(HttpTransportSettings.SETTING_CORS_ALLOW_ORIGIN.getKey(), CorsHandler.ANY_ORIGIN)
+import java.nio.channels.ClosedChannelException;
+    public void testCorsEnabledWithoutAllowOrigins() {
+        final RestRequest request = RestRequest.request(xContentRegistry(), httpRequest, httpChannel);
+        verify(httpChannel).sendResponse(responseCaptor.capture(), any());
+        );
+public class DefaultRestChannelTests extends OpenSearchTestCase {
+import java.nio.charset.StandardCharsets;
+            httpRequest,
+    public void testResponse() {
+        assertThat(response.headers().get(CorsHandler.ACCESS_CONTROL_ALLOW_ORIGIN), nullValue());
+        assertEquals(CorsHandler.ORIGIN, response.headers().get(CorsHandler.VARY).get(0));
+            BytesStreamOutput out = channel.bytesOutput();
+            @Override
+ * this work for additional information regarding copyright
+ * SPDX-License-Identifier: Apache-2.0
+        final Settings settings = Settings.builder().build();
+    private TestHttpResponse executeRequest(final Settings settings, final String host) {
+        TestHttpResponse response = executeRequest(settings, originValue, "https://127.0.0.1");
+                throw new IllegalArgumentException("test");
+            listener.onResponse(null);
+    public void testCorsEnabledWithAllowOriginsAndAllowCredentials() {
+        DefaultRestChannel channel = new DefaultRestChannel(
+            bigArrays,
+    public void testReleaseInListener() throws IOException {
+        ArgumentCaptor<ActionListener<Void>> listenerCaptor = ArgumentCaptor.forClass(listenerClass);
+        Map<String, List<String>> headers = nioResponse.headers();
+            CorsHandler.fromSettings(Settings.EMPTY),
+            "OpenSearch/" + Build.CURRENT.getQualifiedVersion() + " (" + Build.CURRENT.getDistribution() + ")",
+            bigArrays,
+        TestHttpResponse response = executeRequest(settings, "request-host");
+    public void setup() {
+    @Before
+import static org.hamcrest.Matchers.not;
+    }
+        if (close) {
+        if (brokenRequest) {
+        );
+        channel.sendResponse(new TestRestResponse());
+import static org.mockito.Mockito.verify;
+        // inspect what was written
+import org.opensearch.core.rest.RestStatus;
+        }, httpChannel);
+            this.status = Objects.requireNonNull(status);
+            public HttpResponse createResponse(RestStatus status, BytesReference content) {
+        final HttpRequest.HttpVersion httpVersion = close ? HttpRequest.HttpVersion.HTTP_1_0 : HttpRequest.HttpVersion.HTTP_1_1;
+            httpRequest,
+            null
+        }
+ */
+        final Settings settings = Settings.builder().build();
+ *
+            bigArrays,
+            return "text";
+        HttpHandlingSettings handlingSettings = HttpHandlingSettings.fromSettings(settings);
+        final BigArrays bigArrays = new MockBigArrays(new MockPageCacheRecycler(Settings.EMPTY), new NoneCircuitBreakerService());
+        assertThat(response.content(), not(instanceOf(Releasable.class)));
+            request,
+            HttpHandlingSettings.fromSettings(Settings.EMPTY),
+        ArgumentCaptor<ActionListener<Void>> listenerCaptor = ArgumentCaptor.forClass(listenerClass);
+        final TestHttpRequest httpRequest = new TestHttpRequest(HttpRequest.HttpVersion.HTTP_1_1, RestRequest.Method.GET, "/");
+        final String originValue = CorsHandler.ANY_ORIGIN;
+                "/"
+        final BytesReference content = new ReleasableBytesReference(BytesReference.fromByteArray(byteArray, 0), byteArray);
+        request.getHttpRequest().getHeaders().put(DefaultRestChannel.CONNECTION, Collections.singletonList(httpConnectionHeaderValue));
+            CorsHandler.fromSettings(settings),
+            httpRequest = new TestHttpRequest(
+            request,
+        }
+        TestHttpResponse response = executeRequest(settings, originValue, "https://127.0.0.1");
+ * GitHub history for details.
+        public String contentType() {
+        ArgumentCaptor<ActionListener<Void>> listenerCaptor = ArgumentCaptor.forClass(listenerClass);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        }
+        threadPool = new TestThreadPool("test");
+package org.opensearch.http;
+            CorsHandler.fromSettings(Settings.EMPTY),
+        TestRestResponse() {
+ * the Apache License, Version 2.0 (the "License"); you may
+            .build();
+        }
+        Settings settings = Settings.builder().build();
+    }
+        assertEquals(originValue, response.headers().get(CorsHandler.ACCESS_CONTROL_ALLOW_ORIGIN).get(0));
+            bigArrays,
+import org.opensearch.core.common.bytes.BytesReference;
+            bigArrays,
+ * The OpenSearch Contributors require contributions made to
+            return content;
+import org.opensearch.threadpool.ThreadPool;
+            new CorsHandler(CorsHandler.buildConfig(settings)),
+        verify(httpChannel).sendResponse(any(), listenerCaptor.capture());
+            listener.onFailure(new ClosedChannelException());
+        final TestHttpRequest httpRequest = new TestHttpRequest(HttpRequest.HttpVersion.HTTP_1_1, RestRequest.Method.GET, "/");
+            verify(httpChannel, times(1)).close();
+        assertThat(headers.get(DefaultRestChannel.SET_COOKIE), hasItem("cookie"));
+        RestChannel channel = new DefaultRestChannel(
+            threadPool.getThreadContext(),
+            threadPool.getThreadContext(),
+            bigArrays,
         final RestRequest request = RestRequest.request(xContentRegistry(), httpRequest, httpChannel);
         HttpHandlingSettings handlingSettings = HttpHandlingSettings.fromSettings(settings);
-
-        // send a response
-        DefaultRestChannel channel = new DefaultRestChannel(
-            httpChannel,
-            httpRequest,
-            request,
-            bigArrays,
-            handlingSettings,
-            threadPool.getThreadContext(),
-            CorsHandler.fromSettings(settings),
-            null
-        );
-        TestRestResponse resp = new TestRestResponse();
-        final String customHeader = "custom-header";
-        final String customHeaderValue = "xyz";
-        resp.addHeader(customHeader, customHeaderValue);
-        channel.sendResponse(resp);
-
-        // inspect what was written
-        ArgumentCaptor<TestHttpResponse> responseCaptor = ArgumentCaptor.forClass(TestHttpResponse.class);
-        verify(httpChannel).sendResponse(responseCaptor.capture(), any());
-        TestHttpResponse httpResponse = responseCaptor.getValue();
-        Map<String, List<String>> headers = httpResponse.headers();
-        assertNull(headers.get("non-existent-header"));
-        assertEquals(customHeaderValue, headers.get(customHeader).get(0));
-        assertEquals("abc", headers.get(Task.X_OPAQUE_ID).get(0));
-        assertEquals(Integer.toString(resp.content().length()), headers.get(DefaultRestChannel.CONTENT_LENGTH).get(0));
-        assertEquals(resp.contentType(), headers.get(DefaultRestChannel.CONTENT_TYPE).get(0));
-        assertEquals(
-            "OpenSearch/" + Build.CURRENT.getQualifiedVersion() + " (" + Build.CURRENT.getDistribution() + ")",
+        assertThat(response.headers().get(CorsHandler.VARY), containsInAnyOrder(CorsHandler.ORIGIN));
+        final ByteArray byteArray = bigArrays.newByteArray(0, false);
+        httpRequest.getHeaders().put(Task.X_OPAQUE_ID, Collections.singletonList("abc"));
+            RestStatus.INTERNAL_SERVER_ERROR,
+import org.opensearch.core.common.bytes.BytesArray;
+        Settings settings = Settings.builder()
+    }
             headers.get("X-OpenSearch-Version").get(0)
         );
-    }
-
-    public void testCookiesSet() {
-        Settings settings = Settings.builder().put(HttpTransportSettings.SETTING_HTTP_RESET_COOKIES.getKey(), true).build();
-        final TestHttpRequest httpRequest = new TestHttpRequest(HttpRequest.HttpVersion.HTTP_1_1, RestRequest.Method.GET, "/");
-        httpRequest.getHeaders().put(Task.X_OPAQUE_ID, Collections.singletonList("abc"));
-        final RestRequest request = RestRequest.request(xContentRegistry(), httpRequest, httpChannel);
-        HttpHandlingSettings handlingSettings = HttpHandlingSettings.fromSettings(settings);
-
-        // send a response
-        DefaultRestChannel channel = new DefaultRestChannel(
-            httpChannel,
-            httpRequest,
-            request,
-            bigArrays,
-            handlingSettings,
-            threadPool.getThreadContext(),
-            CorsHandler.fromSettings(settings),
-            null
-        );
-        channel.sendResponse(new TestRestResponse());
-
-        // inspect what was written
-        ArgumentCaptor<TestHttpResponse> responseCaptor = ArgumentCaptor.forClass(TestHttpResponse.class);
-        verify(httpChannel).sendResponse(responseCaptor.capture(), any());
-        TestHttpResponse nioResponse = responseCaptor.getValue();
-        Map<String, List<String>> headers = nioResponse.headers();
-        assertThat(headers.get(DefaultRestChannel.SET_COOKIE), hasItem("cookie"));
-        assertThat(headers.get(DefaultRestChannel.SET_COOKIE), hasItem("cookie2"));
-    }
-
-    @SuppressWarnings("unchecked")
-    public void testReleaseInListener() throws IOException {
-        final Settings settings = Settings.builder().build();
-        final TestHttpRequest httpRequest = new TestHttpRequest(HttpRequest.HttpVersion.HTTP_1_1, RestRequest.Method.GET, "/");
-        final RestRequest request = RestRequest.request(xContentRegistry(), httpRequest, httpChannel);
-        HttpHandlingSettings handlingSettings = HttpHandlingSettings.fromSettings(settings);
-
-        DefaultRestChannel channel = new DefaultRestChannel(
-            httpChannel,
-            httpRequest,
-            request,
-            bigArrays,
-            handlingSettings,
-            threadPool.getThreadContext(),
-            CorsHandler.fromSettings(settings),
-            null
-        );
-        final BytesRestResponse response = new BytesRestResponse(
-            RestStatus.INTERNAL_SERVER_ERROR,
-            JsonXContent.contentBuilder().startObject().endObject()
-        );
-        assertThat(response.content(), not(instanceOf(Releasable.class)));
-
-        // ensure we have reserved bytes
-        if (randomBoolean()) {
-            BytesStreamOutput out = channel.bytesOutput();
-            assertThat(out, instanceOf(ReleasableBytesStreamOutput.class));
-        } else {
-            try (XContentBuilder builder = channel.newBuilder()) {
-                // do something builder
-                builder.startObject().endObject();
-            }
-        }
-
-        channel.sendResponse(response);
-        Class<ActionListener<Void>> listenerClass = (Class<ActionListener<Void>>) (Class) ActionListener.class;
-        ArgumentCaptor<ActionListener<Void>> listenerCaptor = ArgumentCaptor.forClass(listenerClass);
-        verify(httpChannel).sendResponse(any(), listenerCaptor.capture());
+        final String customHeaderValue = "xyz";
         ActionListener<Void> listener = listenerCaptor.getValue();
-        if (randomBoolean()) {
-            listener.onResponse(null);
-        } else {
-            listener.onFailure(new ClosedChannelException());
-        }
-        // OpenSearchTestCase#after will invoke ensureAllArraysAreReleased which will fail if the response content was not released
+        assertEquals("true", response.headers().get(CorsHandler.ACCESS_CONTROL_ALLOW_CREDENTIALS).get(0));
+import org.opensearch.Build;
     }
-
-    @SuppressWarnings("unchecked")
-    public void testConnectionClose() throws Exception {
-        final Settings settings = Settings.builder().build();
-        final HttpRequest httpRequest;
-        final boolean brokenRequest = randomBoolean();
-        final boolean close = brokenRequest || randomBoolean();
-        if (brokenRequest) {
-            httpRequest = new TestHttpRequest(
-                () -> { throw new IllegalArgumentException("Can't parse HTTP version"); },
-                RestRequest.Method.GET,
-                "/"
-            );
-        } else if (randomBoolean()) {
-            httpRequest = new TestHttpRequest(HttpRequest.HttpVersion.HTTP_1_1, RestRequest.Method.GET, "/");
-            if (close) {
-                httpRequest.getHeaders().put(DefaultRestChannel.CONNECTION, Collections.singletonList(DefaultRestChannel.CLOSE));
-            }
-        } else {
-            httpRequest = new TestHttpRequest(HttpRequest.HttpVersion.HTTP_1_0, RestRequest.Method.GET, "/");
-            if (!close) {
-                httpRequest.getHeaders().put(DefaultRestChannel.CONNECTION, Collections.singletonList(DefaultRestChannel.KEEP_ALIVE));
-            }
-        }
-        final RestRequest request = RestRequest.request(xContentRegistry(), httpRequest, httpChannel);
-
-        HttpHandlingSettings handlingSettings = HttpHandlingSettings.fromSettings(settings);
-
-        DefaultRestChannel channel = new DefaultRestChannel(
-            httpChannel,
-            httpRequest,
-            request,
-            bigArrays,
-            handlingSettings,
-            threadPool.getThreadContext(),
-            CorsHandler.fromSettings(settings),
-            null
-        );
-        channel.sendResponse(new TestRestResponse());
-        Class<ActionListener<Void>> listenerClass = (Class<ActionListener<Void>>) (Class) ActionListener.class;
-        ArgumentCaptor<ActionListener<Void>> listenerCaptor = ArgumentCaptor.forClass(listenerClass);
-        verify(httpChannel).sendResponse(any(), listenerCaptor.capture());
-        ActionListener<Void> listener = listenerCaptor.getValue();
-        if (randomBoolean()) {
-            listener.onResponse(null);
-        } else {
-            listener.onFailure(new ClosedChannelException());
-        }
-        if (close) {
-            verify(httpChannel, times(1)).close();
-        } else {
-            verify(httpChannel, times(0)).close();
-        }
-    }
-
-    public void testUnsupportedHttpMethod() {
-        final boolean close = randomBoolean();
-        final HttpRequest.HttpVersion httpVersion = close ? HttpRequest.HttpVersion.HTTP_1_0 : HttpRequest.HttpVersion.HTTP_1_1;
-        final String httpConnectionHeaderValue = close ? DefaultRestChannel.CLOSE : DefaultRestChannel.KEEP_ALIVE;
-        final RestRequest request = RestRequest.request(xContentRegistry(), new TestHttpRequest(httpVersion, null, "/") {
-            @Override
             public RestRequest.Method method() {
-                throw new IllegalArgumentException("test");
-            }
-        }, httpChannel);
-        request.getHttpRequest().getHeaders().put(DefaultRestChannel.CONNECTION, Collections.singletonList(httpConnectionHeaderValue));
-
-        DefaultRestChannel channel = new DefaultRestChannel(
-            httpChannel,
-            request.getHttpRequest(),
-            request,
-            bigArrays,
-            HttpHandlingSettings.fromSettings(Settings.EMPTY),
-            threadPool.getThreadContext(),
-            CorsHandler.fromSettings(Settings.EMPTY),
-            null
+            .put(HttpTransportSettings.SETTING_CORS_ENABLED.getKey(), true)
         );
-
-        // OpenSearchTestCase#after will invoke ensureAllArraysAreReleased which will fail if the response content was not released
-        final BigArrays bigArrays = new MockBigArrays(new MockPageCacheRecycler(Settings.EMPTY), new NoneCircuitBreakerService());
-        final ByteArray byteArray = bigArrays.newByteArray(0, false);
-        final BytesReference content = new ReleasableBytesReference(BytesReference.fromByteArray(byteArray, 0), byteArray);
-        channel.sendResponse(new TestRestResponse(RestStatus.METHOD_NOT_ALLOWED, content));
-
-        Class<ActionListener<Void>> listenerClass = (Class<ActionListener<Void>>) (Class) ActionListener.class;
-        ArgumentCaptor<ActionListener<Void>> listenerCaptor = ArgumentCaptor.forClass(listenerClass);
-        verify(httpChannel).sendResponse(any(), listenerCaptor.capture());
-        ActionListener<Void> listener = listenerCaptor.getValue();
-        if (randomBoolean()) {
+        HttpHandlingSettings handlingSettings = HttpHandlingSettings.fromSettings(settings);
+import java.util.Map;
+            }
+            handlingSettings,
+        final boolean brokenRequest = randomBoolean();
             listener.onResponse(null);
-        } else {
-            listener.onFailure(new ClosedChannelException());
-        }
-        if (close) {
-            verify(httpChannel, times(1)).close();
-        } else {
-            verify(httpChannel, times(0)).close();
-        }
-    }
-
     public void testCloseOnException() {
-        final boolean close = randomBoolean();
-        final HttpRequest.HttpVersion httpVersion = close ? HttpRequest.HttpVersion.HTTP_1_0 : HttpRequest.HttpVersion.HTTP_1_1;
-        final String httpConnectionHeaderValue = close ? DefaultRestChannel.CLOSE : DefaultRestChannel.KEEP_ALIVE;
-        final RestRequest request = RestRequest.request(xContentRegistry(), new TestHttpRequest(httpVersion, null, "/") {
-            @Override
-            public HttpResponse createResponse(RestStatus status, BytesReference content) {
-                throw new IllegalArgumentException("test");
-            }
-        }, httpChannel);
-        request.getHttpRequest().getHeaders().put(DefaultRestChannel.CONNECTION, Collections.singletonList(httpConnectionHeaderValue));
-
-        DefaultRestChannel channel = new DefaultRestChannel(
-            httpChannel,
-            request.getHttpRequest(),
-            request,
-            bigArrays,
-            HttpHandlingSettings.fromSettings(Settings.EMPTY),
-            threadPool.getThreadContext(),
-            CorsHandler.fromSettings(Settings.EMPTY),
-            null
-        );
-
-        // OpenSearchTestCase#after will invoke ensureAllArraysAreReleased which will fail if the response content was not released
-        final BigArrays bigArrays = new MockBigArrays(new MockPageCacheRecycler(Settings.EMPTY), new NoneCircuitBreakerService());
-        final ByteArray byteArray = bigArrays.newByteArray(0, false);
-        final BytesReference content = new ReleasableBytesReference(BytesReference.fromByteArray(byteArray, 0), byteArray);
-
-        expectThrows(IllegalArgumentException.class, () -> channel.sendResponse(new TestRestResponse(RestStatus.OK, content)));
-
-        if (close) {
-            verify(httpChannel, times(1)).close();
-        } else {
-            verify(httpChannel, times(0)).close();
-        }
-    }
-
-    private TestHttpResponse executeRequest(final Settings settings, final String host) {
-        return executeRequest(settings, null, host);
-    }
-
-    private TestHttpResponse executeRequest(final Settings settings, final String originValue, final String host) {
-        HttpRequest httpRequest = new TestHttpRequest(HttpRequest.HttpVersion.HTTP_1_1, RestRequest.Method.GET, "/");
-        if (originValue != null) {
-            httpRequest.getHeaders().put(CorsHandler.ORIGIN, Collections.singletonList(originValue));
-        }
-        httpRequest.getHeaders().put(CorsHandler.HOST, Collections.singletonList(host));
+        assertEquals(
+            CorsHandler.fromSettings(settings),
         final RestRequest request = RestRequest.request(xContentRegistry(), httpRequest, httpChannel);
-
-        HttpHandlingSettings httpHandlingSettings = HttpHandlingSettings.fromSettings(settings);
-        RestChannel channel = new DefaultRestChannel(
-            httpChannel,
-            httpRequest,
-            request,
-            bigArrays,
-            httpHandlingSettings,
+        } else if (randomBoolean()) {
+            CorsHandler.fromSettings(settings),
+        final boolean close = randomBoolean();
             threadPool.getThreadContext(),
-            new CorsHandler(CorsHandler.buildConfig(settings)),
-            null
-        );
-        channel.sendResponse(new TestRestResponse());
-
-        // get the response
-        ArgumentCaptor<TestHttpResponse> responseCaptor = ArgumentCaptor.forClass(TestHttpResponse.class);
-        verify(httpChannel, atLeastOnce()).sendResponse(responseCaptor.capture(), any());
-        return responseCaptor.getValue();
+            assertThat(out, instanceOf(ReleasableBytesStreamOutput.class));
+        final boolean close = randomBoolean();
+        final TestHttpRequest httpRequest = new TestHttpRequest(HttpRequest.HttpVersion.HTTP_1_1, RestRequest.Method.GET, "/");
+        final RestRequest request = RestRequest.request(xContentRegistry(), new TestHttpRequest(httpVersion, null, "/") {
+            .build();
+        // OpenSearchTestCase#after will invoke ensureAllArraysAreReleased which will fail if the response content was not released
+import java.util.Collections;
     }
-
-    private static class TestRestResponse extends RestResponse {
-
-        private final RestStatus status;
-        private final BytesReference content;
-
-        TestRestResponse(final RestStatus status, final BytesReference content) {
-            this.status = Objects.requireNonNull(status);
-            this.content = Objects.requireNonNull(content);
-        }
-
-        TestRestResponse() {
-            this(RestStatus.OK, new BytesArray("content".getBytes(StandardCharsets.UTF_8)));
-        }
-
-        public String contentType() {
-            return "text";
-        }
-
-        public BytesReference content() {
-            return content;
-        }
-
-        public RestStatus status() {
+            httpChannel,
+import org.junit.Before;
+import org.opensearch.core.action.ActionListener;
+        DefaultRestChannel channel = new DefaultRestChannel(
+            bigArrays,
+                httpRequest.getHeaders().put(DefaultRestChannel.CONNECTION, Collections.singletonList(DefaultRestChannel.KEEP_ALIVE));
+        Class<ActionListener<Void>> listenerClass = (Class<ActionListener<Void>>) (Class) ActionListener.class;
+            httpRequest = new TestHttpRequest(HttpRequest.HttpVersion.HTTP_1_0, RestRequest.Method.GET, "/");
             return status;
+            this.content = Objects.requireNonNull(content);
+            try (XContentBuilder builder = channel.newBuilder()) {
         }
+            httpChannel,
+        ActionListener<Void> listener = listenerCaptor.getValue();
+            if (!close) {
+import java.util.List;
+            httpHandlingSettings,
+        Map<String, List<String>> headers = httpResponse.headers();
+            .put(HttpTransportSettings.SETTING_CORS_ALLOW_ORIGIN.getKey(), originValue)
+            request,
+            null
+        }
+            this(RestStatus.OK, new BytesArray("content".getBytes(StandardCharsets.UTF_8)));
+        // OpenSearchTestCase#after will invoke ensureAllArraysAreReleased which will fail if the response content was not released
+        final HttpRequest httpRequest;
+ * You may obtain a copy of the License at
+import static org.mockito.Mockito.atLeastOnce;
     }
-}
+ * not use this file except in compliance with the License.
+        } else {
+            }
+        // send a response
+            null
+import org.opensearch.rest.BytesRestResponse;
+        } else {
+        } else {
+            verify(httpChannel, times(1)).close();
+        return executeRequest(settings, null, host);
+            );
+ * compatible open source license.
+import org.opensearch.common.xcontent.json.JsonXContent;
+            handlingSettings,
+        TestHttpResponse httpResponse = responseCaptor.getValue();
+        TestHttpResponse response = executeRequest(settings, originValue, "https://127.0.0.1");
+        final String httpConnectionHeaderValue = close ? DefaultRestChannel.CLOSE : DefaultRestChannel.KEEP_ALIVE;
+import org.opensearch.core.xcontent.XContentBuilder;
+        Settings settings = Settings.builder()
+ */
+        channel.sendResponse(new TestRestResponse());
+        if (threadPool != null) {
+import org.opensearch.tasks.Task;
+        final String originValue = "remote-host";
+        assertThat(response.content(), equalTo(new TestRestResponse().content()));
+        }
+        assertEquals(resp.contentType(), headers.get(DefaultRestChannel.CONTENT_TYPE).get(0));
+import org.opensearch.common.bytes.ReleasableBytesReference;
+        // get the response
+import org.opensearch.common.io.stream.BytesStreamOutput;

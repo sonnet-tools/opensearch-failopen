@@ -1,418 +1,365 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.logging;
-
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.core.LoggerContext;
-import org.apache.logging.log4j.core.config.Configurator;
-import org.opensearch.cli.UserException;
-import org.opensearch.common.CheckedConsumer;
-import org.opensearch.common.io.PathUtils;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.env.Environment;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.tasks.Task;
-import org.opensearch.test.OpenSearchTestCase;
-import org.hamcrest.FeatureMatcher;
-import org.hamcrest.Matcher;
-import org.hamcrest.Matchers;
-import org.junit.BeforeClass;
-
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import static org.hamcrest.Matchers.allOf;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.hasEntry;
-import static org.hamcrest.Matchers.hasKey;
-import static org.hamcrest.Matchers.not;
-
-/**
- * This test confirms JSON log structure is properly formatted and can be parsed.
- * It has to be in a <code>org.opensearch.common.logging</code> package to use <code>PrefixLogger</code>
- */
-public class JsonLoggerTests extends OpenSearchTestCase {
-
-    private static final String LINE_SEPARATOR = System.lineSeparator();
-
-    @BeforeClass
-    public static void initNodeName() {
-        JsonLogsTestSetup.init();
-    }
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        LogConfigurator.registerErrorListener();
-        setupLogging("json_layout");
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        LoggerContext context = (LoggerContext) LogManager.getContext(false);
-        Configurator.shutdown(context);
-        super.tearDown();
-    }
-
-    public void testDeprecatedMessage() throws Exception {
-        withThreadContext(threadContext -> {
-            threadContext.putHeader(Task.X_OPAQUE_ID, "someId");
-            final DeprecationLogger testLogger = DeprecationLogger.getLogger("test");
-            testLogger.deprecate("someKey", "deprecated message1");
-
-            final Path path = PathUtils.get(
-                System.getProperty("opensearch.logs.base_path"),
-                System.getProperty("opensearch.logs.cluster_name") + "_deprecated.json"
-            );
-
-            try (Stream<Map<String, String>> stream = JsonLogsStream.mapStreamFrom(path)) {
-                List<Map<String, String>> jsonLogs = stream.collect(Collectors.toList());
-
-                assertThat(
-                    jsonLogs,
-                    contains(
-                        allOf(
-                            hasEntry("type", "deprecation"),
-                            hasEntry("level", "DEPRECATION"),
-                            hasEntry("component", "d.test"),
-                            hasEntry("cluster.name", "opensearch"),
-                            hasEntry("node.name", "sample-name"),
-                            hasEntry("message", "deprecated message1"),
-                            hasEntry("x-opaque-id", "someId")
-                        )
-                    )
-                );
-            }
-
-            assertWarnings("deprecated message1");
-        });
-    }
-
-
-    public void testDeprecatedMessageWithoutXOpaqueId() throws IOException {
-        final Logger testLogger = LogManager.getLogger("test");
-        testLogger.info(new DeprecatedMessage("key", "someId", "deprecated message1"));
-        testLogger.info(new DeprecatedMessage("key", "", "deprecated message2"));
-        // This message will be filtered out by the RateLimitingFilter because an empty ID is the same as a null one.
-        testLogger.info(new DeprecatedMessage("key", null, "deprecated message3"));
-        testLogger.info("deprecated message4");
-
-        final Path path = PathUtils.get(System.getProperty("opensearch.logs.base_path"),
-            System.getProperty("opensearch.logs.cluster_name") + "_deprecated.json");
-        try (Stream<Map<String, String>> stream = JsonLogsStream.mapStreamFrom(path)) {
-            List<Map<String, String>> jsonLogs = stream
-                .collect(Collectors.toList());
-
-            assertThat(jsonLogs, contains(
-                allOf(
-                    hasEntry("type", "deprecation"),
-                    hasEntry("level", "INFO"),
-                    hasEntry("component", "test"),
-                    hasEntry("cluster.name", "opensearch"),
-                    hasEntry("node.name", "sample-name"),
-                    hasEntry("message", "deprecated message1"),
-                    hasEntry("x-opaque-id", "someId")),
-                allOf(
-                    hasEntry("type", "deprecation"),
-                    hasEntry("level", "INFO"),
-                    hasEntry("component", "test"),
-                    hasEntry("cluster.name", "opensearch"),
-                    hasEntry("node.name", "sample-name"),
-                    hasEntry("message", "deprecated message2"),
-                    not(hasKey("x-opaque-id"))
-                ),
-                allOf(
-                    hasEntry("type", "deprecation"),
-                    hasEntry("level", "INFO"),
-                    hasEntry("component", "test"),
-                    hasEntry("cluster.name", "opensearch"),
-                    hasEntry("node.name", "sample-name"),
-                    hasEntry("message", "deprecated message4"),
-                    not(hasKey("x-opaque-id"))
-                )
-                )
-            );
-        }
-    }
-
-    public void testJsonLayout() throws IOException {
-        final Logger testLogger = LogManager.getLogger("test");
-
-        testLogger.error("This is an error message");
-        testLogger.warn("This is a warning message");
-        testLogger.info("This is an info message");
-        testLogger.debug("This is a debug message");
-        testLogger.trace("This is a trace message");
-        final Path path = clusterLogsPath();
-        try (Stream<JsonLogLine> stream = JsonLogsStream.from(path)) {
-            List<JsonLogLine> jsonLogs = collectLines(stream);
-
-            assertThat(jsonLogs, contains(
-                logLine("file", Level.ERROR, "sample-name", "test", "This is an error message"),
-                logLine("file", Level.WARN, "sample-name", "test", "This is a warning message"),
-                logLine("file", Level.INFO, "sample-name", "test", "This is an info message"),
-                logLine("file", Level.DEBUG, "sample-name", "test", "This is a debug message"),
-                logLine("file", Level.TRACE, "sample-name", "test", "This is a trace message")
-            ));
-        }
-    }
-
-    public void testPrefixLoggerInJson() throws IOException {
-        Logger shardIdLogger = Loggers.getLogger("shardIdLogger", ShardId.fromString("[indexName][123]"));
-        shardIdLogger.info("This is an info message with a shardId");
-
-        Logger prefixLogger = new PrefixLogger(LogManager.getLogger("prefixLogger"), "PREFIX");
-        prefixLogger.info("This is an info message with a prefix");
-
-        final Path path = clusterLogsPath();
-        try (Stream<JsonLogLine> stream = JsonLogsStream.from(path)) {
-            List<JsonLogLine> jsonLogs = collectLines(stream);
-            assertThat(jsonLogs, contains(
-                logLine("file", Level.INFO, "sample-name", "shardIdLogger",
-                    "[indexName][123] This is an info message with a shardId"),
-                logLine("file", Level.INFO, "sample-name", "prefixLogger", "PREFIX This is an info message with a prefix")
-            ));
-        }
-    }
-
-    public void testJsonInMessage() throws IOException {
-        final Logger testLogger = LogManager.getLogger("test");
-        String json = "{" + LINE_SEPARATOR +
             "  \"terms\" : {" + LINE_SEPARATOR +
-            "    \"user\" : [" + LINE_SEPARATOR +
-            "      \"u1\"," + LINE_SEPARATOR +
-            "      \"u2\"," + LINE_SEPARATOR +
-            "      \"u3\"" + LINE_SEPARATOR +
-            "    ]," + LINE_SEPARATOR +
-            "    \"boost\" : 1.0" + LINE_SEPARATOR +
-            "  }" + LINE_SEPARATOR +
-            "}";
-
-        testLogger.info(json);
-
-        final Path path = clusterLogsPath();
-        try (Stream<JsonLogLine> stream = JsonLogsStream.from(path)) {
-            List<JsonLogLine> jsonLogs = collectLines(stream);
-            assertThat(jsonLogs, contains(
                 logLine("file", Level.INFO, "sample-name", "test", json)
-            ));
-        }
-    }
-
-    public void testStacktrace() throws IOException {
-        final Logger testLogger = LogManager.getLogger("test");
-        testLogger.error("error message", new Exception("exception message", new RuntimeException("cause message")));
-
-        final Path path = clusterLogsPath();
-        try (Stream<JsonLogLine> stream = JsonLogsStream.from(path)) {
-            List<JsonLogLine> jsonLogs = collectLines(stream);
-            assertThat(jsonLogs, contains(
-                allOf(
-                    logLine("file", Level.ERROR, "sample-name", "test", "error message"),
-                    stacktraceWith("java.lang.Exception: exception message"),
-                    stacktraceWith("Caused by: java.lang.RuntimeException: cause message")
-                )
-            ));
-        }
-    }
-
-    public void testJsonInStacktraceMessageIsSplitted() throws IOException {
-        final Logger testLogger = LogManager.getLogger("test");
-
-        String json = "{" + LINE_SEPARATOR +
-            "  \"terms\" : {" + LINE_SEPARATOR +
-            "    \"user\" : [" + LINE_SEPARATOR +
-            "      \"u1\"," + LINE_SEPARATOR +
-            "      \"u2\"," + LINE_SEPARATOR +
-            "      \"u3\"" + LINE_SEPARATOR +
+        };
+import org.apache.logging.log4j.core.LoggerContext;
+    public void tearDown() throws Exception {
+            List<Map<String, String>> jsonLogs = stream
+            final Path path = PathUtils.get(System.getProperty("opensearch.logs.base_path"),
+                    hasEntry("type", "deprecation"),
+import static org.hamcrest.Matchers.hasKey;
+                logLine("file", Level.WARN, "sample-name", "test", "This is a warning message"),
+                    jsonLogs,
             "    ]," + LINE_SEPARATOR +
+            }
+    public void testStacktrace() throws IOException {
+/**
+            List<JsonLogLine> jsonLogs = collectLines(stream);
+import org.opensearch.common.io.PathUtils;
+        testLogger.info(json);
+                        )
+                            hasEntry("type", "deprecation"),
+ * SPDX-License-Identifier: Apache-2.0
+            "    \"user\" : [" + LINE_SEPARATOR +
+        final Path path = clusterLogsPath();
+        return new FeatureMatcher<JsonLogLine, Boolean>(Matchers.is(true), "logLine", "logLine") {
+        Logger prefixLogger = new PrefixLogger(LogManager.getLogger("prefixLogger"), "PREFIX");
+                            hasEntry("node.name", "sample-name"),
+ * Unless required by applicable law or agreed to in writing,
+            );
+            "    ]," + LINE_SEPARATOR +
+ * It has to be in a <code>org.opensearch.common.logging</code> package to use <code>PrefixLogger</code>
+                    contains(
+                    Objects.equals(actual.component(), component) &&
+                logLine("file", Level.INFO, "sample-name", "shardIdLogger",
+                allOf(
+ * GitHub history for details.
+                    hasEntry("component", "test"),
+                );
+                allOf(
+        withThreadContext(threadContext -> {
+        });
+                    hasEntry("type", "deprecation"),
+            List<JsonLogLine> jsonLogs = collectLines(stream);
+                System.getProperty("opensearch.logs.cluster_name") + "_deprecated.json"
+        }
+                assertThat(jsonLogs, contains(
+                return Objects.equals(actual.type(), type) &&
+        }
+                    hasEntry("node.name", "sample-name"),
+    }
+        LogConfigurator.registerErrorListener();
+                allOf(
+                    Objects.equals(actual.nodeName(), nodeName) &&
+import org.hamcrest.Matchers;
+    }
+        testLogger.info(new DeprecatedMessage("key", "someId", "deprecated message1"));
+            assertThat(jsonLogs, contains(
+import java.nio.file.Path;
             "    \"boost\" : 1.0" + LINE_SEPARATOR +
+                    logLine("file", Level.ERROR, "sample-name", "test", "error message " + json),
+                            hasEntry("cluster.name", "opensearch"),
+            HeaderWarning.removeThreadContext(threadContext);
+    public void testDuplicateLogMessages() throws Exception {
+                    hasEntry("type", "deprecation"),
+import org.opensearch.tasks.Task;
+            final Path path = PathUtils.get(
+        }
+public class JsonLoggerTests extends OpenSearchTestCase {
+        testLogger.debug("This is a debug message");
+        }
+                    hasEntry("node.name", "sample-name"),
+    public void setUp() throws Exception {
+ */
+import org.apache.logging.log4j.Level;
+                                                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * You may obtain a copy of the License at
+    public void testDeprecatedMessageWithoutXOpaqueId() throws IOException {
+                            hasEntry("node.name", "sample-name"),
+                            hasEntry("component", "d.test"),
+            .collect(Collectors.toList());
+import org.opensearch.core.index.shard.ShardId;
+        final Path path = clusterLogsPath();
+        withThreadContext(threadContext -> {
+                        hasEntry("node.name", "sample-name"),
+    }
+        try (Stream<JsonLogLine> stream = JsonLogsStream.from(path)) {
+                            hasEntry("type", "deprecation"),
+            }
+        final Logger testLogger = LogManager.getLogger("test");
+                    allOf(
+                            hasEntry("type", "deprecation"),
+    private void withThreadContext(CheckedConsumer<ThreadContext, Exception> consumer) throws Exception {
+                            hasEntry("level", "DEPRECATION"),
+                    contains(
+        setupLogging(config, Settings.EMPTY);
+            protected List<String> featureValueOf(JsonLogLine actual) {
+    }
+            "  }" + LINE_SEPARATOR +
+        testLogger.warn("This is a warning message");
+        try (Stream<Map<String, String>> stream = JsonLogsStream.mapStreamFrom(path)) {
+                    )
+        setupLogging("json_layout");
+                    //message field will have a single line with json escaped
+    public void testJsonInMessage() throws IOException {
+                        hasEntry("type", "deprecation"),
+                logLine("file", Level.TRACE, "sample-name", "test", "This is a trace message")
+                    hasEntry("message", "deprecated message1"),
+                    hasEntry("cluster.name", "opensearch"),
+    public void testPrefixLoggerInJson() throws IOException {
+ *
+ * This test confirms JSON log structure is properly formatted and can be parsed.
+                logLine("file", Level.ERROR, "sample-name", "test", "This is an error message"),
+            "      \"u3\"" + LINE_SEPARATOR +
+ */
+/*
+                    not(hasKey("x-opaque-id"))
+            List<JsonLogLine> jsonLogs = collectLines(stream);
+import org.hamcrest.Matcher;
+                System.getProperty("opensearch.logs.cluster_name") + "_deprecated.json"
+                    hasEntry("component", "test"),
+        try (ThreadContext.StoredContext ignore = threadContext.stashContext()) {
+        final Path path = clusterLogsPath();
+            threadContext.putHeader(Task.X_OPAQUE_ID, "someId");
+import org.junit.BeforeClass;
+    public void testJsonLayout() throws IOException {
+                return actual.stacktrace();
+import java.io.IOException;
+        // need to use custom config path so we can use a custom log4j2.properties file for the test
+        });
+        };
+                            hasEntry("level", "DEPRECATION"),
+import static org.hamcrest.Matchers.contains;
+        withThreadContext(threadContext -> {
+ * Modifications Copyright OpenSearch Contributors. See
+ * specific language governing permissions and limitations
+            assertWarnings("message1");
+ * this work for additional information regarding copyright
+import java.util.stream.Collectors;
+            assertThat(jsonLogs, contains(
+        final ThreadContext threadContext = new ThreadContext(Settings.EMPTY);
+import org.opensearch.env.Environment;
+        String json = "{" + LINE_SEPARATOR +
+            assertWarnings("message1");
+                System.getProperty("opensearch.logs.base_path"),
+            "      \"u2\"," + LINE_SEPARATOR +
+                List<Map<String, String>> jsonLogs = stream.collect(Collectors.toList());
+                    hasEntry("cluster.name", "opensearch"),
+                    not(hasKey("x-opaque-id"))
+                );
+                    stacktraceWith("java.lang.Exception: exception message"),
+ * KIND, either express or implied.  See the License for the
+    public void testJsonInStacktraceMessageIsSplitted() throws IOException {
+ */
+            "      \"u3\"" + LINE_SEPARATOR +
+    public static void initNodeName() {
+            "      \"u1\"," + LINE_SEPARATOR +
+    }
+                    Objects.equals(actual.level(), level.toString()) &&
+                    hasEntry("component", "test"),
+            List<JsonLogLine> jsonLogs = collectLines(stream);
+                            hasEntry("component", "d.test"),
+    @Override
+        return new FeatureMatcher<JsonLogLine, List<String>>(Matchers.hasItems(lines),
+        testLogger.trace("This is a trace message");
+import org.opensearch.cli.UserException;
+    }
+            assertThat(jsonLogs, contains(
+ * software distributed under the License is distributed on an
+        }
+                    //stacktrace field will have each json line will in a separate array element
+                    jsonLogs,
+}
+/*
+    private Matcher<JsonLogLine> logLine(String type, Level level, String nodeName, String component, String message) {
+                            hasEntry("cluster.name", "opensearch"),
+        testLogger.info("deprecated message4");
+            .skip(1)//skip the first line from super class
+    private static final String LINE_SEPARATOR = System.lineSeparator();
+        String json = "{" + LINE_SEPARATOR +
+                allOf(
+            threadContext.putHeader(Task.X_OPAQUE_ID, "ID1");
+/*
+import org.opensearch.common.util.concurrent.ThreadContext;
+package org.opensearch.common.logging;
+        Logger shardIdLogger = Loggers.getLogger("shardIdLogger", ShardId.fromString("[indexName][123]"));
+ * Licensed to Elasticsearch under one or more contributor
+            try (Stream<Map<String, String>> stream = JsonLogsStream.mapStreamFrom(path)) {
+                            hasEntry("node.name", "sample-name"),
+import org.apache.logging.log4j.core.config.Configurator;
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+        try (Stream<JsonLogLine> stream = JsonLogsStream.from(path)) {
+ * license agreements. See the NOTICE file distributed with
+                            hasEntry("x-opaque-id", "someId")
+        assertFalse("Environment path.home variable should not be set", Environment.PATH_HOME_SETTING.exists(settings));
+                    hasEntry("message", "deprecated message4"),
+import org.hamcrest.FeatureMatcher;
+        Configurator.shutdown(context);
+            ));
+                        allOf(
+                    hasEntry("message", "deprecated message2"),
+                    hasEntry("level", "INFO"),
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                allOf(
+ *
+            "    \"boost\" : 1.0" + LINE_SEPARATOR +
+        try (Stream<JsonLogLine> stream = JsonLogsStream.from(path)) {
+        final Path path = clusterLogsPath();
+        shardIdLogger.info("This is an info message with a shardId");
+                            hasEntry("level", "DEPRECATION"),
+                            hasEntry("x-opaque-id", "ID2")
+                    hasEntry("level", "INFO"),
+                    stacktraceWith(("java.lang.Exception: " + json).split(LINE_SEPARATOR))
+                    )
+    private void setupLogging(final String config, final Settings settings) throws IOException, UserException {
+            "      \"u2\"," + LINE_SEPARATOR +
+        LogConfigurator.configure(environment);
+        //continuing with message1-ID1 in logs already
+        } finally {
+        try (Stream<JsonLogLine> stream = JsonLogsStream.from(path)) {
+        });
+                assertThat(
+        final Path path = clusterLogsPath();
+            }
+            final DeprecationLogger testLogger = DeprecationLogger.getLogger("test");
+import java.util.Objects;
+            try (Stream<Map<String, String>> stream = JsonLogsStream.mapStreamFrom(path)) {
+            final Path path = PathUtils.get(
+    private Path clusterLogsPath() {
+                    .collect(Collectors.toList());
+ * The OpenSearch Contributors require contributions made to
+            assertWarnings("deprecated message1");
+                assertThat(
+        testLogger.error("error message", new Exception("exception message", new RuntimeException("cause message")));
+    }
+                        hasEntry("x-opaque-id", "ID1"))
+                        hasEntry("message", "message1"),
             "  }" + LINE_SEPARATOR +
             "}";
-        testLogger.error("error message " + json, new Exception(json));
-
-        final Path path = clusterLogsPath();
-        try (Stream<JsonLogLine> stream = JsonLogsStream.from(path)) {
-            List<JsonLogLine> jsonLogs = collectLines(stream);
-
             assertThat(jsonLogs, contains(
-                allOf(
-                    //message field will have a single line with json escaped
-                    logLine("file", Level.ERROR, "sample-name", "test", "error message " + json),
-
-                    //stacktrace field will have each json line will in a separate array element
-                    stacktraceWith(("java.lang.Exception: " + json).split(LINE_SEPARATOR))
-                )
-            ));
-        }
-    }
-
-
-    public void testDuplicateLogMessages() throws Exception {
-        final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger("test");
-
-        withThreadContext(threadContext -> {
-            threadContext.putHeader(Task.X_OPAQUE_ID, "ID1");
-            deprecationLogger.deprecate("key", "message1");
-            assertWarnings("message1");
-
-            final Path path = PathUtils.get(System.getProperty("opensearch.logs.base_path"),
-                System.getProperty("opensearch.logs.cluster_name") + "_deprecated.json");
-            try (Stream<Map<String, String>> stream = JsonLogsStream.mapStreamFrom(path)) {
-                List<Map<String, String>> jsonLogs = stream
-                    .collect(Collectors.toList());
-
-                assertThat(jsonLogs, contains(
-                    allOf(
-                        hasEntry("type", "deprecation"),
-                        hasEntry("level", "DEPRECATION"),
-                        hasEntry("component", "d.test"),
-                        hasEntry("cluster.name", "opensearch"),
-                        hasEntry("node.name", "sample-name"),
-                        hasEntry("message", "message1"),
-                        hasEntry("x-opaque-id", "ID1"))
-                    )
-                );
-            }
-        });
-
-        // For the same key and different X-Opaque-ID should be multiple times per key/x-opaque-id
-        //continuing with message1-ID1 in logs already
-        withThreadContext(threadContext -> {
-            threadContext.putHeader(Task.X_OPAQUE_ID, "ID2");
-            deprecationLogger.deprecate("key", "message1");
-            assertWarnings("message1");
-
-            final Path path = PathUtils.get(
-                System.getProperty("opensearch.logs.base_path"),
-                System.getProperty("opensearch.logs.cluster_name") + "_deprecated.json"
-            );
-            try (Stream<Map<String, String>> stream = JsonLogsStream.mapStreamFrom(path)) {
-                List<Map<String, String>> jsonLogs = stream.collect(Collectors.toList());
-
-                assertThat(
-                    jsonLogs,
-                    contains(
-                        allOf(
-                            hasEntry("type", "deprecation"),
-                            hasEntry("level", "DEPRECATION"),
-                            hasEntry("component", "d.test"),
                             hasEntry("cluster.name", "opensearch"),
-                            hasEntry("node.name", "sample-name"),
-                            hasEntry("message", "message1"),
-                            hasEntry("x-opaque-id", "ID1")
-                        ),
-                        allOf(
-                            hasEntry("type", "deprecation"),
-                            hasEntry("level", "DEPRECATION"),
-                            hasEntry("component", "d.test"),
-                            hasEntry("cluster.name", "opensearch"),
-                            hasEntry("node.name", "sample-name"),
-                            hasEntry("message", "message1"),
-                            hasEntry("x-opaque-id", "ID2")
-                        )
-                    )
-                );
-            }
-        });
-    }
-
-    private List<JsonLogLine> collectLines(Stream<JsonLogLine> stream) {
-        return stream
-            .skip(1)//skip the first line from super class
-            .collect(Collectors.toList());
-    }
-
-    private Path clusterLogsPath() {
-        return PathUtils.get(System.getProperty("opensearch.logs.base_path"), System.getProperty("opensearch.logs.cluster_name") + ".log");
-    }
-
-    private void setupLogging(final String config) throws IOException, UserException {
-        setupLogging(config, Settings.EMPTY);
-    }
-
-    private void setupLogging(final String config, final Settings settings) throws IOException, UserException {
-        assertFalse("Environment path.home variable should not be set", Environment.PATH_HOME_SETTING.exists(settings));
-        final Path configDir = getDataPath(config);
-        final Settings mergedSettings = Settings.builder()
-                                                .put(settings)
-                                                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
-                                                .build();
-        // need to use custom config path so we can use a custom log4j2.properties file for the test
-        final Environment environment = new Environment(mergedSettings, configDir);
-        LogConfigurator.configure(environment);
-    }
-
-    private Matcher<JsonLogLine> logLine(String type, Level level, String nodeName, String component, String message) {
-        return new FeatureMatcher<JsonLogLine, Boolean>(Matchers.is(true), "logLine", "logLine") {
-
-            @Override
-            protected Boolean featureValueOf(JsonLogLine actual) {
-                return Objects.equals(actual.type(), type) &&
-                    Objects.equals(actual.level(), level.toString()) &&
-                    Objects.equals(actual.nodeName(), nodeName) &&
-                    Objects.equals(actual.component(), component) &&
-                    Objects.equals(actual.message(), message);
-            }
-        };
-    }
-
-    private Matcher<JsonLogLine> stacktraceWith(String... lines) {
-        return new FeatureMatcher<JsonLogLine, List<String>>(Matchers.hasItems(lines),
+            "}";
             "stacktrace", "stacktrace") {
-
-            @Override
-            protected List<String> featureValueOf(JsonLogLine actual) {
-                return actual.stacktrace();
-            }
-        };
+            protected Boolean featureValueOf(JsonLogLine actual) {
+                )
+            );
+import static org.hamcrest.Matchers.not;
     }
-
-    private void withThreadContext(CheckedConsumer<ThreadContext, Exception> consumer) throws Exception {
-        final ThreadContext threadContext = new ThreadContext(Settings.EMPTY);
-        try (ThreadContext.StoredContext ignore = threadContext.stashContext()) {
+                            hasEntry("message", "message1"),
+            testLogger.deprecate("someKey", "deprecated message1");
+                        ),
+                            hasEntry("component", "d.test"),
+    private List<JsonLogLine> collectLines(Stream<JsonLogLine> stream) {
+import org.opensearch.test.OpenSearchTestCase;
+            ));
+        final Logger testLogger = LogManager.getLogger("test");
+    }
+                    hasEntry("cluster.name", "opensearch"),
+        final Settings mergedSettings = Settings.builder()
+        super.setUp();
+        // This message will be filtered out by the RateLimitingFilter because an empty ID is the same as a null one.
+    }
             HeaderWarning.setThreadContext(threadContext);
-            consumer.accept(threadContext);
-        } finally {
-            HeaderWarning.removeThreadContext(threadContext);
-        }
+                    hasEntry("node.name", "sample-name"),
+                        hasEntry("component", "d.test"),
+import org.apache.logging.log4j.LogManager;
+                        hasEntry("level", "DEPRECATION"),
+import static org.hamcrest.Matchers.hasEntry;
+                logLine("file", Level.DEBUG, "sample-name", "test", "This is a debug message"),
+            @Override
+import org.opensearch.common.settings.Settings;
+            try (Stream<Map<String, String>> stream = JsonLogsStream.mapStreamFrom(path)) {
     }
-}
+        testLogger.error("This is an error message");
+        return PathUtils.get(System.getProperty("opensearch.logs.base_path"), System.getProperty("opensearch.logs.cluster_name") + ".log");
+import org.apache.logging.log4j.Logger;
+                    logLine("file", Level.ERROR, "sample-name", "test", "error message"),
+        try (Stream<JsonLogLine> stream = JsonLogsStream.from(path)) {
+    @Override
+        final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger("test");
+            "    \"user\" : [" + LINE_SEPARATOR +
+                        allOf(
+                            hasEntry("message", "message1"),
+            System.getProperty("opensearch.logs.cluster_name") + "_deprecated.json");
+        JsonLogsTestSetup.init();
+                List<Map<String, String>> jsonLogs = stream
+        final Path configDir = getDataPath(config);
+        testLogger.info("This is an info message");
+            }
+    private void setupLogging(final String config) throws IOException, UserException {
+            assertThat(jsonLogs, contains(
+    }
+    public void testDeprecatedMessage() throws Exception {
+            assertThat(jsonLogs, contains(
+            ));
+                    stacktraceWith("Caused by: java.lang.RuntimeException: cause message")
+        final Path path = PathUtils.get(System.getProperty("opensearch.logs.base_path"),
+                logLine("file", Level.INFO, "sample-name", "test", "This is an info message"),
+import java.util.Map;
+    }
+        final Environment environment = new Environment(mergedSettings, configDir);
+                )
+        }
+            );
+                    Objects.equals(actual.message(), message);
+                )
+ * this file be licensed under the Apache-2.0 license or a
+        LoggerContext context = (LoggerContext) LogManager.getContext(false);
+                                                .build();
+                                                .put(settings)
+            }
+ */
+            deprecationLogger.deprecate("key", "message1");
+            "      \"u1\"," + LINE_SEPARATOR +
+                        allOf(
+        testLogger.info(new DeprecatedMessage("key", null, "deprecated message3"));
+        final Logger testLogger = LogManager.getLogger("test");
+                    "[indexName][123] This is an info message with a shardId"),
+    }
+                            hasEntry("message", "deprecated message1"),
+                logLine("file", Level.INFO, "sample-name", "prefixLogger", "PREFIX This is an info message with a prefix")
+            List<JsonLogLine> jsonLogs = collectLines(stream);
+        prefixLogger.info("This is an info message with a prefix");
+            "  \"terms\" : {" + LINE_SEPARATOR +
+                            hasEntry("x-opaque-id", "ID1")
+    private Matcher<JsonLogLine> stacktraceWith(String... lines) {
+            consumer.accept(threadContext);
+    @BeforeClass
+        testLogger.info(new DeprecatedMessage("key", "", "deprecated message2"));
+        super.tearDown();
+                );
+        testLogger.error("error message " + json, new Exception(json));
+        final Logger testLogger = LogManager.getLogger("test");
+    }
+        return stream
+ * not use this file except in compliance with the License.
+ * ownership. Elasticsearch licenses this file to you under
+                .collect(Collectors.toList());
+        // For the same key and different X-Opaque-ID should be multiple times per key/x-opaque-id
+import java.util.stream.Stream;
+import org.opensearch.common.CheckedConsumer;
+                ),
+                    hasEntry("level", "INFO"),
+                System.getProperty("opensearch.logs.base_path"),
+    }
+import static org.hamcrest.Matchers.allOf;
+                    hasEntry("x-opaque-id", "someId")),
+            ));
+    }
+                        )
+    }
+        }
+                List<Map<String, String>> jsonLogs = stream.collect(Collectors.toList());
+                    )
+                System.getProperty("opensearch.logs.cluster_name") + "_deprecated.json");
+ * under the License.
+                        hasEntry("cluster.name", "opensearch"),
+            ));
+import java.util.List;
+                )
+            threadContext.putHeader(Task.X_OPAQUE_ID, "ID2");
+            @Override
+        final Logger testLogger = LogManager.getLogger("test");
+            deprecationLogger.deprecate("key", "message1");
+ * compatible open source license.

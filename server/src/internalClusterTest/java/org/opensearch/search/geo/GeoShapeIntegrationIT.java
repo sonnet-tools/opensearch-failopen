@@ -1,351 +1,295 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
+        String mappingQuad = """
+            .startArray()
+        ShapeBuilder.Orientation orientation = gsfm.orientation();
+import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
+        // create index
+            {
+            .startArray()
+            .value(15.0)
+        IndexService indexService = indicesService.indexService(resolveIndex(idxName));
+            {
+        assertAcked(client().admin().indices().prepareCreate("test").setMapping("shape", "type=geo_shape").get());
+    public void testIndexShapeRouting() throws Exception {
+    public GeoShapeIntegrationIT(Settings staticSettings) {
+        String mapping = XContentFactory.jsonBuilder()
+                "properties": {
  * specific language governing permissions and limitations
+        );
+                  }
+            .value(-177.0)
+        SearchResponse searchResponse = client().prepareSearch("test").setQuery(matchAllQuery()).get();
+                }
+                }
+            {
+                }
+import org.opensearch.common.xcontent.XContentFactory;
+/*
+        orientation = gsfm.orientation();
+        String polygonGeoJson = XContentFactory.jsonBuilder()
+                    "type": "geo_shape",
+            .put(super.nodeSettings(nodeOrdinal))
+        indexRandom(true, client().prepareIndex("vector").setId("0").setSource(source, MediaTypeRegistry.JSON));
+            .endArray()
+            """;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     */
+import org.opensearch.cluster.ClusterState;
+        ClusterState state = client().admin().cluster().prepareState().get().getState();
+    /**
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() }
+        assertThat(orientation, equalTo(ShapeBuilder.Orientation.CCW));
+    /**
+        mapping = XContentFactory.jsonBuilder()
+            .value(172.0)
+import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
+              "properties": {
+        SearchResponse searchResponse = client().prepareSearch("test")
+    }
+        ensureGreen(idxName, idxName + "2");
+            .startObject()
+            }
+                .get();
+        searchResponse = client().prepareSearch("vector").setQuery(geoShapeQuery("shape", new PointBuilder(-180, 1))).get();
+            """;
+ *
+ * Licensed to Elasticsearch under one or more contributor
+            }
+/*
+                  }
+            .endArray()
+    @Override
+    public void testMappingUpdate() throws Exception {
+            SearchResponse searchResponse = client().prepareSearch("quad")
+            }
+ * compatible open source license.
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        gsfm = (GeoShapeFieldMapper.GeoShapeFieldType) fieldType;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * software distributed under the License is distributed on an
+            .put("search.allow_expensive_queries", false)
+            assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(1L));
+            .field("type", "Polygon")
+            .get();
+            .field("type", "geo_shape")
+        IllegalArgumentException e = expectThrows(
+            .startObject("properties")
+                  "type": "geo_shape",
+     */
+                "properties": {
+            .endArray()
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+            .value(176.0)
+import java.util.Collection;
+ * SPDX-License-Identifier: Apache-2.0
+        assertThat(orientation, equalTo(ShapeBuilder.Orientation.RIGHT));
+        indexRandom(true, client().prepareIndex("test").setId("0").setSource("shape", polygonGeoJson));
+            assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
+        // left orientation test
+    public void testIgnoreMalformed() throws Exception {
+        ensureGreen();
+            .endObject()
+                "_routing": {
+import org.opensearch.common.geo.builders.PointBuilder;
+        try {
+            .value(176.0)
+        assertAcked(client().admin().indices().prepareCreate("test").setMapping("shape", "type=geo_shape,ignore_malformed=true").get());
+                "shape": {
+public class GeoShapeIntegrationIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
+            ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
+        assertThat(orientation, equalTo(ShapeBuilder.Orientation.LEFT));
+        ensureGreen();
+    }
+            .startArray()
+            .startObject("properties")
+        assertAcked(client().admin().indices().prepareCreate("test").setMapping(mapping).get());
+            .field("orientation", "left")
+            .value(10.0)
+        assertThat(fieldType, instanceOf(GeoShapeFieldMapper.GeoShapeFieldType.class));
+ * GitHub history for details.
+            .startArray()
+            """;
+            .endArray()
+            .startArray()
+            .startArray()
+    @ParametersFactory
+            () -> client().admin().indices().preparePutMapping("test").setSource(update, MediaTypeRegistry.JSON).get()
+            .endObject()
+            updateSettingsRequest.persistentSettings(Settings.builder().put("search.allow_expensive_queries", true));
+        // create index
+import org.opensearch.index.mapper.GeoShapeFieldMapper;
+                    "type" : "bbox",
+                "shape" : "POLYGON((179 0, -179 0, -179 2, 179 2, 179 0))"
+package org.opensearch.search.geo;
+        String idxName = "orientation";
+              }
+    }
+        ensureGreen(idxName, idxName + "2");
+            .startObject("location")
+        assertThat(e.getMessage(), containsString("using [BKD] strategy cannot be merged with"));
+        ensureGreen();
+            .endObject()
+        internalCluster().fullRestart();
+            searchResponse = client().prepareSearch("quad").setQuery(geoShapeQuery("shape", new PointBuilder(180, 1))).get();
+            assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(1L));
+ * ownership. Elasticsearch licenses this file to you under
+        super(staticSettings);
+    public void testOrientationPersistence() throws Exception {
+            .value(-177.0)
+              }
+            .toString();
+        ensureGreen();
+        assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(1L));
+            .startArray("coordinates")
+import org.opensearch.common.settings.Settings;
+/*
+        searchResponse = client().prepareSearch("vector").setQuery(geoShapeQuery("shape", new PointBuilder(180, 1))).get();
+        assertAcked(prepareCreate(idxName + "2").setMapping(mapping));
+     */
+            .startArray()
+import static org.hamcrest.Matchers.equalTo;
+    public static Collection<Object[]> parameters() {
+    }
+            .endObject()
+        );
+            .startObject()
+        GeoShapeFieldMapper.GeoShapeFieldType gsfm = (GeoShapeFieldMapper.GeoShapeFieldType) fieldType;
+ * the Apache License, Version 2.0 (the "License"); you may
+import java.util.Arrays;
+            .value(-10.0)
+        assertThat(orientation, equalTo(ShapeBuilder.Orientation.CW));
+        assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(1L));
+            .value(15.0)
+                }
+                  "shape": {
+            .value(15.0)
+            .value(0.0)
+ * KIND, either express or implied.  See the License for the
+        indicesService = internalCluster().getInstance(IndicesService.class, findNodeName(idxName + "2"));
+    }
+            updateSettingsRequest.persistentSettings(Settings.builder().put("search.allow_expensive_queries", (String) null));
+ * this file be licensed under the Apache-2.0 license or a
+        assertThat(orientation, equalTo(ShapeBuilder.Orientation.CLOCKWISE));
+                .setQuery(geoShapeQuery("shape", new PointBuilder(-179.75, 1)))
+        String update = """
+        SearchResponse searchResponse = client().prepareSearch("vector").setQuery(geoShapeQuery("shape", new PointBuilder(90, 1))).get();
+            .endArray()
+        assertThat(fieldType, instanceOf(GeoShapeFieldMapper.GeoShapeFieldType.class));
+            // Check that only geo-shape queries on legacy PrefixTree based
+ *
+            .toString();
+        String mapping = """
+            .endArray()
+            .endObject()
+ * this work for additional information regarding copyright
+            """;
+        assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(1L));
+        return Settings.builder()
+            .value(176.0)
+ */
+        fieldType = indexService.mapperService().fieldType("location");
+            IllegalArgumentException.class,
+import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
+            assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
+                    "type": "geo_shape"
+        assertAcked(client().admin().indices().prepareCreate("vector").setMapping(mappingVector).get());
+        IndicesService indicesService = internalCluster().getInstance(IndicesService.class, findNodeName(idxName));
+import org.opensearch.common.geo.builders.ShapeBuilder;
+            // geo shapes are disallowed.
+                  "shape": {
+        // create index
+    private String findNodeName(String index) {
+        String source = """
+        assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(1L));
+    }
+import org.opensearch.index.mapper.MappedFieldType;
+        // create index
+        return Arrays.asList(
+            {
+                  }
+        indexService = indicesService.indexService(resolveIndex((idxName + "2")));
+    }
+import static org.hamcrest.Matchers.instanceOf;
+            .value(-177.0)
+import static org.opensearch.index.query.QueryBuilders.matchAllQuery;
+              }
+            .setQuery(geoShapeQuery("shape", "0").indexedShapeIndex("test").indexedShapeRouting("ABC"))
+                },
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+            .startObject()
+        }
+    protected Settings nodeSettings(int nodeOrdinal) {
+     * Test that ignore_malformed on GeoShapeFieldMapper does not fail the entire document
+            .endArray()
+            .startObject("location")
+        // create index
+                    "type": "geo_shape"
+            .endArray()
+        String nodeId = shard.assignedShards().get(0).currentNodeId();
+    }
+            {
+            """;
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },
+ */
+        } finally {
+    }
+                  "strategy": "recursive"
+     * Test that orientation parameter correctly persists across cluster restart
+        // test self crossing ccw poly not crossing dateline
+        IndexShardRoutingTable shard = state.getRoutingTable().index(index).shard(0);
+            assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(1L));
+                  "shape": {
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+        return state.getNodes().get(nodeId).getName();
+            .endArray()
+                "properties": {
+import org.opensearch.action.search.SearchResponse;
+            .endObject()
+              }
+        // right orientation test
+        assertThat(orientation, equalTo(ShapeBuilder.Orientation.COUNTER_CLOCKWISE));
+        assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(1L));
+ * Modifications Copyright OpenSearch Contributors. See
+                }
+}
+            .toString();
+    public void testIndexPolygonDateLine() throws Exception {
+            .field("type", "geo_shape")
+        String source = """
+        assertAcked(client().admin().indices().prepareCreate("quad").setMapping(mappingQuad).get());
+                "shape" : {
+import static org.opensearch.index.query.QueryBuilders.geoShapeQuery;
+        assertAcked(prepareCreate(idxName).setMapping(mapping));
+ * Unless required by applicable law or agreed to in writing,
+            assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(0L));
+        MappedFieldType fieldType = indexService.mapperService().fieldType("location");
+        indexRandom(true, client().prepareIndex("quad").setId("0").setSource(source, MediaTypeRegistry.JSON));
+            .build();
+            {
+        indexRandom(true, client().prepareIndex("test").setId("0").setSource(source, MediaTypeRegistry.JSON).setRouting("ABC"));
+ * You may obtain a copy of the License at
+        searchResponse = client().prepareSearch("vector").setQuery(geoShapeQuery("shape", new PointBuilder(-179.75, 1))).get();
+        String mappingVector = """
+        assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(0L));
+                  "required": true
+                    "tree": "quadtree"
+    /**
+                    "coordinates" : [[-45.0, 45.0], [45.0, -45.0]]
+            """;
+            .value(-15.0)
+ * The OpenSearch Contributors require contributions made to
+        ensureGreen();
+import org.opensearch.indices.IndicesService;
+            searchResponse = client().prepareSearch("quad").setQuery(geoShapeQuery("shape", new PointBuilder(90, 1))).get();
+import org.opensearch.index.IndexService;
+            .startArray()
+            .field("orientation", "right")
+     * Test that the indexed shape routing can be provided if it is required
+ * not use this file except in compliance with the License.
+            ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
+            searchResponse = client().prepareSearch("quad").setQuery(geoShapeQuery("shape", new PointBuilder(-180, 1))).get();
+            .endObject()
+ * license agreements. See the NOTICE file distributed with
  * under the License.
  */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.geo;
-
-import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
-
-import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.common.geo.builders.PointBuilder;
-import org.opensearch.common.geo.builders.ShapeBuilder;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.index.IndexService;
-import org.opensearch.index.mapper.GeoShapeFieldMapper;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
-
-import java.util.Arrays;
-import java.util.Collection;
-
-import static org.opensearch.index.query.QueryBuilders.geoShapeQuery;
-import static org.opensearch.index.query.QueryBuilders.matchAllQuery;
-import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
-
-public class GeoShapeIntegrationIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
-
-    public GeoShapeIntegrationIT(Settings staticSettings) {
-        super(staticSettings);
-    }
-
-    @ParametersFactory
-    public static Collection<Object[]> parameters() {
-        return Arrays.asList(
-            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },
-            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() }
-        );
-    }
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {
-        return Settings.builder()
-            // Check that only geo-shape queries on legacy PrefixTree based
-            // geo shapes are disallowed.
-            .put("search.allow_expensive_queries", false)
-            .put(super.nodeSettings(nodeOrdinal))
-            .build();
-    }
-
-    /**
-     * Test that orientation parameter correctly persists across cluster restart
-     */
-    public void testOrientationPersistence() throws Exception {
-        String idxName = "orientation";
-        String mapping = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject("properties")
-            .startObject("location")
-            .field("type", "geo_shape")
-            .field("orientation", "left")
-            .endObject()
-            .endObject()
-            .endObject()
-            .toString();
-
-        // create index
-        assertAcked(prepareCreate(idxName).setMapping(mapping));
-
-        mapping = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject("properties")
-            .startObject("location")
-            .field("type", "geo_shape")
-            .field("orientation", "right")
-            .endObject()
-            .endObject()
-            .endObject()
-            .toString();
-
-        assertAcked(prepareCreate(idxName + "2").setMapping(mapping));
-        ensureGreen(idxName, idxName + "2");
-
-        internalCluster().fullRestart();
-        ensureGreen(idxName, idxName + "2");
-
-        // left orientation test
-        IndicesService indicesService = internalCluster().getInstance(IndicesService.class, findNodeName(idxName));
-        IndexService indexService = indicesService.indexService(resolveIndex(idxName));
-        MappedFieldType fieldType = indexService.mapperService().fieldType("location");
-        assertThat(fieldType, instanceOf(GeoShapeFieldMapper.GeoShapeFieldType.class));
-
-        GeoShapeFieldMapper.GeoShapeFieldType gsfm = (GeoShapeFieldMapper.GeoShapeFieldType) fieldType;
-        ShapeBuilder.Orientation orientation = gsfm.orientation();
-        assertThat(orientation, equalTo(ShapeBuilder.Orientation.CLOCKWISE));
-        assertThat(orientation, equalTo(ShapeBuilder.Orientation.LEFT));
-        assertThat(orientation, equalTo(ShapeBuilder.Orientation.CW));
-
-        // right orientation test
-        indicesService = internalCluster().getInstance(IndicesService.class, findNodeName(idxName + "2"));
-        indexService = indicesService.indexService(resolveIndex((idxName + "2")));
-        fieldType = indexService.mapperService().fieldType("location");
-        assertThat(fieldType, instanceOf(GeoShapeFieldMapper.GeoShapeFieldType.class));
-
-        gsfm = (GeoShapeFieldMapper.GeoShapeFieldType) fieldType;
-        orientation = gsfm.orientation();
-        assertThat(orientation, equalTo(ShapeBuilder.Orientation.COUNTER_CLOCKWISE));
-        assertThat(orientation, equalTo(ShapeBuilder.Orientation.RIGHT));
-        assertThat(orientation, equalTo(ShapeBuilder.Orientation.CCW));
-    }
-
-    /**
-     * Test that ignore_malformed on GeoShapeFieldMapper does not fail the entire document
-     */
-    public void testIgnoreMalformed() throws Exception {
-        // create index
-        assertAcked(client().admin().indices().prepareCreate("test").setMapping("shape", "type=geo_shape,ignore_malformed=true").get());
-        ensureGreen();
-
-        // test self crossing ccw poly not crossing dateline
-        String polygonGeoJson = XContentFactory.jsonBuilder()
-            .startObject()
-            .field("type", "Polygon")
-            .startArray("coordinates")
-            .startArray()
-            .startArray()
-            .value(176.0)
-            .value(15.0)
-            .endArray()
-            .startArray()
-            .value(-177.0)
-            .value(10.0)
-            .endArray()
-            .startArray()
-            .value(-177.0)
-            .value(-10.0)
-            .endArray()
-            .startArray()
-            .value(176.0)
-            .value(-15.0)
-            .endArray()
-            .startArray()
-            .value(-177.0)
-            .value(15.0)
-            .endArray()
-            .startArray()
-            .value(172.0)
-            .value(0.0)
-            .endArray()
-            .startArray()
-            .value(176.0)
-            .value(15.0)
-            .endArray()
-            .endArray()
-            .endArray()
-            .endObject()
-            .toString();
-
-        indexRandom(true, client().prepareIndex("test").setId("0").setSource("shape", polygonGeoJson));
-        SearchResponse searchResponse = client().prepareSearch("test").setQuery(matchAllQuery()).get();
-        assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(1L));
-    }
-
-    public void testMappingUpdate() throws Exception {
-        // create index
-        assertAcked(client().admin().indices().prepareCreate("test").setMapping("shape", "type=geo_shape").get());
-        ensureGreen();
-
-        String update = """
-            {
-              "properties": {
-                "shape": {
-                  "type": "geo_shape",
-                  "strategy": "recursive"
-                }
-              }
-            }
-            """;
-
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> client().admin().indices().preparePutMapping("test").setSource(update, MediaTypeRegistry.JSON).get()
-        );
-        assertThat(e.getMessage(), containsString("using [BKD] strategy cannot be merged with"));
-    }
-
-    /**
-     * Test that the indexed shape routing can be provided if it is required
-     */
-    public void testIndexShapeRouting() throws Exception {
-        String mapping = """
-            {
-                "_routing": {
-                  "required": true
-                },
-                "properties": {
-                  "shape": {
-                    "type": "geo_shape"
-                  }
-                }
-              }
-            """;
-
-        // create index
-        assertAcked(client().admin().indices().prepareCreate("test").setMapping(mapping).get());
-        ensureGreen();
-
-        String source = """
-            {
-                "shape" : {
-                    "type" : "bbox",
-                    "coordinates" : [[-45.0, 45.0], [45.0, -45.0]]
-                }
-            }
-            """;
-
-        indexRandom(true, client().prepareIndex("test").setId("0").setSource(source, MediaTypeRegistry.JSON).setRouting("ABC"));
-
-        SearchResponse searchResponse = client().prepareSearch("test")
-            .setQuery(geoShapeQuery("shape", "0").indexedShapeIndex("test").indexedShapeRouting("ABC"))
-            .get();
-
-        assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(1L));
-    }
-
-    public void testIndexPolygonDateLine() throws Exception {
-        String mappingVector = """
-            {
-                "properties": {
-                  "shape": {
-                    "type": "geo_shape"
-                  }
-                }
-              }
-            """;
-
-        String mappingQuad = """
-            {
-                "properties": {
-                  "shape": {
-                    "type": "geo_shape",
-                    "tree": "quadtree"
-                  }
-                }
-              }
-            """;
-
-        // create index
-        assertAcked(client().admin().indices().prepareCreate("vector").setMapping(mappingVector).get());
-        ensureGreen();
-
-        assertAcked(client().admin().indices().prepareCreate("quad").setMapping(mappingQuad).get());
-        ensureGreen();
-
-        String source = """
-            {
-                "shape" : "POLYGON((179 0, -179 0, -179 2, 179 2, 179 0))"
-            }
-            """;
-
-        indexRandom(true, client().prepareIndex("quad").setId("0").setSource(source, MediaTypeRegistry.JSON));
-        indexRandom(true, client().prepareIndex("vector").setId("0").setSource(source, MediaTypeRegistry.JSON));
-
-        try {
-            ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
-            updateSettingsRequest.persistentSettings(Settings.builder().put("search.allow_expensive_queries", true));
-            assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
-
-            SearchResponse searchResponse = client().prepareSearch("quad")
-                .setQuery(geoShapeQuery("shape", new PointBuilder(-179.75, 1)))
-                .get();
-
-            assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(1L));
-
-            searchResponse = client().prepareSearch("quad").setQuery(geoShapeQuery("shape", new PointBuilder(90, 1))).get();
-
-            assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(0L));
-
-            searchResponse = client().prepareSearch("quad").setQuery(geoShapeQuery("shape", new PointBuilder(-180, 1))).get();
-
-            assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(1L));
-
-            searchResponse = client().prepareSearch("quad").setQuery(geoShapeQuery("shape", new PointBuilder(180, 1))).get();
-
-            assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(1L));
-        } finally {
-            ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
-            updateSettingsRequest.persistentSettings(Settings.builder().put("search.allow_expensive_queries", (String) null));
-            assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
-        }
-
-        SearchResponse searchResponse = client().prepareSearch("vector").setQuery(geoShapeQuery("shape", new PointBuilder(90, 1))).get();
-
-        assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(0L));
-
-        searchResponse = client().prepareSearch("vector").setQuery(geoShapeQuery("shape", new PointBuilder(-179.75, 1))).get();
-
-        assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(1L));
-
-        searchResponse = client().prepareSearch("vector").setQuery(geoShapeQuery("shape", new PointBuilder(-180, 1))).get();
-
-        assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(1L));
-
-        searchResponse = client().prepareSearch("vector").setQuery(geoShapeQuery("shape", new PointBuilder(180, 1))).get();
-
-        assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(1L));
-    }
-
-    private String findNodeName(String index) {
-        ClusterState state = client().admin().cluster().prepareState().get().getState();
-        IndexShardRoutingTable shard = state.getRoutingTable().index(index).shard(0);
-        String nodeId = shard.assignedShards().get(0).currentNodeId();
-        return state.getNodes().get(nodeId).getName();
-    }
-}
+ *

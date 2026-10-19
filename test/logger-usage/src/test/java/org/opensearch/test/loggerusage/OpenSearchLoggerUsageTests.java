@@ -1,285 +1,240 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.test.loggerusage;
-
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.Marker;
-import org.apache.logging.log4j.message.Message;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.apache.logging.log4j.util.MessageSupplier;
-import org.apache.logging.log4j.util.Supplier;
-import org.opensearch.common.SuppressLoggerChecks;
-import org.opensearch.common.logging.DeprecationLogger;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.loggerusage.OpenSearchLoggerUsageChecker.WrongLoggerUsage;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Stream;
-
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
-import static org.hamcrest.Matchers.oneOf;
-
-public class OpenSearchLoggerUsageTests extends OpenSearchTestCase {
-
-    public void testLoggerUsageChecks() throws IOException {
-        for (Method method : getClass().getMethods()) {
-            if (method.getDeclaringClass().equals(getClass())) {
-                if (method.getName().startsWith("check")) {
-                    logger.info("Checking logger usage for method {}", method.getName());
-                    InputStream classInputStream = getClass().getResourceAsStream(getClass().getSimpleName() + ".class");
-                    List<WrongLoggerUsage> errors = new ArrayList<>();
-                    OpenSearchLoggerUsageChecker.check(errors::add, classInputStream,
-                        m -> m.equals(method.getName()) || m.startsWith("lambda$" + method.getName()));
-                    if (method.getName().startsWith("checkFail")) {
-                        assertFalse("Expected " + method.getName() + " to have wrong Logger usage", errors.isEmpty());
-                    } else {
-                        assertTrue("Method " + method.getName() + " has unexpected Logger usage errors: " + errors, errors.isEmpty());
-                    }
-                } else {
-                    assertTrue("only allow methods starting with test or check in this class", method.getName().startsWith("test"));
-                }
-            }
-        }
-    }
-
-    public void testLoggerUsageCheckerCompatibilityWithLog4j2Logger() {
-        for (Method method : Logger.class.getMethods()) {
-            if (OpenSearchLoggerUsageChecker.LOGGER_METHODS.contains(method.getName())) {
-                assertThat(method.getParameterCount(), greaterThanOrEqualTo(1));
-                final Class<?>[] parameterTypes = method.getParameterTypes();
-                int markerOffset = parameterTypes[0].equals(Marker.class) ? 1 : 0;
-                int paramLength = parameterTypes.length - markerOffset;
-                if (method.isVarArgs()) {
-                    assertEquals(2, paramLength);
-                    assertEquals(String.class, parameterTypes[markerOffset]);
-                    assertThat(parameterTypes[markerOffset + 1], is(oneOf(Object[].class, Supplier[].class)));
-                } else {
-                    assertThat(parameterTypes[markerOffset], is(oneOf(Message.class, MessageSupplier.class,
-                        CharSequence.class, Object.class, String.class, Supplier.class)));
-
-                    if (paramLength == 2) {
-                        assertThat(parameterTypes[markerOffset + 1], is(oneOf(Throwable.class, Object.class)));
-                        if (parameterTypes[markerOffset + 1].equals(Object.class)) {
-                            assertEquals(String.class, parameterTypes[markerOffset]);
-                        }
-                    }
-                    if (paramLength > 2) {
-                        assertEquals(String.class, parameterTypes[markerOffset]);
-                        assertThat(paramLength, lessThanOrEqualTo(11));
-                        for (int i = 1; i < paramLength; i++) {
-                            assertEquals(Object.class, parameterTypes[markerOffset + i]);
-                        }
-                    }
-                }
-            }
-        }
-
-        for (String methodName : OpenSearchLoggerUsageChecker.LOGGER_METHODS) {
-            assertEquals(48, Stream.of(Logger.class.getMethods()).filter(m -> methodName.equals(m.getName())).count());
-        }
-
-        for (Constructor<?> constructor : ParameterizedMessage.class.getConstructors()) {
-            assertThat(constructor.getParameterCount(), greaterThanOrEqualTo(2));
-            final Class<?>[] parameterTypes = constructor.getParameterTypes();
-            assertEquals(String.class, parameterTypes[0]);
-            assertThat(parameterTypes[1], is(oneOf(String[].class, Object[].class, Object.class)));
-
-            if (parameterTypes.length > 2) {
-                assertEquals(3, parameterTypes.length);
-                if (parameterTypes[1].equals(Object.class)) {
-                    assertEquals(Object.class, parameterTypes[2]);
-                } else {
-                    assertEquals(Throwable.class, parameterTypes[2]);
-                }
-            }
-        }
-
-        assertEquals(5, ParameterizedMessage.class.getConstructors().length);
-    }
-    public void checkForSubclasses() {
-        logger.debug(new TestMessage("message", "x-opaque-id"));
-    }
-
-    public void checkArraySizeForSubclasses() {
-        logger.debug(new TestMessage("message {}", "x-opaque-id", 1));
-    }
-
-    public void checkFailArraySizeForSubclasses(Object... arr) {
-        logger.debug(new TestMessage("message {}", "x-opaque-id", arr));
-    }
-
     public void checkFailArraySize(String... arr) {
-        logger.debug(new ParameterizedMessage("text {}", (Object[])arr));
-    }
-
-    public void checkNumberOfArguments1() {
-        logger.info("Hello {}", "world");
-    }
-
-    public void checkFailNumberOfArguments1() {
-        logger.info("Hello {}");
-    }
-
-    @SuppressLoggerChecks(reason = "test ignore functionality")
-    public void checkIgnoreWhenAnnotationPresent() {
-        logger.info("Hello {}");
-    }
-
-    public void checkNumberOfArguments2() {
-        logger.info("Hello {}, {}, {}", "world", 2, "third argument");
-    }
-
-    public void checkFailNumberOfArguments2() {
-        logger.info("Hello {}, {}", "world", 2, "third argument");
-    }
-
-    public void checkNumberOfArguments3() {
-        logger.info("Hello {}, {}, {}, {}, {}, {}, {}", "world", 2, "third argument", 4, 5, 6, new String("last arg"));
-    }
-
-    public void checkFailNumberOfArguments3() {
-        logger.info("Hello {}, {}, {}, {}, {}, {}, {}", "world", 2, "third argument", 4, 5, 6, 7, new String("last arg"));
-    }
-
-    public void checkNumberOfArgumentsParameterizedMessage1() {
-        logger.info(new ParameterizedMessage("Hello {}, {}, {}", "world", 2, "third argument"));
-    }
-
-    public void checkFailNumberOfArgumentsParameterizedMessage1() {
-        logger.info(new ParameterizedMessage("Hello {}, {}", "world", 2, "third argument"));
-    }
-
-    public void checkNumberOfArgumentsParameterizedMessage2() {
-        logger.info(new ParameterizedMessage("Hello {}, {}", "world", 2));
-    }
-
-    public void checkFailNumberOfArgumentsParameterizedMessage2() {
-        logger.info(new ParameterizedMessage("Hello {}, {}, {}", "world", 2));
-    }
-
-    public void checkNumberOfArgumentsParameterizedMessage3() {
-        logger.info((Supplier<?>) () -> new ParameterizedMessage("Hello {}, {}, {}", "world", 2, "third argument"));
-    }
-
-    public void checkFailNumberOfArgumentsParameterizedMessage3() {
-        logger.info((Supplier<?>) () -> new ParameterizedMessage("Hello {}, {}", "world", 2, "third argument"));
-    }
-
-    public void checkOrderOfExceptionArgument() {
-        logger.info("Hello", new Exception());
-    }
-
-    public void checkOrderOfExceptionArgument1() {
-        logger.info((Supplier<?>) () -> new ParameterizedMessage("Hello {}", "world"), new Exception());
-    }
-
-    // SLF4J / Log4j2 style: a trailing throwable is not a placeholder argument, it is logged as the exception.
-    public void checkOrderOfExceptionArgument3() {
-        logger.info("Hello {}", "world", new Exception());
-    }
-
-    public void checkOrderOfExceptionArgument2() {
+    public void testLoggerUsageCheckerCompatibilityWithLog4j2Logger() {
         logger.info((Supplier<?>) () -> new ParameterizedMessage("Hello {}, {}", "world", 42), new Exception());
-    }
-
-    // SLF4J / Log4j2 style with multiple placeholders and a trailing throwable.
-    public void checkOrderOfExceptionArgument4() {
-        logger.info("Hello {}, {}", "world", 42, new Exception());
-    }
-
-    // A subtype of Throwable as the trailing argument must also be recognised.
-    public void checkOrderOfExceptionArgumentSubtype() {
-        logger.info("Hello {}", "world", new IllegalArgumentException("bad"));
-    }
-
-    // Too many non-throwable arguments even after accounting for the trailing throwable is still wrong.
-    public void checkFailTrailingThrowableTooManyArguments() {
-        logger.info("Hello {}", "world", "extra", new Exception());
-    }
-
-    // A trailing throwable does not excuse a message that has too few placeholders for the remaining arguments.
-    public void checkFailTrailingThrowableTooFewPlaceholders() {
-        logger.info("Hello", "world", new Exception());
-    }
-
-    public void checkNonConstantMessageWithZeroArguments(boolean b) {
-        logger.info(Boolean.toString(b), new Exception());
-    }
-
-    public void checkFailNonConstantMessageWithArguments(boolean b) {
-        logger.info((Supplier<?>) () -> new ParameterizedMessage(Boolean.toString(b), 42), new Exception());
-    }
-
+        Object[] args = new Object[] { "world", 42 };
     public void checkComplexUsage(boolean b) {
         String message = "Hello {}, {}";
-        Object[] args = new Object[] { "world", 42 };
-        if (b) {
-            message = "also two args {}{}";
-            args = new Object[] { "world", 43 };
+    }
+        logger.info(new ParameterizedMessage("Hello {}, {}", "world", 2, "third argument"));
         }
+        String message = "Hello {}, {}";
+        logger.info(new ParameterizedMessage("Hello {}, {}, {}", "world", 2));
+                        assertEquals(String.class, parameterTypes[markerOffset]);
+        logger.info(new ParameterizedMessage("Hello {}, {}", "world", 2));
+                if (parameterTypes[1].equals(Object.class)) {
+ * ownership. Elasticsearch licenses this file to you under
+        if (b) {
+    public void checkOrderOfExceptionArgument3() {
+    public void checkFailNumberOfArgumentsParameterizedMessage1() {
+                        assertTrue("Method " + method.getName() + " has unexpected Logger usage errors: " + errors, errors.isEmpty());
+                    assertEquals(Object.class, parameterTypes[2]);
+                    assertEquals(Throwable.class, parameterTypes[2]);
+            if (OpenSearchLoggerUsageChecker.LOGGER_METHODS.contains(method.getName())) {
+                } else {
+    }
+public class OpenSearchLoggerUsageTests extends OpenSearchTestCase {
+    }
+    }
+        }
+                    }
+    }
+import java.util.stream.Stream;
+                if (method.isVarArgs()) {
+ * Licensed to Elasticsearch under one or more contributor
+    public void checkFailNonConstantMessageWithArguments(boolean b) {
+ * compatible open source license.
+                    InputStream classInputStream = getClass().getResourceAsStream(getClass().getSimpleName() + ".class");
         logger.info(message, args);
     }
-
+ */
+    }
+import org.apache.logging.log4j.Marker;
+                        }
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+                int markerOffset = parameterTypes[0].equals(Marker.class) ? 1 : 0;
+import org.opensearch.common.SuppressLoggerChecks;
+    }
+                    if (paramLength > 2) {
+            if (parameterTypes.length > 2) {
+    }
+/*
+        logger.info((Supplier<?>) () -> new ParameterizedMessage("Hello {}", "world"), new Exception());
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                    }
+                    if (paramLength == 2) {
+    }
+                assertThat(method.getParameterCount(), greaterThanOrEqualTo(1));
+import static org.hamcrest.Matchers.oneOf;
+                        if (parameterTypes[markerOffset + 1].equals(Object.class)) {
+        logger.info((Supplier<?>) () -> new ParameterizedMessage("Hello {}, {}", "world", 2, "third argument"));
+import org.opensearch.test.OpenSearchTestCase;
+                            assertEquals(String.class, parameterTypes[markerOffset]);
+        logger.info("Hello {}");
+        logger.info((Supplier<?>) () -> new ParameterizedMessage(Boolean.toString(b), 42), new Exception());
+    public void checkFailNumberOfArguments3() {
+            }
+        for (String methodName : OpenSearchLoggerUsageChecker.LOGGER_METHODS) {
+    }
     public void checkFailComplexUsage1(boolean b) {
-        String message = "Hello {}, {}";
-        Object[] args = new Object[] { "world", 42 };
-        if (b) {
-            message = "just one arg {}";
-            args = new Object[] { "world", 43 };
-        }
-        logger.info(message, args);
     }
-
-    public void checkFailComplexUsage2(boolean b) {
-        String message = "Hello {}, {}";
-        Object[] args = new Object[] { "world", 42 };
-        if (b) {
+ *
+    // SLF4J / Log4j2 style: a trailing throwable is not a placeholder argument, it is logged as the exception.
+    }
+    }
+                    assertEquals(2, paramLength);
+    public void checkOrderOfExceptionArgument4() {
+                    OpenSearchLoggerUsageChecker.check(errors::add, classInputStream,
+ * Modifications Copyright OpenSearch Contributors. See
+/*
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
+        logger.debug(new TestMessage("message", "x-opaque-id"));
             message = "also two args {}{}";
-            args = new Object[] { "world", 43, "another argument" };
-        }
+            }
+    public void checkOrderOfExceptionArgument1() {
         logger.info(message, args);
-    }
-
+    public void testLoggerUsageChecks() throws IOException {
+                    assertThat(parameterTypes[markerOffset + 1], is(oneOf(Object[].class, Supplier[].class)));
+    @SuppressLoggerChecks(reason = "test ignore functionality")
+        logger.info("Hello {}, {}, {}, {}, {}, {}, {}", "world", 2, "third argument", 4, 5, 6, new String("last arg"));
+import java.util.List;
+import org.apache.logging.log4j.Logger;
     public void checkDeprecationLogger() {
         DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(OpenSearchLoggerUsageTests.class);
-        deprecationLogger.deprecate("key","message {}", 123);
+        logger.info("Hello {}");
+            assertThat(parameterTypes[1], is(oneOf(String[].class, Object[].class, Object.class)));
+                        assertThat(parameterTypes[markerOffset + 1], is(oneOf(Throwable.class, Object.class)));
+        logger.info(Boolean.toString(b), new Exception());
     }
-
+ * the Apache License, Version 2.0 (the "License"); you may
+    public void checkIgnoreWhenAnnotationPresent() {
+import java.io.InputStream;
+ * software distributed under the License is distributed on an
+        }
+    }
+    }
+ * this work for additional information regarding copyright
+            args = new Object[] { "world", 43 };
+    public void checkNumberOfArgumentsParameterizedMessage1() {
+ */
+/*
+        if (b) {
+    }
+        Object[] args = new Object[] { "world", 42 };
+                        m -> m.equals(method.getName()) || m.startsWith("lambda$" + method.getName()));
+    // SLF4J / Log4j2 style with multiple placeholders and a trailing throwable.
+    public void checkNumberOfArguments1() {
+                if (method.getName().startsWith("check")) {
+ * Unless required by applicable law or agreed to in writing,
+    }
+                } else {
+    public void checkOrderOfExceptionArgument() {
+    }
+                }
+        String message = "Hello {}, {}";
+                        for (int i = 1; i < paramLength; i++) {
+import static org.hamcrest.Matchers.is;
+                        assertFalse("Expected " + method.getName() + " to have wrong Logger usage", errors.isEmpty());
+        logger.debug(new TestMessage("message {}", "x-opaque-id", arr));
+        logger.info("Hello", new Exception());
+    public void checkNumberOfArgumentsParameterizedMessage2() {
+                        CharSequence.class, Object.class, String.class, Supplier.class)));
+        logger.debug(new TestMessage("message {}", "x-opaque-id", 1));
+    public void checkOrderOfExceptionArgument2() {
+        logger.info("Hello {}, {}, {}, {}, {}, {}, {}", "world", 2, "third argument", 4, 5, 6, 7, new String("last arg"));
+            assertEquals(String.class, parameterTypes[0]);
+    }
+import org.opensearch.test.loggerusage.OpenSearchLoggerUsageChecker.WrongLoggerUsage;
+ * this file be licensed under the Apache-2.0 license or a
+    }
+    public void checkFailNumberOfArgumentsParameterizedMessage3() {
+            message = "just one arg {}";
+        logger.info(new ParameterizedMessage("Hello {}, {}, {}", "world", 2, "third argument"));
+        Object[] args = new Object[] { "world", 42 };
+import org.apache.logging.log4j.message.Message;
+            args = new Object[] { "world", 43, "another argument" };
+    }
+                    } else {
+        }
+            assertEquals(48, Stream.of(Logger.class.getMethods()).filter(m -> methodName.equals(m.getName())).count());
+    }
+    // A subtype of Throwable as the trailing argument must also be recognised.
+    public void checkFailTrailingThrowableTooFewPlaceholders() {
+        if (b) {
+        logger.info("Hello", "world", new Exception());
+ * GitHub history for details.
+        }
+    public void checkFailNumberOfArguments2() {
+                assertEquals(3, parameterTypes.length);
+        logger.info("Hello {}, {}, {}", "world", 2, "third argument");
+        logger.debug(new ParameterizedMessage("text {}", (Object[])arr));
+            message = "also two args {}{}";
+                        assertThat(paramLength, lessThanOrEqualTo(11));
+ * specific language governing permissions and limitations
+    public void checkNumberOfArguments2() {
+import java.lang.reflect.Constructor;
+    public void checkArraySizeForSubclasses() {
+ * under the License.
+ * not use this file except in compliance with the License.
+        logger.info("Hello {}", "world");
+                    }
+    public void checkFailNumberOfArguments1() {
+    public void checkForSubclasses() {
+                    if (method.getName().startsWith("checkFail")) {
+    }
+import java.lang.reflect.Method;
+    }
+                } else {
 }
+ * You may obtain a copy of the License at
+    public void checkFailComplexUsage2(boolean b) {
+    public void checkOrderOfExceptionArgumentSubtype() {
+ *
+ * license agreements. See the NOTICE file distributed with
+ */
+    // A trailing throwable does not excuse a message that has too few placeholders for the remaining arguments.
+        assertEquals(5, ParameterizedMessage.class.getConstructors().length);
+            if (method.getDeclaringClass().equals(getClass())) {
+                    assertTrue("only allow methods starting with test or check in this class", method.getName().startsWith("test"));
+ * SPDX-License-Identifier: Apache-2.0
+        for (Constructor<?> constructor : ParameterizedMessage.class.getConstructors()) {
+    }
+        logger.info("Hello {}", "world", new Exception());
+    }
+        deprecationLogger.deprecate("key","message {}", 123);
+                    assertEquals(String.class, parameterTypes[markerOffset]);
+import org.apache.logging.log4j.message.ParameterizedMessage;
+ * The OpenSearch Contributors require contributions made to
+        }
+                int paramLength = parameterTypes.length - markerOffset;
+                    logger.info("Checking logger usage for method {}", method.getName());
+    }
+import java.util.ArrayList;
+    }
+        logger.info("Hello {}, {}", "world", 2, "third argument");
+    }
+import org.apache.logging.log4j.util.MessageSupplier;
+    public void checkNumberOfArgumentsParameterizedMessage3() {
+import org.opensearch.common.logging.DeprecationLogger;
+        for (Method method : Logger.class.getMethods()) {
+        logger.info("Hello {}", "world", new IllegalArgumentException("bad"));
+    public void checkFailArraySizeForSubclasses(Object... arr) {
+                        }
+                    assertThat(parameterTypes[markerOffset], is(oneOf(Message.class, MessageSupplier.class,
+    // Too many non-throwable arguments even after accounting for the trailing throwable is still wrong.
+            final Class<?>[] parameterTypes = constructor.getParameterTypes();
+        }
+import org.apache.logging.log4j.util.Supplier;
+            }
+            assertThat(constructor.getParameterCount(), greaterThanOrEqualTo(2));
+    }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        logger.info("Hello {}, {}", "world", 42, new Exception());
+                final Class<?>[] parameterTypes = method.getParameterTypes();
+import java.io.IOException;
+ * KIND, either express or implied.  See the License for the
+                    List<WrongLoggerUsage> errors = new ArrayList<>();
+package org.opensearch.test.loggerusage;
+                }
+        for (Method method : getClass().getMethods()) {
+    public void checkNonConstantMessageWithZeroArguments(boolean b) {
+    public void checkNumberOfArguments3() {
+                            assertEquals(Object.class, parameterTypes[markerOffset + i]);
+    public void checkFailTrailingThrowableTooManyArguments() {
+            args = new Object[] { "world", 43 };
+    }
+        logger.info((Supplier<?>) () -> new ParameterizedMessage("Hello {}, {}, {}", "world", 2, "third argument"));
+ *
+                }
+        logger.info(message, args);
+    public void checkFailNumberOfArgumentsParameterizedMessage2() {
+        logger.info("Hello {}", "world", "extra", new Exception());

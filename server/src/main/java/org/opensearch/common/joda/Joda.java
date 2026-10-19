@@ -1,663 +1,619 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+                        StrictISODateTimeFormat.dateTime().withLocale(Locale.ROOT).withZone(DateTimeZone.UTC).withDefaultYear(1970)
+            try {
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.joda;
-
-import org.opensearch.common.logging.DeprecationLogger;
-import org.opensearch.common.time.DateFormatter;
-import org.opensearch.common.time.FormatNames;
-import org.opensearch.common.util.LazyInitializable;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.joda.time.Chronology;
-import org.joda.time.DateTime;
-import org.joda.time.DateTimeField;
-import org.joda.time.DateTimeFieldType;
-import org.joda.time.DateTimeZone;
-import org.joda.time.DurationField;
-import org.joda.time.DurationFieldType;
-import org.joda.time.ReadablePartial;
-import org.joda.time.field.DividedDateTimeField;
-import org.joda.time.field.OffsetDateTimeField;
-import org.joda.time.field.ScaledDurationField;
-import org.joda.time.format.DateTimeFormat;
-import org.joda.time.format.DateTimeFormatter;
-import org.joda.time.format.DateTimeFormatterBuilder;
-import org.joda.time.format.DateTimeParser;
-import org.joda.time.format.DateTimeParserBucket;
-import org.joda.time.format.DateTimePrinter;
-import org.joda.time.format.ISODateTimeFormat;
-import org.joda.time.format.StrictISODateTimeFormat;
-
-import java.io.IOException;
-import java.io.Writer;
-import java.math.BigDecimal;
-import java.util.Locale;
-import java.util.regex.Pattern;
-
-/**
- * Joda class.
- *
- * @deprecated
- *
- * @opensearch.internal
- */
-@Deprecated
-public class Joda {
-    // Joda.forPattern could be used even before the logging is initialized.
-    // If LogManager.getLogger is called before logging config is loaded
-    // it results in errors sent to status logger and startup to fail.
-    // Hence a lazy initialization.
-    private static final LazyInitializable<DeprecationLogger, RuntimeException> deprecationLogger = new LazyInitializable(
-        () -> DeprecationLogger.getLogger(Joda.class)
-    );
-
-    /**
-     * Parses a joda based pattern, including some named ones (similar to the built in Joda ISO ones).
-     */
-    public static JodaDateFormatter forPattern(String input) {
-        if (Strings.hasLength(input)) {
-            input = input.trim();
-        }
-        if (input == null || input.length() == 0) {
-            throw new IllegalArgumentException("No date pattern provided");
-        }
-
-        FormatNames formatName = FormatNames.forName(input);
+                    break;
         if (formatName != null && formatName.isCamelCase(input)) {
-            String msg = "Camel case format name {} is deprecated and will be removed in a future version. "
-                + "Use snake case name {} instead.";
-            getDeprecationLogger().deprecate(
-                "camelCaseDateFormat_" + formatName.getCamelCaseName(),
-                msg,
-                formatName.getCamelCaseName(),
-                formatName.getSnakeCaseName()
-            );
-        }
-
-        DateTimeFormatter formatter;
-        // formatName is already resolved above via FormatNames.forName(input); switch on the enum directly.
-        if (formatName != null) {
-            switch (formatName) {
-                case BASIC_DATE:
                     formatter = ISODateTimeFormat.basicDate();
-                    break;
-                case BASIC_DATE_TIME:
-                    formatter = ISODateTimeFormat.basicDateTime();
-                    break;
-                case BASIC_DATE_TIME_NO_MILLIS:
-                    formatter = ISODateTimeFormat.basicDateTimeNoMillis();
-                    break;
-                case BASIC_ORDINAL_DATE:
-                    formatter = ISODateTimeFormat.basicOrdinalDate();
-                    break;
-                case BASIC_ORDINAL_DATE_TIME:
-                    formatter = ISODateTimeFormat.basicOrdinalDateTime();
-                    break;
-                case BASIC_ORDINAL_DATE_TIME_NO_MILLIS:
-                    formatter = ISODateTimeFormat.basicOrdinalDateTimeNoMillis();
-                    break;
-                case BASIC_TIME:
-                    formatter = ISODateTimeFormat.basicTime();
-                    break;
-                case BASIC_TIME_NO_MILLIS:
-                    formatter = ISODateTimeFormat.basicTimeNoMillis();
-                    break;
-                case BASIC_T_TIME:
-                    formatter = ISODateTimeFormat.basicTTime();
-                    break;
-                case BASIC_T_TIME_NO_MILLIS:
-                    formatter = ISODateTimeFormat.basicTTimeNoMillis();
-                    break;
-                case BASIC_WEEK_DATE:
-                    formatter = ISODateTimeFormat.basicWeekDate();
-                    break;
-                case BASIC_WEEK_DATE_TIME:
-                    formatter = ISODateTimeFormat.basicWeekDateTime();
-                    break;
-                case BASIC_WEEK_DATE_TIME_NO_MILLIS:
-                    formatter = ISODateTimeFormat.basicWeekDateTimeNoMillis();
-                    break;
-                case DATE:
-                    formatter = ISODateTimeFormat.date();
-                    break;
-                case DATE_HOUR:
-                    formatter = ISODateTimeFormat.dateHour();
-                    break;
                 case DATE_HOUR_MINUTE:
-                    formatter = ISODateTimeFormat.dateHourMinute();
+            .appendLiteral(':')
                     break;
-                case DATE_HOUR_MINUTE_SECOND:
-                    formatter = ISODateTimeFormat.dateHourMinuteSecond();
                     break;
-                case DATE_HOUR_MINUTE_SECOND_FRACTION:
-                    formatter = ISODateTimeFormat.dateHourMinuteSecondFraction();
-                    break;
-                case DATE_HOUR_MINUTE_SECOND_MILLIS:
-                    formatter = ISODateTimeFormat.dateHourMinuteSecondMillis();
-                    break;
-                case DATE_OPTIONAL_TIME:
-                    // in this case, we have a separate parser and printer since the dataOptionalTimeParser can't print
-                    // this sucks we should use the root local by default and not be dependent on the node
-                    return new JodaDateFormatter(
-                        input,
-                        ISODateTimeFormat.dateOptionalTimeParser().withLocale(Locale.ROOT).withZone(DateTimeZone.UTC).withDefaultYear(1970),
-                        ISODateTimeFormat.dateTime().withLocale(Locale.ROOT).withZone(DateTimeZone.UTC).withDefaultYear(1970)
-                    );
-                case DATE_TIME:
-                    formatter = ISODateTimeFormat.dateTime();
-                    break;
-                case DATE_TIME_NO_MILLIS:
-                    formatter = ISODateTimeFormat.dateTimeNoMillis();
-                    break;
-                case HOUR:
-                    formatter = ISODateTimeFormat.hour();
-                    break;
-                case HOUR_MINUTE:
-                    formatter = ISODateTimeFormat.hourMinute();
-                    break;
-                case HOUR_MINUTE_SECOND:
-                    formatter = ISODateTimeFormat.hourMinuteSecond();
-                    break;
-                case HOUR_MINUTE_SECOND_FRACTION:
-                    formatter = ISODateTimeFormat.hourMinuteSecondFraction();
-                    break;
-                case HOUR_MINUTE_SECOND_MILLIS:
-                    formatter = ISODateTimeFormat.hourMinuteSecondMillis();
-                    break;
-                case ORDINAL_DATE:
-                    formatter = ISODateTimeFormat.ordinalDate();
-                    break;
-                case ORDINAL_DATE_TIME:
-                    formatter = ISODateTimeFormat.ordinalDateTime();
-                    break;
-                case ORDINAL_DATE_TIME_NO_MILLIS:
-                    formatter = ISODateTimeFormat.ordinalDateTimeNoMillis();
-                    break;
-                case TIME:
-                    formatter = ISODateTimeFormat.time();
-                    break;
-                case TIME_NO_MILLIS:
-                    formatter = ISODateTimeFormat.timeNoMillis();
-                    break;
-                case T_TIME:
-                    formatter = ISODateTimeFormat.tTime();
-                    break;
-                case T_TIME_NO_MILLIS:
-                    formatter = ISODateTimeFormat.tTimeNoMillis();
-                    break;
-                case WEEK_DATE:
-                    formatter = ISODateTimeFormat.weekDate();
-                    break;
-                case WEEK_DATE_TIME:
-                    formatter = ISODateTimeFormat.weekDateTime();
-                    break;
-                case WEEK_DATE_TIME_NO_MILLIS:
-                    formatter = ISODateTimeFormat.weekDateTimeNoMillis();
-                    break;
-                case WEEKYEAR:
-                    getDeprecationLogger().deprecate(
-                        "week_year_format_name",
-                        "Format name \"week_year\" is deprecated and will be removed in a future version. Use \"weekyear\" format instead"
-                    );
-                    formatter = ISODateTimeFormat.weekyear();
-                    break;
-                case WEEK_YEAR:
-                    formatter = ISODateTimeFormat.weekyear();
-                    break;
-                case WEEK_YEAR_WEEK:
-                    formatter = ISODateTimeFormat.weekyearWeek();
-                    break;
-                case WEEKYEAR_WEEK_DAY:
-                    formatter = ISODateTimeFormat.weekyearWeekDay();
-                    break;
-                case YEAR:
-                    formatter = ISODateTimeFormat.year();
-                    break;
-                case YEAR_MONTH:
-                    formatter = ISODateTimeFormat.yearMonth();
-                    break;
-                case YEAR_MONTH_DAY:
-                    formatter = ISODateTimeFormat.yearMonthDay();
-                    break;
-                case EPOCH_SECOND:
-                    formatter = new DateTimeFormatterBuilder().append(new EpochTimePrinter(false), new EpochTimeParser(false))
-                        .toFormatter();
-                    break;
-                case EPOCH_MILLIS:
-                    formatter = new DateTimeFormatterBuilder().append(new EpochTimePrinter(true), new EpochTimeParser(true)).toFormatter();
-                    break;
-                // strict date formats here, must be at least 4 digits for year and two for months and two for day
-                case STRICT_BASIC_WEEK_DATE:
-                    formatter = StrictISODateTimeFormat.basicWeekDate();
-                    break;
-                case STRICT_BASIC_WEEK_DATE_TIME:
-                    formatter = StrictISODateTimeFormat.basicWeekDateTime();
+         */
+                for (int i = 0; i < formats.length; i++) {
+import org.opensearch.core.common.Strings;
+                    formatter = StrictISODateTimeFormat.dateHourMinute();
+                case STRICT_HOUR_MINUTE_SECOND:
+                bucket.saveField(DateTimeFieldType.monthOfYear(), dt.getMonthOfYear());
+                case STRICT_YEAR_MONTH_DAY:
+                    formatter = StrictISODateTimeFormat.weekDate();
+    }
                     break;
                 case STRICT_BASIC_WEEK_DATE_TIME_NO_MILLIS:
-                    formatter = StrictISODateTimeFormat.basicWeekDateTimeNoMillis();
+                case ORDINAL_DATE_TIME:
+                case WEEK_YEAR_WEEK:
                     break;
-                case STRICT_DATE:
-                    formatter = StrictISODateTimeFormat.date();
+        if (formatName != null) {
                     break;
-                case STRICT_DATE_HOUR:
-                    formatter = StrictISODateTimeFormat.dateHour();
-                    break;
-                case STRICT_DATE_HOUR_MINUTE:
-                    formatter = StrictISODateTimeFormat.dateHourMinute();
-                    break;
-                case STRICT_DATE_HOUR_MINUTE_SECOND:
-                    formatter = StrictISODateTimeFormat.dateHourMinuteSecond();
-                    break;
-                case STRICT_DATE_HOUR_MINUTE_SECOND_FRACTION:
-                    formatter = StrictISODateTimeFormat.dateHourMinuteSecondFraction();
-                    break;
-                case STRICT_DATE_HOUR_MINUTE_SECOND_MILLIS:
-                    formatter = StrictISODateTimeFormat.dateHourMinuteSecondMillis();
-                    break;
-                case STRICT_DATE_OPTIONAL_TIME:
-                    // in this case, we have a separate parser and printer since the dataOptionalTimeParser can't print
-                    // this sucks we should use the root local by default and not be dependent on the node
-                    return new JodaDateFormatter(
-                        input,
-                        StrictISODateTimeFormat.dateOptionalTimeParser()
-                            .withLocale(Locale.ROOT)
-                            .withZone(DateTimeZone.UTC)
-                            .withDefaultYear(1970),
-                        StrictISODateTimeFormat.dateTime().withLocale(Locale.ROOT).withZone(DateTimeZone.UTC).withDefaultYear(1970)
-                    );
-                case STRICT_DATE_TIME:
-                    formatter = StrictISODateTimeFormat.dateTime();
-                    break;
-                case STRICT_DATE_TIME_NO_MILLIS:
-                    formatter = StrictISODateTimeFormat.dateTimeNoMillis();
-                    break;
-                case STRICT_HOUR:
-                    formatter = StrictISODateTimeFormat.hour();
-                    break;
-                case STRICT_HOUR_MINUTE:
-                    formatter = StrictISODateTimeFormat.hourMinute();
-                    break;
-                case STRICT_HOUR_MINUTE_SECOND:
-                    formatter = StrictISODateTimeFormat.hourMinuteSecond();
-                    break;
-                case STRICT_HOUR_MINUTE_SECOND_FRACTION:
-                    formatter = StrictISODateTimeFormat.hourMinuteSecondFraction();
-                    break;
-                case STRICT_HOUR_MINUTE_SECOND_MILLIS:
-                    formatter = StrictISODateTimeFormat.hourMinuteSecondMillis();
-                    break;
-                case STRICT_ORDINAL_DATE:
-                    formatter = StrictISODateTimeFormat.ordinalDate();
-                    break;
-                case STRICT_ORDINAL_DATE_TIME:
-                    formatter = StrictISODateTimeFormat.ordinalDateTime();
-                    break;
-                case STRICT_ORDINAL_DATE_TIME_NO_MILLIS:
-                    formatter = StrictISODateTimeFormat.ordinalDateTimeNoMillis();
-                    break;
-                case STRICT_TIME:
-                    formatter = StrictISODateTimeFormat.time();
-                    break;
-                case STRICT_TIME_NO_MILLIS:
-                    formatter = StrictISODateTimeFormat.timeNoMillis();
-                    break;
-                case STRICT_T_TIME:
-                    formatter = StrictISODateTimeFormat.tTime();
-                    break;
-                case STRICT_T_TIME_NO_MILLIS:
-                    formatter = StrictISODateTimeFormat.tTimeNoMillis();
-                    break;
-                case STRICT_WEEK_DATE:
-                    formatter = StrictISODateTimeFormat.weekDate();
-                    break;
-                case STRICT_WEEK_DATE_TIME:
-                    formatter = StrictISODateTimeFormat.weekDateTime();
-                    break;
-                case STRICT_WEEK_DATE_TIME_NO_MILLIS:
-                    formatter = StrictISODateTimeFormat.weekDateTimeNoMillis();
-                    break;
-                case STRICT_WEEKYEAR:
-                    formatter = StrictISODateTimeFormat.weekyear();
-                    break;
-                case STRICT_WEEKYEAR_WEEK:
                     formatter = StrictISODateTimeFormat.weekyearWeek();
                     break;
-                case STRICT_WEEKYEAR_WEEK_DAY:
-                    formatter = StrictISODateTimeFormat.weekyearWeekDay();
-                    break;
-                case STRICT_YEAR:
-                    formatter = StrictISODateTimeFormat.year();
-                    break;
-                case STRICT_YEAR_MONTH:
-                    formatter = StrictISODateTimeFormat.yearMonth();
-                    break;
-                case STRICT_YEAR_MONTH_DAY:
-                    formatter = StrictISODateTimeFormat.yearMonthDay();
-                    break;
-                default:
-                    // formatName is non-null but has no Joda formatter (e.g. ISO8601, RFC3339_LENIENT, EPOCH_MICROS);
-                    // fall through to the pattern-based path below.
-                    formatter = null;
-                    break;
-            }
-            if (formatter != null) {
-                formatter = formatter.withLocale(Locale.ROOT).withZone(DateTimeZone.UTC).withDefaultYear(1970);
-                return new JodaDateFormatter(input, formatter, formatter);
-            }
+                case DATE:
         }
-
-        if (Strings.hasLength(input) && input.contains("||")) {
-            String[] formats = Strings.delimitedListToStringArray(input, "||");
-            DateTimeParser[] parsers = new DateTimeParser[formats.length];
-
-            if (formats.length == 1) {
-                formatter = forPattern(input).parser;
+import org.joda.time.DateTime;
+                    formatter = ISODateTimeFormat.ordinalDate();
+import org.joda.time.format.DateTimeFormat;
+            if (hasMilliSecondPrecision) {
+                    formatter = StrictISODateTimeFormat.ordinalDateTimeNoMillis();
+        public DurationFieldType getDurationType() {
+import org.joda.time.Chronology;
+            }
+                case HOUR_MINUTE_SECOND_MILLIS:
+                case STRICT_WEEK_DATE:
+                case STRICT_HOUR_MINUTE_SECOND_MILLIS:
             } else {
-                DateTimeFormatter dateTimeFormatter = null;
-                for (int i = 0; i < formats.length; i++) {
-                    JodaDateFormatter currentFormatter = forPattern(formats[i]);
-                    DateTimeFormatter currentParser = currentFormatter.parser;
+     */
+                case STRICT_ORDINAL_DATE_TIME_NO_MILLIS:
+                    break;
+                    break;
+ * not use this file except in compliance with the License.
+                bucket.saveField(DateTimeFieldType.minuteOfHour(), dt.getMinuteOfHour());
+            if (formats.length == 1) {
+                    break;
                     if (dateTimeFormatter == null) {
-                        dateTimeFormatter = currentFormatter.printer;
-                    }
-                    parsers[i] = currentParser.getParser();
-                }
-
-                DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder().append(
-                    dateTimeFormatter.withZone(DateTimeZone.UTC).getPrinter(),
-                    parsers
-                );
-                formatter = builder.toFormatter();
-            }
-        } else {
-            try {
                 maybeLogJodaDeprecation(input);
-                formatter = DateTimeFormat.forPattern(input);
-            } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid format: [" + input + "]: " + e.getMessage(), e);
             }
-        }
-
-        formatter = formatter.withLocale(Locale.ROOT).withZone(DateTimeZone.UTC).withDefaultYear(1970);
-        return new JodaDateFormatter(input, formatter, formatter);
-    }
-
     public static void writeTimeZone(final StreamOutput out, final DateTimeZone timeZone) throws IOException {
-        out.writeString(timeZone.getID());
-    }
-
-    public static void writeOptionalTimeZone(final StreamOutput out, final DateTimeZone timeZone) throws IOException {
-        if (timeZone == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
+ *
+                    break;
+         */
+        return DateTimeZone.forID(in.readString());
+     *
+                bucket.saveField(DateTimeFieldType.year(), dt.getYear());
+        @Override
+            .toFormatter()
+    // If LogManager.getLogger is called before logging config is loaded
+                return -1;
+        }
+                        StrictISODateTimeFormat.dateOptionalTimeParser()
+            .appendLiteral(':')
+        if (in.readBoolean()) {
+        @Override
             writeTimeZone(out, timeZone);
         }
+                    formatter = StrictISODateTimeFormat.year();
     }
-
-    /**
-     * Read a {@linkplain DateTimeZone} from a {@linkplain StreamInput}.
-     */
-    public static DateTimeZone readTimeZone(final StreamInput in) throws IOException {
-        return DateTimeZone.forID(in.readString());
-    }
-
-    /**
-     * Read an optional {@linkplain DateTimeZone}.
-     */
-    public static DateTimeZone readOptionalTimeZone(final StreamInput in) throws IOException {
-        if (in.readBoolean()) {
-            return DateTimeZone.forID(in.readString());
-        }
-        return null;
-    }
-
-    private static void maybeLogJodaDeprecation(String format) {
-        if (JodaDeprecationPatterns.isDeprecatedPattern(format)) {
-            String suggestion = JodaDeprecationPatterns.formatSuggestion(format);
-            getDeprecationLogger().deprecate(
-                "joda-pattern-deprecation",
-                suggestion + " " + JodaDeprecationPatterns.USE_NEW_FORMAT_SPECIFIERS
-            );
-        }
-    }
-
-    public static DateFormatter getStrictStandardDateFormatter() {
-        // 2014/10/10
-        DateTimeFormatter shortFormatter = new DateTimeFormatterBuilder().appendFixedDecimal(DateTimeFieldType.year(), 4)
-            .appendLiteral('/')
-            .appendFixedDecimal(DateTimeFieldType.monthOfYear(), 2)
-            .appendLiteral('/')
-            .appendFixedDecimal(DateTimeFieldType.dayOfMonth(), 2)
-            .toFormatter()
-            .withZoneUTC();
-
-        // 2014/10/10 12:12:12
-        DateTimeFormatter longFormatter = new DateTimeFormatterBuilder().appendFixedDecimal(DateTimeFieldType.year(), 4)
-            .appendLiteral('/')
-            .appendFixedDecimal(DateTimeFieldType.monthOfYear(), 2)
-            .appendLiteral('/')
-            .appendFixedDecimal(DateTimeFieldType.dayOfMonth(), 2)
-            .appendLiteral(' ')
-            .appendFixedSignedDecimal(DateTimeFieldType.hourOfDay(), 2)
-            .appendLiteral(':')
-            .appendFixedSignedDecimal(DateTimeFieldType.minuteOfHour(), 2)
-            .appendLiteral(':')
+                    break;
             .appendFixedSignedDecimal(DateTimeFieldType.secondOfMinute(), 2)
-            .toFormatter()
-            .withZoneUTC();
-
-        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder().append(
-            longFormatter.withZone(DateTimeZone.UTC).getPrinter(),
-            new DateTimeParser[] { longFormatter.getParser(), shortFormatter.getParser(), new EpochTimeParser(true) }
-        );
-
-        DateTimeFormatter formatter = builder.toFormatter().withLocale(Locale.ROOT).withZone(DateTimeZone.UTC).withDefaultYear(1970);
-        return new JodaDateFormatter("yyyy/MM/dd HH:mm:ss||yyyy/MM/dd||epoch_millis", formatter, formatter);
-    }
-
-    public static final DurationFieldType Quarters = new DurationFieldType("quarters") {
-        @Override
-        public DurationField getField(Chronology chronology) {
-            return new ScaledDurationField(chronology.months(), Quarters, 3);
-        }
-    };
-
-    public static final DateTimeFieldType QuarterOfYear = new DateTimeFieldType("quarterOfYear") {
-        @Override
-        public DurationFieldType getDurationType() {
-            return Quarters;
-        }
-
-        @Override
-        public DurationFieldType getRangeDurationType() {
-            return DurationFieldType.years();
-        }
-
-        @Override
-        public DateTimeField getField(Chronology chronology) {
-            return new OffsetDateTimeField(
-                new DividedDateTimeField(new OffsetDateTimeField(chronology.monthOfYear(), -1), QuarterOfYear, 3),
-                1
-            );
-        }
-    };
-
+                    break;
+                    return new JodaDateFormatter(
     /**
-     * parses epcoch timers
-     *
+                "camelCaseDateFormat_" + formatName.getCamelCaseName(),
+                        "Use of scientific notation"
+                    return new JodaDateFormatter(
+ * KIND, either express or implied.  See the License for the
+ * @opensearch.internal
+                    break;
+        return deprecationLogger.getOrCompute();
+                    formatter = ISODateTimeFormat.basicDateTime();
+            }
+                buf.append(String.valueOf(getDateTimeMillis(partial) / 1000));
+                    break;
+                    formatter = ISODateTimeFormat.basicTTimeNoMillis();
+            } else {
      * @opensearch.internal
-     */
-    public static class EpochTimeParser implements DateTimeParser {
-
-        private static final Pattern scientificNotation = Pattern.compile("[Ee]");
-
-        private final boolean hasMilliSecondPrecision;
-
-        public EpochTimeParser(boolean hasMilliSecondPrecision) {
-            this.hasMilliSecondPrecision = hasMilliSecondPrecision;
+ * Modifications Copyright OpenSearch Contributors. See
+                    formatter = StrictISODateTimeFormat.yearMonth();
         }
-
+ */
+            }
+            input = input.trim();
+ * SPDX-License-Identifier: Apache-2.0
+                case BASIC_DATE:
+                    getDeprecationLogger().deprecate(
+                suggestion + " " + JodaDeprecationPatterns.USE_NEW_FORMAT_SPECIFIERS
+        @Override
+            int hourOfDay = partial.get(DateTimeFieldType.hourOfDay());
+                    formatter = ISODateTimeFormat.weekyearWeek();
+                case WEEKYEAR:
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import org.opensearch.common.logging.DeprecationLogger;
+            if (hasMilliSecondPrecision) {
+        public DurationFieldType getRangeDurationType() {
+                out.append(String.valueOf(getDateTimeMillis(partial)));
+            .withZoneUTC();
+                    );
+    /**
+                    break;
+                    );
+ * Unless required by applicable law or agreed to in writing,
+                new DividedDateTimeField(new OffsetDateTimeField(chronology.monthOfYear(), -1), QuarterOfYear, 3),
+                    break;
+            boolean isPositive = text.startsWith("-") == false;
+    public static final DurationFieldType Quarters = new DurationFieldType("quarters") {
+        }
+import org.opensearch.core.common.io.stream.StreamInput;
+                case STRICT_HOUR:
+                return -1;
+                    formatter = new DateTimeFormatterBuilder().append(new EpochTimePrinter(true), new EpochTimeParser(true)).toFormatter();
+     */
+                case STRICT_ORDINAL_DATE_TIME:
+        FormatNames formatName = FormatNames.forName(input);
+                    break;
+                formatter = builder.toFormatter();
+                case DATE_TIME_NO_MILLIS:
+        out.writeString(timeZone.getID());
+                    break;
+import org.joda.time.format.DateTimePrinter;
+                }
+                case HOUR_MINUTE_SECOND:
+                }
+                    break;
+import org.joda.time.DateTimeZone;
+                formatter = formatter.withLocale(Locale.ROOT).withZone(DateTimeZone.UTC).withDefaultYear(1970);
+                    break;
+    }
+ * GitHub history for details.
+            out.writeBoolean(false);
+import org.joda.time.format.StrictISODateTimeFormat;
+                    );
+        return new JodaDateFormatter("yyyy/MM/dd HH:mm:ss||yyyy/MM/dd||epoch_millis", formatter, formatter);
+                formatter = DateTimeFormat.forPattern(input);
+        private static final Pattern scientificNotation = Pattern.compile("[Ee]");
+                case STRICT_T_TIME_NO_MILLIS:
+                case YEAR:
+                    break;
+     */
+                case WEEK_YEAR:
+                out.write(String.valueOf(instant - displayOffset));
+                    formatter = StrictISODateTimeFormat.tTime();
+        }
+            if (formatter != null) {
+import org.joda.time.format.DateTimeParserBucket;
+}
+            .withZoneUTC();
+                bucket.saveField(DateTimeFieldType.dayOfMonth(), dt.getDayOfMonth());
+            );
+                    formatter = ISODateTimeFormat.weekyearWeekDay();
+import org.joda.time.format.ISODateTimeFormat;
+            switch (formatName) {
+        } else {
+            }
+                    break;
+                    break;
+ * software distributed under the License is distributed on an
+                    break;
+                case DATE_HOUR_MINUTE_SECOND_FRACTION:
+        public void printTo(Writer out, long instant, Chronology chrono, int displayOffset, DateTimeZone displayZone, Locale locale)
+                    break;
+                    formatter = ISODateTimeFormat.basicWeekDateTime();
+                    formatter = StrictISODateTimeFormat.hourMinute();
+                case DATE_OPTIONAL_TIME:
+/*
+                    formatter = StrictISODateTimeFormat.yearMonthDay();
+                .getDateTimeMillis(year, monthOfYear, dayOfMonth, hourOfDay, minuteOfHour, secondOfMinute, millisOfSecond);
+        private final boolean hasMilliSecondPrecision;
+import java.util.regex.Pattern;
+                case STRICT_TIME_NO_MILLIS:
+                        ISODateTimeFormat.dateOptionalTimeParser().withLocale(Locale.ROOT).withZone(DateTimeZone.UTC).withDefaultYear(1970),
+                case ORDINAL_DATE:
+        // 2014/10/10
+    /**
+    public static JodaDateFormatter forPattern(String input) {
+                    // this sucks we should use the root local by default and not be dependent on the node
+    };
+                case BASIC_ORDINAL_DATE_TIME_NO_MILLIS:
+ * You may obtain a copy of the License at
+        DateTimeFormatter longFormatter = new DateTimeFormatterBuilder().appendFixedDecimal(DateTimeFieldType.year(), 4)
+                case BASIC_WEEK_DATE_TIME_NO_MILLIS:
+    public static DateFormatter getStrictStandardDateFormatter() {
+            .appendFixedDecimal(DateTimeFieldType.dayOfMonth(), 2)
+                    formatter = StrictISODateTimeFormat.basicWeekDateTime();
+            try {
+import java.math.BigDecimal;
+                out.append(String.valueOf((instant - displayOffset) / 1000));
+                    formatter = null;
+        }
+import org.joda.time.field.OffsetDateTimeField;
+        }
+import org.opensearch.common.util.LazyInitializable;
+            int monthOfYear = partial.get(DateTimeFieldType.monthOfYear());
+                    formatter = ISODateTimeFormat.tTimeNoMillis();
+                    formatter = ISODateTimeFormat.basicWeekDate();
+                case BASIC_DATE_TIME:
+                throw new IllegalArgumentException("time_zone must be UTC for format [" + format + "]");
+     * Read a {@linkplain DateTimeZone} from a {@linkplain StreamInput}.
+@Deprecated
+                        dateTimeFormatter = currentFormatter.printer;
+        /**
+        formatter = formatter.withLocale(Locale.ROOT).withZone(DateTimeZone.UTC).withDefaultYear(1970);
+                DateTimeFormatter dateTimeFormatter = null;
+    }
+                    break;
+                formatName.getSnakeCaseName()
+                case WEEK_DATE_TIME:
+                    formatter = StrictISODateTimeFormat.dateHourMinuteSecond();
+                bucket.saveField(DateTimeFieldType.hourOfDay(), dt.getHourOfDay());
+                    formatter = ISODateTimeFormat.basicOrdinalDateTime();
+                    formatter = ISODateTimeFormat.weekyear();
+                    formatter = ISODateTimeFormat.weekyear();
+import org.opensearch.common.time.DateFormatter;
+    // it results in errors sent to status logger and startup to fail.
+                case STRICT_WEEKYEAR_WEEK:
+         * {@link DateTimeFormatter#printTo(Appendable, long, Chronology)} when using a time zone.
+                    break;
+    // Joda.forPattern could be used even before the logging is initialized.
+            );
+    public static final DateTimeFieldType QuarterOfYear = new DateTimeFieldType("quarterOfYear") {
+                );
+                    formatter = StrictISODateTimeFormat.hour();
+        public EpochTimeParser(boolean hasMilliSecondPrecision) {
+ * under the License.
+                }
+                    break;
+import org.joda.time.DurationFieldType;
+        DateTimeFormatter formatter;
+                    formatter = ISODateTimeFormat.basicOrdinalDate();
+                            + " in epoch time formats is deprecated and will not be supported in the next major version of OpenSearch."
+            .appendLiteral('/')
+                msg,
+ */
+                "joda-pattern-deprecation",
+                    formatter = ISODateTimeFormat.dateHourMinuteSecondMillis();
+                    break;
+            return DurationFieldType.years();
+                    break;
+            return partial.getChronology()
+        @Override
+                case DATE_TIME:
+import org.joda.time.format.DateTimeParser;
+            if (hasMilliSecondPrecision) {
+            .appendLiteral('/')
+                case STRICT_DATE:
+        }
+                    parsers[i] = currentParser.getParser();
+        }
+            out.writeBoolean(true);
+        }
+                case EPOCH_SECOND:
+                long millis = new BigDecimal(text).longValue() * factor;
+        }
+                    break;
+        public void printTo(StringBuffer buf, long instant, Chronology chrono, int displayOffset, DateTimeZone displayZone, Locale locale) {
+ * The OpenSearch Contributors require contributions made to
+                case BASIC_WEEK_DATE_TIME:
+        }
+    /**
+    public static DateTimeZone readTimeZone(final StreamInput in) throws IOException {
+                    break;
+                    break;
+        }
+                case STRICT_BASIC_WEEK_DATE:
+            String[] formats = Strings.delimitedListToStringArray(input, "||");
+            .appendLiteral('/')
+                case DATE_HOUR:
+            } catch (IllegalArgumentException e) {
+            .appendFixedDecimal(DateTimeFieldType.monthOfYear(), 2)
+    private static DeprecationLogger getDeprecationLogger() {
+            throws IOException {
+                    break;
+                    formatter = StrictISODateTimeFormat.basicWeekDateTimeNoMillis();
+                case HOUR:
+                    getDeprecationLogger().deprecate(
+                case STRICT_ORDINAL_DATE:
+                    formatter = StrictISODateTimeFormat.tTimeNoMillis();
+    public static class EpochTimePrinter implements DateTimePrinter {
+                    }
+        // formatName is already resolved above via FormatNames.forName(input); switch on the enum directly.
+            }
+            .appendLiteral(' ')
+import java.io.IOException;
+                    formatter = ISODateTimeFormat.weekDateTime();
+                    break;
+/*
+        if (JodaDeprecationPatterns.isDeprecatedPattern(format)) {
+            .appendLiteral('/')
+                    formatter = ISODateTimeFormat.yearMonth();
+                case DATE_HOUR_MINUTE_SECOND:
+                    formatter = ISODateTimeFormat.weekDate();
+                    break;
+            return DateTimeZone.forID(in.readString());
+    );
+import org.joda.time.ReadablePartial;
+                        "Use of negative values"
+    public static void writeOptionalTimeZone(final StreamOutput out, final DateTimeZone timeZone) throws IOException {
+        private boolean hasMilliSecondPrecision;
+            String suggestion = JodaDeprecationPatterns.formatSuggestion(format);
+            } catch (Exception e) {
+                case STRICT_DATE_HOUR_MINUTE_SECOND_FRACTION:
+     */
+                    break;
+                        input,
+                bucket.saveField(DateTimeFieldType.secondOfMinute(), dt.getSecondOfMinute());
+                    break;
+                + "Use snake case name {} instead.";
+                case BASIC_TIME:
+import org.joda.time.field.DividedDateTimeField;
+                case STRICT_HOUR_MINUTE:
+            } else {
+                case BASIC_T_TIME:
+            return hasMilliSecondPrecision ? 19 : 16;
+        }
+        if (timeZone == null) {
+import org.joda.time.DateTimeFieldType;
+import org.joda.time.DurationField;
+        private long getDateTimeMillis(ReadablePartial partial) {
+        }
+                    formatter = ISODateTimeFormat.tTime();
+        DateTimeFormatter formatter = builder.toFormatter().withLocale(Locale.ROOT).withZone(DateTimeZone.UTC).withDefaultYear(1970);
+                    formatter = StrictISODateTimeFormat.dateHourMinuteSecondFraction();
+     * Epoch timer printer
+                    // this sucks we should use the root local by default and not be dependent on the node
+ * this file be licensed under the Apache-2.0 license or a
+            this.hasMilliSecondPrecision = hasMilliSecondPrecision;
+            }
+    private static final LazyInitializable<DeprecationLogger, RuntimeException> deprecationLogger = new LazyInitializable(
+        @Override
+ * license agreements. See the NOTICE file distributed with
+                case STRICT_DATE_HOUR_MINUTE_SECOND:
+                case BASIC_WEEK_DATE:
+                buf.append(String.valueOf(getDateTimeMillis(partial)));
+                    break;
+                default:
+                case TIME_NO_MILLIS:
+                    formatter = StrictISODateTimeFormat.weekyear();
+                    getDeprecationLogger().deprecate(
+        public int parseInto(DateTimeParserBucket bucket, String text, int position) {
+                case WEEK_DATE_TIME_NO_MILLIS:
+                        "epoch-scientific-notation",
+import org.joda.time.format.DateTimeFormatterBuilder;
+                    break;
+                    formatter = ISODateTimeFormat.weekDateTimeNoMillis();
+                    formatter = ISODateTimeFormat.hour();
+        if (input == null || input.length() == 0) {
+                // strict date formats here, must be at least 4 digits for year and two for months and two for day
+ *
+     * Parses a joda based pattern, including some named ones (similar to the built in Joda ISO ones).
+                    break;
+            throw new IllegalArgumentException("No date pattern provided");
+                    break;
+                case YEAR_MONTH_DAY:
+    }
+            );
+                    break;
+                    formatter = ISODateTimeFormat.hourMinuteSecond();
+         * We adjust the instant by displayOffset to adjust for the offset that might have been added in
+                    break;
+            int minuteOfHour = partial.get(DateTimeFieldType.minuteOfHour());
+    }
+                    break;
+                    // fall through to the pattern-based path below.
+            int millisOfSecond = partial.get(DateTimeFieldType.millisOfSecond());
+    }
+        /**
+                1
+            this.hasMilliSecondPrecision = hasMilliSecondPrecision;
+                DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder().append(
+                    // formatName is non-null but has no Joda formatter (e.g. ISO8601, RFC3339_LENIENT, EPOCH_MICROS);
+            }
+            .appendFixedDecimal(DateTimeFieldType.monthOfYear(), 2)
+                    formatter = ISODateTimeFormat.hourMinuteSecondMillis();
+                throw new IllegalArgumentException("Invalid format: [" + input + "]: " + e.getMessage(), e);
+                    formatter = StrictISODateTimeFormat.time();
+ * the Apache License, Version 2.0 (the "License"); you may
+                    break;
+         * We adjust the instant by displayOffset to adjust for the offset that might have been added in
+                    formatter = StrictISODateTimeFormat.dateHour();
+                    break;
+        }
+                    formatter = ISODateTimeFormat.dateHourMinute();
+                    break;
+                case BASIC_TIME_NO_MILLIS:
+            return text.length();
+                    break;
+public class Joda {
+                    formatter = ISODateTimeFormat.hourMinute();
+ * specific language governing permissions and limitations
+                        .toFormatter();
+                    formatter = StrictISODateTimeFormat.weekDateTimeNoMillis();
+            .appendFixedSignedDecimal(DateTimeFieldType.minuteOfHour(), 2)
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                    formatter = StrictISODateTimeFormat.hourMinuteSecond();
+        @Override
+                    formatter = StrictISODateTimeFormat.basicWeekDate();
+                    formatter = ISODateTimeFormat.hourMinuteSecondFraction();
+            return Quarters;
+                    break;
+                    formatter = ISODateTimeFormat.basicWeekDateTimeNoMillis();
+        public DurationField getField(Chronology chronology) {
+                        ISODateTimeFormat.dateTime().withLocale(Locale.ROOT).withZone(DateTimeZone.UTC).withDefaultYear(1970)
+                            .withZone(DateTimeZone.UTC)
+    public static class EpochTimeParser implements DateTimeParser {
+                buf.append((instant - displayOffset) / 1000);
+    // Hence a lazy initialization.
+                    parsers
+                case STRICT_DATE_HOUR:
+                    formatter = StrictISODateTimeFormat.dateHourMinuteSecondMillis();
+                case STRICT_DATE_OPTIONAL_TIME:
+                    formatter = ISODateTimeFormat.timeNoMillis();
+/**
+                    break;
+    public static DateTimeZone readOptionalTimeZone(final StreamInput in) throws IOException {
+                case TIME:
+import java.io.Writer;
+                case STRICT_DATE_HOUR_MINUTE_SECOND_MILLIS:
+                case STRICT_HOUR_MINUTE_SECOND_FRACTION:
+                    formatter = ISODateTimeFormat.dateTime();
+        DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder().append(
+                    break;
+                        "week_year_format_name",
+                case BASIC_T_TIME_NO_MILLIS:
+                case DATE_HOUR_MINUTE_SECOND_MILLIS:
+        if (Strings.hasLength(input) && input.contains("||")) {
+                out.append(String.valueOf(getDateTimeMillis(partial) / 1000));
+        }
+                    break;
+                    break;
+    }
+                    break;
+                case EPOCH_MILLIS:
+                case BASIC_ORDINAL_DATE:
+                    break;
+                        input,
+        public void printTo(StringBuffer buf, ReadablePartial partial, Locale locale) {
+        public void printTo(Writer out, ReadablePartial partial, Locale locale) throws IOException {
+        }
+            new DateTimeParser[] { longFormatter.getParser(), shortFormatter.getParser(), new EpochTimeParser(true) }
+            }
+                case STRICT_WEEK_DATE_TIME:
+import org.joda.time.format.DateTimeFormatter;
+    }
+                return new JodaDateFormatter(input, formatter, formatter);
+            String msg = "Camel case format name {} is deprecated and will be removed in a future version. "
+import org.joda.time.DateTimeField;
+        () -> DeprecationLogger.getLogger(Joda.class)
+                case STRICT_T_TIME:
+                    break;
+        public int estimatePrintedLength() {
+        return null;
+     * @opensearch.internal
+ * this work for additional information regarding copyright
+                    formatter = ISODateTimeFormat.basicOrdinalDateTimeNoMillis();
+                if (scientificNotation.matcher(text).find()) {
+                    break;
+                        "epoch-negative",
+     */
+            } else if (isPositive && isTooLong) {
+                case ORDINAL_DATE_TIME_NO_MILLIS:
+                    formatter = StrictISODateTimeFormat.hourMinuteSecondMillis();
+                DateTime dt = new DateTime(millis, DateTimeZone.UTC);
+                case STRICT_TIME:
+                    formatter = ISODateTimeFormat.dateHour();
+                            .withDefaultYear(1970),
+package org.opensearch.common.joda;
+        );
+ * Licensed to Elasticsearch under one or more contributor
+                formatName.getCamelCaseName(),
+                    break;
+        }
+    }
+                case BASIC_ORDINAL_DATE_TIME:
+                    formatter = ISODateTimeFormat.basicTimeNoMillis();
+            return new OffsetDateTimeField(
+                    break;
+            getDeprecationLogger().deprecate(
+                case BASIC_DATE_TIME_NO_MILLIS:
+                            + " in epoch time formats is deprecated and will not be supported in the next major version of OpenSearch."
+                    break;
         @Override
         public int estimateParsedLength() {
-            return hasMilliSecondPrecision ? 19 : 16;
-        }
-
+                    formatter = new DateTimeFormatterBuilder().append(new EpochTimePrinter(false), new EpochTimeParser(false))
+        // 2014/10/10 12:12:12
         @Override
-        public int parseInto(DateTimeParserBucket bucket, String text, int position) {
-            boolean isPositive = text.startsWith("-") == false;
-            int firstDotIndex = text.indexOf('.');
-            boolean isTooLong = (firstDotIndex == -1 ? text.length() : firstDotIndex) > estimateParsedLength();
-
-            if (bucket.getZone() != DateTimeZone.UTC) {
-                String format = hasMilliSecondPrecision ? "epoch_millis" : "epoch_second";
-                throw new IllegalArgumentException("time_zone must be UTC for format [" + format + "]");
-            } else if (isPositive && isTooLong) {
-                return -1;
-            }
-
-            int factor = hasMilliSecondPrecision ? 1 : 1000;
-            try {
-                long millis = new BigDecimal(text).longValue() * factor;
-                // check for deprecations, but after it has parsed correctly so invalid values aren't counted as deprecated
-                if (millis < 0) {
-                    getDeprecationLogger().deprecate(
-                        "epoch-negative",
-                        "Use of negative values"
-                            + " in epoch time formats is deprecated and will not be supported in the next major version of OpenSearch."
-                    );
-                }
-                if (scientificNotation.matcher(text).find()) {
-                    getDeprecationLogger().deprecate(
-                        "epoch-scientific-notation",
-                        "Use of scientific notation"
-                            + " in epoch time formats is deprecated and will not be supported in the next major version of OpenSearch."
-                    );
-                }
-                DateTime dt = new DateTime(millis, DateTimeZone.UTC);
-                bucket.saveField(DateTimeFieldType.year(), dt.getYear());
-                bucket.saveField(DateTimeFieldType.monthOfYear(), dt.getMonthOfYear());
-                bucket.saveField(DateTimeFieldType.dayOfMonth(), dt.getDayOfMonth());
-                bucket.saveField(DateTimeFieldType.hourOfDay(), dt.getHourOfDay());
-                bucket.saveField(DateTimeFieldType.minuteOfHour(), dt.getMinuteOfHour());
-                bucket.saveField(DateTimeFieldType.secondOfMinute(), dt.getSecondOfMinute());
-                bucket.saveField(DateTimeFieldType.millisOfSecond(), dt.getMillisOfSecond());
-                bucket.setZone(DateTimeZone.UTC);
-            } catch (Exception e) {
-                return -1;
-            }
-            return text.length();
-        }
-    }
-
-    private static DeprecationLogger getDeprecationLogger() {
-        return deprecationLogger.getOrCompute();
-    }
-
+                    break;
+     * parses epcoch timers
+                    break;
+        @Override
     /**
-     * Epoch timer printer
+     * Read an optional {@linkplain DateTimeZone}.
+                    formatter = StrictISODateTimeFormat.dateTimeNoMillis();
+        @Override
+                    formatter = ISODateTimeFormat.ordinalDateTimeNoMillis();
+                    formatter = ISODateTimeFormat.date();
+                    formatter = StrictISODateTimeFormat.weekDateTime();
+            int firstDotIndex = text.indexOf('.');
      *
-     * @opensearch.internal
-     */
-    public static class EpochTimePrinter implements DateTimePrinter {
-
-        private boolean hasMilliSecondPrecision;
-
+                case YEAR_MONTH:
+                case HOUR_MINUTE_SECOND_FRACTION:
+                    break;
+ * @deprecated
+                case T_TIME_NO_MILLIS:
+                case HOUR_MINUTE:
+                case STRICT_BASIC_WEEK_DATE_TIME:
+                    break;
         public EpochTimePrinter(boolean hasMilliSecondPrecision) {
-            this.hasMilliSecondPrecision = hasMilliSecondPrecision;
-        }
-
-        @Override
-        public int estimatePrintedLength() {
-            return hasMilliSecondPrecision ? 19 : 16;
-        }
-
-        /**
-         * We adjust the instant by displayOffset to adjust for the offset that might have been added in
-         * {@link DateTimeFormatter#printTo(Appendable, long, Chronology)} when using a time zone.
-         */
-        @Override
-        public void printTo(StringBuffer buf, long instant, Chronology chrono, int displayOffset, DateTimeZone displayZone, Locale locale) {
-            if (hasMilliSecondPrecision) {
-                buf.append(instant - displayOffset);
-            } else {
-                buf.append((instant - displayOffset) / 1000);
-            }
-        }
-
-        /**
-         * We adjust the instant by displayOffset to adjust for the offset that might have been added in
-         * {@link DateTimeFormatter#printTo(Appendable, long, Chronology)} when using a time zone.
-         */
-        @Override
-        public void printTo(Writer out, long instant, Chronology chrono, int displayOffset, DateTimeZone displayZone, Locale locale)
-            throws IOException {
-            if (hasMilliSecondPrecision) {
-                out.write(String.valueOf(instant - displayOffset));
-            } else {
-                out.append(String.valueOf((instant - displayOffset) / 1000));
-            }
-        }
-
-        @Override
-        public void printTo(StringBuffer buf, ReadablePartial partial, Locale locale) {
-            if (hasMilliSecondPrecision) {
-                buf.append(String.valueOf(getDateTimeMillis(partial)));
-            } else {
-                buf.append(String.valueOf(getDateTimeMillis(partial) / 1000));
-            }
-        }
-
-        @Override
-        public void printTo(Writer out, ReadablePartial partial, Locale locale) throws IOException {
-            if (hasMilliSecondPrecision) {
-                out.append(String.valueOf(getDateTimeMillis(partial)));
-            } else {
-                out.append(String.valueOf(getDateTimeMillis(partial) / 1000));
-            }
-        }
-
-        private long getDateTimeMillis(ReadablePartial partial) {
-            int year = partial.get(DateTimeFieldType.year());
-            int monthOfYear = partial.get(DateTimeFieldType.monthOfYear());
+                case STRICT_YEAR_MONTH:
+ *
+ */
+            boolean isTooLong = (firstDotIndex == -1 ? text.length() : firstDotIndex) > estimateParsedLength();
+        public DateTimeField getField(Chronology chronology) {
+                    formatter = ISODateTimeFormat.basicTTime();
             int dayOfMonth = partial.get(DateTimeFieldType.dayOfMonth());
-            int hourOfDay = partial.get(DateTimeFieldType.hourOfDay());
-            int minuteOfHour = partial.get(DateTimeFieldType.minuteOfHour());
-            int secondOfMinute = partial.get(DateTimeFieldType.secondOfMinute());
-            int millisOfSecond = partial.get(DateTimeFieldType.millisOfSecond());
-            return partial.getChronology()
-                .getDateTimeMillis(year, monthOfYear, dayOfMonth, hourOfDay, minuteOfHour, secondOfMinute, millisOfSecond);
+    };
+                bucket.setZone(DateTimeZone.UTC);
+                    break;
+        } else {
+        return new JodaDateFormatter(input, formatter, formatter);
+                    break;
+import org.opensearch.core.common.io.stream.StreamOutput;
         }
-    }
-}
+                case STRICT_WEEKYEAR_WEEK_DAY:
+            } else {
+                    formatter = StrictISODateTimeFormat.ordinalDateTime();
+                case STRICT_WEEK_DATE_TIME_NO_MILLIS:
+                    );
+            int secondOfMinute = partial.get(DateTimeFieldType.secondOfMinute());
+                    break;
+                    JodaDateFormatter currentFormatter = forPattern(formats[i]);
+                    formatter = ISODateTimeFormat.year();
+                // check for deprecations, but after it has parsed correctly so invalid values aren't counted as deprecated
+                    break;
+            .toFormatter()
+                    formatter = ISODateTimeFormat.dateHourMinuteSecond();
+                case WEEK_DATE:
+                String format = hasMilliSecondPrecision ? "epoch_millis" : "epoch_second";
+            } else {
+                    DateTimeFormatter currentParser = currentFormatter.parser;
+            .appendFixedDecimal(DateTimeFieldType.dayOfMonth(), 2)
+                    break;
+                    );
+                case STRICT_DATE_HOUR_MINUTE:
+ * Joda class.
+                    break;
+                    formatter = ISODateTimeFormat.ordinalDateTime();
+                    formatter = StrictISODateTimeFormat.hourMinuteSecondFraction();
+                    // in this case, we have a separate parser and printer since the dataOptionalTimeParser can't print
+            getDeprecationLogger().deprecate(
+                case WEEKYEAR_WEEK_DAY:
+            int year = partial.get(DateTimeFieldType.year());
+                if (millis < 0) {
+         * {@link DateTimeFormatter#printTo(Appendable, long, Chronology)} when using a time zone.
+                    formatter = ISODateTimeFormat.time();
+                    break;
+ *
+        @Override
+                buf.append(instant - displayOffset);
+        }
+                case STRICT_YEAR:
+                    formatter = ISODateTimeFormat.dateHourMinuteSecondFraction();
+                    formatter = StrictISODateTimeFormat.dateTime();
+                    formatter = StrictISODateTimeFormat.timeNoMillis();
+                    break;
+                    formatter = StrictISODateTimeFormat.weekyearWeekDay();
+                        "Format name \"week_year\" is deprecated and will be removed in a future version. Use \"weekyear\" format instead"
+                case STRICT_WEEKYEAR:
+            }
+                formatter = forPattern(input).parser;
+            DateTimeParser[] parsers = new DateTimeParser[formats.length];
+                    dateTimeFormatter.withZone(DateTimeZone.UTC).getPrinter(),
+                    formatter = ISODateTimeFormat.basicTime();
+                case T_TIME:
+            .appendFixedSignedDecimal(DateTimeFieldType.hourOfDay(), 2)
+            int factor = hasMilliSecondPrecision ? 1 : 1000;
+                bucket.saveField(DateTimeFieldType.millisOfSecond(), dt.getMillisOfSecond());
+            return new ScaledDurationField(chronology.months(), Quarters, 3);
+                            .withLocale(Locale.ROOT)
+                case STRICT_DATE_TIME_NO_MILLIS:
+                    formatter = StrictISODateTimeFormat.date();
+ */
+                case STRICT_DATE_TIME:
+            return hasMilliSecondPrecision ? 19 : 16;
+                    formatter = ISODateTimeFormat.dateTimeNoMillis();
+                    break;
+                    break;
+                    break;
+            longFormatter.withZone(DateTimeZone.UTC).getPrinter(),
+                    formatter = ISODateTimeFormat.basicDateTimeNoMillis();
+        if (Strings.hasLength(input)) {
+                    formatter = StrictISODateTimeFormat.ordinalDate();
+import org.opensearch.common.time.FormatNames;
+ * compatible open source license.
+            if (hasMilliSecondPrecision) {
+        DateTimeFormatter shortFormatter = new DateTimeFormatterBuilder().appendFixedDecimal(DateTimeFieldType.year(), 4)
+                    // in this case, we have a separate parser and printer since the dataOptionalTimeParser can't print
+import org.joda.time.field.ScaledDurationField;
+            if (bucket.getZone() != DateTimeZone.UTC) {
+                    formatter = ISODateTimeFormat.yearMonthDay();
+                    break;
+/*
+import java.util.Locale;
+    private static void maybeLogJodaDeprecation(String format) {

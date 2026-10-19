@@ -1,261 +1,244 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.pipeline;
-
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.XContentLocation;
-import org.opensearch.search.aggregations.AggregationExecutionException;
-import org.opensearch.search.aggregations.InternalMultiBucketAggregation;
-import org.opensearch.search.aggregations.InvalidAggregationPathException;
-import org.opensearch.search.aggregations.bucket.MultiBucketsAggregation;
-import org.opensearch.search.aggregations.metrics.InternalNumericMetricsAggregation;
-import org.opensearch.search.aggregations.support.AggregationPath;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-
-/**
- * A set of static helpers to simplify working with aggregation buckets, in
- * particular providing utilities that help pipeline aggregations.
- *
- * @opensearch.internal
- */
-public class BucketHelpers {
-
-    /**
-     * A gap policy determines how "holes" in a set of buckets should be handled.  For example,
-     * a date_histogram might have empty buckets due to no data existing for that time interval.
-     * This can cause problems for operations like a derivative, which relies on a continuous
-     * function.
-     * <p>
-     * "insert_zeros": empty buckets will be filled with zeros for all metrics
-     * "skip": empty buckets will simply be ignored
-     *
-     * @opensearch.internal
-     */
-    public enum GapPolicy implements Writeable {
-        INSERT_ZEROS((byte) 0, "insert_zeros"),
-        SKIP((byte) 1, "skip");
-
-        /**
-         * Parse a string GapPolicy into the byte enum
-         *
-         * @param text
-         *            GapPolicy in string format (e.g. "ignore")
-         * @return GapPolicy enum
-         */
-        public static GapPolicy parse(String text, XContentLocation tokenLocation) {
-            GapPolicy result = null;
-            for (GapPolicy policy : values()) {
-                if (policy.parseField.match(text, LoggingDeprecationHandler.INSTANCE)) {
-                    if (result == null) {
-                        result = policy;
+     * @param agg
+}
+            return new AggregationExecutionException(
                     } else {
-                        throw new IllegalStateException(
-                            "Text can be parsed to 2 different gap policies: text=["
-                                + text
-                                + "], "
-                                + "policies="
-                                + Arrays.asList(result, policy)
-                        );
-                    }
-                }
             }
-            if (result == null) {
-                final List<String> validNames = new ArrayList<>();
-                for (GapPolicy policy : values()) {
-                    validNames.add(policy.getName());
-                }
-                throw new ParsingException(tokenLocation, "Invalid gap policy: [" + text + "], accepted values: " + validNames);
-            }
-            return result;
-        }
-
-        private final byte id;
-        private final ParseField parseField;
-
-        GapPolicy(byte id, String name) {
-            this.id = id;
-            this.parseField = new ParseField(name);
-        }
-
-        /**
-         * Serialize the GapPolicy to the output stream
-         */
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeByte(id);
-        }
-
-        /**
-         * Deserialize the GapPolicy from the input stream
-         *
-         * @return    GapPolicy Enum
-         */
-        public static GapPolicy readFrom(StreamInput in) throws IOException {
-            byte id = in.readByte();
-            for (GapPolicy gapPolicy : values()) {
-                if (id == gapPolicy.id) {
-                    return gapPolicy;
-                }
-            }
-            throw new IllegalStateException("Unknown GapPolicy with id [" + id + "]");
-        }
-
-        /**
-         * Return the english-formatted name of the GapPolicy
-         *
+        MultiBucketsAggregation agg,
          * @return English representation of GapPolicy
          */
-        public String getName() {
-            return parseField.getPreferredName();
-        }
-    }
-
-    /**
-     * Given a path and a set of buckets, this method will return the value
-     * inside the agg at that path. This is used to extract values for use by
-     * pipeline aggregations (e.g. a derivative might need the price for each
-     * bucket). If the bucket is empty, the configured GapPolicy is invoked to
-     * resolve the missing bucket
-     *
-     * @param agg
-     *            A series of agg buckets in the form of a histogram
-     * @param bucket
-     *            A specific bucket that a value needs to be extracted from.
-     *            This bucket should be present in the <code>histo</code>
-     *            parameter
-     * @param aggPath
-     *            The path to a particular value that needs to be extracted.
-     *            This path should point to a metric inside the
-     *            <code>bucket</code>
-     * @param gapPolicy
-     *            The gap policy to apply if empty buckets are found
-     * @return The value extracted from <code>bucket</code> found at
-     *         <code>aggPath</code>
-     */
-    public static Double resolveBucketValue(
-        MultiBucketsAggregation agg,
-        InternalMultiBucketAggregation.InternalBucket bucket,
-        String aggPath,
-        GapPolicy gapPolicy
-    ) {
-        List<String> aggPathsList = AggregationPath.parse(aggPath).getPathElementsAsStringList();
         return resolveBucketValue(agg, bucket, aggPathsList, gapPolicy);
-    }
-
-    public static Double resolveBucketValue(
-        MultiBucketsAggregation agg,
-        InternalMultiBucketAggregation.InternalBucket bucket,
-        List<String> aggPathAsList,
-        GapPolicy gapPolicy
-    ) {
-        try {
-            Object propertyValue = bucket.getProperty(agg.getName(), aggPathAsList);
-
-            if (propertyValue == null) {
-                throw new AggregationExecutionException(
-                    AbstractPipelineAggregationBuilder.BUCKETS_PATH_FIELD.getPreferredName()
-                        + " must reference either a number value or a single value numeric metric aggregation"
-                );
-            } else {
-                double value;
-                if (propertyValue instanceof Number) {
-                    value = ((Number) propertyValue).doubleValue();
-                } else if (propertyValue instanceof InternalNumericMetricsAggregation.SingleValue) {
-                    value = ((InternalNumericMetricsAggregation.SingleValue) propertyValue).value();
-                } else {
                     throw formatResolutionError(agg, aggPathAsList, propertyValue);
-                }
-                // doc count never has missing values so gap policy doesn't apply here
-                boolean isDocCountProperty = aggPathAsList.size() == 1 && "_count".equals(aggPathAsList.get(0));
-                if (Double.isInfinite(value) || Double.isNaN(value) || (bucket.getDocCount() == 0 && !isDocCountProperty)) {
-                    switch (gapPolicy) {
-                        case INSERT_ZEROS:
-                            return 0.0;
-                        case SKIP:
-                        default:
-                            return Double.NaN;
-                    }
-                } else {
-                    return value;
-                }
-            }
-        } catch (InvalidAggregationPathException e) {
-            return null;
-        }
-    }
-
-    /**
-     * Inspects where we are in the agg tree and tries to format a helpful error
-     */
-    private static AggregationExecutionException formatResolutionError(
-        MultiBucketsAggregation agg,
-        List<String> aggPathAsList,
-        Object propertyValue
-    ) {
-        String currentAggName;
-        Object currentAgg;
-        if (aggPathAsList.isEmpty()) {
-            currentAggName = agg.getName();
+        /**
+/*
+        private final ParseField parseField;
+            for (GapPolicy policy : values()) {
+ * A set of static helpers to simplify working with aggregation buckets, in
+     * A gap policy determines how "holes" in a set of buckets should be handled.  For example,
+ * compatible open source license.
+         *
             currentAgg = agg;
-        } else {
-            currentAggName = aggPathAsList.get(0);
-            currentAgg = propertyValue;
+     * function.
+                                + "policies="
         }
-        if (currentAgg instanceof InternalNumericMetricsAggregation.MultiValue) {
-            return new AggregationExecutionException(
-                AbstractPipelineAggregationBuilder.BUCKETS_PATH_FIELD.getPreferredName()
-                    + " must reference either a number value or a single value numeric metric aggregation, but ["
-                    + currentAggName
-                    + "] contains multiple values. Please specify which to use."
+        }
+                }
+                double value;
+        private final byte id;
+                            return 0.0;
+        }
+     *
+        public void writeTo(StreamOutput out) throws IOException {
+     *            parameter
+public class BucketHelpers {
+     * @param gapPolicy
+                            "Text can be parsed to 2 different gap policies: text=["
+ * the Apache License, Version 2.0 (the "License"); you may
+        /**
+                    validNames.add(policy.getName());
             );
-        } else {
-            return new AggregationExecutionException(
-                AbstractPipelineAggregationBuilder.BUCKETS_PATH_FIELD.getPreferredName()
-                    + " must reference either a number value or a single value numeric metric aggregation, got: ["
-                    + propertyValue.getClass().getSimpleName()
-                    + "] at aggregation ["
-                    + currentAggName
-                    + "]"
-            );
+     * Given a path and a set of buckets, this method will return the value
+     * a date_histogram might have empty buckets due to no data existing for that time interval.
+            }
+        try {
+ * specific language governing permissions and limitations
+                    if (result == null) {
+     * bucket). If the bucket is empty, the configured GapPolicy is invoked to
+        InternalMultiBucketAggregation.InternalBucket bucket,
+/*
         }
     }
-}
+                                + "], "
+                if (policy.parseField.match(text, LoggingDeprecationHandler.INSTANCE)) {
+     *            This path should point to a metric inside the
+                for (GapPolicy policy : values()) {
+    public enum GapPolicy implements Writeable {
+     *         <code>aggPath</code>
+            return new AggregationExecutionException(
+         */
+    /**
+        List<String> aggPathsList = AggregationPath.parse(aggPath).getPathElementsAsStringList();
+                // doc count never has missing values so gap policy doesn't apply here
+                    + currentAggName
+import java.util.Arrays;
+        } else {
+ * Modifications Copyright OpenSearch Contributors. See
+        GapPolicy gapPolicy
+        if (currentAgg instanceof InternalNumericMetricsAggregation.MultiValue) {
+    ) {
+                        default:
+        }
+                        case INSERT_ZEROS:
+         * @return GapPolicy enum
+ * Unless required by applicable law or agreed to in writing,
+ *
+        List<String> aggPathAsList,
+            return result;
+    }
+            GapPolicy result = null;
+                    + propertyValue.getClass().getSimpleName()
+        MultiBucketsAggregation agg,
+         */
+                            return Double.NaN;
+         *
+            this.parseField = new ParseField(name);
+import org.opensearch.search.aggregations.bucket.MultiBucketsAggregation;
+ *
+        } catch (InvalidAggregationPathException e) {
+ * not use this file except in compliance with the License.
+                    return gapPolicy;
+                    value = ((InternalNumericMetricsAggregation.SingleValue) propertyValue).value();
+ * under the License.
+ * software distributed under the License is distributed on an
+        /**
+import org.opensearch.search.aggregations.InternalMultiBucketAggregation;
+import org.opensearch.core.common.io.stream.Writeable;
+ * SPDX-License-Identifier: Apache-2.0
+                }
+/**
+        MultiBucketsAggregation agg,
+         * @param text
+import java.io.IOException;
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+                                + text
+            currentAggName = aggPathAsList.get(0);
+                }
+ * particular providing utilities that help pipeline aggregations.
+                AbstractPipelineAggregationBuilder.BUCKETS_PATH_FIELD.getPreferredName()
+    }
+     */
+ * this file be licensed under the Apache-2.0 license or a
+                    + "] contains multiple values. Please specify which to use."
+         */
+     * @param bucket
+import org.opensearch.search.aggregations.support.AggregationPath;
+            if (result == null) {
+                                + Arrays.asList(result, policy)
+        Object propertyValue
+         * Return the english-formatted name of the GapPolicy
+                    return value;
+import java.util.ArrayList;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+package org.opensearch.search.aggregations.pipeline;
+ * GitHub history for details.
+                    value = ((Number) propertyValue).doubleValue();
+                    AbstractPipelineAggregationBuilder.BUCKETS_PATH_FIELD.getPreferredName()
+    public static Double resolveBucketValue(
+        if (aggPathAsList.isEmpty()) {
+/*
+                    switch (gapPolicy) {
+ * The OpenSearch Contributors require contributions made to
+     * <p>
+                    }
+                    + "]"
+            }
+         * Deserialize the GapPolicy from the input stream
+ */
+        Object currentAgg;
+            return parseField.getPreferredName();
+                } else if (propertyValue instanceof InternalNumericMetricsAggregation.SingleValue) {
+        List<String> aggPathAsList,
+                    }
+            out.writeByte(id);
+        }
+                }
+                    + currentAggName
+import org.opensearch.core.common.ParsingException;
+            byte id = in.readByte();
+            if (propertyValue == null) {
+            } else {
+        INSERT_ZEROS((byte) 0, "insert_zeros"),
+            return null;
+ */
+     *            <code>bucket</code>
+import org.opensearch.core.xcontent.XContentLocation;
+                        throw new IllegalStateException(
+     * Inspects where we are in the agg tree and tries to format a helpful error
+                        + " must reference either a number value or a single value numeric metric aggregation"
+         *            GapPolicy in string format (e.g. "ignore")
+    }
+         * Parse a string GapPolicy into the byte enum
+                throw new AggregationExecutionException(
+                        result = policy;
+import org.opensearch.core.common.io.stream.StreamInput;
+        public static GapPolicy readFrom(StreamInput in) throws IOException {
+        public static GapPolicy parse(String text, XContentLocation tokenLocation) {
+         *
+                if (Double.isInfinite(value) || Double.isNaN(value) || (bucket.getDocCount() == 0 && !isDocCountProperty)) {
+            }
+    /**
+     *
+import org.opensearch.search.aggregations.AggregationExecutionException;
+            currentAggName = agg.getName();
+     *            The gap policy to apply if empty buckets are found
+    private static AggregationExecutionException formatResolutionError(
+                );
+import java.util.List;
+ * KIND, either express or implied.  See the License for the
+        GapPolicy gapPolicy
+import org.opensearch.search.aggregations.metrics.InternalNumericMetricsAggregation;
+import org.opensearch.core.ParseField;
+        @Override
+     * This can cause problems for operations like a derivative, which relies on a continuous
+                    + " must reference either a number value or a single value numeric metric aggregation, got: ["
+     */
+     * @param aggPath
+ * You may obtain a copy of the License at
+        public String getName() {
+                final List<String> validNames = new ArrayList<>();
+     *            A series of agg buckets in the form of a histogram
+    ) {
+        /**
+ * Licensed to Elasticsearch under one or more contributor
+                if (propertyValue instanceof Number) {
+        } else {
+ * license agreements. See the NOTICE file distributed with
+            throw new IllegalStateException("Unknown GapPolicy with id [" + id + "]");
+        SKIP((byte) 1, "skip");
+     * @opensearch.internal
+ */
+import org.opensearch.core.common.io.stream.StreamOutput;
+                        );
+     *            The path to a particular value that needs to be extracted.
+                        case SKIP:
+     * inside the agg at that path. This is used to extract values for use by
+        String currentAggName;
+                throw new ParsingException(tokenLocation, "Invalid gap policy: [" + text + "], accepted values: " + validNames);
+            for (GapPolicy gapPolicy : values()) {
+         * @return    GapPolicy Enum
+        String aggPath,
+import org.opensearch.search.aggregations.InvalidAggregationPathException;
+                if (id == gapPolicy.id) {
+ * @opensearch.internal
+ */
+                    + " must reference either a number value or a single value numeric metric aggregation, but ["
+                AbstractPipelineAggregationBuilder.BUCKETS_PATH_FIELD.getPreferredName()
+    ) {
+                }
+        }
+ *
+                } else {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            );
+     * resolve the missing bucket
+                } else {
+         * Serialize the GapPolicy to the output stream
+     *            This bucket should be present in the <code>histo</code>
+ * this work for additional information regarding copyright
+                    + "] at aggregation ["
+        InternalMultiBucketAggregation.InternalBucket bucket,
+        }
+     * @return The value extracted from <code>bucket</code> found at
+    /**
+     * "insert_zeros": empty buckets will be filled with zeros for all metrics
+     * pipeline aggregations (e.g. a derivative might need the price for each
+            Object propertyValue = bucket.getProperty(agg.getName(), aggPathAsList);
+     *            A specific bucket that a value needs to be extracted from.
+            this.id = id;
+     * "skip": empty buckets will simply be ignored
+    public static Double resolveBucketValue(
+            currentAgg = propertyValue;
+ *
+                boolean isDocCountProperty = aggPathAsList.size() == 1 && "_count".equals(aggPathAsList.get(0));
+        GapPolicy(byte id, String name) {
+     */

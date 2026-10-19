@@ -1,740 +1,576 @@
-setup:
+              date:
+                    to: 1
+  - match: { aggregations.range.buckets.0.key: "*-192.168.0.0" }
+  - length: { aggregations.range.buckets: 3 }
   - do:
-      indices.create:
-          index: test
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
-              properties:
-                ip:
-                   type: ip
-                double:
-                  type: double
-                date:
-                  type: date
-                  format: epoch_second
-                scaled_field:
-                  type: scaled_float
-                  scaling_factor: 100
-
+      reason: Backport fix to 2.16
+                match_all: {}
   - do:
-      cluster.health:
-        wait_for_status: green
-
----
-"Double range":
-  - do:
-      index:
-        index: test
-        id: 1
-        body: { "double" : 42 }
-
-  - do:
-      index:
-        index: test
-        id: 2
-        body: { "double" : 100 }
-
-  - do:
-      index:
-        index: test
-        id: 3
-        body: { "double" : 50 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
+  - match: { hits.total.value: 3 }
         rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "double_range" : { "range" : { "field" : "double", "ranges": [ { "to": 50 }, { "from": 50, "to": 150 }, { "from": 150 } ] } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.double_range.buckets: 3 }
-
-  - match: { aggregations.double_range.buckets.0.key: "*-50.0" }
-
-  - is_false: aggregations.double_range.buckets.0.from
-
-  - match: { aggregations.double_range.buckets.0.to: 50.0 }
-
-  - match: { aggregations.double_range.buckets.0.doc_count: 1 }
-
-  - match: { aggregations.double_range.buckets.1.key: "50.0-150.0" }
-
-  - match: { aggregations.double_range.buckets.1.from: 50.0 }
-
-  - match: { aggregations.double_range.buckets.1.to: 150.0 }
-
-  - match: { aggregations.double_range.buckets.1.doc_count: 2 }
-
-  - match: { aggregations.double_range.buckets.2.key: "150.0-*" }
-
-  - match: { aggregations.double_range.buckets.2.from: 150.0 }
-
-  - is_false:  aggregations.double_range.buckets.2.to
-
-  - match: { aggregations.double_range.buckets.2.doc_count: 0 }
-
   - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "double_range" : { "range" : { "field" : "double", "ranges": [ { "from": null, "to": 50 }, { "from": 50, "to": 150 }, { "from": 150, "to": null } ] } } } }
-
+                v:
+          - '{"double" : 50}'
+        index: test
   - match: { hits.total: 3 }
-
-  - length: { aggregations.double_range.buckets: 3 }
-
-  - match: { aggregations.double_range.buckets.0.key: "*-50.0" }
-
-  - is_false: aggregations.double_range.buckets.0.from
-
-  - match: { aggregations.double_range.buckets.0.to: 50.0 }
-
-  - match: { aggregations.double_range.buckets.0.doc_count: 1 }
-
-  - match: { aggregations.double_range.buckets.1.key: "50.0-150.0" }
-
-  - match: { aggregations.double_range.buckets.1.from: 50.0 }
-
-  - match: { aggregations.double_range.buckets.1.to: 150.0 }
-
-  - match: { aggregations.double_range.buckets.1.doc_count: 2 }
-
-  - match: { aggregations.double_range.buckets.2.key: "150.0-*" }
-
-  - match: { aggregations.double_range.buckets.2.from: 150.0 }
-
-  - is_false:  aggregations.double_range.buckets.2.to
-
-  - match: { aggregations.double_range.buckets.2.doc_count: 0 }
-
----
+        body: { "date" : "315561600000" }
+  - do:
+  - do:
 "IP range":
   - do:
-      index:
-        index: test
-        id: 1
-        body: { "ip" : "::1" }
-
-  - do:
-      index:
-        index: test
-        id: 2
-        body: { "ip" : "192.168.0.1" }
-
-  - do:
-      index:
-        index: test
-        id: 3
-        body: { "ip" : "192.168.0.7" }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "ip_range" : { "ip_range" : { "field" : "ip", "ranges": [ { "to": "192.168.0.0" }, { "from": "192.168.0.0", "to": "192.169.0.0" }, { "from": "192.169.0.0" } ] } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.ip_range.buckets: 3 }
-
-  - is_false: aggregations.ip_range.buckets.0.from
-
-  - match: { aggregations.ip_range.buckets.0.to: "192.168.0.0" }
-
-  - match: { aggregations.ip_range.buckets.0.doc_count: 1 }
-
-  - match: { aggregations.ip_range.buckets.1.from: "192.168.0.0" }
-
-  - match: { aggregations.ip_range.buckets.1.to: "192.169.0.0" }
-
-  - match: { aggregations.ip_range.buckets.1.doc_count: 2 }
-
-  - match: { aggregations.ip_range.buckets.2.from: "192.169.0.0" }
-
-  - is_false:  aggregations.ip_range.buckets.2.to
-
-  - match: { aggregations.ip_range.buckets.2.doc_count: 0 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "ip_range" : { "ip_range" : { "field" : "ip", "ranges": [ { "from": null, "to": "192.168.0.0" }, { "from": "192.168.0.0", "to": "192.169.0.0" }, { "from": "192.169.0.0", "to": null } ] } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.ip_range.buckets: 3 }
-
-  - is_false: aggregations.ip_range.buckets.0.from
-
-  - match: { aggregations.ip_range.buckets.0.to: "192.168.0.0" }
-
-  - match: { aggregations.ip_range.buckets.0.doc_count: 1 }
-
-  - match: { aggregations.ip_range.buckets.1.from: "192.168.0.0" }
-
-  - match: { aggregations.ip_range.buckets.1.to: "192.169.0.0" }
-
-  - match: { aggregations.ip_range.buckets.1.doc_count: 2 }
-
-  - match: { aggregations.ip_range.buckets.2.from: "192.169.0.0" }
-
-  - is_false:  aggregations.ip_range.buckets.2.to
-
-  - match: { aggregations.ip_range.buckets.2.doc_count: 0 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "ip_range" : { "ip_range" : { "field" : "ip", "ranges": [ { "mask": "::/24" }, { "mask": "192.168.0.0/16" } ] } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.ip_range.buckets: 2 }
-
-  - match: { aggregations.ip_range.buckets.0.key: "::/24" }
-
-  - match: { aggregations.ip_range.buckets.0.to: "0:100::" }
-
-  - match: { aggregations.ip_range.buckets.0.doc_count: 3 }
-
-  - match: { aggregations.ip_range.buckets.1.key: "192.168.0.0/16" }
-
-  - match: { aggregations.ip_range.buckets.1.from: "192.168.0.0" }
-
-  - match: { aggregations.ip_range.buckets.1.to: "192.169.0.0" }
-
-  - match: { aggregations.ip_range.buckets.1.doc_count: 2 }
-
----
-"IP Range Key Generation":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "ip_range" : { "ip_range" : { "field" : "ip", "ranges": [ { "to": "192.168.0.0" }, { "from": "192.168.0.0", "to": "192.169.0.0" }, { "from": "192.169.0.0" } ] } } } }
-
-  - length: { aggregations.ip_range.buckets: 3 }
-  - match: { aggregations.ip_range.buckets.0.key: "*-192.168.0.0" }
-  - match: { aggregations.ip_range.buckets.1.key: "192.168.0.0-192.169.0.0" }
-  - match: { aggregations.ip_range.buckets.2.key: "192.169.0.0-*" }
-
----
-"IP Range avg_bucket":
-  - do:
-      bulk:
-        refresh: true
-        index: test
-        body:
-            - '{"index": {}}'
-            - '{"ip": "::1", "v": 1}'
-            - '{"index": {}}'
-            - '{"ip": "192.168.0.1", "v": 2}'
-            - '{"index": {}}'
-            - '{"ip": "192.168.0.7", "v": 3}'
-
-  - do:
-      search:
-        index: test
-        body:
-          size: 0
-          aggs:
-            range:
-              ip_range:
-                field: ip
-                ranges:
-                  - to: 192.168.0.0
-                  - from: 192.168.0.0
-                    to: 192.169.0.0
-                  - from: 192.169.0.0
-              aggs:
-                v:
-                  sum:
-                    field: v
-            range_avg_v:
-              avg_bucket:
-                buckets_path: range.v
-
-  - match: { hits.total.value: 3 }
-  - length: { aggregations.range.buckets: 3 }
-  - match: { aggregations.range.buckets.0.key: "*-192.168.0.0" }
-  - match: { aggregations.range.buckets.0.doc_count: 1 }
-  - match: { aggregations.range.buckets.0.v.value: 1 }
-  - match: { aggregations.range.buckets.1.key: "192.168.0.0-192.169.0.0" }
-  - match: { aggregations.range.buckets.1.doc_count: 2 }
-  - match: { aggregations.range.buckets.1.v.value: 5 }
-  - match: { aggregations.range.buckets.2.key: "192.169.0.0-*" }
-  - match: { aggregations.range.buckets.2.doc_count: 0 }
-  - match: { aggregations.range.buckets.2.v.value: 0 }
-  - match: { aggregations.range_avg_v.value: 3 }
-
----
-"Date range":
-  - do:
-      index:
-        index: test
-        id: 1
-        body: { "date" : 1000 }
-
-  - do:
-      index:
-        index: test
-        id: 2
-        body: { "date" : 2000 }
-
-  - do:
-      index:
-        index: test
-        id: 3
-        body: { "date" : 3000 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "date_range" : { "date_range" : { "field" : "date", "ranges": [ { "from" : 1000, "to": 3000 }, { "from": 3000, "to": 4000 } ] } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.date_range.buckets: 2 }
-
-  - match: { aggregations.date_range.buckets.0.doc_count: 2 }
-  - match: { aggregations.date_range.buckets.0.key: "1000-3000" }
-  - match: { aggregations.date_range.buckets.0.from: 1000000 }
-  - match: { aggregations.date_range.buckets.0.to: 3000000 }
-
-  - match: { aggregations.date_range.buckets.1.doc_count: 1 }
-  - match: { aggregations.date_range.buckets.1.key: "3000-4000" }
-  - match: { aggregations.date_range.buckets.1.from: 3000000 }
-  - match: { aggregations.date_range.buckets.1.to: 4000000 }
-
----
-"Date Range Missing":
-  - do:
-      index:
-        index: test
-        id: 1
-        body: { "date" : "28800000000" }
-
-  - do:
-      index:
-        index: test
-        id: 2
-        body: { "date" : "315561600000" }
-
-  - do:
-      index:
-        index: test
-        id: 3
-        body: { "date" : "631180800000" }
-
-  - do:
-      index:
-        index: test
-        id: 4
-        body: { "date" : "10000" }
-
-  - do:
-        index:
-          index: test
-          id: 5
-          body: { "ip" : "192.168.0.1" }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            age_groups:
-              date_range:
-                field: date
-                missing: "0"
-                ranges:
-                - key: Generation Y
-                  from: '315561600000'
-                  to: '946713600000'
-                - key: Generation X
-                  from: "200000"
-                  to: '315561600000'
-                - key: Other
-                  to: "200000"
-
-  - match: { hits.total: 5 }
-
-  - length: { aggregations.age_groups.buckets: 3 }
-
-  - match: { aggregations.age_groups.buckets.0.key: "Other" }
-
-  - match: { aggregations.age_groups.buckets.0.doc_count: 2 }
-
-  - match: { aggregations.age_groups.buckets.1.key: "Generation X" }
-
-  - match: { aggregations.age_groups.buckets.1.doc_count: 1 }
-
-  - match: { aggregations.age_groups.buckets.2.key: "Generation Y" }
-
-  - match: { aggregations.age_groups.buckets.2.doc_count: 2 }
-
-
----
-"Date range unmapped with children":
-
-  - do:
-      indices.create:
-          index: test_a_unmapped
-          body:
-            settings:
-              number_of_shards: 1
-              number_of_replicas: 0
-  - do:
-      search:
-        index: test_a_unmapped
-        body:
-          size: 0
           query:
-            terms:
-              animal: []
-          aggs:
-            date_range:
+  - match: { hits.total.value: 3 }
               date_range:
-                field: date
-                ranges:
-                 - from: 2020-01-01T00:00:00Z
-              aggs:
-                sounds:
-                  cardinality:
-                    field: sound.keyword
-
-  - match: { hits.total.value: 0 }
-  - length: { aggregations.date_range.buckets: 1 }
-  - match: { aggregations.date_range.buckets.0.doc_count: 0 }
-  - match: { aggregations.date_range.buckets.0.key: "2020-01-01T00:00:00.000Z-*" }
-  - is_false: aggregations.date_range.buckets.0.to
-  - match: { aggregations.date_range.buckets.0.sounds.value: 0 }
-
----
-"Unsigned long range":
-  - skip:
-      version: " - 2.7.99"
-      reason: unsigned_long is not supported before 2.8.0
-
-  - do:
-      indices.put_mapping:
-        index: test
-        body:
-          properties:
-            unsigned:
-              type: unsigned_long
-
-  - do:
-      index:
-        index: test
-        id: 1
-        body: { "unsigned" : 42 }
-
-  - do:
-      index:
-        index: test
-        id: 2
-        body: { "unsigned" : 100 }
-
-  - do:
-      index:
-        index: test
-        id: 3
-        body: { "unsigned" : 50 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "unsigned_long_range" : { "range" : { "field" : "unsigned", "ranges": [ { "to": 50 }, { "from": 50, "to": 150 }, { "from": 150 } ] } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.unsigned_long_range.buckets: 3 }
-
-  - match: { aggregations.unsigned_long_range.buckets.0.key: "*-50.0" }
-
+  - match: { aggregations.range.buckets.2.v.value: 0 }
   - is_false: aggregations.unsigned_long_range.buckets.0.from
-
-  - match: { aggregations.unsigned_long_range.buckets.0.to: 50.0 }
-
-  - match: { aggregations.unsigned_long_range.buckets.0.doc_count: 1 }
-
-  - match: { aggregations.unsigned_long_range.buckets.1.key: "50.0-150.0" }
-
-  - match: { aggregations.unsigned_long_range.buckets.1.from: 50.0 }
-
-  - match: { aggregations.unsigned_long_range.buckets.1.to: 150.0 }
-
-  - match: { aggregations.unsigned_long_range.buckets.1.doc_count: 2 }
-
-  - match: { aggregations.unsigned_long_range.buckets.2.key: "150.0-*" }
-
-  - match: { aggregations.unsigned_long_range.buckets.2.from: 150.0 }
-
-  - is_false:  aggregations.unsigned_long_range.buckets.2.to
-
-  - match: { aggregations.unsigned_long_range.buckets.2.doc_count: 0 }
-
-  - do:
+        index: test
       search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "unsigned_long_range" : { "range" : { "field" : "unsigned", "ranges": [ { "from": null, "to": 50 }, { "from": 50, "to": 150 }, { "from": 150, "to": null } ] } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.unsigned_long_range.buckets: 3 }
-
-  - match: { aggregations.unsigned_long_range.buckets.0.key: "*-50.0" }
-
-  - is_false: aggregations.unsigned_long_range.buckets.0.from
-
-  - match: { aggregations.unsigned_long_range.buckets.0.to: 50.0 }
-
-  - match: { aggregations.unsigned_long_range.buckets.0.doc_count: 1 }
-
-  - match: { aggregations.unsigned_long_range.buckets.1.key: "50.0-150.0" }
-
-  - match: { aggregations.unsigned_long_range.buckets.1.from: 50.0 }
-
-  - match: { aggregations.unsigned_long_range.buckets.1.to: 150.0 }
-
-  - match: { aggregations.unsigned_long_range.buckets.1.doc_count: 2 }
-
-  - match: { aggregations.unsigned_long_range.buckets.2.key: "150.0-*" }
-
-  - match: { aggregations.unsigned_long_range.buckets.2.from: 150.0 }
-
-  - is_false:  aggregations.unsigned_long_range.buckets.2.to
-
-  - match: { aggregations.unsigned_long_range.buckets.2.doc_count: 0 }
-
----
-"Double range profiler shows filter rewrite info":
-  - skip:
-      version: " - 2.15.99"
-      reason: debug info for filter rewrite was added in 2.16.0
-
-  - do:
-      indices.create:
-        index: test_profile
-        body:
-          settings:
-            number_of_replicas: 0
-            number_of_shards: 1
-            refresh_interval: -1
-          mappings:
-            properties:
-              ip:
-                type: ip
-              double:
-                type: double
-              date:
-                type: date
-                format: epoch_second
-
-  - do:
-      bulk:
-        index: test_profile
-        refresh: true
-        body:
-          - '{"index": {}}'
-          - '{"double" : 42}'
-          - '{"index": {}}'
-          - '{"double" : 100}'
-          - '{"index": {}}'
-          - '{"double" : 50}'
-
-  - do:
-      search:
-        index: test_profile
-        body:
-          size: 0
-          profile: true
-          aggs:
-            double_range:
-              range:
-                field: double
-                ranges:
-                  - to: 50
-                  - from: 50
-                    to: 150
-                  - from: 150
-
-  - length: { aggregations.double_range.buckets: 3 }
-
-  - match: { aggregations.double_range.buckets.0.key: "*-50.0" }
-  - is_false: aggregations.double_range.buckets.0.from
-  - match: { aggregations.double_range.buckets.0.to: 50.0 }
-  - match: { aggregations.double_range.buckets.0.doc_count: 1 }
-  - match: { aggregations.double_range.buckets.1.key: "50.0-150.0" }
-  - match: { aggregations.double_range.buckets.1.from: 50.0 }
-  - match: { aggregations.double_range.buckets.1.to: 150.0 }
-  - match: { aggregations.double_range.buckets.1.doc_count: 2 }
-  - match: { aggregations.double_range.buckets.2.key: "150.0-*" }
-  - match: { aggregations.double_range.buckets.2.from: 150.0 }
-  - is_false:  aggregations.double_range.buckets.2.to
-  - match: { aggregations.double_range.buckets.2.doc_count: 0 }
-
-  - match: { profile.shards.0.aggregations.0.debug.optimized_segments: 1 }
-  - match: { profile.shards.0.aggregations.0.debug.unoptimized_segments: 0 }
-  - match: { profile.shards.0.aggregations.0.debug.leaf_visited: 1 }
-  - match: { profile.shards.0.aggregations.0.debug.inner_visited: 0 }
-
----
-"Scaled Float Range Aggregation":
-  - do:
-      index:
-        index: test
-        id: 1
-        body: { "scaled_field": 1 }
-
-  - do:
-      index:
-        index: test
-        id: 2
-        body: { "scaled_field": 1.53 }
-
-  - do:
-      index:
-        index: test
-        id: 3
-        body: { "scaled_field": -2.1 }
-
-  - do:
-      index:
-        index: test
         id: 4
-        body: { "scaled_field": 1.53 }
-
+      search:
+                  to: '946713600000'
+        index: test_profile
+              number_of_replicas: 0
+            number_of_shards: 1
+          - '{"index": {}}'
+          aggs:
+  - match: { aggregations.unsigned_long_range.buckets.2.key: "150.0-*" }
   - do:
-      indices.refresh: { }
-
+        body:
+        body: { "double" : 42 }
+  - match: { aggregations.date_range.buckets.0.from: 1000000 }
+  - do:
+        body:
+      index:
+        index: test
+        wait_for_status: green
+  - match: { aggregations.double_range.buckets.2.doc_count: 0 }
+      search:
+          - '{"routing": "route2", "v": 15, "date": "2024-11-01"}'
+        id: 3
+  - do:
+  - match: { hits.total: 3 }
+            settings:
+        body: { "double" : 50 }
+  - match: { aggregations.double_range.buckets.1.from: 50.0 }
+      indices.refresh: {}
+          - '{"index": {}}'
+  - is_false:  aggregations.double_range.buckets.2.to
+  - match: { aggregations.double_range.buckets.2.key: "150.0-*" }
+  - match: { aggregations.NegPosAgg.buckets.0.doc_count: 2 }
+  - match: { aggregations.double_range.buckets.1.to: 150.0 }
+  - match: { aggregations.ip_range.buckets.0.to: "0:100::" }
+                    to: 192.169.0.0
+        id: 1
+          index: test
+                  type: scaled_float
+                    field: v
+                    key: "1"
+  - match: { aggregations.unsigned_long_range.buckets.1.to: 150.0 }
+  - do:
+            terms:
+  - match: { profile.shards.0.aggregations.0.debug.unoptimized_segments: 0 }
+        id: 4
+  - is_false: aggregations.ip_range.buckets.0.from
+  - match: { aggregations.ip_range.buckets.2.from: "192.169.0.0" }
+        body: { "unsigned" : 100 }
+  - match: { aggregations.unsigned_long_range.buckets.1.key: "50.0-150.0" }
+      indices.create:
+---
+  - length: { aggregations.ip_range.buckets: 3 }
+      search:
+  - match: { aggregations.date_range.buckets.0.sounds.value: 0 }
+          body:
+  - match: { aggregations.date_range.buckets.1.from: 3000000 }
+            - '{"index": {}}'
+        index: test
+              avg_bucket:
+      version: " - 2.15.99"
+            my_range:
+  - do:
+        body: { "scaled_field": 1.53 }
+        id: 1
+  - do:
+                  type: date
+      version: " - 2.99.99"
+  - match: { aggregations.unsigned_long_range.buckets.0.key: "*-50.0" }
+  - match: { aggregations.double_range.buckets.2.doc_count: 0 }
+  - match: { aggregations.my_range.buckets.3.from: 1.5 }
+                  - to: 50
+"Date range":
+        id: 3
+  - do:
+            range_avg_v:
+        body:
+        id: 3
+  - is_false: aggregations.my_range.buckets.0.from
+      reason: unsigned_long is not supported before 2.8.0
+      version: " - 2.7.99"
+  - match: { aggregations.double_range.buckets.1.doc_count: 2 }
+  - match: { aggregations.ip_range.buckets.1.from: "192.168.0.0" }
+        index: test
+"Filter query w/ aggregation test":
+  - length: { aggregations.double_range.buckets: 3 }
+        rest_total_hits_as_int: true
+  - match: { aggregations.date_range.buckets.1.key: "3000-4000" }
+      search:
+        id: 2
+  - length: { aggregations.unsigned_long_range.buckets: 3 }
+          aggs:
+  - match: { aggregations.unsigned_long_range.buckets.2.key: "150.0-*" }
+          - '{"routing": "route1", "v": -5, "date": "2024-10-30"}'
+          body:
+              animal: []
+---
+  - is_false: aggregations.double_range.buckets.0.from
+  - match: { hits.total: 3 }
+  - match: { aggregations.date_range.buckets.0.doc_count: 2 }
+                field: ip
+        body:
+  - match: { aggregations.ip_range.buckets.2.from: "192.169.0.0" }
+  - match: { aggregations.date_range.buckets.1.to: 4000000 }
+  - match: { aggregations.unsigned_long_range.buckets.0.key: "*-50.0" }
+  - do:
+        body: { "date" : "631180800000" }
+              number_of_shards: 1
+            settings:
+        body: { "size" : 0, "aggs" : { "ip_range" : { "ip_range" : { "field" : "ip", "ranges": [ { "to": "192.168.0.0" }, { "from": "192.168.0.0", "to": "192.169.0.0" }, { "from": "192.169.0.0" } ] } } } }
+  - do:
+---
+        id: 1
+      index:
+setup:
+              range:
+      index:
+  - is_false: aggregations.unsigned_long_range.buckets.0.from
+  - do:
+        index: test
+  - length: { aggregations.date_range.buckets: 1 }
+  - match: { profile.shards.0.aggregations.0.debug.optimized_segments: 1 }
+        body: { "date" : 2000 }
+  - match: { aggregations.date_range.buckets.0.key: "1000-3000" }
   - do:
       search:
-        index: test
-        body:
-          size: 0
-          aggs:
-            my_range:
+  - do:
+        body: { "ip" : "::1" }
               range:
-                field: scaled_field
+      index:
+  - match: { aggregations.double_range.buckets.0.doc_count: 1 }
+  - do:
+  - do:
+  - skip:
+  - match: { aggregations.age_groups.buckets.0.doc_count: 2 }
+        index: test
+      index:
                 ranges:
-                  - to: 0
-                  - from: 0
-                    to: 1
-                  - from: 1
+        body: { "size" : 0, "aggs" : { "unsigned_long_range" : { "range" : { "field" : "unsigned", "ranges": [ { "from": null, "to": 50 }, { "from": 50, "to": 150 }, { "from": 150, "to": null } ] } } } }
+        body: { "unsigned" : 50 }
+        rest_total_hits_as_int: true
+  - match: { aggregations.double_range.buckets.2.key: "150.0-*" }
+                match_all: {}
+  - do:
+  - match: { aggregations.double_range.buckets.0.to: 50.0 }
                     to: 1.5
                   - from: 1.5
-
-  - length: { aggregations.my_range.buckets: 4 }
-
-  - match: { aggregations.my_range.buckets.0.key: "*-0.0" }
-  - is_false: aggregations.my_range.buckets.0.from
-  - match: { aggregations.my_range.buckets.0.to: 0.0 }
-  - match: { aggregations.my_range.buckets.0.doc_count: 1 }
-  - match: { aggregations.my_range.buckets.1.key: "0.0-1.0" }
-  - match: { aggregations.my_range.buckets.1.from: 0.0 }
-  - match: { aggregations.my_range.buckets.1.to: 1.0 }
-  - match: { aggregations.my_range.buckets.1.doc_count: 0 }
-  - match: { aggregations.my_range.buckets.2.key: "1.0-1.5" }
-  - match: { aggregations.my_range.buckets.2.from: 1.0 }
-  - match: { aggregations.my_range.buckets.2.to: 1.5 }
-  - match: { aggregations.my_range.buckets.2.doc_count: 1 }
-  - match: { aggregations.my_range.buckets.3.key: "1.5-*" }
-  - match: { aggregations.my_range.buckets.3.from: 1.5 }
-  - is_false:  aggregations.my_range.buckets.3.to
+          properties:
+  - do:
+              type: unsigned_long
+        id: 3
+        body: { "size" : 0, "aggs" : { "ip_range" : { "ip_range" : { "field" : "ip", "ranges": [ { "to": "192.168.0.0" }, { "from": "192.168.0.0", "to": "192.169.0.0" }, { "from": "192.169.0.0" } ] } } } }
+"Double range":
   - match: { aggregations.my_range.buckets.3.doc_count: 2 }
-
----
-"Filter query w/ aggregation test":
-  - skip:
-      version: " - 2.99.99"
-      reason: Backport fix to 2.16
-
+            bool:
   - do:
-      bulk:
+        id: 2
+          profile: true
+        id: 1
+        index: test
+  - do:
+      index:
+                   type: ip
+  - match: { aggregations.double_range.buckets.0.to: 50.0 }
         refresh: true
-        index: range-agg-w-query
-        body:
-          - '{"index": {}}'
-          - '{"routing": "route1", "v": -10, "date": "2024-10-29"}'
-          - '{"index": {}}'
-          - '{"routing": "route1", "v": -5, "date": "2024-10-30"}'
-          - '{"index": {}}'
-          - '{"routing": "route1", "v": 10, "date": "2024-10-31"}'
-          - '{"index": {}}'
-          - '{"routing": "route2", "v": 15, "date": "2024-11-01"}'
-          - '{"index": {}}'
-          - '{"routing": "route2", "v": 20, "date": "2024-11-02"}'
-
-  - do:
-      search:
-        index: range-agg-w-query
-        body:
-          query:
-            bool:
-              must:
-                match_all: {}
-              filter:
-                - terms:
-                    routing:
-                      - "route1"
-          aggregations:
-            NegPosAgg:
-              range:
-                field: v
-                keyed: true
-                ranges:
-                  - to: 0
-                    key: "0"
-                  - from: 0
-                    key: "1"
-          _source: false
-
-  - match: { hits.total.value: 3 }
-  - match: { aggregations.NegPosAgg.buckets.0.doc_count: 2 }
-  - match: { aggregations.NegPosAgg.buckets.1.doc_count: 1 }
-
-  - do:
-      search:
-        index: range-agg-w-query
-        body:
-          query:
-            bool:
-              must:
-                match_all: {}
-              filter:
-                - terms:
-                    routing:
-                      - "route1"
-          aggregations:
-            HalloweenAgg:
-              date_range:
-                field: date
-                format: "yyyy-MM-dd"
-                keyed: true
-                ranges:
-                  - to: "2024-11-01"
-                    key: "to-october"
+  - match: { aggregations.age_groups.buckets.2.key: "Generation Y" }
+        index: test_profile
+  - match: { aggregations.my_range.buckets.3.key: "1.5-*" }
                   - from: "2024-11-01"
-                    key: "from-september"
+  - match: { aggregations.unsigned_long_range.buckets.1.key: "50.0-150.0" }
+  - match: { aggregations.date_range.buckets.0.key: "2020-01-01T00:00:00.000Z-*" }
+      cluster.health:
+  - do:
+      search:
+              filter:
+  - match: { aggregations.double_range.buckets.2.from: 150.0 }
+                format: "yyyy-MM-dd"
+  - do:
+  - match: { aggregations.range.buckets.0.doc_count: 1 }
+  - match: { aggregations.unsigned_long_range.buckets.0.doc_count: 1 }
+      search:
+        body:
+  - do:
+  - match: { aggregations.range.buckets.1.doc_count: 2 }
+  - match: { aggregations.ip_range.buckets.1.doc_count: 2 }
+  - skip:
+                      - "route1"
+        index: range-agg-w-query
+            double_range:
+  - is_false: aggregations.ip_range.buckets.0.from
+              must:
+  - match: { aggregations.age_groups.buckets.1.doc_count: 1 }
+  - do:
+---
+  - match: { aggregations.my_range.buckets.0.key: "*-0.0" }
+        id: 1
+                - key: Generation X
+  - length: { aggregations.double_range.buckets: 3 }
           _source: false
-
-  - match: { hits.total.value: 3 }
+      search:
+  - match: { aggregations.my_range.buckets.1.from: 0.0 }
+  - match: { aggregations.ip_range.buckets.1.from: "192.168.0.0" }
+                format: epoch_second
+  - do:
+        index: test
+  - match: { aggregations.date_range.buckets.0.doc_count: 0 }
+                field: date
+  - match: { aggregations.my_range.buckets.1.doc_count: 0 }
+      indices.refresh: {}
+                type: ip
+  - match: { aggregations.unsigned_long_range.buckets.0.to: 50.0 }
+  - do:
+                  scaling_factor: 100
+                    routing:
+        rest_total_hits_as_int: true
+  - is_false:  aggregations.double_range.buckets.2.to
+        body:
+  - match: { profile.shards.0.aggregations.0.debug.inner_visited: 0 }
+      search:
+                  - from: 50
+  - match: { aggregations.age_groups.buckets.0.key: "Other" }
+                field: date
+            date_range:
+            refresh_interval: -1
+        body: { "unsigned" : 42 }
+  - do:
+              ip:
+  - match: { hits.total: 3 }
+  - do:
+  - length: { aggregations.unsigned_long_range.buckets: 3 }
+                keyed: true
+  - is_false:  aggregations.ip_range.buckets.2.to
+        body: { "size" : 0, "aggs" : { "double_range" : { "range" : { "field" : "double", "ranges": [ { "to": 50 }, { "from": 50, "to": 150 }, { "from": 150 } ] } } } }
+            properties:
+              date_range:
+  - match: { aggregations.range_avg_v.value: 3 }
+                - terms:
+              properties:
+  - match: { hits.total: 3 }
+                type: date
+  - match: { aggregations.double_range.buckets.2.from: 150.0 }
+  - length: { aggregations.ip_range.buckets: 2 }
+        rest_total_hits_as_int: true
+          aggregations:
+      index:
+      reason: debug info for filter rewrite was added in 2.16.0
+  - match: { hits.total: 3 }
+      indices.put_mapping:
+  - match: { aggregations.unsigned_long_range.buckets.1.from: 50.0 }
+      search:
+              ip_range:
+        id: 2
+---
+          - '{"double" : 100}'
+        body: { "double" : 100 }
+  - match: { aggregations.ip_range.buckets.1.from: "192.168.0.0" }
+            range:
+              range:
+                  - from: 0
+          - '{"index": {}}'
+          - '{"index": {}}'
+        rest_total_hits_as_int: true
+          - '{"routing": "route1", "v": -10, "date": "2024-10-29"}'
+  - match: { aggregations.my_range.buckets.2.doc_count: 1 }
+  - match: { aggregations.double_range.buckets.1.from: 50.0 }
+                ranges:
+  - is_false:  aggregations.ip_range.buckets.2.to
+  - match: { aggregations.double_range.buckets.1.to: 150.0 }
+  - match: { aggregations.ip_range.buckets.2.key: "192.169.0.0-*" }
+"Unsigned long range":
+  - match: { aggregations.ip_range.buckets.1.doc_count: 2 }
+      indices.refresh: {}
+      index:
+  - match: { aggregations.range.buckets.2.doc_count: 0 }
+  - match: { aggregations.double_range.buckets.1.key: "50.0-150.0" }
+          size: 0
+  - length: { aggregations.age_groups.buckets: 3 }
+  - match: { aggregations.ip_range.buckets.1.key: "192.168.0.0/16" }
+        index: test
+  - is_false:  aggregations.unsigned_long_range.buckets.2.to
+        id: 2
+  - do:
+                field: scaled_field
+        body: { "date" : "10000" }
+  - match: { aggregations.unsigned_long_range.buckets.2.from: 150.0 }
+  - do:
+  - match: { aggregations.ip_range.buckets.0.to: "192.168.0.0" }
+"Date range unmapped with children":
+  - do:
+                    key: "0"
+      index:
+      index:
+  - match: { hits.total.value: 0 }
+        id: 3
+      index:
+                  - from: 1
+          aggs:
+                - key: Generation Y
+"Date Range Missing":
+                 - from: 2020-01-01T00:00:00Z
+            unsigned:
+---
+        index: test
+          - '{"index": {}}'
+      bulk:
+      index:
+          - '{"double" : 42}'
+      index:
+        index: test
+                      - "route1"
+          - '{"index": {}}'
+            HalloweenAgg:
+  - do:
+        refresh: true
+  - skip:
+                  to: '315561600000'
+                  from: '315561600000'
+                    routing:
+  - length: { aggregations.double_range.buckets: 3 }
+  - is_false:  aggregations.unsigned_long_range.buckets.2.to
+                  - to: 192.168.0.0
   - match: { aggregations.HalloweenAgg.buckets.to-october.doc_count: 3 }
+"Double range profiler shows filter rewrite info":
+  - do:
+                date:
+  - match: { aggregations.my_range.buckets.0.to: 0.0 }
+                  - to: "2024-11-01"
+  - match: { aggregations.ip_range.buckets.0.key: "*-192.168.0.0" }
+        index:
+  - match: { aggregations.ip_range.buckets.1.to: "192.169.0.0" }
+        index: test_profile
+                    key: "to-october"
+  - match: { aggregations.double_range.buckets.1.doc_count: 2 }
+            - '{"index": {}}'
+          - '{"index": {}}'
+        body: { "size" : 0, "aggs" : { "ip_range" : { "ip_range" : { "field" : "ip", "ranges": [ { "from": null, "to": "192.168.0.0" }, { "from": "192.168.0.0", "to": "192.169.0.0" }, { "from": "192.169.0.0", "to": null } ] } } } }
+                ranges:
+  - match: { aggregations.double_range.buckets.1.doc_count: 2 }
+                  format: epoch_second
+        body: { "date" : 1000 }
+  - match: { aggregations.double_range.buckets.0.key: "*-50.0" }
+          - '{"index": {}}'
+  - do:
+  - match: { hits.total: 3 }
+        body: { "ip" : "192.168.0.7" }
+  - do:
+  - length: { aggregations.ip_range.buckets: 3 }
+      search:
+        index: range-agg-w-query
+        rest_total_hits_as_int: true
+                ranges:
+        body:
+  - do:
+                missing: "0"
+          index: test_a_unmapped
+        rest_total_hits_as_int: true
+        body:
+  - match: { aggregations.ip_range.buckets.0.to: "192.168.0.0" }
+              filter:
+        body: { "size" : 0, "aggs" : { "date_range" : { "date_range" : { "field" : "date", "ranges": [ { "from" : 1000, "to": 3000 }, { "from": 3000, "to": 4000 } ] } } } }
+              number_of_replicas: 0
+  - match: { aggregations.ip_range.buckets.0.doc_count: 3 }
+  - match: { aggregations.my_range.buckets.2.from: 1.0 }
+                type: double
+          aggs:
+  - match: { aggregations.range.buckets.2.key: "192.169.0.0-*" }
+"IP Range avg_bucket":
+                  to: "200000"
+  - length: { aggregations.my_range.buckets: 4 }
+  - match: { aggregations.my_range.buckets.2.to: 1.5 }
+  - is_false:  aggregations.my_range.buckets.3.to
+          index: test
+  - match: { aggregations.ip_range.buckets.2.doc_count: 0 }
+  - length: { aggregations.date_range.buckets: 2 }
+      indices.create:
+        body:
+---
+                double:
+        index: range-agg-w-query
+        index: test
+        index: test
+  - match: { aggregations.date_range.buckets.1.doc_count: 1 }
+        index: test
+        index: test
+  - match: { aggregations.age_groups.buckets.1.key: "Generation X" }
+        body:
+        id: 1
+                  from: "200000"
+  - is_false: aggregations.double_range.buckets.0.from
+  - match: { aggregations.unsigned_long_range.buckets.1.to: 150.0 }
+        index: test
+  - match: { aggregations.double_range.buckets.1.key: "50.0-150.0" }
+  - match: { aggregations.ip_range.buckets.1.to: "192.169.0.0" }
+  - do:
+            - '{"ip": "192.168.0.1", "v": 2}'
+      index:
+  - match: { aggregations.double_range.buckets.1.key: "50.0-150.0" }
+      search:
+        index: test
+          _source: false
+  - match: { hits.total.value: 3 }
+        index: test
+  - match: { aggregations.my_range.buckets.2.key: "1.0-1.5" }
+---
+        rest_total_hits_as_int: true
+      index:
+      search:
+        body: { "size" : 0, "aggs" : { "double_range" : { "range" : { "field" : "double", "ranges": [ { "from": null, "to": 50 }, { "from": 50, "to": 150 }, { "from": 150, "to": null } ] } } } }
+                field: v
+            - '{"ip": "192.168.0.7", "v": 3}'
+                  type: double
+        id: 3
+                ip:
+  - match: { aggregations.double_range.buckets.0.key: "*-50.0" }
+                  - from: 150
+---
+            bool:
+      indices.refresh: {}
+          size: 0
+                  - to: 0
+  - match: { aggregations.age_groups.buckets.2.doc_count: 2 }
+        index: test
+      index:
+  - match: { aggregations.ip_range.buckets.1.doc_count: 2 }
+  - match: { aggregations.unsigned_long_range.buckets.1.from: 50.0 }
+  - match: { aggregations.double_range.buckets.2.from: 150.0 }
+  - match: { aggregations.unsigned_long_range.buckets.1.doc_count: 2 }
+        rest_total_hits_as_int: true
+  - match: { aggregations.NegPosAgg.buckets.1.doc_count: 1 }
+              must:
+        body: { "scaled_field": 1 }
+  - match: { aggregations.range.buckets.0.v.value: 1 }
+  - match: { hits.total: 5 }
+  - match: { aggregations.double_range.buckets.1.to: 150.0 }
+                    key: "from-september"
+        body: { "ip" : "192.168.0.1" }
+        id: 2
+  - match: { aggregations.ip_range.buckets.0.doc_count: 1 }
+                  - from: 192.168.0.0
+      index:
+  - do:
+  - do:
+        index: test
+  - match: { aggregations.double_range.buckets.0.doc_count: 1 }
+        index: test
+                sounds:
+        index: test
+  - match: { aggregations.ip_range.buckets.2.doc_count: 0 }
+                    to: 150
+              aggs:
+                keyed: true
+        body: { "date" : "28800000000" }
+            - '{"ip": "::1", "v": 1}'
+      search:
+  - length: { aggregations.ip_range.buckets: 3 }
+      index:
+  - do:
+                ranges:
+  - match: { aggregations.unsigned_long_range.buckets.2.doc_count: 0 }
+  - match: { aggregations.my_range.buckets.1.key: "0.0-1.0" }
+  - match: { aggregations.unsigned_long_range.buckets.0.doc_count: 1 }
+  - match: { aggregations.ip_range.buckets.0.key: "::/24" }
+          size: 0
+        index: test
+                ranges:
+      bulk:
+  - match: { aggregations.double_range.buckets.2.doc_count: 0 }
+              aggs:
+      index:
+              double:
+  - match: { aggregations.unsigned_long_range.buckets.2.doc_count: 0 }
+  - match: { aggregations.my_range.buckets.1.to: 1.0 }
+                    field: sound.keyword
+            mappings:
+  - match: { aggregations.double_range.buckets.2.key: "150.0-*" }
+  - match: { aggregations.double_range.buckets.1.from: 50.0 }
+          - '{"routing": "route1", "v": 10, "date": "2024-10-31"}'
+  - do:
+                - terms:
+  - match: { aggregations.date_range.buckets.0.to: 3000000 }
+  - match: { aggregations.double_range.buckets.0.to: 50.0 }
+          query:
+      index:
+  - do:
+  - match: { aggregations.ip_range.buckets.1.to: "192.169.0.0" }
+                  cardinality:
+                field: double
+              date_range:
+        id: 2
+  - match: { aggregations.ip_range.buckets.0.doc_count: 1 }
+  - match: { aggregations.my_range.buckets.0.doc_count: 1 }
+                  sum:
+      indices.create:
+  - match: { aggregations.double_range.buckets.0.doc_count: 1 }
+                  - from: 192.169.0.0
+  - match: { profile.shards.0.aggregations.0.debug.leaf_visited: 1 }
+      indices.refresh: { }
+"IP Range Key Generation":
+          body: { "ip" : "192.168.0.1" }
+                - key: Other
+      search:
+  - match: { aggregations.range.buckets.1.v.value: 5 }
+            - '{"index": {}}'
+        body: { "size" : 0, "aggs" : { "ip_range" : { "ip_range" : { "field" : "ip", "ranges": [ { "mask": "::/24" }, { "mask": "192.168.0.0/16" } ] } } } }
+          - '{"routing": "route2", "v": 20, "date": "2024-11-02"}'
+          id: 5
+            NegPosAgg:
+          size: 0
+  - match: { aggregations.ip_range.buckets.1.key: "192.168.0.0-192.169.0.0" }
   - match: { aggregations.HalloweenAgg.buckets.from-september.doc_count: 0 }
+      indices.refresh: {}
+                  - to: 0
+          settings:
+                field: date
+      bulk:
+  - match: { aggregations.unsigned_long_range.buckets.2.from: 150.0 }
+        body: { "size" : 0, "aggs" : { "unsigned_long_range" : { "range" : { "field" : "unsigned", "ranges": [ { "to": 50 }, { "from": 50, "to": 150 }, { "from": 150 } ] } } } }
+  - match: { aggregations.unsigned_long_range.buckets.0.to: 50.0 }
+  - do:
+        body: { "date" : 3000 }
+  - do:
+  - do:
+                ranges:
+        body:
+          aggs:
+"Scaled Float Range Aggregation":
+        refresh: true
+                buckets_path: range.v
+        body: { "scaled_field": -2.1 }
+        body: { "scaled_field": 1.53 }
+                  - from: 0
+---
+  - is_false: aggregations.double_range.buckets.0.from
+          aggregations:
+  - do:
+            number_of_replicas: 0
+  - match: { hits.total: 3 }
+  - match: { aggregations.range.buckets.1.key: "192.168.0.0-192.169.0.0" }
+          mappings:
+        body:
+  - match: { aggregations.unsigned_long_range.buckets.1.doc_count: 2 }
+  - match: { aggregations.double_range.buckets.0.key: "*-50.0" }
+                scaled_field:
+  - is_false: aggregations.date_range.buckets.0.to
+          query:
+        index: test_a_unmapped
+  - do:
+            age_groups:
+---
+  - is_false:  aggregations.double_range.buckets.2.to

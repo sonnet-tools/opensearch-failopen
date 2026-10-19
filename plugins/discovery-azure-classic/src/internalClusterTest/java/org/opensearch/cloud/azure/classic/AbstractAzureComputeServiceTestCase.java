@@ -1,193 +1,169 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+ * Modifications Copyright OpenSearch Contributors. See
+     */
+        }
+        builder.put(Management.SUBSCRIPTION_ID_SETTING.getKey(), "fake")
+            .put(Management.SERVICE_NAME_SETTING.getKey(), "dummy");
+            .put(Management.KEYSTORE_PASSWORD_SETTING.getKey(), "dummy")
+                final HostedServiceGetDetailedResponse response = new HostedServiceGetDetailedResponse();
+                            return NetworkAddress.format(discoveryNode.getAddress().address());
+import com.microsoft.windowsazure.management.compute.models.DeploymentSlot;
+        public TestPlugin(Settings settings) {
+}
+                    RoleInstance instance = new RoleInstance();
+    @After
  */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
+    public void clearAzureNodes() {
+            };
+                final HostedServiceGetDetailedResponse.Deployment deployment = new HostedServiceGetDetailedResponse.Deployment();
+                    final String name = node.getKey();
+    }
+                    }
  *    http://www.apache.org/licenses/LICENSE-2.0
+    protected void registerAzureNode(final String nodeName) {
+                    endpoint.setName(Discovery.ENDPOINT_NAME_SETTING.getDefault(Settings.EMPTY));
+    }
+                    return super.resolveInstanceAddress(hostType, instance);
+            final Settings settings,
+import org.opensearch.plugins.Plugin;
+                        }
+         * Defines a {@link AzureSeedHostsProvider} for testing purpose that is able to resolve
+                    instance.setInstanceEndpoints(new ArrayList<>(Collections.singletonList(endpoint)));
+                        DiscoveryNode discoveryNode = nodes.get(instance.getInstanceName());
+import org.opensearch.common.network.NetworkAddress;
+import org.junit.After;
+            super(settings);
+ * this work for additional information regarding copyright
+                    // Set the private IP address
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
+ * SPDX-License-Identifier: Apache-2.0
+                deployment.setRoleInstances(new ArrayList<>(Collections.unmodifiableList(instances)));
+                    final DiscoveryNode discoveryNode = node.getValue();
+                    instance.setIPAddress(transportAddress.address().getAddress());
+    }
+import java.util.Collection;
+ *
+ * You may obtain a copy of the License at
+                    instance.setPowerState(RoleInstancePowerState.Started);
+        protected AzureSeedHostsProvider createSeedHostsProvider(
+        assertNotNull(nodeInfos.getNodes());
+        @Override
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+         */
+import com.microsoft.windowsazure.management.compute.models.InstanceEndpoint;
+     */
+                    // Set the public IP address
+ */
+import org.opensearch.action.admin.cluster.node.info.NodesInfoResponse;
+import com.microsoft.windowsazure.management.compute.models.RoleInstance;
+import static org.opensearch.core.common.util.CollectionUtils.newSingletonArrayList;
+    @Override
+import org.opensearch.cloud.azure.classic.management.AzureComputeService.Discovery;
+ * compatible open source license.
+         * network addresses for Azure instances running on the same host but different ports.
+import org.opensearch.cloud.azure.classic.management.AzureComputeService;
+    }
+     * Use {@link #registerAzureNode(String)} method to expose nodes in the tests.
+            throw new IllegalArgumentException("Node [" + discoveryNode.getName() + "] cannot be registered twice in Azure");
+        if (nodes.put(discoveryNode.getName(), discoveryNode) != null) {
+    /**
+                    final InstanceEndpoint endpoint = new InstanceEndpoint();
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+        }
+import org.opensearch.cluster.node.DiscoveryNode;
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cloud.azure.classic;
-
-import com.microsoft.windowsazure.management.compute.models.DeploymentSlot;
-import com.microsoft.windowsazure.management.compute.models.DeploymentStatus;
-import com.microsoft.windowsazure.management.compute.models.HostedServiceGetDetailedResponse;
-import com.microsoft.windowsazure.management.compute.models.InstanceEndpoint;
-import com.microsoft.windowsazure.management.compute.models.RoleInstance;
-import com.microsoft.windowsazure.management.compute.models.RoleInstancePowerState;
-import org.opensearch.action.admin.cluster.node.info.NodesInfoResponse;
-import org.opensearch.cloud.azure.classic.management.AzureComputeService;
-import org.opensearch.cloud.azure.classic.management.AzureComputeService.Discovery;
-import org.opensearch.cloud.azure.classic.management.AzureComputeService.Management;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.network.NetworkAddress;
-import org.opensearch.common.network.NetworkService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.discovery.azure.classic.AzureSeedHostsProvider;
-import org.opensearch.plugin.discovery.azure.classic.AzureDiscoveryPlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.transport.TransportService;
-import org.junit.After;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
-import static org.opensearch.core.common.util.CollectionUtils.newSingletonArrayList;
-import static org.opensearch.discovery.DiscoveryModule.DISCOVERY_SEED_PROVIDERS_SETTING;
-
-public abstract class AbstractAzureComputeServiceTestCase extends OpenSearchIntegTestCase {
-
-    private static final Map<String, DiscoveryNode> nodes = new ConcurrentHashMap<>();
-
-    @After
-    public void clearAzureNodes() {
-        nodes.clear();
-    }
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {
-        Settings.Builder builder = Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(DISCOVERY_SEED_PROVIDERS_SETTING.getKey(), "azure");
-
-        // We add a fake subscription_id to start mock compute service
-        builder.put(Management.SUBSCRIPTION_ID_SETTING.getKey(), "fake")
-            .put(Discovery.REFRESH_SETTING.getKey(), "5s")
-            .put(Management.KEYSTORE_PATH_SETTING.getKey(), "dummy")
-            .put(Management.KEYSTORE_PASSWORD_SETTING.getKey(), "dummy")
-            .put(Management.SERVICE_NAME_SETTING.getKey(), "dummy");
-        return builder.build();
-    }
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
+        @Override
         return Collections.singletonList(TestPlugin.class);
-    }
-
-    /**
-     * Register an existing node as a Azure node, exposing its address and details htrough
-     *
-     * @param nodeName the name of the node
-     */
-    protected void registerAzureNode(final String nodeName) {
-        TransportService transportService = internalCluster().getInstance(TransportService.class, nodeName);
-        assertNotNull(transportService);
-        DiscoveryNode discoveryNode = transportService.getLocalNode();
-        assertNotNull(discoveryNode);
-        if (nodes.put(discoveryNode.getName(), discoveryNode) != null) {
-            throw new IllegalArgumentException("Node [" + discoveryNode.getName() + "] cannot be registered twice in Azure");
-        }
-    }
-
-    protected void assertNumberOfNodes(int expected) {
-        NodesInfoResponse nodeInfos = client().admin().cluster().prepareNodesInfo().clear().execute().actionGet();
-        assertNotNull(nodeInfos);
-        assertNotNull(nodeInfos.getNodes());
-        assertEquals(expected, nodeInfos.getNodes().size());
-    }
-
-    /**
-     * Test plugin that exposes internal test cluster nodes as if they were real Azure nodes.
-     * Use {@link #registerAzureNode(String)} method to expose nodes in the tests.
-     */
-    public static class TestPlugin extends AzureDiscoveryPlugin {
-
-        public TestPlugin(Settings settings) {
-            super(settings);
-        }
-
-        @Override
-        protected AzureComputeService createComputeService() {
-            return () -> {
-                final List<RoleInstance> instances = new ArrayList<>();
-                for (Map.Entry<String, DiscoveryNode> node : nodes.entrySet()) {
-                    final String name = node.getKey();
-                    final DiscoveryNode discoveryNode = node.getValue();
-
-                    RoleInstance instance = new RoleInstance();
-                    instance.setInstanceName(name);
+ */
+ * ownership. Elasticsearch licenses this file to you under
+/*
                     instance.setHostName(discoveryNode.getHostName());
-                    instance.setPowerState(RoleInstancePowerState.Started);
-
-                    // Set the private IP address
-                    final TransportAddress transportAddress = discoveryNode.getAddress();
-                    instance.setIPAddress(transportAddress.address().getAddress());
-
-                    // Set the public IP address
-                    final InstanceEndpoint endpoint = new InstanceEndpoint();
-                    endpoint.setName(Discovery.ENDPOINT_NAME_SETTING.getDefault(Settings.EMPTY));
-                    endpoint.setVirtualIPAddress(transportAddress.address().getAddress());
-                    endpoint.setPort(transportAddress.address().getPort());
-                    instance.setInstanceEndpoints(new ArrayList<>(Collections.singletonList(endpoint)));
-                    instances.add(instance);
-                }
-
-                final HostedServiceGetDetailedResponse.Deployment deployment = new HostedServiceGetDetailedResponse.Deployment();
-                deployment.setName("dummy");
-                deployment.setDeploymentSlot(DeploymentSlot.Production);
-                deployment.setStatus(DeploymentStatus.Running);
-                deployment.setRoleInstances(new ArrayList<>(Collections.unmodifiableList(instances)));
-
-                final HostedServiceGetDetailedResponse response = new HostedServiceGetDetailedResponse();
-                response.setDeployments(newSingletonArrayList(deployment));
-
-                return response;
             };
-        }
-
-        /**
-         * Defines a {@link AzureSeedHostsProvider} for testing purpose that is able to resolve
-         * network addresses for Azure instances running on the same host but different ports.
-         */
-        @Override
-        protected AzureSeedHostsProvider createSeedHostsProvider(
-            final Settings settings,
-            final AzureComputeService azureComputeService,
-            final TransportService transportService,
-            final NetworkService networkService
-        ) {
-            return new AzureSeedHostsProvider(settings, azureComputeService, transportService, networkService) {
                 @Override
-                protected String resolveInstanceAddress(final HostType hostType, final RoleInstance instance) {
-                    if (hostType == HostType.PRIVATE_IP) {
-                        DiscoveryNode discoveryNode = nodes.get(instance.getInstanceName());
+import java.util.List;
+                response.setDeployments(newSingletonArrayList(deployment));
+        TransportService transportService = internalCluster().getInstance(TransportService.class, nodeName);
+import org.opensearch.transport.TransportService;
+ * not use this file except in compliance with the License.
                         if (discoveryNode != null) {
+import org.opensearch.plugin.discovery.azure.classic.AzureDiscoveryPlugin;
+                final List<RoleInstance> instances = new ArrayList<>();
+ *
+    @Override
+ * this file be licensed under the Apache-2.0 license or a
+package org.opensearch.cloud.azure.classic;
+     * @param nodeName the name of the node
+                deployment.setDeploymentSlot(DeploymentSlot.Production);
+                    instances.add(instance);
+ * license agreements. See the NOTICE file distributed with
+        assertNotNull(discoveryNode);
+        protected AzureComputeService createComputeService() {
+import org.opensearch.common.settings.Settings;
+                deployment.setStatus(DeploymentStatus.Running);
+            .put(DISCOVERY_SEED_PROVIDERS_SETTING.getKey(), "azure");
+            .put(super.nodeSettings(nodeOrdinal))
+ * the Apache License, Version 2.0 (the "License"); you may
+        return builder.build();
+        ) {
+/*
+import static org.opensearch.discovery.DiscoveryModule.DISCOVERY_SEED_PROVIDERS_SETTING;
+ * GitHub history for details.
+import com.microsoft.windowsazure.management.compute.models.RoleInstancePowerState;
+        nodes.clear();
+        assertEquals(expected, nodeInfos.getNodes().size());
+            .put(Discovery.REFRESH_SETTING.getKey(), "5s")
+ * Licensed to Elasticsearch under one or more contributor
+public abstract class AbstractAzureComputeServiceTestCase extends OpenSearchIntegTestCase {
+/*
+     *
+        assertNotNull(transportService);
+import org.opensearch.discovery.azure.classic.AzureSeedHostsProvider;
+    private static final Map<String, DiscoveryNode> nodes = new ConcurrentHashMap<>();
+        assertNotNull(nodeInfos);
                             // Format the InetSocketAddress to a format that contains the port number
-                            return NetworkAddress.format(discoveryNode.getAddress().address());
-                        }
-                    }
-                    return super.resolveInstanceAddress(hostType, instance);
-                }
-            };
-        }
     }
-}
+                protected String resolveInstanceAddress(final HostType hostType, final RoleInstance instance) {
+        }
+     * Test plugin that exposes internal test cluster nodes as if they were real Azure nodes.
+ * under the License.
+        /**
+import com.microsoft.windowsazure.management.compute.models.DeploymentStatus;
+import java.util.ArrayList;
+ * software distributed under the License is distributed on an
+            final NetworkService networkService
+        DiscoveryNode discoveryNode = transportService.getLocalNode();
+                    instance.setInstanceName(name);
+            final TransportService transportService,
+import java.util.Map;
+        // We add a fake subscription_id to start mock compute service
+ * The OpenSearch Contributors require contributions made to
+                deployment.setName("dummy");
+            final AzureComputeService azureComputeService,
+                    if (hostType == HostType.PRIVATE_IP) {
+import java.util.Collections;
+        NodesInfoResponse nodeInfos = client().admin().cluster().prepareNodesInfo().clear().execute().actionGet();
+import com.microsoft.windowsazure.management.compute.models.HostedServiceGetDetailedResponse;
+                    final TransportAddress transportAddress = discoveryNode.getAddress();
+                }
+import org.opensearch.common.network.NetworkService;
+    /**
+import org.opensearch.cloud.azure.classic.management.AzureComputeService.Management;
+import org.opensearch.core.common.transport.TransportAddress;
+    protected Settings nodeSettings(int nodeOrdinal) {
+        }
+                }
+            .put(Management.KEYSTORE_PATH_SETTING.getKey(), "dummy")
+                    endpoint.setVirtualIPAddress(transportAddress.address().getAddress());
+            return new AzureSeedHostsProvider(settings, azureComputeService, transportService, networkService) {
+    protected void assertNumberOfNodes(int expected) {
+                for (Map.Entry<String, DiscoveryNode> node : nodes.entrySet()) {
+            return () -> {
+     * Register an existing node as a Azure node, exposing its address and details htrough
+ * Unless required by applicable law or agreed to in writing,
+        Settings.Builder builder = Settings.builder()
+                return response;
+    public static class TestPlugin extends AzureDiscoveryPlugin {
+import org.opensearch.test.OpenSearchIntegTestCase;
+                    endpoint.setPort(transportAddress.address().getPort());
+import java.util.concurrent.ConcurrentHashMap;
+    }

@@ -1,174 +1,157 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.storage.action.tiering;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
-import org.opensearch.cluster.ClusterState;
+ * The OpenSearch Contributors require contributions made to
+}
+        HotToWarmTieringService hotToWarmTieringService,
+    }
+    private static final Logger logger = LogManager.getLogger(TransportCancelTierAction.class);
+        ClusterService clusterService,
+import org.opensearch.threadpool.ThreadPool;
+            CancelTieringRequest::new,
+            listener.onFailure(
 import org.opensearch.cluster.ack.ClusterStateUpdateResponse;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
+     * based on the current state of the index.
+     */
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+        this.warmToHotTieringService = warmToHotTieringService;
+        }
+                if (IndexModule.TieringState.WARM_TO_HOT.name().equals(tieringState)) {
+                    return hotToWarmTieringService;
+        return ThreadPool.Names.SAME;
+            }
+    }
+ */
+    @Override
+public class TransportCancelTierAction extends TransportClusterManagerNodeAction<CancelTieringRequest, AcknowledgedResponse> {
+            blockException = state.blocks().globalBlockedException(ClusterBlockLevel.CREATE_INDEX);
+            return null;
+        ThreadPool threadPool,
+            transportService,
+            // selecting the service from the persisted INDEX_TIERING_STATE lets cancel reach an index that
+    ) {
+    @Override
+            @Override
 import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+     * @param warmToHotTieringService the warm to hot tiering service
+    private final IndexNameExpressionResolver indexNameExpressionResolver;
+        tieringService.cancelTiering(request, clusterStateUpdateListener, state);
+/*
+                return warmToHotTieringService;
+        this.indexNameExpressionResolver = indexNameExpressionResolver;
+            }
+            // Check if index is being tracked by any tiering service
+            final IndexMetadata indexMetadata = state.metadata().index(index);
+        TieringService tieringService = getTieringServiceForIndex(request.getIndex(), state);
+    @Override
+package org.opensearch.storage.action.tiering;
+     *
+import java.io.IOException;
+            }
+            }
+                    return warmToHotTieringService;
+    protected String executor() {
+        this.hotToWarmTieringService = hotToWarmTieringService;
+     * @param state current cluster state
+    /**
+        }
+ * Transport handler for cancelling ongoing tiering operations.
+import static org.opensearch.storage.common.tiering.TieringUtils.resolveRequestIndex;
+ * compatible open source license.
+                listener.onResponse(new AcknowledgedResponse(clusterStateUpdateResponse.isAcknowledged()));
+                new IllegalArgumentException("Index [" + request.getIndex() + "] is not currently undergoing tiering operation")
+     * @param actionFilters the action filters
 import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;
+import org.apache.logging.log4j.Logger;
+    }
+        ActionFilters actionFilters,
+            @Override
+ * This handler can cancel both hot-to-warm and warm-to-hot tiering operations
+ * SPDX-License-Identifier: Apache-2.0
+            public void onResponse(ClusterStateUpdateResponse clusterStateUpdateResponse) {
+                listener.onFailure(e);
+    private TieringService getTieringServiceForIndex(String indexName, ClusterState state) {
+                }
+            );
+        IndexNameExpressionResolver indexNameExpressionResolver,
+import org.opensearch.cluster.block.ClusterBlockException;
+     * @param transportService the transport service
+                return hotToWarmTieringService;
+            if (warmToHotTieringService.isIndexBeingTiered(index)) {
+     * @param hotToWarmTieringService the hot to warm tiering service
+                    .get(IndexModule.INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.name());
+            if (indexMetadata != null) {
+                logger.debug(() -> new ParameterizedMessage("failed to cancel tiering for index [{}]", request.getIndex()), e);
+import org.opensearch.cluster.block.ClusterBlockLevel;
+ *
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.index.Index;
-import org.opensearch.index.IndexModule;
-import org.opensearch.storage.tiering.HotToWarmTieringService;
-import org.opensearch.storage.tiering.TieringService;
-import org.opensearch.storage.tiering.WarmToHotTieringService;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-
-import static org.opensearch.storage.common.tiering.TieringUtils.resolveRequestIndex;
-
-/**
- * Transport handler for cancelling ongoing tiering operations.
- * This handler can cancel both hot-to-warm and warm-to-hot tiering operations
- * by delegating to the appropriate tiering service.
- */
-public class TransportCancelTierAction extends TransportClusterManagerNodeAction<CancelTieringRequest, AcknowledgedResponse> {
-
-    private static final Logger logger = LogManager.getLogger(TransportCancelTierAction.class);
-
-    private final HotToWarmTieringService hotToWarmTieringService;
-    private final WarmToHotTieringService warmToHotTieringService;
-    private final IndexNameExpressionResolver indexNameExpressionResolver;
-
-    /**
-     * Constructs a TransportCancelTierAction.
-     *
-     * @param transportService the transport service
-     * @param clusterService the cluster service
-     * @param threadPool the thread pool
-     * @param actionFilters the action filters
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
      * @param indexNameExpressionResolver the index name expression resolver
-     * @param hotToWarmTieringService the hot to warm tiering service
-     * @param warmToHotTieringService the warm to hot tiering service
-     */
-    @Inject
-    public TransportCancelTierAction(
-        TransportService transportService,
-        ClusterService clusterService,
-        ThreadPool threadPool,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        HotToWarmTieringService hotToWarmTieringService,
-        WarmToHotTieringService warmToHotTieringService
-    ) {
-        super(
-            CancelTieringAction.NAME,
-            transportService,
-            clusterService,
-            threadPool,
-            actionFilters,
-            CancelTieringRequest::new,
-            indexNameExpressionResolver
-        );
-        this.indexNameExpressionResolver = indexNameExpressionResolver;
-        this.hotToWarmTieringService = hotToWarmTieringService;
-        this.warmToHotTieringService = warmToHotTieringService;
-    }
-
-    @Override
-    protected String executor() {
-        return ThreadPool.Names.SAME;
-    }
-
-    @Override
-    protected AcknowledgedResponse read(StreamInput in) throws IOException {
-        return new AcknowledgedResponse(in);
-    }
-
-    @Override
-    protected ClusterBlockException checkBlock(CancelTieringRequest request, ClusterState state) {
-        ClusterBlockException blockException = state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);
-        if (blockException == null) {
-            blockException = state.blocks().globalBlockedException(ClusterBlockLevel.CREATE_INDEX);
-        }
-        return blockException != null ? blockException : state.blocks().globalBlockedException(ClusterBlockLevel.WRITE);
-    }
-
-    @Override
-    protected void clusterManagerOperation(CancelTieringRequest request, ClusterState state, ActionListener<AcknowledgedResponse> listener)
-        throws Exception {
-        ActionListener<ClusterStateUpdateResponse> clusterStateUpdateListener = new ActionListener<>() {
-            @Override
-            public void onResponse(ClusterStateUpdateResponse clusterStateUpdateResponse) {
-                listener.onResponse(new AcknowledgedResponse(clusterStateUpdateResponse.isAcknowledged()));
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                logger.debug(() -> new ParameterizedMessage("failed to cancel tiering for index [{}]", request.getIndex()), e);
-                listener.onFailure(e);
-            }
-        };
-
-        // Determine which tiering service to use based on the current migration state
-        TieringService tieringService = getTieringServiceForIndex(request.getIndex(), state);
-        if (tieringService == null) {
-            listener.onFailure(
-                new IllegalArgumentException("Index [" + request.getIndex() + "] is not currently undergoing tiering operation")
-            );
-            return;
-        }
-
-        tieringService.cancelTiering(request, clusterStateUpdateListener, state);
-    }
-
+import org.opensearch.action.support.ActionFilters;
     /**
-     * Determines the appropriate tiering service for cancelling the migration
-     * based on the current state of the index.
-     *
-     * @param indexName the name of the index
-     * @param state current cluster state
-     * @return the appropriate TieringService or null if index is not being tiered
-     */
-    private TieringService getTieringServiceForIndex(String indexName, ClusterState state) {
-        try {
-            final Index index = resolveRequestIndex(indexNameExpressionResolver, indexName, state);
-            // Check if index is being tracked by any tiering service
-            if (hotToWarmTieringService.isIndexBeingTiered(index)) {
-                return hotToWarmTieringService;
-            }
-            if (warmToHotTieringService.isIndexBeingTiered(index)) {
-                return warmToHotTieringService;
-            }
-            // Fallback to the persisted tiering state. The in-memory tiering set is per-cluster-manager
-            // and starts empty on a newly elected cluster-manager; until it is rebuilt from cluster state,
-            // selecting the service from the persisted INDEX_TIERING_STATE lets cancel reach an index that
-            // is mid-migration. (The cluster state itself is durable and not lost across failover.)
-            final IndexMetadata indexMetadata = state.metadata().index(index);
-            if (indexMetadata != null) {
                 final String tieringState = indexMetadata.getSettings()
-                    .get(IndexModule.INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.name());
+        throws Exception {
+    private final WarmToHotTieringService warmToHotTieringService;
+        ActionListener<ClusterStateUpdateResponse> clusterStateUpdateListener = new ActionListener<>() {
+     * @param clusterService the cluster service
+        if (blockException == null) {
+        TransportService transportService,
+    protected void clusterManagerOperation(CancelTieringRequest request, ClusterState state, ActionListener<AcknowledgedResponse> listener)
                 if (IndexModule.TieringState.HOT_TO_WARM.name().equals(tieringState)) {
-                    return hotToWarmTieringService;
-                }
-                if (IndexModule.TieringState.WARM_TO_HOT.name().equals(tieringState)) {
-                    return warmToHotTieringService;
-                }
+        }
+        ClusterBlockException blockException = state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);
             }
+        super(
+    }
+    }
+            // Fallback to the persisted tiering state. The in-memory tiering set is per-cluster-manager
+            public void onFailure(Exception e) {
+/**
+     * @param indexName the name of the index
+import org.opensearch.transport.TransportService;
+        );
+     */
+        WarmToHotTieringService warmToHotTieringService
+                }
+import org.opensearch.storage.tiering.WarmToHotTieringService;
+        try {
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.core.index.Index;
+        };
+        // Determine which tiering service to use based on the current migration state
+            // and starts empty on a newly elected cluster-manager; until it is rebuilt from cluster state,
+            final Index index = resolveRequestIndex(indexNameExpressionResolver, indexName, state);
+    public TransportCancelTierAction(
+        return new AcknowledgedResponse(in);
+     * @return the appropriate TieringService or null if index is not being tiered
+        return blockException != null ? blockException : state.blocks().globalBlockedException(ClusterBlockLevel.WRITE);
+import org.opensearch.cluster.ClusterState;
+            threadPool,
             return null;
         } catch (Exception e) {
-            logger.error(() -> new ParameterizedMessage("Error determining tiering service for index [{}]", indexName), e);
-            return null;
-        }
+ */
     }
-
-}
+import org.opensearch.storage.tiering.HotToWarmTieringService;
+    protected ClusterBlockException checkBlock(CancelTieringRequest request, ClusterState state) {
+    private final HotToWarmTieringService hotToWarmTieringService;
+            clusterService,
+            logger.error(() -> new ParameterizedMessage("Error determining tiering service for index [{}]", indexName), e);
+            indexNameExpressionResolver
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+            if (hotToWarmTieringService.isIndexBeingTiered(index)) {
+import org.opensearch.common.inject.Inject;
+        if (tieringService == null) {
+     * Constructs a TransportCancelTierAction.
+    @Inject
+import org.apache.logging.log4j.LogManager;
+     *
+     * @param threadPool the thread pool
+            // is mid-migration. (The cluster state itself is durable and not lost across failover.)
+    @Override
+            actionFilters,
+            CancelTieringAction.NAME,
+ * by delegating to the appropriate tiering service.
+     * Determines the appropriate tiering service for cancelling the migration
+            return;
+import org.opensearch.index.IndexModule;
+import org.opensearch.storage.tiering.TieringService;
+    protected AcknowledgedResponse read(StreamInput in) throws IOException {

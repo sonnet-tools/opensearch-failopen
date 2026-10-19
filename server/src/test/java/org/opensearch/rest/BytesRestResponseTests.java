@@ -1,463 +1,414 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.rest;
-
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.OpenSearchException;
-import org.opensearch.OpenSearchStatusException;
-import org.opensearch.OpenSearchTimeoutException;
-import org.opensearch.ResourceAlreadyExistsException;
-import org.opensearch.ResourceNotFoundException;
-import org.opensearch.action.OriginalIndices;
-import org.opensearch.action.search.SearchPhaseExecutionException;
-import org.opensearch.action.search.ShardSearchFailure;
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.SearchShardTarget;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.rest.FakeRestRequest;
-import org.opensearch.transport.RemoteTransportException;
-
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.util.Collections;
-import java.util.Map;
-
-import static org.opensearch.OpenSearchExceptionTests.assertDeepEquals;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.notNullValue;
-
-public class BytesRestResponseTests extends OpenSearchTestCase {
-
-    /**
-     * Drives an oversized string through the public constructor, so this fails if the guard is ever unwired from
-     * {@link BytesRestResponse#BytesRestResponse(RestStatus, String, String)}.
-     * <p>
-     * The guard trips above {@code Integer.MAX_VALUE / 3} UTF-16 chars, so the smallest string that reaches it is
-     * 715,827,883 chars - roughly 683 MiB as a Latin-1 compact string. That fits comfortably in the test heap, which
-     * {@code build.gradle} fixes at {@code options.forkOptions.memoryMaximumSize} (3g) for every forked test JVM. The
-     * assumption below is insurance in case that value is ever lowered; it is not reachable through
-     * {@code -Dtests.heap.size}, which the same assignment overrides. Only the string has to fit, because the guard
-     * throws before {@code BytesRef} allocates its {@code maxUTF8Length} byte array.
-     */
-    public void testStringConstructorMapsOversizedContentToRequestEntityTooLarge() {
-        final int overflowingLength = (Integer.MAX_VALUE / 3) + 1;
-        assumeTrue("needs ~683MiB of heap to build the oversized string", Runtime.getRuntime().maxMemory() >= 1_500_000_000L);
-
-        final String oversized = "a".repeat(overflowingLength);
-
-        OpenSearchStatusException exception = expectThrows(
-            OpenSearchStatusException.class,
-            () -> new BytesRestResponse(RestStatus.OK, BytesRestResponse.TEXT_CONTENT_TYPE, oversized)
-        );
-
-        assertEquals(RestStatus.REQUEST_ENTITY_TOO_LARGE, exception.status());
-        assertThat(exception.getMessage(), containsString("UTF16 string length"));
-        assertThat(exception.getMessage(), containsString(String.valueOf(overflowingLength)));
-    }
-
-    class UnknownException extends Exception {
-        UnknownException(final String message, final Throwable cause) {
-            super(message, cause);
-        }
-    }
-
-    public void testWithHeaders() throws Exception {
-        RestRequest request = new FakeRestRequest();
-        RestChannel channel = randomBoolean() ? new DetailedExceptionRestChannel(request) : new SimpleExceptionRestChannel(request);
-
-        BytesRestResponse response = new BytesRestResponse(channel, new WithHeadersException());
-        assertEquals(2, response.getHeaders().size());
-        assertThat(response.getHeaders().get("n1"), notNullValue());
-        assertThat(response.getHeaders().get("n1"), contains("v11", "v12"));
-        assertThat(response.getHeaders().get("n2"), notNullValue());
-        assertThat(response.getHeaders().get("n2"), contains("v21", "v22"));
-    }
-
-    public void testSimpleExceptionMessage() throws Exception {
-        RestRequest request = new FakeRestRequest();
-        RestChannel channel = new SimpleExceptionRestChannel(request);
-
-        Exception t = new OpenSearchException("an error occurred reading data", new FileNotFoundException("/foo/bar"));
-        BytesRestResponse response = new BytesRestResponse(channel, t);
-        String text = response.content().utf8ToString();
-        assertThat(text, containsString("OpenSearchException[an error occurred reading data]"));
-        assertThat(text, not(containsString("FileNotFoundException")));
-        assertThat(text, not(containsString("/foo/bar")));
-        assertThat(text, not(containsString("error_trace")));
-    }
-
-    public void testDetailedExceptionMessage() throws Exception {
-        RestRequest request = new FakeRestRequest();
+            assertNull(parser.nextToken());
+                    address,
+                original = new RemoteTransportException(
+                if (detailed) {
         RestChannel channel = new DetailedExceptionRestChannel(request);
-
-        Exception t = new OpenSearchException("an error occurred reading data", new FileNotFoundException("/foo/bar"));
+        assertDeepEquals(expected, parsedError);
         BytesRestResponse response = new BytesRestResponse(channel, t);
-        String text = response.content().utf8ToString();
-        assertThat(text, containsString("{\"type\":\"exception\",\"reason\":\"an error occurred reading data\"}"));
-        assertThat(text, containsString("{\"type\":\"file_not_found_exception\",\"reason\":\"/foo/bar\"}"));
+        }
+ *
+        final String oversized = "a".repeat(overflowingLength);
+     * {@link BytesRestResponse#BytesRestResponse(RestStatus, String, String)}.
+              "status": 400
+        assertThat(content, containsString("\"reason\":\"partial escape sequence at end of string: %a\""));
+                break;
+        // if we try to decode the path, this will throw an IllegalArgumentException again
+import org.opensearch.core.common.bytes.BytesReference;
+        );
+                expected.setIndex("_index");
+            super(request, false);
+ * specific language governing permissions and limitations
+        BytesRestResponse response = new BytesRestResponse(channel, t);
     }
-
-    public void testNonOpenSearchExceptionIsNotShownAsSimpleMessage() throws Exception {
-        RestRequest request = new FakeRestRequest();
-        RestChannel channel = new SimpleExceptionRestChannel(request);
-
-        Exception t = new UnknownException("an error occurred reading data", new FileNotFoundException("/foo/bar"));
-        BytesRestResponse response = new BytesRestResponse(channel, t);
+                }
+        RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withParams(params).build();
+    }
+        String message = "OpenSearch exception [type=" + type + ", reason=" + reason + "]";
         String text = response.content().utf8ToString();
-        assertThat(text, not(containsString("UnknownException[an error occurred reading data]")));
+                break;
+     * Drives an oversized string through the public constructor, so this fails if the guard is ever unwired from
+ * not use this file except in compliance with the License.
+                  "line": 1,
+        final String content = response.content().utf8ToString();
+        final RestRequest request = new FakeRestRequest();
+                    "index": "foo",
+        public void sendResponse(RestResponse response) {}
+    }
+        assertThat(content, containsString("\"status\":" + 504));
+        assertNotNull(response.content());
+                  }
+            }
+    public void testResponseWhenTimeoutException() throws IOException {
+        assertThat(text, not(containsString("FileNotFoundException")));
+        ShardSearchFailure failure1 = new ShardSearchFailure(
+                original = new OpenSearchException("OpenSearchException with a cause", new FileNotFoundException("missing"));
         assertThat(text, not(containsString("FileNotFoundException[/foo/bar]")));
-        assertThat(text, not(containsString("error_trace")));
+ * license agreements. See the NOTICE file distributed with
+    }
+                    "reason": {
+                "caused_by": {
+        final RestChannel channel = new DetailedExceptionRestChannel(request);
+            }
+                    "action",
+import org.opensearch.common.xcontent.XContentHelper;
+    class UnknownException extends Exception {
+import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.rest.RestStatus;
+        RestRequest request = new FakeRestRequest();
+     * assumption below is insurance in case that value is ever lowered; it is not reachable through
+            case 0:
+        final RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withPath(path).build();
+                expected.addHeader("foo", "bar", "baz");
+        String stackTrace = ExceptionsHelper.stackTrace(ex);
+            {
+    public void testConvert() throws IOException {
+    /**
+                    reason = "OpenSearchException[OpenSearchException with a cause]";
+                originalException.addMetadata("opensearch.metadata_0", "0");
+    public void testNullThrowable() throws Exception {
+        assertThat(text, not(containsString("UnknownException[an error occurred reading data]")));
+        assertEquals(RestStatus.GATEWAY_TIMEOUT, response.status());
+                  {
+import static org.opensearch.OpenSearchExceptionTests.assertDeepEquals;
+            }
+                    reason = "RemoteTransportException[[remote][" + address.toString() + "][action]]";
+                try (XContentParser parser = createParser(builder.contentType().xContent(), BytesReference.bytes(builder))) {
+        assertThat(exception.getMessage(), containsString(String.valueOf(overflowingLength)));
+                    "line": 1,
+                    type = "status_exception";
+        final RestRequest request = new FakeRestRequest();
+/*
+        SimpleExceptionRestChannel(RestRequest request) {
+                  "col": 2
+                    new ResourceAlreadyExistsException("OpenSearchWrapperException with a cause that has a custom status")
+        assertThat(text, not(containsString("/foo/bar")));
+                      "col": 2
+    public void testGuessRootCause() throws IOException {
+                    "col": 2
+                "grouped": true,
+                    reason = "OpenSearchException without cause";
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * Unless required by applicable law or agreed to in writing,
+            }
+        if (addHeadersOrMetadata) {
+            case 1:
+        assertThat(content, containsString("\"type\":\"illegal_argument_exception\""));
+        Exception t = new UnknownException("an error occurred reading data", new FileNotFoundException("/foo/bar"));
+                    type = "resource_not_found_exception";
+                }
+        );
+                break;
+ */
         assertThat(text, containsString("\"error\":\"Internal failure\""));
     }
-
-    public void testErrorTrace() throws Exception {
-        RestRequest request = new FakeRestRequest();
-        request.params().put("error_trace", "true");
-        RestChannel channel = new DetailedExceptionRestChannel(request);
-
-        Exception t = new UnknownException("an error occurred reading data", new FileNotFoundException("/foo/bar"));
-        BytesRestResponse response = new BytesRestResponse(channel, t);
-        String text = response.content().utf8ToString();
-        assertThat(text, containsString("\"type\":\"unknown_exception\",\"reason\":\"an error occurred reading data\""));
-        assertThat(text, containsString("{\"type\":\"file_not_found_exception\""));
-        assertThat(text, containsString("\"stack_trace\":\"OpenSearchException[an error occurred reading data]"));
-    }
-
-    public void testGuessRootCause() throws IOException {
-        RestRequest request = new FakeRestRequest();
-        RestChannel channel = new DetailedExceptionRestChannel(request);
-        {
-            Exception e = new OpenSearchException("an error occurred reading data", new FileNotFoundException("/foo/bar"));
-            BytesRestResponse response = new BytesRestResponse(channel, e);
-            String text = response.content().utf8ToString();
-            assertThat(text, containsString("{\"root_cause\":[{\"type\":\"exception\",\"reason\":\"an error occurred reading data\"}]"));
-        }
-        {
-            Exception e = new FileNotFoundException("/foo/bar");
-            BytesRestResponse response = new BytesRestResponse(channel, e);
-            String text = response.content().utf8ToString();
-            assertThat(text, containsString("{\"root_cause\":[{\"type\":\"file_not_found_exception\",\"reason\":\"/foo/bar\"}]"));
-        }
-    }
-
-    public void testNullThrowable() throws Exception {
-        RestRequest request = new FakeRestRequest();
-        RestChannel channel = new SimpleExceptionRestChannel(request);
-
-        BytesRestResponse response = new BytesRestResponse(channel, null);
-        String text = response.content().utf8ToString();
-        assertThat(text, containsString("\"error\":\"unknown\""));
-        assertThat(text, not(containsString("error_trace")));
-    }
-
-    public void testConvert() throws IOException {
-        RestRequest request = new FakeRestRequest();
-        RestChannel channel = new DetailedExceptionRestChannel(request);
-        ShardSearchFailure failure = new ShardSearchFailure(
-            new ParsingException(1, 2, "foobar", null),
-            new SearchShardTarget("node_1", new ShardId("foo", "_na_", 1), null, OriginalIndices.NONE)
-        );
-        ShardSearchFailure failure1 = new ShardSearchFailure(
-            new ParsingException(1, 2, "foobar", null),
-            new SearchShardTarget("node_1", new ShardId("foo", "_na_", 2), null, OriginalIndices.NONE)
-        );
-        SearchPhaseExecutionException ex = new SearchPhaseExecutionException(
-            "search",
-            "all shards failed",
-            new ShardSearchFailure[] { failure, failure1 }
-        );
-        BytesRestResponse response = new BytesRestResponse(channel, new RemoteTransportException("foo", ex));
-        String text = response.content().utf8ToString();
-        String expected = XContentHelper.stripWhitespace("""
-            {
-              "error": {
-                "root_cause": [
-                  {
-                    "type": "parsing_exception",
-                    "reason": "foobar",
-                    "line": 1,
-                    "col": 2
-                  }
-                ],
                 "type": "search_phase_execution_exception",
-                "reason": "all shards failed",
-                "phase": "search",
-                "grouped": true,
-                "failed_shards": [
-                  {
-                    "shard": 1,
-                    "index": "foo",
-                    "node": "node_1",
-                    "reason": {
-                      "type": "parsing_exception",
-                      "reason": "foobar",
-                      "line": 1,
-                      "col": 2
-                    }
-                  }
-                ],
-                "caused_by": {
-                  "type": "parsing_exception",
-                  "reason": "foobar",
-                  "line": 1,
-                  "col": 2
-                }
-              },
-              "status": 400
-            }
-            """);
-        assertEquals(expected.trim(), text.trim());
-        String stackTrace = ExceptionsHelper.stackTrace(ex);
-        assertTrue(stackTrace.contains("Caused by: ParsingException[foobar]"));
-    }
-
-    public void testResponseWhenPathContainsEncodingError() throws IOException {
-        final String path = "%a";
-        final RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withPath(path).build();
-        final IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> RestUtils.decodeComponent(request.rawPath()));
-        final RestChannel channel = new DetailedExceptionRestChannel(request);
-        // if we try to decode the path, this will throw an IllegalArgumentException again
-        final BytesRestResponse response = new BytesRestResponse(channel, e);
-        assertNotNull(response.content());
-        final String content = response.content().utf8ToString();
-        assertThat(content, containsString("\"type\":\"illegal_argument_exception\""));
-        assertThat(content, containsString("\"reason\":\"partial escape sequence at end of string: %a\""));
-        assertThat(content, containsString("\"status\":" + 400));
-    }
-
-    public void testResponseWhenInternalServerError() throws IOException {
-        final RestRequest request = new FakeRestRequest();
-        final RestChannel channel = new DetailedExceptionRestChannel(request);
-        final BytesRestResponse response = new BytesRestResponse(channel, new OpenSearchException("simulated"));
-        assertNotNull(response.content());
-        final String content = response.content().utf8ToString();
-        assertThat(content, containsString("\"type\":\"exception\""));
-        assertThat(content, containsString("\"reason\":\"simulated\""));
-        assertThat(content, containsString("\"status\":" + 500));
-    }
-
-    public void testResponseWhenTimeoutException() throws IOException {
-        final RestRequest request = new FakeRestRequest();
-        final RestChannel channel = new DetailedExceptionRestChannel(request);
-        final BytesRestResponse response = new BytesRestResponse(channel, new OpenSearchTimeoutException("simulated timeout"));
-        assertEquals(RestStatus.GATEWAY_TIMEOUT, response.status());
-        assertNotNull(response.content());
-        final String content = response.content().utf8ToString();
         assertThat(content, containsString("\"reason\":\"simulated timeout\""));
-        assertThat(content, containsString("\"status\":" + 504));
-    }
-
-    public void testErrorToAndFromXContent() throws IOException {
-        final boolean detailed = randomBoolean();
-
-        Exception original;
-        OpenSearchException cause = null;
-        String reason;
-        String type = "exception";
-        RestStatus status = RestStatus.INTERNAL_SERVER_ERROR;
-        boolean addHeadersOrMetadata = false;
-
-        switch (randomIntBetween(0, 5)) {
-            case 0:
-                original = new OpenSearchException("OpenSearchException without cause");
-                if (detailed) {
-                    addHeadersOrMetadata = randomBoolean();
-                    reason = "OpenSearchException without cause";
                 } else {
-                    reason = "OpenSearchException[OpenSearchException without cause]";
-                }
-                break;
-            case 1:
-                original = new OpenSearchException("OpenSearchException with a cause", new FileNotFoundException("missing"));
-                if (detailed) {
-                    addHeadersOrMetadata = randomBoolean();
-                    type = "exception";
-                    reason = "OpenSearchException with a cause";
-                    cause = new OpenSearchException("OpenSearch exception [type=file_not_found_exception, reason=missing]");
-                } else {
-                    reason = "OpenSearchException[OpenSearchException with a cause]";
-                }
-                break;
-            case 2:
-                original = new ResourceNotFoundException("OpenSearchException with custom status");
-                status = RestStatus.NOT_FOUND;
-                if (detailed) {
-                    addHeadersOrMetadata = randomBoolean();
-                    type = "resource_not_found_exception";
-                    reason = "OpenSearchException with custom status";
-                } else {
-                    reason = "ResourceNotFoundException[OpenSearchException with custom status]";
-                }
-                break;
-            case 3:
-                TransportAddress address = buildNewFakeTransportAddress();
-                original = new RemoteTransportException(
-                    "remote",
-                    address,
-                    "action",
-                    new ResourceAlreadyExistsException("OpenSearchWrapperException with a cause that has a custom status")
-                );
-                status = RestStatus.BAD_REQUEST;
-                if (detailed) {
-                    type = "resource_already_exists_exception";
-                    reason = "OpenSearchWrapperException with a cause that has a custom status";
-                } else {
-                    reason = "RemoteTransportException[[remote][" + address.toString() + "][action]]";
-                }
-                break;
-            case 4:
-                original = new RemoteTransportException(
-                    "OpenSearchWrapperException with a cause that has a special treatment",
-                    new IllegalArgumentException("wrong")
-                );
-                status = RestStatus.BAD_REQUEST;
-                if (detailed) {
-                    type = "illegal_argument_exception";
-                    reason = "wrong";
-                } else {
-                    reason = "RemoteTransportException[[OpenSearchWrapperException with a cause that has a special treatment]]";
-                }
-                break;
-            case 5:
-                status = randomFrom(RestStatus.values());
-                original = new OpenSearchStatusException("OpenSearchStatusException with random status", status);
-                if (detailed) {
-                    addHeadersOrMetadata = randomBoolean();
-                    type = "status_exception";
-                    reason = "OpenSearchStatusException with random status";
-                } else {
-                    reason = "OpenSearchStatusException[OpenSearchStatusException with random status]";
-                }
-                break;
-            default:
-                throw new UnsupportedOperationException("Failed to generate random exception");
+            this.addHeader("n1", "v11", "v12");
+        assertNotNull(response.content());
         }
-
-        String message = "OpenSearch exception [type=" + type + ", reason=" + reason + "]";
-        OpenSearchStatusException expected = new OpenSearchStatusException(message, status, cause);
-
-        if (addHeadersOrMetadata) {
+ * KIND, either express or implied.  See the License for the
+                    reason = "OpenSearchException[OpenSearchException without cause]";
+            OpenSearchStatusException.class,
+        OpenSearchStatusException exception = expectThrows(
+        RestStatus status = RestStatus.INTERNAL_SERVER_ERROR;
+        RestRequest request = new FakeRestRequest();
+    }
+            case 5:
+                    reason = "OpenSearchStatusException with random status";
+            """);
+     * <p>
+            BytesRestResponse response = new BytesRestResponse(channel, e);
+import static org.hamcrest.Matchers.containsString;
+                if (detailed) {
+            super(message, cause);
+        RestChannel channel = new SimpleExceptionRestChannel(request);
+        BytesRestResponse response = new BytesRestResponse(channel, t);
+                    reason = "OpenSearchWrapperException with a cause that has a custom status";
+        }
+                originalException.setIndex("_index");
+                    BytesRestResponse.errorFromXContent(parser);
+            try (XContentBuilder builder = XContentBuilder.builder(randomFrom(XContentType.values()).xContent())) {
+import org.opensearch.action.search.SearchPhaseExecutionException;
+import static org.hamcrest.Matchers.not;
+                    "node": "node_1",
+ * SPDX-License-Identifier: Apache-2.0
+        assertThat(text, not(containsString("error_trace")));
+            assertThat(text, containsString("{\"root_cause\":[{\"type\":\"file_not_found_exception\",\"reason\":\"/foo/bar\"}]"));
+            new ShardSearchFailure[] { failure, failure1 }
+    public static class WithHeadersException extends OpenSearchException {
+import org.opensearch.test.OpenSearchTestCase;
+            super(request, true);
+        RestChannel channel = new DetailedExceptionRestChannel(request);
+                expected.setResources(resourceType, resourceId);
+import java.util.Collections;
+}
+        assertEquals("Failed to parse opensearch status exception: no exception was found", e.getMessage());
+import org.opensearch.OpenSearchException;
+                    addHeadersOrMetadata = randomBoolean();
+                status = RestStatus.BAD_REQUEST;
+                    "remote",
+     * {@code build.gradle} fixes at {@code options.forkOptions.memoryMaximumSize} (3g) for every forked test JVM. The
+        {
+            case 4:
+    }
+        assertThat(text, containsString("{\"type\":\"file_not_found_exception\",\"reason\":\"/foo/bar\"}"));
+        IllegalStateException e = expectThrows(IllegalStateException.class, () -> {
             OpenSearchException originalException = ((OpenSearchException) original);
+    public void testDetailedExceptionMessage() throws Exception {
+        String reason;
+                TransportAddress address = buildNewFakeTransportAddress();
+    }
+        assertNotNull(response.content());
+        BytesRestResponse response = new BytesRestResponse(channel, original);
+                    addHeadersOrMetadata = randomBoolean();
+                }
+            this.addHeader("n2", "v21", "v22");
+import org.opensearch.action.search.ShardSearchFailure;
+ */
+        assumeTrue("needs ~683MiB of heap to build the oversized string", Runtime.getRuntime().maxMemory() >= 1_500_000_000L);
+        OpenSearchException parsedError;
+        RestRequest request = new FakeRestRequest();
+                    addHeadersOrMetadata = randomBoolean();
+        boolean addHeadersOrMetadata = false;
+    }
+        ShardSearchFailure failure = new ShardSearchFailure(
+import org.opensearch.ExceptionsHelper;
+        @Override
+                "reason": "all shards failed",
+        Exception t = new OpenSearchException("an error occurred reading data", new FileNotFoundException("/foo/bar"));
+        String text = response.content().utf8ToString();
+import org.opensearch.action.OriginalIndices;
+                    reason = "RemoteTransportException[[OpenSearchWrapperException with a cause that has a special treatment]]";
+            () -> new BytesRestResponse(RestStatus.OK, BytesRestResponse.TEXT_CONTENT_TYPE, oversized)
+    private static class DetailedExceptionRestChannel extends AbstractRestChannel {
+     * throws before {@code BytesRef} allocates its {@code maxUTF8Length} byte array.
+        RestRequest request = new FakeRestRequest();
+                      "line": 1,
+        assertEquals(2, response.getHeaders().size());
+ * GitHub history for details.
+                if (detailed) {
+        });
+import org.opensearch.OpenSearchStatusException;
+        OpenSearchException cause = null;
+                  "type": "parsing_exception",
+import org.opensearch.common.xcontent.XContentType;
+        RestRequest request = new FakeRestRequest();
+ * The OpenSearch Contributors require contributions made to
+import java.util.Map;
+    public void testErrorTrace() throws Exception {
+import java.io.IOException;
+     */
+     * 715,827,883 chars - roughly 683 MiB as a Latin-1 compact string. That fits comfortably in the test heap, which
+        assertEquals(RestStatus.REQUEST_ENTITY_TOO_LARGE, exception.status());
+        RestChannel channel = new SimpleExceptionRestChannel(request);
+import org.opensearch.core.xcontent.XContentParser;
+        UnknownException(final String message, final Throwable cause) {
+            "all shards failed",
+            this.addMetadata("opensearch.test", "value1", "value2");
+                } else {
+import org.opensearch.test.rest.FakeRestRequest;
+    public void testNoErrorFromXContent() throws IOException {
+                status = RestStatus.NOT_FOUND;
+        assertThat(content, containsString("\"status\":" + 500));
+                    reason = "wrong";
+        );
+            new ParsingException(1, 2, "foobar", null),
+        final String path = "%a";
+        assertThat(text, not(containsString("error_trace")));
+import static org.hamcrest.Matchers.contains;
+    }
+        assertThat(exception.getMessage(), containsString("UTF16 string length"));
+ * Licensed to Elasticsearch under one or more contributor
+    }
+                original = new RemoteTransportException(
+    }
+                ],
+        final int overflowingLength = (Integer.MAX_VALUE / 3) + 1;
+        RestRequest request = new FakeRestRequest();
+        OpenSearchStatusException expected = new OpenSearchStatusException(message, status, cause);
+        BytesRestResponse response = new BytesRestResponse(channel, new RemoteTransportException("foo", ex));
+        assertThat(text, containsString("\"type\":\"unknown_exception\",\"reason\":\"an error occurred reading data\""));
+            new ParsingException(1, 2, "foobar", null),
+ * You may obtain a copy of the License at
+        }
+        RestRequest request = new FakeRestRequest();
+            if (randomBoolean()) {
+            assertThat(text, containsString("{\"root_cause\":[{\"type\":\"exception\",\"reason\":\"an error occurred reading data\"}]"));
+ * the Apache License, Version 2.0 (the "License"); you may
+    public void testErrorToAndFromXContent() throws IOException {
+                      "reason": "foobar",
+        final RestChannel channel = new DetailedExceptionRestChannel(request);
+        }
+package org.opensearch.rest;
+    }
+                expected.addMetadata("opensearch.metadata_0", "0");
+        @Override
+            String text = response.content().utf8ToString();
+    public void testWithHeaders() throws Exception {
+                } else {
+        RestChannel channel = new DetailedExceptionRestChannel(request);
+                    reason = "ResourceNotFoundException[OpenSearchException with custom status]";
+        WithHeadersException() {
+            default:
+                } else {
+    }
+            super("");
+                break;
+                    "type": "parsing_exception",
+ * this file be licensed under the Apache-2.0 license or a
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                original = new OpenSearchStatusException("OpenSearchStatusException with random status", status);
+        request.params().put("error_trace", "true");
+import org.opensearch.transport.RemoteTransportException;
+        String type = "exception";
+import org.opensearch.ResourceNotFoundException;
+        assertThat(response.getHeaders().get("n2"), contains("v21", "v22"));
+ * ownership. Elasticsearch licenses this file to you under
+        assertThat(text, containsString("OpenSearchException[an error occurred reading data]"));
+                if (detailed) {
+            "search",
+import org.opensearch.OpenSearchTimeoutException;
+        assertThat(content, containsString("\"status\":" + 400));
+    public void testStringConstructorMapsOversizedContentToRequestEntityTooLarge() {
+/*
+        }
+        Exception t = new OpenSearchException("an error occurred reading data", new FileNotFoundException("/foo/bar"));
+        BytesRestResponse response = new BytesRestResponse(channel, null);
+    public void testNonOpenSearchExceptionIsNotShownAsSimpleMessage() throws Exception {
+    }
+import org.opensearch.core.common.transport.TransportAddress;
+ * compatible open source license.
+            new SearchShardTarget("node_1", new ShardId("foo", "_na_", 1), null, OriginalIndices.NONE)
+            if (randomBoolean()) {
+        Map<String, String> params = Collections.singletonMap("format", xContentType.format());
+        assertThat(text, containsString("{\"type\":\"file_not_found_exception\""));
+                } else {
+                "root_cause": [
+        }
+ *
             if (randomBoolean()) {
                 originalException.addHeader("foo", "bar", "baz");
-                expected.addHeader("foo", "bar", "baz");
-            }
-            if (randomBoolean()) {
-                originalException.addMetadata("opensearch.metadata_0", "0");
-                expected.addMetadata("opensearch.metadata_0", "0");
-            }
-            if (randomBoolean()) {
-                String resourceType = randomAlphaOfLength(5);
-                String resourceId = randomAlphaOfLength(5);
-                originalException.setResources(resourceType, resourceId);
-                expected.setResources(resourceType, resourceId);
-            }
-            if (randomBoolean()) {
-                originalException.setIndex("_index");
-                expected.setIndex("_index");
-            }
+                    reason = "OpenSearchStatusException[OpenSearchStatusException with random status]";
+        final BytesRestResponse response = new BytesRestResponse(channel, new OpenSearchException("simulated"));
+                  {
+                  }
+        public void sendResponse(RestResponse response) {}
+        SearchPhaseExecutionException ex = new SearchPhaseExecutionException(
         }
-
-        final XContentType xContentType = randomFrom(XContentType.values());
-
-        Map<String, String> params = Collections.singletonMap("format", xContentType.format());
-        RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withParams(params).build();
+import org.opensearch.core.index.shard.ShardId;
+        assertThat(response.getHeaders().get("n1"), notNullValue());
+                    "reason": "foobar",
         RestChannel channel = detailed ? new DetailedExceptionRestChannel(request) : new SimpleExceptionRestChannel(request);
-
-        BytesRestResponse response = new BytesRestResponse(channel, original);
-
-        OpenSearchException parsedError;
-        try (XContentParser parser = createParser(xContentType.xContent(), response.content())) {
-            parsedError = BytesRestResponse.errorFromXContent(parser);
-            assertNull(parser.nextToken());
-        }
-
-        assertEquals(expected.status(), parsedError.status());
-        assertDeepEquals(expected, parsedError);
+    public void testResponseWhenPathContainsEncodingError() throws IOException {
+            if (randomBoolean()) {
+                    "OpenSearchWrapperException with a cause that has a special treatment",
+public class BytesRestResponseTests extends OpenSearchTestCase {
+            Exception e = new FileNotFoundException("/foo/bar");
     }
-
-    public void testNoErrorFromXContent() throws IOException {
-        IllegalStateException e = expectThrows(IllegalStateException.class, () -> {
-            try (XContentBuilder builder = XContentBuilder.builder(randomFrom(XContentType.values()).xContent())) {
-                builder.startObject();
-                builder.field("status", randomFrom(RestStatus.values()).getStatus());
-                builder.endObject();
-
-                try (XContentParser parser = createParser(builder.contentType().xContent(), BytesReference.bytes(builder))) {
-                    BytesRestResponse.errorFromXContent(parser);
-                }
-            }
-        });
-        assertEquals("Failed to parse opensearch status exception: no exception was found", e.getMessage());
-    }
-
-    public static class WithHeadersException extends OpenSearchException {
-
-        WithHeadersException() {
-            super("");
-            this.addHeader("n1", "v11", "v12");
-            this.addHeader("n2", "v21", "v22");
-            this.addMetadata("opensearch.test", "value1", "value2");
-        }
-    }
-
+                "phase": "search",
     private static class SimpleExceptionRestChannel extends AbstractRestChannel {
-
-        SimpleExceptionRestChannel(RestRequest request) {
-            super(request, false);
-        }
-
-        @Override
-        public void sendResponse(RestResponse response) {}
+        final String content = response.content().utf8ToString();
+                    addHeadersOrMetadata = randomBoolean();
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+                original = new ResourceNotFoundException("OpenSearchException with custom status");
     }
-
-    private static class DetailedExceptionRestChannel extends AbstractRestChannel {
-
+        Exception t = new UnknownException("an error occurred reading data", new FileNotFoundException("/foo/bar"));
+ * under the License.
+            new SearchShardTarget("node_1", new ShardId("foo", "_na_", 2), null, OriginalIndices.NONE)
+              },
+        Exception original;
+                }
+        {
         DetailedExceptionRestChannel(RestRequest request) {
-            super(request, true);
-        }
-
-        @Override
-        public void sendResponse(RestResponse response) {}
+        assertThat(response.getHeaders().get("n1"), contains("v11", "v12"));
+        RestChannel channel = new SimpleExceptionRestChannel(request);
+                builder.endObject();
+        final BytesRestResponse response = new BytesRestResponse(channel, new OpenSearchTimeoutException("simulated timeout"));
+                );
+import org.opensearch.search.SearchShardTarget;
+        assertThat(content, containsString("\"type\":\"exception\""));
+            String text = response.content().utf8ToString();
+                    type = "resource_already_exists_exception";
+                }
+                builder.startObject();
     }
-}
+        String expected = XContentHelper.stripWhitespace("""
+        assertEquals(expected.status(), parsedError.status());
+        assertEquals(expected.trim(), text.trim());
+     * The guard trips above {@code Integer.MAX_VALUE / 3} UTF-16 chars, so the smallest string that reaches it is
+/*
+        String text = response.content().utf8ToString();
+ */
+        final XContentType xContentType = randomFrom(XContentType.values());
+                if (detailed) {
+                    reason = "OpenSearchException with custom status";
+ * this work for additional information regarding copyright
+                }
+        assertThat(response.getHeaders().get("n2"), notNullValue());
+                    new IllegalArgumentException("wrong")
+                    type = "exception";
+        RestChannel channel = randomBoolean() ? new DetailedExceptionRestChannel(request) : new SimpleExceptionRestChannel(request);
+                if (detailed) {
+            BytesRestResponse response = new BytesRestResponse(channel, e);
+                original = new OpenSearchException("OpenSearchException without cause");
+                    type = "illegal_argument_exception";
+            parsedError = BytesRestResponse.errorFromXContent(parser);
+                builder.field("status", randomFrom(RestStatus.values()).getStatus());
+        BytesRestResponse response = new BytesRestResponse(channel, t);
+            }
+                status = RestStatus.BAD_REQUEST;
+        assertThat(text, containsString("\"stack_trace\":\"OpenSearchException[an error occurred reading data]"));
+import static org.hamcrest.Matchers.notNullValue;
+                    "shard": 1,
+                originalException.setResources(resourceType, resourceId);
+                }
+        String text = response.content().utf8ToString();
+        final boolean detailed = randomBoolean();
+                      "type": "parsing_exception",
+    public void testSimpleExceptionMessage() throws Exception {
+        switch (randomIntBetween(0, 5)) {
+                ],
+            case 3:
+        }
+                String resourceId = randomAlphaOfLength(5);
+                    }
+                    reason = "OpenSearchException with a cause";
+                break;
+        assertThat(text, containsString("\"error\":\"unknown\""));
+        String text = response.content().utf8ToString();
+        RestRequest request = new FakeRestRequest();
+import java.io.FileNotFoundException;
+                String resourceType = randomAlphaOfLength(5);
+        final BytesRestResponse response = new BytesRestResponse(channel, e);
+                }
+import org.opensearch.ResourceAlreadyExistsException;
+        assertThat(text, not(containsString("error_trace")));
+                break;
+import org.opensearch.core.common.ParsingException;
+     * {@code -Dtests.heap.size}, which the same assignment overrides. Only the string has to fit, because the guard
+                throw new UnsupportedOperationException("Failed to generate random exception");
+                status = randomFrom(RestStatus.values());
+        );
+                  "reason": "foobar",
+        final String content = response.content().utf8ToString();
+                );
+        String text = response.content().utf8ToString();
+            case 2:
+        BytesRestResponse response = new BytesRestResponse(channel, new WithHeadersException());
+        RestChannel channel = new DetailedExceptionRestChannel(request);
+            }
+        final RestChannel channel = new DetailedExceptionRestChannel(request);
+    public void testResponseWhenInternalServerError() throws IOException {
+            Exception e = new OpenSearchException("an error occurred reading data", new FileNotFoundException("/foo/bar"));
+        assertThat(text, containsString("{\"type\":\"exception\",\"reason\":\"an error occurred reading data\"}"));
+              "error": {
+        assertTrue(stackTrace.contains("Caused by: ParsingException[foobar]"));
+        try (XContentParser parser = createParser(xContentType.xContent(), response.content())) {
+                "failed_shards": [
+        final IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> RestUtils.decodeComponent(request.rawPath()));
+                } else {
+        assertThat(content, containsString("\"reason\":\"simulated\""));
+                    cause = new OpenSearchException("OpenSearch exception [type=file_not_found_exception, reason=missing]");

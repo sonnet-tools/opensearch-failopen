@@ -1,481 +1,428 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.action.admin.indices.scale.searchonly;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.action.admin.indices.flush.FlushRequest;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.ChannelActionListener;
-import org.opensearch.action.support.GroupedActionListener;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateUpdateTask;
-import org.opensearch.cluster.block.ClusterBlock;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.block.ClusterBlocks;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.routing.RoutingTable;
-import org.opensearch.cluster.routing.allocation.AllocationService;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Priority;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexService;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportChannel;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static org.opensearch.cluster.metadata.IndexMetadata.INDEX_SEARCH_ONLY_BLOCK_ID;
-
-/**
- * Transport action implementation for search-only scale operations.
- * <p>
- * This class coordinates the entire process of scaling indices up or down between normal
- * and search-only modes. It manages the multistep process including:
- * <ul>
- *   <li>Validating prerequisites for scale operations</li>
- *   <li>Adding temporary write blocks during scale-down preparation</li>
- *   <li>Coordinating shard synchronization across nodes</li>
- *   <li>Modifying cluster state to transition indices between modes</li>
- *   <li>Handling synchronization requests from other nodes</li>
- * </ul>
- * <p>
- * The scale operation is implemented as a series of cluster state update tasks to ensure
- * atomicity and consistency throughout the transition.
- */
-public class TransportScaleIndexAction extends TransportClusterManagerNodeAction<ScaleIndexRequest, AcknowledgedResponse> {
-
-    private static final Logger logger = LogManager.getLogger(TransportScaleIndexAction.class);
-    /**
-     * Transport action name for shard sync requests
-     */
-    public static final String NAME = ScaleIndexAction.NAME + "[s]";
-
-    public static final String SHARD_SYNC_EXECUTOR = ThreadPool.Names.MANAGEMENT;
-
-    private final AllocationService allocationService;
+                ClusterState.builder(tempState).blocks(blocksBuilder).metadata(metadataBuilder).build(),
     private final IndicesService indicesService;
-    private final ThreadPool threadPool;
-
-    private final ScaleIndexOperationValidator validator;
-    private final ScaleIndexClusterStateBuilder scaleIndexClusterStateBuilder;
-    private final ScaleIndexShardSyncManager scaleIndexShardSyncManager;
-
-    /**
-     * Constructs a new TransportSearchOnlyAction.
-     *
-     * @param transportService            the transport service for network communication
-     * @param clusterService              the cluster service for accessing cluster state
-     * @param threadPool                  the thread pool for executing operations
-     * @param actionFilters               filters for action requests
-     * @param indexNameExpressionResolver resolver for index names and expressions
-     * @param allocationService           service for shard allocation decisions
-     * @param indicesService              service for accessing index shards
-     */
-    @Inject
-    public TransportScaleIndexAction(
-        TransportService transportService,
-        ClusterService clusterService,
-        ThreadPool threadPool,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        AllocationService allocationService,
-        IndicesService indicesService
-    ) {
-        super(
-            ScaleIndexAction.NAME,
-            transportService,
-            clusterService,
-            threadPool,
-            actionFilters,
-            ScaleIndexRequest::new,
-            indexNameExpressionResolver
-        );
-        this.allocationService = allocationService;
-        this.indicesService = indicesService;
-        this.threadPool = threadPool;
-        this.validator = new ScaleIndexOperationValidator();
-        this.scaleIndexClusterStateBuilder = new ScaleIndexClusterStateBuilder();
-        this.scaleIndexShardSyncManager = new ScaleIndexShardSyncManager(clusterService, transportService, NAME);
-
-        transportService.registerRequestHandler(
-            NAME,
-            ThreadPool.Names.SAME,
-            ScaleIndexNodeRequest::new,
-            (request, channel, task) -> handleShardSyncRequest(request, channel)
-        );
     }
-
-    /**
-     * Returns the executor name for this transport action.
-     *
-     * @return the executor name
-     */
+    public static final String NAME = ScaleIndexAction.NAME + "[s]";
     @Override
-    protected String executor() {
-        return ThreadPool.Names.MANAGEMENT;
-    }
-
-    /**
-     * Deserializes the response from stream.
-     *
-     * @param in the stream input
-     * @return the deserialized response
-     * @throws IOException if an I/O error occurs
-     */
-    @Override
-    protected AcknowledgedResponse read(StreamInput in) throws IOException {
-        return new AcknowledgedResponse(in);
-    }
-
-    /**
-     * Handles the search-only request on the cluster manager node.
-     * <p>
-     * This method determines whether to execute a scale-up or scale-down operation
-     * based on the request parameters, and submits the appropriate cluster state update task.
-     *
-     * @param request  the search-only scale request
-     * @param state    the current cluster state
-     * @param listener the listener to notify with the operation result
-     */
-    @Override
-    protected void clusterManagerOperation(ScaleIndexRequest request, ClusterState state, ActionListener<AcknowledgedResponse> listener) {
-        try {
-            String index = request.getIndex();
-            if (request.isScaleDown()) {
-                submitScaleDownTask(index, listener);
-            } else {
-                submitScaleUpTask(index, state, listener);
+     * Finalizes scale-down by updating the metadata and routing table:
+import org.opensearch.core.index.Index;
             }
-        } catch (Exception e) {
-            logger.error("Failed to execute cluster manager operation", e);
-            listener.onFailure(e);
-        }
-    }
-
     /**
+        super(
+    @Override
+     * <ul>
+        public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+    protected AcknowledgedResponse read(StreamInput in) throws IOException {
+            return scaleIndexClusterStateBuilder.buildFinalScaleDownState(currentState, index);
+import org.opensearch.action.admin.indices.flush.FlushRequest;
+            return;
+     * </ul>
+            listener.onResponse(new AcknowledgedResponse(true));
+        shard.acquireAllPrimaryOperationsPermits(new ActionListener<>() {
+        }
      * Submits the scale-down update task: it first adds a temporary block to the indices and then initiates shard synchronization.
+            @Override
+            @Override
+                    listener.onFailure(e);
+                IndexMetadata.builder(indexMetadata).settings(updatedSettings).settingsVersion(indexMetadata.getSettingsVersion() + 1)
+        @Override
+            threadPool,
+        this.indicesService = indicesService;
+        Map<ShardId, String> primaryShardsNodes,
+                .put(indexMetadata.getSettings())
+            }
+     * Returns the executor name for this transport action.
+            logger.error("Failed to execute cluster state update for scale up", e);
+    private final ScaleIndexShardSyncManager scaleIndexShardSyncManager;
+     *
+        }, TimeValue.timeValueSeconds(30));
+        final ClusterState currentState,
+        @Override
+                    );
+    private IndexService getIndexService(IndexMetadata indexMetadata) {
+        IndexMetadata indexMetadata = currentState.metadata().index(index);
+ *   <li>Adding temporary write blocks during scale-down preparation</li>
+        ThreadPool threadPool,
+        }
+     *   <li>Rebuilds the routing table to add primary and replica shards</li>
+ *   <li>Modifying cluster state to transition indices between modes</li>
+        public void onFailure(String source, Exception e) {
+            ActionListener.wrap(searchOnlyResponse -> finalizeScaleDown(index, listener), listener::onFailure)
+     * Transport action name for shard sync requests
+            );
      */
-    private void submitScaleDownTask(final String index, final ActionListener<AcknowledgedResponse> listener) {
-        final Map<Index, ClusterBlock> blockedIndices = new HashMap<>();
-
-        clusterService.submitStateUpdateTask(
-            "add-block-index-to-scale " + index,
-            new AddBlockClusterStateUpdateTask(index, blockedIndices, listener)
+    ) {
+import org.opensearch.cluster.metadata.IndexMetadata;
+            clusterService,
+/**
         );
+        try {
+ * compatible open source license.
+     * Handles an incoming shard sync request from another node.
+    public TransportScaleIndexAction(
     }
-
+        private final ActionListener<AcknowledgedResponse> listener;
+import java.util.Map;
+    private final ScaleIndexOperationValidator validator;
+     */
+        }
+                try {
+            IndexMetadata indexMetadata = currentState.metadata().index(index);
+        }
+     *   <li>Removes the temporary scale-down preparation block</li>
+        private final String index;
+import org.opensearch.common.Priority;
+        return indexService;
+     * <p>
+                return;
+        public void onFailure(String source, Exception e) {
+import org.opensearch.index.IndexService;
+     * <p>
+            }
+    void syncSingleShard(IndexShard shard, ActionListener<ScaleIndexShardResponse> listener) {
+            logger.error("Failed to execute cluster manager operation", e);
+ * <ul>
+     *   <li>Applies a permanent search-only block</li>
+     * <ul>
+     */
+        @Override
+import org.apache.logging.log4j.LogManager;
+                "restore indexing shards"
+     * @param request  the search-only scale request
+            "add-block-index-to-scale " + index,
+            threadPool.executor(SHARD_SYNC_EXECUTOR).execute(() -> { syncSingleShard(shard, groupedActionListener); });
+        );
+import org.opensearch.transport.TransportChannel;
+     */
+            ScaleIndexAction.NAME,
+ * atomicity and consistency throughout the transition.
+     * @param transportService            the transport service for network communication
+            channel,
+            String index = request.getIndex();
+    }
+            RoutingTable newRoutingTable = scaleIndexClusterStateBuilder.buildScaleUpRoutingTable(currentState, index);
+            metadataBuilder.put(
+        final String index,
+            indexNameExpressionResolver
+        public ClusterState execute(ClusterState currentState) {
+            Metadata.Builder metadataBuilder = Metadata.builder(tempState.metadata());
+        this.scaleIndexShardSyncManager = new ScaleIndexShardSyncManager(clusterService, transportService, NAME);
+            public void onFailure(Exception e) {
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+    private final AllocationService allocationService;
+                submitScaleDownTask(index, listener);
+        }
+            );
+        TransportService transportService,
+        String index,
+            this.index = index;
+     *
+            ActionListener<AcknowledgedResponse> listener
+            if (shard == null || shard.routingEntry().primary() == false) {
+import org.opensearch.common.inject.Inject;
+     * @param threadPool                  the thread pool for executing operations
+ * </ul>
+    private void syncShards(IndexService indexService, List<ShardId> shardIds, ActionListener<ScaleIndexNodeResponse> listener) {
+     */
+import org.opensearch.cluster.block.ClusterBlockException;
+ * This class coordinates the entire process of scaling indices up or down between normal
+/*
+ * this file be licensed under the Apache-2.0 license or a
+     * @param in the stream input
+        ActionListener<AcknowledgedResponse> listener
+     * removes the temporary block and adds a permanent search-only block.
+            Settings updatedSettings = Settings.builder()
+        if (indexService == null) {
+        private final String index;
+     * Cluster state update task for scaling up an index from search-only mode to normal operation.
+import org.opensearch.core.action.ActionListener;
+        @Override
+     *   <li>Removes the search-only block</li>
+import org.opensearch.cluster.block.ClusterBlock;
+            listener.onResponse(new AcknowledgedResponse(true));
+        this.scaleIndexClusterStateBuilder = new ScaleIndexClusterStateBuilder();
+            if (request.isScaleDown()) {
+                validator.validateScalePrerequisites(indexMetadata, index, listener, true);
+import org.opensearch.indices.IndicesService;
+        @Override
+ *   <li>Handling synchronization requests from other nodes</li>
+import org.opensearch.cluster.routing.allocation.AllocationService;
+        ClusterState state = clusterService.state();
+            listener.onFailure(e);
+                .put(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), false)
+     * @param listener the listener to notify with the operation result
+        ActionListener<AcknowledgedResponse> listener
+    /**
+        GroupedActionListener<ScaleIndexShardResponse> groupedActionListener = new GroupedActionListener<>(new ActionListener<>() {
+import org.opensearch.transport.TransportService;
+    private final ThreadPool threadPool;
+     *   <li>Triggers routing table updates to allocate the new shards</li>
+            }
+            } catch (Exception e) {
+import java.util.List;
+            Map<Index, ClusterBlock> blockedIndices,
+                break;
+        }, shardIds.size());
+     */
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+     * based on the request parameters, and submits the appropriate cluster state update task.
+            IndexMetadata indexMetadata = newState.metadata().index(index);
+                        new ScaleIndexShardResponse(shard.shardId(), shard.isSyncNeeded(), shard.translogStats().getUncommittedOperations())
+     * Constructs a new TransportSearchOnlyAction.
+        public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+        public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+        public void onFailure(String source, Exception e) {
+            listener.onFailure(e);
+            if (indexMetadata != null) {
+            throw new IllegalStateException("Index " + request.getIndex() + " not found");
+    }
+     * </ul>
+    }
+            if (oldState == newState) {
+import java.util.Collection;
+        @Override
+            this.blockedIndices = blockedIndices;
+        this.validator = new ScaleIndexOperationValidator();
+                listener.onResponse(new AcknowledgedResponse(true));
+        }
+        scaleIndexShardSyncManager.sendShardSyncRequests(
+import org.opensearch.threadpool.ThreadPool;
+            super(Priority.URGENT);
+    protected ClusterBlockException checkBlock(ScaleIndexRequest request, ClusterState state) {
     /**
      * Sends shard sync requests to each node that holds a primary shard.
-     */
+import static org.opensearch.cluster.metadata.IndexMetadata.INDEX_SEARCH_ONLY_BLOCK_ID;
     private void proceedWithScaleDown(
-        String index,
-        Map<ShardId, String> primaryShardsNodes,
-        ActionListener<AcknowledgedResponse> listener
-    ) {
-        scaleIndexShardSyncManager.sendShardSyncRequests(
-            index,
-            primaryShardsNodes,
-            ActionListener.wrap(responses -> handleShardSyncResponses(responses, index, listener), listener::onFailure)
-        );
-    }
-
-    private void handleShardSyncResponses(
-        Collection<ScaleIndexNodeResponse> responses,
-        String index,
-        ActionListener<AcknowledgedResponse> listener
-    ) {
-        scaleIndexShardSyncManager.validateNodeResponses(
-            responses,
-            ActionListener.wrap(searchOnlyResponse -> finalizeScaleDown(index, listener), listener::onFailure)
-        );
-    }
-
-    /**
-     * Finalizes scale-down by updating the metadata and routing table:
-     * removes the temporary block and adds a permanent search-only block.
-     */
-    private void finalizeScaleDown(String index, ActionListener<AcknowledgedResponse> listener) {
-        clusterService.submitStateUpdateTask("finalize-scale-down", new FinalizeScaleDownTask(index, listener));
-    }
-
-    /**
-     * Handles an incoming shard sync request from another node.
-     */
-    void handleShardSyncRequest(ScaleIndexNodeRequest request, TransportChannel channel) {
-        ClusterState state = clusterService.state();
-
-        IndexMetadata indexMetadata = state.metadata().index(request.getIndex());
-        if (indexMetadata == null) {
-            throw new IllegalStateException("Index " + request.getIndex() + " not found");
-        }
-
-        IndexService indexService = getIndexService(indexMetadata);
-        ChannelActionListener<ScaleIndexNodeResponse, ScaleIndexNodeRequest> listener = new ChannelActionListener<>(
-            channel,
-            "sync_shard",
-            request
-        );
-
-        syncShards(indexService, request.getShardIds(), listener);
-    }
-
-    private IndexService getIndexService(IndexMetadata indexMetadata) {
-        IndexService indexService = indicesService.indexService(indexMetadata.getIndex());
-        if (indexService == null) {
-            throw new IllegalStateException("IndexService not found for index " + indexMetadata.getIndex().getName());
-        }
-        return indexService;
-    }
-
-    private void syncShards(IndexService indexService, List<ShardId> shardIds, ActionListener<ScaleIndexNodeResponse> listener) {
-
-        GroupedActionListener<ScaleIndexShardResponse> groupedActionListener = new GroupedActionListener<>(new ActionListener<>() {
-            @Override
-            public void onResponse(Collection<ScaleIndexShardResponse> shardResponses) {
-                listener.onResponse(new ScaleIndexNodeResponse(clusterService.localNode(), shardResponses.stream().toList()));
             }
-
-            @Override
-            public void onFailure(Exception e) {
-                listener.onFailure(e);
-            }
-        }, shardIds.size());
-
-        for (ShardId shardId : shardIds) {
-            IndexShard shard = indexService.getShardOrNull(shardId.id());
-            if (shard == null || shard.routingEntry().primary() == false) {
-                groupedActionListener.onFailure(new IllegalStateException("Attempting to scale down a replica shard"));
-                break;
-            }
-            threadPool.executor(SHARD_SYNC_EXECUTOR).execute(() -> { syncSingleShard(shard, groupedActionListener); });
-        }
-    }
-
-    void syncSingleShard(IndexShard shard, ActionListener<ScaleIndexShardResponse> listener) {
-        shard.acquireAllPrimaryOperationsPermits(new ActionListener<>() {
-            @Override
-            public void onResponse(Releasable releasable) {
-                logger.info("Performing final sync and flush for shard {}", shard.shardId());
-                try {
-                    shard.sync();
-                    shard.flush(new FlushRequest().force(true).waitIfOngoing(true));
-                    shard.waitForRemoteStoreSync();
-                    listener.onResponse(
-                        new ScaleIndexShardResponse(shard.shardId(), shard.isSyncNeeded(), shard.translogStats().getUncommittedOperations())
-                    );
-                } catch (IOException e) {
-                    listener.onFailure(e);
-                }
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                listener.onFailure(e);
-            }
-        }, TimeValue.timeValueSeconds(30));
-    }
-
-    /**
-     * Submits the scale-up update task that rebuilds the routing table and updates index metadata.
-     */
-    private void submitScaleUpTask(
-        final String index,
-        final ClusterState currentState,
-        final ActionListener<AcknowledgedResponse> listener
-    ) {
-        IndexMetadata indexMetadata = currentState.metadata().index(index);
-        if (!validator.validateScalePrerequisites(indexMetadata, index, listener, false)) {
-            return;
-        }
-
-        clusterService.submitStateUpdateTask("scale-up-index", new ScaleUpClusterStateUpdateTask(index, listener));
-    }
-
-    @Override
-    protected ClusterBlockException checkBlock(ScaleIndexRequest request, ClusterState state) {
-        return state.blocks()
             .indicesBlockedException(
-                ClusterBlockLevel.METADATA_WRITE,
-                indexNameExpressionResolver.concreteIndexNames(state, request.indicesOptions(), request.getIndex())
-            );
-    }
-
-    /**
-     * Cluster state update task for adding a temporary block during the initial phase of scaling down.
-     * <p>
-     * This task:
-     * <ul>
-     *   <li>Validates that the index meets prerequisites for scaling down</li>
-     *   <li>Adds a temporary write block to prevent new operations during scaling</li>
-     *   <li>Initiates shard synchronization after the block is applied</li>
-     * </ul>
-     */
-    class AddBlockClusterStateUpdateTask extends ClusterStateUpdateTask {
-        private final String index;
+        IndexService indexService = getIndexService(indexMetadata);
+    public static final String SHARD_SYNC_EXECUTOR = ThreadPool.Names.MANAGEMENT;
+     * @param indicesService              service for accessing index shards
+        if (indexMetadata == null) {
         private final Map<Index, ClusterBlock> blockedIndices;
-        private final ActionListener<AcknowledgedResponse> listener;
-
-        AddBlockClusterStateUpdateTask(
-            String index,
-            Map<Index, ClusterBlock> blockedIndices,
-            ActionListener<AcknowledgedResponse> listener
-        ) {
-            super(Priority.URGENT);
+        for (ShardId shardId : shardIds) {
+            throw new IllegalStateException("IndexService not found for index " + indexMetadata.getIndex().getName());
             this.index = index;
-            this.blockedIndices = blockedIndices;
-            this.listener = listener;
-        }
-
-        @Override
-        public ClusterState execute(final ClusterState currentState) {
-            IndexMetadata indexMetadata = currentState.metadata().index(index);
-            try {
-                validator.validateScalePrerequisites(indexMetadata, index, listener, true);
-                return scaleIndexClusterStateBuilder.buildScaleDownState(currentState, index, blockedIndices);
-            } catch (Exception e) {
-                return currentState;
-            }
-        }
-
-        @Override
-        public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-            if (oldState == newState) {
-                listener.onResponse(new AcknowledgedResponse(true));
-                return;
-            }
-
-            IndexMetadata indexMetadata = newState.metadata().index(index);
-            if (indexMetadata != null) {
-                Map<ShardId, String> primaryShardsNodes = scaleIndexShardSyncManager.getPrimaryShardAssignments(indexMetadata, newState);
-                proceedWithScaleDown(index, primaryShardsNodes, listener);
-            }
-        }
-
-        @Override
-        public void onFailure(String source, Exception e) {
-            logger.error("Failed to process cluster state update for scale down", e);
-            listener.onFailure(e);
-        }
+            @Override
     }
-
-    /**
-     * Cluster state update task for finalizing a scale-down operation.
-     * <p>
-     * This task:
-     * <ul>
-     *   <li>Removes the temporary scale-down preparation block</li>
-     *   <li>Updates index metadata to mark it as search-only</li>
-     *   <li>Applies a permanent search-only block</li>
-     *   <li>Updates the routing table to remove non-search-only shards</li>
-     * </ul>
+ * SPDX-License-Identifier: Apache-2.0
      */
-    class FinalizeScaleDownTask extends ClusterStateUpdateTask {
-        private final String index;
-        private final ActionListener<AcknowledgedResponse> listener;
-
-        FinalizeScaleDownTask(String index, ActionListener<AcknowledgedResponse> listener) {
-            super(Priority.URGENT);
-            this.index = index;
-            this.listener = listener;
-        }
-
-        @Override
-        public ClusterState execute(ClusterState currentState) {
-            return scaleIndexClusterStateBuilder.buildFinalScaleDownState(currentState, index);
-        }
-
-        @Override
-        public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-            listener.onResponse(new AcknowledgedResponse(true));
-        }
-
-        @Override
-        public void onFailure(String source, Exception e) {
-            logger.error("Failed to finalize scale-down operation", e);
-            listener.onFailure(e);
-        }
-    }
-
-    /**
-     * Cluster state update task for scaling up an index from search-only mode to normal operation.
-     * <p>
-     * This task:
-     * <ul>
-     *   <li>Rebuilds the routing table to add primary and replica shards</li>
-     *   <li>Removes the search-only block</li>
-     *   <li>Updates index settings to disable search-only mode</li>
-     *   <li>Triggers routing table updates to allocate the new shards</li>
-     * </ul>
-     */
-    private class ScaleUpClusterStateUpdateTask extends ClusterStateUpdateTask {
-        private final String index;
-        private final ActionListener<AcknowledgedResponse> listener;
-
-        ScaleUpClusterStateUpdateTask(String index, ActionListener<AcknowledgedResponse> listener) {
-            this.index = index;
-            this.listener = listener;
-        }
-
-        @Override
-        public ClusterState execute(ClusterState currentState) {
-            RoutingTable newRoutingTable = scaleIndexClusterStateBuilder.buildScaleUpRoutingTable(currentState, index);
-            ClusterState tempState = ClusterState.builder(currentState).routingTable(newRoutingTable).build();
-
-            ClusterBlocks.Builder blocksBuilder = ClusterBlocks.builder().blocks(tempState.blocks());
-            Metadata.Builder metadataBuilder = Metadata.builder(tempState.metadata());
-
-            blocksBuilder.removeIndexBlockWithId(index, INDEX_SEARCH_ONLY_BLOCK_ID);
-            IndexMetadata indexMetadata = tempState.metadata().index(index);
-            Settings updatedSettings = Settings.builder()
-                .put(indexMetadata.getSettings())
-                .put(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), false)
-                .build();
-            metadataBuilder.put(
-                IndexMetadata.builder(indexMetadata).settings(updatedSettings).settingsVersion(indexMetadata.getSettingsVersion() + 1)
             );
-
+            this.listener = listener;
             return allocationService.reroute(
-                ClusterState.builder(tempState).blocks(blocksBuilder).metadata(metadataBuilder).build(),
-                "restore indexing shards"
-            );
+            public void onFailure(Exception e) {
+     * This method determines whether to execute a scale-up or scale-down operation
+     *   <li>Updates index metadata to mark it as search-only</li>
+    }
+     * Cluster state update task for adding a temporary block during the initial phase of scaling down.
+            String index,
+    }
+     * This task:
+    private static final Logger logger = LogManager.getLogger(TransportScaleIndexAction.class);
+import org.opensearch.cluster.service.ClusterService;
+     */
+    private final ScaleIndexClusterStateBuilder scaleIndexClusterStateBuilder;
+    void handleShardSyncRequest(ScaleIndexNodeRequest request, TransportChannel channel) {
+    protected String executor() {
+ * <p>
+package org.opensearch.action.admin.indices.scale.searchonly;
+        );
+     * @param state    the current cluster state
+        scaleIndexShardSyncManager.validateNodeResponses(
+    class FinalizeScaleDownTask extends ClusterStateUpdateTask {
+    /**
+            }
+                    shard.sync();
+    @Override
+                } catch (IOException e) {
+                    shard.waitForRemoteStoreSync();
+            this.listener = listener;
+}
         }
-
-        @Override
-        public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-            listener.onResponse(new AcknowledgedResponse(true));
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
+    }
+            index,
         }
-
-        @Override
-        public void onFailure(String source, Exception e) {
-            logger.error("Failed to execute cluster state update for scale up", e);
+     */
+     * This task:
             listener.onFailure(e);
+            this.listener = listener;
+        }
+    @Override
+import org.opensearch.index.shard.IndexShard;
+            NAME,
+    }
+    class AddBlockClusterStateUpdateTask extends ClusterStateUpdateTask {
+            ActionListener.wrap(responses -> handleShardSyncResponses(responses, index, listener), listener::onFailure)
+            ScaleIndexNodeRequest::new,
+                Map<ShardId, String> primaryShardsNodes = scaleIndexShardSyncManager.getPrimaryShardAssignments(indexMetadata, newState);
+            request
+ * and search-only modes. It manages the multistep process including:
+                indexNameExpressionResolver.concreteIndexNames(state, request.indicesOptions(), request.getIndex())
+            IndexMetadata indexMetadata = tempState.metadata().index(index);
+            responses,
+                listener.onFailure(e);
+            public void onResponse(Releasable releasable) {
+    private void submitScaleDownTask(final String index, final ActionListener<AcknowledgedResponse> listener) {
         }
     }
-
-}
+            public void onResponse(Collection<ScaleIndexShardResponse> shardResponses) {
+    }
+            ClusterState tempState = ClusterState.builder(currentState).routingTable(newRoutingTable).build();
+     * @param allocationService           service for shard allocation decisions
+        this.allocationService = allocationService;
+                groupedActionListener.onFailure(new IllegalStateException("Attempting to scale down a replica shard"));
+     * @param actionFilters               filters for action requests
+        ChannelActionListener<ScaleIndexNodeResponse, ScaleIndexNodeRequest> listener = new ChannelActionListener<>(
+    private void submitScaleUpTask(
+        }
+import org.opensearch.core.index.shard.ShardId;
+     * This task:
+        final ActionListener<AcknowledgedResponse> listener
+        AddBlockClusterStateUpdateTask(
+import org.opensearch.action.support.GroupedActionListener;
+                return scaleIndexClusterStateBuilder.buildScaleDownState(currentState, index, blockedIndices);
+ * <p>
+     * @return the deserialized response
+        return ThreadPool.Names.MANAGEMENT;
+    }
+ * Transport action implementation for search-only scale operations.
+            this.index = index;
+    @Inject
+        } catch (Exception e) {
+        }
+    }
+ *   <li>Validating prerequisites for scale operations</li>
+     */
+            primaryShardsNodes,
+            ScaleIndexRequest::new,
+            try {
+            } else {
+        clusterService.submitStateUpdateTask(
+            (request, channel, task) -> handleShardSyncRequest(request, channel)
+import java.util.HashMap;
+                proceedWithScaleDown(index, primaryShardsNodes, listener);
+    /**
+        clusterService.submitStateUpdateTask("finalize-scale-down", new FinalizeScaleDownTask(index, listener));
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.action.support.ChannelActionListener;
+     *   <li>Initiates shard synchronization after the block is applied</li>
+    /**
+        );
+        this.threadPool = threadPool;
+import org.apache.logging.log4j.Logger;
+        );
+            listener.onFailure(e);
+            @Override
+     * <ul>
+     * @throws IOException if an I/O error occurs
+        private final ActionListener<AcknowledgedResponse> listener;
+     * <p>
+            logger.error("Failed to process cluster state update for scale down", e);
+import org.opensearch.cluster.block.ClusterBlocks;
+ * The scale operation is implemented as a series of cluster state update tasks to ensure
+import org.opensearch.common.settings.Settings;
+                .build();
+    /**
+        public ClusterState execute(final ClusterState currentState) {
+        @Override
+     * Handles the search-only request on the cluster manager node.
+                listener.onResponse(new ScaleIndexNodeResponse(clusterService.localNode(), shardResponses.stream().toList()));
+    private void handleShardSyncResponses(
+                    listener.onResponse(
+        }
+import org.opensearch.core.common.io.stream.StreamInput;
+ *   <li>Coordinating shard synchronization across nodes</li>
+            actionFilters,
+            new AddBlockClusterStateUpdateTask(index, blockedIndices, listener)
+            }
+        private final ActionListener<AcknowledgedResponse> listener;
+        }
+    /**
+    private class ScaleUpClusterStateUpdateTask extends ClusterStateUpdateTask {
+    /**
+        }
+     * Cluster state update task for finalizing a scale-down operation.
+                submitScaleUpTask(index, state, listener);
+        private final String index;
+    /**
+    }
+            blocksBuilder.removeIndexBlockWithId(index, INDEX_SEARCH_ONLY_BLOCK_ID);
+     *
+ */
+     *   <li>Validates that the index meets prerequisites for scaling down</li>
+     * Deserializes the response from stream.
+        transportService.registerRequestHandler(
+        IndexNameExpressionResolver indexNameExpressionResolver,
+public class TransportScaleIndexAction extends TransportClusterManagerNodeAction<ScaleIndexRequest, AcknowledgedResponse> {
+    private void finalizeScaleDown(String index, ActionListener<AcknowledgedResponse> listener) {
+ *
+     * @param clusterService              the cluster service for accessing cluster state
+ */
+     * @param indexNameExpressionResolver resolver for index names and expressions
+        }
+    /**
+        AllocationService allocationService,
+        ) {
+        }
+import org.opensearch.cluster.metadata.Metadata;
+     * @return the executor name
+                return currentState;
+     *   <li>Updates index settings to disable search-only mode</li>
+import org.opensearch.action.support.ActionFilters;
+     * Submits the scale-up update task that rebuilds the routing table and updates index metadata.
+            transportService,
+            "sync_shard",
+    }
+            ThreadPool.Names.SAME,
+        @Override
+     * <p>
+            ClusterBlocks.Builder blocksBuilder = ClusterBlocks.builder().blocks(tempState.blocks());
+        if (!validator.validateScalePrerequisites(indexMetadata, index, listener, false)) {
+     */
+import org.opensearch.common.unit.TimeValue;
+     */
+        clusterService.submitStateUpdateTask("scale-up-index", new ScaleUpClusterStateUpdateTask(index, listener));
+     *   <li>Adds a temporary write block to prevent new operations during scaling</li>
+import org.opensearch.cluster.ClusterStateUpdateTask;
+        public ClusterState execute(ClusterState currentState) {
+    /**
+    ) {
+        return new AcknowledgedResponse(in);
+        );
+                ClusterBlockLevel.METADATA_WRITE,
+    ) {
+import java.io.IOException;
+                    shard.flush(new FlushRequest().force(true).waitIfOngoing(true));
+        @Override
+        return state.blocks()
+     */
+        Collection<ScaleIndexNodeResponse> responses,
+            IndexShard shard = indexService.getShardOrNull(shardId.id());
+import org.opensearch.common.lease.Releasable;
+        ScaleUpClusterStateUpdateTask(String index, ActionListener<AcknowledgedResponse> listener) {
+ * The OpenSearch Contributors require contributions made to
+        syncShards(indexService, request.getShardIds(), listener);
+                }
+     *   <li>Updates the routing table to remove non-search-only shards</li>
+                listener.onFailure(e);
+        IndicesService indicesService
+    protected void clusterManagerOperation(ScaleIndexRequest request, ClusterState state, ActionListener<AcknowledgedResponse> listener) {
+import org.opensearch.cluster.routing.RoutingTable;
+    ) {
+                logger.info("Performing final sync and flush for shard {}", shard.shardId());
+        IndexMetadata indexMetadata = state.metadata().index(request.getIndex());
+        String index,
+     *
+        ClusterService clusterService,
+        IndexService indexService = indicesService.indexService(indexMetadata.getIndex());
+            }
+            super(Priority.URGENT);
+            logger.error("Failed to finalize scale-down operation", e);
+     * </ul>
+    /**
+        final Map<Index, ClusterBlock> blockedIndices = new HashMap<>();
+        FinalizeScaleDownTask(String index, ActionListener<AcknowledgedResponse> listener) {
+            }
+        ActionFilters actionFilters,
+import org.opensearch.cluster.block.ClusterBlockLevel;
+    }

@@ -1,480 +1,440 @@
----
-"Modify a document":
   - do:
-      index:
-        index:  twitter
-        id:     1
-        body:   { "user": "foobar" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      reindex:
-        refresh: true
-        body:
-          source:
-            index: twitter
-          dest:
-            index: new_twitter
-          script:
-            lang: painless
-            source: ctx._source.user = "other" + ctx._source.user
-  - match: {created: 1}
-  - match: {noops: 0}
-
-  - do:
+        version_type: external
+        id:           1
+        index:  new_twitter
       search:
-        rest_total_hits_as_int: true
-        index: new_twitter
-        body:
-          query:
-            match:
-              user: otherfoobar
-  - match: { hits.total: 1 }
-
----
-"Modify a document based on id":
-  - do:
-      index:
-        index:  twitter
         id:     1
-        body:   { "user": "foobar" }
-  - do:
       index:
-        index:  twitter
-        id:     2
-        body:   { "user": "blort" }
   - do:
-      indices.refresh: {}
-
+        body:         { "user": "foobar" }
   - do:
-      reindex:
-        refresh: true
-        body:
-          source:
-            index: twitter
-          dest:
-            index: new_twitter
-          script:
-            lang: painless
-            source: if (ctx._id == "1") {ctx._source.user = "other" + ctx._source.user}
-  - match: {created: 2}
-  - match: {noops: 0}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: new_twitter
-        body:
-          query:
-            match:
-              user: otherfoobar
-  - match: { hits.total: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: new_twitter
-        body:
-          query:
-            match:
-              user: blort
-  - match: { hits.total: 1 }
-
----
-"Add routing":
-  - do:
-      index:
-        index:  twitter
-        id:     1
-        body:   { "user": "foobar" }
-  - do:
-      index:
-        index:  twitter
-        id:     2
-        body:   { "user": "foo" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      reindex:
-        refresh: true
-        body:
-          source:
-            index: twitter
-          dest:
-            index: new_twitter
-          script:
-            lang: painless
-            source: ctx._routing = ctx._source.user
-  - match: {created: 2}
-  - match: {noops: 0}
-
-  - do:
-      get:
-        index:   new_twitter
-        id:      1
-        routing: foobar
-  - match: { _routing: foobar }
-
-  - do:
-      get:
-        index:   new_twitter
-        id:      2
         routing: foo
-  - match: { _routing: foo }
-
----
-"Noop one doc":
-  - do:
-      index:
-        index:  twitter
-        id:     1
-        body:   { "user": "foobar" }
-  - do:
-      index:
-        index:  twitter
-        id:     2
-        body:   { "user": "foo" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      reindex:
-        refresh: true
         body:
-          source:
-            index: twitter
-          dest:
-            index: new_twitter
-          script:
-            lang: painless
-            source: if (ctx._source.user == "foobar") {ctx._source.user = "not" + ctx._source.user} else {ctx.op = "noop"}
-  - match: {created: 1}
-  - match: {noops: 1}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: new_twitter
-        body:
-          query:
-            match:
-              user: notfoobar
   - match: { hits.total: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: twitter
-        body:
-          query:
-            match:
-              user: notfoo
-  - match: { hits.total: 0 }
-
-  - do:
-      count:
-        index: new_twitter
-  - match: {count: 1}
-
----
-"Noop all docs":
-  - do:
-      index:
-        index:  twitter
-        id:     1
-        body:   { "user": "foobar" }
-  - do:
-      index:
-        index:  twitter
-        id:     2
-        body:   { "user": "foo" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      reindex:
-        body:
-          source:
-            index: twitter
-          dest:
-            index: new_twitter
-          script:
             lang: painless
-            source: ctx.op = "noop"
-  - match: {updated: 0}
+          script:
+  - match: {created: 1}
+  - do:
   - match: {noops: 2}
-
-  - do:
-      indices.exists:
-        index: new_twitter
-  - is_false: ''
-
 ---
+        id:           1
+      reindex:
+  - do:
+  - do:
+  - skip:
 "Set version to null to force an update":
-  - do:
-      index:
-        index:        twitter
-        id:           1
-        version:      1
-        version_type: external
-        body:         { "user": "foobar" }
-  - do:
-      index:
-        index:        new_twitter
-        id:           1
-        version:      1
-        version_type: external
-        body:         { "user": "foobar" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      reindex:
-        refresh: true
-        body:
-          source:
-            index: twitter
-          dest:
-            index: new_twitter
-            version_type: external
-          script:
-            lang: painless
-            source: ctx._source.user = "other" + ctx._source.user; ctx._version = null
-  - match: {updated: 1}
-  - match: {noops: 0}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: new_twitter
-        body:
-          query:
-            match:
-              user: otherfoobar
-  - match: { hits.total: 1 }
-
----
-"Set id to null to get an automatic id":
-  - do:
-      index:
-        index:        twitter
-        id:           1
-        body:         { "user": "foobar" }
-  - do:
-      index:
-        index:        new_twitter
-        id:           1
-        body:         { "user": "foobar" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      reindex:
-        refresh: true
-        body:
-          source:
-            index: twitter
-          dest:
-            index: new_twitter
-          script:
-            lang: painless
-            source: ctx._source.user = "other" + ctx._source.user; ctx._id = null
-  - match: {created: 1}
-  - match: {noops: 0}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: new_twitter
-        body:
-          query:
-            match:
-              user: otherfoobar
-  - match: { hits.total: 1 }
-
----
-"Change index to write to a different index":
-  - do:
-      index:
-        index:        twitter
-        id:           1
-        body:         { "user": "foobar" }
-  - do:
-      index:
-        index:        twitter
-        id:           2
-        body:         { "user": "another" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      reindex:
-        refresh: true
-        body:
-          source:
-            index: twitter
-          dest:
-            index: new_twitter
-          script:
-            lang: painless
-            source: if (ctx._source.user == "foobar") {ctx._index = 'other_new_twitter'}
-  - match: {created: 2}
-  - match: {noops: 0}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: other_new_twitter
-        body:
-          query:
-            match:
-              user: foobar
-  - match: { hits.total: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: new_twitter
-        body:
-          query:
-            match:
-              user: another
-  - match: { hits.total: 1 }
-
----
-"Reindex all docs with one doc deletion":
+        id:     fr_789
   # Source index
-  - do:
+      reindex:
+        refresh: true
+  - match: {created: 1}
+        index:  twitter
       index:
-        index:  index1
-        id:     1
-        body:   { "lang": "en", "id": 123 }
+  - match:  { docs.2._index:     index2      }
+---
   - do:
+        index:        twitter
       index:
-        index:  index1
+  - do:
+          script:
+            lang: painless
+            match:
+      indices.refresh: {}
+      index:
+  - do:
+            source: if (ctx._source.user == "foobar") {ctx._index = 'other_new_twitter'}
+        rest_total_hits_as_int: true
+        body:
+        body:
+        body:
+        refresh: true
+        index:  twitter
+            index: new_twitter
+  - match: {deleted: 1}
+  - do:
+        body:         { "user": "foobar" }
+"Add routing":
+            match:
+  - do:
+      version: " - 2.18.99"
+        id:      2
+        index:        twitter
+        rest_total_hits_as_int: true
+        body:
+          dest:
+              user: another
+            index: twitter
+  - is_true: docs.0.found
+  - do:
+            match:
+          script:
+            match:
+  - do:
+  - match:  { docs.2._id:        fr_789      }
+            - { _index: index2, _id: en_456}
+      index:
+  - match: { hits.total: 0 }
+  - match: { _source.user:        foobar }
+  - do:
+        index: new_twitter
+        refresh: true
+            match:
         id:     2
-        body:   { "lang": "en", "id": 456 }
+          dest:
   - do:
+  - do:
+          query:
       index:
+      index:
+  - do:
+  - match:  { docs.1._index:     index2      }
+        index:        twitter
+            index: new_twitter
+"Script supports sha1() and sha256() method for strings":
+        index: new_twitter
+      index:
+        body:
         index:  index1
+  - do:
+      reindex:
+      indices.refresh: {}
+---
+        body:
+        id:     2
+      indices.refresh: {}
+        index: new_twitter
+            index: twitter
+            match:
+  - match: {created: 1}
+          dest:
+  - do:
+  - do:
+        body:   { "user": "foobar" }
+  - match: {created: 1}
+        body:   { "user": "foo" }
         id:     3
+      indices.refresh: {}
+        id:      1
+            source: ctx._source.user = "other" + ctx._source.user
+  - do:
+        index:  twitter
+        index:   new_twitter
+              user: blort
+      indices.refresh: {}
+          dest:
+            source: ctx._source.user = "other" + ctx._source.user; ctx._id = null
+  - do:
+      search:
+      count:
+  - match:  { docs.0._id:        en_123      }
+            index: twitter
+        version:      1
+        body:
+# related issue: https://github.com/opensearch-project/OpenSearch/issues/16423
+  - match: {noops: 0}
+  - match: {noops: 0}
+  - do:
+---
+      reindex:
+  - do:
+---
+      search:
+        refresh: true
+            source: "ctx._id = ctx._source.lang + '_' + ctx._source.id;
+              user: otherfoobar
+        id:     1
+            index: new_twitter
+            source: if (ctx._source.user == "foobar") {ctx._source.user = "not" + ctx._source.user} else {ctx.op = "noop"}
+          source:
+  - is_false: ''
+      index:
+        index:  index2
+          source:
+  - match: { hits.total: 1 }
+        rest_total_hits_as_int: true
+      reason: "introduced in 2.19.0"
+        rest_total_hits_as_int: true
+        index:  twitter
+        index: other_new_twitter
+  - match:  { docs.0._index:     index2      }
+        index:        new_twitter
+        id:           2
+  - match: { hits.total: 1 }
+        refresh: true
+  - do:
+        rest_total_hits_as_int: true
+  - match: { hits.total: 1 }
+      indices.refresh: {}
+  - match: {created: 2}
+      reindex:
+            index: new_twitter
+        body:
+  - do:
+        body:   { "user": "foobar" }
+          query:
+            index: index1
+              user: otherfoobar
+        body:         { "user": "foobar" }
+        id:     en_123
         body:   { "lang": "fr", "id": 789 }
+        rest_total_hits_as_int: true
+  - do:
+          dest:
+  - match: {updated: 1}
+  - match: { _source.user_sha256:      "c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2"   }
+  - do:
+            index: new_twitter
+          source:
+      reindex:
+          query:
+  - match: { _source.user_sha1:      "8843d7f92416211de9ebb963ff4ce28125932878"   }
+  - match: {created: 2}
+        body:   { "lang": "en", "id": 456 }
+      index:
+            index: twitter
+            match:
+            - { _index: index2, _id: en_123}
+              user: otherfoobar
+            lang: painless
+  - match: {noops: 0}
+        body:
+        id:     1
+            lang: painless
+        body:   { "user": "foo" }
+        refresh: true
+        body:
+---
+      search:
+      catch: bad_request
+            lang: painless
+        index:  index1
+            source: ctx._source.user_sha1 = ctx._source.user.sha1();ctx._source.user_sha256 = ctx._source.user.sha256()
+      indices.refresh: {}
+  - do:
+  - do:
+        index:  twitter
+  - match: { hits.total: 1 }
+---
+            lang: painless
+  - match: {noops: 0}
+            index: new_twitter
+  - do:
+            source: ctx._source.user = "other" + ctx._source.user; ctx._version = null
+  - do:
+"Modify a document":
+        version_type: external
+        body:   { "user": "foobar" }
   # Destination index
   - do:
-      index:
-        index:  index2
-        id:     fr_789
-        body:   { "lang": "fr", "id": 789 }
-  - do:
-      index:
-        index:  index2
-        id:     en_123
-        body:   { "lang": "en", "id": 123 }
-  - do:
-      indices.refresh: {}
-
-  # Reindex all documents from "index1" into "index2", changing
-  # their id to the concatenated lang+id fields,
-  # trashing all non-english pre existing ones
-  - do:
-      reindex:
-        refresh: true
         body:
-          source:
-            index: index1
-          dest:
-            index: index2
-          script:
+      search:
+      index:
             lang: painless
-            source: "ctx._id = ctx._source.lang + '_' + ctx._source.id;
-                     if (ctx._source.lang != \"en\" ) {ctx.op = 'delete'}"
-  - match: {created: 1}
-  - match: {noops: 0}
-  - match: {updated: 1}
-  - match: {deleted: 1}
-
+      index:
+  - do:
+        id:     1
+  - match: { hits.total: 1 }
+          script:
+        body:   { "user": "foo" }
+          dest:
+  - do:
+            index: index2
+        body:
+      index:
+        body:
+            index: twitter
+  - do:
   - do:
       mget:
-        body:
-          docs:
-            - { _index: index2, _id: en_123}
-            - { _index: index2, _id: en_456}
-            - { _index: index2, _id: fr_789}
-
-  - is_true: docs.0.found
-  - match:  { docs.0._index:     index2      }
-  - match:  { docs.0._id:        en_123      }
-  - match:  { docs.0._version:   2           }
-
-  - is_true: docs.1.found
-  - match:  { docs.1._index:     index2      }
-  - match:  { docs.1._id:        en_456      }
-  - match:  { docs.1._version:   1           }
-
-  - is_false: docs.2.found
-  - match:  { docs.2._index:     index2      }
-  - match:  { docs.2._id:        fr_789      }
-
+      search:
 ---
-"Totally broken scripts report the error properly":
-  - do:
-      index:
-        index:  twitter
-        id:     1
-        body:   { "user": "foobar" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      catch: bad_request
-      reindex:
-        refresh: true
-        body:
-          source:
-            index: twitter
-          dest:
-            index: new_twitter
-          script:
-            lang: painless
-            source: syntax errors are fun!
-  - match: {error.reason: 'compile error'}
-
-# script in reindex supports java.lang.String.sha1() and java.lang.String.sha256() methods
-# related issue: https://github.com/opensearch-project/OpenSearch/issues/16423
----
-"Script supports sha1() and sha256() method for strings":
-  - skip:
-      version: " - 2.18.99"
-      reason: "introduced in 2.19.0"
-  - do:
-      index:
-        index:  twitter
-        id:     1
-        body:   { "user": "foobar" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      reindex:
-        refresh: true
-        body:
-          source:
-            index: twitter
-          dest:
-            index: new_twitter
-          script:
-            lang: painless
-            source: ctx._source.user_sha1 = ctx._source.user.sha1();ctx._source.user_sha256 = ctx._source.user.sha256()
-  - match: {created: 1}
-  - match: {noops: 0}
-
-  - do:
+      search:
+        body:         { "user": "foobar" }
+          query:
       get:
-        index:  new_twitter
+        index:        new_twitter
+  - do:
+  - match: { _routing: foobar }
+        id:           1
+        refresh: true
+        body:   { "user": "foobar" }
+          script:
+"Totally broken scripts report the error properly":
+            source: ctx._routing = ctx._source.user
+        id:     2
+  - match: { hits.total: 1 }
         id:     1
-
-  - match: { _source.user:        foobar }
-  - match: { _source.user_sha1:      "8843d7f92416211de9ebb963ff4ce28125932878"   }
-  - match: { _source.user_sha256:      "c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2"   }
+        id:           1
+                     if (ctx._source.lang != \"en\" ) {ctx.op = 'delete'}"
+        body:   { "user": "blort" }
+        body:
+        index:  index1
+              user: otherfoobar
+        body:
+      reindex:
+            version_type: external
+  - match:  { docs.1._version:   1           }
+        index: new_twitter
+      search:
+---
+  - do:
+            lang: painless
+  - match: {error.reason: 'compile error'}
+        index: new_twitter
+        index: new_twitter
+"Change index to write to a different index":
+  - is_true: docs.1.found
+        index:  twitter
+            index: new_twitter
+        version:      1
+  - do:
+      index:
+        index:  twitter
+  - do:
+        index:  twitter
+        body:   { "lang": "fr", "id": 789 }
+"Noop all docs":
+          dest:
+  - match: {updated: 1}
+        body:   { "lang": "en", "id": 123 }
+        refresh: true
+        id:     1
+      reindex:
+        body:         { "user": "another" }
+  - do:
+          source:
+            lang: painless
+          query:
+  - do:
+      index:
+  - match: {created: 2}
+              user: foobar
+      index:
+      get:
+          source:
+          dest:
+        index: new_twitter
+      index:
+        index: twitter
+      index:
+          dest:
+      indices.refresh: {}
+      index:
+      indices.refresh: {}
+        body:
+  - do:
+          docs:
+"Noop one doc":
+        index:  twitter
+          query:
+        id:     2
+        refresh: true
+            source: if (ctx._id == "1") {ctx._source.user = "other" + ctx._source.user}
+        rest_total_hits_as_int: true
+  - do:
+            source: ctx.op = "noop"
+      reindex:
+  - match: {created: 1}
+  - match:  { docs.1._id:        en_456      }
+            index: new_twitter
+            index: twitter
+        body:   { "user": "foobar" }
+        index:  index2
+          source:
+  - match: {noops: 0}
+              user: notfoobar
+  - do:
+            source: syntax errors are fun!
+  - do:
+  - match: { _routing: foo }
+        id:           1
+            lang: painless
+          dest:
+  - match: {noops: 1}
+          script:
+  - match: {updated: 0}
+  - do:
+  - do:
+          query:
+  - match: { hits.total: 1 }
+"Modify a document based on id":
+            index: new_twitter
+        index:        twitter
+      reindex:
+            lang: painless
+  - match: {noops: 0}
+  - match:  { docs.0._version:   2           }
+      search:
+        body:
+            index: twitter
+  - do:
+        index:   new_twitter
+          dest:
+  - match: {noops: 0}
+          script:
+        index: new_twitter
+"Set id to null to get an automatic id":
+          source:
+        index: new_twitter
+          source:
+  - do:
+        index:  twitter
+          script:
+        body:
+      index:
+# script in reindex supports java.lang.String.sha1() and java.lang.String.sha256() methods
+          query:
+        body:   { "lang": "en", "id": 123 }
+        index:  twitter
+            index: new_twitter
+          source:
+  - do:
+      indices.refresh: {}
+  # their id to the concatenated lang+id fields,
+          script:
+        body:
+        refresh: true
+        id:     1
+          query:
+          source:
+        id:     2
+  - do:
+      index:
+"Reindex all docs with one doc deletion":
+---
+          script:
+  - match: {noops: 0}
+        rest_total_hits_as_int: true
+        id:     1
+      index:
+  - is_false: docs.2.found
+  - do:
+  - do:
+        body:
+  - do:
+  - do:
+        body:   { "user": "foobar" }
+      get:
+      indices.refresh: {}
+      indices.exists:
+            index: twitter
+            match:
+            - { _index: index2, _id: fr_789}
+            index: twitter
+        routing: foobar
+  - match: {count: 1}
+  # Reindex all documents from "index1" into "index2", changing
+        id:     1
+          script:
+              user: notfoo
+  # trashing all non-english pre existing ones
+---
+        body:         { "user": "foobar" }
+            match:
+          source:
+  - do:
+      reindex:
+        rest_total_hits_as_int: true
+  - do:
+        body:   { "user": "foobar" }
+            index: twitter

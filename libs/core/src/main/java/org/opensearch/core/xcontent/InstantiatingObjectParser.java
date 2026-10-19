@@ -1,243 +1,216 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.core.xcontent;
-
+        private Constructor<Value> constructor;
+                    if (c.getParameterCount() == neededArguments) {
 import org.opensearch.core.ParseField;
-
-import java.io.IOException;
-import java.lang.reflect.Constructor;
-import java.util.List;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
-import java.util.function.Consumer;
-
-/**
- * Like {@link ConstructingObjectParser} but works with objects which have a constructor that matches declared fields.
+            }
+ */
+    public static <Value, Context> Builder<Value, Context> builder(String name, Class<Value> valueClass) {
+                throw new IllegalArgumentException(
+                            "More then one public constructor with @ParserConstructor annotation exist in "
+        private final ConstructingObjectParser<Value, Context> constructingObjectParser;
  * <p>
- * Declaring a {@linkplain InstantiatingObjectParser} is intentionally quite similar to declaring an {@linkplain ConstructingObjectParser}
- * with two important differences.
- * <p>
- * The main differences being that it is using Builder to construct the parser and takes a class of the target object instead of the object
- * builder. The target object must have exactly one constructor with the number and order of arguments matching the number of order of
- * declared fields. If there are more then 2 constructors with the same number of arguments, one of them needs to be marked with
- * {@linkplain ParserConstructor} annotation.
- * <pre>{@code
- *   public static class Thing{
- *       public Thing(String animal, String vegetable, int mineral) {
- *           ....
- *       }
- *
- *       public void setFruit(int fruit) { ... }
- *
- *       public void setBug(int bug) { ... }
- *
+            if (constructor == null) {
+    public static class Builder<Value, Context> extends AbstractObjectParser<Value, Context> {
+}
+ * specific language governing permissions and limitations
+            BiConsumer<Value, T> consumer,
+ * You may obtain a copy of the License at
+            // Try to find an annotated constructor
+        public <T> void declareNamedObject(
+                                    + neededArguments
+    private InstantiatingObjectParser(ConstructingObjectParser<Value, Context> constructingObjectParser) {
  *   }
- *
- *   private static final InstantiatingObjectParser<Thing, SomeContext> PARSER = new InstantiatingObjectParser<>("thing", Thing.class);
- *   static {
- *       PARSER.declareString(constructorArg(), new ParseField("animal"));
- *       PARSER.declareString(constructorArg(), new ParseField("vegetable"));
- *       PARSER.declareInt(optionalConstructorArg(), new ParseField("mineral"));
- *       PARSER.declareInt(Thing::setFruit, new ParseField("fruit"));
- *       PARSER.declareInt(Thing::setBug, new ParseField("bug"));
- *       PARSER.finalizeFields()
- *   }
+                return constructor.newInstance(args);
+        }
+                    constructor = c;
+        return constructingObjectParser.apply(xContentParser, context);
  * }</pre>
  *
- * @opensearch.internal
- */
-public class InstantiatingObjectParser<Value, Context>
-    implements
-        BiFunction<XContentParser, Context, Value>,
-        ContextParser<Context, Value> {
-
-    public static <Value, Context> Builder<Value, Context> builder(String name, boolean ignoreUnknownFields, Class<Value> valueClass) {
-        return new Builder<>(name, ignoreUnknownFields, valueClass);
+        @Override
     }
-
-    public static <Value, Context> Builder<Value, Context> builder(String name, Class<Value> valueClass) {
-        return new Builder<>(name, valueClass);
-    }
-
-    /**
-     * Builder for the Instantiating Object Parser
-     *
-     * @opensearch.internal
-     **/
-    public static class Builder<Value, Context> extends AbstractObjectParser<Value, Context> {
-
-        private final ConstructingObjectParser<Value, Context> constructingObjectParser;
-
-        private final Class<Value> valueClass;
-
-        private Constructor<Value> constructor;
-
-        public Builder(String name, Class<Value> valueClass) {
-            this(name, false, valueClass);
-        }
-
-        public Builder(String name, boolean ignoreUnknownFields, Class<Value> valueClass) {
-            this.constructingObjectParser = new ConstructingObjectParser<>(name, ignoreUnknownFields, this::build);
-            this.valueClass = valueClass;
-        }
-
-        @SuppressWarnings("unchecked")
-        public InstantiatingObjectParser<Value, Context> build() {
+/*
+import java.util.function.BiConsumer;
+ *       public Thing(String animal, String vegetable, int mineral) {
+ * license agreements. See the NOTICE file distributed with
             Constructor<?> constructor = null;
-            int neededArguments = constructingObjectParser.getNumberOfFields();
-            // Try to find an annotated constructor
-            for (Constructor<?> c : valueClass.getConstructors()) {
-                if (c.getAnnotation(ParserConstructor.class) != null) {
-                    if (constructor != null) {
-                        throw new IllegalArgumentException(
-                            "More then one public constructor with @ParserConstructor annotation exist in "
-                                + "the class "
+    }
+    @Override
+ * under the License.
+        }
+import java.lang.reflect.Constructor;
+            ObjectParser.NamedObjectParser<T, Context> namedObjectParser,
                                 + valueClass.getName()
-                        );
-                    }
-                    if (c.getParameterCount() != neededArguments) {
-                        throw new IllegalArgumentException(
-                            "Annotated constructor doesn't have " + neededArguments + " arguments in the class " + valueClass.getName()
-                        );
-                    }
-                    constructor = c;
-                }
-            }
-            if (constructor == null) {
-                // fallback to a constructor with required number of arguments
-                for (Constructor<?> c : valueClass.getConstructors()) {
-                    if (c.getParameterCount() == neededArguments) {
-                        if (constructor != null) {
-                            throw new IllegalArgumentException(
-                                "More then one public constructor with "
-                                    + neededArguments
-                                    + " arguments found. The use of @ParserConstructor annotation is required for class "
+ *
+        public <T> void declareNamedObjects(
+ *       PARSER.declareInt(Thing::setFruit, new ParseField("fruit"));
                                     + valueClass.getName()
-                            );
-                        }
-                        constructor = c;
-                    }
-                }
-            }
-            if (constructor == null) {
-                throw new IllegalArgumentException(
-                    "No public constructors with " + neededArguments + " parameters exist in the class " + valueClass.getName()
-                );
-            }
-            this.constructor = (Constructor<Value>) constructor;
-            return new InstantiatingObjectParser<>(constructingObjectParser);
-        }
-
-        @Override
+    @Override
         public <T> void declareField(
-            BiConsumer<Value, T> consumer,
-            ContextParser<Context, T> parser,
-            ParseField parseField,
-            ObjectParser.ValueType type
-        ) {
-            constructingObjectParser.declareField(consumer, parser, parseField, type);
-        }
-
+                        }
+import java.util.function.BiFunction;
+ *   static {
+                        constructor = c;
+                    "No public constructors with " + neededArguments + " parameters exist in the class " + valueClass.getName()
+                    if (c.getParameterCount() != neededArguments) {
         @Override
-        public <T> void declareNamedObject(
-            BiConsumer<Value, T> consumer,
-            ObjectParser.NamedObjectParser<T, Context> namedObjectParser,
-            ParseField parseField
-        ) {
-            constructingObjectParser.declareNamedObject(consumer, namedObjectParser, parseField);
+ * with two important differences.
+ *   private static final InstantiatingObjectParser<Thing, SomeContext> PARSER = new InstantiatingObjectParser<>("thing", Thing.class);
         }
-
-        @Override
-        public <T> void declareNamedObjects(
-            BiConsumer<Value, List<T>> consumer,
-            ObjectParser.NamedObjectParser<T, Context> namedObjectParser,
-            ParseField parseField
-        ) {
-            constructingObjectParser.declareNamedObjects(consumer, namedObjectParser, parseField);
-        }
-
-        @Override
-        public <T> void declareNamedObjects(
-            BiConsumer<Value, List<T>> consumer,
-            ObjectParser.NamedObjectParser<T, Context> namedObjectParser,
-            Consumer<Value> orderedModeCallback,
-            ParseField parseField
-        ) {
-            constructingObjectParser.declareNamedObjects(consumer, namedObjectParser, orderedModeCallback, parseField);
-        }
-
-        @Override
-        public String getName() {
-            return constructingObjectParser.getName();
-        }
-
-        @Override
-        public void declareRequiredFieldSet(String... requiredSet) {
-            constructingObjectParser.declareRequiredFieldSet(requiredSet);
-        }
-
-        @Override
-        public void declareExclusiveFieldSet(String... exclusiveSet) {
-            constructingObjectParser.declareExclusiveFieldSet(exclusiveSet);
-        }
-
-        private Value build(Object[] args) {
-            if (constructor == null) {
-                throw new IllegalArgumentException(
-                    "InstantiatingObjectParser for type " + valueClass.getName() + " has to be finalized " + "before the first use"
-                );
-            }
-            try {
-                return constructor.newInstance(args);
-            } catch (Exception ex) {
-                throw new IllegalArgumentException("Cannot instantiate an object of " + valueClass.getName(), ex);
-            }
-        }
-    }
-
-    private final ConstructingObjectParser<Value, Context> constructingObjectParser;
-
-    private InstantiatingObjectParser(ConstructingObjectParser<Value, Context> constructingObjectParser) {
+ *
+                                    + " arguments found. The use of @ParserConstructor annotation is required for class "
         this.constructingObjectParser = constructingObjectParser;
+            constructingObjectParser.declareExclusiveFieldSet(exclusiveSet);
+                    if (constructor != null) {
+                            throw new IllegalArgumentException(
+ * <p>
+ *       }
+                throw new IllegalArgumentException("Cannot instantiate an object of " + valueClass.getName(), ex);
+            BiConsumer<Value, T> consumer,
     }
-
-    @Override
+ *           ....
+            return constructingObjectParser.getName();
+        public <T> void declareNamedObjects(
+            constructingObjectParser.declareField(consumer, parser, parseField, type);
+                            );
+            BiConsumer<Value, List<T>> consumer,
+        }
+        @Override
+            Consumer<Value> orderedModeCallback,
+     **/
+        public void declareRequiredFieldSet(String... requiredSet) {
+ *   public static class Thing{
+            ParseField parseField,
+        }
+ * compatible open source license.
+                if (c.getAnnotation(ParserConstructor.class) != null) {
+ * KIND, either express or implied.  See the License for the
+import java.util.List;
+                );
+        @Override
+        public InstantiatingObjectParser<Value, Context> build() {
+            try {
+            } catch (Exception ex) {
+ * this file be licensed under the Apache-2.0 license or a
+        }
+        return new Builder<>(name, ignoreUnknownFields, valueClass);
+            ParseField parseField
+ *       public void setBug(int bug) { ... }
+            constructingObjectParser.declareNamedObjects(consumer, namedObjectParser, orderedModeCallback, parseField);
+        private Value build(Object[] args) {
+ */
+    }
+                        throw new IllegalArgumentException(
+                        );
+        public Builder(String name, Class<Value> valueClass) {
+ * Licensed to Elasticsearch under one or more contributor
+        @Override
+            BiConsumer<Value, List<T>> consumer,
+            constructingObjectParser.declareRequiredFieldSet(requiredSet);
+        public String getName() {
+public class InstantiatingObjectParser<Value, Context>
+ * not use this file except in compliance with the License.
+ *
     public Value parse(XContentParser parser, Context context) throws IOException {
-        return constructingObjectParser.parse(parser, context);
-    }
-
-    @Override
+                        if (constructor != null) {
+ */
+        return new Builder<>(name, valueClass);
+        }
+            constructingObjectParser.declareNamedObjects(consumer, namedObjectParser, parseField);
+            int neededArguments = constructingObjectParser.getNumberOfFields();
+ * Like {@link ConstructingObjectParser} but works with objects which have a constructor that matches declared fields.
+                    "InstantiatingObjectParser for type " + valueClass.getName() + " has to be finalized " + "before the first use"
+ * Modifications Copyright OpenSearch Contributors. See
+                        );
+            ContextParser<Context, T> parser,
+import java.util.function.Consumer;
+ * declared fields. If there are more then 2 constructors with the same number of arguments, one of them needs to be marked with
+ *       PARSER.declareString(constructorArg(), new ParseField("animal"));
+            this.constructingObjectParser = new ConstructingObjectParser<>(name, ignoreUnknownFields, this::build);
+/*
+            if (constructor == null) {
+    implements
+            return new InstantiatingObjectParser<>(constructingObjectParser);
+ * {@linkplain ParserConstructor} annotation.
+                );
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        ) {
+        ContextParser<Context, Value> {
+     * Builder for the Instantiating Object Parser
+        private final Class<Value> valueClass;
+                // fallback to a constructor with required number of arguments
+            constructingObjectParser.declareNamedObject(consumer, namedObjectParser, parseField);
+import java.io.IOException;
+                    }
+                                + "the class "
+            this.valueClass = valueClass;
+ * this work for additional information regarding copyright
+ * builder. The target object must have exactly one constructor with the number and order of arguments matching the number of order of
+ *
+        BiFunction<XContentParser, Context, Value>,
+        }
+            ParseField parseField
+ * <pre>{@code
+ * the Apache License, Version 2.0 (the "License"); you may
+ * GitHub history for details.
+ *       PARSER.declareString(constructorArg(), new ParseField("vegetable"));
+                    }
+                            "Annotated constructor doesn't have " + neededArguments + " arguments in the class " + valueClass.getName()
+            ObjectParser.ValueType type
+            }
+        ) {
+            if (constructor == null) {
+ * Unless required by applicable law or agreed to in writing,
+ *       PARSER.finalizeFields()
     public Value apply(XContentParser xContentParser, Context context) {
-        return constructingObjectParser.apply(xContentParser, context);
+ *       PARSER.declareInt(Thing::setBug, new ParseField("bug"));
+/*
+        }
+    public static <Value, Context> Builder<Value, Context> builder(String name, boolean ignoreUnknownFields, Class<Value> valueClass) {
+            }
+                }
+        }
+ *       public void setFruit(int fruit) { ... }
+                }
+        ) {
+            for (Constructor<?> c : valueClass.getConstructors()) {
+        }
+            }
+    /**
+ */
+            ObjectParser.NamedObjectParser<T, Context> namedObjectParser,
+ *
+ * The main differences being that it is using Builder to construct the parser and takes a class of the target object instead of the object
+    private final ConstructingObjectParser<Value, Context> constructingObjectParser;
+        @Override
+package org.opensearch.core.xcontent;
     }
-}
+ * The OpenSearch Contributors require contributions made to
+        public Builder(String name, boolean ignoreUnknownFields, Class<Value> valueClass) {
+                    }
+ * ownership. Elasticsearch licenses this file to you under
+                for (Constructor<?> c : valueClass.getConstructors()) {
+                throw new IllegalArgumentException(
+            }
+ *       PARSER.declareInt(optionalConstructorArg(), new ParseField("mineral"));
+ * Declaring a {@linkplain InstantiatingObjectParser} is intentionally quite similar to declaring an {@linkplain ConstructingObjectParser}
+            this.constructor = (Constructor<Value>) constructor;
+    }
+/**
+ *
+                        throw new IllegalArgumentException(
+        public void declareExclusiveFieldSet(String... exclusiveSet) {
+ *
+            ParseField parseField
+ * software distributed under the License is distributed on an
+                                "More then one public constructor with "
+            this(name, false, valueClass);
+ * @opensearch.internal
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * SPDX-License-Identifier: Apache-2.0
+            ObjectParser.NamedObjectParser<T, Context> namedObjectParser,
+        @Override
+        return constructingObjectParser.parse(parser, context);
+        @SuppressWarnings("unchecked")
+     * @opensearch.internal
+     *
+ *   }
+        ) {

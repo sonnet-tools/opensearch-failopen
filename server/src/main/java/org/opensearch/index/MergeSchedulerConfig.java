@@ -1,374 +1,345 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.apache.lucene.index.ConcurrentMergeScheduler;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Setting.Property;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.concurrent.OpenSearchExecutors;
-import org.opensearch.indices.ClusterMergeSchedulerConfig;
-
-import java.util.Objects;
-
-/**
- * The merge scheduler (<code>ConcurrentMergeScheduler</code>) controls the execution of
- * merge operations once they are needed (according to the merge policy).  Merges
- * run in separate threads, and when the maximum number of threads is reached,
- * further merges will wait until a merge thread becomes available.
- *
- * <p>The merge scheduler supports the following <b>dynamic</b> settings:
- *
- * <ul>
- * <li> <code>index.merge.scheduler.max_thread_count</code>:
+        if (hasIndexSetting) {
+     **
  * <p>
- *     The maximum number of threads that may be merging at once. Defaults to
- *     <code>Math.max(1, Math.min(4, {@link OpenSearchExecutors#allocatedProcessors(Settings)} / 2))</code>
- *     which works well for a good solid-state-disk (SSD).  If your index is on
- *     spinning platter drives instead, decrease this to 1.
- *
- * <li><code>index.merge.scheduler.auto_throttle</code>:
- * <p>
- *     If this is true (the default), then the merge scheduler will rate-limit IO
- *     (writes) for merges to an adaptive value depending on how many merges are
- *     requested over time.  An application with a low indexing rate that
- *     unluckily suddenly requires a large merge will see that merge aggressively
- *     throttled, while an application doing heavy indexing will see the throttle
- *     move higher to allow merges to keep up with ongoing indexing.
- *
- * <li><code>index.merge.scheduler.max_force_merge_mb_per_sec</code>:
- * <p>
- *     Controls the rate limiting for forced merges in MB per second at the index level.
- *     The default value of Double.POSITIVE_INFINITY means no rate limiting is applied.
- *     Setting a finite positive value will limit the throughput of forced merge operations
- *     to the specified rate. This setting takes precedence over the cluster-level setting.
- *
- * <li><code>cluster.merge.scheduler.max_force_merge_mb_per_sec</code>:
- * <p>
- *     Controls the rate limiting for forced merges in MB per second at the cluster level.
- *     The default value of Double.POSITIVE_INFINITY means no rate limiting is applied.
- *     This setting is used as a fallback when the index-level setting is not specified.
- *     Index-level settings take precedence over this cluster-level setting.
- * </ul>
- *
- * <p><b>Setting Precedence:</b>
- * <ul>
- * <li>If only index-level setting is specified: uses index value
- * <li>If only cluster-level setting is specified: uses cluster value
- * <li>If both settings are specified: uses index value (index takes precedence)
- * <li>If neither setting is specified: uses default value (Double.POSITIVE_INFINITY)
- * </ul>
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public final class MergeSchedulerConfig {
-    static Logger logger = LogManager.getLogger(MergeSchedulerConfig.class);
-    public static final boolean DEFAULT_AUTO_THROTTLE = true;
-
-    public static final Setting<Integer> MAX_THREAD_COUNT_SETTING = new Setting<>(
-        "index.merge.scheduler.max_thread_count",
-        MergeSchedulerConfig::getDefaultMaxThreadCount,
+    void setMaxForceMergeMBPerSec(double maxForceMergeMBPerSec) {
+     * @param overrideExistingConfigs if {@code true}, applies these values to all existing
+    /**
+        boolean autoThrottleEnabled = (AUTO_THROTTLE_SETTING.exists(settings) == false && clusterAutoThrottleEnabledDefault != null)
         (s) -> Setting.parseInt(s, 1, "index.merge.scheduler.max_thread_count"),
+        // If MAX_THREAD_COUNT_SETTING is set - return the absolute default for MAX_MERGE_COUNT_SETTING
         Property.Dynamic,
-        Property.IndexScope
-    );
+ *    http://www.apache.org/licenses/LICENSE-2.0
+     *                                configurations in the cluster; if {@code false}, only
+     */
+        logger.info(
     public static final Setting<Integer> MAX_MERGE_COUNT_SETTING = new Setting<>(
-        "index.merge.scheduler.max_merge_count",
-        MergeSchedulerConfig::getDefaultMergeCount,
-        (s) -> Setting.parseInt(s, 1, "index.merge.scheduler.max_merge_count"),
-        Property.Dynamic,
+    public int getMaxMergeCount() {
+        this.maxMergeCount = newMaxMergeCount;
+ *
+        }
+        Double.POSITIVE_INFINITY,
+    public static final Setting<Integer> MAX_THREAD_COUNT_SETTING = new Setting<>(
+        }
+ *     which works well for a good solid-state-disk (SSD).  If your index is on
+     * Sets the default auto-throttle enabled state for the cluster.
+    private static volatile Boolean clusterAutoThrottleEnabledDefault;
+    }
+        return maxForceMergeMBPerSec;
+     * A value of Double.POSITIVE_INFINITY indicates no rate limiting.
+     * @see ConcurrentMergeScheduler#enableAutoIOThrottle()
+            this.maxForceMergeMBPerSec = indexSettings.getValue(MAX_FORCE_MERGE_MB_PER_SEC_SETTING);
+     *   <li>If <b>no index-level settings</b> are explicitly set for thread/merge count,
+                this.indexName,
+        MergeSchedulerConfig::getDefaultAutoThrottle,
+ */
+    /**
+     * and applies them to this merge scheduler instance.
+ * <li>If both settings are specified: uses index value (index takes precedence)
+    private volatile double maxForceMergeMBPerSec;
+                this.maxMergeCount,
+import org.apache.logging.log4j.LogManager;
+ * <p>
+/**
+    );
+ * <p>
+        initMergeConfigs(indexSettings);
+            && clusterMaxMergeCountDefault != null;
+ * specific language governing permissions and limitations
+        if (MAX_MERGE_COUNT_SETTING == null || MAX_MERGE_COUNT_SETTING.exists(settings) == true || clusterMaxThreadCountDefault == null) {
+            )
+     * A value of Double.POSITIVE_INFINITY disables rate limiting.
+ * <li>If only cluster-level setting is specified: uses cluster value
+     * </ul>
+        MergeSchedulerConfig::getDefaultMaxThreadCount,
+    /**
+    private final String indexName;
+ * run in separate threads, and when the maximum number of threads is reached,
+    /**
+        if (maxMergeCount < 1) {
+        clusterMaxThreadCountDefault = threadCount;
+        }
         Property.IndexScope
+        } else {
+ * software distributed under the License is distributed on an
+ * Unless required by applicable law or agreed to in writing,
+     *   <li>Otherwise → use the settings as-is (which may include index-level values
+    public double getMaxForceMergeMBPerSec() {
+        validateMaxThreadAndMergeCount(newMaxThreadCount, newMaxMergeCount);
+        }
+        this.maxThreadCount = newMaxThreadCount;
+    }
+            this.maxForceMergeMBPerSec = CLUSTER_MAX_FORCE_MERGE_MB_PER_SEC_SETTING.get(indexSettings.getNodeSettings());
+    /**
+        "index.merge.scheduler.max_force_merge_mb_per_sec",
+     * </p>
+    public synchronized void setDefaultMaxThreadAndMergeCount(int threadCount, int mergeCount, boolean overrideExistingConfigs) {
+    static Logger logger = LogManager.getLogger(MergeSchedulerConfig.class);
     );
     public static final Setting<Boolean> AUTO_THROTTLE_SETTING = Setting.boolSetting(
-        "index.merge.scheduler.auto_throttle",
-        MergeSchedulerConfig::getDefaultAutoThrottle,
-        Property.Dynamic,
-        Property.IndexScope
-    );
-    public static final Setting<Double> MAX_FORCE_MERGE_MB_PER_SEC_SETTING = Setting.doubleSetting(
-        "index.merge.scheduler.max_force_merge_mb_per_sec",
-        Double.POSITIVE_INFINITY,
-        0.0d,
-        Double.POSITIVE_INFINITY,
-        Property.Dynamic,
-        Property.IndexScope
-    );
-
-    public static final Setting<Double> CLUSTER_MAX_FORCE_MERGE_MB_PER_SEC_SETTING = Setting.doubleSetting(
-        "cluster.merge.scheduler.max_force_merge_mb_per_sec",
-        Double.POSITIVE_INFINITY,
-        0.0d,
-        Double.POSITIVE_INFINITY,
-        Property.Dynamic,
-        Property.NodeScope
-    );
-
-    private final String indexName;
-    private volatile boolean autoThrottle;
-    private volatile int maxThreadCount;
-    private volatile int maxMergeCount;
-    private volatile double maxForceMergeMBPerSec;
-    private static volatile Boolean clusterAutoThrottleEnabledDefault;
-    private static volatile Integer clusterMaxThreadCountDefault;
-    private static volatile Integer clusterMaxMergeCountDefault;
-
-    MergeSchedulerConfig(IndexSettings indexSettings) {
-        indexName = indexSettings.getIndex().getName();
-        initMergeConfigs(indexSettings);
-        updateMaxForceMergeMBPerSec(indexSettings);
-    }
-
-    /**
-     * Sets the default maximum thread and merge count for the cluster.
-     * <p>
-     * This default value optionally overrides the existing configs for the index
-     * if overrideExistingConfigs == true
-     * </p>
-     *
-     * @param threadCount the default maximum number of threads to use for merge operations
-     * @param mergeCount the default maximum number of concurrent merges allowed
-     * @param overrideExistingConfigs if {@code true}, applies these values to all existing
-     *                                configurations in the cluster; if {@code false}, only
-     *                                sets the defaults for future configurations
-     */
-    public synchronized void setDefaultMaxThreadAndMergeCount(int threadCount, int mergeCount, boolean overrideExistingConfigs) {
-        clusterMaxThreadCountDefault = threadCount;
         clusterMaxMergeCountDefault = mergeCount;
-        if (overrideExistingConfigs == true) {
-            setMaxThreadAndMergeCount(threadCount, mergeCount);
-        }
-    }
-
-    /**
-     * Sets the default auto-throttle enabled state for the cluster.
-     * <p>
-     * This default value optionally overrides the existing configs for the index
-     * if overrideExistingConfigs == true
-     * </p>
-     *
-     * @param enabled {@code true} to enable auto-throttling by default,
-     *                {@code false} to disable it
-     * @param overrideExistingConfigs if {@code true}, applies this setting to all existing
-     *                                configurations in the cluster; if {@code false}, only
-     *                                sets the default for future configurations
-     */
-    public synchronized void setDefaultAutoThrottleEnabled(boolean enabled, boolean overrideExistingConfigs) {
-        clusterAutoThrottleEnabledDefault = enabled;
-        if (overrideExistingConfigs == true) {
-            setAutoThrottle(enabled);
-        }
-    }
-
-    /**
-     * Initializes merge scheduler configuration for an index.
-     * <p>
-     * This method figures out which settings to use (index-level, cluster-level, or absolute defaults)
-     * and applies them to this merge scheduler instance.
-     * </p>
-     *
-     * <p><b>Decision Logic:</b>
-     * <ul>
-     *   <li>If <b>no index-level settings</b> are explicitly set for thread/merge count,
-     *       AND cluster defaults exist → use cluster defaults</li>
-     *   <li>Otherwise → use the settings as-is (which may include index-level values
-     *       or fall back to absolute defaults)</li>
-     * </ul>
-     *
-     * <p><b>What gets initialized:</b></p>
-     * <ul>
-     *   <li>{@code maxThreadCount} - Maximum number of merge threads</li>
-     *   <li>{@code maxMergeCount} - Maximum number of concurrent merges</li>
      *   <li>{@code autoThrottle} - Whether merge I/O throttling is enabled</li>
-     * </ul>
-     **
-     * @param indexSettings the settings for the index being initialized
-     */
-    private void initMergeConfigs(IndexSettings indexSettings) {
-        Settings settings = indexSettings.getSettings();
-        boolean useCachedClusterDefaults = MAX_THREAD_COUNT_SETTING.exists(settings) == false
-            && MAX_MERGE_COUNT_SETTING.exists(settings) == false
-            && clusterMaxThreadCountDefault != null
-            && clusterMaxMergeCountDefault != null;
-
-        int maxThread = useCachedClusterDefaults ? clusterMaxThreadCountDefault : MAX_THREAD_COUNT_SETTING.get(settings);
-
-        int maxMerge = useCachedClusterDefaults ? clusterMaxMergeCountDefault : MAX_MERGE_COUNT_SETTING.get(settings);
-
-        boolean autoThrottleEnabled = (AUTO_THROTTLE_SETTING.exists(settings) == false && clusterAutoThrottleEnabledDefault != null)
-            ? clusterAutoThrottleEnabledDefault
-            : AUTO_THROTTLE_SETTING.get(settings);
-
-        setAutoThrottle(autoThrottleEnabled);
-        setMaxThreadAndMergeCount(maxThread, maxMerge);
-        logger.info(
-            new ParameterizedMessage(
-                "Initialized index {} with maxMergeCount={}, maxThreadCount={}, autoThrottleEnabled={}",
-                this.indexName,
-                this.maxMergeCount,
-                this.maxThreadCount,
-                this.autoThrottle
-            )
-        );
-    }
-
-    /**
-     * Returns <code>true</code> iff auto throttle is enabled.
-     *
-     * @see ConcurrentMergeScheduler#enableAutoIOThrottle()
-     */
-    public boolean isAutoThrottle() {
-        return autoThrottle;
-    }
-
-    /**
-     * Enables / disables auto throttling on the {@link ConcurrentMergeScheduler}
-     */
-    public void setAutoThrottle(boolean enabled) {
-        logger.info(
-            new ParameterizedMessage("Updating autoThrottle for index {} from [{}] to [{}]", this.indexName, this.autoThrottle, enabled)
-        );
-        this.autoThrottle = enabled;
-    }
-
-    /**
-     * Returns {@code maxThreadCount}.
-     */
-    public int getMaxThreadCount() {
-        return maxThreadCount;
-    }
-
-    /**
-     * Expert: directly set the maximum number of merge threads and
-     * simultaneous merges allowed.
-     */
-    public void setMaxThreadAndMergeCount(int newMaxThreadCount, int newMaxMergeCount) {
-        if (newMaxThreadCount == this.maxThreadCount && newMaxMergeCount == this.maxMergeCount) {
-            return;
+ */
+ *     unluckily suddenly requires a large merge will see that merge aggressively
         }
-        validateMaxThreadAndMergeCount(newMaxThreadCount, newMaxMergeCount);
-        logger.info(
-            new ParameterizedMessage(
-                "Updating maxThreadCount from [{}] to [{}] and maxMergeCount from [{}] to [{}] for index {}.",
-                this.maxThreadCount,
-                newMaxThreadCount,
-                this.maxMergeCount,
-                newMaxMergeCount,
+     *                                configurations in the cluster; if {@code false}, only
                 this.indexName
-            )
-        );
-        this.maxThreadCount = newMaxThreadCount;
-        this.maxMergeCount = newMaxMergeCount;
-    }
-
-    /**
-     * Validate the values of {@code maxMergeCount} and {@code maxThreadCount}
      */
-    public static void validateMaxThreadAndMergeCount(int maxThreadCount, int maxMergeCount) {
-        if (maxThreadCount < 1) {
-            throw new IllegalArgumentException("maxThreadCount (= " + maxThreadCount + ") should be at least 1");
-        }
-        if (maxMergeCount < 1) {
-            throw new IllegalArgumentException("maxMergeCount (= " + maxMergeCount + ") should be at least 1");
-        }
-        if (maxThreadCount > maxMergeCount) {
-            throw new IllegalArgumentException(
-                "maxThreadCount (= " + maxThreadCount + ") should be <= maxMergeCount (= " + maxMergeCount + ")"
             );
-        }
+     */
+     * @param indexSettings the settings for the index being initialized
     }
-
+ *     move higher to allow merges to keep up with ongoing indexing.
+    public void updateMaxForceMergeMBPerSec(IndexSettings indexSettings) {
+ */
+            new ParameterizedMessage(
+     */
+ * </ul>
+}
+ *     Controls the rate limiting for forced merges in MB per second at the cluster level.
+     *
+import org.opensearch.common.util.concurrent.OpenSearchExecutors;
+            )
+/*
+                newMaxMergeCount,
+import org.opensearch.common.settings.Setting.Property;
+     *
+        0.0d,
+        logger.info(
+                "maxThreadCount (= " + maxThreadCount + ") should be <= maxMergeCount (= " + maxMergeCount + ")"
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        setMaxThreadAndMergeCount(maxThread, maxMerge);
+        Settings settings = indexSettings.getSettings();
+    private volatile int maxMergeCount;
+    public int getMaxThreadCount() {
+     *
+        Double.POSITIVE_INFINITY,
+     * Returns the maximum force merge rate in MB per second.
+        Property.IndexScope
+     * Validate the values of {@code maxMergeCount} and {@code maxThreadCount}
+    }
+     * @param enabled {@code true} to enable auto-throttling by default,
+    /**
+     * This method handles the case where an index-level setting is removed and should
+     * if overrideExistingConfigs == true
+        Property.IndexScope
+ *     Setting a finite positive value will limit the throughput of forced merge operations
+        }
+        );
+ * this file be licensed under the Apache-2.0 license or a
+     *                {@code false} to disable it
+        0.0d,
+    /**
+            ? clusterAutoThrottleEnabledDefault
+ *
+     * </ul>
+    }
+        boolean hasIndexSetting = MAX_FORCE_MERGE_MB_PER_SEC_SETTING.exists(indexSettings.getSettings());
+ *     The maximum number of threads that may be merging at once. Defaults to
+import org.opensearch.common.annotation.PublicApi;
+                newMaxThreadCount,
+     * Initializes merge scheduler configuration for an index.
+import org.apache.logging.log4j.message.ParameterizedMessage;
+        }
+     * fall back to the cluster-level setting.
+    public static final Setting<Double> MAX_FORCE_MERGE_MB_PER_SEC_SETTING = Setting.doubleSetting(
+            setAutoThrottle(enabled);
+     * if overrideExistingConfigs == true
+ * <li><code>cluster.merge.scheduler.max_force_merge_mb_per_sec</code>:
+    MergeSchedulerConfig(IndexSettings indexSettings) {
+        return autoThrottle;
+package org.opensearch.index;
+import org.opensearch.common.settings.Setting;
+                "Initialized index {} with maxMergeCount={}, maxThreadCount={}, autoThrottleEnabled={}",
+        int maxMerge = useCachedClusterDefaults ? clusterMaxMergeCountDefault : MAX_MERGE_COUNT_SETTING.get(settings);
+                this.autoThrottle
+ * </ul>
+            : AUTO_THROTTLE_SETTING.get(settings);
     /**
      * Returns {@code maxMergeCount}.
-     */
-    public int getMaxMergeCount() {
-        return maxMergeCount;
-    }
-
-    /**
-     * Returns the maximum force merge rate in MB per second.
-     * A value of Double.POSITIVE_INFINITY indicates no rate limiting.
-     */
-    public double getMaxForceMergeMBPerSec() {
-        return maxForceMergeMBPerSec;
-    }
-
-    /**
-     * Sets the maximum force merge rate in MB per second.
-     * A value of Double.POSITIVE_INFINITY disables rate limiting.
-     */
-    void setMaxForceMergeMBPerSec(double maxForceMergeMBPerSec) {
-        this.maxForceMergeMBPerSec = maxForceMergeMBPerSec;
-    }
-
-    /**
-     * Updates the maximum force merge rate based on index settings, with fallback to cluster settings.
-     * This method handles the case where an index-level setting is removed and should
-     * fall back to the cluster-level setting.
-     */
-    public void updateMaxForceMergeMBPerSec(IndexSettings indexSettings) {
-        boolean hasIndexSetting = MAX_FORCE_MERGE_MB_PER_SEC_SETTING.exists(indexSettings.getSettings());
-        if (hasIndexSetting) {
-            this.maxForceMergeMBPerSec = indexSettings.getValue(MAX_FORCE_MERGE_MB_PER_SEC_SETTING);
-        } else {
-            this.maxForceMergeMBPerSec = CLUSTER_MAX_FORCE_MERGE_MB_PER_SEC_SETTING.get(indexSettings.getNodeSettings());
-        }
-    }
-
-    private static String getDefaultMaxThreadCount(Settings settings) {
-        // If MAX_MERGE_COUNT_SETTING is set - return the absolute default for MAX_THREAD_COUNT_SETTING
-        // If MAX_MERGE_COUNT_SETTING is NOT set - return the cluster default
-        // On first invocation, MAX_MERGE_COUNT_SETTING would not have been initialized, hence the null check
-        if (MAX_MERGE_COUNT_SETTING == null || MAX_MERGE_COUNT_SETTING.exists(settings) == true || clusterMaxThreadCountDefault == null) {
-            return ClusterMergeSchedulerConfig.getClusterMaxThreadCountDefault(settings);
-        }
-        return Integer.toString(clusterMaxThreadCountDefault);
-    }
-
-    private static String getDefaultMergeCount(Settings settings) {
-        // If MAX_THREAD_COUNT_SETTING is set - return the absolute default for MAX_MERGE_COUNT_SETTING
-        // If MAX_THREAD_COUNT_SETTING is NOT set - return the cluster default
         if (MAX_THREAD_COUNT_SETTING.exists(settings) == true || clusterMaxMergeCountDefault == null) {
-            return Integer.toString(MAX_THREAD_COUNT_SETTING.get(settings) + 5);
+     */
+        );
+    private volatile int maxThreadCount;
+    }
+    /**
+ * KIND, either express or implied.  See the License for the
+ * GitHub history for details.
+    }
+     * <p><b>What gets initialized:</b></p>
+     * Returns {@code maxThreadCount}.
+            throw new IllegalArgumentException("maxMergeCount (= " + maxMergeCount + ") should be at least 1");
+ * further merges will wait until a merge thread becomes available.
+        "index.merge.scheduler.auto_throttle",
+     * @param overrideExistingConfigs if {@code true}, applies this setting to all existing
+ *
+ *
+                this.maxMergeCount,
+    public boolean isAutoThrottle() {
+/*
+     *   <li>{@code maxMergeCount} - Maximum number of concurrent merges</li>
         }
+import org.opensearch.indices.ClusterMergeSchedulerConfig;
+     * simultaneous merges allowed.
+ * under the License.
         return Integer.toString(clusterMaxMergeCountDefault);
+ *     This setting is used as a fallback when the index-level setting is not specified.
+     * Sets the maximum force merge rate in MB per second.
+            && clusterMaxThreadCountDefault != null
+ * SPDX-License-Identifier: Apache-2.0
     }
-
-    private static String getDefaultAutoThrottle(Settings settings) {
+ *     throttled, while an application doing heavy indexing will see the throttle
+     * This method figures out which settings to use (index-level, cluster-level, or absolute defaults)
+     *
+     * Expert: directly set the maximum number of merge threads and
+        Property.Dynamic,
+ *
+import org.opensearch.common.settings.Settings;
+                "Updating maxThreadCount from [{}] to [{}] and maxMergeCount from [{}] to [{}] for index {}.",
+    private static String getDefaultMaxThreadCount(Settings settings) {
+ * The OpenSearch Contributors require contributions made to
+        "index.merge.scheduler.max_merge_count",
+     */
+     *                                sets the default for future configurations
+        if (overrideExistingConfigs == true) {
+    );
+ *     Controls the rate limiting for forced merges in MB per second at the index level.
+            new ParameterizedMessage(
+                this.maxThreadCount,
+ * <li>If neither setting is specified: uses default value (Double.POSITIVE_INFINITY)
+ *     The default value of Double.POSITIVE_INFINITY means no rate limiting is applied.
+ * ownership. Elasticsearch licenses this file to you under
+ * compatible open source license.
+public final class MergeSchedulerConfig {
+        Property.Dynamic,
+ * <p><b>Setting Precedence:</b>
+ * Modifications Copyright OpenSearch Contributors. See
+        return maxMergeCount;
         return Boolean.toString(Objects.requireNonNullElseGet(clusterAutoThrottleEnabledDefault, () -> DEFAULT_AUTO_THROTTLE));
+ * <li> <code>index.merge.scheduler.max_thread_count</code>:
+     */
     }
-}
+    private void initMergeConfigs(IndexSettings indexSettings) {
+        // On first invocation, MAX_MERGE_COUNT_SETTING would not have been initialized, hence the null check
+        this.maxForceMergeMBPerSec = maxForceMergeMBPerSec;
+    /**
+        "index.merge.scheduler.max_thread_count",
+ *
+    }
+            throw new IllegalArgumentException(
+     *
+    }
+        int maxThread = useCachedClusterDefaults ? clusterMaxThreadCountDefault : MAX_THREAD_COUNT_SETTING.get(settings);
+ * <p>
+        this.autoThrottle = enabled;
+     */
+@PublicApi(since = "1.0.0")
+    public static final boolean DEFAULT_AUTO_THROTTLE = true;
+    private volatile boolean autoThrottle;
+ * You may obtain a copy of the License at
+ */
+        Double.POSITIVE_INFINITY,
+    private static String getDefaultAutoThrottle(Settings settings) {
+ *
+     */
+ * <p>The merge scheduler supports the following <b>dynamic</b> settings:
+        // If MAX_THREAD_COUNT_SETTING is NOT set - return the cluster default
+ * <li><code>index.merge.scheduler.max_force_merge_mb_per_sec</code>:
+            setMaxThreadAndMergeCount(threadCount, mergeCount);
+        updateMaxForceMergeMBPerSec(indexSettings);
+    private static volatile Integer clusterMaxThreadCountDefault;
+    );
+ * <ul>
+/*
+     * <p>
+     * <ul>
+     *       or fall back to absolute defaults)</li>
+        return maxThreadCount;
+    }
+            return ClusterMergeSchedulerConfig.getClusterMaxThreadCountDefault(settings);
+    }
+ * <ul>
+                this.maxThreadCount,
+     */
+ * Licensed to Elasticsearch under one or more contributor
+import org.apache.logging.log4j.Logger;
+        // If MAX_MERGE_COUNT_SETTING is NOT set - return the cluster default
+        if (overrideExistingConfigs == true) {
+    }
+        );
+    public synchronized void setDefaultAutoThrottleEnabled(boolean enabled, boolean overrideExistingConfigs) {
+ *
+        if (maxThreadCount < 1) {
+import java.util.Objects;
+        return Integer.toString(clusterMaxThreadCountDefault);
+ *
+ * the Apache License, Version 2.0 (the "License"); you may
+     * This default value optionally overrides the existing configs for the index
+    /**
+ * not use this file except in compliance with the License.
+ *     requested over time.  An application with a low indexing rate that
+ * license agreements. See the NOTICE file distributed with
+ *     to the specified rate. This setting takes precedence over the cluster-level setting.
+     * @param threadCount the default maximum number of threads to use for merge operations
+        (s) -> Setting.parseInt(s, 1, "index.merge.scheduler.max_merge_count"),
+ * <li><code>index.merge.scheduler.auto_throttle</code>:
+        logger.info(
+        Property.IndexScope
+ *     Index-level settings take precedence over this cluster-level setting.
+        // If MAX_MERGE_COUNT_SETTING is set - return the absolute default for MAX_THREAD_COUNT_SETTING
+ * merge operations once they are needed (according to the merge policy).  Merges
+            new ParameterizedMessage("Updating autoThrottle for index {} from [{}] to [{}]", this.indexName, this.autoThrottle, enabled)
+        MergeSchedulerConfig::getDefaultMergeCount,
+    }
+    /**
+    public static void validateMaxThreadAndMergeCount(int maxThreadCount, int maxMergeCount) {
+     * Enables / disables auto throttling on the {@link ConcurrentMergeScheduler}
+     * </p>
+        }
+    private static volatile Integer clusterMaxMergeCountDefault;
+        "cluster.merge.scheduler.max_force_merge_mb_per_sec",
+     *       AND cluster defaults exist → use cluster defaults</li>
+        if (newMaxThreadCount == this.maxThreadCount && newMaxMergeCount == this.maxMergeCount) {
+ *
+     * <p>
+ * this work for additional information regarding copyright
+ *     <code>Math.max(1, Math.min(4, {@link OpenSearchExecutors#allocatedProcessors(Settings)} / 2))</code>
+        clusterAutoThrottleEnabledDefault = enabled;
+            throw new IllegalArgumentException("maxThreadCount (= " + maxThreadCount + ") should be at least 1");
+ * <li>If only index-level setting is specified: uses index value
+        indexName = indexSettings.getIndex().getName();
+ *     spinning platter drives instead, decrease this to 1.
+ *     (writes) for merges to an adaptive value depending on how many merges are
+     * Returns <code>true</code> iff auto throttle is enabled.
+        if (maxThreadCount > maxMergeCount) {
+    }
+    public void setMaxThreadAndMergeCount(int newMaxThreadCount, int newMaxMergeCount) {
+ * @opensearch.api
+     */
+     * Sets the default maximum thread and merge count for the cluster.
+        setAutoThrottle(autoThrottleEnabled);
+            return Integer.toString(MAX_THREAD_COUNT_SETTING.get(settings) + 5);
+     * <p><b>Decision Logic:</b>
+    public static final Setting<Double> CLUSTER_MAX_FORCE_MERGE_MB_PER_SEC_SETTING = Setting.doubleSetting(
+     *                                sets the defaults for future configurations
+     *   <li>{@code maxThreadCount} - Maximum number of merge threads</li>
+        Property.Dynamic,
+     * Updates the maximum force merge rate based on index settings, with fallback to cluster settings.
+ *     If this is true (the default), then the merge scheduler will rate-limit IO
+        Property.Dynamic,
+ *     The default value of Double.POSITIVE_INFINITY means no rate limiting is applied.
+     */
+     * <p>
+     * <ul>
+            return;
+    );
+     * @param mergeCount the default maximum number of concurrent merges allowed
+        boolean useCachedClusterDefaults = MAX_THREAD_COUNT_SETTING.exists(settings) == false
+    private static String getDefaultMergeCount(Settings settings) {
+     * </p>
+     * This default value optionally overrides the existing configs for the index
+        Double.POSITIVE_INFINITY,
+            && MAX_MERGE_COUNT_SETTING.exists(settings) == false
+        Property.NodeScope
+import org.apache.lucene.index.ConcurrentMergeScheduler;
+    public void setAutoThrottle(boolean enabled) {
+ * The merge scheduler (<code>ConcurrentMergeScheduler</code>) controls the execution of

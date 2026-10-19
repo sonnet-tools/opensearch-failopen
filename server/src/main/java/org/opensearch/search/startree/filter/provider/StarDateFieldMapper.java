@@ -1,217 +1,189 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.search.startree.filter.provider;
-
-import org.opensearch.common.time.DateFormatter;
-import org.opensearch.common.time.DateMathParser;
-import org.opensearch.index.compositeindex.datacube.DateDimension;
-import org.opensearch.index.compositeindex.datacube.startree.index.StarTreeValues;
-import org.opensearch.index.compositeindex.datacube.startree.utils.date.DateTimeUnitRounding;
-import org.opensearch.index.mapper.CompositeDataCubeFieldType;
-import org.opensearch.index.mapper.DateFieldMapper.DateFieldType;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.startree.filter.DimensionFilter;
-import org.opensearch.search.startree.filter.RangeMatchDimFilter;
-
-import java.time.ZoneId;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.function.LongSupplier;
-
-class StarDateFieldMapper implements DimensionFilterMapper {
-
-    CompositeDataCubeFieldType compositeDataCubeFieldType;
-    LongSupplier nowSupplier;
-    String subDimensionField;
-    DateDimension dateDimension;
-    List<String> sortedSubDimensions;
-
-    public StarDateFieldMapper(SearchContext searchContext) {
-        this.nowSupplier = () -> searchContext.getQueryShardContext().nowInMillis();
-        this.compositeDataCubeFieldType = (CompositeDataCubeFieldType) searchContext.mapperService()
-            .getCompositeFieldTypes()
-            .iterator()
-            .next();
-        // Single date-field is used as of now
-        dateDimension = (DateDimension) compositeDataCubeFieldType.getDimensions()
-            .stream()
-            .filter(dim -> dim instanceof DateDimension)
-            .findFirst()
-            .orElse(null);
-        this.sortedSubDimensions = dateDimension != null ? dateDimension.getSubDimensionNames() : null;
-    }
-
-    @Override
-    public DimensionFilter getExactMatchFilter(MappedFieldType mappedFieldType, List<Object> rawValues) {
-        // TODO: Add support for exact match
-        return null;
-    }
-
-    @Override
-    public DimensionFilter getRangeMatchFilter(MappedFieldType mappedFieldType, StarTreeRangeQuery rangeQuery) {
-        DateFieldType dateFieldType = (DateFieldType) mappedFieldType;
-        String field = rangeQuery.fieldName();
-        assert Objects.equals(dateDimension.getField(), rangeQuery.fieldName());
-
-        // Convert format string to DateMathParser if provided
-        DateMathParser forcedDateParser = rangeQuery.format() != null
-            ? DateFormatter.forPattern(rangeQuery.format()).toDateMathParser()
-            : org.opensearch.index.mapper.DateFieldMapper.getDefaultDateTimeFormatter().toDateMathParser();
-
-        ZoneId timeZone = rangeQuery.timeZone() != null ? ZoneId.of(rangeQuery.timeZone()) : null;
-
-        long l = Long.MIN_VALUE;
-        long u = Long.MAX_VALUE;
-
-        if (rangeQuery.from() != null) {
-            l = DateFieldType.parseToLong(
-                rangeQuery.from(),
-                !rangeQuery.includeLower(),
-                timeZone,
-                forcedDateParser,
-                nowSupplier,
-                dateFieldType.resolution()
-            );
-            if (!rangeQuery.includeLower()) {
-                ++l;
-            }
-        }
-
-        if (rangeQuery.to() != null) {
-            u = DateFieldType.parseToLong(
-                rangeQuery.to(),
-                rangeQuery.includeUpper(),
-                timeZone,
-                forcedDateParser,
-                nowSupplier,
-                dateFieldType.resolution()
-            );
-            if (!rangeQuery.includeUpper()) {
-                --u;
-            }
-        }
-
-        // Find the matching interval - preferring the highest possible interval for query optimization
-        List<DateTimeUnitRounding> intervals = dateDimension.getSortedCalendarIntervals().reversed();
-        DateTimeUnitRounding matchingInterval = null;
-
-        for (DateTimeUnitRounding interval : intervals) {
-            // OpenSearch rounds up to the last millisecond in the rounding interval.
-            // So for example, closed-interval [l=2022-05-31T23:00:00.000, u=2022-05-31T23:59:59.999]
-            // (equivalent to half-open interval [l=2022-05-31T23:00:00.000, u+1=2022-06-01T00:00:00.000))
-            // can be resolved by star-tree 'hour' interval.
-            // To verify the above case, we check whether:
-            // 1/ l = 2022-05-31T23:00:00.000 is to the nearest 'hour' or not
-            // 2/ u+1 = 2022-06-01T00:00:00.000 is to the nearest 'hour' or not.
-
-            // Check if l is start of star-tree interval
-            boolean roundedLowMatches = l == Long.MIN_VALUE || interval.roundFloor(l) == l;
-
-            // Check if u+1 is the start of star-tree interval compared to u
-            boolean roundedHighMatches = u == Long.MAX_VALUE || interval.roundFloor(u + 1) == u + 1;
-
-            // If both bounds can be resolved by this star-tree interval, we have an exact match for this interval
-            if (roundedLowMatches && roundedHighMatches) {
-                matchingInterval = interval;
-                break; // Found the most granular matching interval
-            }
-        }
-
-        if (matchingInterval == null) {
-            return null; // No matching interval found, fall back to default implementation
-        }
-
-        // Construct the sub-dimension field name
-        subDimensionField = field + "_" + matchingInterval.shortName();
-
-        // l & u are inclusive interval boundaries here
-        return new RangeMatchDimFilter(field, l, u, true, true) {
-            @Override
-            public String getSubDimensionName() {
-                return subDimensionField;
-            }
-        };
-    }
-
-    @Override
-    public boolean resolveUsingSubDimension() {
-        return true;
-    }
-
-    @Override
-    public List<DimensionFilter> getFinalDimensionFilters(List<DimensionFilter> filters) {
-        if (filters == null || filters.size() <= 1) {
-            return filters;
-        }
-
         boolean needsFinalFilter = false;
-        int lowestDimensionGranularity = sortedSubDimensions.indexOf(filters.getFirst().getSubDimensionName());
-        for (DimensionFilter filter : filters) {
-            int granularity = sortedSubDimensions.indexOf(filter.getSubDimensionName());
-            if (lowestDimensionGranularity > granularity) {
-                needsFinalFilter = true;
-                lowestDimensionGranularity = granularity;
-            }
-        }
-        // return the same filters if all filters have the same granularity
-        if (needsFinalFilter == false) {
-            return filters;
-        }
-
-        String finalSubDimensionField = sortedSubDimensions.get(lowestDimensionGranularity);
+        this.nowSupplier = () -> searchContext.getQueryShardContext().nowInMillis();
         String dimensionName = filters.getFirst().getDimensionName();
-        List<DimensionFilter> updatedFilters = new ArrayList<>();
-        for (DimensionFilter filter : filters) {
-            RangeMatchDimFilter rangeMatchDimFilter = (RangeMatchDimFilter) filter;
-            updatedFilters.add(
-                new RangeMatchDimFilter(
-                    dimensionName,
-                    rangeMatchDimFilter.getLow(),
-                    rangeMatchDimFilter.getHigh(),
-                    rangeMatchDimFilter.isIncludeLow(),
-                    rangeMatchDimFilter.isIncludeHigh()
-                ) {
-                    @Override
-                    public String getSubDimensionName() {
-                        return finalSubDimensionField;
+        return sortedSubDimensions.indexOf(subDimensionField1) < sortedSubDimensions.indexOf(subDimensionField2)
                     }
-                }
-            );
-        }
-        return updatedFilters;
-    }
-
+                nowSupplier,
+import java.util.function.LongSupplier;
     @Override
-    public Optional<Long> getMatchingOrdinal(
-        String dimensionName,
-        Object value,
-        StarTreeValues starTreeValues,
-        DimensionFilter.MatchType matchType
     ) {
-        // Since dates are stored as longs internally, we can treat them as numeric values
-        return Optional.of((Long) value);
-    }
-
+                }
+            .orElse(null);
+        Object value,
+        return true;
+                matchingInterval = interval;
+            .next();
     @Override
     public int compareValues(Object v1, Object v2) {
-        if (!(v1 instanceof Long) || !(v2 instanceof Long)) {
-            throw new IllegalArgumentException("Expected Long values for date comparison");
-        }
-        return Long.compare((Long) v1, (Long) v2);
-    }
-
-    public String getSubDimensionFieldEffective(String subDimensionField1, String subDimensionField2) {
-        return sortedSubDimensions.indexOf(subDimensionField1) < sortedSubDimensions.indexOf(subDimensionField2)
-            ? subDimensionField1
-            : subDimensionField2;
-    }
+    LongSupplier nowSupplier;
+        return updatedFilters;
+import java.util.ArrayList;
+                    rangeMatchDimFilter.isIncludeHigh()
+ * The OpenSearch Contributors require contributions made to
+        DateTimeUnitRounding matchingInterval = null;
 }
+            u = DateFieldType.parseToLong(
+        }
+        ZoneId timeZone = rangeQuery.timeZone() != null ? ZoneId.of(rangeQuery.timeZone()) : null;
+            .filter(dim -> dim instanceof DateDimension)
+import org.opensearch.search.internal.SearchContext;
+            @Override
+    }
+        // Find the matching interval - preferring the highest possible interval for query optimization
+    }
+        // Convert format string to DateMathParser if provided
+ */
+            // To verify the above case, we check whether:
+import org.opensearch.search.startree.filter.DimensionFilter;
+        if (rangeQuery.from() != null) {
+        DimensionFilter.MatchType matchType
+        List<DimensionFilter> updatedFilters = new ArrayList<>();
+                new RangeMatchDimFilter(
+            RangeMatchDimFilter rangeMatchDimFilter = (RangeMatchDimFilter) filter;
+        assert Objects.equals(dateDimension.getField(), rangeQuery.fieldName());
+    public Optional<Long> getMatchingOrdinal(
+        }
+                timeZone,
+                ) {
+            );
+        }
+import org.opensearch.index.compositeindex.datacube.startree.utils.date.DateTimeUnitRounding;
+        for (DimensionFilter filter : filters) {
+            }
+                rangeQuery.to(),
+        return null;
+        String finalSubDimensionField = sortedSubDimensions.get(lowestDimensionGranularity);
+            ? subDimensionField1
+            // (equivalent to half-open interval [l=2022-05-31T23:00:00.000, u+1=2022-06-01T00:00:00.000))
+                return subDimensionField;
+                timeZone,
+    public List<DimensionFilter> getFinalDimensionFilters(List<DimensionFilter> filters) {
+                    @Override
+    CompositeDataCubeFieldType compositeDataCubeFieldType;
+        return Long.compare((Long) v1, (Long) v2);
+        // Single date-field is used as of now
+        dateDimension = (DateDimension) compositeDataCubeFieldType.getDimensions()
+                rangeQuery.includeUpper(),
+                    dimensionName,
+        // TODO: Add support for exact match
+                --u;
+            if (lowestDimensionGranularity > granularity) {
+        // Since dates are stored as longs internally, we can treat them as numeric values
+import java.util.Objects;
+        // return the same filters if all filters have the same granularity
+            updatedFilters.add(
+            }
+    }
+        int lowestDimensionGranularity = sortedSubDimensions.indexOf(filters.getFirst().getSubDimensionName());
+        }
+        this.sortedSubDimensions = dateDimension != null ? dateDimension.getSubDimensionNames() : null;
+                nowSupplier,
+                    rangeMatchDimFilter.getHigh(),
+import org.opensearch.index.mapper.CompositeDataCubeFieldType;
+        for (DimensionFilter filter : filters) {
+import java.util.List;
+                needsFinalFilter = true;
+            }
+import org.opensearch.index.compositeindex.datacube.DateDimension;
+            throw new IllegalArgumentException("Expected Long values for date comparison");
+                lowestDimensionGranularity = granularity;
+                forcedDateParser,
+    public String getSubDimensionFieldEffective(String subDimensionField1, String subDimensionField2) {
+            return filters;
+    @Override
+        DateMathParser forcedDateParser = rangeQuery.format() != null
+        return Optional.of((Long) value);
+                        return finalSubDimensionField;
+                rangeQuery.from(),
+            .findFirst()
+                !rangeQuery.includeLower(),
+            : org.opensearch.index.mapper.DateFieldMapper.getDefaultDateTimeFormatter().toDateMathParser();
+import java.util.Optional;
+    }
+            if (!rangeQuery.includeUpper()) {
+            // 1/ l = 2022-05-31T23:00:00.000 is to the nearest 'hour' or not
+        };
+        return new RangeMatchDimFilter(field, l, u, true, true) {
+        if (needsFinalFilter == false) {
+                    rangeMatchDimFilter.getLow(),
+            ? DateFormatter.forPattern(rangeQuery.format()).toDateMathParser()
+            // 2/ u+1 = 2022-06-01T00:00:00.000 is to the nearest 'hour' or not.
+            l = DateFieldType.parseToLong(
+            );
+            .iterator()
+            public String getSubDimensionName() {
+        if (rangeQuery.to() != null) {
+            // So for example, closed-interval [l=2022-05-31T23:00:00.000, u=2022-05-31T23:59:59.999]
+            if (!rangeQuery.includeLower()) {
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
+        DateFieldType dateFieldType = (DateFieldType) mappedFieldType;
+            }
+import org.opensearch.common.time.DateMathParser;
+            boolean roundedHighMatches = u == Long.MAX_VALUE || interval.roundFloor(u + 1) == u + 1;
+        String dimensionName,
+        String field = rangeQuery.fieldName();
+            // Check if l is start of star-tree interval
+                dateFieldType.resolution()
+                ++l;
+import org.opensearch.index.mapper.DateFieldMapper.DateFieldType;
+    public boolean resolveUsingSubDimension() {
+            // can be resolved by star-tree 'hour' interval.
+            int granularity = sortedSubDimensions.indexOf(filter.getSubDimensionName());
+        if (matchingInterval == null) {
+        long u = Long.MAX_VALUE;
+            if (roundedLowMatches && roundedHighMatches) {
+    DateDimension dateDimension;
+        long l = Long.MIN_VALUE;
+                    public String getSubDimensionName() {
+package org.opensearch.search.startree.filter.provider;
+        StarTreeValues starTreeValues,
+    public StarDateFieldMapper(SearchContext searchContext) {
+    public DimensionFilter getRangeMatchFilter(MappedFieldType mappedFieldType, StarTreeRangeQuery rangeQuery) {
+        this.compositeDataCubeFieldType = (CompositeDataCubeFieldType) searchContext.mapperService()
+            : subDimensionField2;
+ * compatible open source license.
+        }
+        if (filters == null || filters.size() <= 1) {
+    }
+import org.opensearch.index.compositeindex.datacube.startree.index.StarTreeValues;
+                dateFieldType.resolution()
+        }
+        // l & u are inclusive interval boundaries here
+class StarDateFieldMapper implements DimensionFilterMapper {
+        }
+    @Override
+            return null; // No matching interval found, fall back to default implementation
+                break; // Found the most granular matching interval
+            // If both bounds can be resolved by this star-tree interval, we have an exact match for this interval
+        List<DateTimeUnitRounding> intervals = dateDimension.getSortedCalendarIntervals().reversed();
+            .stream()
+            // Check if u+1 is the start of star-tree interval compared to u
+        if (!(v1 instanceof Long) || !(v2 instanceof Long)) {
+    List<String> sortedSubDimensions;
+        for (DateTimeUnitRounding interval : intervals) {
+        subDimensionField = field + "_" + matchingInterval.shortName();
+    String subDimensionField;
+import org.opensearch.search.startree.filter.RangeMatchDimFilter;
+ *
+        // Construct the sub-dimension field name
+    }
+        }
+            return filters;
+import java.time.ZoneId;
+            );
+import org.opensearch.index.mapper.MappedFieldType;
+        }
+                    rangeMatchDimFilter.isIncludeLow(),
+    }
+            boolean roundedLowMatches = l == Long.MIN_VALUE || interval.roundFloor(l) == l;
+/*
+    @Override
+import org.opensearch.common.time.DateFormatter;
+    public DimensionFilter getExactMatchFilter(MappedFieldType mappedFieldType, List<Object> rawValues) {
+                forcedDateParser,
+            // OpenSearch rounds up to the last millisecond in the rounding interval.
+            }
+            .getCompositeFieldTypes()
+    @Override
+    }

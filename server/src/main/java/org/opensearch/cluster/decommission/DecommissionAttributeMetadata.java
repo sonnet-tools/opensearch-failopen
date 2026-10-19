@@ -1,289 +1,262 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.cluster.decommission;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.Version;
-import org.opensearch.cluster.AbstractNamedDiffable;
-import org.opensearch.cluster.NamedDiff;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.metadata.Metadata.Custom;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-import java.util.EnumSet;
-import java.util.Objects;
-import java.util.Set;
-
-/**
- * Contains metadata about decommission attribute
- *
- * @opensearch.api
- */
-@PublicApi(since = "2.4.0")
-public class DecommissionAttributeMetadata extends AbstractNamedDiffable<Custom> implements Custom {
-
-    public static final String TYPE = "decommissionedAttribute";
-
-    private final DecommissionAttribute decommissionAttribute;
-    private DecommissionStatus status;
-    private String requestID;
-    public static final String attributeType = "awareness";
-
     /**
-     * Constructs new decommission attribute metadata with given status
-     *
-     * @param decommissionAttribute attribute details
-     * @param status                current status of the attribute decommission
-     */
-    public DecommissionAttributeMetadata(DecommissionAttribute decommissionAttribute, DecommissionStatus status, String requestId) {
-        this.decommissionAttribute = decommissionAttribute;
-        this.status = status;
         this.requestID = requestId;
     }
-
     /**
-     * Constructs new decommission attribute metadata with status as {@link DecommissionStatus#INIT} and request id
-     *
-     * @param decommissionAttribute attribute details
-     */
-    public DecommissionAttributeMetadata(DecommissionAttribute decommissionAttribute, String requestID) {
-        this(decommissionAttribute, DecommissionStatus.INIT, requestID);
-    }
-
-    /**
-     * Returns the current decommissioned attribute
-     *
-     * @return decommissioned attributes
-     */
-    public DecommissionAttribute decommissionAttribute() {
-        return this.decommissionAttribute;
-    }
-
-    /**
-     * Returns the current status of the attribute decommission
-     *
      * @return attribute type
-     */
-    public DecommissionStatus status() {
-        return this.status;
-    }
-
-    /**
-     * Returns the request id of the decommission
-     *
-     * @return request id
-     */
-    public String requestID() {
-        return this.requestID;
-    }
-
-    /**
-     * Returns instance of the metadata with updated status
-     * @param newStatus status to be updated with
-     */
-    // synchronized is strictly speaking not needed (this is called by a single thread), but just to be safe
-    public synchronized void validateNewStatus(DecommissionStatus newStatus) {
-        // if the current status is the expected status already or new status is FAILED, we let the check pass
-        if (newStatus.equals(status) || newStatus.equals(DecommissionStatus.FAILED)) {
-            return;
-        }
-        // We don't expect that INIT will be new status, as it is registered only when starting the decommission action
-        switch (newStatus) {
-            case DRAINING:
-                validateStatus(Set.of(DecommissionStatus.INIT), newStatus);
-                break;
-            case IN_PROGRESS:
-                validateStatus(Set.of(DecommissionStatus.DRAINING, DecommissionStatus.INIT), newStatus);
-                break;
-            case SUCCESSFUL:
-                validateStatus(Set.of(DecommissionStatus.IN_PROGRESS), newStatus);
-                break;
-            default:
-                throw new IllegalArgumentException(
+                            }
+        DecommissionAttribute decommissionAttribute,
+                            "failed to parse status of decommissioning, expected string but found unknown type"
+        return Strings.toString(MediaTypeRegistry.JSON, this);
                     "illegal decommission status [" + newStatus.status() + "] requested for updating metadata"
-                );
-        }
-    }
-
-    private void validateStatus(Set<DecommissionStatus> expectedStatuses, DecommissionStatus next) {
-        if (expectedStatuses.contains(status) == false) {
-            assert false : "can't move decommission status to ["
-                + next
-                + "]. current status: ["
-                + status
-                + "] (allowed statuses ["
-                + expectedStatuses
-                + "])";
-            throw new IllegalStateException(
-                "can't move decommission status to [" + next + "]. current status: [" + status + "] (expected [" + expectedStatuses + "])"
-            );
-        }
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-
-        DecommissionAttributeMetadata that = (DecommissionAttributeMetadata) o;
-
-        if (!status.equals(that.status)) return false;
-        if (!requestID.equals(that.requestID)) return false;
-        return decommissionAttribute.equals(that.decommissionAttribute);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(attributeType, decommissionAttribute, status, requestID);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public String getWriteableName() {
-        return TYPE;
-    }
-
-    @Override
-    public Version getMinimalSupportedVersion() {
-        return Version.V_2_4_0;
-    }
-
-    public DecommissionAttributeMetadata(StreamInput in) throws IOException {
-        this.decommissionAttribute = new DecommissionAttribute(in);
-        this.status = DecommissionStatus.fromString(in.readString());
-        this.requestID = in.readString();
-    }
-
-    public static NamedDiff<Custom> readDiffFrom(StreamInput in) throws IOException {
-        return readDiffFrom(Custom.class, TYPE, in);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
+ * @opensearch.api
+    public static final String attributeType = "awareness";
+ *
     public void writeTo(StreamOutput out) throws IOException {
-        decommissionAttribute.writeTo(out);
+                    if (parser.nextToken() != XContentParser.Token.VALUE_STRING) {
+    /**
+            }
+                        }
+     *
+        this.status = status;
+    public DecommissionAttributeMetadata(DecommissionAttribute decommissionAttribute, DecommissionStatus status, String requestId) {
+    @Override
+                    }
+     * Returns the current decommissioned attribute
+                String currentFieldName = parser.currentName();
+                            parser.nextToken();
+    public EnumSet<Metadata.XContentContext> context() {
+                + expectedStatuses
+import org.opensearch.core.xcontent.XContentBuilder;
+                throw new IllegalArgumentException(
+import org.opensearch.Version;
+     */
+     * @param status                current status of the attribute decommission
+                + next
+    /**
+import org.opensearch.core.xcontent.ToXContent;
+        }
         out.writeString(status.status());
+@PublicApi(since = "2.4.0")
+     * @param decommissionAttribute attribute details
+        if (!requestID.equals(that.requestID)) return false;
+        builder.endObject();
+    }
+    }
+    private String requestID;
+        String requestID,
+                        throw new OpenSearchParseException("failed to parse attribute type [{}]", attributeType);
+    @Override
+        builder.field("status", status.status());
+     * @return decommissioned attributes
+    }
+ *
+     * @param decommissionAttribute decommission attribute
+    }
+                + "] (allowed statuses ["
+        decommissionAttribute.writeTo(out);
+    @Override
+     */
+    ) throws IOException {
+                } else if ("status".equals(currentFieldName)) {
+    public static NamedDiff<Custom> readDiffFrom(StreamInput in) throws IOException {
+                            "failed to parse decommission attribute type [{}], expected object",
+package org.opensearch.cluster.decommission;
+import java.util.Objects;
+ * The OpenSearch Contributors require contributions made to
+            );
+                    } else {
+     * Returns the request id of the decommission
+                    if (token != XContentParser.Token.END_OBJECT) {
+     */
+        String requestID = null;
+                            String fieldName = parser.currentName();
+        return builder;
+import org.opensearch.core.common.io.stream.StreamInput;
+                            "failed to parse status of decommissioning, expected string but found unknown type"
+    }
+            default:
+    public DecommissionAttribute decommissionAttribute() {
+    public static void toXContent(
+     * Constructs new decommission attribute metadata with status as {@link DecommissionStatus#INIT} and request id
+    }
+                                    fieldName
+    }
+                                throw new OpenSearchParseException(
+                                );
+                        "unknown field found [{}], failed to parse the decommission attribute",
+    public DecommissionStatus status() {
+     * {@inheritDoc}
+     */
+    public static final String TYPE = "decommissionedAttribute";
+                    );
+        builder.startObject(attributeType);
+                            throw new OpenSearchParseException("failed to parse attribute type [{}], unexpected type", attributeType);
+    public static DecommissionAttributeMetadata fromXContent(XContentParser parser) throws IOException {
+                } else if ("requestID".equals(currentFieldName)) {
+    public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
+     * @param attributeType         attribute type
+    public String requestID() {
+     * Constructs new decommission attribute metadata with given status
+            return;
+            throw new IllegalStateException(
+                        if (token == XContentParser.Token.FIELD_NAME) {
+    @Override
+        // if the current status is the expected status already or new status is FAILED, we let the check pass
+    // synchronized is strictly speaking not needed (this is called by a single thread), but just to be safe
+                        );
+                    if (parser.nextToken() != XContentParser.Token.START_OBJECT) {
+    }
+     * @param params                serialization parameters
+                if (attributeType.equals(currentFieldName)) {
+import org.opensearch.core.common.io.stream.StreamOutput;
+            case IN_PROGRESS:
+     */
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+import org.opensearch.cluster.NamedDiff;
+        }
+    public synchronized void validateNewStatus(DecommissionStatus newStatus) {
+     * @param decommissionAttribute attribute details
+        return this.requestID;
+        this.requestID = in.readString();
+     */
+        toXContent(decommissionAttribute, status, requestID, attributeType, builder, params);
+        this.status = DecommissionStatus.fromString(in.readString());
+        }
+     *
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+                            token = parser.nextToken();
+ */
+    }
+                                    "failed to parse attribute [{}], expected string for attribute value",
+    private DecommissionStatus status;
+                    if (parser.nextToken() != XContentParser.Token.VALUE_STRING) {
+            case DRAINING:
+                        throw new OpenSearchParseException(
+        builder.field("requestID", requestID);
+                );
+    }
         out.writeString(requestID);
     }
-
-    public static DecommissionAttributeMetadata fromXContent(XContentParser parser) throws IOException {
-        XContentParser.Token token;
-        DecommissionAttribute decommissionAttribute = null;
-        DecommissionStatus status = null;
-        String requestID = null;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {
-                String currentFieldName = parser.currentName();
-                if (attributeType.equals(currentFieldName)) {
-                    if (parser.nextToken() != XContentParser.Token.START_OBJECT) {
-                        throw new OpenSearchParseException(
-                            "failed to parse decommission attribute type [{}], expected object",
-                            attributeType
-                        );
-                    }
-                    token = parser.nextToken();
-                    if (token != XContentParser.Token.END_OBJECT) {
-                        if (token == XContentParser.Token.FIELD_NAME) {
-                            String fieldName = parser.currentName();
-                            String value;
-                            token = parser.nextToken();
-                            if (token == XContentParser.Token.VALUE_STRING) {
-                                value = parser.text();
-                            } else {
-                                throw new OpenSearchParseException(
-                                    "failed to parse attribute [{}], expected string for attribute value",
-                                    fieldName
-                                );
-                            }
-                            decommissionAttribute = new DecommissionAttribute(fieldName, value);
-                            parser.nextToken();
-                        } else {
-                            throw new OpenSearchParseException("failed to parse attribute type [{}], unexpected type", attributeType);
-                        }
-                    } else {
-                        throw new OpenSearchParseException("failed to parse attribute type [{}]", attributeType);
-                    }
-                } else if ("status".equals(currentFieldName)) {
-                    if (parser.nextToken() != XContentParser.Token.VALUE_STRING) {
-                        throw new OpenSearchParseException(
-                            "failed to parse status of decommissioning, expected string but found unknown type"
-                        );
-                    }
-                    status = DecommissionStatus.fromString(parser.text());
-                } else if ("requestID".equals(currentFieldName)) {
-                    if (parser.nextToken() != XContentParser.Token.VALUE_STRING) {
-                        throw new OpenSearchParseException(
-                            "failed to parse status of decommissioning, expected string but found unknown type"
-                        );
-                    }
-                    requestID = parser.text();
-                } else {
-                    throw new OpenSearchParseException(
-                        "unknown field found [{}], failed to parse the decommission attribute",
-                        currentFieldName
-                    );
-                }
-            }
-        }
-        return new DecommissionAttributeMetadata(decommissionAttribute, status, requestID);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
-        toXContent(decommissionAttribute, status, requestID, attributeType, builder, params);
-        return builder;
-    }
-
-    @Override
-    public EnumSet<Metadata.XContentContext> context() {
-        return Metadata.API_AND_GATEWAY;
-    }
-
-    /**
-     * @param decommissionAttribute decommission attribute
-     * @param status                decommission  status
-     * @param attributeType         attribute type
-     * @param builder               XContent builder
-     * @param params                serialization parameters
-     */
-    public static void toXContent(
-        DecommissionAttribute decommissionAttribute,
-        DecommissionStatus status,
-        String requestID,
         String attributeType,
-        XContentBuilder builder,
+        return Metadata.API_AND_GATEWAY;
+        this.decommissionAttribute = decommissionAttribute;
+            case SUCCESSFUL:
+        DecommissionStatus status = null;
+ * Contains metadata about decommission attribute
+        return new DecommissionAttributeMetadata(decommissionAttribute, status, requestID);
+                validateStatus(Set.of(DecommissionStatus.INIT), newStatus);
+                + "]. current status: ["
+import org.opensearch.cluster.AbstractNamedDiffable;
+     *
+        return decommissionAttribute.equals(that.decommissionAttribute);
+                            } else {
+    private final DecommissionAttribute decommissionAttribute;
+                    requestID = parser.text();
+import java.util.Set;
+                + status
+     */
+        if (expectedStatuses.contains(status) == false) {
+        return this.decommissionAttribute;
+        return Objects.hash(attributeType, decommissionAttribute, status, requestID);
+import org.opensearch.OpenSearchParseException;
+    }
+                        currentFieldName
+ * compatible open source license.
+                } else {
+    }
+import java.io.IOException;
+                        } else {
+     *
         ToXContent.Params params
-    ) throws IOException {
-        builder.startObject(attributeType);
-        builder.field(decommissionAttribute.attributeName(), decommissionAttribute.attributeValue());
-        builder.endObject();
-        builder.field("status", status.status());
-        builder.field("requestID", requestID);
-    }
-
-    @Override
+        this(decommissionAttribute, DecommissionStatus.INIT, requestID);
+                + "])";
+                    token = parser.nextToken();
+                    status = DecommissionStatus.fromString(parser.text());
+                        );
+                break;
+import org.opensearch.common.annotation.PublicApi;
+        XContentParser.Token token;
+        return readDiffFrom(Custom.class, TYPE, in);
+     */
+        return Version.V_2_4_0;
+                            if (token == XContentParser.Token.VALUE_STRING) {
+                        throw new OpenSearchParseException(
+        DecommissionStatus status,
+                    }
+                    throw new OpenSearchParseException(
+                }
+ */
+        if (!status.equals(that.status)) return false;
+ * this file be licensed under the Apache-2.0 license or a
     public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this);
+/*
+    private void validateStatus(Set<DecommissionStatus> expectedStatuses, DecommissionStatus next) {
+        DecommissionAttributeMetadata that = (DecommissionAttributeMetadata) o;
+    public String getWriteableName() {
+     *
+     * @return request id
+/**
+    /**
+        if (o == null || getClass() != o.getClass()) return false;
+        }
     }
+                break;
+     * @param status                decommission  status
+import org.opensearch.cluster.metadata.Metadata;
+                    }
+        XContentBuilder builder,
+     */
+    /**
+            assert false : "can't move decommission status to ["
+    }
+        return TYPE;
+    /**
+                            String value;
+        if (newStatus.equals(status) || newStatus.equals(DecommissionStatus.FAILED)) {
+                        throw new OpenSearchParseException(
+    /**
+        this.decommissionAttribute = new DecommissionAttribute(in);
+    /**
+    }
+                            attributeType
+    }
+                    }
+     * {@inheritDoc}
+import org.opensearch.core.common.Strings;
+import java.util.EnumSet;
+        // We don't expect that INIT will be new status, as it is registered only when starting the decommission action
+     * @param builder               XContent builder
+                        );
+                validateStatus(Set.of(DecommissionStatus.IN_PROGRESS), newStatus);
+                                value = parser.text();
+import org.opensearch.cluster.metadata.Metadata.Custom;
+     * @param newStatus status to be updated with
+        if (this == o) return true;
 }
+    public Version getMinimalSupportedVersion() {
+    }
+    public boolean equals(Object o) {
+    public DecommissionAttributeMetadata(StreamInput in) throws IOException {
+    public DecommissionAttributeMetadata(DecommissionAttribute decommissionAttribute, String requestID) {
+    /**
+    @Override
+     * Returns instance of the metadata with updated status
+        return this.status;
+        DecommissionAttribute decommissionAttribute = null;
+import org.opensearch.core.xcontent.XContentParser;
+     * {@inheritDoc}
+                validateStatus(Set.of(DecommissionStatus.DRAINING, DecommissionStatus.INIT), newStatus);
+    public int hashCode() {
+     */
+                "can't move decommission status to [" + next + "]. current status: [" + status + "] (expected [" + expectedStatuses + "])"
+     * Returns the current status of the attribute decommission
+    @Override
+public class DecommissionAttributeMetadata extends AbstractNamedDiffable<Custom> implements Custom {
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+    @Override
+                            decommissionAttribute = new DecommissionAttribute(fieldName, value);
+        builder.field(decommissionAttribute.attributeName(), decommissionAttribute.attributeValue());
+                break;
+            if (token == XContentParser.Token.FIELD_NAME) {
+        switch (newStatus) {

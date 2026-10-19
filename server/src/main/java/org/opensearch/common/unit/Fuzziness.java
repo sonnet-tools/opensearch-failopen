@@ -1,276 +1,249 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.unit;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-import java.util.Locale;
-import java.util.Objects;
-
-/**
- * A unit class that encapsulates all in-exact search
- * parsing and conversion from similarities to edit distances
- * etc.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public final class Fuzziness implements ToXContentFragment, Writeable {
-
-    public static final String X_FIELD_NAME = "fuzziness";
-    public static final Fuzziness ZERO = new Fuzziness(0);
-    public static final Fuzziness ONE = new Fuzziness(1);
-    public static final Fuzziness TWO = new Fuzziness(2);
-    public static final Fuzziness AUTO = new Fuzziness("AUTO");
-    public static final ParseField FIELD = new ParseField(X_FIELD_NAME);
-    private static final int DEFAULT_LOW_DISTANCE = 3;
-    private static final int DEFAULT_HIGH_DISTANCE = 6;
-
-    private final String fuzziness;
-    private int lowDistance = DEFAULT_LOW_DISTANCE;
-    private int highDistance = DEFAULT_HIGH_DISTANCE;
-
-    private Fuzziness(int fuzziness) {
-        if (fuzziness != 0 && fuzziness != 1 && fuzziness != 2) {
-            throw new IllegalArgumentException("Valid edit distances are [0, 1, 2] but was [" + fuzziness + "]");
-        }
-        this.fuzziness = Integer.toString(fuzziness);
-    }
-
-    private Fuzziness(String fuzziness) {
-        if (fuzziness == null || fuzziness.isEmpty()) {
-            throw new IllegalArgumentException("fuzziness can't be null!");
-        }
-        this.fuzziness = fuzziness.toUpperCase(Locale.ROOT);
-    }
-
-    private Fuzziness(String fuzziness, int lowDistance, int highDistance) {
-        this(fuzziness);
-        if (lowDistance < 0 || highDistance < 0 || lowDistance > highDistance) {
-            throw new IllegalArgumentException(
-                "fuzziness wrongly configured, must be: lowDistance > 0, highDistance" + " > 0 and lowDistance <= highDistance "
-            );
-        }
-        this.lowDistance = lowDistance;
-        this.highDistance = highDistance;
-    }
-
-    /**
      * Read from a stream.
-     */
-    public Fuzziness(StreamInput in) throws IOException {
-        fuzziness = in.readString();
-        if (in.readBoolean()) {
-            lowDistance = in.readVInt();
-            highDistance = in.readVInt();
-        }
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(fuzziness);
-        // we cannot serialize the low/high bounds since the other node does not know about them.
-        // This is a best-effort to not fail queries in case the cluster is being upgraded and users
         // start using features that are not available on all nodes.
-        if (isAutoWithCustomValues()) {
-            out.writeBoolean(true);
-            out.writeVInt(lowDistance);
-            out.writeVInt(highDistance);
-        } else {
-            out.writeBoolean(false);
-        }
-    }
-
-    /**
-     * Creates a {@link Fuzziness} instance from an edit distance. The value must be one of {@code [0, 1, 2]}
-     *
-     * Note: Using this method only makes sense if the field you are applying Fuzziness to is some sort of string.
-     */
-    public static Fuzziness fromEdits(int edits) {
-        return new Fuzziness(edits);
-    }
-
-    public static Fuzziness build(Object fuzziness) {
-        if (fuzziness instanceof Fuzziness) {
-            return (Fuzziness) fuzziness;
-        }
-        String string = fuzziness.toString();
-        if (AUTO.asString().equalsIgnoreCase(string)) {
-            return AUTO;
-        } else if (string.toUpperCase(Locale.ROOT).startsWith(AUTO.asString() + ":")) {
-            return parseCustomAuto(string);
-        }
-        return new Fuzziness(string);
-    }
-
-    /***
-     * Creates a {@link Fuzziness} instance from lowDistance and highDistance.
-     * where the edit distance is 0 for strings shorter than lowDistance,
-     * 1 for strings where its length between lowDistance and highDistance (inclusive),
-     * and 2 for strings longer than highDistance.
-     */
-    public static Fuzziness customAuto(int lowDistance, int highDistance) {
-        return new Fuzziness("AUTO", lowDistance, highDistance);
-    }
-
-    private static Fuzziness parseCustomAuto(final String string) {
-        assert string.toUpperCase(Locale.ROOT).startsWith(AUTO.asString() + ":");
-        String[] fuzzinessLimit = string.substring(AUTO.asString().length() + 1).split(",");
-        if (fuzzinessLimit.length == 2) {
-            try {
-                int lowerLimit = Integer.parseInt(fuzzinessLimit[0]);
-                int highLimit = Integer.parseInt(fuzzinessLimit[1]);
-                return new Fuzziness("AUTO", lowerLimit, highLimit);
-            } catch (NumberFormatException e) {
-                throw new OpenSearchParseException("failed to parse [{}] as a \"auto:int,int\"", e, string);
-            }
-        } else {
-            throw new OpenSearchParseException("failed to find low and high distance values");
-        }
-    }
-
-    public static Fuzziness parse(XContentParser parser) throws IOException {
         XContentParser.Token token = parser.currentToken();
-        switch (token) {
-            case VALUE_STRING:
-            case VALUE_NUMBER:
-                final String fuzziness = parser.text();
-                if (AUTO.asString().equalsIgnoreCase(fuzziness)) {
-                    return AUTO;
-                } else if (fuzziness.toUpperCase(Locale.ROOT).startsWith(AUTO.asString() + ":")) {
-                    return parseCustomAuto(fuzziness);
-                }
-                try {
-                    final int minimumSimilarity = Integer.parseInt(fuzziness);
-                    if (minimumSimilarity < 0) {
-                        throw new IllegalArgumentException("Invalid fuzziness value: " + fuzziness);
-                    }
-                    switch (minimumSimilarity) {
-                        case 0:
-                            return ZERO;
-                        case 1:
-                            return ONE;
-                        case 2:
-                            return TWO;
-                        default:
-                            return build(fuzziness);
-                    }
-                } catch (NumberFormatException ex) {
-                    // Validate if the fuzziness value is formatted correctly as a numeric value.
-                    try {
-                        final float minimumSimilarity = Float.parseFloat(fuzziness);
-                        if (minimumSimilarity < 0.0f || Float.isInfinite(minimumSimilarity) || Float.isNaN(minimumSimilarity)) {
-                            throw new IllegalArgumentException("Invalid fuzziness value: " + fuzziness);
-                        }
-                        return build(fuzziness);
-                    } catch (NumberFormatException e) {
-                        throw new IllegalArgumentException("Invalid fuzziness value: " + fuzziness);
-                    }
-                }
-
-            default:
-                throw new IllegalArgumentException("Can't parse fuzziness on token: [" + token + "]");
-        }
+            }
+        if (obj == null || getClass() != obj.getClass()) {
+ *
     }
-
+            throw new OpenSearchParseException("failed to find low and high distance values");
+                        if (minimumSimilarity < 0.0f || Float.isInfinite(minimumSimilarity) || Float.isNaN(minimumSimilarity)) {
+            throw new IllegalArgumentException("fuzziness can't be null!");
+        return asDistance(null);
+ * You may obtain a copy of the License at
+        }
+ * Unless required by applicable law or agreed to in writing,
+ */
+        if (this == obj) {
+        }
+     */
+        }
     @Override
+        if (fuzziness == null || fuzziness.isEmpty()) {
+ *
+import org.opensearch.core.xcontent.XContentParser;
+ * the Apache License, Version 2.0 (the "License"); you may
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.field(X_FIELD_NAME, asString());
-        return builder;
-    }
-
-    public int asDistance() {
-        return asDistance(null);
-    }
-
-    public int asDistance(String text) {
-        if (this.equals(AUTO) || isAutoWithCustomValues()) { // AUTO
-            final int len = termLen(text);
-            if (len < lowDistance) {
-                return 0;
-            } else if (len < highDistance) {
-                return 1;
-            } else {
-                return 2;
-            }
-        }
-        return Math.min(2, (int) asFloat());
-    }
-
-    public float asFloat() {
-        if (this.equals(AUTO) || isAutoWithCustomValues()) {
-            return 1f;
-        }
-        return Float.parseFloat(fuzziness);
-    }
-
-    private int termLen(String text) {
-        return text == null ? 5 : text.codePointCount(0, text.length()); // 5 avg term length in english
-    }
-
+                } else if (fuzziness.toUpperCase(Locale.ROOT).startsWith(AUTO.asString() + ":")) {
     public String asString() {
-        if (isAutoWithCustomValues()) {
-            return fuzziness + ":" + lowDistance + "," + highDistance;
-        }
-        return fuzziness;
+    public static Fuzziness fromEdits(int edits) {
+ * this file be licensed under the Apache-2.0 license or a
+    private static final int DEFAULT_HIGH_DISTANCE = 6;
+                int lowerLimit = Integer.parseInt(fuzzinessLimit[0]);
     }
-
+                return new Fuzziness("AUTO", lowerLimit, highLimit);
+        }
+                }
+        if (this.equals(AUTO) || isAutoWithCustomValues()) {
+    }
+ * software distributed under the License is distributed on an
+import org.opensearch.common.annotation.PublicApi;
+import java.util.Objects;
+        // we cannot serialize the low/high bounds since the other node does not know about them.
+ * this work for additional information regarding copyright
+        String[] fuzzinessLimit = string.substring(AUTO.asString().length() + 1).split(",");
+        return Math.min(2, (int) asFloat());
+public final class Fuzziness implements ToXContentFragment, Writeable {
+        this.fuzziness = fuzziness.toUpperCase(Locale.ROOT);
+                try {
+import org.opensearch.core.xcontent.XContentBuilder;
+    public static final String X_FIELD_NAME = "fuzziness";
+                        }
+     * Creates a {@link Fuzziness} instance from lowDistance and highDistance.
+    public boolean equals(Object obj) {
+    public static Fuzziness parse(XContentParser parser) throws IOException {
+     *
+            throw new IllegalArgumentException("Valid edit distances are [0, 1, 2] but was [" + fuzziness + "]");
+ * not use this file except in compliance with the License.
+ * license agreements. See the NOTICE file distributed with
+        this.highDistance = highDistance;
+        if (fuzzinessLimit.length == 2) {
+ * @opensearch.api
+    }
+                    if (minimumSimilarity < 0) {
+    private int termLen(String text) {
+ * Licensed to Elasticsearch under one or more contributor
+    @Override
+        }
+import org.opensearch.core.common.io.stream.StreamInput;
+                    } catch (NumberFormatException e) {
+                throw new OpenSearchParseException("failed to parse [{}] as a \"auto:int,int\"", e, string);
+            if (len < lowDistance) {
+                    switch (minimumSimilarity) {
+                }
+ * under the License.
+import org.opensearch.core.ParseField;
+        return new Fuzziness(edits);
+        }
+    public static Fuzziness customAuto(int lowDistance, int highDistance) {
+    }
+    public int hashCode() {
+    }
+     * and 2 for strings longer than highDistance.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            );
+    }
+@PublicApi(since = "1.0.0")
+import org.opensearch.core.common.io.stream.StreamOutput;
+            }
+        if (in.readBoolean()) {
+    private int lowDistance = DEFAULT_LOW_DISTANCE;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+/**
+        String string = fuzziness.toString();
     private boolean isAutoWithCustomValues() {
+            } else {
+            case VALUE_NUMBER:
+                            return build(fuzziness);
+ * SPDX-License-Identifier: Apache-2.0
+    /**
+        }
+            out.writeBoolean(true);
+ */
+     */
+        return Objects.hash(fuzziness, lowDistance, highDistance);
+            } else if (len < highDistance) {
+                return 2;
+ * parsing and conversion from similarities to edit distances
+            return parseCustomAuto(string);
+    }
+    public Fuzziness(StreamInput in) throws IOException {
+/*
+    public static final Fuzziness ONE = new Fuzziness(1);
         return fuzziness.startsWith("AUTO") && (lowDistance != DEFAULT_LOW_DISTANCE || highDistance != DEFAULT_HIGH_DISTANCE);
     }
-
+    private Fuzziness(int fuzziness) {
+    }
+            try {
+                        case 0:
+ * A unit class that encapsulates all in-exact search
+                return 1;
+    /***
+            return 1f;
     @Override
-    public boolean equals(Object obj) {
-        if (this == obj) {
+        return fuzziness;
+        }
+                        default:
+    public static final ParseField FIELD = new ParseField(X_FIELD_NAME);
+    /**
+        if (lowDistance < 0 || highDistance < 0 || lowDistance > highDistance) {
+     * 1 for strings where its length between lowDistance and highDistance (inclusive),
+        }
+ * etc.
+    public static final Fuzziness TWO = new Fuzziness(2);
+        }
+                        throw new IllegalArgumentException("Invalid fuzziness value: " + fuzziness);
+            return fuzziness + ":" + lowDistance + "," + highDistance;
+                    final int minimumSimilarity = Integer.parseInt(fuzziness);
+    private static final int DEFAULT_LOW_DISTANCE = 3;
+ * ownership. Elasticsearch licenses this file to you under
+            return (Fuzziness) fuzziness;
+/*
             return true;
-        }
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;
-        }
-        Fuzziness other = (Fuzziness) obj;
-        return Objects.equals(fuzziness, other.fuzziness) && lowDistance == other.lowDistance && highDistance == other.highDistance;
+        return text == null ? 5 : text.codePointCount(0, text.length()); // 5 avg term length in english
+                            return TWO;
     }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(fuzziness, lowDistance, highDistance);
+import org.opensearch.core.common.io.stream.Writeable;
+            lowDistance = in.readVInt();
+            out.writeVInt(highDistance);
+                if (AUTO.asString().equalsIgnoreCase(fuzziness)) {
+        }
+     * where the edit distance is 0 for strings shorter than lowDistance,
+        }
+                throw new IllegalArgumentException("Can't parse fuzziness on token: [" + token + "]");
+                    }
+    private static Fuzziness parseCustomAuto(final String string) {
+ * KIND, either express or implied.  See the License for the
+            highDistance = in.readVInt();
     }
+                final String fuzziness = parser.text();
+            default:
+                    }
+ * compatible open source license.
+                        case 1:
+     * Creates a {@link Fuzziness} instance from an edit distance. The value must be one of {@code [0, 1, 2]}
+    private int highDistance = DEFAULT_HIGH_DISTANCE;
+import org.opensearch.core.xcontent.ToXContentFragment;
+    }
+    public int asDistance(String text) {
+                            throw new IllegalArgumentException("Invalid fuzziness value: " + fuzziness);
+            throw new IllegalArgumentException(
+        } else {
+                        throw new IllegalArgumentException("Invalid fuzziness value: " + fuzziness);
+        this.fuzziness = Integer.toString(fuzziness);
+ * The OpenSearch Contributors require contributions made to
+                    try {
+    public static final Fuzziness ZERO = new Fuzziness(0);
+    }
+    }
+        }
+        } else {
 }
+                            return ZERO;
+                        final float minimumSimilarity = Float.parseFloat(fuzziness);
+        fuzziness = in.readString();
+    public float asFloat() {
+                    }
+        // This is a best-effort to not fail queries in case the cluster is being upgraded and users
+import org.opensearch.OpenSearchParseException;
+                return 0;
+import java.util.Locale;
+     * Note: Using this method only makes sense if the field you are applying Fuzziness to is some sort of string.
+        if (isAutoWithCustomValues()) {
+        out.writeString(fuzziness);
+        return new Fuzziness("AUTO", lowDistance, highDistance);
+                    // Validate if the fuzziness value is formatted correctly as a numeric value.
+        if (fuzziness instanceof Fuzziness) {
+    }
+        if (this.equals(AUTO) || isAutoWithCustomValues()) { // AUTO
+            return false;
+/*
+            case VALUE_STRING:
+        switch (token) {
+            return AUTO;
+        Fuzziness other = (Fuzziness) obj;
+                        case 2:
+import java.io.IOException;
+            } catch (NumberFormatException e) {
+    }
+        this.lowDistance = lowDistance;
+                    return AUTO;
+ */
+        } else if (string.toUpperCase(Locale.ROOT).startsWith(AUTO.asString() + ":")) {
+ * GitHub history for details.
+package org.opensearch.common.unit;
+                "fuzziness wrongly configured, must be: lowDistance > 0, highDistance" + " > 0 and lowDistance <= highDistance "
+            out.writeVInt(lowDistance);
+        if (fuzziness != 0 && fuzziness != 1 && fuzziness != 2) {
+                            return ONE;
+     */
+        if (isAutoWithCustomValues()) {
+ *
+        return Objects.equals(fuzziness, other.fuzziness) && lowDistance == other.lowDistance && highDistance == other.highDistance;
+        return builder;
+                    return parseCustomAuto(fuzziness);
+                        return build(fuzziness);
+    public int asDistance() {
+            out.writeBoolean(false);
+                } catch (NumberFormatException ex) {
+    @Override
+ *
+    private Fuzziness(String fuzziness, int lowDistance, int highDistance) {
+        return Float.parseFloat(fuzziness);
+    private Fuzziness(String fuzziness) {
+ * specific language governing permissions and limitations
+    }
+        if (AUTO.asString().equalsIgnoreCase(string)) {
+        }
+    public void writeTo(StreamOutput out) throws IOException {
+            final int len = termLen(text);
+        return new Fuzziness(string);
+                int highLimit = Integer.parseInt(fuzzinessLimit[1]);
+    private final String fuzziness;
+    public static Fuzziness build(Object fuzziness) {
+    }
+        this(fuzziness);
+ * Modifications Copyright OpenSearch Contributors. See
+    public static final Fuzziness AUTO = new Fuzziness("AUTO");
+        assert string.toUpperCase(Locale.ROOT).startsWith(AUTO.asString() + ":");
+ */

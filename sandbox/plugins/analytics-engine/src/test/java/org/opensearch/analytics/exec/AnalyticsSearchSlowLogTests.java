@@ -1,165 +1,138 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.analytics.exec;
-
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.action.search.SearchRequestSlowLog;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.logging.Loggers;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
+        wrapped.setHeaders("user-opaque-123", "req-456");
+            wrapped.onQueryComplete("q5", TimeValue.timeValueMillis(1).nanos(), 0);
+        var wrapped = slowLog.createQueryListener("SELECT 1");
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(logger)) {
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(logger)) {
+                    AnalyticsSearchSlowLog.QUERY_LOGGER_NAME,
+    public void testSlowLogFiresAtOnQueryComplete() throws Exception {
+    }
+            wrapped.onQueryComplete("q1", TimeValue.timeValueMillis(10).nanos(), 50);
+        AnalyticsSearchSlowLog slowLog = createSlowLog(TimeValue.timeValueMillis(0));
 import org.opensearch.test.MockLogAppender;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Set;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class AnalyticsSearchSlowLogTests extends OpenSearchTestCase {
-
-    private AnalyticsSearchSlowLog createSlowLog(TimeValue warnThreshold) {
-        Settings settings = Settings.builder()
-            .put(SearchRequestSlowLog.CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_WARN_SETTING.getKey(), warnThreshold)
+ * compatible open source license.
             .build();
-        ClusterSettings clusterSettings = new ClusterSettings(
-            settings,
-            Set.of(
-                SearchRequestSlowLog.CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_WARN_SETTING,
-                SearchRequestSlowLog.CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_INFO_SETTING,
-                SearchRequestSlowLog.CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_DEBUG_SETTING,
-                SearchRequestSlowLog.CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_TRACE_SETTING,
-                SearchRequestSlowLog.CLUSTER_SEARCH_REQUEST_SLOWLOG_LEVEL
             )
-        );
-        ClusterService clusterService = mock(ClusterService.class);
+                SearchRequestSlowLog.CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_INFO_SETTING,
+            wrapped.onQueryComplete("q3", TimeValue.timeValueMillis(14).nanos(), 100);
+            wrapped.onStageSuccess("q3", 0, "ShardFragmentStageExecution", TimeValue.timeValueMillis(8).nanos(), 100);
+                )
+                SearchRequestSlowLog.CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_WARN_SETTING,
+                    "empty fields present",
+            appender.assertAllExpectationsMatched();
+                new MockLogAppender.PatternSeenWithLoggerPrefixExpectation(
+        ClusterSettings clusterSettings = new ClusterSettings(
+            .put(SearchRequestSlowLog.CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_WARN_SETTING.getKey(), warnThreshold)
+        Loggers.setLevel(logger, Level.WARN);
+        var wrapped = slowLog.createQueryListener("SELECT * FROM idx");
         when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
-        when(clusterService.getSettings()).thenReturn(settings);
+import org.opensearch.common.unit.TimeValue;
+            appender.assertAllExpectationsMatched();
+        Settings settings = Settings.builder()
+            );
+                SearchRequestSlowLog.CLUSTER_SEARCH_REQUEST_SLOWLOG_LEVEL
+        Logger logger = LogManager.getLogger(AnalyticsSearchSlowLog.QUERY_LOGGER_NAME);
+        }
+                    Level.WARN,
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(logger)) {
+            appender.assertAllExpectationsMatched();
+                )
+        Logger logger = LogManager.getLogger(AnalyticsSearchSlowLog.QUERY_LOGGER_NAME);
+            );
+        }
+        }
+import org.opensearch.common.settings.Settings;
+            wrapped.onPlanningComplete("q3", TimeValue.timeValueMillis(2).nanos());
+                    Level.WARN,
+                new MockLogAppender.PatternSeenWithLoggerPrefixExpectation(
+        }
+            );
+                    AnalyticsSearchSlowLog.QUERY_LOGGER_NAME,
+import org.apache.logging.log4j.Level;
+            wrapped.onQueryComplete("q2", TimeValue.timeValueMillis(5).nanos(), 10);
+import org.opensearch.cluster.service.ClusterService;
+                )
+import java.util.Set;
+            appender.addExpectation(
+                    "planning and stage timing present",
+import org.apache.logging.log4j.LogManager;
+        Logger logger = LogManager.getLogger(AnalyticsSearchSlowLog.QUERY_LOGGER_NAME);
+import static org.mockito.Mockito.mock;
+                    ".*took\\[.*\\].*query_id\\[q1\\].*total_rows\\[50\\].*"
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(logger)) {
         return new AnalyticsSearchSlowLog(clusterService);
     }
-
-    public void testSlowLogFiresAtOnQueryComplete() throws Exception {
-        AnalyticsSearchSlowLog slowLog = createSlowLog(TimeValue.timeValueMillis(0));
-        Logger logger = LogManager.getLogger(AnalyticsSearchSlowLog.QUERY_LOGGER_NAME);
-        Loggers.setLevel(logger, Level.WARN);
-
-        var wrapped = slowLog.createQueryListener("SELECT * FROM idx");
-        wrapped.setHeaders("opaque-1", "req-1");
-
-        try (MockLogAppender appender = MockLogAppender.createForLoggers(logger)) {
-            appender.addExpectation(
-                new MockLogAppender.PatternSeenWithLoggerPrefixExpectation(
-                    "slow log fires at query complete",
-                    AnalyticsSearchSlowLog.QUERY_LOGGER_NAME,
-                    Level.WARN,
-                    ".*took\\[.*\\].*query_id\\[q1\\].*total_rows\\[50\\].*"
-                )
-            );
-
-            wrapped.onQueryComplete("q1", TimeValue.timeValueMillis(10).nanos(), 50);
-            appender.assertAllExpectationsMatched();
-        }
     }
-
-    public void testSlowLogDoesNotFireWhenBelowThreshold() throws Exception {
-        AnalyticsSearchSlowLog slowLog = createSlowLog(TimeValue.timeValueSeconds(10));
-        Logger logger = LogManager.getLogger(AnalyticsSearchSlowLog.QUERY_LOGGER_NAME);
-        Loggers.setLevel(logger, Level.WARN);
-
-        var wrapped = slowLog.createQueryListener("SELECT 1");
-
-        try (MockLogAppender appender = MockLogAppender.createForLoggers(logger)) {
+                    AnalyticsSearchSlowLog.QUERY_LOGGER_NAME,
+import org.opensearch.action.search.SearchRequestSlowLog;
+ *
             appender.addExpectation(
-                new MockLogAppender.UnseenEventExpectation(
+            appender.addExpectation(
+    private AnalyticsSearchSlowLog createSlowLog(TimeValue warnThreshold) {
+                SearchRequestSlowLog.CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_TRACE_SETTING,
                     "no log below threshold",
-                    AnalyticsSearchSlowLog.QUERY_LOGGER_NAME,
-                    Level.WARN,
-                    "*"
-                )
-            );
-
-            wrapped.onQueryComplete("q2", TimeValue.timeValueMillis(5).nanos(), 10);
-            appender.assertAllExpectationsMatched();
-        }
     }
-
+import org.opensearch.test.OpenSearchTestCase;
+                    Level.WARN,
+                new MockLogAppender.UnseenEventExpectation(
+    }
+        Logger logger = LogManager.getLogger(AnalyticsSearchSlowLog.QUERY_LOGGER_NAME);
     public void testSlowLogIncludesPlanningAndStageTiming() throws Exception {
-        AnalyticsSearchSlowLog slowLog = createSlowLog(TimeValue.timeValueMillis(0));
-        Logger logger = LogManager.getLogger(AnalyticsSearchSlowLog.QUERY_LOGGER_NAME);
-        Loggers.setLevel(logger, Level.WARN);
-
-        var wrapped = slowLog.createQueryListener("SELECT val FROM idx");
-
-        try (MockLogAppender appender = MockLogAppender.createForLoggers(logger)) {
+        var wrapped = slowLog.createQueryListener(null);
+                    ".*source\\[\\].*id\\[\\].*request_id\\[\\].*"
+                    "*"
             appender.addExpectation(
-                new MockLogAppender.PatternSeenWithLoggerPrefixExpectation(
-                    "planning and stage timing present",
-                    AnalyticsSearchSlowLog.QUERY_LOGGER_NAME,
-                    Level.WARN,
-                    ".*planning_time_millis\\[2\\].*stage_took_millis\\[\\{ShardFragmentStageExecution=8, ReduceStageExecution=3\\}\\].*"
-                )
-            );
-
-            wrapped.onPlanningComplete("q3", TimeValue.timeValueMillis(2).nanos());
-            wrapped.onStageSuccess("q3", 0, "ShardFragmentStageExecution", TimeValue.timeValueMillis(8).nanos(), 100);
-            wrapped.onStageSuccess("q3", 1, "ReduceStageExecution", TimeValue.timeValueMillis(3).nanos(), 100);
-            wrapped.onQueryComplete("q3", TimeValue.timeValueMillis(14).nanos(), 100);
-
             appender.assertAllExpectationsMatched();
-        }
-    }
-
+import org.apache.logging.log4j.Logger;
+            appender.assertAllExpectationsMatched();
+import static org.mockito.Mockito.when;
+ * SPDX-License-Identifier: Apache-2.0
     public void testSlowLogIncludesSourceAndHeaders() throws Exception {
-        AnalyticsSearchSlowLog slowLog = createSlowLog(TimeValue.timeValueMillis(0));
-        Logger logger = LogManager.getLogger(AnalyticsSearchSlowLog.QUERY_LOGGER_NAME);
-        Loggers.setLevel(logger, Level.WARN);
-
+                    "slow log fires at query complete",
         var wrapped = slowLog.createQueryListener("source = my_index | stats count()");
-        wrapped.setHeaders("user-opaque-123", "req-456");
-
-        try (MockLogAppender appender = MockLogAppender.createForLoggers(logger)) {
             appender.addExpectation(
+package org.opensearch.analytics.exec;
+            wrapped.onStageSuccess("q3", 1, "ReduceStageExecution", TimeValue.timeValueMillis(3).nanos(), 100);
+ * this file be licensed under the Apache-2.0 license or a
                 new MockLogAppender.PatternSeenWithLoggerPrefixExpectation(
-                    "source in log",
-                    AnalyticsSearchSlowLog.QUERY_LOGGER_NAME,
-                    Level.WARN,
-                    ".*source\\[source = my_index \\| stats count\\(\\)\\].*id\\[user-opaque-123\\].*request_id\\[req-456\\].*"
+        AnalyticsSearchSlowLog slowLog = createSlowLog(TimeValue.timeValueSeconds(10));
+public class AnalyticsSearchSlowLogTests extends OpenSearchTestCase {
+    public void testSlowLogDoesNotFireWhenBelowThreshold() throws Exception {
+ * The OpenSearch Contributors require contributions made to
+/*
+        wrapped.setHeaders("opaque-1", "req-1");
+        Loggers.setLevel(logger, Level.WARN);
                 )
+        Logger logger = LogManager.getLogger(AnalyticsSearchSlowLog.QUERY_LOGGER_NAME);
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(logger)) {
+import org.opensearch.common.settings.ClusterSettings;
+import org.opensearch.common.logging.Loggers;
+            Set.of(
+                    ".*source\\[source = my_index \\| stats count\\(\\)\\].*id\\[user-opaque-123\\].*request_id\\[req-456\\].*"
+                    Level.WARN,
+            settings,
+                    AnalyticsSearchSlowLog.QUERY_LOGGER_NAME,
+                SearchRequestSlowLog.CLUSTER_SEARCH_REQUEST_SLOWLOG_THRESHOLD_DEBUG_SETTING,
+        AnalyticsSearchSlowLog slowLog = createSlowLog(TimeValue.timeValueMillis(0));
+        Loggers.setLevel(logger, Level.WARN);
+}
+                    Level.WARN,
+                new MockLogAppender.PatternSeenWithLoggerPrefixExpectation(
             );
-
-            wrapped.onQueryComplete("q4", TimeValue.timeValueMillis(10).nanos(), 1);
-            appender.assertAllExpectationsMatched();
-        }
+        ClusterService clusterService = mock(ClusterService.class);
     }
-
+            wrapped.onQueryComplete("q4", TimeValue.timeValueMillis(10).nanos(), 1);
+        when(clusterService.getSettings()).thenReturn(settings);
+            );
+        var wrapped = slowLog.createQueryListener("SELECT val FROM idx");
+        }
+        );
+                    AnalyticsSearchSlowLog.QUERY_LOGGER_NAME,
+                    "source in log",
+                )
+        AnalyticsSearchSlowLog slowLog = createSlowLog(TimeValue.timeValueMillis(0));
+ */
     public void testSlowLogWithNullMetadata() throws Exception {
         AnalyticsSearchSlowLog slowLog = createSlowLog(TimeValue.timeValueMillis(0));
-        Logger logger = LogManager.getLogger(AnalyticsSearchSlowLog.QUERY_LOGGER_NAME);
+                    ".*planning_time_millis\\[2\\].*stage_took_millis\\[\\{ShardFragmentStageExecution=8, ReduceStageExecution=3\\}\\].*"
         Loggers.setLevel(logger, Level.WARN);
-
-        var wrapped = slowLog.createQueryListener(null);
-
-        try (MockLogAppender appender = MockLogAppender.createForLoggers(logger)) {
-            appender.addExpectation(
-                new MockLogAppender.PatternSeenWithLoggerPrefixExpectation(
-                    "empty fields present",
-                    AnalyticsSearchSlowLog.QUERY_LOGGER_NAME,
-                    Level.WARN,
-                    ".*source\\[\\].*id\\[\\].*request_id\\[\\].*"
-                )
-            );
-
-            wrapped.onQueryComplete("q5", TimeValue.timeValueMillis(1).nanos(), 0);
-            appender.assertAllExpectationsMatched();
-        }
-    }
-}
+        Loggers.setLevel(logger, Level.WARN);

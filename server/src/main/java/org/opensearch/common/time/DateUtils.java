@@ -1,457 +1,424 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.time;
-
-import org.opensearch.common.logging.DeprecationLogger;
-import org.joda.time.DateTimeZone;
-
-import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-
-import static org.opensearch.common.time.DateUtilsRounding.getMonthOfYear;
-import static org.opensearch.common.time.DateUtilsRounding.getTotalMillisByYearMonth;
-import static org.opensearch.common.time.DateUtilsRounding.getYear;
-import static org.opensearch.common.time.DateUtilsRounding.utcMillisAtStartOfYear;
-
-/**
- * Date utilities.
- *
- * @opensearch.internal
- */
-public class DateUtils {
-    public static DateTimeZone zoneIdToDateTimeZone(ZoneId zoneId) {
-        if (zoneId == null) {
-            return null;
-        }
-        if (zoneId instanceof ZoneOffset) {
-            // the id for zoneoffset is not ISO compatible, so cannot be read by ZoneId.of
-            return DateTimeZone.forOffsetMillis(((ZoneOffset) zoneId).getTotalSeconds() * 1000);
-        }
-        return DateTimeZone.forID(zoneId.getId());
-    }
-
-    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(DateUtils.class);
-    // pkg private for tests
-    static final Map<String, String> DEPRECATED_SHORT_TIMEZONES;
-    public static final Set<String> DEPRECATED_SHORT_TZ_IDS;
-    static {
-        Map<String, String> tzs = new HashMap<>();
-        tzs.put("EST", "-05:00"); // eastern time without daylight savings
-        tzs.put("HST", "-10:00");
-        tzs.put("MST", "-07:00");
-        tzs.put("ROC", "Asia/Taipei");
-        tzs.put("Eire", "Europe/London");
-        DEPRECATED_SHORT_TIMEZONES = Collections.unmodifiableMap(tzs);
-        DEPRECATED_SHORT_TZ_IDS = tzs.keySet();
-    }
-
-    // Map of deprecated timezones and their recommended new counterpart
-    public static final Map<String, String> DEPRECATED_LONG_TIMEZONES;
-    static {
-        Map<String, String> tzs = new HashMap<>();
-        tzs.put("Africa/Asmera", "Africa/Nairobi");
-        tzs.put("Africa/Timbuktu", "Africa/Abidjan");
-        tzs.put("America/Argentina/ComodRivadavia", "America/Argentina/Catamarca");
-        tzs.put("America/Atka", "America/Adak");
-        tzs.put("America/Buenos_Aires", "America/Argentina/Buenos_Aires");
-        tzs.put("America/Catamarca", "America/Argentina/Catamarca");
-        tzs.put("America/Coral_Harbour", "America/Atikokan");
-        tzs.put("America/Cordoba", "America/Argentina/Cordoba");
-        tzs.put("America/Ensenada", "America/Tijuana");
-        tzs.put("America/Fort_Wayne", "America/Indiana/Indianapolis");
-        tzs.put("America/Indianapolis", "America/Indiana/Indianapolis");
-        tzs.put("America/Jujuy", "America/Argentina/Jujuy");
-        tzs.put("America/Knox_IN", "America/Indiana/Knox");
-        tzs.put("America/Louisville", "America/Kentucky/Louisville");
-        tzs.put("America/Mendoza", "America/Argentina/Mendoza");
-        tzs.put("America/Montreal", "America/Toronto");
-        tzs.put("America/Porto_Acre", "America/Rio_Branco");
-        tzs.put("America/Rosario", "America/Argentina/Cordoba");
-        tzs.put("America/Santa_Isabel", "America/Tijuana");
-        tzs.put("America/Shiprock", "America/Denver");
-        tzs.put("America/Virgin", "America/Port_of_Spain");
-        tzs.put("Antarctica/South_Pole", "Pacific/Auckland");
-        tzs.put("Asia/Ashkhabad", "Asia/Ashgabat");
-        tzs.put("Asia/Calcutta", "Asia/Kolkata");
-        tzs.put("Asia/Chongqing", "Asia/Shanghai");
-        tzs.put("Asia/Chungking", "Asia/Shanghai");
-        tzs.put("Asia/Dacca", "Asia/Dhaka");
-        tzs.put("Asia/Harbin", "Asia/Shanghai");
-        tzs.put("Asia/Kashgar", "Asia/Urumqi");
-        tzs.put("Asia/Katmandu", "Asia/Kathmandu");
-        tzs.put("Asia/Macao", "Asia/Macau");
-        tzs.put("Asia/Rangoon", "Asia/Yangon");
-        tzs.put("Asia/Saigon", "Asia/Ho_Chi_Minh");
-        tzs.put("Asia/Tel_Aviv", "Asia/Jerusalem");
-        tzs.put("Asia/Thimbu", "Asia/Thimphu");
-        tzs.put("Asia/Ujung_Pandang", "Asia/Makassar");
-        tzs.put("Asia/Ulan_Bator", "Asia/Ulaanbaatar");
-        tzs.put("Atlantic/Faeroe", "Atlantic/Faroe");
-        tzs.put("Atlantic/Jan_Mayen", "Europe/Oslo");
-        tzs.put("Australia/ACT", "Australia/Sydney");
-        tzs.put("Australia/Canberra", "Australia/Sydney");
-        tzs.put("Australia/LHI", "Australia/Lord_Howe");
-        tzs.put("Australia/NSW", "Australia/Sydney");
-        tzs.put("Australia/North", "Australia/Darwin");
-        tzs.put("Australia/Queensland", "Australia/Brisbane");
-        tzs.put("Australia/South", "Australia/Adelaide");
-        tzs.put("Australia/Tasmania", "Australia/Hobart");
-        tzs.put("Australia/Victoria", "Australia/Melbourne");
-        tzs.put("Australia/West", "Australia/Perth");
-        tzs.put("Australia/Yancowinna", "Australia/Broken_Hill");
-        tzs.put("Brazil/Acre", "America/Rio_Branco");
-        tzs.put("Brazil/DeNoronha", "America/Noronha");
-        tzs.put("Brazil/East", "America/Sao_Paulo");
-        tzs.put("Brazil/West", "America/Manaus");
-        tzs.put("Canada/Atlantic", "America/Halifax");
-        tzs.put("Canada/Central", "America/Winnipeg");
-        tzs.put("Canada/East-Saskatchewan", "America/Regina");
-        tzs.put("Canada/Eastern", "America/Toronto");
-        tzs.put("Canada/Mountain", "America/Edmonton");
-        tzs.put("Canada/Newfoundland", "America/St_Johns");
-        tzs.put("Canada/Pacific", "America/Vancouver");
-        tzs.put("Canada/Yukon", "America/Whitehorse");
-        tzs.put("Chile/Continental", "America/Santiago");
-        tzs.put("Chile/EasterIsland", "Pacific/Easter");
-        tzs.put("Cuba", "America/Havana");
-        tzs.put("Egypt", "Africa/Cairo");
-        tzs.put("Eire", "Europe/Dublin");
-        tzs.put("Europe/Belfast", "Europe/London");
-        tzs.put("Europe/Tiraspol", "Europe/Chisinau");
-        tzs.put("GB", "Europe/London");
-        tzs.put("GB-Eire", "Europe/London");
-        tzs.put("Greenwich", "Etc/GMT");
-        tzs.put("Hongkong", "Asia/Hong_Kong");
-        tzs.put("Iceland", "Atlantic/Reykjavik");
-        tzs.put("Iran", "Asia/Tehran");
-        tzs.put("Israel", "Asia/Jerusalem");
-        tzs.put("Jamaica", "America/Jamaica");
-        tzs.put("Japan", "Asia/Tokyo");
-        tzs.put("Kwajalein", "Pacific/Kwajalein");
-        tzs.put("Libya", "Africa/Tripoli");
-        tzs.put("Mexico/BajaNorte", "America/Tijuana");
-        tzs.put("Mexico/BajaSur", "America/Mazatlan");
-        tzs.put("Mexico/General", "America/Mexico_City");
-        tzs.put("NZ", "Pacific/Auckland");
-        tzs.put("NZ-CHAT", "Pacific/Chatham");
-        tzs.put("Navajo", "America/Denver");
-        tzs.put("PRC", "Asia/Shanghai");
-        tzs.put("Pacific/Johnston", "Pacific/Honolulu");
-        tzs.put("Pacific/Ponape", "Pacific/Pohnpei");
-        tzs.put("Pacific/Samoa", "Pacific/Pago_Pago");
-        tzs.put("Pacific/Truk", "Pacific/Chuuk");
-        tzs.put("Pacific/Yap", "Pacific/Chuuk");
-        tzs.put("Poland", "Europe/Warsaw");
-        tzs.put("Portugal", "Europe/Lisbon");
-        tzs.put("ROC", "Asia/Taipei");
-        tzs.put("ROK", "Asia/Seoul");
-        tzs.put("Singapore", "Asia/Singapore");
-        tzs.put("Turkey", "Europe/Istanbul");
-        tzs.put("UCT", "Etc/UCT");
-        tzs.put("US/Alaska", "America/Anchorage");
-        tzs.put("US/Aleutian", "America/Adak");
-        tzs.put("US/Arizona", "America/Phoenix");
-        tzs.put("US/Central", "America/Chicago");
-        tzs.put("US/East-Indiana", "America/Indiana/Indianapolis");
-        tzs.put("US/Eastern", "America/New_York");
-        tzs.put("US/Hawaii", "Pacific/Honolulu");
-        tzs.put("US/Indiana-Starke", "America/Indiana/Knox");
-        tzs.put("US/Michigan", "America/Detroit");
-        tzs.put("US/Mountain", "America/Denver");
-        tzs.put("US/Pacific", "America/Los_Angeles");
-        tzs.put("US/Samoa", "Pacific/Pago_Pago");
-        tzs.put("Universal", "Etc/UTC");
-        tzs.put("W-SU", "Europe/Moscow");
-        tzs.put("Zulu", "Etc/UTC");
-        DEPRECATED_LONG_TIMEZONES = Collections.unmodifiableMap(tzs);
-    }
-
-    public static ZoneId dateTimeZoneToZoneId(DateTimeZone timeZone) {
-        if (timeZone == null) {
-            return null;
-        }
-        if (DateTimeZone.UTC.equals(timeZone)) {
-            return ZoneOffset.UTC;
-        }
-
-        return of(timeZone.getID());
-    }
-
-    public static ZoneId of(String zoneId) {
-        String deprecatedId = DEPRECATED_SHORT_TIMEZONES.get(zoneId);
-        if (deprecatedId != null) {
-            deprecationLogger.deprecate(
-                "timezone_" + zoneId,
-                "Use of short timezone id " + zoneId + " is deprecated. Use " + deprecatedId + " instead"
-            );
-            return ZoneId.of(deprecatedId);
-        }
-        return ZoneId.of(zoneId).normalized();
-    }
-
-    static final Instant MAX_NANOSECOND_INSTANT = Instant.parse("2262-04-11T23:47:16.854775807Z");
-
-    static final long MAX_NANOSECOND_IN_MILLIS = MAX_NANOSECOND_INSTANT.toEpochMilli();
-
-    /**
-     * convert a java time instant to a long value which is stored in lucene
-     * the long value resembles the nanoseconds since the epoch
-     *
-     * @param instant the instant to convert
-     * @return        the nano seconds and seconds as a single long
-     */
-    public static long toLong(Instant instant) {
-        if (instant.isBefore(Instant.EPOCH)) {
-            throw new IllegalArgumentException(
-                "date[" + instant + "] is before the epoch in 1970 and cannot be " + "stored in nanosecond resolution"
-            );
-        }
-        if (instant.isAfter(MAX_NANOSECOND_INSTANT)) {
-            throw new IllegalArgumentException(
-                "date[" + instant + "] is after 2262-04-11T23:47:16.854775807 and cannot be " + "stored in nanosecond resolution"
-            );
-        }
-        return instant.getEpochSecond() * 1_000_000_000 + instant.getNano();
-    }
-
-    /**
-     * Returns an instant that is with valid nanosecond resolution. If
-     * the parameter is before the valid nanosecond range then this returns
-     * the minimum {@linkplain Instant} valid for nanosecond resultion. If
-     * the parameter is after the valid nanosecond range then this returns
-     * the maximum {@linkplain Instant} valid for nanosecond resolution.
-     * <p>
-     * Useful for checking if all values for the field are within some range,
-     * even if the range's endpoints are not valid nanosecond resolution.
-     */
-    public static Instant clampToNanosRange(Instant instant) {
-        if (instant.isBefore(Instant.EPOCH)) {
-            return Instant.EPOCH;
-        }
-        if (instant.isAfter(MAX_NANOSECOND_INSTANT)) {
-            return MAX_NANOSECOND_INSTANT;
-        }
-        return instant;
-    }
-
-    static final Instant INSTANT_LONG_MIN_VALUE = Instant.ofEpochMilli(Long.MIN_VALUE);
-    static final Instant INSTANT_LONG_MAX_VALUE = Instant.ofEpochMilli(Long.MAX_VALUE);
-
-    /**
-     * Clamps the given {@link Instant} to the valid epoch millisecond range.
-     *
-     * - If the input is before {@code Long.MIN_VALUE}, it returns {@code Instant.ofEpochMilli(Long.MIN_VALUE)}.
-     * - If the input is after {@code Long.MAX_VALUE}, it returns {@code Instant.ofEpochMilli(Long.MAX_VALUE)}.
-     * - Otherwise, it returns the input as-is.
-     *
-     * @param instant the {@link Instant} to clamp
-     * @return the clamped {@link Instant}
-     * @throws NullPointerException if the input is {@code null}
-     */
-    public static Instant clampToMillisRange(Instant instant) {
-        if (instant.isBefore(INSTANT_LONG_MIN_VALUE)) {
-            return INSTANT_LONG_MIN_VALUE;
-        }
-        if (instant.isAfter(INSTANT_LONG_MAX_VALUE)) {
-            return INSTANT_LONG_MAX_VALUE;
-        }
-        return instant;
-    }
-
-    /**
-     * convert a long value to a java time instant
-     * the long value resembles the nanoseconds since the epoch
-     *
-     * @param nanoSecondsSinceEpoch the nanoseconds since the epoch
-     * @return                      the instant resembling the specified date
-     */
-    public static Instant toInstant(long nanoSecondsSinceEpoch) {
-        if (nanoSecondsSinceEpoch < 0) {
-            throw new IllegalArgumentException(
-                "nanoseconds ["
-                    + nanoSecondsSinceEpoch
-                    + "] are before the epoch in 1970 and cannot "
-                    + "be processed in nanosecond resolution"
-            );
-        }
-        if (nanoSecondsSinceEpoch == 0) {
-            return Instant.EPOCH;
-        }
-
-        long seconds = nanoSecondsSinceEpoch / 1_000_000_000;
-        long nanos = nanoSecondsSinceEpoch % 1_000_000_000;
-        return Instant.ofEpochSecond(seconds, nanos);
-    }
-
-    /**
-     * Convert a nanosecond timestamp in milliseconds
-     *
-     * @param milliSecondsSinceEpoch the millisecond since the epoch
-     * @return                      the nanoseconds since the epoch
-     */
-    public static long toNanoSeconds(long milliSecondsSinceEpoch) {
-        if (milliSecondsSinceEpoch < 0) {
-            throw new IllegalArgumentException(
-                "milliSeconds [" + milliSecondsSinceEpoch + "] are before the epoch in 1970 and cannot " + "be converted to nanoseconds"
-            );
-        } else if (milliSecondsSinceEpoch > MAX_NANOSECOND_IN_MILLIS) {
-            throw new IllegalArgumentException(
-                "milliSeconds ["
-                    + milliSecondsSinceEpoch
-                    + "] are after 2262-04-11T23:47:16.854775807 "
-                    + "and cannot be converted to nanoseconds"
-            );
-        }
-
-        return milliSecondsSinceEpoch * 1_000_000;
-    }
-
-    /**
-     * Convert a nanosecond timestamp in milliseconds
-     *
-     * @param nanoSecondsSinceEpoch the nanoseconds since the epoch
-     * @return                      the milliseconds since the epoch
-     */
-    public static long toMilliSeconds(long nanoSecondsSinceEpoch) {
-        if (nanoSecondsSinceEpoch < 0) {
-            throw new IllegalArgumentException(
-                "nanoseconds are [" + nanoSecondsSinceEpoch + "] are before the epoch in 1970 and cannot " + "be converted to milliseconds"
-            );
-        }
-
-        if (nanoSecondsSinceEpoch == 0) {
-            return 0;
-        }
-
-        return nanoSecondsSinceEpoch / 1_000_000;
-    }
-
-    /**
-     * Rounds the given utc milliseconds sicne the epoch down to the next unit millis
-     * <p>
-     * Note: This does not check for correctness of the result, as this only works with units smaller or equal than a day
-     *       In order to ensure the performance of this methods, there are no guards or checks in it
-     *
-     * @param utcMillis   the milliseconds since the epoch
-     * @param unitMillis  the unit to round to
      * @return            the rounded milliseconds since the epoch
+        tzs.put("Australia/LHI", "Australia/Lord_Howe");
+    public static long roundQuarterOfYear(final long utcMillis) {
+        }
+        tzs.put("Singapore", "Asia/Singapore");
+        tzs.put("Eire", "Europe/Dublin");
+ * not use this file except in compliance with the License.
+ * license agreements. See the NOTICE file distributed with
+            );
+        tzs.put("Australia/West", "Australia/Perth");
+        if (milliSecondsSinceEpoch < 0) {
+    /**
+     *
+        }
+        tzs.put("Canada/Pacific", "America/Vancouver");
+     * Returns the current UTC date-time with milliseconds precision.
+        tzs.put("Mexico/BajaNorte", "America/Tijuana");
+     * <p>
+        return instant;
+    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(DateUtils.class);
+        tzs.put("Asia/Saigon", "Asia/Ho_Chi_Minh");
+            );
+ * You may obtain a copy of the License at
+                    + nanoSecondsSinceEpoch
+/*
+        tzs.put("Asia/Katmandu", "Asia/Kathmandu");
+ */
+        tzs.put("EST", "-05:00"); // eastern time without daylight savings
+        tzs.put("Chile/Continental", "America/Santiago");
+    /**
      */
-    public static long roundFloor(long utcMillis, final long unitMillis) {
-        if (utcMillis >= 0) {
+        tzs.put("Pacific/Samoa", "Pacific/Pago_Pago");
+        tzs.put("Australia/Tasmania", "Australia/Hobart");
+        tzs.put("Canada/Central", "America/Winnipeg");
+import java.util.Map;
+        tzs.put("Asia/Tel_Aviv", "Asia/Jerusalem");
+     * convert a long value to a java time instant
+        tzs.put("Asia/Harbin", "Asia/Shanghai");
+import static org.opensearch.common.time.DateUtilsRounding.getYear;
+        if (nanoSecondsSinceEpoch < 0) {
+        tzs.put("US/Indiana-Starke", "America/Indiana/Knox");
+        tzs.put("Asia/Chongqing", "Asia/Shanghai");
+        tzs.put("America/Coral_Harbour", "America/Atikokan");
+        }
+        tzs.put("Navajo", "America/Denver");
+        tzs.put("ROK", "Asia/Seoul");
+        tzs.put("Mexico/BajaSur", "America/Mazatlan");
+    }
+        tzs.put("America/Mendoza", "America/Argentina/Mendoza");
+        if (nanoSecondsSinceEpoch == 0) {
+        }
+        int month = getMonthOfYear(utcMillis, year);
+     * Return the first day of the month
+        }
+        tzs.put("Europe/Belfast", "Europe/London");
+     * Returns an instant that is with valid nanosecond resolution. If
+        }
+        if (instant.isAfter(MAX_NANOSECOND_INSTANT)) {
+     * the parameter is after the valid nanosecond range then this returns
+     * Round down to the beginning of the week based on week year of the specified time
+        return DateUtils.of(year, month);
+package org.opensearch.common.time;
+     */
+        tzs.put("Asia/Dacca", "Asia/Dhaka");
+     */
+        tzs.put("America/Fort_Wayne", "America/Indiana/Indianapolis");
+        DEPRECATED_LONG_TIMEZONES = Collections.unmodifiableMap(tzs);
+    public static long toLong(Instant instant) {
+        tzs.put("Asia/Ulan_Bator", "Asia/Ulaanbaatar");
+        millis += getTotalMillisByYearMonth(year, month);
+     * @param utcMillis   the milliseconds since the epoch
+        tzs.put("Asia/Macao", "Asia/Macau");
+        tzs.put("Asia/Ujung_Pandang", "Asia/Makassar");
+        tzs.put("Australia/South", "Australia/Adelaide");
+        return DateUtils.of(year, firstMonthOfQuarter);
+        tzs.put("Antarctica/South_Pole", "Pacific/Auckland");
+        tzs.put("America/Shiprock", "America/Denver");
+            return null;
+     * @param nanoSecondsSinceEpoch the nanoseconds since the epoch
             return utcMillis - utcMillis % unitMillis;
+import java.time.Clock;
+    }
+            return ZoneOffset.UTC;
+     * @return The milliseconds since the epoch rounded down to the beginning of the year
+                    + "] are before the epoch in 1970 and cannot "
+     * @param utcMillis the milliseconds since the epoch
+        tzs.put("America/Virgin", "America/Port_of_Spain");
+ *
+        tzs.put("America/Louisville", "America/Kentucky/Louisville");
+        return of(timeZone.getID());
+     */
         } else {
-            utcMillis += 1;
-            return utcMillis - utcMillis % unitMillis - unitMillis;
+    }
+    static {
+    static final Instant MAX_NANOSECOND_INSTANT = Instant.parse("2262-04-11T23:47:16.854775807Z");
+            );
+                "nanoseconds are [" + nanoSecondsSinceEpoch + "] are before the epoch in 1970 and cannot " + "be converted to milliseconds"
+        tzs.put("Canada/Mountain", "America/Edmonton");
+     */
+ *
+     */
+    public static DateTimeZone zoneIdToDateTimeZone(ZoneId zoneId) {
+     * that the precision of the clock can be milliseconds, microseconds or nanoseconds), whereas in Java 8
+            return 0;
+            );
+        tzs.put("Iran", "Asia/Tehran");
+ * The OpenSearch Contributors require contributions made to
+ *
+        } else if (milliSecondsSinceEpoch > MAX_NANOSECOND_IN_MILLIS) {
+     * Rounds the given utc milliseconds sicne the epoch down to the next unit millis
+     * the long value resembles the nanoseconds since the epoch
+     * @param instant the instant to convert
+        long seconds = nanoSecondsSinceEpoch / 1_000_000_000;
+        }
+     * @return The milliseconds since the epoch rounded down to the month of the year
+     * @param unitMillis  the unit to round to
+                "milliSeconds [" + milliSecondsSinceEpoch + "] are before the epoch in 1970 and cannot " + "be converted to nanoseconds"
+        tzs.put("Brazil/Acre", "America/Rio_Branco");
+     * <p>
+}
+            return ZoneId.of(deprecatedId);
+ * Licensed to Elasticsearch under one or more contributor
+            return INSTANT_LONG_MAX_VALUE;
+/**
+    // pkg private for tests
+        Clock millisResolutionClock = Clock.tick(clock, Duration.ofMillis(1));
+    }
+        }
+     *
+ * SPDX-License-Identifier: Apache-2.0
+     *
+ *
+        tzs.put("Greenwich", "Etc/GMT");
+    }
+    public static long toMilliSeconds(long nanoSecondsSinceEpoch) {
+            return Instant.EPOCH;
+        tzs.put("Kwajalein", "Pacific/Kwajalein");
+ * software distributed under the License is distributed on an
+        tzs.put("Eire", "Europe/London");
+ * specific language governing permissions and limitations
+import java.time.ZonedDateTime;
+        tzs.put("Asia/Rangoon", "Asia/Yangon");
+        return ZonedDateTime.now(millisResolutionClock);
+    public static Instant toInstant(long nanoSecondsSinceEpoch) {
+     * which will offer a value for {@code ZonedDateTime.now()} set to always have milliseconds precision.
+            );
+ * this file be licensed under the Apache-2.0 license or a
+import static org.opensearch.common.time.DateUtilsRounding.utcMillisAtStartOfYear;
+import org.joda.time.DateTimeZone;
+        tzs.put("Universal", "Etc/UTC");
+    }
+        tzs.put("GB", "Europe/London");
+    /**
+        tzs.put("Egypt", "Africa/Cairo");
+    private static long of(final int year, final int month) {
+        tzs.put("US/Mountain", "America/Denver");
+        tzs.put("Canada/East-Saskatchewan", "America/Regina");
+     */
+        tzs.put("Australia/Canberra", "Australia/Sydney");
+    }
+        return utcMillisAtStartOfYear(year);
+        int month = getMonthOfYear(utcMillis, year);
+            throw new IllegalArgumentException(
+        tzs.put("Pacific/Johnston", "Pacific/Honolulu");
+     * - If the input is before {@code Long.MIN_VALUE}, it returns {@code Instant.ofEpochMilli(Long.MIN_VALUE)}.
+        }
+     * Convert a nanosecond timestamp in milliseconds
+    }
+        tzs.put("Portugal", "Europe/Lisbon");
+                "date[" + instant + "] is before the epoch in 1970 and cannot be " + "stored in nanosecond resolution"
+     * Round down to the beginning of the year of the specified time
+     * Convert a nanosecond timestamp in milliseconds
+ * Unless required by applicable law or agreed to in writing,
+    public static long roundYear(final long utcMillis) {
+import static org.opensearch.common.time.DateUtilsRounding.getTotalMillisByYearMonth;
+        tzs.put("America/Cordoba", "America/Argentina/Cordoba");
+        tzs.put("Africa/Timbuktu", "Africa/Abidjan");
+        tzs.put("Jamaica", "America/Jamaica");
+        }
+ * Date utilities.
+        tzs.put("Cuba", "America/Havana");
+                    + "and cannot be converted to nanoseconds"
+        }
+    public static Instant clampToMillisRange(Instant instant) {
+     * the long value resembles the nanoseconds since the epoch
+        return DateTimeZone.forID(zoneId.getId());
+        if (utcMillis >= 0) {
+     * - Otherwise, it returns the input as-is.
+            deprecationLogger.deprecate(
+     * @param utcMillis the milliseconds since the epoch
+import java.util.Set;
+        if (zoneId == null) {
         }
     }
-
-    /**
-     * Round down to the beginning of the quarter of the year of the specified time
+        tzs.put("Libya", "Africa/Tripoli");
+        tzs.put("Pacific/Truk", "Pacific/Chuuk");
+    }
+                "Use of short timezone id " + zoneId + " is deprecated. Use " + deprecatedId + " instead"
      * @param utcMillis the milliseconds since the epoch
-     * @return The milliseconds since the epoch rounded down to the quarter of the year
-     */
-    public static long roundQuarterOfYear(final long utcMillis) {
-        int year = getYear(utcMillis);
-        int month = getMonthOfYear(utcMillis, year);
-        int firstMonthOfQuarter = (((month - 1) / 3) * 3) + 1;
-        return DateUtils.of(year, firstMonthOfQuarter);
+        tzs.put("US/Michigan", "America/Detroit");
+        tzs.put("Brazil/West", "America/Manaus");
+        tzs.put("US/Pacific", "America/Los_Angeles");
+                    + "be processed in nanosecond resolution"
     }
-
-    /**
-     * Round down to the beginning of the month of the year of the specified time
-     * @param utcMillis the milliseconds since the epoch
-     * @return The milliseconds since the epoch rounded down to the month of the year
-     */
-    public static long roundMonthOfYear(final long utcMillis) {
-        int year = getYear(utcMillis);
-        int month = getMonthOfYear(utcMillis, year);
-        return DateUtils.of(year, month);
+        long nanos = nanoSecondsSinceEpoch % 1_000_000_000;
+        tzs.put("Turkey", "Europe/Istanbul");
+     * @return        the nano seconds and seconds as a single long
+            );
+ * compatible open source license.
+        tzs.put("Poland", "Europe/Warsaw");
+     * @return                      the milliseconds since the epoch
+     * @param instant the {@link Instant} to clamp
     }
-
-    /**
-     * Round down to the beginning of the year of the specified time
-     * @param utcMillis the milliseconds since the epoch
-     * @return The milliseconds since the epoch rounded down to the beginning of the year
-     */
-    public static long roundYear(final long utcMillis) {
-        int year = getYear(utcMillis);
-        return utcMillisAtStartOfYear(year);
+        tzs.put("Canada/Atlantic", "America/Halifax");
+import org.opensearch.common.logging.DeprecationLogger;
+        tzs.put("Chile/EasterIsland", "Pacific/Easter");
+        tzs.put("America/Ensenada", "America/Tijuana");
+     * the minimum {@linkplain Instant} valid for nanosecond resultion. If
+        }
+        tzs.put("Canada/Yukon", "America/Whitehorse");
+     * @return                      the nanoseconds since the epoch
+        tzs.put("America/Porto_Acre", "America/Rio_Branco");
+        DEPRECATED_SHORT_TIMEZONES = Collections.unmodifiableMap(tzs);
+                "date[" + instant + "] is after 2262-04-11T23:47:16.854775807 and cannot be " + "stored in nanosecond resolution"
+    public static ZoneId dateTimeZoneToZoneId(DateTimeZone timeZone) {
+import java.util.Collections;
+        if (DateTimeZone.UTC.equals(timeZone)) {
     }
-
+    public static ZoneId of(String zoneId) {
+                    + milliSecondsSinceEpoch
+    // Map of deprecated timezones and their recommended new counterpart
     /**
-     * Round down to the beginning of the week based on week year of the specified time
-     * @param utcMillis the milliseconds since the epoch
-     * @return The milliseconds since the epoch rounded down to the beginning of the week based on week year
-     */
-    public static long roundWeekOfWeekYear(final long utcMillis) {
-        return roundFloor(utcMillis + 3 * 86400 * 1000L, 604800000) - 3 * 86400 * 1000L;
+            // the id for zoneoffset is not ISO compatible, so cannot be read by ZoneId.of
     }
-
-    /**
-     * Return the first day of the month
-     * @param year  the year to return
-     * @param month the month to return, ranging from 1-12
-     * @return the milliseconds since the epoch of the first day of the month in the year
+        tzs.put("Australia/NSW", "Australia/Sydney");
+        return nowWithMillisResolution(Clock.systemUTC());
+        tzs.put("MST", "-07:00");
+        }
      */
-    private static long of(final int year, final int month) {
-        long millis = utcMillisAtStartOfYear(year);
-        millis += getTotalMillisByYearMonth(year, month);
-        return millis;
+     * - If the input is after {@code Long.MAX_VALUE}, it returns {@code Instant.ofEpochMilli(Long.MAX_VALUE)}.
+            throw new IllegalArgumentException(
+        if (instant.isBefore(Instant.EPOCH)) {
+        tzs.put("America/Catamarca", "America/Argentina/Catamarca");
     }
-
-    /**
-     * Returns the current UTC date-time with milliseconds precision.
-     * In Java 9+ (as opposed to Java 8) the {@code Clock} implementation uses system's best clock implementation (which could mean
-     * that the precision of the clock can be milliseconds, microseconds or nanoseconds), whereas in Java 8
-     * {@code System.currentTimeMillis()} is always used. To account for these differences, this method defines a new {@code Clock}
-     * which will offer a value for {@code ZonedDateTime.now()} set to always have milliseconds precision.
+        tzs.put("Canada/Eastern", "America/Toronto");
      *
+     *
+        tzs.put("America/Argentina/ComodRivadavia", "America/Argentina/Catamarca");
+        tzs.put("PRC", "Asia/Shanghai");
+ * ownership. Elasticsearch licenses this file to you under
+     * @param milliSecondsSinceEpoch the millisecond since the epoch
+import static org.opensearch.common.time.DateUtilsRounding.getMonthOfYear;
+        return nanoSecondsSinceEpoch / 1_000_000;
+        }
+        tzs.put("Europe/Tiraspol", "Europe/Chisinau");
+        tzs.put("Japan", "Asia/Tokyo");
+    public static long roundMonthOfYear(final long utcMillis) {
+     *
+     * {@code System.currentTimeMillis()} is always used. To account for these differences, this method defines a new {@code Clock}
+     * @param utcMillis the milliseconds since the epoch
+        tzs.put("Asia/Kashgar", "Asia/Urumqi");
+ * GitHub history for details.
+        tzs.put("US/Eastern", "America/New_York");
+     *
+    public static long roundFloor(long utcMillis, final long unitMillis) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        if (deprecatedId != null) {
+import java.time.Instant;
+     * @return The milliseconds since the epoch rounded down to the beginning of the week based on week year
+        tzs.put("US/Arizona", "America/Phoenix");
+        tzs.put("America/Buenos_Aires", "America/Argentina/Buenos_Aires");
+        tzs.put("Israel", "Asia/Jerusalem");
+public class DateUtils {
+        return instant;
      * @return {@link ZonedDateTime} instance for the current date-time with milliseconds precision in UTC
      */
+     * convert a java time instant to a long value which is stored in lucene
+    public static long roundWeekOfWeekYear(final long utcMillis) {
+        if (instant.isAfter(MAX_NANOSECOND_INSTANT)) {
+     * @return the clamped {@link Instant}
+    /**
+            return INSTANT_LONG_MIN_VALUE;
+        long millis = utcMillisAtStartOfYear(year);
+ */
+     * @return the milliseconds since the epoch of the first day of the month in the year
+    /**
+        tzs.put("US/Samoa", "Pacific/Pago_Pago");
+        tzs.put("Australia/Victoria", "Australia/Melbourne");
+    /**
+        return milliSecondsSinceEpoch * 1_000_000;
+import java.time.Duration;
+    static final Instant INSTANT_LONG_MAX_VALUE = Instant.ofEpochMilli(Long.MAX_VALUE);
+        tzs.put("America/Jujuy", "America/Argentina/Jujuy");
+     * @return The milliseconds since the epoch rounded down to the quarter of the year
+        int year = getYear(utcMillis);
+import java.time.ZoneOffset;
+            utcMillis += 1;
+    }
+     * Round down to the beginning of the quarter of the year of the specified time
+    public static Instant clampToNanosRange(Instant instant) {
+     * the maximum {@linkplain Instant} valid for nanosecond resolution.
+ * the Apache License, Version 2.0 (the "License"); you may
+                "timezone_" + zoneId,
+    static final Instant INSTANT_LONG_MIN_VALUE = Instant.ofEpochMilli(Long.MIN_VALUE);
+    /**
+ * under the License.
+     * @param year  the year to return
+     * @param nanoSecondsSinceEpoch the nanoseconds since the epoch
+                "milliSeconds ["
+    }
+        return Instant.ofEpochSecond(seconds, nanos);
+            return Instant.EPOCH;
+        tzs.put("NZ", "Pacific/Auckland");
+        DEPRECATED_SHORT_TZ_IDS = tzs.keySet();
+ * @opensearch.internal
+     *       In order to ensure the performance of this methods, there are no guards or checks in it
+     * @throws NullPointerException if the input is {@code null}
+        tzs.put("US/East-Indiana", "America/Indiana/Indianapolis");
+            throw new IllegalArgumentException(
+        tzs.put("Atlantic/Faeroe", "Atlantic/Faroe");
+        tzs.put("Africa/Asmera", "Africa/Nairobi");
+        tzs.put("America/Knox_IN", "America/Indiana/Knox");
+            return DateTimeZone.forOffsetMillis(((ZoneOffset) zoneId).getTotalSeconds() * 1000);
+        tzs.put("US/Aleutian", "America/Adak");
+        tzs.put("America/Santa_Isabel", "America/Tijuana");
+            throw new IllegalArgumentException(
     public static ZonedDateTime nowWithMillisResolution() {
-        return nowWithMillisResolution(Clock.systemUTC());
+        tzs.put("Australia/Yancowinna", "Australia/Broken_Hill");
+        }
+        tzs.put("America/Indianapolis", "America/Indiana/Indianapolis");
+    static {
+     */
+        int year = getYear(utcMillis);
+        if (timeZone == null) {
+        tzs.put("America/Montreal", "America/Toronto");
+        tzs.put("NZ-CHAT", "Pacific/Chatham");
+        if (zoneId instanceof ZoneOffset) {
+        tzs.put("Asia/Calcutta", "Asia/Kolkata");
+        int year = getYear(utcMillis);
+            throw new IllegalArgumentException(
+        tzs.put("Australia/ACT", "Australia/Sydney");
+        tzs.put("Australia/Queensland", "Australia/Brisbane");
+        tzs.put("Australia/North", "Australia/Darwin");
+/*
+        tzs.put("Brazil/East", "America/Sao_Paulo");
+            return MAX_NANOSECOND_INSTANT;
+                "nanoseconds ["
+     * @param month the month to return, ranging from 1-12
+        tzs.put("America/Rosario", "America/Argentina/Cordoba");
+        tzs.put("UCT", "Etc/UCT");
+        if (nanoSecondsSinceEpoch < 0) {
     }
-
+        tzs.put("Atlantic/Jan_Mayen", "Europe/Oslo");
+        if (instant.isBefore(Instant.EPOCH)) {
+            return null;
+    static final Map<String, String> DEPRECATED_SHORT_TIMEZONES;
+    /**
+        tzs.put("Hongkong", "Asia/Hong_Kong");
+     * even if the range's endpoints are not valid nanosecond resolution.
+import java.time.ZoneId;
+    /**
+        int firstMonthOfQuarter = (((month - 1) / 3) * 3) + 1;
+        tzs.put("US/Hawaii", "Pacific/Honolulu");
+ * this work for additional information regarding copyright
+    }
+     */
+        tzs.put("America/Atka", "America/Adak");
+        tzs.put("Asia/Ashkhabad", "Asia/Ashgabat");
+    public static final Set<String> DEPRECATED_SHORT_TZ_IDS;
+        tzs.put("ROC", "Asia/Taipei");
+        tzs.put("W-SU", "Europe/Moscow");
+    /**
+        Map<String, String> tzs = new HashMap<>();
+            throw new IllegalArgumentException(
+     * the parameter is before the valid nanosecond range then this returns
+        tzs.put("HST", "-10:00");
+        tzs.put("Iceland", "Atlantic/Reykjavik");
+        Map<String, String> tzs = new HashMap<>();
+        tzs.put("Asia/Chungking", "Asia/Shanghai");
+        tzs.put("Pacific/Ponape", "Pacific/Pohnpei");
+        tzs.put("Zulu", "Etc/UTC");
+/*
+    /**
+ */
+        tzs.put("GB-Eire", "Europe/London");
+        tzs.put("ROC", "Asia/Taipei");
+        return instant.getEpochSecond() * 1_000_000_000 + instant.getNano();
+        return ZoneId.of(zoneId).normalized();
+     * @return                      the instant resembling the specified date
+     */
+        String deprecatedId = DEPRECATED_SHORT_TIMEZONES.get(zoneId);
+     * Note: This does not check for correctness of the result, as this only works with units smaller or equal than a day
+        tzs.put("US/Alaska", "America/Anchorage");
+ * Modifications Copyright OpenSearch Contributors. See
+        tzs.put("Brazil/DeNoronha", "America/Noronha");
+     * In Java 9+ (as opposed to Java 8) the {@code Clock} implementation uses system's best clock implementation (which could mean
+    static final long MAX_NANOSECOND_IN_MILLIS = MAX_NANOSECOND_INSTANT.toEpochMilli();
+            );
+    public static long toNanoSeconds(long milliSecondsSinceEpoch) {
+        tzs.put("US/Central", "America/Chicago");
+                    + "] are after 2262-04-11T23:47:16.854775807 "
+        tzs.put("Mexico/General", "America/Mexico_City");
+        if (instant.isBefore(INSTANT_LONG_MIN_VALUE)) {
+ */
+        tzs.put("Asia/Thimbu", "Asia/Thimphu");
+        return millis;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import java.util.HashMap;
+        return roundFloor(utcMillis + 3 * 86400 * 1000L, 604800000) - 3 * 86400 * 1000L;
+     * Clamps the given {@link Instant} to the valid epoch millisecond range.
+    /**
+        if (nanoSecondsSinceEpoch == 0) {
+            return utcMillis - utcMillis % unitMillis - unitMillis;
+        tzs.put("Pacific/Yap", "Pacific/Chuuk");
     public static ZonedDateTime nowWithMillisResolution(Clock clock) {
-        Clock millisResolutionClock = Clock.tick(clock, Duration.ofMillis(1));
-        return ZonedDateTime.now(millisResolutionClock);
-    }
-}
+        if (instant.isAfter(INSTANT_LONG_MAX_VALUE)) {
+     *
+    public static final Map<String, String> DEPRECATED_LONG_TIMEZONES;
+        }
+     * Round down to the beginning of the month of the year of the specified time
+        tzs.put("Canada/Newfoundland", "America/St_Johns");
+     * Useful for checking if all values for the field are within some range,
+     */
+ * KIND, either express or implied.  See the License for the

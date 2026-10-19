@@ -1,350 +1,331 @@
----
+  - length: {task.status.slices: 2}
 "Multiple slices":
-  - do:
-      index:
-        index:   test
-        id:      1
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   test
-        id:      2
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   test
-        id:      3
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   test
-        id:      4
-        body:    { "text": "test" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      delete_by_query:
-        index: test
-        slices: 5
-        body:
-          query:
-            match_all: {}
-
-  - is_false: timed_out
-  - match: {deleted: 4}
-  - is_false: created
-  - is_false: updated
-  - match: {version_conflicts: 0}
-  - match: {failures: []}
-  - match: {noops: 0}
-  - match: {throttled_millis: 0}
-  - gte: { took: 0 }
-  - is_false: task
-  - length: {slices: 5}
-  - match: {slices.0.version_conflicts: 0}
-  - match: {slices.0.throttled_millis: 0}
-  - match: {slices.1.version_conflicts: 0}
-  - match: {slices.1.throttled_millis: 0}
-  - match: {slices.2.version_conflicts: 0}
-  - match: {slices.2.throttled_millis: 0}
-  - match: {slices.3.version_conflicts: 0}
-  - match: {slices.3.throttled_millis: 0}
-  - match: {slices.4.version_conflicts: 0}
-  - match: {slices.4.throttled_millis: 0}
-
-  - do:
-      indices.refresh: {}
-  - do:
-      count:
-        index: test
-  - match: {count: 0}
-
----
-"Multiple slices with wait_for_completion=false":
-  - skip:
-      features: allowed_warnings
-  - do:
-      index:
-        index:   test
-        id:      1
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   test
-        id:      2
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   test
-        id:      3
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   test
-        id:      4
-        body:    { "text": "test" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      delete_by_query:
-        index: test
-        wait_for_completion: false
-        slices: 5
-        body:
-          query:
-            match_all: {}
-  - is_false: timed_out
-  - match: {task: '/.+:\d+/'}
-  - set: {task: task}
-  - is_false: updated
-  - is_false: version_conflicts
-  - is_false: batches
-  - is_false: failures
-  - is_false: noops
-  - is_false: took
-  - is_false: throttled_millis
-  - is_false: created
-  - is_false: deleted
-
-  - do:
-      tasks.get:
-        wait_for_completion: true
-        task_id: $task
-  - is_false: node_failures
-  # The task will be in the response even if it finished before we got here
-  # because of task persistence.
-  - is_true: task
-  - match: {response.total: 4}
-  - match: {response.deleted: 4}
-  - match: {response.version_conflicts: 0}
-  - match: {response.failures: []}
-  - match: {response.throttled_millis: 0}
-  - gte: { response.took: 0 }
-  - is_false: response.task
-  - length: {response.slices: 5}
   - match: {response.slices.0.version_conflicts: 0}
-  - match: {response.slices.0.throttled_millis: 0}
-  - match: {response.slices.1.version_conflicts: 0}
-  - match: {response.slices.1.throttled_millis: 0}
-  - match: {response.slices.2.version_conflicts: 0}
-  - match: {response.slices.2.throttled_millis: 0}
-  - match: {response.slices.3.version_conflicts: 0}
-  - match: {response.slices.3.throttled_millis: 0}
-  - match: {response.slices.4.version_conflicts: 0}
-  - match: {response.slices.4.throttled_millis: 0}
-  - match: {task.status.total: 4}
-  - match: {task.status.deleted: 4}
-  - match: {task.status.version_conflicts: 0}
-  - match: {task.status.throttled_millis: 0}
-  - length: {task.status.slices: 5}
-  - match: {task.status.slices.0.version_conflicts: 0}
-  - match: {task.status.slices.0.throttled_millis: 0}
-  - match: {task.status.slices.1.version_conflicts: 0}
-  - match: {task.status.slices.1.throttled_millis: 0}
-  - match: {task.status.slices.2.version_conflicts: 0}
-  - match: {task.status.slices.2.throttled_millis: 0}
-  - match: {task.status.slices.3.version_conflicts: 0}
-  - match: {task.status.slices.3.throttled_millis: 0}
-  - match: {task.status.slices.4.version_conflicts: 0}
-  - match: {task.status.slices.4.throttled_millis: 0}
-
-
-  # Only the "parent" reindex task wrote its status to the tasks index though
+      delete_by_query:
+        index:   test
+      tasks.get:
   - do:
-      allowed_warnings:
-        - "this request accesses system indices: [.tasks], but in a future major version, direct access to system indices will be prevented by default"
+        index:   test
+  - is_false: updated
+      search:
+  - match: {slices.0.version_conflicts: 0}
+  - match: {response.slices.0.throttled_millis: 0}
+      count:
+  - do:
+  - do:
+        index: .tasks
+        index:   test
+  - match: {slices.0.throttled_millis: 0}
+  - gte: { response.took: 0 }
+      index:
+  - match: {task.status.slices.3.version_conflicts: 0}
+      index:
+      index:
+        task_id: $task
+  - is_false: noops
+        body:    { "text": "test" }
+  - is_false: throttled_millis
+  - match: {slices.2.throttled_millis: 0}
+  - do:
+      index:
+        index:   test
+---
+  - is_false: node_failures
+        body:    { "text": "test" }
+  - match: {throttled_millis: 0}
+---
+      indices.refresh: {}
+  - is_false: version_conflicts
+  - do:
+  - match: {task.status.version_conflicts: 0}
+      indices.refresh: {}
+        body:    { "text": "test" }
+  - do:
+        body:    { "text": "test" }
+  - match: {task: '/.+:\d+/'}
+      index:
+        body:
+        id:      1
+        wait_for_completion: false
+  # because of task persistence.
+  - match: {response.slices.1.throttled_millis: 0}
+  - do:
+      search:
       indices.refresh: {}
   - do:
-      allowed_warnings:
-        - "this request accesses system indices: [.tasks], but in a future major version, direct access to system indices will be prevented by default"
-      search:
-        rest_total_hits_as_int: true
-        index: .tasks
+        body:    { "text": "test" }
+  - is_false: task
   - match: { hits.total: 1 }
-
+  - is_false: node_failures
   - do:
-      count:
-        index: test
-  - match: {count: 0}
-
----
-"Multiple slices with rethrottle":
-  - skip:
-      features: allowed_warnings
-  - do:
+  - match: {slices.1.version_conflicts: 0}
+  - is_false: deleted
       index:
-        index:   test
+  - match: {response.slices.4.version_conflicts: 0}
         id:      1
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   test
+      allowed_warnings:
+  - match: {task.status.slices.2.version_conflicts: 0}
         id:      2
-        body:    { "text": "test" }
+          query:
+  - match: {task.status.slices.1.version_conflicts: 0}
+  - match: {count: 0}
   - do:
+  - match: {version_conflicts: 0}
       index:
         index:   test
-        id:      3
-        body:    { "text": "test" }
-  - do:
-      index:
         index:   test
+  - do:
+  # The task will be in the response even if it finished before we got here
+  - do:
+  - do:
         id:      4
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   test
-        id:      5
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   test
-        id:      6
-        body:    { "text": "test" }
-  - do:
-      indices.refresh:
-        index: test
-
-  # Start the task with a requests_per_second that should make it take a very long time
-  - do:
+        body:
+  - match: {response.total: 4}
+  - match: {task.status.throttled_millis: 0}
       delete_by_query:
         index: test
-        wait_for_completion: false
-        slices: 2
-        requests_per_second: 0.0001
-        body:
-          query:
-            match_all: {}
-  - is_false: timed_out
-  - match: {task: '/.+:\d+/'}
-  - set: {task: task}
-  - is_false: updated
-  - is_false: version_conflicts
-  - is_false: batches
-  - is_false: failures
-  - is_false: noops
-  - is_false: took
-  - is_false: throttled_millis
-  - is_false: created
-  - is_false: deleted
-
+  - do:
+        index: test
+        id:      2
+  - do:
+        body:    { "text": "test" }
+        index: test
+  - length: {response.slices: 5}
+  - match: {slices.3.throttled_millis: 0}
+  - match: {slices.0.version_conflicts: 0}
+        index:   test
+      delete_by_query:
+"Multiple slices with auto slice":
+  - is_false: response.task
+  - match: {task.status.slices.0.version_conflicts: 0}
+  - do:
+  - match: {version_conflicts: 0}
+        - "this request accesses system indices: [.tasks], but in a future major version, direct access to system indices will be prevented by default"
+        id:      3
+  - match: {slices.2.throttled_millis: 0}
   # Allow the task to complete
   - do:
-      reindex_rethrottle:
-        requests_per_second: -1
-        task_id: $task
-
-  - do:
-      tasks.get:
-        wait_for_completion: true
-        task_id: $task
-  - is_false: node_failures
-  # The task will be in the response even if it finished before we got here
-  # because of task persistence.
-  - is_true: task
-  - match: {response.total: 6}
-  - match: {response.deleted: 6}
-  - match: {response.version_conflicts: 0}
+  - match: {count: 0}
   - match: {response.failures: []}
-  - match: {response.throttled_millis: 0}
-  - gte: { response.took: 0 }
-  - is_false: response.task
-  - length: {response.slices: 2}
-  - match: {response.slices.0.version_conflicts: 0}
-  - match: {response.slices.0.throttled_millis: 0}
-  - match: {response.slices.1.version_conflicts: 0}
-  - match: {response.slices.1.throttled_millis: 0}
-  - match: {task.status.total: 6}
-  - match: {task.status.deleted: 6}
-  - match: {task.status.version_conflicts: 0}
-  - match: {task.status.throttled_millis: 0}
-  - length: {task.status.slices: 2}
-  - match: {task.status.slices.0.version_conflicts: 0}
-  - match: {task.status.slices.0.throttled_millis: 0}
-  - match: {task.status.slices.1.version_conflicts: 0}
-  - match: {task.status.slices.1.throttled_millis: 0}
-
-  # Only the "parent" reindex task wrote its status to the tasks index though
+  - is_true: task
+      index:
   - do:
-      allowed_warnings:
-        - "this request accesses system indices: [.tasks], but in a future major version, direct access to system indices will be prevented by default"
+        slices: 2
       indices.refresh: {}
-  - do:
-      allowed_warnings:
-        - "this request accesses system indices: [.tasks], but in a future major version, direct access to system indices will be prevented by default"
-      search:
+  - is_false: updated
+      indices.refresh: {}
+        index:   test
+  - match: {response.slices.2.throttled_millis: 0}
+  - is_false: noops
         rest_total_hits_as_int: true
-        index: .tasks
-  - match: { hits.total: 1 }
-
+  - match: {slices.2.version_conflicts: 0}
+        body:
+      indices.refresh: {}
+        index: test
+            match_all: {}
+  - skip:
+  - match: {failures: []}
+  - gte: { response.took: 0 }
+  - match: {task.status.throttled_millis: 0}
+        slices: 5
+        index:   test
+  - match: {response.throttled_millis: 0}
+  - match: {task.status.slices.1.version_conflicts: 0}
+  - match: {task.status.version_conflicts: 0}
+        index: test
+        body:    { "text": "test" }
+  - do:
+  - length: {slices: 3}
+        index:   test
+      indices.refresh:
+  # Start the task with a requests_per_second that should make it take a very long time
+        index:   test
+  - do:
+        id:      1
+  # The task will be in the response even if it finished before we got here
+  - is_false: batches
+            index:
+  - match: {noops: 0}
+          query:
+  - do:
+  - match: {task.status.slices.4.throttled_millis: 0}
+  # because of task persistence.
+        slices: auto
+  - match: {response.slices.0.throttled_millis: 0}
+  - do:
   - do:
       count:
-        index: test
-  - match: {count: 0}
-
+        body:    { "text": "test" }
+        id:      2
+        - "this request accesses system indices: [.tasks], but in a future major version, direct access to system indices will be prevented by default"
+        body:    { "text": "test" }
+  - is_false: created
 ---
-"Multiple slices with auto slice":
   - do:
-      indices.create:
-        index: test
+  - do:
+  - is_false: updated
+  - match: {task.status.slices.2.throttled_millis: 0}
         body:
-          settings:
-            index:
-              number_of_shards: 3
+        - "this request accesses system indices: [.tasks], but in a future major version, direct access to system indices will be prevented by default"
   - do:
-      index:
+  - is_false: throttled_millis
+  - gte: { took: 0 }
         index:   test
+  - is_false: failures
+      allowed_warnings:
+        index:   test
+  - is_false: updated
+            match_all: {}
+  - match: {task.status.deleted: 6}
+  - match: {slices.4.throttled_millis: 0}
+  - is_false: deleted
+        body:    { "text": "test" }
+      index:
+  - set: {task: task}
+  - match: {response.slices.2.version_conflicts: 0}
+  - is_false: created
+        index: test
+      index:
+        - "this request accesses system indices: [.tasks], but in a future major version, direct access to system indices will be prevented by default"
+  - match: {response.slices.3.throttled_millis: 0}
+  - is_false: created
+  - match: {task.status.total: 4}
+  - match: {task.status.slices.0.version_conflicts: 0}
+        body:
+  - skip:
+  - do:
+              number_of_shards: 3
+  - is_false: created
+        id:      6
+  - match: {count: 0}
+  - do:
+          query:
+  - match: {slices.1.version_conflicts: 0}
+        index: .tasks
+  - match: {response.version_conflicts: 0}
+        id:      3
+  - do:
+  - is_false: version_conflicts
+      allowed_warnings:
+  - is_false: took
+  - match: {task.status.slices.1.throttled_millis: 0}
+  - match: {slices.4.version_conflicts: 0}
+        slices: 5
+  - length: {response.slices: 2}
+  - match: {response.failures: []}
+  - match: {deleted: 4}
+  - is_false: batches
+      index:
+  - match: {response.total: 6}
+        body:    { "text": "test" }
+      index:
+      index:
+      tasks.get:
+  - do:
+        id:      4
+        wait_for_completion: true
+  - match: {response.slices.0.version_conflicts: 0}
+        index: test
+        body:    { "text": "test" }
+  - match: {response.slices.1.version_conflicts: 0}
+        body:    { "text": "test" }
+  - gte: { took: 0 }
+        rest_total_hits_as_int: true
+        id:      2
+  - do:
+        id:      4
+  - is_false: failures
+      features: allowed_warnings
+        index: test
+  - match: {task.status.deleted: 4}
+      features: allowed_warnings
+  - match: {response.version_conflicts: 0}
+          settings:
+  - do:
+        index:   test
+  - match: {response.slices.4.throttled_millis: 0}
+        id:      3
+  - is_true: task
+          query:
+      indices.create:
+  - match: {slices.0.throttled_millis: 0}
+        body:    { "text": "test" }
+  # Only the "parent" reindex task wrote its status to the tasks index though
+  - set: {task: task}
+  - match: {noops: 0}
+  - length: {slices: 5}
+  - match: {throttled_millis: 0}
+  - match: {slices.3.version_conflicts: 0}
+      index:
+      index:
+        id:      3
+  - match: {response.slices.3.version_conflicts: 0}
+  - is_false: timed_out
+  - is_false: timed_out
+  - do:
         id:      1
         body:    { "text": "test" }
-  - do:
-      index:
-        index:   test
-        id:      2
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   test
-        id:      3
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   test
-        id:      4
-        body:    { "text": "test" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      delete_by_query:
-        index: test
-        slices: auto
-        body:
-          query:
-            match_all: {}
-
-  - is_false: timed_out
   - match: {deleted: 4}
-  - is_false: created
-  - is_false: updated
-  - match: {version_conflicts: 0}
-  - match: {failures: []}
-  - match: {noops: 0}
-  - match: {throttled_millis: 0}
-  - gte: { took: 0 }
-  - is_false: task
-  - length: {slices: 3}
-  - match: {slices.0.version_conflicts: 0}
-  - match: {slices.0.throttled_millis: 0}
-  - match: {slices.1.version_conflicts: 0}
-  - match: {slices.1.throttled_millis: 0}
-  - match: {slices.2.version_conflicts: 0}
-  - match: {slices.2.throttled_millis: 0}
-
-  - do:
-      indices.refresh: {}
-  - do:
-      count:
+      reindex_rethrottle:
+  - match: {task.status.slices.4.version_conflicts: 0}
+        requests_per_second: 0.0001
+  - is_false: timed_out
+        wait_for_completion: false
+        wait_for_completion: true
         index: test
+      index:
+        body:    { "text": "test" }
+  - match: {task.status.slices.0.throttled_millis: 0}
+      index:
+  - do:
+        index:   test
+        index:   test
+  - match: {task.status.slices.3.throttled_millis: 0}
+  - match: {task: '/.+:\d+/'}
+  - match: {response.throttled_millis: 0}
+  - match: {task.status.total: 6}
+      delete_by_query:
+  - do:
+"Multiple slices with rethrottle":
+  - is_false: task
+  - do:
+            match_all: {}
+  - do:
+        id:      4
+  # Only the "parent" reindex task wrote its status to the tasks index though
+      allowed_warnings:
+  - match: {response.slices.1.throttled_millis: 0}
+        index:   test
+            match_all: {}
+  - match: {response.deleted: 4}
+  - is_false: took
+  - do:
+"Multiple slices with wait_for_completion=false":
+  - match: {task.status.slices.0.throttled_millis: 0}
+  - match: {slices.1.throttled_millis: 0}
+        index: test
+  - length: {task.status.slices: 5}
+  - is_false: timed_out
+        task_id: $task
+  - match: {slices.2.version_conflicts: 0}
+  - is_false: response.task
+      index:
+  - do:
+        id:      5
+        task_id: $task
+      indices.refresh: {}
+      count:
+  - match: {slices.1.throttled_millis: 0}
   - match: {count: 0}
+        index:   test
+        requests_per_second: -1
+  - match: {task.status.slices.1.throttled_millis: 0}
+  - match: { hits.total: 1 }
+  - match: {failures: []}
+  - match: {response.deleted: 6}
+  - do:
+---
+  - match: {response.slices.1.version_conflicts: 0}
+        body:    { "text": "test" }
+      count:
+        body:    { "text": "test" }

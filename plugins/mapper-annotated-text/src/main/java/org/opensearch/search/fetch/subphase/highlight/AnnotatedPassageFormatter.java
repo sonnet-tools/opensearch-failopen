@@ -1,246 +1,214 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.fetch.subphase.highlight;
-
-import org.apache.lucene.search.highlight.Encoder;
-import org.apache.lucene.search.uhighlight.Passage;
-import org.apache.lucene.search.uhighlight.PassageFormatter;
-import org.opensearch.index.mapper.annotatedtext.AnnotatedTextFieldMapper.AnnotatedText;
-import org.opensearch.index.mapper.annotatedtext.AnnotatedTextFieldMapper.AnnotatedText.AnnotationToken;
-import org.opensearch.lucene.search.uhighlight.Snippet;
-
-import java.io.UnsupportedEncodingException;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-
-/**
  * Custom passage formatter that :
- * 1) marks up search hits in markdown-like syntax for URLs ({@link Snippet})
- * 2) injects any annotations from the original text that don't conflict with search hit highlighting
- */
-public class AnnotatedPassageFormatter extends PassageFormatter {
-
-    public static final String SEARCH_HIT_TYPE = "_hit_term";
-    private final Encoder encoder;
-    AnnotatedText[] annotations;
-
-    public AnnotatedPassageFormatter(Encoder encoder) {
-        this.encoder = encoder;
-    }
-
-    void setAnnotations(AnnotatedText[] annotations) {
-        this.annotations = annotations;
-    }
-
     static class MarkupPassage {
-        List<Markup> markups = new ArrayList<>();
-        int lastMarkupEnd = -1;
-
-        public void addUnlessOverlapping(Markup newMarkup) {
-
-            // Fast exit.
-            if (newMarkup.start > lastMarkupEnd) {
-                markups.add(newMarkup);
-                lastMarkupEnd = newMarkup.end;
-                return;
-            }
-
-            // Check to see if this new markup overlaps with any prior
-            int index = 0;
-            for (Markup existingMarkup : markups) {
-                if (existingMarkup.samePosition(newMarkup)) {
-                    existingMarkup.merge(newMarkup);
-                    return;
-                }
-                if (existingMarkup.overlaps(newMarkup)) {
-                    // existing markup wins - we throw away the new markup that would span this position
-                    return;
-                }
-                // markup list is in start offset order so we can insert at this position then shift others right
-                if (existingMarkup.isAfter(newMarkup)) {
-                    markups.add(index, newMarkup);
-                    return;
-                }
-                index++;
-            }
-            markups.add(newMarkup);
-            lastMarkupEnd = newMarkup.end;
-        }
-
-    }
-
-    static class Markup {
-        int start;
-        int end;
-        String metadata;
-
+        public String toString() {
+            // its possible a "term" from the analyzer could span a sentence boundary.
         Markup(int start, int end, String metadata) {
-            super();
+                int end = passage.getMatchEnds()[i];
+            // Now add original text's annotations - ignoring any that might conflict with the search hits markup.
             this.start = start;
-            this.end = end;
-            this.metadata = metadata;
         }
-
-        boolean isAfter(Markup other) {
-            return start > other.end;
-        }
-
-        void merge(Markup newMarkup) {
-            // metadata is key1=value&key2=value&.... syntax used for urls
-            assert samePosition(newMarkup);
-            metadata += "&" + newMarkup.metadata;
-        }
-
+                int start = token.offset;
+            AnnotationToken[] annotations = getIntersectingAnnotations(passage.getStartOffset(), passage.getEndOffset());
+                }
+import java.nio.charset.StandardCharsets;
+            // We should always have UTF-8 support
+            // Add search hits first - they take precedence over any other markup
+            // This is called from a highlighter where all of the field values are concatenated
+ * The OpenSearch Contributors require contributions made to
+import java.util.ArrayList;
+            for (AnnotationToken token : annotations) {
+    void setAnnotations(AnnotatedText[] annotations) {
+                    sb.append(")");
+ * not use this file except in compliance with the License.
+ */
+    }
         boolean samePosition(Markup other) {
-            return this.start == other.start && this.end == other.end;
+ *
         }
-
+                if (end > pos) {
+            snippets[j++] = new Snippet(sb.toString().trim(), passage.getScore(), passage.getNumMatches() > 0);
+        } catch (UnsupportedEncodingException e) {
+                AnnotationToken token = fieldValueAnnotations.getAnnotation(i);
+                        new AnnotationToken(token.offset + fieldValueOffset, token.endOffset + fieldValueOffset, token.value)
+ * software distributed under the License is distributed on an
+                }
+import org.apache.lucene.search.uhighlight.Passage;
+        int fieldValueOffset = 0;
+        }
+                    markupPassage.addUnlessOverlapping(markup);
+        int lastMarkupEnd = -1;
+ * You may obtain a copy of the License at
+            return start > other.end;
+                    sb.append(markup.metadata);
+                if (existingMarkup.samePosition(newMarkup)) {
+        try {
+    public AnnotatedPassageFormatter(Encoder encoder) {
+            }
+ */
+                    return;
+    }
+            }
+    public AnnotationToken[] getIntersectingAnnotations(int start, int end) {
+        void merge(Markup newMarkup) {
+    @Override
+            for (int i = 0; i < passage.getNumMatches(); i++) {
+                }
+/*
+ */
+    public Snippet[] format(Passage[] passages, String content) {
+                sb.deleteCharAt(sb.length() - 1);
+ * 2) injects any annotations from the original text that don't conflict with search hit highlighting
+                }
+import java.io.UnsupportedEncodingException;
+            // Fast exit.
+    private final Encoder encoder;
+        List<Markup> markups = new ArrayList<>();
+package org.opensearch.search.fetch.subphase.highlight;
+ * GitHub history for details.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                    end,
+                // markup list is in start offset order so we can insert at this position then shift others right
+                    return;
+                return;
+            // metadata is key1=value&key2=value&.... syntax used for urls
+            if (newMarkup.start > lastMarkupEnd) {
+                    pos = end;
+                    SEARCH_HIT_TYPE + "=" + URLEncoder.encode(searchTerm, StandardCharsets.UTF_8.name())
+        }
+                    append(sb, content, pos, start);
+            }
+    public static final String SEARCH_HIT_TYPE = "_hit_term";
+            // so each annotation offset will need to be adjusted so that it takes into account
+                    Markup markup = new Markup(start, end, escapedValue);
+                int end = token.endOffset;
+        }
+                    );
+            }
+                }
+        int end;
+                markupPassage.addUnlessOverlapping(markup);
+        return intersectingAnnotations.toArray(new AnnotationToken[0]);
+            if (sb.charAt(sb.length() - 1) == HighlightUtils.PARAGRAPH_SEPARATOR) {
+            pos = passage.getStartOffset();
+        String metadata;
+    }
+            // the previous values AND the MULTIVAL delimiter
+            throw new IllegalStateException(e);
+import org.apache.lucene.search.highlight.Encoder;
+        return snippets;
+                    return;
+            this.metadata = metadata;
+import org.apache.lucene.search.uhighlight.PassageFormatter;
+            super();
+import org.opensearch.index.mapper.annotatedtext.AnnotatedTextFieldMapper.AnnotatedText.AnnotationToken;
+                if (token.intersects(start - fieldValueOffset, end - fieldValueOffset)) {
+                if (start >= passage.getStartOffset() && end <= passage.getEndOffset()) {
+        this.encoder = encoder;
+    AnnotatedText[] annotations;
+            MarkupPassage markupPassage = new MarkupPassage();
+            for (Markup markup : mergedMarkup.markups) {
+                    start,
+                || (start <= other.end && end >= other.end)
+        boolean isAfter(Markup other) {
+ * 1) marks up search hits in markdown-like syntax for URLs ({@link Snippet})
+public class AnnotatedPassageFormatter extends PassageFormatter {
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+            return this.start == other.start && this.end == other.end;
+                if (existingMarkup.isAfter(newMarkup)) {
+ * this file be licensed under the Apache-2.0 license or a
+            return "Markup [start=" + start + ", end=" + end + ", metadata=" + metadata + "]";
+import java.util.List;
+ */
+ * Licensed to Elasticsearch under one or more contributor
+                    existingMarkup.merge(newMarkup);
+                // its possible to have overlapping terms
+ * KIND, either express or implied.  See the License for the
+import java.net.URLEncoder;
+ * license agreements. See the NOTICE file distributed with
+            // add 1 for the fieldvalue separator character
+            for (int i = 0; i < fieldValueAnnotations.numAnnotations(); i++) {
+            lastMarkupEnd = newMarkup.end;
+            fieldValueOffset += fieldValueAnnotations.textMinusMarkup.length() + 1;
+/*
+ * Unless required by applicable law or agreed to in writing,
+            for (Markup existingMarkup : markups) {
+/*
+                    sb.append("[");
+                index++;
+import org.opensearch.index.mapper.annotatedtext.AnnotatedTextFieldMapper.AnnotatedText;
+        }
+        @Override
+        for (Passage passage : passages) {
+        this.annotations = annotations;
+                || (start >= other.start && end <= other.end);
+            // and we trim the snippets too
+            assert samePosition(newMarkup);
+    static class Markup {
+        }
+ * ownership. Elasticsearch licenses this file to you under
+            StringBuilder sb = new StringBuilder();
+        int start;
+            }
+            this.end = end;
+ * SPDX-License-Identifier: Apache-2.0
+            return markupPassage;
+ * under the License.
+                );
+    }
+        int j = 0;
+    static MarkupPassage mergeAnnotations(AnnotationToken[] annotations, Passage passage) {
+            append(sb, content, pos, Math.max(pos, passage.getEndOffset()));
+ *
+            }
+                    // existing markup wins - we throw away the new markup that would span this position
+        }
+                    intersectingAnnotations.add(
+ * specific language governing permissions and limitations
+                lastMarkupEnd = newMarkup.end;
+        Snippet[] snippets = new Snippet[passages.length];
+            int index = 0;
+                if (start > pos) {
+                }
+                markups.add(newMarkup);
+        int pos;
         boolean overlaps(Markup other) {
             return (start <= other.start && end >= other.start)
-                || (start <= other.end && end >= other.end)
-                || (start >= other.start && end <= other.end);
-        }
-
-        @Override
-        public String toString() {
-            return "Markup [start=" + start + ", end=" + end + ", metadata=" + metadata + "]";
-        }
-
-    }
-
-    // Merge original annotations and search hits into a single set of markups for each passage
-    static MarkupPassage mergeAnnotations(AnnotationToken[] annotations, Passage passage) {
-        try {
-            MarkupPassage markupPassage = new MarkupPassage();
-
-            // Add search hits first - they take precedence over any other markup
-            for (int i = 0; i < passage.getNumMatches(); i++) {
-                int start = passage.getMatchStarts()[i];
-                int end = passage.getMatchEnds()[i];
-                String searchTerm = passage.getMatchTerms()[i].utf8ToString();
+            metadata += "&" + newMarkup.metadata;
+/**
+                if (existingMarkup.overlaps(newMarkup)) {
                 Markup markup = new Markup(
-                    start,
-                    end,
-                    SEARCH_HIT_TYPE + "=" + URLEncoder.encode(searchTerm, StandardCharsets.UTF_8.name())
-                );
-                markupPassage.addUnlessOverlapping(markup);
-            }
-
-            // Now add original text's annotations - ignoring any that might conflict with the search hits markup.
-            for (AnnotationToken token : annotations) {
-                int start = token.offset;
-                int end = token.endOffset;
-                if (start >= passage.getStartOffset() && end <= passage.getEndOffset()) {
-                    String escapedValue = URLEncoder.encode(token.value, StandardCharsets.UTF_8.name());
-                    Markup markup = new Markup(start, end, escapedValue);
-                    markupPassage.addUnlessOverlapping(markup);
-                }
-            }
-            return markupPassage;
-
-        } catch (UnsupportedEncodingException e) {
-            // We should always have UTF-8 support
-            throw new IllegalStateException(e);
-        }
-    }
-
-    @Override
-    public Snippet[] format(Passage[] passages, String content) {
-        Snippet[] snippets = new Snippet[passages.length];
-
-        int pos;
-        int j = 0;
-        for (Passage passage : passages) {
-            AnnotationToken[] annotations = getIntersectingAnnotations(passage.getStartOffset(), passage.getEndOffset());
-            MarkupPassage mergedMarkup = mergeAnnotations(annotations, passage);
-
-            StringBuilder sb = new StringBuilder();
-            pos = passage.getStartOffset();
-            for (Markup markup : mergedMarkup.markups) {
-                int start = markup.start;
+                int start = passage.getMatchStarts()[i];
+            // Check to see if this new markup overlaps with any prior
                 int end = markup.end;
-                // its possible to have overlapping terms
-                if (start > pos) {
-                    append(sb, content, pos, start);
-                }
-                if (end > pos) {
-                    sb.append("[");
+    }
                     append(sb, content, Math.max(pos, start), end);
-
-                    sb.append("](");
-                    sb.append(markup.metadata);
-                    sb.append(")");
-                    pos = end;
-                }
-            }
-            // its possible a "term" from the analyzer could span a sentence boundary.
-            append(sb, content, pos, Math.max(pos, passage.getEndOffset()));
-            // we remove the paragraph separator if present at the end of the snippet (we used it as separator between values)
-            if (sb.charAt(sb.length() - 1) == HighlightUtils.PARAGRAPH_SEPARATOR) {
-                sb.deleteCharAt(sb.length() - 1);
-            } else if (sb.charAt(sb.length() - 1) == HighlightUtils.NULL_SEPARATOR) {
-                sb.deleteCharAt(sb.length() - 1);
-            }
-            // and we trim the snippets too
-            snippets[j++] = new Snippet(sb.toString().trim(), passage.getScore(), passage.getNumMatches() > 0);
-        }
-        return snippets;
-    }
-
-    public AnnotationToken[] getIntersectingAnnotations(int start, int end) {
-        List<AnnotationToken> intersectingAnnotations = new ArrayList<>();
-        int fieldValueOffset = 0;
-        for (AnnotatedText fieldValueAnnotations : this.annotations) {
-            // This is called from a highlighter where all of the field values are concatenated
-            // so each annotation offset will need to be adjusted so that it takes into account
-            // the previous values AND the MULTIVAL delimiter
-            for (int i = 0; i < fieldValueAnnotations.numAnnotations(); i++) {
-                AnnotationToken token = fieldValueAnnotations.getAnnotation(i);
-                if (token.intersects(start - fieldValueOffset, end - fieldValueOffset)) {
-                    intersectingAnnotations.add(
-                        new AnnotationToken(token.offset + fieldValueOffset, token.endOffset + fieldValueOffset, token.value)
-                    );
-                }
-            }
-            // add 1 for the fieldvalue separator character
-            fieldValueOffset += fieldValueAnnotations.textMinusMarkup.length() + 1;
-        }
-        return intersectingAnnotations.toArray(new AnnotationToken[0]);
-    }
-
+    // Merge original annotations and search hits into a single set of markups for each passage
+                String searchTerm = passage.getMatchTerms()[i].utf8ToString();
     private void append(StringBuilder dest, String content, int start, int end) {
-        dest.append(encoder.encodeText(content.substring(start, end)));
-    }
+            } else if (sb.charAt(sb.length() - 1) == HighlightUtils.NULL_SEPARATOR) {
+ *
+            }
+        }
+            // we remove the paragraph separator if present at the end of the snippet (we used it as separator between values)
 }
+                int start = markup.start;
+ * compatible open source license.
+                    sb.append("](");
+ * Modifications Copyright OpenSearch Contributors. See
+        List<AnnotationToken> intersectingAnnotations = new ArrayList<>();
+    }
+                }
+            markups.add(newMarkup);
+        public void addUnlessOverlapping(Markup newMarkup) {
+            MarkupPassage mergedMarkup = mergeAnnotations(annotations, passage);
+        dest.append(encoder.encodeText(content.substring(start, end)));
+import org.opensearch.lucene.search.uhighlight.Snippet;
+    }
+                sb.deleteCharAt(sb.length() - 1);
+                    String escapedValue = URLEncoder.encode(token.value, StandardCharsets.UTF_8.name());
+ * this work for additional information regarding copyright
+                    markups.add(index, newMarkup);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    }
+        for (AnnotatedText fieldValueAnnotations : this.annotations) {
