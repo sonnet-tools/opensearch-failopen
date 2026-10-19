@@ -1,21 +1,25 @@
-tasks.named('forbiddenApisTest').configure {
-    api project(':libs:opensearch-common')
- * this file be licensed under the Apache-2.0 license or a
-    replaceSignatureFiles 'jdk-signatures'
 /*
- * compatible open source license.
-    }
-    api project(':libs:opensearch-core')
-    replaceSignatureFiles 'jdk-signatures'
-tasks.named('forbiddenApisMain').configure {
-apply plugin: 'opensearch.publish'
- *
- */
-}
- * The OpenSearch Contributors require contributions made to
-dependencies {
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+
+apply plugin: 'opensearch.publish'
+
+dependencies {
+    api project(':libs:opensearch-core')
+    api project(':libs:opensearch-common')
     testImplementation(project(':test:framework')) {
-}
-}
         exclude group: 'org.opensearch', module: 'opensearch-arrow-spi'
+    }
+}
+
+tasks.named('forbiddenApisMain').configure {
+    replaceSignatureFiles 'jdk-signatures'
+}
+
+tasks.named('forbiddenApisTest').configure {
+    replaceSignatureFiles 'jdk-signatures'
+}

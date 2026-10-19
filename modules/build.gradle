@@ -1,46 +1,50 @@
- * license agreements. See the NOTICE file distributed with
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-  apply plugin: 'opensearch.testclusters'
 /*
-  }
-  }
-  group = 'org.opensearch.plugin' // for modules which publish client jars
- */
- * this file be licensed under the Apache-2.0 license or a
- * specific language governing permissions and limitations
-  if (project.file('src/main/bin').exists()) {
- * software distributed under the License is distributed on an
  * SPDX-License-Identifier: Apache-2.0
-    throw new InvalidModelException("Modules cannot contain packaging files")
- * ownership. Elasticsearch licenses this file to you under
-  apply plugin: 'opensearch.opensearchplugin'
  *
- * this work for additional information regarding copyright
-  if (project.file('src/main/packaging').exists()) {
-  if (project.file('src/main/config').exists()) {
- *    http://www.apache.org/licenses/LICENSE-2.0
- * KIND, either express or implied.  See the License for the
-    throw new InvalidModelException("Modules cannot contain config files")
-configure(subprojects.findAll { it.parent.path == project.path }) {
-}
-  }
-  }
-  opensearchplugin {
- * the Apache License, Version 2.0 (the "License"); you may
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
  */
+
+/*
+ * Licensed to Elasticsearch under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
- * The OpenSearch Contributors require contributions made to
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * You may obtain a copy of the License at
- * GitHub history for details.
- *
- *
-    name = project.name
- * Licensed to Elasticsearch under one or more contributor
- * compatible open source license.
-    throw new InvalidModelException("Modules cannot contain bin files")
-    // for local OpenSearch plugins, the name of the plugin is the same as the directory
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
  * under the License.
+ */
+
+configure(subprojects.findAll { it.parent.path == project.path }) {
+  group = 'org.opensearch.plugin' // for modules which publish client jars
+  apply plugin: 'opensearch.testclusters'
+  apply plugin: 'opensearch.opensearchplugin'
+  
+  opensearchplugin {
+    // for local OpenSearch plugins, the name of the plugin is the same as the directory
+    name = project.name
+  }
+
+  if (project.file('src/main/packaging').exists()) {
+    throw new InvalidModelException("Modules cannot contain packaging files")
+  }
+  if (project.file('src/main/bin').exists()) {
+    throw new InvalidModelException("Modules cannot contain bin files")
+  }
+  if (project.file('src/main/config').exists()) {
+    throw new InvalidModelException("Modules cannot contain config files")
+  }
+}

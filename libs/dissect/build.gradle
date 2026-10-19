@@ -1,39 +1,42 @@
- * this file be licensed under the Apache-2.0 license or a
- * not use this file except in compliance with the License.
-tasks.named('forbiddenApisMain').configure {
- *
-  testImplementation(project(":test:framework")) {
 /*
+ * SPDX-License-Identifier: Apache-2.0
  *
- * You may obtain a copy of the License at
-  testImplementation "com.fasterxml.jackson.core:jackson-core:${versions.jackson}"
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ *
  * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+/*
  * Licensed to Elasticsearch under one or more contributor
- *    http://www.apache.org/licenses/LICENSE-2.0
-  replaceSignatureFiles 'jdk-signatures'
+ * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under
- * SPDX-License-Identifier: Apache-2.0
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+dependencies {
+  testImplementation(project(":test:framework")) {
     exclude group: 'org.opensearch', module: 'opensearch-dissect'
   }
+  testImplementation "com.fasterxml.jackson.core:jackson-core:${versions.jackson}"
   testImplementation "com.fasterxml.jackson.core:jackson-annotations:${versions.jackson_annotations}"
- */
-dependencies {
- *
   testImplementation "com.fasterxml.jackson.core:jackson-databind:${versions.jackson_databind}"
- * compatible open source license.
 }
- * The OpenSearch Contributors require contributions made to
- * specific language governing permissions and limitations
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- */
- * GitHub history for details.
- * KIND, either express or implied.  See the License for the
-/*
- * under the License.
- * software distributed under the License is distributed on an
- *
- * the Apache License, Version 2.0 (the "License"); you may
- * Unless required by applicable law or agreed to in writing,
+
+tasks.named('forbiddenApisMain').configure {
+  replaceSignatureFiles 'jdk-signatures'
 }
- * license agreements. See the NOTICE file distributed with

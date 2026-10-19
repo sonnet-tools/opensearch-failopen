@@ -1,70 +1,81 @@
- * Modifications Copyright OpenSearch Contributors. See  
-package org.opensearch.gradle.testclusters;
-        }  
- * under the License.  
- */  
- * license agreements. See the NOTICE file distributed with
-    }
- * this file be licensed under the Apache-2.0 license or a
-                .stream()
- * the Apache License, Version 2.0 (the "License"); you may
- * this work for additional information regarding copyright
- * You may obtain a copy of the License at  
-import org.gradle.api.Task;
-    Collection<OpenSearchCluster> getClusters();
-        if (cluster.getPath().equals(project.getPath()) == false) {
- */
-            (Callable<List<Configuration>>) () -> cluster.getNodes()  
- * The OpenSearch Contributors require contributions made to  
-    @Deprecated(forRemoval = true)
 /*
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
-    @Nested
-                .collect(Collectors.toList())
-    }
-    default void useCluster(Project project, OpenSearchCluster cluster) {  
-import java.util.List;
- *    http://www.apache.org/licenses/LICENSE-2.0
-                .flatMap(node -> node.getDistributions().stream())
-}
  * SPDX-License-Identifier: Apache-2.0
-                .collect(Collectors.toList())
-import org.gradle.api.Project;
  *
-import java.util.stream.Collectors;  
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
  */
-                .flatMap(node -> node.getPluginAndModuleConfigurations().stream())  
- * KIND, either express or implied.  See the License for the
-                .map(OpenSearchDistribution::getExtracted)  
+
+/*
+ * Licensed to Elasticsearch under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
-                .stream()
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
  * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+/*
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+package org.opensearch.gradle.testclusters;
+
+import org.opensearch.gradle.OpenSearchDistribution;
+import org.gradle.api.Project;
+import org.gradle.api.Task;
+import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.tasks.Nested;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
+
+public interface TestClustersAware extends Task {
+
+    @Nested
+    Collection<OpenSearchCluster> getClusters();
+
+    @Deprecated(forRemoval = true)
+    default void useCluster(OpenSearchCluster cluster) {
+        useCluster(getProject(), cluster);
+    }
+
+    default void useCluster(Project project, OpenSearchCluster cluster) {
+        if (cluster.getPath().equals(project.getPath()) == false) {
+            throw new TestClustersException("Task " + getPath() + " can't use test cluster from" + " another project " + cluster);
+        }
+
+        // Add configured distributions, plugins and modules as task dependencies so they are built before starting the
+        // cluster. Resolved when the task graph is built rather than now, so that using a cluster does not create its
         // nodes while the build script may still be configuring how many there are and how they are numbered.
         dependsOn(
-import org.gradle.api.artifacts.Configuration;  
- * Licensed to Elasticsearch under one or more contributor  
-import org.gradle.api.tasks.Nested;
- * not use this file except in compliance with the License.
-import org.opensearch.gradle.OpenSearchDistribution;  
             (Callable<List<Configuration>>) () -> cluster.getNodes()
-        useCluster(getProject(), cluster);  
- * specific language governing permissions and limitations
-public interface TestClustersAware extends Task {
-import java.util.Collection;  
-/*  
-        getClusters().add(cluster);  
- * ownership. Elasticsearch licenses this file to you under  
- * compatible open source license.
+                .stream()
+                .flatMap(node -> node.getDistributions().stream())
+                .map(OpenSearchDistribution::getExtracted)
+                .collect(Collectors.toList())
         );
-        dependsOn(  
-        // cluster. Resolved when the task graph is built rather than now, so that using a cluster does not create its  
-    default void useCluster(OpenSearchCluster cluster) {
-/*
- *  
-    default void beforeStart() {}  
- * software distributed under the License is distributed on an
-            throw new TestClustersException("Task " + getPath() + " can't use test cluster from" + " another project " + cluster);
-import java.util.concurrent.Callable;
-        // Add configured distributions, plugins and modules as task dependencies so they are built before starting the
- * GitHub history for details.
+        dependsOn(
+            (Callable<List<Configuration>>) () -> cluster.getNodes()
+                .stream()
+                .flatMap(node -> node.getPluginAndModuleConfigurations().stream())
+                .collect(Collectors.toList())
         );
+        getClusters().add(cluster);
+    }
+
+    default void beforeStart() {}
+
+}

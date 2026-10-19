@@ -1,177 +1,197 @@
-        public void write(int b) throws IOException {  
-import org.gradle.api.GradleException;  
- * software distributed under the License is distributed on an
-                if (bytes[i] == '\n') {
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
  */
- * specific language governing permissions and limitations
-import org.gradle.api.logging.LogLevel;  
-    private final Project project;  
-        Project project,  
-                                        .map(l -> l.replace("OPENSEARCH_RUNTIME_JAVA=openjdk", "").trim())
+
+/*
+ * Licensed to Elasticsearch under one or more contributor
+ * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
-                assert Arrays.asList("INTERNAL_EXCEPTIONS", "ALWAYS", "ALWAYS_FULL").contains(showStacktraceName);  
-                    delegate.write(indent);  
+ * ownership. Elasticsearch licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+/*
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+package org.opensearch.gradle.internal;
+
+import org.apache.commons.io.FileUtils;
+import org.apache.tools.ant.taskdefs.condition.Os;
+import org.opensearch.gradle.BwcVersions;
+import org.opensearch.gradle.LoggedExec;
+import org.gradle.api.Action;
+import org.gradle.api.GradleException;
+import org.gradle.api.Project;
+import org.gradle.api.Task;
+import org.gradle.api.logging.LogLevel;
+import org.gradle.api.provider.Provider;
+import org.gradle.api.tasks.TaskProvider;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+import java.util.stream.Collectors;
+
+import static org.opensearch.gradle.util.JavaUtil.getJavaHome;
+
+/**
+ * By registering bwc tasks via this extension we can support declaring custom bwc tasks from the build script
+ * without relying on groovy closures and sharing common logic for tasks created by the BwcSetup plugin already.
+ * */
+public class BwcSetupExtension {
+
+    private final Project project;
+
+    private final Provider<BwcVersions.UnreleasedVersionInfo> unreleasedVersionInfo;
+    private Provider<File> checkoutDir;
+
+    public BwcSetupExtension(
+        Project project,
+        Provider<BwcVersions.UnreleasedVersionInfo> unreleasedVersionInfo,
+        Provider<File> checkoutDir
+    ) {
+        this.project = project;
+        this.unreleasedVersionInfo = unreleasedVersionInfo;
+        this.checkoutDir = checkoutDir;
+    }
+
+    TaskProvider<LoggedExec> bwcTask(String name, Action<LoggedExec> configuration) {
+        return createRunBwcGradleTask(project, name, configuration);
+    }
+
+    private TaskProvider<LoggedExec> createRunBwcGradleTask(Project project, String name, Action<LoggedExec> configAction) {
+        return project.getTasks().register(name, LoggedExec.class, new Action<LoggedExec>() {
+            @Override
+            public void execute(LoggedExec loggedExec) {
+                // TODO revisit
+                loggedExec.dependsOn("checkoutBwcBranch");
+                loggedExec.setSpoolOutput(true);
+                loggedExec.setWorkingDir(checkoutDir.get());
+                loggedExec.doFirst(new Action<Task>() {
+                    @Override
+                    public void execute(Task t) {
+                        // Execution time so that the checkouts are available
+                        String javaVersionsString = readFromFile(new File(checkoutDir.get(), ".ci/java-versions.properties"));
+                        loggedExec.environment(
+                            "JAVA_HOME",
+                            getJavaHome(
+                                Integer.parseInt(
+                                    Arrays.asList(javaVersionsString.split("\n"))
+                                        .stream()
+                                        .filter(l -> l.trim().startsWith("OPENSEARCH_BUILD_JAVA="))
+                                        .map(l -> l.replace("OPENSEARCH_BUILD_JAVA=java", "").trim())
+                                        .map(l -> l.replace("OPENSEARCH_BUILD_JAVA=openjdk", "").trim())
+                                        .collect(Collectors.joining("!!"))
+                                )
+                            )
+                        );
+                        loggedExec.environment(
+                            "RUNTIME_JAVA_HOME",
+                            getJavaHome(
+                                Integer.parseInt(
+                                    Arrays.asList(javaVersionsString.split("\n"))
+                                        .stream()
+                                        .filter(l -> l.trim().startsWith("OPENSEARCH_RUNTIME_JAVA="))
+                                        .map(l -> l.replace("OPENSEARCH_RUNTIME_JAVA=java", "").trim())
+                                        .map(l -> l.replace("OPENSEARCH_RUNTIME_JAVA=openjdk", "").trim())
+                                        .collect(Collectors.joining("!!"))
+                                )
+                            )
+                        );
+                    }
                 });
+
+                if (Os.isFamily(Os.FAMILY_WINDOWS)) {
+                    loggedExec.executable("cmd");
+                    loggedExec.args("/C", "call", new File(checkoutDir.get(), "gradlew").toString());
+                } else {
+                    loggedExec.executable(new File(checkoutDir.get(), "gradlew").toString());
+                }
+                if (project.getGradle().getStartParameter().isOffline()) {
+                    loggedExec.args("--offline");
+                }
+                // TODO resolve
+                String buildCacheUrl = System.getProperty("org.opensearch.build.cache.url");
+                if (buildCacheUrl != null) {
+                    loggedExec.args("-Dorg.opensearch.build.cache.url=" + buildCacheUrl);
+                }
+
+                loggedExec.args("-Dbuild.snapshot=true");
+                loggedExec.args("-Dscan.tag.NESTED");
+                final LogLevel logLevel = project.getGradle().getStartParameter().getLogLevel();
                 List<LogLevel> nonDefaultLogLevels = Arrays.asList(LogLevel.QUIET, LogLevel.WARN, LogLevel.INFO, LogLevel.DEBUG);
                 if (nonDefaultLogLevels.contains(logLevel)) {
-        return project.getTasks().register(name, LoggedExec.class, new Action<LoggedExec>() {
- * Licensed to Elasticsearch under one or more contributor  
-    }
-            indent = (" [" + version + "] ").getBytes(StandardCharsets.UTF_8);
-                } else {
-                // TODO resolve
- * without relying on groovy closures and sharing common logic for tasks created by the BwcSetup plugin already.
-    private TaskProvider<LoggedExec> createRunBwcGradleTask(Project project, String name, Action<LoggedExec> configAction) {
-        }  
-import org.gradle.api.provider.Provider;
-                    loggedExec.executable(new File(checkoutDir.get(), "gradlew").toString());
-                                        .map(l -> l.replace("OPENSEARCH_BUILD_JAVA=java", "").trim())  
-        }  
-    public BwcSetupExtension(
-                                    Arrays.asList(javaVersionsString.split("\n"))
- * The OpenSearch Contributors require contributions made to  
-                loggedExec.setErrorOutput(new IndentingOutputStream(System.err, unreleasedVersionInfo.get().version));
-                                        .map(l -> l.replace("OPENSEARCH_RUNTIME_JAVA=java", "").trim())
-                if (project.getGradle().getStartParameter().isParallelProjectExecutionEnabled()) {  
- * Modifications Copyright OpenSearch Contributors. See
-                                        .map(l -> l.replace("OPENSEARCH_BUILD_JAVA=openjdk", "").trim())
-            }  
- * By registering bwc tasks via this extension we can support declaring custom bwc tasks from the build script
-                        loggedExec.environment(
-                    }
-    }
- * */  
-import org.gradle.api.Action;
-}
-import java.util.Locale;
-        });
-/*  
-                if (buildCacheUrl != null) {  
-                        String javaVersionsString = readFromFile(new File(checkoutDir.get(), ".ci/java-versions.properties"));
-                configAction.execute(loggedExec);
-import static org.opensearch.gradle.util.JavaUtil.getJavaHome;
+                    loggedExec.args("--" + logLevel.name().toLowerCase(Locale.ENGLISH));
+                }
                 final String showStacktraceName = project.getGradle().getStartParameter().getShowStacktrace().name();
-    ) {  
-import org.gradle.api.Task;
-import org.opensearch.gradle.LoggedExec;
-            int[] arr = { b };
-                if (Os.isFamily(Os.FAMILY_WINDOWS)) {
-        this.checkoutDir = checkoutDir;  
-                    loggedExec.args("--parallel");
-            write(arr, 0, 1);
-    }
-import java.util.stream.Collectors;
-                }  
-        this.project = project;
-package org.opensearch.gradle.internal;
-                                Integer.parseInt(  
-                    loggedExec.args("-Dorg.opensearch.build.cache.url=" + buildCacheUrl);
-import java.io.IOException;
-                }
-import java.util.List;  
-import org.gradle.api.tasks.TaskProvider;
-        }  
+                assert Arrays.asList("INTERNAL_EXCEPTIONS", "ALWAYS", "ALWAYS_FULL").contains(showStacktraceName);
                 if (showStacktraceName.equals("ALWAYS")) {
-/*
-        }
- * the Apache License, Version 2.0 (the "License"); you may
- */  
-        } catch (IOException ioException) {  
-    private static String readFromFile(File file) {  
-                }
-            for (int i = 0; i < bytes.length; i++) {  
-                                    Arrays.asList(javaVersionsString.split("\n"))  
-/**  
-import java.io.OutputStream;  
-                        );  
-                loggedExec.args("-Dbuild.snapshot=true");
-                            getJavaHome(
-import org.gradle.api.Project;
-                }  
-                } else if (showStacktraceName.equals("ALWAYS_FULL")) {  
-                            "RUNTIME_JAVA_HOME",
-                            "JAVA_HOME",  
- * GitHub history for details.
-                            getJavaHome(
- *     http://www.apache.org/licenses/LICENSE-2.0
-import java.nio.charset.StandardCharsets;
- * this file be licensed under the Apache-2.0 license or a
-import java.util.Arrays;
-            public void execute(LoggedExec loggedExec) {
-                }
-        this.unreleasedVersionInfo = unreleasedVersionInfo;
- * license agreements. See the NOTICE file distributed with
-        public final byte[] indent;  
-                if (project.getGradle().getStartParameter().isOffline()) {
-                String buildCacheUrl = System.getProperty("org.opensearch.build.cache.url");
-        Provider<File> checkoutDir
-                loggedExec.setStandardOutput(new IndentingOutputStream(System.out, unreleasedVersionInfo.get().version));  
-                loggedExec.args("-Dscan.tag.NESTED");
-                    loggedExec.args("--full-stacktrace");
-    }  
- * under the License.  
-    private Provider<File> checkoutDir;  
- * SPDX-License-Identifier: Apache-2.0
- * ownership. Elasticsearch licenses this file to you under  
-                loggedExec.setWorkingDir(checkoutDir.get());
-                loggedExec.setSpoolOutput(true);
-                                Integer.parseInt(
-                delegate.write(bytes[i]);
-        @Override
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
-                }
-public class BwcSetupExtension {
-                    loggedExec.args("--offline");
-import java.io.File;
-                // TODO revisit
- * not use this file except in compliance with the License.
-        IndentingOutputStream(OutputStream delegate, Object version) {  
- */  
-                                        .filter(l -> l.trim().startsWith("OPENSEARCH_BUILD_JAVA="))
-            this.delegate = delegate;
-                loggedExec.doFirst(new Action<Task>() {  
- * KIND, either express or implied.  See the License for the
-                final LogLevel logLevel = project.getGradle().getStartParameter().getLogLevel();  
-        try {
-                    loggedExec.args("/C", "call", new File(checkoutDir.get(), "gradlew").toString());  
-            @Override  
-import org.apache.commons.io.FileUtils;
-                                )
-        public void write(int[] bytes, int offset, int length) throws IOException {
-            }
- * Unless required by applicable law or agreed to in writing,
-                    public void execute(Task t) {
-        private final OutputStream delegate;
-                    loggedExec.executable("cmd");
-import org.apache.tools.ant.taskdefs.condition.Os;
-    }
-        Provider<BwcVersions.UnreleasedVersionInfo> unreleasedVersionInfo,
-/*  
-import org.opensearch.gradle.BwcVersions;  
                     loggedExec.args("--stacktrace");
-                        loggedExec.environment(  
-            throw new GradleException("Cannot read java properties file.", ioException);
-                    loggedExec.args("--" + logLevel.name().toLowerCase(Locale.ENGLISH));  
- * You may obtain a copy of the License at  
+                } else if (showStacktraceName.equals("ALWAYS_FULL")) {
+                    loggedExec.args("--full-stacktrace");
                 }
-                                        .filter(l -> l.trim().startsWith("OPENSEARCH_RUNTIME_JAVA="))  
-    TaskProvider<LoggedExec> bwcTask(String name, Action<LoggedExec> configuration) {  
- *
- * compatible open source license.
- *
+                if (project.getGradle().getStartParameter().isParallelProjectExecutionEnabled()) {
+                    loggedExec.args("--parallel");
+                }
+                loggedExec.setStandardOutput(new IndentingOutputStream(System.out, unreleasedVersionInfo.get().version));
+                loggedExec.setErrorOutput(new IndentingOutputStream(System.err, unreleasedVersionInfo.get().version));
+                configAction.execute(loggedExec);
+            }
+        });
+    }
+
     private static class IndentingOutputStream extends OutputStream {
-                                        .collect(Collectors.joining("!!"))
-                                        .stream()
-        return createRunBwcGradleTask(project, name, configuration);
-                    @Override
-                        // Execution time so that the checkouts are available  
- *  
-                        );
-                            )
+
+        public final byte[] indent;
+        private final OutputStream delegate;
+
+        IndentingOutputStream(OutputStream delegate, Object version) {
+            this.delegate = delegate;
+            indent = (" [" + version + "] ").getBytes(StandardCharsets.UTF_8);
+        }
+
+        @Override
+        public void write(int b) throws IOException {
+            int[] arr = { b };
+            write(arr, 0, 1);
+        }
+
+        public void write(int[] bytes, int offset, int length) throws IOException {
+            for (int i = 0; i < bytes.length; i++) {
+                delegate.write(bytes[i]);
+                if (bytes[i] == '\n') {
+                    delegate.write(indent);
+                }
+            }
+        }
+    }
+
+    private static String readFromFile(File file) {
+        try {
             return FileUtils.readFileToString(file).trim();
-                                        .stream()
-                loggedExec.dependsOn("checkoutBwcBranch");  
-                                        .collect(Collectors.joining("!!"))  
-                            )
-    private final Provider<BwcVersions.UnreleasedVersionInfo> unreleasedVersionInfo;
-                                )  
+        } catch (IOException ioException) {
+            throw new GradleException("Cannot read java properties file.", ioException);
+        }
+    }
+}

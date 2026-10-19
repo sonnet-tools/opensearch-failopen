@@ -1,24 +1,28 @@
-}
-}
+plugins {
   id 'java-gradle-plugin'
   id 'opensearch.pluginzip'
-  archiveFileName = "sample-plugin-${version}.zip"
-  group = 'org.opensearch'
-      pom {
-  from layout.projectDirectory.file('sample-plugin-source.txt')
-      }
-    pluginZip(MavenPublication) { publication ->
+}
+
 version='2.0.0.0'
-        description = "pluginDescription"
-        name = "sample-plugin"
-  }
-publishing {
-  publications {
-  destinationDirectory = layout.buildDirectory.dir('distributions')
-    }
-}
-plugins {
-}
-allprojects {
+
 // A bundlePlugin task mockup
 tasks.register('bundlePlugin', Zip.class) {
+  archiveFileName = "sample-plugin-${version}.zip"
+  destinationDirectory = layout.buildDirectory.dir('distributions')
+  from layout.projectDirectory.file('sample-plugin-source.txt')
+}
+
+allprojects {
+  group = 'org.opensearch'
+}
+
+publishing {
+  publications {
+    pluginZip(MavenPublication) { publication ->
+      pom {
+        name = "sample-plugin"
+        description = "pluginDescription"
+      }
+    }
+  }
+}

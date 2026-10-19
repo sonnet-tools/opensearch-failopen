@@ -1,21 +1,27 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
  *
-tasks.named("dependencyLicenses").configure {
-description = 'OpenSearch Rule framework common constructs which spi and module shares'
-  compileOnly project(":server")
-apply plugin: 'opensearch.build'
- */
+ * The OpenSearch Contributors require contributions made to
  * this file be licensed under the Apache-2.0 license or a
-  mapping from: /commons-collections.*/, to: 'commons-collections'
+ * compatible open source license.
+ */
+
+apply plugin: 'opensearch.build'
+apply plugin: 'opensearch.publish'
+
+description = 'OpenSearch Rule framework common constructs which spi and module shares'
+
+dependencies {
+  api "org.apache.commons:commons-collections4:${versions.commonscollections4}"
+  implementation project(":libs:opensearch-common")
+  compileOnly project(":server")
+
+  testImplementation(project(":test:framework")) {
+    exclude group: 'org.opensearch', module: 'opensearch-core'
   }
 }
- * compatible open source license.
- * SPDX-License-Identifier: Apache-2.0
-  testImplementation(project(":test:framework")) {
+
+
+tasks.named("dependencyLicenses").configure {
+  mapping from: /commons-collections.*/, to: 'commons-collections'
 }
-  api "org.apache.commons:commons-collections4:${versions.commonscollections4}"
-dependencies {
-apply plugin: 'opensearch.publish'
- * The OpenSearch Contributors require contributions made to
-  implementation project(":libs:opensearch-common")
-/*
-    exclude group: 'org.opensearch', module: 'opensearch-core'

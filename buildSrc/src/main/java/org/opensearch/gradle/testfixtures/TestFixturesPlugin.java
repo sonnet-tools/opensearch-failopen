@@ -1,247 +1,279 @@
-import javax.inject.Inject;
-                    .getServicesInfos()
- * software distributed under the License is distributed on an
-import org.gradle.api.DefaultTask;
-            // deprecated in Gradle 9.7 and fails in 10.  
-    @SuppressWarnings("unchecked")  
- * GitHub history for details.
+/*
  * SPDX-License-Identifier: Apache-2.0
  *
-        if (project.file(DOCKER_COMPOSE_YML).exists()) {
-                                try {
- * The OpenSearch Contributors require contributions made to  
-                    // if only one fixture is used, that's this one, but without a compose file that's not a valid configuration
-        task.onlyIf(spec -> {
-            TaskProvider<Task> buildFixture = project.getTasks().register("buildFixture", new Action<Task>() {
-                }
-                t.mustRunAfter(preProcessFixture);  
-                TestFixtureExtension extension = fixtureProject.getExtensions().getByType(TestFixtureExtension.class);
-                    });
-import org.gradle.api.provider.Provider;
-            tasks.named("composePull").configure(t -> t.mustRunAfter(preProcessFixture));
-                    .entrySet()  
- * compatible open source license.
- * Unless required by applicable law or agreed to in writing,
-    }
-        }
-            composeExtension.getUseDockerComposeV2()
-                            }  
-/*  
-        maybeSkipTasks(tasks, dockerSupport, getTaskClass("org.opensearch.gradle.test.RestIntegTestTask"));
-import org.opensearch.gradle.info.BuildParams;
-    private static final Logger LOGGER = Logging.getLogger(TestFixturesPlugin.class);  
-            throw new IllegalArgumentException("No such task: " + type);  
- * ownership. Elasticsearch licenses this file to you under  
-            maybeSkipTask(dockerSupport, preProcessFixture);
-        ExtraPropertiesExtension ext = project.getExtensions().getByType(ExtraPropertiesExtension.class);  
-        Provider<DockerSupportService> dockerSupport = GradleUtils.getBuildService(
-                        @Override
-        tasks.withType(Test.class).configureEach(task -> {
-import com.avast.gradle.dockercompose.DockerComposePlugin;
- */  
-                // Avoid running docker-compose tasks in parallel in CI due to some issues on certain Linux distributions
-        File testfixturesDir = project.file("testfixtures_shared");
-        BiConsumer<String, Integer> consumer  
-        });  
- *    http://www.apache.org/licenses/LICENSE-2.0
-                                    Files.createDirectories(testfixturesDir.toPath());
-        maybeSkipTasks(tasks, dockerSupport, ComposeBuild.class);
-                        }
-            if (DefaultTask.class.isAssignableFrom(aClass) == false) {
-        }
-            DockerSupportPlugin.DOCKER_SUPPORT_SERVICE_NAME  
-                    });
-            project.getGradle().getSharedServices(),
-                .getByType(SystemPropertyCommandLineArgumentProvider.class);
-            extension.fixtures.all(fixtureProject -> {  
-                    // Resolved here rather than inside the action: Task.extensions at execution time is
-                    configureServiceInfoForTask(task, project, false, taskExt::set);
-        task.doFirst(new Action<Task>() {
-import org.gradle.api.tasks.testing.Test;
-        Class<?> aClass;
-        });
-        } else {
-            boolean isComposeAvailable = dockerSupport.get().getDockerAvailability().isDockerComposeAvailable();  
-            });  
-                if (BuildParams.isCi()) {  
-public class TestFixturesPlugin implements Plugin<Project> {
-    private Class<? extends DefaultTask> getTaskClass(String type) {
-                                }
-import java.util.function.BiConsumer;
-            composeExtension.getRemoveContainers().set(true);
-            });
- * specific language governing permissions and limitations
-import org.opensearch.gradle.SystemPropertyCommandLineArgumentProvider;
-                    .stream()
-                            consumer.accept(name, host);  
-                    t.doFirst(new Action<Task>() {  
-            });
-        });
-            .all(fixtureProject -> project.evaluationDependsOn(fixtureProject.getPath()));
- *
-import com.avast.gradle.dockercompose.tasks.ComposeUp;  
-        maybeSkipTasks(tasks, dockerSupport, ComposeDown.class);
-                            String name = "test.fixtures." + service + ".tcp." + container;
-            composeExtension.getEnvironment().put("COMPOSE_HTTP_TIMEOUT", timeout);  
-                @Override  
-import org.gradle.api.tasks.TaskProvider;
-import org.gradle.api.plugins.BasePlugin;  
-            project.getPluginManager().apply(BasePlugin.class);
-            public void execute(Task theTask) {  
-        );
-        TaskContainer tasks = project.getTasks();
-                    .getByType(ComposeExtension.class)
-import com.avast.gradle.dockercompose.ServiceInfo;
-                task.dependsOn(fixtureProject.getTasks().named("postProcessFixture"));
-            project.getPluginManager().apply(DockerComposePlugin.class);  
-                configureServiceInfoForTask(task, fixtureProject, true, nonInputProperties::systemProperty);  
-                            theTask.getLogger().info("port mapping property: {}={}", name, host);
-            TaskProvider<Task> postProcessFixture = project.getTasks().register("postProcessFixture", new Action<Task>() {  
-                                    throw new UncheckedIOException(e);
-        maybeSkipTasks(tasks, dockerSupport, getTaskClass("org.opensearch.gradle.test.AntFixture"));
-                            String name = "test.fixtures." + service + ".udp." + container;  
-                        });
-        TestFixtureExtension extension = project.getExtensions().create("testFixtures", TestFixtureExtension.class, project);
- * license agreements. See the NOTICE file distributed with
-        Task task,  
-            TaskProvider<Task> preProcessFixture = project.getTasks().register("preProcessFixture", new Action<Task>() {
-import org.gradle.api.Task;
-            // Increase the Docker Compose HTTP timeout to 120 sec (the default is 60)
-import com.avast.gradle.dockercompose.tasks.ComposePull;
-            composeExtension.getUseComposeFiles().set(Collections.singletonList(DOCKER_COMPOSE_YML));
-                    ExtraPropertiesExtension taskExt = task.getExtensions().getByType(ExtraPropertiesExtension.class);  
-                        infos.getTcpPorts().forEach((container, host) -> {  
-    }
- * Modifications Copyright OpenSearch Contributors. See  
-import org.gradle.api.logging.Logger;
-package org.opensearch.gradle.testfixtures;
-                        ServiceInfo infos = entry.getValue();
-                    .filter(entry -> enableFilter == false || extension.isServiceRequired(entry.getKey(), fixtureProject.getPath()))
-        // Skip docker compose tasks if it is unavailable  
-import org.opensearch.gradle.util.GradleUtils;  
-        maybeSkipTasks(tasks, dockerSupport, TestingConventionsTasks.class);  
-                            {  
-        return (Class<? extends DefaultTask>) aClass;
-                    // deprecated in Gradle 9.7 and fails in 10.
-        ext.set("testFixturesDir", testfixturesDir);
-            aClass = Class.forName(type);
-        tasks.withType(taskClass).configureEach(t -> maybeSkipTask(dockerSupport, t));  
-                }
-    public void apply(Project project) {
-import org.opensearch.gradle.docker.DockerSupportPlugin;  
- * the Apache License, Version 2.0 (the "License"); you may
-                throw new IllegalArgumentException("Not a task type: " + type);  
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
-            }  
-            SystemPropertyCommandLineArgumentProvider nonInputProperties = task.getExtensions()
-        // Configure ports for the tests as system properties.
-            .getSharedServices()
-            final DockerAvailability dockerAvailability = dockerSupport.get().getDockerAvailability();
-import org.gradle.api.Action;
-                }  
- */
-                @Override
-import com.avast.gradle.dockercompose.tasks.ComposeDown;
-        maybeSkipTasks(tasks, dockerSupport, Test.class);
-                composeExtension.getExecutable().set(dockerAvailability.dockerComposeAvailability.getPath());
- * this work for additional information regarding copyright
-    }  
-                LOGGER.info("Task {} requires docker-compose but it is unavailable. Task will be skipped.", task.getPath());
-    @Override  
- *  
-            }
-    }
-            ComposeExtension composeExtension = project.getExtensions().getByType(ComposeExtension.class);  
-            }
-import org.gradle.api.Plugin;  
-                        public void execute(Task t2) {
-    private void maybeSkipTasks(TaskContainer tasks, Provider<DockerSupportService> dockerSupport, Class<? extends DefaultTask> taskClass) {
-            });
-                if (extension.fixtures.isEmpty()) {  
+ * The OpenSearch Contributors require contributions made to
  * this file be licensed under the Apache-2.0 license or a
-        project.getRootProject().getPluginManager().apply(DockerSupportPlugin.class);
- * KIND, either express or implied.  See the License for the
-        } catch (ClassNotFoundException e) {
-                            consumer.accept(name, host);
-            project.afterEvaluate(spec -> {
-                        String service = entry.getKey();
-            final Integer timeout = ext.has("dockerComposeHttpTimeout") ? (Integer) ext.get("dockerComposeHttpTimeout") : 120;
-                    task.dependsOn(buildFixture);  
-            });  
-                    throw new IllegalStateException(
-                    t.getOutputs().dir(testfixturesDir);
-                        });  
-        // We only know these at execution time so we need to do it in doFirst  
- * under the License.  
-                    t.dependsOn(preProcessFixture, tasks.named("composeUp"));
-import org.opensearch.gradle.docker.DockerSupportService;
-                @Override  
-                public void execute(Task task) {
-    ) {
-    }  
-                        infos.getUdpPorts().forEach((container, host) -> {
-                .set(dockerSupport.get().getDockerAvailability().dockerComposeAvailability instanceof DockerComposeV2Availability);
-import org.opensearch.gradle.docker.DockerSupportService.DockerComposeV2Availability;  
-        boolean enableFilter,
-            tasks.named("composeDown").configure(t -> t.doLast(t2 -> getFileSystemOperations().delete(d -> d.delete(testfixturesDir))));  
-            if (isComposeAvailable == false) {
-    }  
-                            theTask.getLogger().info("port mapping property: {}={}", name, host);
-            maybeSkipTask(dockerSupport, buildFixture);
-}
-                    );
-        extension.fixtures.matching(fixtureProject -> fixtureProject.equals(project) == false)  
-        maybeSkipTasks(tasks, dockerSupport, ComposeUp.class);  
-/*
-import java.io.IOException;
-import org.opensearch.gradle.precommit.TestingConventionsTasks;
-import org.gradle.api.logging.Logging;
-            if (dockerAvailability.isAvailable && dockerAvailability.isDockerComposeAvailable()) {  
-            tasks.named("composeUp").configure(t -> {
- * Licensed to Elasticsearch under one or more contributor  
-import org.gradle.api.plugins.ExtraPropertiesExtension;
-            return isComposeAvailable;
-import java.io.File;  
-            @Override
- * You may obtain a copy of the License at  
-        throw new UnsupportedOperationException();  
-                public void execute(Task t) {
-                                } catch (IOException e) {  
-    private static final String DOCKER_COMPOSE_THROTTLE = "dockerComposeThrottle";
-                task.finalizedBy(fixtureProject.getTasks().named("composeDown"));
-            .registerIfAbsent(DOCKER_COMPOSE_THROTTLE, DockerComposeThrottle.class, spec -> spec.getMaxParallelUsages().set(1));
-    private void maybeSkipTask(Provider<DockerSupportService> dockerSupport, TaskProvider<Task> task) {  
-/*
-            // Resolved here rather than inside the action: Task.extensions at execution time is
-    protected FileSystemOperations getFileSystemOperations() {
-            });
-import org.gradle.api.tasks.TaskContainer;  
-import org.gradle.api.file.FileSystemOperations;  
-        Project fixtureProject,
-                fixtureProject.getExtensions()  
-                public void execute(Task t) {
-                        "No " + DOCKER_COMPOSE_YML + " found for " + project.getPath() + " nor does it use other fixtures."  
-            }
-    private void maybeSkipTask(Provider<DockerSupportService> dockerSupport, Task task) {
-                    .forEach(entry -> {  
+ * compatible open source license.
  */
-import java.nio.file.Files;  
-        task.configure(t -> maybeSkipTask(dockerSupport, t));
-        try {  
-        Provider<DockerComposeThrottle> dockerComposeThrottle = project.getGradle()  
-import java.util.Collections;
-import java.io.UncheckedIOException;
-import org.gradle.api.Project;
-import com.avast.gradle.dockercompose.ComposeExtension;  
-                    t.usesService(dockerComposeThrottle);
-            maybeSkipTask(dockerSupport, postProcessFixture);  
-    static final String DOCKER_COMPOSE_YML = "docker-compose.yml";
-    private void configureServiceInfoForTask(
-import org.opensearch.gradle.docker.DockerSupportService.DockerAvailability;
-                }  
-        maybeSkipTasks(tasks, dockerSupport, ComposePull.class);
+
+/*
+ * Licensed to Elasticsearch under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
-import com.avast.gradle.dockercompose.tasks.ComposeBuild;  
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+/*
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+package org.opensearch.gradle.testfixtures;
+
+import com.avast.gradle.dockercompose.ComposeExtension;
+import com.avast.gradle.dockercompose.DockerComposePlugin;
+import com.avast.gradle.dockercompose.ServiceInfo;
+import com.avast.gradle.dockercompose.tasks.ComposeBuild;
+import com.avast.gradle.dockercompose.tasks.ComposeDown;
+import com.avast.gradle.dockercompose.tasks.ComposePull;
+import com.avast.gradle.dockercompose.tasks.ComposeUp;
+
+import org.opensearch.gradle.SystemPropertyCommandLineArgumentProvider;
+import org.opensearch.gradle.docker.DockerSupportPlugin;
+import org.opensearch.gradle.docker.DockerSupportService;
+import org.opensearch.gradle.docker.DockerSupportService.DockerAvailability;
+import org.opensearch.gradle.docker.DockerSupportService.DockerComposeV2Availability;
+import org.opensearch.gradle.info.BuildParams;
+import org.opensearch.gradle.precommit.TestingConventionsTasks;
+import org.opensearch.gradle.util.GradleUtils;
+import org.gradle.api.Action;
+import org.gradle.api.DefaultTask;
+import org.gradle.api.Plugin;
+import org.gradle.api.Project;
+import org.gradle.api.Task;
+import org.gradle.api.file.FileSystemOperations;
+import org.gradle.api.logging.Logger;
+import org.gradle.api.logging.Logging;
+import org.gradle.api.plugins.BasePlugin;
+import org.gradle.api.plugins.ExtraPropertiesExtension;
+import org.gradle.api.provider.Provider;
+import org.gradle.api.tasks.TaskContainer;
+import org.gradle.api.tasks.TaskProvider;
+import org.gradle.api.tasks.testing.Test;
+
+import javax.inject.Inject;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.util.Collections;
+import java.util.function.BiConsumer;
+
+public class TestFixturesPlugin implements Plugin<Project> {
+
+    private static final Logger LOGGER = Logging.getLogger(TestFixturesPlugin.class);
+    private static final String DOCKER_COMPOSE_THROTTLE = "dockerComposeThrottle";
+    static final String DOCKER_COMPOSE_YML = "docker-compose.yml";
+
     @Inject
-                }
+    protected FileSystemOperations getFileSystemOperations() {
+        throw new UnsupportedOperationException();
     }
+
+    @Override
+    public void apply(Project project) {
+        project.getRootProject().getPluginManager().apply(DockerSupportPlugin.class);
+
+        TaskContainer tasks = project.getTasks();
+        TestFixtureExtension extension = project.getExtensions().create("testFixtures", TestFixtureExtension.class, project);
+        Provider<DockerComposeThrottle> dockerComposeThrottle = project.getGradle()
+            .getSharedServices()
+            .registerIfAbsent(DOCKER_COMPOSE_THROTTLE, DockerComposeThrottle.class, spec -> spec.getMaxParallelUsages().set(1));
+
+        Provider<DockerSupportService> dockerSupport = GradleUtils.getBuildService(
+            project.getGradle().getSharedServices(),
+            DockerSupportPlugin.DOCKER_SUPPORT_SERVICE_NAME
+        );
+
+        ExtraPropertiesExtension ext = project.getExtensions().getByType(ExtraPropertiesExtension.class);
+        File testfixturesDir = project.file("testfixtures_shared");
+        ext.set("testFixturesDir", testfixturesDir);
+
+        if (project.file(DOCKER_COMPOSE_YML).exists()) {
+            project.getPluginManager().apply(BasePlugin.class);
+            project.getPluginManager().apply(DockerComposePlugin.class);
+
+            TaskProvider<Task> preProcessFixture = project.getTasks().register("preProcessFixture", new Action<Task>() {
+                @Override
+                public void execute(Task t) {
+                    t.getOutputs().dir(testfixturesDir);
+                    t.doFirst(new Action<Task>() {
+                        @Override
+                        public void execute(Task t2) {
+                            {
+                                try {
+                                    Files.createDirectories(testfixturesDir.toPath());
+                                } catch (IOException e) {
+                                    throw new UncheckedIOException(e);
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+            TaskProvider<Task> buildFixture = project.getTasks().register("buildFixture", new Action<Task>() {
+                @Override
+                public void execute(Task t) {
+                    t.dependsOn(preProcessFixture, tasks.named("composeUp"));
+                }
+            });
+
+            TaskProvider<Task> postProcessFixture = project.getTasks().register("postProcessFixture", new Action<Task>() {
+                @Override
+                public void execute(Task task) {
+                    task.dependsOn(buildFixture);
+                    // Resolved here rather than inside the action: Task.extensions at execution time is
+                    // deprecated in Gradle 9.7 and fails in 10.
+                    ExtraPropertiesExtension taskExt = task.getExtensions().getByType(ExtraPropertiesExtension.class);
+                    configureServiceInfoForTask(task, project, false, taskExt::set);
+                }
+            });
+
+            maybeSkipTask(dockerSupport, preProcessFixture);
+            maybeSkipTask(dockerSupport, postProcessFixture);
+            maybeSkipTask(dockerSupport, buildFixture);
+
+            ComposeExtension composeExtension = project.getExtensions().getByType(ComposeExtension.class);
+            composeExtension.getUseComposeFiles().set(Collections.singletonList(DOCKER_COMPOSE_YML));
+            composeExtension.getRemoveContainers().set(true);
+
+            // Increase the Docker Compose HTTP timeout to 120 sec (the default is 60)
+            final Integer timeout = ext.has("dockerComposeHttpTimeout") ? (Integer) ext.get("dockerComposeHttpTimeout") : 120;
+            composeExtension.getEnvironment().put("COMPOSE_HTTP_TIMEOUT", timeout);
+
+            final DockerAvailability dockerAvailability = dockerSupport.get().getDockerAvailability();
+            if (dockerAvailability.isAvailable && dockerAvailability.isDockerComposeAvailable()) {
+                composeExtension.getExecutable().set(dockerAvailability.dockerComposeAvailability.getPath());
+            }
+
+            composeExtension.getUseDockerComposeV2()
+                .set(dockerSupport.get().getDockerAvailability().dockerComposeAvailability instanceof DockerComposeV2Availability);
+
+            tasks.named("composeUp").configure(t -> {
+                // Avoid running docker-compose tasks in parallel in CI due to some issues on certain Linux distributions
+                if (BuildParams.isCi()) {
+                    t.usesService(dockerComposeThrottle);
+                }
+                t.mustRunAfter(preProcessFixture);
+            });
+            tasks.named("composePull").configure(t -> t.mustRunAfter(preProcessFixture));
+            tasks.named("composeDown").configure(t -> t.doLast(t2 -> getFileSystemOperations().delete(d -> d.delete(testfixturesDir))));
+        } else {
+            project.afterEvaluate(spec -> {
+                if (extension.fixtures.isEmpty()) {
+                    // if only one fixture is used, that's this one, but without a compose file that's not a valid configuration
+                    throw new IllegalStateException(
+                        "No " + DOCKER_COMPOSE_YML + " found for " + project.getPath() + " nor does it use other fixtures."
+                    );
+                }
+            });
+        }
+
+        extension.fixtures.matching(fixtureProject -> fixtureProject.equals(project) == false)
+            .all(fixtureProject -> project.evaluationDependsOn(fixtureProject.getPath()));
+
+        // Skip docker compose tasks if it is unavailable
+        maybeSkipTasks(tasks, dockerSupport, Test.class);
+        maybeSkipTasks(tasks, dockerSupport, getTaskClass("org.opensearch.gradle.test.RestIntegTestTask"));
+        maybeSkipTasks(tasks, dockerSupport, TestingConventionsTasks.class);
+        maybeSkipTasks(tasks, dockerSupport, getTaskClass("org.opensearch.gradle.test.AntFixture"));
+        maybeSkipTasks(tasks, dockerSupport, ComposeBuild.class);
+        maybeSkipTasks(tasks, dockerSupport, ComposeUp.class);
+        maybeSkipTasks(tasks, dockerSupport, ComposePull.class);
+        maybeSkipTasks(tasks, dockerSupport, ComposeDown.class);
+
+        tasks.withType(Test.class).configureEach(task -> {
+            // Resolved here rather than inside the action: Task.extensions at execution time is
+            // deprecated in Gradle 9.7 and fails in 10.
+            SystemPropertyCommandLineArgumentProvider nonInputProperties = task.getExtensions()
+                .getByType(SystemPropertyCommandLineArgumentProvider.class);
+            extension.fixtures.all(fixtureProject -> {
+                task.dependsOn(fixtureProject.getTasks().named("postProcessFixture"));
+                task.finalizedBy(fixtureProject.getTasks().named("composeDown"));
+                configureServiceInfoForTask(task, fixtureProject, true, nonInputProperties::systemProperty);
+            });
+        });
+    }
+
+    private void maybeSkipTasks(TaskContainer tasks, Provider<DockerSupportService> dockerSupport, Class<? extends DefaultTask> taskClass) {
+        tasks.withType(taskClass).configureEach(t -> maybeSkipTask(dockerSupport, t));
+    }
+
+    private void maybeSkipTask(Provider<DockerSupportService> dockerSupport, TaskProvider<Task> task) {
+        task.configure(t -> maybeSkipTask(dockerSupport, t));
+    }
+
+    private void maybeSkipTask(Provider<DockerSupportService> dockerSupport, Task task) {
+        task.onlyIf(spec -> {
+            boolean isComposeAvailable = dockerSupport.get().getDockerAvailability().isDockerComposeAvailable();
+            if (isComposeAvailable == false) {
+                LOGGER.info("Task {} requires docker-compose but it is unavailable. Task will be skipped.", task.getPath());
+            }
+            return isComposeAvailable;
+        });
+    }
+
+    private void configureServiceInfoForTask(
+        Task task,
+        Project fixtureProject,
+        boolean enableFilter,
+        BiConsumer<String, Integer> consumer
+    ) {
+        // Configure ports for the tests as system properties.
+        // We only know these at execution time so we need to do it in doFirst
+        task.doFirst(new Action<Task>() {
+            @Override
+            public void execute(Task theTask) {
+                TestFixtureExtension extension = fixtureProject.getExtensions().getByType(TestFixtureExtension.class);
+
+                fixtureProject.getExtensions()
+                    .getByType(ComposeExtension.class)
+                    .getServicesInfos()
+                    .entrySet()
+                    .stream()
+                    .filter(entry -> enableFilter == false || extension.isServiceRequired(entry.getKey(), fixtureProject.getPath()))
+                    .forEach(entry -> {
+                        String service = entry.getKey();
+                        ServiceInfo infos = entry.getValue();
+                        infos.getTcpPorts().forEach((container, host) -> {
+                            String name = "test.fixtures." + service + ".tcp." + container;
+                            theTask.getLogger().info("port mapping property: {}={}", name, host);
+                            consumer.accept(name, host);
+                        });
+                        infos.getUdpPorts().forEach((container, host) -> {
+                            String name = "test.fixtures." + service + ".udp." + container;
+                            theTask.getLogger().info("port mapping property: {}={}", name, host);
+                            consumer.accept(name, host);
+                        });
+                    });
+            }
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    private Class<? extends DefaultTask> getTaskClass(String type) {
+        Class<?> aClass;
+        try {
+            aClass = Class.forName(type);
+            if (DefaultTask.class.isAssignableFrom(aClass) == false) {
+                throw new IllegalArgumentException("Not a task type: " + type);
+            }
+        } catch (ClassNotFoundException e) {
+            throw new IllegalArgumentException("No such task: " + type);
+        }
+        return (Class<? extends DefaultTask>) aClass;
+    }
+
+}

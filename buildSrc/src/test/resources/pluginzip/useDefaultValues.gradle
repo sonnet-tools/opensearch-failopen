@@ -1,40 +1,43 @@
-        developers {
-            url = "https://github.com/john-doe/"
-  publications {
-  destinationDirectory = layout.buildDirectory.dir('distributions')
-          license {
-//        name = "plugin name"
-          }
-        }
-  }
-//        description = "plugin description"
-  id 'opensearch.pluginzip'
-  id 'java-gradle-plugin'
-    }
-          }
-      pom {
-group="org.custom.group"
 plugins {
-          url = "https://github.com/doe/sample-plugin"
-        url = "https://github.com/doe/sample-plugin"
-            url = "http://www.apache.org/licenses/LICENSE-2.0.txt"
-            organizationUrl = "https://doe.inc/"
-            organization = "Doe.inc"
-            name = "John Doe"
+  id 'java-gradle-plugin'
+  id 'opensearch.pluginzip'
 }
-          developer {
-}
-      }
-        scm {
-  from layout.projectDirectory.file('sample-plugin-source.txt')
-  archiveFileName = "sample-plugin-${version}.zip"
-        licenses {
-            name = "The Apache License, Version 2.0"
-        }
+
+group="org.custom.group"
 version='2.0.0.0'
-tasks.register('bundlePlugin', Zip.class) {
+
 // A bundlePlugin task mockup
-publishing {
-    pluginZip(MavenPublication) {
+tasks.register('bundlePlugin', Zip.class) {
+  archiveFileName = "sample-plugin-${version}.zip"
+  destinationDirectory = layout.buildDirectory.dir('distributions')
+  from layout.projectDirectory.file('sample-plugin-source.txt')
 }
+
+publishing {
+  publications {
+    pluginZip(MavenPublication) {
+      pom {
+//        name = "plugin name"
+//        description = "plugin description"
+        licenses {
+          license {
+            name = "The Apache License, Version 2.0"
+            url = "http://www.apache.org/licenses/LICENSE-2.0.txt"
+          }
         }
+        developers {
+          developer {
+            name = "John Doe"
+            url = "https://github.com/john-doe/"
+            organization = "Doe.inc"
+            organizationUrl = "https://doe.inc/"
+          }
+        }
+        url = "https://github.com/doe/sample-plugin"
+        scm {
+          url = "https://github.com/doe/sample-plugin"
+        }
+      }
+    }
+  }
+}

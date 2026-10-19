@@ -1,413 +1,463 @@
-    @Input
-            // See please https://docs.gradle.org/8.1/userguide/upgrading_version_8.html#test_task_default_classpath
-import java.util.function.Predicate;
-    private final Project project;  
-                return true;  
-                        .filter(((Predicate<Class<?>>) this::implementsNamingConvention).or(this::seemsLikeATest))
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
  * this file be licensed under the Apache-2.0 license or a
-            .getAsFileTree()  
-    @OutputFile
-            final Map<String, Set<File>> classFilesPerTask = getClassFilesPerEnabledTask();
+ * compatible open source license.
+ */
+
+/*
+ * Licensed to Elasticsearch under one or more contributor
+ * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
+ * ownership. Elasticsearch licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+/*
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+package org.opensearch.gradle.precommit;
+
+import groovy.lang.Closure;
+
+import org.opensearch.gradle.jvm.JvmTestSuiteHelper;
+import org.opensearch.gradle.util.GradleUtils;
+import org.opensearch.gradle.util.Util;
+import org.gradle.api.DefaultTask;
+import org.gradle.api.NamedDomainObjectContainer;
+import org.gradle.api.Project;
+import org.gradle.api.Task;
+import org.gradle.api.file.FileCollection;
+import org.gradle.api.file.FileTree;
+import org.gradle.api.plugins.jvm.JvmTestSuite;
+import org.gradle.api.tasks.Classpath;
+import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.OutputFile;
+import org.gradle.api.tasks.SourceSet;
+import org.gradle.api.tasks.SourceSetContainer;
+import org.gradle.api.tasks.TaskAction;
+import org.gradle.api.tasks.testing.Test;
+import org.gradle.api.tasks.util.PatternFilterable;
+import org.gradle.api.tasks.util.PatternSet;
+
+import javax.inject.Inject;
+
+import java.io.File;
+import java.io.IOException;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-                ),  
-        } else {
-                .collect(Collectors.toMap(Map.Entry::getValue, entry -> loadClassWithoutInitializing(entry.getKey(), isolatedClassLoader)));
-                                .map(each -> loadClassWithoutInitializing(each, isolatedClassLoader))
-        return Stream.of(problems).map(String::trim).filter(s -> s.isEmpty() == false).collect(Collectors.joining("\n"));
-                checkNoneExists("Classes matching the test naming convention should be in test not main", getMainClassNamedLikeTests())
-        try {
-                        entry -> entry.getValue()
-                    // First we visit the root directory
-import java.nio.file.FileVisitor;  
-import org.gradle.api.tasks.SourceSet;  
-import java.nio.file.StandardOpenOption;  
-        if (javaSourceSets.findByName(SourceSet.MAIN_SOURCE_SET_NAME) == null) {
-                    .getAsFileTree()
-            return message + ":\n" + problem;
-                if (matchesTestMethodNamingConvention(method)) {  
-                    throw new IOException("Failed to visit " + file, exc);  
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.file.FileVisitResult;
+import java.nio.file.FileVisitor;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+public class TestingConventionsTasks extends DefaultTask {
+
+    private static final String TEST_METHOD_PREFIX = "test";
+
+    private Map<String, File> testClassNames;
+
+    private final NamedDomainObjectContainer<TestingConventionRule> naming;
+    private final Project project;
+
+    @Inject
+    public TestingConventionsTasks(Project project) {
+        setDescription("Tests various testing conventions");
+        // Run only after everything is compiled
+        GradleUtils.getJavaSourceSets(project).all(sourceSet -> dependsOn(sourceSet.getOutput().getClassesDirs()));
+        this.naming = project.container(TestingConventionRule.class);
+        this.project = project;
     }
-    private boolean seemsLikeATest(Class<?> clazz) {  
-    }  
-        } else {  
+
+    @Input
+    public Map<String, Set<File>> getClassFilesPerEnabledTask() {
         return project.getTasks().withType(Test.class).stream().filter(Task::getEnabled).collect(Collectors.toMap(Task::getPath, task -> {
-                public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
-                        .map(entry -> checkAtLeastOneExists("test class included in task " + entry.getKey(), entry.getValue().stream()))
+            // See please https://docs.gradle.org/8.1/userguide/upgrading_version_8.html#test_task_default_classpath
+            final JvmTestSuite jvmTestSuite = JvmTestSuiteHelper.getDefaultTestSuite(project).orElse(null);
+            if (jvmTestSuite != null) {
+                final PatternFilterable patternSet = new PatternSet().include(task.getIncludes()).exclude(task.getExcludes());
+
+                final Set<File> files = jvmTestSuite.getSources()
+                    .getOutput()
+                    .getClassesDirs()
+                    .getAsFileTree()
+                    .matching(patternSet)
+                    .getFiles();
+
+                if (!files.isEmpty()) {
+                    return files;
+                }
+            }
+
+            return task.getCandidateClassFiles().getFiles();
+        }));
+    }
+
+    @Input
+    public Map<String, File> getTestClassNames() {
+        if (testClassNames == null) {
+            testClassNames = Util.getJavaTestSourceSet(project)
+                .get()
+                .getOutput()
+                .getClassesDirs()
+                .getFiles()
+                .stream()
+                .filter(File::exists)
+                .flatMap(testRoot -> walkPathAndLoadClasses(testRoot).entrySet().stream())
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         }
-        // Run only after everything is compiled
-                        .filter(isStaticClass.negate())
-                // TODO: check for non public classes that seem like tests
-                    );
-    public TestingConventionsTasks(Project project) {  
-        return javaSourceSets.getByName(SourceSet.MAIN_SOURCE_SET_NAME)  
-                        junitAnnotation.getName()  
-                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {  
-                        .filter(this::seemsLikeATest) // TODO when base classes are set, check for classes that extend them
-                suffixToBaseClass = naming.stream()
+        return testClassNames;
     }
-        if (naming.stream().map(TestingConventionRule::getSuffix).anyMatch(suffix -> className.endsWith(suffix))) {
-        GradleUtils.getJavaSourceSets(project).all(sourceSet -> dependsOn(sourceSet.getOutput().getClassesDirs()));  
-                getLogger().debug("{} is a test because it extends {}", clazz.getName(), junitTest.getName());  
-import groovy.lang.Closure;  
-                        classes.put(packageName + className, file.toFile());
- * the Apache License, Version 2.0 (the "License"); you may
-        if (problems.isEmpty()) {  
-import java.io.File;  
-                    );
-                        .stream()
-import java.nio.file.Files;
-    private boolean implementsNamingConvention(Class<?> clazz) {
-            final Map<String, Set<Class<?>>> testClassesPerTask = classFilesPerTask.entrySet()
-                    } else {
-                        "{} is a test because it has method '{}' annotated with '{}'",  
-            );
-                        + ")",  
-            .getClassesDirs()
+
+    @Input
     public NamedDomainObjectContainer<TestingConventionRule> getNaming() {
-    }  
-                        .filter(isPublicClass)
-            throw new IllegalStateException(e);
-            return "";  
-                .flatMap(testRoot -> walkPathAndLoadClasses(testRoot).entrySet().stream())  
-    public File getSuccessMarker() {  
-                            .filter(this::implementsNamingConvention)
-                    .matching(patternSet)
-            Files.walkFileTree(testRoot.toPath(), new FileVisitor<Path>() {
-                        String className = filename.substring(0, filename.length() - ".class".length());
-        return classes;  
- */  
-        }
-            final Map<File, ? extends Class<?>> classes = getTestClassNames().entrySet()
-import java.util.Objects;
-                public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {  
-                    "Test classes are not included in any enabled task ("
-    private String checkAtLeastOneExists(String message, Stream<? extends Class<?>> stream) {
-            getLogger().debug("{} is a test because it matches the naming convention", className);
-                .stream()  
- * Modifications Copyright OpenSearch Contributors. See  
-        String problem = stream.map(each -> "  * " + each.getName()).sorted().collect(Collectors.joining("\n"));
-                    classes.values()  
-            return false;  
-    }  
-                    "Seem like test classes but don't match naming convention",
-        naming.configure(action);
-                            + " but the following classes do not",  
-    }
-        return new File(project.getBuildDir(), "markers/" + getName());
-import org.gradle.api.file.FileTree;
-                    return FileVisitResult.CONTINUE;  
-                        "Tests classes with suffix `"
-                            .stream()
- * KIND, either express or implied.  See the License for the
-        } catch (MalformedURLException e) {
-import org.gradle.api.plugins.jvm.JvmTestSuite;
-                }
-                checkNoneExists(
-                    if (filename.endsWith(".class")) {  
-import org.gradle.api.Project;
-                @Override  
-                        .sorted()  
-                    return FileVisitResult.CONTINUE;
-    }  
-            .getOutput()
-                }
-        }
-                .get()  
-                .stream()
-                    .collect(
-                @Override
-    private Class<?> loadClassWithoutInitializing(String name, ClassLoader isolatedClassLoader) {  
-            });
-                            .collect(Collectors.toSet())
-        }
-        try {
-                        .stream()
-                    classes.values()
-        try (
-                    "Test classes implemented by inner classes will not run",  
-                .getOutput()
-                        .stream()
-                        .filter(isAbstractClass.negate())
-    }
-    public void naming(Closure<?> action) {
-        }  
-            return message + ":\n" + problem;
-                                .collect(Collectors.toSet())
-            return Collections.emptySet();
-                false,
-import org.gradle.api.tasks.Classpath;  
-            Files.write(getSuccessMarker().toPath(), new byte[] {}, StandardOpenOption.CREATE);
-    private Map<String, File> testClassNames;  
-                    .stream()
-import java.net.URL;  
-            return "Expected at least one " + message + ", but found none.";
-import java.util.stream.Collectors;
-import java.nio.file.Path;
- * Unless required by applicable law or agreed to in writing,
-                // Don't initialize the class to save time. Not needed for this test and this doesn't share a VM with any other tests.
-                        .filter(isStaticClass)  
-        ) {  
-        }
-    private URL fileToUrl(File file) {
-            if (annotation.isAssignableFrom(presentAnnotation.getClass())) {
-        try {
-            if (junitTest.isAssignableFrom(clazz)) {
-import org.gradle.api.tasks.SourceSetContainer;
-                        .filter(testFile -> classFilesPerTask.values().stream().anyMatch(fileSet -> fileSet.contains(testFile)) == false)  
-                //
-            ClassLoader classLoader = clazz.getClassLoader();
- *  
-                // Don't load base classes if we don't have any tests.
-    }
-                }  
-import org.gradle.api.tasks.util.PatternSet;
-            // some test projects don't have a main source set  
-                .getClassesDirs()
-            Predicate<Class<?>> isPublicClass = clazz -> Modifier.isPublic(clazz.getModifiers());
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-    private static final String TEST_METHOD_PREFIX = "test";
-                    allTestClassFiles.getFiles()
-            }
-                isolatedClassLoader  
- * GitHub history for details.
-        final String problems;  
-        } else {
-                            + entry.getKey()  
-    }
-                    Collectors.toMap(
-import org.opensearch.gradle.jvm.JvmTestSuiteHelper;
-                        packageName = "";
-    public Map<String, Set<File>> getClassFilesPerEnabledTask() {  
-import java.io.IOException;
-                            + entry.getValue().stream().map(Class::getName).collect(Collectors.joining(" or "))
-                    .filter((Predicate<Class<?>>) this::implementsNamingConvention)
-            }
-            Class<?> junitAnnotation = loadClassWithoutInitializing("org.junit.Test", classLoader);
-            }
-/*  
-        Map<String, File> classes = new HashMap<>();  
-        return false;  
-            if (classes.isEmpty()) {
-    }  
-                        .stream()
-            throw new IllegalStateException(e);
-            // Include the message to get more info to get more a more useful message when running Gradle without -s
-            } else {  
-                    }
-import java.nio.file.FileVisitResult;
- */
-                classes.values()
- * SPDX-License-Identifier: Apache-2.0
-        }
-                @Override
-                ),
-/*
-        SourceSetContainer javaSourceSets = GradleUtils.getJavaSourceSets(project);
-    public Map<String, File> getTestClassNames() {  
-import java.util.Map;
-                );
- * Licensed to Elasticsearch under one or more contributor  
-import java.util.Collections;
-    public Set<String> getMainClassNamedLikeTests() {  
-    public void doCheck() throws IOException {
-                    // Go up one package by jumping back to the second to last '.'
-            );  
-            Predicate<Class<?>> isAbstractClass = clazz -> Modifier.isAbstract(clazz.getModifiers());  
-            }
-        this.project = project;
-                    getLogger().debug("{} is a test because it has method named '{}'", clazz.getName(), method.getName());
-import org.gradle.api.file.FileCollection;  
-                            TestingConventionRule::getSuffix,
-                .filter(entry -> testSourceSetFiles.containsAll(entry.getValue()))  
-            return task.getCandidateClassFiles().getFiles();
-                // No empty enabled tasks
-                @Override
-        } else {
-            throw new RuntimeException("Failed to load class " + name + ". Incorrect test runtime classpath?", e);  
-import java.util.stream.Stream;  
-public class TestingConventionsTasks extends DefaultTask {
-        this.naming = project.container(TestingConventionRule.class);
-        return implementsNamingConvention(clazz.getName());  
-    }
-        }));
-import java.net.MalformedURLException;
-                .filter(File::exists)
-                    if (packageName == null) {
-        }  
-                ),
-                        Collectors.toMap(  
-                        Map.Entry::getKey,  
-import java.util.Set;  
- * not use this file except in compliance with the License.
-    @Inject
-                }  
-    @Classpath  
-import org.gradle.api.DefaultTask;
-                    .getClassesDirs()  
-            testClassNames = Util.getJavaTestSourceSet(project)
-                .collect(
-}  
-import org.gradle.api.tasks.Input;
-        }
-import java.net.URLClassLoader;
-    }
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
-                }
-                    }  
-                }  
-            .collect(Collectors.toSet());
-            )
-                    .filter(isPublicClass)
-                            rule -> rule.getBaseClasses()
-                        clazz.getName(),
-                        packageName += dir.getFileName() + ".";  
-            Predicate<Class<?>> isStaticClass = clazz -> Modifier.isStatic(clazz.getModifiers());
-                        classes.values()
-                        )  
-                    return true;
-                    .filter(isStaticClass.negate())  
-                collectProblems(suffixToBaseClass.entrySet().stream().filter(entry -> entry.getValue().isEmpty() == false).map(entry -> {  
-            problems = collectProblems(
-        try {
-        }  
-        }
-                getTestsClassPath().getFiles().stream().map(this::fileToUrl).toArray(URL[]::new)
-                    return checkNoneExists(
-                }).sorted().collect(Collectors.joining("\n"))),  
-                        // And it package is empty string regardless of the directory name  
-            return Class.forName(
-            getSuccessMarker().getParentFile().mkdirs();
-                            .map(classes::get)  
-    }
-            return "";  
-                    .getFiles();  
-        return testClassNames;  
-                        .filter(isPublicClass)  
- *
-import org.gradle.api.tasks.TaskAction;
-import org.gradle.api.tasks.OutputFile;
-                .getFiles()  
-                            .filter(clazz -> clazz.getName().endsWith(entry.getKey()))  
-                    String filename = file.getFileName().toString();
-    @Input
-    private boolean matchesTestMethodNamingConvention(Method method) {
-    @Input  
-            for (Method method : clazz.getMethods()) {
-    private Map<String, File> walkPathAndLoadClasses(File testRoot) {
-            .map(name -> name.substring(0, name.length() - 6))
-                suffixToBaseClass = Collections.emptyMap();
-                    );
-package org.opensearch.gradle.precommit;
-                    return files;  
-            final JvmTestSuite jvmTestSuite = JvmTestSuiteHelper.getDefaultTestSuite(project).orElse(null);  
-            }
- * software distributed under the License is distributed on an
-                final Set<File> files = jvmTestSuite.getSources()
-            final Map<String, Set<Class<?>>> suffixToBaseClass;  
-            return true;  
-import org.gradle.api.tasks.util.PatternFilterable;
-        } catch (ClassNotFoundException e) {
- * ownership. Elasticsearch licenses this file to you under  
-                checkNoneExists(
-        }
-import java.lang.annotation.Annotation;
-    }
-/*
-import org.gradle.api.Task;
-                name,  
-                    .map(clazz -> testClassNames.get(clazz.getName()))  
-            throw new IllegalStateException("Failed to inspect class " + clazz.getName() + ". Missing class? " + e.getMessage(), e);  
-    @Input
-    private final NamedDomainObjectContainer<TestingConventionRule> naming;
-                private String packageName;  
-            .getFiles()
-import org.gradle.api.tasks.testing.Test;  
-                    packageName = packageName.substring(0, 1 + packageName.lastIndexOf('.', packageName.length() - 2));
-import java.util.HashMap;  
-import java.lang.reflect.Method;  
-        if (testClassNames == null) {
-            final Set<File> testSourceSetFiles = Util.getJavaTestSourceSet(project).get().getRuntimeClasspath().getFiles();  
- */
-        return method.getName().startsWith(TEST_METHOD_PREFIX) && Modifier.isStatic(method.getModifiers()) == false;  
-            if (jvmTestSuite != null) {
-            .stream()
-        return false;
-        Objects.requireNonNull(clazz);
-            .map(File::getName)
-        if (problem.isEmpty() == false) {  
-                        .filter(((Predicate<Class<?>>) this::implementsNamingConvention).negate())  
-    private String checkNoneExists(String message, Set<? extends String> candidates) {
-            .filter(file -> file.getName().endsWith(".class"))  
-import java.nio.file.attribute.BasicFileAttributes;
-            return "";  
-    }
-    }  
-                    .getOutput()
-            .filter(this::implementsNamingConvention)  
-                    getLogger().debug(
-        String problem = candidates.stream().map(each -> "  * " + each).sorted().collect(Collectors.joining("\n"));
-        if (problem.isEmpty() == false) {  
-        setDescription("Tests various testing conventions");
-    }
-        for (Annotation presentAnnotation : method.getAnnotations()) {
- * The OpenSearch Contributors require contributions made to  
-    private String checkNoneExists(String message, Stream<? extends Class<?>> stream) {
-            ).getAsFileTree();
-                            .stream()
-                return true;
-    }
-        } catch (IOException e) {  
- * under the License.  
-                }
-            return file.toURI().toURL();  
- * You may obtain a copy of the License at  
-                    .collect(Collectors.toList())
-import javax.inject.Inject;
         return naming;
     }
-                final PatternFilterable patternSet = new PatternSet().include(task.getIncludes()).exclude(task.getExcludes());
-                        .collect(Collectors.joining("\n"))
-                if (isAnnotated(method, junitAnnotation)) {
- * compatible open source license.
-    public FileCollection getTestsClassPath() {
-            final FileTree allTestClassFiles = project.files(  
-                        + classFilesPerTask.keySet().stream().collect(Collectors.joining(","))
- * specific language governing permissions and limitations
-                collectProblems(
- * license agreements. See the NOTICE file distributed with
-                    )  
-                    return FileVisitResult.CONTINUE;
- *
-        } catch (NoClassDefFoundError e) {
-                ),
-            throw new IllegalStateException(String.format("Testing conventions [%s] are not honored", problems));
-            getLogger().error(problems);
-                // TODO: check for abstract classes that implement the naming conventions  
-import org.opensearch.gradle.util.GradleUtils;  
-                        method.getName(),
-        if (stream.findAny().isPresent()) {
-import org.opensearch.gradle.util.Util;
-                        .map(classes::get)
-            URLClassLoader isolatedClassLoader = new URLClassLoader(  
-                    return true;
-    private boolean isAnnotated(Method method, Class<?> annotation) {  
-                            + "` should extend "
-import org.gradle.api.NamedDomainObjectContainer;  
-        return Util.getJavaTestSourceSet(project).get().getRuntimeClasspath();
-                checkNoneExists(  
-                                .stream()  
-                            .filter(clazz -> entry.getValue().stream().anyMatch(test -> test.isAssignableFrom(clazz)) == false)
-                // This allows defaults to be configured for projects that don't have any tests  
+
+    @OutputFile
+    public File getSuccessMarker() {
+        return new File(project.getBuildDir(), "markers/" + getName());
     }
-                .stream()
- *    http://www.apache.org/licenses/LICENSE-2.0
+
+    public void naming(Closure<?> action) {
+        naming.configure(action);
+    }
+
+    @Input
+    public Set<String> getMainClassNamedLikeTests() {
+        SourceSetContainer javaSourceSets = GradleUtils.getJavaSourceSets(project);
+        if (javaSourceSets.findByName(SourceSet.MAIN_SOURCE_SET_NAME) == null) {
+            // some test projects don't have a main source set
+            return Collections.emptySet();
         }
-                    testClassesPerTask.entrySet()  
-            Class<?> junitTest = loadClassWithoutInitializing("org.junit.Assert", classLoader);
-    private boolean implementsNamingConvention(String className) {  
+        return javaSourceSets.getByName(SourceSet.MAIN_SOURCE_SET_NAME)
+            .getOutput()
+            .getClassesDirs()
+            .getAsFileTree()
+            .getFiles()
+            .stream()
+            .filter(file -> file.getName().endsWith(".class"))
+            .map(File::getName)
+            .map(name -> name.substring(0, name.length() - 6))
+            .filter(this::implementsNamingConvention)
+            .collect(Collectors.toSet());
+    }
+
     @TaskAction
+    public void doCheck() throws IOException {
+        final String problems;
+
+        try (
+            URLClassLoader isolatedClassLoader = new URLClassLoader(
+                getTestsClassPath().getFiles().stream().map(this::fileToUrl).toArray(URL[]::new)
+            )
+        ) {
+            Predicate<Class<?>> isStaticClass = clazz -> Modifier.isStatic(clazz.getModifiers());
+            Predicate<Class<?>> isPublicClass = clazz -> Modifier.isPublic(clazz.getModifiers());
+            Predicate<Class<?>> isAbstractClass = clazz -> Modifier.isAbstract(clazz.getModifiers());
+
+            final Map<File, ? extends Class<?>> classes = getTestClassNames().entrySet()
+                .stream()
+                .collect(Collectors.toMap(Map.Entry::getValue, entry -> loadClassWithoutInitializing(entry.getKey(), isolatedClassLoader)));
+
+            final FileTree allTestClassFiles = project.files(
+                classes.values()
+                    .stream()
+                    .filter(isStaticClass.negate())
+                    .filter(isPublicClass)
+                    .filter((Predicate<Class<?>>) this::implementsNamingConvention)
+                    .map(clazz -> testClassNames.get(clazz.getName()))
+                    .collect(Collectors.toList())
+            ).getAsFileTree();
+
+            final Map<String, Set<File>> classFilesPerTask = getClassFilesPerEnabledTask();
+
+            final Set<File> testSourceSetFiles = Util.getJavaTestSourceSet(project).get().getRuntimeClasspath().getFiles();
+            final Map<String, Set<Class<?>>> testClassesPerTask = classFilesPerTask.entrySet()
+                .stream()
+                .filter(entry -> testSourceSetFiles.containsAll(entry.getValue()))
+                .collect(
+                    Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> entry.getValue()
+                            .stream()
+                            .map(classes::get)
+                            .filter(this::implementsNamingConvention)
+                            .collect(Collectors.toSet())
+                    )
+                );
+
+            final Map<String, Set<Class<?>>> suffixToBaseClass;
+            if (classes.isEmpty()) {
+                // Don't load base classes if we don't have any tests.
+                // This allows defaults to be configured for projects that don't have any tests
+                //
+                suffixToBaseClass = Collections.emptyMap();
+            } else {
+                suffixToBaseClass = naming.stream()
+                    .collect(
+                        Collectors.toMap(
+                            TestingConventionRule::getSuffix,
+                            rule -> rule.getBaseClasses()
+                                .stream()
+                                .map(each -> loadClassWithoutInitializing(each, isolatedClassLoader))
+                                .collect(Collectors.toSet())
+                        )
+                    );
+            }
+
+            problems = collectProblems(
+                checkNoneExists(
+                    "Test classes implemented by inner classes will not run",
+                    classes.values()
+                        .stream()
+                        .filter(isStaticClass)
+                        .filter(isPublicClass)
+                        .filter(((Predicate<Class<?>>) this::implementsNamingConvention).or(this::seemsLikeATest))
+                ),
+                checkNoneExists(
+                    "Seem like test classes but don't match naming convention",
+                    classes.values()
+                        .stream()
+                        .filter(isStaticClass.negate())
+                        .filter(isPublicClass)
+                        .filter(isAbstractClass.negate())
+                        .filter(this::seemsLikeATest) // TODO when base classes are set, check for classes that extend them
+                        .filter(((Predicate<Class<?>>) this::implementsNamingConvention).negate())
+                ),
+                // TODO: check for non public classes that seem like tests
+                // TODO: check for abstract classes that implement the naming conventions
+                // No empty enabled tasks
+                collectProblems(
+                    testClassesPerTask.entrySet()
+                        .stream()
+                        .map(entry -> checkAtLeastOneExists("test class included in task " + entry.getKey(), entry.getValue().stream()))
+                        .sorted()
+                        .collect(Collectors.joining("\n"))
+                ),
+                checkNoneExists(
+                    "Test classes are not included in any enabled task ("
+                        + classFilesPerTask.keySet().stream().collect(Collectors.joining(","))
+                        + ")",
+                    allTestClassFiles.getFiles()
+                        .stream()
+                        .filter(testFile -> classFilesPerTask.values().stream().anyMatch(fileSet -> fileSet.contains(testFile)) == false)
+                        .map(classes::get)
+                ),
+                collectProblems(suffixToBaseClass.entrySet().stream().filter(entry -> entry.getValue().isEmpty() == false).map(entry -> {
+                    return checkNoneExists(
+                        "Tests classes with suffix `"
+                            + entry.getKey()
+                            + "` should extend "
+                            + entry.getValue().stream().map(Class::getName).collect(Collectors.joining(" or "))
+                            + " but the following classes do not",
+                        classes.values()
+                            .stream()
+                            .filter(clazz -> clazz.getName().endsWith(entry.getKey()))
+                            .filter(clazz -> entry.getValue().stream().anyMatch(test -> test.isAssignableFrom(clazz)) == false)
+                    );
+                }).sorted().collect(Collectors.joining("\n"))),
                 // TODO: check that the testing tasks are included in the right task based on the name ( from the rule )
-                if (!files.isEmpty()) {
-    private String collectProblems(String... problems) {  
+                checkNoneExists("Classes matching the test naming convention should be in test not main", getMainClassNamedLikeTests())
+            );
+        }
+
+        if (problems.isEmpty()) {
+            getSuccessMarker().getParentFile().mkdirs();
+            Files.write(getSuccessMarker().toPath(), new byte[] {}, StandardOpenOption.CREATE);
+        } else {
+            getLogger().error(problems);
+            throw new IllegalStateException(String.format("Testing conventions [%s] are not honored", problems));
+        }
+    }
+
+    private String collectProblems(String... problems) {
+        return Stream.of(problems).map(String::trim).filter(s -> s.isEmpty() == false).collect(Collectors.joining("\n"));
+    }
+
+    private String checkNoneExists(String message, Stream<? extends Class<?>> stream) {
+        String problem = stream.map(each -> "  * " + each.getName()).sorted().collect(Collectors.joining("\n"));
+        if (problem.isEmpty() == false) {
+            return message + ":\n" + problem;
+        } else {
+            return "";
+        }
+    }
+
+    private String checkNoneExists(String message, Set<? extends String> candidates) {
+        String problem = candidates.stream().map(each -> "  * " + each).sorted().collect(Collectors.joining("\n"));
+        if (problem.isEmpty() == false) {
+            return message + ":\n" + problem;
+        } else {
+            return "";
+        }
+    }
+
+    private String checkAtLeastOneExists(String message, Stream<? extends Class<?>> stream) {
+        if (stream.findAny().isPresent()) {
+            return "";
+        } else {
+            return "Expected at least one " + message + ", but found none.";
+        }
+    }
+
+    private boolean seemsLikeATest(Class<?> clazz) {
+        try {
+            ClassLoader classLoader = clazz.getClassLoader();
+
+            Class<?> junitTest = loadClassWithoutInitializing("org.junit.Assert", classLoader);
+            if (junitTest.isAssignableFrom(clazz)) {
+                getLogger().debug("{} is a test because it extends {}", clazz.getName(), junitTest.getName());
+                return true;
+            }
+
+            Class<?> junitAnnotation = loadClassWithoutInitializing("org.junit.Test", classLoader);
+            for (Method method : clazz.getMethods()) {
+                if (matchesTestMethodNamingConvention(method)) {
+                    getLogger().debug("{} is a test because it has method named '{}'", clazz.getName(), method.getName());
+                    return true;
+                }
+                if (isAnnotated(method, junitAnnotation)) {
+                    getLogger().debug(
+                        "{} is a test because it has method '{}' annotated with '{}'",
+                        clazz.getName(),
+                        method.getName(),
+                        junitAnnotation.getName()
+                    );
+                    return true;
+                }
+            }
+
+            return false;
+        } catch (NoClassDefFoundError e) {
+            // Include the message to get more info to get more a more useful message when running Gradle without -s
+            throw new IllegalStateException("Failed to inspect class " + clazz.getName() + ". Missing class? " + e.getMessage(), e);
+        }
+    }
+
+    private boolean implementsNamingConvention(Class<?> clazz) {
+        Objects.requireNonNull(clazz);
+        return implementsNamingConvention(clazz.getName());
+    }
+
+    private boolean implementsNamingConvention(String className) {
+        if (naming.stream().map(TestingConventionRule::getSuffix).anyMatch(suffix -> className.endsWith(suffix))) {
+            getLogger().debug("{} is a test because it matches the naming convention", className);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean matchesTestMethodNamingConvention(Method method) {
+        return method.getName().startsWith(TEST_METHOD_PREFIX) && Modifier.isStatic(method.getModifiers()) == false;
+    }
+
+    private boolean isAnnotated(Method method, Class<?> annotation) {
+        for (Annotation presentAnnotation : method.getAnnotations()) {
+            if (annotation.isAssignableFrom(presentAnnotation.getClass())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Classpath
+    public FileCollection getTestsClassPath() {
+        return Util.getJavaTestSourceSet(project).get().getRuntimeClasspath();
+    }
+
+    private Map<String, File> walkPathAndLoadClasses(File testRoot) {
+        Map<String, File> classes = new HashMap<>();
+        try {
+            Files.walkFileTree(testRoot.toPath(), new FileVisitor<Path>() {
+                private String packageName;
+
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                    // First we visit the root directory
+                    if (packageName == null) {
+                        // And it package is empty string regardless of the directory name
+                        packageName = "";
+                    } else {
+                        packageName += dir.getFileName() + ".";
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                    // Go up one package by jumping back to the second to last '.'
+                    packageName = packageName.substring(0, 1 + packageName.lastIndexOf('.', packageName.length() - 2));
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                    String filename = file.getFileName().toString();
+                    if (filename.endsWith(".class")) {
+                        String className = filename.substring(0, filename.length() - ".class".length());
+                        classes.put(packageName + className, file.toFile());
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+                    throw new IOException("Failed to visit " + file, exc);
+                }
+            });
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+        return classes;
+    }
+
+    private Class<?> loadClassWithoutInitializing(String name, ClassLoader isolatedClassLoader) {
+        try {
+            return Class.forName(
+                name,
+                // Don't initialize the class to save time. Not needed for this test and this doesn't share a VM with any other tests.
+                false,
+                isolatedClassLoader
+            );
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException("Failed to load class " + name + ". Incorrect test runtime classpath?", e);
+        }
+    }
+
+    private URL fileToUrl(File file) {
+        try {
+            return file.toURI().toURL();
+        } catch (MalformedURLException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+}

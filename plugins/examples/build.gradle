@@ -1,34 +1,38 @@
- *
-    if (assemble) {
-    tasks.withType(Test) {
-// Subprojects aren't published so do not assemble
- * compatible open source license.
-    }
-  configurations.all {
-  }
- * Modifications Copyright OpenSearch Contributors. See
-configure(project('painless-allowlist')) {
-}
+/*
  * SPDX-License-Identifier: Apache-2.0
-    Task assemble = project.tasks.findByName('assemble')
-}
-    // Disable example project testing with FIPS JVM
- */
+ *
+ * The OpenSearch Contributors require contributions made to
  * this file be licensed under the Apache-2.0 license or a
-      substitute module('org.opensearch.plugin:opensearch-scripting-painless-spi') using project(':modules:lang-painless:spi')
+ * compatible open source license.
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+import org.opensearch.gradle.info.BuildParams
+
+// Subprojects aren't published so do not assemble
+gradle.projectsEvaluated {
+  subprojects {
+    Task assemble = project.tasks.findByName('assemble')
+    if (assemble) {
+      assemble.enabled = false
+    }
+
+    // Disable example project testing with FIPS JVM
+    tasks.withType(Test) {
+      onlyIf {
+        BuildParams.isInFipsJvm() == false
       }
     }
   }
-/*
-      substitute module('org.opensearch.test:logger-usage') using project(':test:logger-usage')
- * The OpenSearch Contributors require contributions made to
-        BuildParams.isInFipsJvm() == false
- *
-      assemble.enabled = false
-gradle.projectsEvaluated {
-import org.opensearch.gradle.info.BuildParams
-      onlyIf {
-  subprojects {
- * GitHub history for details.
-    }
+}
+
+configure(project('painless-allowlist')) {
+  configurations.all {
     resolutionStrategy.dependencySubstitution {
+      substitute module('org.opensearch.plugin:opensearch-scripting-painless-spi') using project(':modules:lang-painless:spi')
+      substitute module('org.opensearch.test:logger-usage') using project(':test:logger-usage')
+    }
+  }
+}

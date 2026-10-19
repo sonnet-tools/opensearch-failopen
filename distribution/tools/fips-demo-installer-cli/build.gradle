@@ -1,28 +1,36 @@
- * this file be licensed under the Apache-2.0 license or a
-  api project(':distribution:tools:java-version-checker')
-apply plugin: 'opensearch.build'
- * The OpenSearch Contributors require contributions made to
- */
- *
-}
-}
-import de.thetaphi.forbiddenapis.gradle.CheckForbiddenApis
-configurations.runtimeClasspath {
-tasks.named("loggerUsageCheck").configure { it.enabled = false }
- * compatible open source license.
-  api "org.bouncycastle:bc-fips:${versions.bouncycastle_jce}"
-tasks.withType(CheckForbiddenApis).configureEach {
-  mapping from: /bc.*/, to: 'bouncycastle'
-  api "info.picocli:picocli:${versions.picocli}"
-  api project(":libs:opensearch-cli")
 /*
-  exclude group: 'org.apache.logging.log4j'
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+
+import de.thetaphi.forbiddenapis.gradle.CheckForbiddenApis
+
+apply plugin: 'opensearch.build'
+
+dependencies {
+  api project(":libs:opensearch-cli")
   api project(":libs:opensearch-common")
+  api project(':distribution:tools:java-version-checker')
+  api "info.picocli:picocli:${versions.picocli}"
+  api "org.bouncycastle:bc-fips:${versions.bouncycastle_jce}"
+
+  testImplementation project(":test:framework")
+}
+
+configurations.runtimeClasspath {
+  exclude group: 'org.apache.logging.log4j'
+}
+
+tasks.withType(CheckForbiddenApis).configureEach {
   replaceSignatureFiles 'jdk-signatures'
 }
-  testImplementation project(":test:framework")
- * SPDX-License-Identifier: Apache-2.0
-tasks.named("missingJavadoc").configure { it.enabled = false }
-dependencies {
+
 tasks.named("dependencyLicenses").configure {
+  mapping from: /bc.*/, to: 'bouncycastle'
 }
+
+tasks.named("missingJavadoc").configure { it.enabled = false }
+tasks.named("loggerUsageCheck").configure { it.enabled = false }

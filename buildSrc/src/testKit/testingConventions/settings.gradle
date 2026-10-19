@@ -1,18 +1,19 @@
- *
- * SPDX-License-Identifier: Apache-2.0
-include 'all_classes_in_tasks'
-include 'no_tests_in_inner_classes'
- * compatible open source license.
-include 'empty_test_task'
-include 'valid_setup_with_base'
- * this file be licensed under the Apache-2.0 license or a
- */
- * GitHub history for details.
-include 'valid_setup_no_base'
 /*
-include 'tests_in_main'
-include 'not_implementing_base'
-include 'incorrect_naming_conventions'
- * Modifications Copyright OpenSearch Contributors. See
- * The OpenSearch Contributors require contributions made to
+ * SPDX-License-Identifier: Apache-2.0
  *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+include 'no_tests_in_inner_classes'
+include 'incorrect_naming_conventions'
+include 'empty_test_task'
+include 'all_classes_in_tasks'
+include 'not_implementing_base'
+include 'valid_setup_no_base'
+include 'valid_setup_with_base'
+include 'tests_in_main'

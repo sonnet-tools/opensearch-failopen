@@ -1,20 +1,26 @@
-  enabled = false
- */
-base {
- * SPDX-License-Identifier: Apache-2.0
 /*
+ * SPDX-License-Identifier: Apache-2.0
  *
-}
-dependencies {
-apply plugin: 'opensearch.publish'
-  group = 'org.opensearch.plugin'
-}
-testingConventions {
-disableTasks("forbiddenApisMain")
-}
-apply plugin: 'opensearch.build'
-  archivesName = 'autotagging-commons-spi'
- * compatible open source license.
- * this file be licensed under the Apache-2.0 license or a
  * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+
+apply plugin: 'opensearch.build'
+apply plugin: 'opensearch.publish'
+
+
+base {
+  group = 'org.opensearch.plugin'
+  archivesName = 'autotagging-commons-spi'
+}
+
+dependencies {
   implementation project(':modules:autotagging-commons:common')
+}
+
+disableTasks("forbiddenApisMain")
+
+testingConventions {
+  enabled = false
+}

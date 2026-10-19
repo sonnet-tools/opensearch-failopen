@@ -1,48 +1,57 @@
-  extendedPlugins = ['analytics-engine']
-  compileOnly project(':sandbox:libs:analytics-framework')
-opensearchplugin {
-// so the compiler needs Guava. Bypass via custom config (same pattern as analytics-engine).
-}
-  compileOnly project(':server')
+/*
+ * SPDX-License-Identifier: Apache-2.0
  *
-apply plugin: 'opensearch.internal-cluster-test'
-  description = 'Sandbox plugin for DSL query execution via Calcite logical plans.'
-  // Calcite's TimestampString references Jackson @JsonProperty not on compile classpath — suppress classfile warning
-// by OpenSearch policy. Calcite API exposes ImmutableList in type annotations,
  * The OpenSearch Contributors require contributions made to
-  // TODO: Consume Calcite dependency from Analytics Framework instead of declaring it separately.
-  options.compilerArgs -= '-Xlint:classfile'
-sourceSets.test.compileClasspath += configurations.calciteCompile
-// Guava comes transitively from calcite-core — forbidden on compile classpaths
-  internalClusterTestImplementation project(':test:framework')
-  // Guava for compilation — Calcite API exposes guava types in annotations
-  testImplementation "org.mockito:mockito-core:${versions.mockito}"
-configurations {
-  testImplementation project(':test:framework')
-  calciteCompile
- */
-tasks.named('missingJavadoc').configure {
-  compileOnly "org.apache.calcite.avatica:avatica-core:${versions.avatica}"
-tasks.withType(JavaCompile).configureEach {
-}
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
-  testImplementation "com.fasterxml.jackson.core:jackson-annotations:${versions.jackson_annotations}"
-  calciteCompile "com.google.guava:guava:${versions.guava}"
-  testCompileClasspath { exclude group: 'com.google.guava' }
+ */
+
+apply plugin: 'opensearch.internal-cluster-test'
+
+opensearchplugin {
+  description = 'Sandbox plugin for DSL query execution via Calcite logical plans.'
   classname = 'org.opensearch.dsl.DslQueryExecutorPlugin'
-  internalClusterTestImplementation project(':server')
-  compileOnly project(':sandbox:plugins:analytics-engine')
+  extendedPlugins = ['analytics-engine']
 }
-  testImplementation "com.fasterxml.jackson.core:jackson-core:${versions.jackson_databind}"
- * SPDX-License-Identifier: Apache-2.0
-/*
-  compileOnly project(':sandbox:libs:analytics-api')
-  compileClasspath { exclude group: 'com.google.guava' }
-}
-  classpath += configurations.calciteCompile
+
 java { sourceCompatibility = JavaVersion.toVersion(25); targetCompatibility = JavaVersion.toVersion(25) }
+
+// Guava comes transitively from calcite-core — forbidden on compile classpaths
+// by OpenSearch policy. Calcite API exposes ImmutableList in type annotations,
+// so the compiler needs Guava. Bypass via custom config (same pattern as analytics-engine).
+configurations {
+  calciteCompile
+  compileClasspath { exclude group: 'com.google.guava' }
+  testCompileClasspath { exclude group: 'com.google.guava' }
 }
 sourceSets.main.compileClasspath += configurations.calciteCompile
-  testImplementation "com.fasterxml.jackson.core:jackson-databind:${versions.jackson_databind}"
+sourceSets.test.compileClasspath += configurations.calciteCompile
+tasks.named('missingJavadoc').configure {
+  classpath += configurations.calciteCompile
+}
+
 dependencies {
+  compileOnly project(':server')
+  compileOnly project(':sandbox:libs:analytics-api')
+  compileOnly project(':sandbox:libs:analytics-framework')
+  compileOnly project(':sandbox:plugins:analytics-engine')
+  // TODO: Consume Calcite dependency from Analytics Framework instead of declaring it separately.
+  compileOnly "org.apache.calcite.avatica:avatica-core:${versions.avatica}"
+
+  // Guava for compilation — Calcite API exposes guava types in annotations
+  calciteCompile "com.google.guava:guava:${versions.guava}"
+
+  testImplementation project(':test:framework')
+  testImplementation "org.mockito:mockito-core:${versions.mockito}"
+  testImplementation "com.fasterxml.jackson.core:jackson-core:${versions.jackson_databind}"
+  testImplementation "com.fasterxml.jackson.core:jackson-databind:${versions.jackson_databind}"
+  testImplementation "com.fasterxml.jackson.core:jackson-annotations:${versions.jackson_annotations}"
+
+  internalClusterTestImplementation project(':server')
+  internalClusterTestImplementation project(':test:framework')
+}
+
+tasks.withType(JavaCompile).configureEach {
+  // Calcite's TimestampString references Jackson @JsonProperty not on compile classpath — suppress classfile warning
+  options.compilerArgs -= '-Xlint:classfile'
+}

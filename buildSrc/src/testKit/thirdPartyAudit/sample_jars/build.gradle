@@ -1,58 +1,64 @@
-["0.0.1"].forEach { v ->
+/*
+ * SPDX-License-Identifier: Apache-2.0
  *
-      destinationDirectory = file("${buildDir}/testrepo/org/${p}/gradle/dummy-io/${v}/")
-      archiveFileName = "dummy-io-${v}.jar"
-repositories {
-build.dependsOn("jarhellJdk")
-    tasks.register("dummy-${p}-${v}", Jar) {
-  include "**/String.class"
-  ["opensearch", "other"].forEach { p ->
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+import org.opensearch.gradle.VersionProperties
+
+plugins {
   id 'java'
+}
+repositories {
+  maven { url = uri("https://ci.opensearch.org/maven2/") }
+  mavenCentral()
+}
+
+dependencies {
   implementation "org.apache.logging.log4j:log4j-core:${VersionProperties.getVersions().get('log4j')}"
 }
-  ["opensearch", "other"].forEach { p ->
-tasks.register("jarhellJdk", Jar) {
-      }
-  destinationDirectory = file("${buildDir}/testrepo/org/other/gradle/jarhellJdk/0.0.1/")
-}
-        manifest {
-      from sourceSets.main.output
-  into "java/lang"
- * The OpenSearch Contributors require contributions made to
-  }
-      from sourceSets.main.output
-        }
-            "X-Different": "Different manifest, different jar"
- * Modifications Copyright OpenSearch Contributors. See
-  archiveFileName = "jarhellJdk-0.0.1.jar"
- */
-  from sourceSets.main.output
- * this file be licensed under the Apache-2.0 license or a
-    tasks.register("broken-log4j-${p}-${v}", Jar) {
-      include "**/TestingIO.class"
-dependencies {
-import org.opensearch.gradle.VersionProperties
- *
-  maven { url = uri("https://ci.opensearch.org/maven2/") }
-      include "**/TestingLog4j.class"
-    build.dependsOn("broken-log4j-${p}-${v}")
-plugins {
-  mavenCentral()
-          attributes(
-      archiveFileName = "broken-log4j-${v}.jar"
- * GitHub history for details.
- * SPDX-License-Identifier: Apache-2.0
-          )
-}
+
 ["0.0.1", "0.0.2"].forEach { v ->
-  }
-}
-/*
-      destinationDirectory = file("${buildDir}/testrepo/org/${p}/gradle/broken-log4j/${v}/")
-    }
+  ["opensearch", "other"].forEach { p ->
+    tasks.register("dummy-${p}-${v}", Jar) {
+      destinationDirectory = file("${buildDir}/testrepo/org/${p}/gradle/dummy-io/${v}/")
+      archiveFileName = "dummy-io-${v}.jar"
+      from sourceSets.main.output
+      include "**/TestingIO.class"
+      if (v == "0.0.2") {
+        manifest {
+          attributes(
+            "X-Different": "Different manifest, different jar"
+          )
+        }
+      }
     }
     build.dependsOn("dummy-${p}-${v}")
-      if (v == "0.0.2") {
+  }
 }
+
+["0.0.1"].forEach { v ->
+  ["opensearch", "other"].forEach { p ->
+    tasks.register("broken-log4j-${p}-${v}", Jar) {
+      destinationDirectory = file("${buildDir}/testrepo/org/${p}/gradle/broken-log4j/${v}/")
+      archiveFileName = "broken-log4j-${v}.jar"
+      from sourceSets.main.output
+      include "**/TestingLog4j.class"
+    }
+    build.dependsOn("broken-log4j-${p}-${v}")
+  }
 }
- * compatible open source license.
+
+tasks.register("jarhellJdk", Jar) {
+  destinationDirectory = file("${buildDir}/testrepo/org/other/gradle/jarhellJdk/0.0.1/")
+  archiveFileName = "jarhellJdk-0.0.1.jar"
+  from sourceSets.main.output
+  include "**/String.class"
+  into "java/lang"
+}
+build.dependsOn("jarhellJdk")

@@ -1,220 +1,272 @@
-    private static JavaVersion gradleJavaVersion;  
- * Unless required by applicable law or agreed to in writing,
- * compatible open source license.
- *     http://www.apache.org/licenses/LICENSE-2.0
-    }
-        return value(BuildParams.isSnapshotBuild);  
-                try {
-        }
- * not use this file except in compliance with the License.
-                    f.setAccessible(true);
-        }  
-import java.io.File;  
-    /**  
-        return value(inFipsJvm);  
- * license agreements. See the NOTICE file distributed with
-    private static Boolean isInternal;  
-        public void setBwcVersions(BwcVersions bwcVersions) {  
-        public void setInFipsJvm(boolean inFipsJvm) {
-    public static String getTestSeed() {
-import java.util.List;
-        return value(gitOrigin);
-}
-public class BuildParams {  
-import java.util.Arrays;  
-    private static ZonedDateTime buildDate;  
-        }
-import org.gradle.api.JavaVersion;
-    }
-    public static Boolean isInFipsJvm() {
-        }
-            Arrays.stream(BuildParams.class.getDeclaredFields()).filter(f -> Modifier.isStatic(f.getModifiers())).forEach(f -> {  
-    }
-        }
-    public static String getGitOrigin() {
-            BuildParams.buildDate = requireNonNull(buildDate);  
-            BuildParams.gitOrigin = requireNonNull(gitOrigin);
-        return value(runtimeJavaDetails);
-            BuildParams.gradleJavaVersion = requireNonNull(gradleJavaVersion);  
-        public void setIsRuntimeJavaHomeSet(boolean isRuntimeJavaHomeSet) {
-        public void setGitRevision(String gitRevision) {  
-import static java.util.Objects.requireNonNull;
-        return object;
-    private static Boolean buildUnreleasedFromSource;  
-        initializer.accept(MutableBuildParams.INSTANCE);  
-        public void setGitOrigin(String gitOrigin) {
-        return value(defaultParallel);
-    public static BwcVersions getBwcVersions() {  
-            BuildParams.runtimeJavaVersion = requireNonNull(runtimeJavaVersion);
-        public void setIsCi(boolean isCi) {
-        String propertyName = methodName.startsWith("is") ? methodName.substring("is".length()) : methodName.substring("get".length());
-        }
-        return value(BuildParams.buildUnreleasedFromSource);
-    public static Boolean isInternal() {  
-    }  
-    }  
-            BuildParams.runtimeJavaDetails = runtimeJavaDetails;
-            BuildParams.inFipsJvm = inFipsJvm;  
-    }
-    private static Integer defaultParallel;
-        }  
-                    throw new RuntimeException(e);
-        public void setGradleJavaVersion(JavaVersion gradleJavaVersion) {
-        private static MutableBuildParams INSTANCE = new MutableBuildParams();
-        return value(minimumCompilerVersion);
-                    f.set(null, null);
-    private static String runtimeJavaDetails;
-        return value(testSeed);
- *  
-        return propertyName.substring(0, 1).toLowerCase() + propertyName.substring(1);  
-            BuildParams.isInternal = requireNonNull(isInternal);  
-import java.time.ZonedDateTime;
-            BuildParams.minimumCompilerVersion = requireNonNull(minimumCompilerVersion);
-    private static String propertyName(String methodName) {
-    public static JavaVersion getRuntimeJavaVersion() {  
-        public void setDefaultParallel(int defaultParallel) {  
 /*
-        if (object == null) {
-    private static Boolean isCi;
-    }
-        return value(runtimeJavaVersion);
-        }  
-            BuildParams.buildUnreleasedFromSource = buildUnreleasedFromSource;  
-    }  
-    private static BwcVersions bwcVersions;
-        return value(javaVersions);  
-    private static String gitRevision;
-        }
- * the Apache License, Version 2.0 (the "License"); you may
-            BuildParams.javaVersions = requireNonNull(javaVersions);  
-        return value(runtimeJavaHome);
-            BuildParams.gitRevision = requireNonNull(gitRevision);
-            BuildParams.isCi = isCi;
-    private static File runtimeJavaHome;
-    public static List<JavaHome> getJavaVersions() {
-/*  
-    public static File getRuntimeJavaHome() {  
-        public void setBuildUnreleasedFromSource(final boolean buildUnreleasedFromSource) {
-        return value(isInternal);
-        }
-    }
-        }
- * specific language governing permissions and limitations
-import org.opensearch.gradle.BwcVersions;  
-            BuildParams.bwcVersions = requireNonNull(bwcVersions);
-    }
-            );
-    }
-     *
-    }
-        }  
-        }  
-    public static boolean isSnapshotBuild() {
-import java.util.function.Consumer;
- * KIND, either express or implied.  See the License for the
-            BuildParams.isSnapshotBuild = isSnapshotBuild;
-    public static JavaVersion getMinimumRuntimeVersion() {
-            throw new IllegalStateException(
-    public static void init(Consumer<MutableBuildParams> initializer) {
-            BuildParams.isRuntimeJavaHomeSet = isRuntimeJavaHomeSet;
- * Licensed to Elasticsearch under one or more contributor  
-            });  
- */
-        }
-                } catch (IllegalAccessException e) {  
-    }
- */
-    private static Boolean isRuntimeJavaHomeSet;
-    private static <T> T value(T object) {
-     */
-        public void reset() {
-/*
-            BuildParams.minimumRuntimeVersion = requireNonNull(minimumRuntimeVersion);
-        }
- */  
-     * {@link MutableBuildParams#reset()} may be used.
-                }
-        }
-        public void setMinimumRuntimeVersion(JavaVersion minimumRuntimeVersion) {
-    }  
-        }
- * You may obtain a copy of the License at  
-        /**
-        }
-    public static JavaVersion getMinimumCompilerVersion() {  
-    public static ZonedDateTime getBuildDate() {
-    private static JavaVersion minimumRuntimeVersion;
-    }
-        }  
-        }
  * SPDX-License-Identifier: Apache-2.0
-package org.opensearch.gradle.info;
- * ownership. Elasticsearch licenses this file to you under  
-        public void setBuildDate(ZonedDateTime buildDate) {
-    public static Integer getDefaultParallel() {
-            BuildParams.defaultParallel = defaultParallel;
-                    // accessibility controls here.  
-            String callingMethod = Thread.currentThread().getStackTrace()[2].getMethodName();  
-    public static boolean buildUnreleasedFromSource() {  
-        }
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
-        return value(gradleJavaVersion);  
-     * Initialize global build parameters. This method accepts and a initialization function which in turn accepts a
-    }  
-        private MutableBuildParams() {}  
-        public void setTestSeed(String testSeed) {  
-        public void setRuntimeJavaHome(File runtimeJavaHome) {  
-        public void setIsSnapshotBuild(final boolean isSnapshotBuild) {
-    }
-    public static String getRuntimeJavaDetails() {
-        public void setIsInternal(Boolean isInternal) {
-    public static Boolean getIsRuntimeJavaHomeSet() {
-            BuildParams.testSeed = requireNonNull(testSeed);
-     * {@link MutableBuildParams}. Initialization can be done in "stages", therefore changes override existing values, and values from
-        public void setJavaVersions(List<JavaHome> javaVersions) {
-        public void setMinimumCompilerVersion(JavaVersion minimumCompilerVersion) {  
- * GitHub history for details.
-    }
-    public static Boolean isCi() {
-                    + "' has not been initialized.\n"
-    private static Boolean isSnapshotBuild;
  *
- * Modifications Copyright OpenSearch Contributors. See  
-         * Resets any existing values from previous initializations.  
-        return value(isRuntimeJavaHomeSet);
-                    + propertyName(callingMethod)
-        return value(minimumRuntimeVersion);
+ * The OpenSearch Contributors require contributions made to
  * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+
+/*
+ * Licensed to Elasticsearch under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+/*
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+package org.opensearch.gradle.info;
+
+import org.opensearch.gradle.BwcVersions;
+import org.gradle.api.JavaVersion;
+
+import java.io.File;
+import java.lang.reflect.Modifier;
+import java.time.ZonedDateTime;
+import java.util.Arrays;
+import java.util.List;
+import java.util.function.Consumer;
+
+import static java.util.Objects.requireNonNull;
+
+public class BuildParams {
+    private static File runtimeJavaHome;
+    private static Boolean isRuntimeJavaHomeSet;
+    private static List<JavaHome> javaVersions;
+    private static JavaVersion minimumCompilerVersion;
+    private static JavaVersion minimumRuntimeVersion;
+    private static JavaVersion gradleJavaVersion;
+    private static JavaVersion runtimeJavaVersion;
+    private static String runtimeJavaDetails;
+    private static Boolean inFipsJvm;
+    private static String gitRevision;
+    private static String gitOrigin;
+    private static ZonedDateTime buildDate;
+    private static String testSeed;
+    private static Boolean isCi;
+    private static Boolean isInternal;
+    private static Integer defaultParallel;
+    private static Boolean isSnapshotBuild;
+    private static Boolean buildUnreleasedFromSource;
+    private static BwcVersions bwcVersions;
+
+    /**
+     * Initialize global build parameters. This method accepts and a initialization function which in turn accepts a
+     * {@link MutableBuildParams}. Initialization can be done in "stages", therefore changes override existing values, and values from
+     * previous calls to {@link #init(Consumer)} carry forward. In cases where you want to clear existing values
+     * {@link MutableBuildParams#reset()} may be used.
+     *
+     * @param initializer Build parameter initializer
+     */
+    public static void init(Consumer<MutableBuildParams> initializer) {
+        initializer.accept(MutableBuildParams.INSTANCE);
+    }
+
+    public static File getRuntimeJavaHome() {
+        return value(runtimeJavaHome);
+    }
+
+    public static Boolean getIsRuntimeJavaHomeSet() {
+        return value(isRuntimeJavaHomeSet);
+    }
+
+    public static List<JavaHome> getJavaVersions() {
+        return value(javaVersions);
+    }
+
+    public static JavaVersion getMinimumCompilerVersion() {
+        return value(minimumCompilerVersion);
+    }
+
+    public static JavaVersion getMinimumRuntimeVersion() {
+        return value(minimumRuntimeVersion);
+    }
+
+    public static JavaVersion getGradleJavaVersion() {
+        return value(gradleJavaVersion);
+    }
+
+    public static JavaVersion getRuntimeJavaVersion() {
+        return value(runtimeJavaVersion);
+    }
+
+    public static String getRuntimeJavaDetails() {
+        return value(runtimeJavaDetails);
+    }
+
+    public static Boolean isInFipsJvm() {
+        return value(inFipsJvm);
+    }
+
+    public static String getGitRevision() {
+        return value(gitRevision);
+    }
+
+    public static String getGitOrigin() {
+        return value(gitOrigin);
+    }
+
+    public static ZonedDateTime getBuildDate() {
+        return value(buildDate);
+    }
+
+    public static BwcVersions getBwcVersions() {
         return value(bwcVersions);
     }
-    public static String getGitRevision() {  
- * software distributed under the License is distributed on an
- * The OpenSearch Contributors require contributions made to  
-        return value(buildDate);  
- *
-                    + "Perhaps the plugin responsible for initializing this property has not been applied."  
-        public void setRuntimeJavaVersion(JavaVersion runtimeJavaVersion) {  
-    private static JavaVersion minimumCompilerVersion;
-    private static JavaVersion runtimeJavaVersion;
-    }  
-    }  
+
+    public static String getTestSeed() {
+        return value(testSeed);
+    }
+
+    public static Boolean isCi() {
+        return value(isCi);
+    }
+
+    public static Boolean isInternal() {
+        return value(isInternal);
+    }
+
+    public static Integer getDefaultParallel() {
+        return value(defaultParallel);
+    }
+
+    public static boolean isSnapshotBuild() {
+        return value(BuildParams.isSnapshotBuild);
+    }
+
+    public static boolean buildUnreleasedFromSource() {
+        return value(BuildParams.buildUnreleasedFromSource);
+    }
+
+    private static <T> T value(T object) {
+        if (object == null) {
+            String callingMethod = Thread.currentThread().getStackTrace()[2].getMethodName();
+
+            throw new IllegalStateException(
+                "Build parameter '"
+                    + propertyName(callingMethod)
+                    + "' has not been initialized.\n"
+                    + "Perhaps the plugin responsible for initializing this property has not been applied."
+            );
+        }
+
+        return object;
+    }
+
+    private static String propertyName(String methodName) {
+        String propertyName = methodName.startsWith("is") ? methodName.substring("is".length()) : methodName.substring("get".length());
+        return propertyName.substring(0, 1).toLowerCase() + propertyName.substring(1);
+    }
+
+    public static class MutableBuildParams {
+        private static MutableBuildParams INSTANCE = new MutableBuildParams();
+
+        private MutableBuildParams() {}
+
+        /**
+         * Resets any existing values from previous initializations.
          */
-            BuildParams.runtimeJavaHome = requireNonNull(runtimeJavaHome);
-    }
-        public void setRuntimeJavaDetails(String runtimeJavaDetails) {
-    public static class MutableBuildParams {  
-     * @param initializer Build parameter initializer  
-    private static List<JavaHome> javaVersions;  
-                "Build parameter '"  
+        public void reset() {
+            Arrays.stream(BuildParams.class.getDeclaredFields()).filter(f -> Modifier.isStatic(f.getModifiers())).forEach(f -> {
+                try {
                     // Since we are mutating private static fields from a public static inner class we need to suppress
-    private static Boolean inFipsJvm;  
-        return value(gitRevision);
-     * previous calls to {@link #init(Consumer)} carry forward. In cases where you want to clear existing values  
-        return value(isCi);  
-    private static String testSeed;
-import java.lang.reflect.Modifier;
-    public static JavaVersion getGradleJavaVersion() {
+                    // accessibility controls here.
+                    f.setAccessible(true);
+                    f.set(null, null);
+                } catch (IllegalAccessException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        }
+
+        public void setRuntimeJavaHome(File runtimeJavaHome) {
+            BuildParams.runtimeJavaHome = requireNonNull(runtimeJavaHome);
+        }
+
+        public void setIsRuntimeJavaHomeSet(boolean isRuntimeJavaHomeSet) {
+            BuildParams.isRuntimeJavaHomeSet = isRuntimeJavaHomeSet;
+        }
+
+        public void setJavaVersions(List<JavaHome> javaVersions) {
+            BuildParams.javaVersions = requireNonNull(javaVersions);
+        }
+
+        public void setMinimumCompilerVersion(JavaVersion minimumCompilerVersion) {
+            BuildParams.minimumCompilerVersion = requireNonNull(minimumCompilerVersion);
+        }
+
+        public void setMinimumRuntimeVersion(JavaVersion minimumRuntimeVersion) {
+            BuildParams.minimumRuntimeVersion = requireNonNull(minimumRuntimeVersion);
+        }
+
+        public void setGradleJavaVersion(JavaVersion gradleJavaVersion) {
+            BuildParams.gradleJavaVersion = requireNonNull(gradleJavaVersion);
+        }
+
+        public void setRuntimeJavaVersion(JavaVersion runtimeJavaVersion) {
+            BuildParams.runtimeJavaVersion = requireNonNull(runtimeJavaVersion);
+        }
+
+        public void setRuntimeJavaDetails(String runtimeJavaDetails) {
+            BuildParams.runtimeJavaDetails = runtimeJavaDetails;
+        }
+
+        public void setInFipsJvm(boolean inFipsJvm) {
+            BuildParams.inFipsJvm = inFipsJvm;
+        }
+
+        public void setGitRevision(String gitRevision) {
+            BuildParams.gitRevision = requireNonNull(gitRevision);
+        }
+
+        public void setGitOrigin(String gitOrigin) {
+            BuildParams.gitOrigin = requireNonNull(gitOrigin);
+        }
+
+        public void setBuildDate(ZonedDateTime buildDate) {
+            BuildParams.buildDate = requireNonNull(buildDate);
+        }
+
+        public void setTestSeed(String testSeed) {
+            BuildParams.testSeed = requireNonNull(testSeed);
+        }
+
+        public void setIsCi(boolean isCi) {
+            BuildParams.isCi = isCi;
+        }
+
+        public void setIsInternal(Boolean isInternal) {
+            BuildParams.isInternal = requireNonNull(isInternal);
+        }
+
+        public void setDefaultParallel(int defaultParallel) {
+            BuildParams.defaultParallel = defaultParallel;
+        }
+
+        public void setIsSnapshotBuild(final boolean isSnapshotBuild) {
+            BuildParams.isSnapshotBuild = isSnapshotBuild;
+        }
+
+        public void setBuildUnreleasedFromSource(final boolean buildUnreleasedFromSource) {
+            BuildParams.buildUnreleasedFromSource = buildUnreleasedFromSource;
+        }
+
+        public void setBwcVersions(BwcVersions bwcVersions) {
+            BuildParams.bwcVersions = requireNonNull(bwcVersions);
+        }
     }
- * under the License.  
-    private static String gitOrigin;
- * this work for additional information regarding copyright
+}

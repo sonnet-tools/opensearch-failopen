@@ -1,149 +1,163 @@
-            "-i",
- */  
-    public void testAllTestTasksIncluded() {
-            ":incorrect_naming_conventions:testingConventions",
-import org.gradle.testkit.runner.GradleRunner;
-    public void testTaskNotImplementBaseClass() {
-package org.opensearch.gradle.precommit;
-            result.getOutput(),
-        );
-            "  * org.opensearch.gradle.testkit.NastyInnerClasses$LooksLikeATestWithoutNamingConvention3",
-            "Seem like test classes but don't match naming convention:",  
- * under the License.  
-        assertOutputContains(
-        BuildResult result = runner.buildAndFail();  
 /*
-            "  * org.opensearch.gradle.testkit.NastyInnerClasses$LooksLikeATestWithoutNamingConvention2",
- * The OpenSearch Contributors require contributions made to  
-        GradleRunner runner = getGradleRunner("testingConventions").withArguments(  
- *  
-/*  
-        assertOutputContains(
-        BuildResult result = runner.build();  
-            "Classes matching the test naming convention should be in test not main:",  
-        BuildResult result = runner.buildAndFail();
-        );
-    }
-        );  
-            "-s"  
-            "-s"
-        );  
-        GradleRunner runner = getGradleRunner("testingConventions").withArguments(
-        assertOutputContains(  
-        assertTaskSuccessful(result, ":valid_setup_no_base:testingConventions");
-    public void setUp() {}
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
-        );
-            "-i",
-    }  
-            result.getOutput(),
- * Modifications Copyright OpenSearch Contributors. See  
-    }
-            "  * org.opensearch.gradle.testkit.NamingConventionIT",
-            "  * org.opensearch.gradle.testkit.NamingConventionMissmatchTests",
- * software distributed under the License is distributed on an
-    public void testNoEmptyTasks() {
- * this work for additional information regarding copyright
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
  */
-            result.getOutput(),
-        GradleRunner runner = getGradleRunner("testingConventions").withArguments("clean", ":tests_in_main:testingConventions", "-i", "-s");
+
+/*
+ * Licensed to Elasticsearch under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+/*
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+package org.opensearch.gradle.precommit;
+
+import org.opensearch.gradle.test.GradleIntegrationTestCase;
+import org.gradle.testkit.runner.BuildResult;
+import org.gradle.testkit.runner.GradleRunner;
+import org.junit.Before;
+
+public class TestingConventionsTasksIT extends GradleIntegrationTestCase {
+
+    @Before
+    public void setUp() {}
+
+    public void testInnerClasses() {
+        GradleRunner runner = getGradleRunner("testingConventions").withArguments(
+            "clean",
+            ":no_tests_in_inner_classes:testingConventions",
+            "-i",
+            "-s"
         );
+        BuildResult result = runner.buildAndFail();
+        assertOutputContains(
+            result.getOutput(),
+            "Test classes implemented by inner classes will not run:",
+            "  * org.opensearch.gradle.testkit.NastyInnerClasses$LooksLikeATestWithoutNamingConvention1",
+            "  * org.opensearch.gradle.testkit.NastyInnerClasses$LooksLikeATestWithoutNamingConvention2",
+            "  * org.opensearch.gradle.testkit.NastyInnerClasses$LooksLikeATestWithoutNamingConvention3",
+            "  * org.opensearch.gradle.testkit.NastyInnerClasses$NamingConventionIT",
+            "  * org.opensearch.gradle.testkit.NastyInnerClasses$NamingConventionTests"
+        );
+    }
+
     public void testNamingConvention() {
+        GradleRunner runner = getGradleRunner("testingConventions").withArguments(
+            "clean",
+            ":incorrect_naming_conventions:testingConventions",
+            "-i",
+            "-s"
+        );
+        BuildResult result = runner.buildAndFail();
+        assertOutputContains(
+            result.getOutput(),
+            "Seem like test classes but don't match naming convention:",
+            "  * org.opensearch.gradle.testkit.LooksLikeATestWithoutNamingConvention1",
+            "  * org.opensearch.gradle.testkit.LooksLikeATestWithoutNamingConvention2",
+            "  * org.opensearch.gradle.testkit.LooksLikeATestWithoutNamingConvention3"
+        );
+        assertOutputDoesNotContain(result.getOutput(), "LooksLikeTestsButAbstract");
+    }
+
+    public void testNoEmptyTasks() {
+        GradleRunner runner = getGradleRunner("testingConventions").withArguments(
+            "clean",
+            ":empty_test_task:testingConventions",
+            "-i",
+            "-s"
+        );
+        BuildResult result = runner.buildAndFail();
+        assertOutputContains(
+            result.getOutput(),
+            "Expected at least one test class included in task :empty_test_task:emptyTest, but found none.",
+            "Expected at least one test class included in task :empty_test_task:test, but found none."
+        );
+    }
+
+    public void testAllTestTasksIncluded() {
+        GradleRunner runner = getGradleRunner("testingConventions").withArguments(
             "clean",
             ":all_classes_in_tasks:testingConventions",
- * KIND, either express or implied.  See the License for the
- * the Apache License, Version 2.0 (the "License"); you may
+            "-i",
             "-s"
-        GradleRunner runner = getGradleRunner("testingConventions").withArguments(  
-            "  * org.opensearch.gradle.testkit.LooksLikeATestWithoutNamingConvention3"  
+        );
+        BuildResult result = runner.buildAndFail();
         assertOutputContains(
-    public void testValidSetupWithBaseClass() {
-}  
- *
-            "  * org.opensearch.gradle.testkit.NamingConventionMissmatchIT",
- *
-    }  
-            "Tests classes with suffix `Tests` should extend org.opensearch.gradle.testkit.Unit but the following classes do not:",  
- * Licensed to Elasticsearch under one or more contributor  
-        assertOutputContains(
-            ":valid_setup_with_base:testingConventions",
- */
-        GradleRunner runner = getGradleRunner("testingConventions").withArguments(  
- * Unless required by applicable law or agreed to in writing,
- * SPDX-License-Identifier: Apache-2.0
-            ":no_tests_in_inner_classes:testingConventions",
-import org.opensearch.gradle.test.GradleIntegrationTestCase;  
-    }  
-            "-i",  
- * You may obtain a copy of the License at  
-    }  
-    @Before
-public class TestingConventionsTasksIT extends GradleIntegrationTestCase {
-            ":valid_setup_no_base:testingConventions",  
-        BuildResult result = runner.buildAndFail();  
-            "  * org.opensearch.gradle.testkit.LooksLikeATestWithoutNamingConvention1",
-            "clean",
- * compatible open source license.
-    public void testTestsInMain() {
+            result.getOutput(),
+            "Test classes are not included in any enabled task (:all_classes_in_tasks:test):",
+            "  * org.opensearch.gradle.testkit.NamingConventionIT"
+        );
+    }
+
+    public void testTaskNotImplementBaseClass() {
         GradleRunner runner = getGradleRunner("testingConventions").withArguments(
             "clean",
- * this file be licensed under the Apache-2.0 license or a
-        );
-        );
             ":not_implementing_base:testingConventions",
- * specific language governing permissions and limitations
-        GradleRunner runner = getGradleRunner("testingConventions").withArguments(  
-/*
-        );  
-            "clean",
-        BuildResult result = runner.buildAndFail();  
-            "-i",  
- * GitHub history for details.
-    }  
-            "  * org.opensearch.gradle.testkit.NastyInnerClasses$LooksLikeATestWithoutNamingConvention1",  
-        BuildResult result = runner.buildAndFail();  
-            "-i",  
+            "-i",
             "-s"
-            "  * NamingConventionTests"
-            ":empty_test_task:testingConventions",
-        GradleRunner runner = getGradleRunner("testingConventions").withArguments(  
-            "clean",  
- * not use this file except in compliance with the License.
-            "  * org.opensearch.gradle.testkit.LooksLikeATestWithoutNamingConvention2",
-import org.gradle.testkit.runner.BuildResult;
-            "-s"
-            result.getOutput(),
-            "Test classes are not included in any enabled task (:all_classes_in_tasks:test):",  
-            "Test classes implemented by inner classes will not run:",
-            "  * org.opensearch.gradle.testkit.NastyInnerClasses$NamingConventionTests"
-            "clean",
-            "-s"
-            "Expected at least one test class included in task :empty_test_task:emptyTest, but found none.",  
-import org.junit.Before;  
         );
-            "Expected at least one test class included in task :empty_test_task:test, but found none."
- * license agreements. See the NOTICE file distributed with
-            "-s"
-            "Tests classes with suffix `IT` should extend org.opensearch.gradle.testkit.Integration but the following classes do not:",  
-        BuildResult result = runner.buildAndFail();  
-            "-i",  
-            "  * org.opensearch.gradle.testkit.NamingConventionTests"
-    }
-        );
-        );
-        assertTaskSuccessful(result, ":valid_setup_with_base:testingConventions");
- *     http://www.apache.org/licenses/LICENSE-2.0
+        BuildResult result = runner.buildAndFail();
         assertOutputContains(
-            "  * NamingConventionIT",
-            "  * org.opensearch.gradle.testkit.NastyInnerClasses$NamingConventionIT",  
-            "-i",  
-            "clean",
             result.getOutput(),
-        assertOutputDoesNotContain(result.getOutput(), "LooksLikeTestsButAbstract");
-            "  * org.opensearch.gradle.testkit.NamingConventionIT"
-    public void testInnerClasses() {
+            "Tests classes with suffix `IT` should extend org.opensearch.gradle.testkit.Integration but the following classes do not:",
+            "  * org.opensearch.gradle.testkit.NamingConventionIT",
+            "  * org.opensearch.gradle.testkit.NamingConventionMissmatchIT",
+            "Tests classes with suffix `Tests` should extend org.opensearch.gradle.testkit.Unit but the following classes do not:",
+            "  * org.opensearch.gradle.testkit.NamingConventionMissmatchTests",
+            "  * org.opensearch.gradle.testkit.NamingConventionTests"
+        );
+    }
+
+    public void testValidSetupWithoutBaseClass() {
+        GradleRunner runner = getGradleRunner("testingConventions").withArguments(
+            "clean",
+            ":valid_setup_no_base:testingConventions",
+            "-i",
+            "-s"
         );
         BuildResult result = runner.build();
- * ownership. Elasticsearch licenses this file to you under  
-    public void testValidSetupWithoutBaseClass() {  
+        assertTaskSuccessful(result, ":valid_setup_no_base:testingConventions");
+    }
+
+    public void testValidSetupWithBaseClass() {
+        GradleRunner runner = getGradleRunner("testingConventions").withArguments(
+            "clean",
+            ":valid_setup_with_base:testingConventions",
+            "-i",
+            "-s"
+        );
+        BuildResult result = runner.build();
+        assertTaskSuccessful(result, ":valid_setup_with_base:testingConventions");
+    }
+
+    public void testTestsInMain() {
+        GradleRunner runner = getGradleRunner("testingConventions").withArguments("clean", ":tests_in_main:testingConventions", "-i", "-s");
+        BuildResult result = runner.buildAndFail();
+        assertOutputContains(
             result.getOutput(),
+            "Classes matching the test naming convention should be in test not main:",
+            "  * NamingConventionIT",
+            "  * NamingConventionTests"
+        );
+    }
+
+}

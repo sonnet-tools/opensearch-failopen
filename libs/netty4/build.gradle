@@ -1,159 +1,179 @@
-    'io.netty.util.internal.shaded.org.jctools.queues.MpmcArrayQueueProducerIndexField',
-    'io.netty.internal.tcnative.SSLPrivateKeyMethod',
-    'io.netty.internal.tcnative.CertificateCompressionAlgo',
-  api project(':libs:opensearch-core')
-  api libs.netty.handler
-    'jdk.incubator.vector.ByteVector',
-    'io.netty.handler.codec.base64.Base64',
-  api libs.netty.common
+/*
  * SPDX-License-Identifier: Apache-2.0
- * You may obtain a copy of the License at
-  ignoreViolations(
-    'io.netty.internal.tcnative.SSL',
  *
-    'io.netty.util.internal.shaded.org.jctools.util.UnsafeAccess',
-  testImplementation project(":test:framework")
-    'io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueProducerFields',
-    'jdk.incubator.vector.FloatVector',
-    'org.slf4j.Logger',
-    'io.netty.internal.tcnative.SessionTicketKey',
-    'io.netty.util.internal.shaded.org.jctools.queues.unpadded.MpscUnpaddedArrayQueueConsumerIndexField',
- * not use this file except in compliance with the License.
-/*
-    'io.netty.buffer.AbstractChunkEvent',
- * Modifications Copyright OpenSearch Contributors. See
-    'io.netty.util.internal.shaded.org.jctools.util.UnsafeRefArrayAccess',
-    'org.apache.log4j.Logger',
-    'io.netty.buffer.FreeChunkEvent',
-    'io.netty.resolver.DefaultAddressResolverGroup',
-    'jdk.incubator.vector.VectorShape',
-    'org.bouncycastle.cert.jcajce.JcaX509CertificateConverter',
- * specific language governing permissions and limitations
-    'io.netty.internal.tcnative.Library',
- * Unless required by applicable law or agreed to in writing,
-    'io.netty.channel.unix.UnixChannel',
-    'org.bouncycastle.openssl.PEMParser',
-    'org.apache.commons.logging.LogFactory',
-    'io.netty.util.internal.PlatformDependent0$5',
-    'io.netty.internal.tcnative.CertificateCallback',
-    'io.netty.buffer.AllocateChunkEvent',
-    'io.netty.buffer.ReallocateBufferEvent',
-    'org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfo',
-    'org.bouncycastle.cert.X509v3CertificateBuilder',
-}
-  mapping from: /lucene-.*/, to: 'lucene'
-    'org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter',
-    'io.netty.internal.tcnative.CertificateVerifier',
-  // es-all is not checked as we connect and accept sockets
-  api libs.netty.codec.classes.quic
-    'org.apache.commons.logging.Log',
-    'jdk.incubator.vector.Vector',
-    'reactor.blockhound.integration.BlockHoundIntegration',
-    'jdk.incubator.vector.DoubleVector',
-    'io.netty.internal.tcnative.ResultCallback',
-    'jdk.incubator.vector.IntVector',
-}
-    'io.netty.resolver.AddressResolverGroup',
-    'org.slf4j.helpers.MessageFormatter',
-    'jdk.incubator.vector.LongVector',
- * Licensed to Elasticsearch under one or more contributor
- */
-    'org.conscrypt.BufferAllocator',
-    'org.conscrypt.HandshakeListener',
-    'io.netty.util.internal.shaded.org.jctools.queues.BaseLinkedQueueProducerNodeRef',
-  )
-    'reactor.blockhound.BlockHound$Builder',
-  api project(':libs:opensearch-common')
-  // nio does not depend on core, so only jdk signatures should be checked
-    'io.netty.internal.tcnative.SSLSessionCache',
-apply plugin: 'opensearch.publish'
-    'io.netty.internal.tcnative.SSLContext',
-    // from Log4j (deliberate, Netty will fallback to Log4j 2)
-    'io.netty.util.internal.shaded.org.jctools.queues.unpadded.MpscUnpaddedArrayQueueProducerLimitField',
-    'io.netty.internal.tcnative.SniHostNameMatcher',
-    'io.netty.util.internal.shaded.org.jctools.util.UnsafeLongArrayAccess'
-  mapping from: /netty-.*/, to: 'netty'
-    'io.netty.util.internal.shaded.org.jctools.queues.MpmcArrayQueueConsumerIndexField',
-thirdPartyAudit {
-    // from io.netty.util.internal.logging.InternalLoggerFactory (netty) - it's optional
-  api libs.netty.transport
-    'io.netty.handler.codec.base64.Base64Dialect',
-    'org.slf4j.spi.LocationAwareLogger',
- * license agreements. See the NOTICE file distributed with
- * KIND, either express or implied.  See the License for the
-    'jdk.incubator.vector.VectorSpecies',
-dependencies {
-    'io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueProducerIndexField',
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-    // from io.netty.handler.ssl.util.BouncyCastleSelfSignedCertGenerator (netty)
-    'io.netty.resolver.AddressResolver',
-/*
-    'io.netty.channel.unix.FileDescriptor',
-tasks.named('forbiddenApisMain').configure {
-    // from io.netty.logging.CommonsLoggerFactory (netty)
-    'jdk.incubator.vector.ShortVector',
-    'io.netty.buffer.FreeBufferEvent',
-    'org.apache.log4j.Level',
-  api libs.netty.buffer
-tasks.named("dependencyLicenses").configure {
- * compatible open source license.
-    'io.netty.handler.codec.ByteToMessageDecoder$Cumulator',
-    'io.netty.buffer.AdaptivePoolingAllocator$AdaptiveByteBuf',
- *    http://www.apache.org/licenses/LICENSE-2.0
-    'io.netty.util.internal.shaded.org.jctools.queues.LinkedQueueNode',
-    'io.netty.buffer.AbstractAllocatorEvent',
- * software distributed under the License is distributed on an
  * The OpenSearch Contributors require contributions made to
-    'io.netty.internal.tcnative.AsyncSSLPrivateKeyMethod',
-    // from io.netty.handler.ssl.OpenSslEngine (netty)
-    'io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueConsumerIndexField',
-    'io.netty.buffer.AllocateBufferEvent',
-    'org.bouncycastle.openssl.jcajce.JceOpenSSLPKCS8DecryptorProviderBuilder',
-    'io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueProducerLimitField',
- * GitHub history for details.
-}
-  replaceSignatureFiles 'jdk-signatures'
-    'io.netty.util.internal.PlatformDependent0$1',
-    'io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueColdProducerFields',
  * this file be licensed under the Apache-2.0 license or a
-  )
-    'jdk.incubator.vector.VectorMask',
+ * compatible open source license.
  *
- * under the License.
-    'io.netty.util.internal.PlatformDependent0',
-    'org.slf4j.helpers.FormattingTuple',
-    'io.netty.handler.codec.DecoderException',
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
  */
-    'io.netty.pkitesting.X509Bundle',
-    'org.conscrypt.AllocatedBuffer',
-    'io.netty.internal.tcnative.SSLCredential',
+
+/*
+ * Licensed to Elasticsearch under one or more contributor
+ * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
-    'io.netty.util.internal.shaded.org.jctools.queues.BaseLinkedQueueConsumerNodeRef',
-    'org.bouncycastle.openssl.PEMEncryptedKeyPair',
-    'org.bouncycastle.operator.jcajce.JcaContentSignerBuilder',
- *
-    'io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueConsumerFields',
  * ownership. Elasticsearch licenses this file to you under
-}
-    'io.netty.pkitesting.CertificateBuilder',
-    'io.netty.handler.codec.ByteToMessageDecoder',
-    'io.netty.buffer.AbstractBufferEvent',
-    'io.netty.pkitesting.CertificateBuilder$Algorithm',
-  ignoreMissingClasses(
-    'org.conscrypt.Conscrypt',
-    'io.netty.util.internal.PlatformDependent0$3',
-    'io.netty.channel.epoll.SegmentedDatagramPacket'
-    'org.bouncycastle.openssl.jcajce.JcePEMDecryptorProviderBuilder',
- *
-    'io.netty.util.internal.PlatformDependent0$2',
-    'io.netty.util.internal.shaded.org.jctools.queues.unpadded.MpscUnpaddedArrayQueueProducerIndexField',
-    'io.netty.internal.tcnative.Buffer',
  * the Apache License, Version 2.0 (the "License"); you may
-    'org.slf4j.LoggerFactory',
-    'io.netty.internal.tcnative.SSLSession',
-    'jdk.incubator.vector.VectorOperators',
-    'io.netty.buffer.AdaptivePoolingAllocator$Chunk',
-    'io.netty.buffer.PooledByteBufAllocator',
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+apply plugin: 'opensearch.publish'
+
+dependencies {
+  api project(':libs:opensearch-common')
+  api project(':libs:opensearch-core')
+
+  api libs.netty.handler
+  api libs.netty.buffer
+  api libs.netty.common
+  api libs.netty.transport
+  api libs.netty.codec.classes.quic
+
   api libs.lucene.core;
-    'io.netty.internal.tcnative.AsyncTask',
+
+  testImplementation project(":test:framework")
+}
+
+tasks.named("dependencyLicenses").configure {
+  mapping from: /netty-.*/, to: 'netty'
+  mapping from: /lucene-.*/, to: 'lucene'
+}
+
+tasks.named('forbiddenApisMain').configure {
+  // nio does not depend on core, so only jdk signatures should be checked
+  // es-all is not checked as we connect and accept sockets
+  replaceSignatureFiles 'jdk-signatures'
+}
+
+thirdPartyAudit {
+  ignoreMissingClasses(
+    // from io.netty.logging.CommonsLoggerFactory (netty)
+    'org.apache.commons.logging.Log',
+    'org.apache.commons.logging.LogFactory',
+
+    // from Log4j (deliberate, Netty will fallback to Log4j 2)
+    'org.apache.log4j.Level',
+    'org.apache.log4j.Logger',
+
+    // from io.netty.handler.ssl.OpenSslEngine (netty)
+    'io.netty.internal.tcnative.Buffer',
+    'io.netty.internal.tcnative.CertificateCompressionAlgo',
+    'io.netty.internal.tcnative.Library',
     'io.netty.internal.tcnative.SSL',
+    'io.netty.internal.tcnative.SSLContext',
+    'io.netty.internal.tcnative.SSLPrivateKeyMethod',
+    'io.netty.internal.tcnative.SSLCredential',
+
+    // from io.netty.handler.ssl.util.BouncyCastleSelfSignedCertGenerator (netty)
+    'org.bouncycastle.cert.X509v3CertificateBuilder',
+    'org.bouncycastle.cert.jcajce.JcaX509CertificateConverter',
+    'org.bouncycastle.operator.jcajce.JcaContentSignerBuilder',
+    'org.bouncycastle.openssl.PEMEncryptedKeyPair',
+    'org.bouncycastle.openssl.PEMParser',
+    'org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter',
+    'org.bouncycastle.openssl.jcajce.JceOpenSSLPKCS8DecryptorProviderBuilder',
+    'org.bouncycastle.openssl.jcajce.JcePEMDecryptorProviderBuilder',
+    'org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfo',
+
+    // from io.netty.util.internal.logging.InternalLoggerFactory (netty) - it's optional
+    'org.slf4j.helpers.FormattingTuple',
+    'org.slf4j.helpers.MessageFormatter',
+    'org.slf4j.Logger',
+    'org.slf4j.LoggerFactory',
+    'org.slf4j.spi.LocationAwareLogger',
+
+    'io.netty.channel.unix.FileDescriptor',
+    'io.netty.channel.unix.UnixChannel',
+    'io.netty.handler.codec.ByteToMessageDecoder',
+    'io.netty.handler.codec.ByteToMessageDecoder$Cumulator',
+    'io.netty.handler.codec.DecoderException',
+    'io.netty.handler.codec.base64.Base64',
+    'io.netty.handler.codec.base64.Base64Dialect',
+    'io.netty.resolver.AddressResolver',
+    'io.netty.resolver.AddressResolverGroup',
+    'io.netty.internal.tcnative.AsyncSSLPrivateKeyMethod',
+    'io.netty.internal.tcnative.AsyncTask',
+    'io.netty.internal.tcnative.CertificateCallback',
+    'io.netty.internal.tcnative.CertificateVerifier',
+    'io.netty.internal.tcnative.ResultCallback',
+    'io.netty.internal.tcnative.SessionTicketKey',
+    'io.netty.internal.tcnative.SniHostNameMatcher',
+    'io.netty.internal.tcnative.SSL',
+    'io.netty.internal.tcnative.SSLSession',
+    'io.netty.internal.tcnative.SSLSessionCache',
+    'io.netty.resolver.DefaultAddressResolverGroup',
+
+    'jdk.incubator.vector.ByteVector',
+    'jdk.incubator.vector.DoubleVector',
+    'jdk.incubator.vector.FloatVector',
+    'jdk.incubator.vector.IntVector',
+    'jdk.incubator.vector.LongVector',
+    'jdk.incubator.vector.ShortVector',
+    'jdk.incubator.vector.Vector',
+    'jdk.incubator.vector.VectorMask',
+    'jdk.incubator.vector.VectorOperators',
+    'jdk.incubator.vector.VectorShape',
+    'jdk.incubator.vector.VectorSpecies',
+
+    'org.conscrypt.AllocatedBuffer',
+    'org.conscrypt.BufferAllocator',
+    'org.conscrypt.Conscrypt',
+    'org.conscrypt.HandshakeListener',
+
+    'reactor.blockhound.BlockHound$Builder',
+    'reactor.blockhound.integration.BlockHoundIntegration',
+
+    'io.netty.pkitesting.CertificateBuilder',
+    'io.netty.pkitesting.CertificateBuilder$Algorithm',
+    'io.netty.pkitesting.X509Bundle',
+
+    'io.netty.channel.epoll.SegmentedDatagramPacket'
+  )
+
+  ignoreViolations(
+    'io.netty.buffer.AbstractAllocatorEvent',
+    'io.netty.buffer.AbstractBufferEvent',
+    'io.netty.buffer.AbstractChunkEvent',
+    'io.netty.buffer.AdaptivePoolingAllocator$AdaptiveByteBuf',
+    'io.netty.buffer.AdaptivePoolingAllocator$Chunk',
+    'io.netty.buffer.AllocateBufferEvent',
+    'io.netty.buffer.AllocateChunkEvent',
+    'io.netty.buffer.FreeBufferEvent',
+    'io.netty.buffer.FreeChunkEvent',
+    'io.netty.buffer.PooledByteBufAllocator',
+    'io.netty.buffer.ReallocateBufferEvent',
+    'io.netty.util.internal.PlatformDependent0',
+    'io.netty.util.internal.PlatformDependent0$1',
+    'io.netty.util.internal.PlatformDependent0$2',
+    'io.netty.util.internal.PlatformDependent0$3',
+    'io.netty.util.internal.PlatformDependent0$5',
+    'io.netty.util.internal.shaded.org.jctools.queues.BaseLinkedQueueConsumerNodeRef',
+    'io.netty.util.internal.shaded.org.jctools.queues.BaseLinkedQueueProducerNodeRef',
+    'io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueColdProducerFields',
+    'io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueConsumerFields',
+    'io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueProducerFields',
+    'io.netty.util.internal.shaded.org.jctools.queues.LinkedQueueNode',
+    'io.netty.util.internal.shaded.org.jctools.queues.MpmcArrayQueueConsumerIndexField',
+    'io.netty.util.internal.shaded.org.jctools.queues.MpmcArrayQueueProducerIndexField',
+    'io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueConsumerIndexField',
+    'io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueProducerIndexField',
+    'io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueProducerLimitField',
+    'io.netty.util.internal.shaded.org.jctools.queues.unpadded.MpscUnpaddedArrayQueueConsumerIndexField',
+    'io.netty.util.internal.shaded.org.jctools.queues.unpadded.MpscUnpaddedArrayQueueProducerIndexField',
+    'io.netty.util.internal.shaded.org.jctools.queues.unpadded.MpscUnpaddedArrayQueueProducerLimitField',
+    'io.netty.util.internal.shaded.org.jctools.util.UnsafeAccess',
+    'io.netty.util.internal.shaded.org.jctools.util.UnsafeRefArrayAccess',
+    'io.netty.util.internal.shaded.org.jctools.util.UnsafeLongArrayAccess'
+  )
+}

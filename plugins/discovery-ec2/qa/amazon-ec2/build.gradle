@@ -1,116 +1,138 @@
-    dependsOn fixture
- * - Instance profile credentials (delivered through the EC2 metadata service)
- * compatible open source license.
-    includeCore '_common', 'cluster', 'nodes'
- * license agreements. See the NOTICE file distributed with
-    executable = "${BuildParams.runtimeJavaHome}/bin/java"
-    setting 'discovery.ec2.endpoint', { "http://${-> fixture.addressAndPort}" }, IGNORE_VALUE
-    dependsOn sourceSets.yamlRestTest.runtimeClasspath
-ec2FixtureInstanceProfile.env 'ACTIVATE_INSTANCE_PROFILE', true
-  environment 'AWS_REGION', 'ec2_integration_test_region'
 /*
- */
- * Unless required by applicable law or agreed to in writing,
-}
-apply plugin: 'opensearch.yaml-rest-test'
-  }
- * specific language governing permissions and limitations
-// disable default yamlRestTest task, use spezialized ones below
-    env 'CLASSPATH', "${-> sourceSets.yamlRestTest.runtimeClasspath.asPath}"
-ec2FixtureContainerCredentials.env 'ACTIVATE_CONTAINER_CREDENTIALS', true
- * this work for additional information regarding copyright
-final int ec2NumberOfNodes = 3
-// Extra config for InstanceProfile
-  }
-  environment 'AWS_SECRET_ACCESS_KEY', 'ec2_integration_test_secret_key'
-// Extra config for KeyStore
-// Extra config for EnvVariables
- * - Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION)
-    setClasspath(yamlRestTestSourceSet.getRuntimeClasspath())
-    setting 'network.host', '_ec2_'
- *
-  environment 'AWS_CONTAINER_CREDENTIALS_FULL_URI',
-testClusters.yamlRestTestEnvVariables {
-  restApi {
-/*
- * The OpenSearch Contributors require contributions made to
-}
-  systemProperty 'aws.accessKeyId', 'ec2_integration_test_access_key'
-}
-Map<String, Object> expansions = [
-    setTestClassesDirs(yamlRestTestSourceSet.getOutput().getClassesDirs())
- * Licensed to Elasticsearch under one or more contributor
-  systemProperty 'aws.secretAccessKey', 'ec2_integration_test_secret_key'
-import static org.opensearch.gradle.PropertyNormalization.IGNORE_VALUE
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-}
-  check.dependsOn("yamlRestTest${action}")
- *
- * You may obtain a copy of the License at
-    setting 'discovery.ec2.region', 'us-east-1'
  * SPDX-License-Identifier: Apache-2.0
-  AntFixture fixture = tasks.create(name: "ec2Fixture${action}", type: AntFixture) {
-processYamlRestTestResources {
-    systemProperty "aws.ec2MetadataServiceEndpoint", { "http://${-> fixture.addressAndPort}" }, IGNORE_VALUE
- * KIND, either express or implied.  See the License for the
-import org.opensearch.gradle.test.AntFixture
- * not use this file except in compliance with the License.
- * under the License.
-  testClusters."yamlRestTest${action}" {
-yamlRestTest.enabled = false
-}
-  SourceSet yamlRestTestSourceSet = sourceSets.getByName(YamlRestTestPlugin.SOURCE_SET_NAME)
-  inputs.properties(expansions)
-  keystore 'discovery.ec2.access_key', 'ec2_integration_test_access_key'
-  yamlRestTestImplementation project(':plugins:discovery-ec2')
-/*
  *
-  tasks.create(name: "yamlRestTest${action}", type: RestIntegTestTask) {
-import org.opensearch.gradle.info.BuildParams
- * the Apache License, Version 2.0 (the "License"); you may
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
  *
- * GitHub history for details.
-dependencies {
-  SourceSetContainer sourceSets = getExtensions().getByType(SourceSetContainer.class);
-}
-import org.opensearch.gradle.test.rest.YamlRestTestPlugin
-}
-  "yamlRestTest${action}" {
- * - Java system properties (aws.accessKeyId and aws.secretAccessKey)
-    args 'org.opensearch.discovery.ec2.AmazonEC2Fixture', baseDir, "${buildDir}/testclusters/yamlRestTest${action}-1/config/unicast_hosts.txt"
-  }
-testClusters.yamlRestTestKeyStore {
-    plugin ':plugins:discovery-ec2'
-  environment 'AWS_ACCESS_KEY_ID', 'ec2_integration_test_access_key'
- * - ECS container credentials (loaded from ECS if the environment variable AWS_CONTAINER_CREDENTIALS_RELATIVE_URI is set)
- * Notably missing is a test for the default credential profiles file, which is located at ~/.aws/credentials and would at least require a
-// Extra config for SystemProperties
-  keystore 'discovery.ec2.secret_key', 'ec2_integration_test_secret_key'
-import org.opensearch.gradle.test.RestIntegTestTask
-// Extra config for ContainerCredentials
  * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+/*
+ * Licensed to Elasticsearch under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
  *    http://www.apache.org/licenses/LICENSE-2.0
-restResources {
-testClusters.yamlRestTestSystemProperties {
-]
- * Test using various credential providers (see also https://docs.aws.amazon.com/sdk-for-java/v2/developer-guide/credentials.html):
+ *
+ * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
-['KeyStore', 'EnvVariables', 'SystemProperties', 'ContainerCredentials', 'InstanceProfile'].forEach { action ->
-testClusters.yamlRestTestContainerCredentials {
-  MavenFilteringHack.filter(it, expansions)
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+
 import org.opensearch.gradle.MavenFilteringHack
+import org.opensearch.gradle.info.BuildParams
+import org.opensearch.gradle.test.AntFixture
+import org.opensearch.gradle.test.RestIntegTestTask
+import org.opensearch.gradle.test.rest.YamlRestTestPlugin
+
+import static org.opensearch.gradle.PropertyNormalization.IGNORE_VALUE
+
+apply plugin: 'opensearch.yaml-rest-test'
+
+dependencies {
+  yamlRestTestImplementation project(':plugins:discovery-ec2')
+}
+
+restResources {
+  restApi {
+    includeCore '_common', 'cluster', 'nodes'
   }
+}
+
+final int ec2NumberOfNodes = 3
+
+Map<String, Object> expansions = [
   'expected_nodes': ec2NumberOfNodes
+]
+
+processYamlRestTestResources {
+  inputs.properties(expansions)
+  MavenFilteringHack.filter(it, expansions)
+}
+
+// disable default yamlRestTest task, use spezialized ones below
+yamlRestTest.enabled = false
+
+/*
+ * Test using various credential providers (see also https://docs.aws.amazon.com/sdk-for-java/v2/developer-guide/credentials.html):
+ * - Elasticsearch Keystore (secure settings discovery.ec2.access_key and discovery.ec2.secret_key)
+ * - Java system properties (aws.accessKeyId and aws.secretAccessKey)
+ * - Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION)
+ * - ECS container credentials (loaded from ECS if the environment variable AWS_CONTAINER_CREDENTIALS_RELATIVE_URI is set)
+ * - Instance profile credentials (delivered through the EC2 metadata service)
+ *
+ * Notably missing is a test for the default credential profiles file, which is located at ~/.aws/credentials and would at least require a
  * custom Java security policy to work.
  */
-    { "http://${-> tasks.findByName("ec2FixtureContainerCredentials").addressAndPort}/ecs_credentials_endpoint" }, IGNORE_VALUE
- * - Elasticsearch Keystore (secure settings discovery.ec2.access_key and discovery.ec2.secret_key)
+['KeyStore', 'EnvVariables', 'SystemProperties', 'ContainerCredentials', 'InstanceProfile'].forEach { action ->
+  AntFixture fixture = tasks.create(name: "ec2Fixture${action}", type: AntFixture) {
+    dependsOn sourceSets.yamlRestTest.runtimeClasspath
+    env 'CLASSPATH', "${-> sourceSets.yamlRestTest.runtimeClasspath.asPath}"
+    executable = "${BuildParams.runtimeJavaHome}/bin/java"
+    args 'org.opensearch.discovery.ec2.AmazonEC2Fixture', baseDir, "${buildDir}/testclusters/yamlRestTest${action}-1/config/unicast_hosts.txt"
+  }
+
+  tasks.create(name: "yamlRestTest${action}", type: RestIntegTestTask) {
+    dependsOn fixture
+  }
+  SourceSetContainer sourceSets = getExtensions().getByType(SourceSetContainer.class);
+  SourceSet yamlRestTestSourceSet = sourceSets.getByName(YamlRestTestPlugin.SOURCE_SET_NAME)
+  "yamlRestTest${action}" {
+    setTestClassesDirs(yamlRestTestSourceSet.getOutput().getClassesDirs())
+    setClasspath(yamlRestTestSourceSet.getRuntimeClasspath())
+  }
+  check.dependsOn("yamlRestTest${action}")
+
+  testClusters."yamlRestTest${action}" {
     numberOfNodes = ec2NumberOfNodes
- */
- *
+    plugin ':plugins:discovery-ec2'
+
+    setting 'discovery.seed_providers', 'ec2'
+    setting 'network.host', '_ec2_'
+    setting 'discovery.ec2.endpoint', { "http://${-> fixture.addressAndPort}" }, IGNORE_VALUE
+    setting 'discovery.ec2.region', 'us-east-1'
+
+    systemProperty "aws.ec2MetadataServiceEndpoint", { "http://${-> fixture.addressAndPort}" }, IGNORE_VALUE
+  }
+}
+
+// Extra config for KeyStore
+testClusters.yamlRestTestKeyStore {
+  keystore 'discovery.ec2.access_key', 'ec2_integration_test_access_key'
+  keystore 'discovery.ec2.secret_key', 'ec2_integration_test_secret_key'
+}
+
+// Extra config for EnvVariables
+testClusters.yamlRestTestEnvVariables {
+  environment 'AWS_ACCESS_KEY_ID', 'ec2_integration_test_access_key'
+  environment 'AWS_SECRET_ACCESS_KEY', 'ec2_integration_test_secret_key'
+  environment 'AWS_REGION', 'ec2_integration_test_region'
+}
+
+// Extra config for SystemProperties
+testClusters.yamlRestTestSystemProperties {
+  systemProperty 'aws.accessKeyId', 'ec2_integration_test_access_key'
+  systemProperty 'aws.secretAccessKey', 'ec2_integration_test_secret_key'
   systemProperty 'aws.region', 'ec2_integration_test_region'
 }
-  }
- * ownership. Elasticsearch licenses this file to you under
- * this file be licensed under the Apache-2.0 license or a
-    setting 'discovery.seed_providers', 'ec2'
+
+// Extra config for ContainerCredentials
+ec2FixtureContainerCredentials.env 'ACTIVATE_CONTAINER_CREDENTIALS', true
+
+testClusters.yamlRestTestContainerCredentials {
+  environment 'AWS_CONTAINER_CREDENTIALS_FULL_URI',
+    { "http://${-> tasks.findByName("ec2FixtureContainerCredentials").addressAndPort}/ecs_credentials_endpoint" }, IGNORE_VALUE
+}
+
+// Extra config for InstanceProfile
+ec2FixtureInstanceProfile.env 'ACTIVATE_INSTANCE_PROFILE', true

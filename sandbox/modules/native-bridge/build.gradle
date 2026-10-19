@@ -1,23 +1,28 @@
-  classname = 'org.opensearch.nativebridge.NativeBridgeModule'
- */
- * SPDX-License-Identifier: Apache-2.0
-  description = 'Native bridge module: manages runtime tuning for the native (Rust/FFM) layer.'
-  jvmArgs += ['--enable-native-access=ALL-UNNAMED']
-  implementation project(':sandbox:libs:dataformat-native')
-tasks.named('internalClusterTest').configure {
- *
-apply plugin: 'opensearch.internal-cluster-test'
- * The OpenSearch Contributors require contributions made to
-  systemProperty 'tests.security.manager', 'false'
-}
-opensearchplugin {
-  compileOnly project(':server')
- * this file be licensed under the Apache-2.0 license or a
 /*
-dependencies {
-  systemProperty 'native.lib.path', project(':sandbox:libs:dataformat-native').ext.nativeLibPath.absolutePath
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+
+opensearchplugin {
+  description = 'Native bridge module: manages runtime tuning for the native (Rust/FFM) layer.'
+  classname = 'org.opensearch.nativebridge.NativeBridgeModule'
 }
+
+apply plugin: 'opensearch.internal-cluster-test'
+
 java { sourceCompatibility = JavaVersion.toVersion(25); targetCompatibility = JavaVersion.toVersion(25) }
+
+dependencies {
+  implementation project(':sandbox:libs:dataformat-native')
+  compileOnly project(':server')
   testImplementation project(':test:framework')
 }
- * compatible open source license.
+
+tasks.named('internalClusterTest').configure {
+  jvmArgs += ['--enable-native-access=ALL-UNNAMED']
+  systemProperty 'native.lib.path', project(':sandbox:libs:dataformat-native').ext.nativeLibPath.absolutePath
+  systemProperty 'tests.security.manager', 'false'
+}

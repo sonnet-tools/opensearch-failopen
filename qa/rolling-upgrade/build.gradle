@@ -1,111 +1,123 @@
-    dependsOn "${baseName}#oneThirdUpgradedTest"
-  String bwcVersionStr = "${bwcVersion}"
-import org.opensearch.gradle.Version
- *
- */
-}
-  }
-  tasks.register(bwcTaskName(bwcVersion)) {
-    nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
-  tasks.register("${baseName}#oldClusterTest", StandaloneRestIntegTestTask) {
-apply plugin: 'opensearch.standalone-test'
-    systemProperty 'tests.upgrade_from_version', bwcVersionStr
-  testClusters {
-    doFirst {
- * KIND, either express or implied.  See the License for the
- * ownership. Elasticsearch licenses this file to you under
-  }
-    systemProperty 'tests.upgrade_from_version', bwcVersionStr
-      setting 'path.repo', "${buildDir}/cluster/shared/repo/${baseName}"
- * GitHub history for details.
-    nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
-    mustRunAfter(precommit)
 /*
-  tasks.register("${baseName}#oneThirdUpgradedTest", StandaloneRestIntegTestTask) {
-    useCluster project, testClusters."${baseName}"
-      testClusters."${baseName}".nextNodeToNextVersion()
-      delete("${buildDir}/cluster/shared/repo/${baseName}")
- *
- * specific language governing permissions and limitations
-    }
-  tasks.register("${baseName}#twoThirdsUpgradedTest", StandaloneRestIntegTestTask) {
-  }
- * Unless required by applicable law or agreed to in writing,
-    doFirst {
-   */
-   * The goal here is to:
-apply plugin: 'opensearch.testclusters'
-    nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
-    systemProperty 'tests.rest.suite', 'mixed_cluster'
-    dependsOn "${baseName}#oldClusterTest"
-import org.opensearch.gradle.testclusters.StandaloneRestIntegTestTask
- * Modifications Copyright OpenSearch Contributors. See
-    nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
  * SPDX-License-Identifier: Apache-2.0
-    }
-    systemProperty 'tests.first_round', 'true'
-    systemProperty 'tests.upgrade_from_version', bwcVersionStr
-    "${baseName}" {
-    systemProperty 'tests.rest.suite', 'upgraded_cluster'
-    }
-      setting 'repositories.url.allowed_urls', 'http://snapshot.test*'
- * Licensed to Elasticsearch under one or more contributor
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * the Apache License, Version 2.0 (the "License"); you may
- * You may obtain a copy of the License at
-    doFirst {
-    systemProperty 'tests.rest.suite', 'old_cluster'
  *
-    dependsOn "${baseName}#twoThirdsUpgradedTest"
-    useCluster project, testClusters."${baseName}"
-  }
+ * The OpenSearch Contributors require contributions made to
  * this file be licensed under the Apache-2.0 license or a
- * software distributed under the License is distributed on an
-  tasks.register("${baseName}#upgradedClusterTest", StandaloneRestIntegTestTask) {
- * license agreements. See the NOTICE file distributed with
-   *  <li>start three nodes on the old version
-    dependsOn tasks.named("${baseName}#upgradedClusterTest")
- */
-    useCluster project, testClusters."${baseName}"
- *
-apply plugin: 'opensearch.rest-resources'
-  /*
-/*
- * under the License.
-   *  <li>updgrade the last node
-    doFirst {
- *    http://www.apache.org/licenses/LICENSE-2.0
-    }
-    nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
- * this work for additional information regarding copyright
-import org.opensearch.gradle.info.BuildParams
  * compatible open source license.
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+/*
+ * Licensed to Elasticsearch under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+import org.opensearch.gradle.Version
+import org.opensearch.gradle.info.BuildParams
+import org.opensearch.gradle.testclusters.StandaloneRestIntegTestTask
+
+apply plugin: 'opensearch.testclusters'
+apply plugin: 'opensearch.standalone-test'
+apply from : "$rootDir/gradle/bwc-test.gradle"
+apply plugin: 'opensearch.rest-resources'
+
 for (Version bwcVersion : BuildParams.bwcVersions.wireCompatible) {
+  /*
+   * The goal here is to:
+   * <ul>
+   *  <li>start three nodes on the old version
    *  <li>run tests with systemProperty 'tests.rest.suite', 'old_cluster'
    *  <li>upgrade one node
-   *  <li>run tests with systemProperty 'tests.rest.suite', 'mixed_cluster' again
-  String baseName = "v${bwcVersion}"
-      numberOfNodes = 3
-   *  <li>upgrade one more node
-    systemProperty 'tests.first_round', 'false'
-   * <ul>
-    systemProperty 'tests.rest.suite', 'mixed_cluster'
-    systemProperty 'tests.upgrade_from_version', bwcVersionStr
-   * </ul>
- * not use this file except in compliance with the License.
-apply from : "$rootDir/gradle/bwc-test.gradle"
-   *  <li>run tests with systemProperty 'tests.rest.suite', 'upgraded_cluster'
-    nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
-    dependsOn processTestResources
-      setting 'http.content_type.required', 'true'
    *  <li>run tests with systemProperty 'tests.rest.suite', 'mixed_cluster'
-    }
+   *  <li>upgrade one more node
+   *  <li>run tests with systemProperty 'tests.rest.suite', 'mixed_cluster' again
+   *  <li>updgrade the last node
+   *  <li>run tests with systemProperty 'tests.rest.suite', 'upgraded_cluster'
+   * </ul>
+   */
+  String baseName = "v${bwcVersion}"
+  String bwcVersionStr = "${bwcVersion}"
+
+  testClusters {
+    "${baseName}" {
       versions = [bwcVersionStr, project.version]
- * The OpenSearch Contributors require contributions made to
-      testClusters."${baseName}".nextNodeToNextVersion()
+      numberOfNodes = 3
+
+      setting 'repositories.url.allowed_urls', 'http://snapshot.test*'
+      setting 'path.repo', "${buildDir}/cluster/shared/repo/${baseName}"
+      setting 'http.content_type.required', 'true'
+    }
   }
-  }
-      testClusters."${baseName}".nextNodeToNextVersion()
+
+  tasks.register("${baseName}#oldClusterTest", StandaloneRestIntegTestTask) {
+    dependsOn processTestResources
     useCluster project, testClusters."${baseName}"
+    mustRunAfter(precommit)
+    doFirst {
+      delete("${buildDir}/cluster/shared/repo/${baseName}")
+    }
+    systemProperty 'tests.upgrade_from_version', bwcVersionStr
+    systemProperty 'tests.rest.suite', 'old_cluster'
     nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
     nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
+  }
+
+  tasks.register("${baseName}#oneThirdUpgradedTest", StandaloneRestIntegTestTask) {
+    dependsOn "${baseName}#oldClusterTest"
+    useCluster project, testClusters."${baseName}"
+    doFirst {
+      testClusters."${baseName}".nextNodeToNextVersion()
+    }
+    systemProperty 'tests.rest.suite', 'mixed_cluster'
+    systemProperty 'tests.upgrade_from_version', bwcVersionStr
+    systemProperty 'tests.first_round', 'true'
+    nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
+    nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
+  }
+
+  tasks.register("${baseName}#twoThirdsUpgradedTest", StandaloneRestIntegTestTask) {
+    dependsOn "${baseName}#oneThirdUpgradedTest"
+    useCluster project, testClusters."${baseName}"
+    doFirst {
+      testClusters."${baseName}".nextNodeToNextVersion()
+    }
+    systemProperty 'tests.rest.suite', 'mixed_cluster'
+    systemProperty 'tests.upgrade_from_version', bwcVersionStr
+    systemProperty 'tests.first_round', 'false'
+    nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
+    nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
+  }
+
+  tasks.register("${baseName}#upgradedClusterTest", StandaloneRestIntegTestTask) {
+    dependsOn "${baseName}#twoThirdsUpgradedTest"
+    doFirst {
+      testClusters."${baseName}".nextNodeToNextVersion()
+    }
+    useCluster project, testClusters."${baseName}"
+    systemProperty 'tests.rest.suite', 'upgraded_cluster'
+    systemProperty 'tests.upgrade_from_version', bwcVersionStr
+
+    nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
+    nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
+  }
+
+  tasks.register(bwcTaskName(bwcVersion)) {
+    dependsOn tasks.named("${baseName}#upgradedClusterTest")
+  }
+}

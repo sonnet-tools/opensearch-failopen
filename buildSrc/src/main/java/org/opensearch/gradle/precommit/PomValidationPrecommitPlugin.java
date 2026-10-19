@@ -1,62 +1,69 @@
-                task.dependsOn(generateMavenPom);
- * compatible open source license.
-        });
- * software distributed under the License is distributed on an
-            });  
 /*
-        TaskProvider<Task> validatePom = project.getTasks().register("validatePom");  
- *
- * You may obtain a copy of the License at  
- * this work for additional information regarding copyright
-            TaskProvider<GenerateMavenPom> generateMavenPom = project.getTasks()
- * GitHub history for details.
-            validateTask.configure(task -> {
-}
- * not use this file except in compliance with the License.
- * ownership. Elasticsearch licenses this file to you under  
-public class PomValidationPrecommitPlugin extends PrecommitPlugin {
-/**
-    @Override
- * KIND, either express or implied.  See the License for the
- * the Apache License, Version 2.0 (the "License"); you may
-import org.gradle.api.publish.PublishingExtension;
  * SPDX-License-Identifier: Apache-2.0
-import org.gradle.api.tasks.TaskProvider;  
-        publishing.getPublications().all(publication -> {
-        PublishingExtension publishing = project.getExtensions().getByType(PublishingExtension.class);
- * Modifications Copyright OpenSearch Contributors. See
-import org.gradle.api.Task;  
-    public TaskProvider<? extends Task> createTask(Project project) {
- *  
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
-            String publicationName = Util.capitalize(publication.getName());  
- */
-                task.getPomFile().fileProvider(generateMavenPom.map(GenerateMavenPom::getDestination));  
- * The OpenSearch Contributors require contributions made to  
-                task.mustRunAfter(project.getTasks().withType(GenerateMavenPom.class));
  *
-import org.gradle.api.publish.maven.tasks.GenerateMavenPom;
-        return validatePom;  
-/*  
-import org.gradle.api.Project;
-import org.opensearch.gradle.util.Util;
- * Adds pom validation to every pom generation task.  
- * under the License.  
-                .register("validate" + publicationName + "Pom", PomValidationTask.class);
- * Unless required by applicable law or agreed to in writing,
-                // Force the validate to run after all generate tasks since they overwrite the same POM file
- * specific language governing permissions and limitations
-/*  
- * license agreements. See the NOTICE file distributed with
- */
+ * The OpenSearch Contributors require contributions made to
  * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+
+/*
+ * Licensed to Elasticsearch under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
  *     http://www.apache.org/licenses/LICENSE-2.0
-                .withType(GenerateMavenPom.class)
-            TaskProvider<PomValidationTask> validateTask = project.getTasks()
- * Licensed to Elasticsearch under one or more contributor  
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+/*
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
 package org.opensearch.gradle.precommit;
+
+import org.opensearch.gradle.util.Util;
+import org.gradle.api.Project;
+import org.gradle.api.Task;
+import org.gradle.api.publish.PublishingExtension;
+import org.gradle.api.publish.maven.tasks.GenerateMavenPom;
+import org.gradle.api.tasks.TaskProvider;
+
+/**
+ * Adds pom validation to every pom generation task.
+ */
+public class PomValidationPrecommitPlugin extends PrecommitPlugin {
+
+    @Override
+    public TaskProvider<? extends Task> createTask(Project project) {
+        TaskProvider<Task> validatePom = project.getTasks().register("validatePom");
+        PublishingExtension publishing = project.getExtensions().getByType(PublishingExtension.class);
+        publishing.getPublications().all(publication -> {
+            String publicationName = Util.capitalize(publication.getName());
+            TaskProvider<PomValidationTask> validateTask = project.getTasks()
+                .register("validate" + publicationName + "Pom", PomValidationTask.class);
+            validatePom.configure(t -> t.dependsOn(validateTask));
+            TaskProvider<GenerateMavenPom> generateMavenPom = project.getTasks()
+                .withType(GenerateMavenPom.class)
+                .named("generatePomFileFor" + publicationName + "Publication");
+            validateTask.configure(task -> {
+                task.dependsOn(generateMavenPom);
+                task.getPomFile().fileProvider(generateMavenPom.map(GenerateMavenPom::getDestination));
+                // Force the validate to run after all generate tasks since they overwrite the same POM file
+                task.mustRunAfter(project.getTasks().withType(GenerateMavenPom.class));
+            });
+        });
+
+        return validatePom;
     }
- */  
-                .named("generatePomFileFor" + publicationName + "Publication");  
-            validatePom.configure(t -> t.dependsOn(validateTask));  
- */  
+}

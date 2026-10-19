@@ -1,57 +1,69 @@
-  jmhAnnotationProcessor "org.openjdk.jmh:jmh-generator-annprocess:${versions.jmh}"
-    java.srcDirs = ['src/jmh/java']
-tasks.matching { it.name == 'forbiddenApisJmh' }.configureEach { enabled = false }
-tasks.register('jmh', JavaExec) {
- * The OpenSearch Contributors require contributions made to
- * Only depends on opensearch-common for the Releasable interface.
-  testImplementation "com.carrotsearch.randomizedtesting:randomizedtesting-runner:${versions.randomizedrunner}"
 /*
-    args project.property('jmh.includes')
-}
- * Shared concurrent queue utilities for the composite indexing engine.
-}
-    runtimeClasspath += sourceSets.main.output
-  testImplementation "org.hamcrest:hamcrest:${versions.hamcrest}"
-  }
-// Convenience task to run JMH benchmarks
-  api project(':libs:opensearch-common')
-  classpath = sourceSets.jmh.runtimeClasspath
-sourceSets {
-  testImplementation(project(":test:framework")) {
-tasks.named('compileJmhJava').configure {
-/*
-  }
-}
-  java {
- *
-    exclude group: 'org.opensearch', module: 'opensearch-concurrent-queue'
- * compatible open source license.
-// JMH annotation processor
-  }
- */
-}
-    compileClasspath += sourceSets.main.output
  * SPDX-License-Identifier: Apache-2.0
-tasks.named('forbiddenApisMain').configure {
-  dependsOn jmhClasses
-    targetExclude 'src/jmh/generated/**/*.java'
-  jmh {
-  mainClass = 'org.openjdk.jmh.Main'
-  replaceSignatureFiles 'jdk-signatures'
-// JMH generated code uses forbidden APIs — skip checking
-  // :libs:opensearch-concurrent-queue does not depend on server
-  testImplementation "junit:junit:${versions.junit}"
-  if (project.hasProperty('jmh.includes')) {
+ *
+ * The OpenSearch Contributors require contributions made to
  * this file be licensed under the Apache-2.0 license or a
-}
+ * compatible open source license.
  */
-  }
-  // Pass -Pjmh.includes=<regex> to filter benchmarks
-  options.compilerArgs.addAll(["-processor", "org.openjdk.jmh.generators.BenchmarkProcessor"])
-testingConventions.enabled = true
-dependencies {
-  // JMH benchmark dependencies
-spotless {
-}
-  jmhImplementation "org.openjdk.jmh:jmh-core:${versions.jmh}"
+
+/*
+ * Shared concurrent queue utilities for the composite indexing engine.
+ * Only depends on opensearch-common for the Releasable interface.
+ */
+
 // ---- JMH benchmark source set ----
+sourceSets {
+  jmh {
+    java.srcDirs = ['src/jmh/java']
+    compileClasspath += sourceSets.main.output
+    runtimeClasspath += sourceSets.main.output
+  }
+}
+
+dependencies {
+  api project(':libs:opensearch-common')
+
+  testImplementation "com.carrotsearch.randomizedtesting:randomizedtesting-runner:${versions.randomizedrunner}"
+  testImplementation "junit:junit:${versions.junit}"
+  testImplementation "org.hamcrest:hamcrest:${versions.hamcrest}"
+
+  testImplementation(project(":test:framework")) {
+    exclude group: 'org.opensearch', module: 'opensearch-concurrent-queue'
+  }
+
+  // JMH benchmark dependencies
+  jmhImplementation "org.openjdk.jmh:jmh-core:${versions.jmh}"
+  jmhAnnotationProcessor "org.openjdk.jmh:jmh-generator-annprocess:${versions.jmh}"
+}
+
+testingConventions.enabled = true
+
+tasks.named('forbiddenApisMain').configure {
+  // :libs:opensearch-concurrent-queue does not depend on server
+  replaceSignatureFiles 'jdk-signatures'
+}
+
+// JMH generated code uses forbidden APIs — skip checking
+tasks.matching { it.name == 'forbiddenApisJmh' }.configureEach { enabled = false }
+
+// JMH annotation processor
+tasks.named('compileJmhJava').configure {
+  options.compilerArgs.addAll(["-processor", "org.openjdk.jmh.generators.BenchmarkProcessor"])
+}
+
+// Convenience task to run JMH benchmarks
+tasks.register('jmh', JavaExec) {
+  dependsOn jmhClasses
+  mainClass = 'org.openjdk.jmh.Main'
+  classpath = sourceSets.jmh.runtimeClasspath
+  // Pass -Pjmh.includes=<regex> to filter benchmarks
+  if (project.hasProperty('jmh.includes')) {
+    args project.property('jmh.includes')
+  }
+}
+
+spotless {
+  java {
+    targetExclude 'src/jmh/generated/**/*.java'
+  }
+}

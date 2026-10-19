@@ -1,167 +1,182 @@
- * Unless required by applicable law or agreed to in writing,
-      'io.micrometer.context.ContextRegistry',
+/*
  * SPDX-License-Identifier: Apache-2.0
-// JarHell is part of es server, which we don't want to pull in
-  )
  *
-tasks.withType(JavaCompile) {
-  testImplementation "org.hamcrest:hamcrest:${versions.hamcrest}"
-    Tests {
-      'org.apache.logging.log4j.spi.LoggerContextFactory',
-}
-      'org.apache.logging.log4j.spi.LoggerAdapter',
-      'io.micrometer.core.instrument.DistributionSummary$Builder',
-  testImplementation "net.bytebuddy:byte-buddy-agent:${versions.bytebuddy}"
-      'org.apache.logging.log4j.MarkerManager',
-  bundledSignatures += 'jdk-internal'
-      'org.apache.logging.log4j.Marker',
-  // Optional BC ML-KEM implementations are not supplied by the FIPS provider.
-      'javax.servlet.ServletContextListener',
- * Modifications Copyright OpenSearch Contributors. See
-  testImplementation "org.mockito:mockito-core:${versions.mockito}"
-      'com.aayushatharva.brotli4j.decoder.DecoderJNI$Status',
-}
- * under the License.
-      'org.apache.logging.log4j.spi.LoggerContext',
-  api "org.apache.httpcomponents.core5:httpcore5:${versions.httpcore5}"
-      'org.apache.log4j.Level',
- * license agreements. See the NOTICE file distributed with
-  api "commons-logging:commons-logging:${versions.commonslogging}"
-      'com.aayushatharva.brotli4j.encoder.EncoderJNI$Wrapper',
-tasks.withType(CheckForbiddenApis).configureEach {
-      'reactor.core.publisher.CallSiteSupplierFactory$SharedSecretsCallSiteSupplierFactory',
-jarHell.enabled = false
-  fipsRuntimeOnly "org.bouncycastle:bctls-fips:${versions.bouncycastle_tls}"
-      'io.micrometer.core.instrument.Counter$Builder',
-  configure(options) {
-apply plugin: 'opensearch.build'
-  api "org.slf4j:slf4j-api:${versions.slf4j}"
- * ownership. Elasticsearch licenses this file to you under
-      'io.micrometer.context.ContextSnapshot',
-}
  * The OpenSearch Contributors require contributions made to
-      //commons-logging provided dependencies
-  fipsRuntimeOnly "org.bouncycastle:bcutil-fips:${versions.bouncycastle_util}"
-      'org.apache.logging.log4j.LogManager',
-      'io.micrometer.context.ContextAccessor',
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+/*
+ * Licensed to Elasticsearch under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
-  testImplementation project(":client:test")
-  }
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+import de.thetaphi.forbiddenapis.gradle.CheckForbiddenApis
+
+apply plugin: 'opensearch.build'
+apply plugin: 'opensearch.publish'
+apply from: "$rootDir/gradle/fips.gradle"
+
+java {
   targetCompatibility = JavaVersion.VERSION_1_8
+  sourceCompatibility = JavaVersion.VERSION_1_8
+}
+
+base {
+  group = 'org.opensearch.client'
+  archivesName = 'opensearch-rest-client'
+}
+
+dependencies {
+  api "org.apache.httpcomponents.client5:httpclient5:${versions.httpclient5}"
+  api "org.apache.httpcomponents.core5:httpcore5:${versions.httpcore5}"
+  api "org.apache.httpcomponents.core5:httpcore5-h2:${versions.httpcore5}"
+  api "org.apache.httpcomponents.core5:httpcore5-reactive:${versions.httpcore5}"
+  api "commons-codec:commons-codec:${versions.commonscodec}"
+  api "commons-logging:commons-logging:${versions.commonslogging}"
+  api "org.slf4j:slf4j-api:${versions.slf4j}"
+  fipsRuntimeOnly "org.bouncycastle:bc-fips:${versions.bouncycastle_jce}"
+  fipsRuntimeOnly "org.bouncycastle:bctls-fips:${versions.bouncycastle_tls}"
+  fipsRuntimeOnly "org.bouncycastle:bcutil-fips:${versions.bouncycastle_util}"
+
+  // reactor
+  api "io.projectreactor:reactor-core:${versions.reactor}"
+  api "org.reactivestreams:reactive-streams:${versions.reactivestreams}"
+
+  testImplementation project(":client:test")
+  testImplementation "com.carrotsearch.randomizedtesting:randomizedtesting-runner:${versions.randomizedrunner}"
+  testImplementation "junit:junit:${versions.junit}"
+  testImplementation "org.hamcrest:hamcrest:${versions.hamcrest}"
+  testImplementation "org.mockito:mockito-core:${versions.mockito}"
+  testImplementation "org.objenesis:objenesis:${versions.objenesis}"
+  testImplementation "net.bytebuddy:byte-buddy:${versions.bytebuddy}"
+  testImplementation "net.bytebuddy:byte-buddy-agent:${versions.bytebuddy}"
+  testImplementation "org.apache.logging.log4j:log4j-api:${versions.log4j}"
+  testImplementation "org.apache.logging.log4j:log4j-core:${versions.log4j}"
+  testImplementation "org.apache.logging.log4j:log4j-jul:${versions.log4j}"
+  testImplementation "org.apache.logging.log4j:log4j-slf4j2-impl:${versions.log4j}"
+}
+
+tasks.named("dependencyLicenses").configure {
+  mapping from: /bc.*/, to: 'bouncycastle'
+}
+
+tasks.withType(CheckForbiddenApis).configureEach {
+  //client does not depend on server, so only jdk and http signatures should be checked
+  replaceSignatureFiles('jdk-signatures', 'http-signatures')
+}
+
+tasks.named('forbiddenApisTest').configure {
+  //we are using jdk-internal instead of jdk-non-portable to allow for com.sun.net.httpserver.* usage
+  bundledSignatures -= 'jdk-non-portable'
+  bundledSignatures += 'jdk-internal'
+}
+
+// JarHell is part of es server, which we don't want to pull in
+// TODO: Not anymore. Now in :libs:opensearch-core
+jarHell.enabled = false
+
+testingConventions {
+  naming.clear()
+  naming {
+    Tests {
+      baseClass 'org.opensearch.client.RestClientTestCase'
+    }
+  }
+}
+
+thirdPartyAudit {
+  // Optional BC ML-KEM implementations are not supplied by the FIPS provider.
+  ignoreMissingClasses(
+    'org.bouncycastle.pqc.jcajce.SecretKeyWithEncapsulation',
+    'org.bouncycastle.pqc.jcajce.interfaces.MLKEMPublicKey',
+    'org.bouncycastle.pqc.jcajce.spec.KEMExtractSpec$Builder',
+    'org.bouncycastle.pqc.jcajce.spec.KEMGenerateSpec$Builder',
+    'org.bouncycastle.pqc.jcajce.spec.MLKEMParameterSpec'
+  )
+  ignoreMissingClasses(
+      'org.conscrypt.Conscrypt',
+      //commons-logging optional dependencies
+      'org.apache.avalon.framework.logger.Logger',
+      'org.apache.log.Hierarchy',
+      'org.apache.log.Logger',
+      'org.apache.log4j.Level',
+      'org.apache.log4j.Logger',
+      'org.apache.log4j.Priority',
+      'org.apache.logging.log4j.Level',
+      'org.apache.logging.log4j.LogManager',
+      'org.apache.logging.log4j.Marker',
+      'org.apache.logging.log4j.MarkerManager',
+      'org.apache.logging.log4j.spi.AbstractLoggerAdapter',
+      'org.apache.logging.log4j.spi.ExtendedLogger',
+      'org.apache.logging.log4j.spi.LoggerAdapter',
+      'org.apache.logging.log4j.spi.LoggerContext',
+      'org.apache.logging.log4j.spi.LoggerContextFactory',
+      'org.apache.logging.log4j.util.StackLocatorUtil',
+      //commons-logging provided dependencies
+      'javax.servlet.ServletContextEvent',
+      'javax.servlet.ServletContextListener',
+      'io.micrometer.context.ContextAccessor',
+      'io.micrometer.context.ContextRegistry',
+      'io.micrometer.context.ContextSnapshot',
+      'io.micrometer.context.ContextSnapshot$Scope',
+      'io.micrometer.context.ContextSnapshotFactory',
+      'io.micrometer.context.ContextSnapshotFactory$Builder',
+      'io.micrometer.context.ThreadLocalAccessor',
+      'io.micrometer.core.instrument.Clock',
+      'io.micrometer.core.instrument.Counter',
+      'io.micrometer.core.instrument.Counter$Builder',
+      'io.micrometer.core.instrument.DistributionSummary',
+      'io.micrometer.core.instrument.DistributionSummary$Builder',
       'io.micrometer.core.instrument.Meter',
       'io.micrometer.core.instrument.MeterRegistry',
-   )
-      'reactor.core.publisher.CallSiteSupplierFactory$SharedSecretsCallSiteSupplierFactory$TracingException'
-      'org.apache.avalon.framework.logger.Logger',
-  }
-      'javax.servlet.ServletContextEvent',
-    'org.bouncycastle.pqc.jcajce.spec.KEMExtractSpec$Builder',
-      'io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics',
-      'io.micrometer.core.instrument.Counter',
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-  ignoreMissingClasses(
-}
-      'io.micrometer.core.instrument.Clock',
-      'org.apache.logging.log4j.util.StackLocatorUtil',
-  testImplementation "org.apache.logging.log4j:log4j-api:${versions.log4j}"
-  naming.clear()
-      'io.micrometer.core.instrument.Timer$Builder',
-  //client does not depend on server, so only jdk and http signatures should be checked
-  sourceCompatibility = JavaVersion.VERSION_1_8
-    options.compilerArgs << '-Xlint:-options'
-  naming {
-      'io.micrometer.context.ThreadLocalAccessor',
-      //optional compression
-      'org.apache.log.Hierarchy',
-      'io.micrometer.core.instrument.search.Search',
- *    http://www.apache.org/licenses/LICENSE-2.0
- * software distributed under the License is distributed on an
-      'io.micrometer.core.instrument.composite.CompositeMeterRegistry',
-    'org.bouncycastle.pqc.jcajce.spec.KEMGenerateSpec$Builder',
-}
-      'com.aayushatharva.brotli4j.decoder.DecoderJNI$Wrapper',
- *
-      baseClass 'org.opensearch.client.RestClientTestCase'
-  bundledSignatures -= 'jdk-non-portable'
-}
-apply plugin: 'opensearch.publish'
-  api "org.reactivestreams:reactive-streams:${versions.reactivestreams}"
-      'io.micrometer.core.instrument.DistributionSummary',
-      'org.apache.logging.log4j.spi.AbstractLoggerAdapter',
-  api "org.apache.httpcomponents.client5:httpclient5:${versions.httpclient5}"
-  // reactor
-      //commons-logging optional dependencies
- *
-tasks.named("dependencyLicenses").configure {
-apply from: "$rootDir/gradle/fips.gradle"
+      'io.micrometer.core.instrument.Metrics',
+      'io.micrometer.core.instrument.Tag',
       'io.micrometer.core.instrument.Tags',
- * the Apache License, Version 2.0 (the "License"); you may
-    'org.bouncycastle.pqc.jcajce.spec.MLKEMParameterSpec'
-      'org.apache.logging.log4j.spi.ExtendedLogger',
+      'io.micrometer.core.instrument.Timer',
+      'io.micrometer.core.instrument.Timer$Builder',
+      'io.micrometer.core.instrument.Timer$Sample',
+      'io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics',
+      'io.micrometer.core.instrument.composite.CompositeMeterRegistry',
+      'io.micrometer.core.instrument.search.Search',
       'reactor.blockhound.BlockHound$Builder',
       'reactor.blockhound.integration.BlockHoundIntegration',
-      'io.micrometer.context.ContextSnapshot$Scope',
-      'io.micrometer.context.ContextSnapshotFactory$Builder',
-base {
-/*
-// TODO: Not anymore. Now in :libs:opensearch-core
-  fipsRuntimeOnly "org.bouncycastle:bc-fips:${versions.bouncycastle_jce}"
- * GitHub history for details.
-dependencies {
- *
-  group = 'org.opensearch.client'
-  api "org.apache.httpcomponents.core5:httpcore5-reactive:${versions.httpcore5}"
-  mapping from: /bc.*/, to: 'bouncycastle'
- * this work for additional information regarding copyright
-  testImplementation "net.bytebuddy:byte-buddy:${versions.bytebuddy}"
-      'com.github.luben.zstd.ZstdDecompressCtx',
- * Licensed to Elasticsearch under one or more contributor
-      'org.apache.logging.log4j.Level',
- * this file be licensed under the Apache-2.0 license or a
-    'org.bouncycastle.pqc.jcajce.interfaces.MLKEMPublicKey',
-  testImplementation "junit:junit:${versions.junit}"
-thirdPartyAudit {
-  testImplementation "org.objenesis:objenesis:${versions.objenesis}"
- */
-import de.thetaphi.forbiddenapis.gradle.CheckForbiddenApis
-      'io.micrometer.core.instrument.Timer$Sample',
-      'io.micrometer.core.instrument.Tag',
-      'org.conscrypt.Conscrypt',
-  testImplementation "com.carrotsearch.randomizedtesting:randomizedtesting-runner:${versions.randomizedrunner}"
-  api "io.projectreactor:reactor-core:${versions.reactor}"
+      //optional compression
+      'com.aayushatharva.brotli4j.decoder.DecoderJNI$Status',
+      'com.aayushatharva.brotli4j.decoder.DecoderJNI$Wrapper',
       'com.aayushatharva.brotli4j.encoder.Encoder$Mode',
-      'org.apache.commons.compress.compressors.CompressorStreamFactory'
-    'org.bouncycastle.pqc.jcajce.SecretKeyWithEncapsulation',
-  // Suppressing '[options] target value 8 is obsolete and will be removed in a future release'
- * specific language governing permissions and limitations
-  testImplementation "org.apache.logging.log4j:log4j-slf4j2-impl:${versions.log4j}"
-java {
+      'com.aayushatharva.brotli4j.encoder.EncoderJNI$Operation',
+      'com.aayushatharva.brotli4j.encoder.EncoderJNI$Wrapper',
+      'com.github.luben.zstd.ZstdDecompressCtx',
       'com.github.luben.zstd.ZstdDirectBufferCompressingStream',
-      'org.apache.log4j.Logger',
-  //we are using jdk-internal instead of jdk-non-portable to allow for com.sun.net.httpserver.* usage
-testingConventions {
-  testImplementation "org.apache.logging.log4j:log4j-core:${versions.log4j}"
-  api "commons-codec:commons-codec:${versions.commonscodec}"
- * You may obtain a copy of the License at
-      'org.apache.log4j.Priority',
- * compatible open source license.
-    }
-      'io.micrometer.core.instrument.Metrics',
-      'io.micrometer.context.ContextSnapshotFactory',
-}
-  api "org.apache.httpcomponents.core5:httpcore5-h2:${versions.httpcore5}"
-}
-  ignoreMissingClasses(
-tasks.named('forbiddenApisTest').configure {
- * KIND, either express or implied.  See the License for the
- */
-  replaceSignatureFiles('jdk-signatures', 'http-signatures')
-/*
+      'org.apache.commons.compress.compressors.CompressorStreamFactory'
+   )
    ignoreViolations(
+      'reactor.core.publisher.CallSiteSupplierFactory$SharedSecretsCallSiteSupplierFactory',
+      'reactor.core.publisher.CallSiteSupplierFactory$SharedSecretsCallSiteSupplierFactory$TracingException'
    )
 }
-  archivesName = 'opensearch-rest-client'
-  testImplementation "org.apache.logging.log4j:log4j-jul:${versions.log4j}"
-      'com.aayushatharva.brotli4j.encoder.EncoderJNI$Operation',
-      'org.apache.log.Logger',
-      'io.micrometer.core.instrument.Timer',
+
+tasks.withType(JavaCompile) {
+  // Suppressing '[options] target value 8 is obsolete and will be removed in a future release'
+  configure(options) {
+    options.compilerArgs << '-Xlint:-options'
+  }
+}

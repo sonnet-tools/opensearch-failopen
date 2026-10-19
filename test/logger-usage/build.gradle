@@ -1,38 +1,41 @@
-  api "org.apache.logging.log4j:log4j-api:${versions.log4j}"
- */
-  testImplementation project(":test:framework")
- * Unless required by applicable law or agreed to in writing,
- * KIND, either express or implied.  See the License for the
- * license agreements. See the NOTICE file distributed with
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+/*
+ * Licensed to Elasticsearch under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- * ownership. Elasticsearch licenses this file to you under
+ *
+ * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
-  api "org.ow2.asm:asm:${versions.asm}"
- *
-apply plugin: 'opensearch.java'
- * the Apache License, Version 2.0 (the "License"); you may
- * under the License.
- * compatible open source license.
- * Modifications Copyright OpenSearch Contributors. See
- * specific language governing permissions and limitations
- * this file be licensed under the Apache-2.0 license or a
- *
- * SPDX-License-Identifier: Apache-2.0
-  api "org.ow2.asm:asm-analysis:${versions.asm}"
- * not use this file except in compliance with the License.
-/*
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
- * GitHub history for details.
- * You may obtain a copy of the License at
-/*
-  compileOnly "com.google.errorprone:error_prone_annotations:${versions.error_prone_annotations}"
+
+apply plugin: 'opensearch.java'
 apply plugin: 'opensearch.publish'
-  api "org.ow2.asm:asm-tree:${versions.asm}"
- * this work for additional information regarding copyright
-}
- *
- * Licensed to Elasticsearch under one or more contributor
+
 dependencies {
+  api "org.ow2.asm:asm:${versions.asm}"
+  api "org.ow2.asm:asm-tree:${versions.asm}"
+  api "org.ow2.asm:asm-analysis:${versions.asm}"
+  api "org.apache.logging.log4j:log4j-api:${versions.log4j}"
+  compileOnly "com.google.errorprone:error_prone_annotations:${versions.error_prone_annotations}"
+  testImplementation project(":test:framework")
+}

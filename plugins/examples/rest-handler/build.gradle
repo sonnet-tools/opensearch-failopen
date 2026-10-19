@@ -1,51 +1,58 @@
-apply plugin: 'opensearch.java-rest-test'
- * this file be licensed under the Apache-2.0 license or a
- *
- */
-tasks.register("exampleFixture", org.opensearch.gradle.test.AntFixture) {
-  classname = 'org.opensearch.example.resthandler.ExampleRestHandlerPlugin'
-  description = 'An example plugin showing how to register a REST handler'
- * not use this file except in compliance with the License.
-  licenseFile = rootProject.file('licenses/APACHE-LICENSE-2.0.txt')
-  dependsOn exampleFixture
-import org.opensearch.gradle.info.BuildParams
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * compatible open source license.
-  env 'CLASSPATH', "${-> sourceSets.javaRestTest.runtimeClasspath.asPath}"
- */
 /*
- *
- * the Apache License, Version 2.0 (the "License"); you may
-opensearchplugin {
- *    http://www.apache.org/licenses/LICENSE-2.0
-apply plugin: 'opensearch.yaml-rest-test'
  * SPDX-License-Identifier: Apache-2.0
- * Modifications Copyright OpenSearch Contributors. See
- * software distributed under the License is distributed on an
- * ownership. Elasticsearch licenses this file to you under
-  executable = "${BuildParams.runtimeJavaHome}/bin/java"
-javaRestTest {
- * GitHub history for details.
- * Licensed to Elasticsearch under one or more contributor
  *
  * The OpenSearch Contributors require contributions made to
-}
-apply plugin: 'opensearch.opensearchplugin'
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+/*
+ * Licensed to Elasticsearch under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
-  noticeFile = rootProject.file('NOTICE.txt')
-  name = 'rest-handler'
-  dependsOn sourceSets.javaRestTest.runtimeClasspath
-test.enabled = false
- * license agreements. See the NOTICE file distributed with
-  nonInputProperties.systemProperty 'external.address', "${-> exampleFixture.addressAndPort}"
- * Unless required by applicable law or agreed to in writing,
- * You may obtain a copy of the License at
  * under the License.
- *
-/*
- * this work for additional information regarding copyright
+ */
+
+import org.opensearch.gradle.info.BuildParams
+
+apply plugin: 'opensearch.opensearchplugin'
+apply plugin: 'opensearch.yaml-rest-test'
+apply plugin: 'opensearch.java-rest-test'
+
+opensearchplugin {
+  name = 'rest-handler'
+  description = 'An example plugin showing how to register a REST handler'
+  classname = 'org.opensearch.example.resthandler.ExampleRestHandlerPlugin'
+  licenseFile = rootProject.file('licenses/APACHE-LICENSE-2.0.txt')
+  noticeFile = rootProject.file('NOTICE.txt')
 }
-  args 'org.opensearch.example.resthandler.ExampleFixture', baseDir, 'TEST'
+
 // No unit tests in this example
+test.enabled = false
+
+tasks.register("exampleFixture", org.opensearch.gradle.test.AntFixture) {
+  dependsOn sourceSets.javaRestTest.runtimeClasspath
+  env 'CLASSPATH', "${-> sourceSets.javaRestTest.runtimeClasspath.asPath}"
+  executable = "${BuildParams.runtimeJavaHome}/bin/java"
+  args 'org.opensearch.example.resthandler.ExampleFixture', baseDir, 'TEST'
+}
+
+javaRestTest {
+  dependsOn exampleFixture
+  nonInputProperties.systemProperty 'external.address', "${-> exampleFixture.addressAndPort}"
 }

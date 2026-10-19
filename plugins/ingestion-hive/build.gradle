@@ -1,184 +1,200 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+apply plugin: 'opensearch.internal-cluster-test'
+
+opensearchplugin {
+  description = 'Pull-based ingestion plugin to consume from Hive tables'
+  classname = 'org.opensearch.plugin.hive.HiveIngestionPlugin'
+}
+
+versions << [
+  'hadoopCommon': versions.hadoop3,
+  'parquetHadoop': '1.15.0',
+  'thrift': '0.24.0',
+  'testcontainers': '2.0.5',
+  'docker': '3.7.1',
+  'ducttape': '1.0.8',
+]
+
+dependencies {
+  // Thrift transport for Hive Metastore communication
+  api "org.apache.thrift:libthrift:${versions.thrift}"
+
+  // Hadoop FileSystem API for reading data files
+  api "org.apache.hadoop:hadoop-client-api:${versions.hadoopCommon}"
+  runtimeOnly "org.apache.hadoop:hadoop-client-runtime:${versions.hadoopCommon}"
+
+  // AWS SDK v2 for S3 file access
+  api "software.amazon.awssdk:s3:${versions.aws}"
+  api "software.amazon.awssdk:sdk-core:${versions.aws}"
+  api "software.amazon.awssdk:aws-core:${versions.aws}"
+  api "software.amazon.awssdk:auth:${versions.aws}"
+  api "software.amazon.awssdk:identity-spi:${versions.aws}"
+  api "software.amazon.awssdk:regions:${versions.aws}"
+  api "software.amazon.awssdk:http-client-spi:${versions.aws}"
+  api "software.amazon.awssdk:apache-client:${versions.aws}"
+  api "org.apache.httpcomponents:httpclient:${versions.httpclient}"
+  api "org.apache.httpcomponents:httpcore:${versions.httpcore}"
+  api "commons-logging:commons-logging:${versions.commonslogging}"
+  api "software.amazon.awssdk:endpoints-spi:${versions.aws}"
+  api "software.amazon.awssdk:metrics-spi:${versions.aws}"
+  api "software.amazon.awssdk:utils:${versions.aws}"
+  api "software.amazon.awssdk:utils-lite:${versions.aws}"
+  api "software.amazon.awssdk:annotations:${versions.aws}"
+  api "software.amazon.awssdk:profiles:${versions.aws}"
+  api "software.amazon.awssdk:retries:${versions.aws}"
+  api "software.amazon.awssdk:retries-spi:${versions.aws}"
+  api "software.amazon.awssdk:http-auth:${versions.aws}"
+  api "software.amazon.awssdk:http-auth-aws:${versions.aws}"
+  api "software.amazon.awssdk:http-auth-spi:${versions.aws}"
+  api "software.amazon.awssdk:checksums:${versions.aws}"
+  api "software.amazon.awssdk:checksums-spi:${versions.aws}"
+  api "software.amazon.awssdk:json-utils:${versions.aws}"
+  api "software.amazon.awssdk:protocol-core:${versions.aws}"
+  api "software.amazon.awssdk:aws-json-protocol:${versions.aws}"
+  api "software.amazon.awssdk:aws-xml-protocol:${versions.aws}"
+  api "software.amazon.awssdk:third-party-jackson-core:${versions.aws}"
+  api "software.amazon.awssdk:aws-query-protocol:${versions.aws}"
+  api "software.amazon.awssdk:sts:${versions.aws}"
+
+  // Parquet reader (bundle includes all parquet modules in one jar, avoids jar hell)
+  api "org.apache.parquet:parquet-hadoop-bundle:${versions.parquetHadoop}"
+  runtimeOnly "org.xerial.snappy:snappy-java:1.1.10.7"
+
+  // SLF4J required by Hadoop Configuration class initializer
+  api "org.slf4j:slf4j-api:${versions.slf4j}"
+
+  // test
+  testImplementation "com.github.docker-java:docker-java-api:${versions.docker}"
+  testImplementation "com.github.docker-java:docker-java-transport:${versions.docker}"
+  testImplementation "com.github.docker-java:docker-java-transport-zerodep:${versions.docker}"
+  testImplementation "com.fasterxml.jackson.core:jackson-annotations:${versions.jackson_annotations}"
+  testImplementation "org.testcontainers:testcontainers:${versions.testcontainers}"
+  testImplementation "org.rnorth.duct-tape:duct-tape:${versions.ducttape}"
   testImplementation "org.apache.commons:commons-compress:${versions.commonscompress}"
-  excludes = ['org/opensearch/plugin/hive/metastore/**']
+  testImplementation "org.apache.commons:commons-lang3:${versions.commonslang}"
+  testImplementation "commons-io:commons-io:${versions.commonsio}"
+  testImplementation "org.slf4j:slf4j-simple:${versions.slf4j}"
+  testImplementation "org.apache.hadoop:hadoop-minikdc:3.4.3"
+  testImplementation "org.apache.kerby:kerb-simplekdc:2.0.3"
+  testImplementation "org.apache.kerby:kerb-client:2.0.3"
+  testImplementation "org.apache.kerby:kerb-admin:2.0.3"
+  testImplementation "org.apache.kerby:kerb-server:2.0.3"
+  testImplementation "org.apache.kerby:kerb-identity:2.0.3"
+  testImplementation "org.apache.kerby:kerb-common:2.0.3"
+  testImplementation "org.apache.kerby:kerb-util:2.0.3"
+  testImplementation "org.apache.kerby:kerby-config:2.0.3"
+  testImplementation "org.apache.kerby:token-provider:2.0.3"
+  testImplementation "org.apache.kerby:kerb-crypto:2.0.3"
+  testImplementation "org.apache.kerby:kerb-core:2.0.3"
+  testImplementation "org.apache.kerby:kerby-pkix:2.0.3"
+  testImplementation "org.apache.kerby:kerby-xdr:2.0.3"
+  testImplementation "org.apache.kerby:kerby-asn1:2.0.3"
   testImplementation "org.apache.kerby:kerby-util:2.0.3"
 }
-  api "org.apache.httpcomponents:httpcore:${versions.httpcore}"
-    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeCustomEncodedField',
-  api "software.amazon.awssdk:utils-lite:${versions.aws}"
-  systemProperty 'tests.security.manager', 'false'
-  testImplementation "org.apache.kerby:kerb-common:2.0.3"
-    'org.apache.hadoop.thirdparty.protobuf.UnsafeUtil$JvmMemoryAccessor',
-    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.hash.Striped64$1',
-    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeIntField',
-    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeBooleanField',
-}
-  api "software.amazon.awssdk:protocol-core:${versions.aws}"
-/*
-  api "org.apache.hadoop:hadoop-client-api:${versions.hadoopCommon}"
-  api "software.amazon.awssdk:utils:${versions.aws}"
-}
- * this file be licensed under the Apache-2.0 license or a
-    'shaded.parquet.net.openhft.hashing.UnsafeAccess$OldUnsafeAccessLittleEndian',
-  jvmArgs '--add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED'
-  'docker': '3.7.1',
-  // Parquet reader (bundle includes all parquet modules in one jar, avoids jar hell)
-  api "software.amazon.awssdk:third-party-jackson-core:${versions.aws}"
-  testImplementation "com.fasterxml.jackson.core:jackson-annotations:${versions.jackson_annotations}"
-// is enforced by spotless, forbiddenApis, and loggerUsageCheck instead.
+
 internalClusterTest {
-    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeFloatField',
-  testImplementation "org.apache.kerby:kerb-util:2.0.3"
-    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.cache.Striped64',
-    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeObjectField',
-  testImplementation "org.apache.commons:commons-lang3:${versions.commonslang}"
-    'org.apache.hadoop.io.FastByteComparisons$LexicographicalComparerHolder$UnsafeComparer',
-    'org.apache.hadoop.thirdparty.protobuf.MessageSchema',
-  testImplementation "org.apache.kerby:kerby-config:2.0.3"
-  api "software.amazon.awssdk:metrics-spi:${versions.aws}"
-    'shaded.parquet.net.openhft.hashing.UnsafeAccess$OldUnsafeAccessBigEndian',
-    'org.apache.hadoop.io.nativeio.NativeIO',
-  api "software.amazon.awssdk:endpoints-spi:${versions.aws}"
-  api "software.amazon.awssdk:s3:${versions.aws}"
-tasks.named("dependencyLicenses").configure {
-  'hadoopCommon': versions.hadoop3,
-tasks.named('forbiddenApisMain').configure {
-  api "software.amazon.awssdk:identity-spi:${versions.aws}"
-    'org.apache.hadoop.shaded.org.xbill.DNS.spi.DNSJavaNameServiceDescriptor',
-    'shaded.parquet.net.openhft.hashing.ModernCompactStringHash',
- * GitHub history for details.
-  api "software.amazon.awssdk:aws-xml-protocol:${versions.aws}"
-  api "org.apache.httpcomponents:httpclient:${versions.httpclient}"
-    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper$1',
-    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.hash.LittleEndianByteArray$UnsafeByteArray',
-  enabled = false
-    'org.apache.hadoop.shaded.com.google.common.hash.LittleEndianByteArray$UnsafeByteArray',
-  'parquetHadoop': '1.15.0',
-    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.cache.Striped64$1',
-tasks.matching { it.name == 'missingJavadoc' }.configureEach {
-    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.hash.LittleEndianByteArray$UnsafeByteArray$3',
-  testImplementation "commons-io:commons-io:${versions.commonsio}"
-  api "software.amazon.awssdk:regions:${versions.aws}"
-  api "software.amazon.awssdk:checksums:${versions.aws}"
-    'shaded.parquet.net.openhft.hashing.LongTupleHashFunction',
-  'thrift': '0.24.0',
-  api "software.amazon.awssdk:retries:${versions.aws}"
-    'org.apache.hadoop.thirdparty.com.google.common.primitives.UnsignedBytes$LexicographicalComparatorHolder$UnsafeComparator',
-}
-  testImplementation "org.apache.hadoop:hadoop-minikdc:3.4.3"
-  api "software.amazon.awssdk:retries-spi:${versions.aws}"
   environment 'TESTCONTAINERS_RYUK_DISABLED', 'true'
-    'org.apache.hadoop.thirdparty.protobuf.UnsafeUtil$Android64MemoryAccessor',
-  // Thrift transport for Hive Metastore communication
-  api "org.apache.parquet:parquet-hadoop-bundle:${versions.parquetHadoop}"
-    'org.apache.hadoop.shaded.com.google.common.util.concurrent.AbstractFutureState$UnsafeAtomicHelper',
-    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.hash.Striped64',
-versions << [
-  api "software.amazon.awssdk:auth:${versions.aws}"
-  api "software.amazon.awssdk:aws-query-protocol:${versions.aws}"
-  api "org.apache.thrift:libthrift:${versions.thrift}"
-  // Hadoop FileSystem API for reading data files
-  testImplementation "org.apache.kerby:kerb-identity:2.0.3"
-  commandLine './bin/generate-thrift.sh'
-    'shaded.parquet.net.openhft.hashing.ModernHotSpotStringHash',
-    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeByteField',
-  api "software.amazon.awssdk:annotations:${versions.aws}"
-// Generated Thrift code lacks Javadoc; exclude from checks (same as ingestion-kafka)
-dependencies {
-    'org.apache.hadoop.shaded.com.google.common.primitives.UnsignedBytes$LexicographicalComparatorHolder$UnsafeComparator',
-  testImplementation "org.apache.kerby:kerby-xdr:2.0.3"
-    'org.apache.hadoop.thirdparty.com.google.common.util.concurrent.AbstractFutureState$UnsafeAtomicHelper',
-  'ducttape': '1.0.8',
-  api "software.amazon.awssdk:json-utils:${versions.aws}"
+  systemProperty 'tests.security.manager', 'false'
+  jvmArgs '--add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED'
 }
-  api "software.amazon.awssdk:apache-client:${versions.aws}"
-  // AWS SDK v2 for S3 file access
-    'org.apache.hadoop.io.FastByteComparisons$LexicographicalComparerHolder$UnsafeComparer$1',
-  api "software.amazon.awssdk:http-auth-aws:${versions.aws}"
-  testImplementation "org.apache.kerby:kerb-core:2.0.3"
-  ignoreMissingClasses()
- *
+
 thirdPartyAudit {
-tasks.register('generateThrift', Exec) {
-  testImplementation "com.github.docker-java:docker-java-transport:${versions.docker}"
- * SPDX-License-Identifier: Apache-2.0
-    'org.apache.hadoop.thirdparty.protobuf.UnsafeUtil$1',
-    'org.apache.hadoop.shaded.com.google.common.hash.LittleEndianByteArray$UnsafeByteArray$1',
-    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeCachedField',
-  api "software.amazon.awssdk:profiles:${versions.aws}"
-  description = 'Pull-based ingestion plugin to consume from Hive tables'
-  testImplementation "com.github.docker-java:docker-java-transport-zerodep:${versions.docker}"
-    'org.apache.hadoop.hdfs.shortcircuit.ShortCircuitShm',
-    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.primitives.UnsignedBytes$LexicographicalComparatorHolder$UnsafeComparator',
-  'testcontainers': '2.0.5',
-    'shaded.parquet.net.openhft.hashing.UnsafeAccess',
-    'org.apache.hadoop.thirdparty.protobuf.UnsafeUtil',
-  api "software.amazon.awssdk:checksums-spi:${versions.aws}"
-// This disables -Werror for all compile tasks in this plugin. Self-written code quality
-    'org.apache.hadoop.hdfs.shortcircuit.ShortCircuitShm$Slot',
-  testImplementation "org.rnorth.duct-tape:duct-tape:${versions.ducttape}"
-  testImplementation "org.apache.kerby:token-provider:2.0.3"
-    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.hash.LittleEndianByteArray$UnsafeByteArray$1',
-  api "software.amazon.awssdk:http-client-spi:${versions.aws}"
-  description = 'Regenerate Thrift client code from IDL (requires Docker)'
-    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.hash.Striped64$Cell',
-  mapping from: /hadoop-.*/, to: 'hadoop'
-  options.compilerArgs -= '-Werror'
-// Generated Thrift code produces deprecation/unchecked warnings that fail with -Werror.
- *
-  testImplementation "org.apache.kerby:kerb-simplekdc:2.0.3"
-    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeLongField',
-// Generated Thrift code uses Java serialization (ObjectInputStream/ObjectOutputStream)
+  ignoreMissingClasses()
   ignoreViolations(
-  runtimeOnly "org.xerial.snappy:snappy-java:1.1.10.7"
-}
-  classname = 'org.opensearch.plugin.hive.HiveIngestionPlugin'
-// Map hadoop-client-api and hadoop-client-runtime to shared hadoop license
-tasks.withType(JavaCompile).configureEach {
-  testImplementation "org.apache.kerby:kerby-asn1:2.0.3"
- * The OpenSearch Contributors require contributions made to
-}
-    'org.apache.hadoop.thirdparty.com.google.common.hash.LittleEndianByteArray$UnsafeByteArray$2',
-  api "software.amazon.awssdk:http-auth-spi:${versions.aws}"
- * Modifications Copyright OpenSearch Contributors. See
- * compatible open source license.
-opensearchplugin {
-}
-    'org.apache.hadoop.thirdparty.com.google.common.hash.LittleEndianByteArray$UnsafeByteArray$1',
- */
-  testImplementation "com.github.docker-java:docker-java-api:${versions.docker}"
-    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeDoubleField',
-  api "commons-logging:commons-logging:${versions.commonslogging}"
-  testImplementation "org.apache.kerby:kerb-admin:2.0.3"
-    'shaded.parquet.net.openhft.hashing.LongHashFunction',
-    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeCharField',
-]
-  testImplementation "org.apache.kerby:kerb-client:2.0.3"
-    'org.apache.hadoop.thirdparty.protobuf.UnsafeUtil$Android32MemoryAccessor',
-    'shaded.parquet.net.openhft.hashing.HotSpotPrior7u6StringHash',
-  api "software.amazon.awssdk:sts:${versions.aws}"
-    'shaded.parquet.net.openhft.hashing.Util',
-}
-  )
-    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper',
-  testImplementation "org.apache.kerby:kerb-crypto:2.0.3"
-  api "software.amazon.awssdk:aws-core:${versions.aws}"
-    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeShortField',
-  testImplementation "org.apache.kerby:kerb-server:2.0.3"
-    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe',
-  testImplementation "org.testcontainers:testcontainers:${versions.testcontainers}"
-    'org.apache.hadoop.thirdparty.com.google.common.hash.LittleEndianByteArray$UnsafeByteArray',
-  api "org.slf4j:slf4j-api:${versions.slf4j}"
-  api "software.amazon.awssdk:aws-json-protocol:${versions.aws}"
-  testImplementation "org.slf4j:slf4j-simple:${versions.slf4j}"
-  runtimeOnly "org.apache.hadoop:hadoop-client-runtime:${versions.hadoopCommon}"
-    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.cache.Striped64$Cell',
-  testImplementation "org.apache.kerby:kerby-pkix:2.0.3"
-  // test
+    'org.apache.hadoop.hdfs.shortcircuit.ShortCircuitShm',
+    'org.apache.hadoop.hdfs.shortcircuit.ShortCircuitShm$Slot',
+    'org.apache.hadoop.io.FastByteComparisons$LexicographicalComparerHolder$UnsafeComparer',
+    'org.apache.hadoop.io.FastByteComparisons$LexicographicalComparerHolder$UnsafeComparer$1',
+    'org.apache.hadoop.io.nativeio.NativeIO',
+    'org.apache.hadoop.shaded.com.google.common.hash.LittleEndianByteArray$UnsafeByteArray',
+    'org.apache.hadoop.shaded.com.google.common.hash.LittleEndianByteArray$UnsafeByteArray$1',
     'org.apache.hadoop.shaded.com.google.common.hash.LittleEndianByteArray$UnsafeByteArray$2',
-  api "software.amazon.awssdk:http-auth:${versions.aws}"
-  api "software.amazon.awssdk:sdk-core:${versions.aws}"
-    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.primitives.UnsignedBytes$LexicographicalComparatorHolder$UnsafeComparator$1',
-    'org.apache.hadoop.thirdparty.protobuf.UnsafeUtil$MemoryAccessor',
-apply plugin: 'opensearch.internal-cluster-test'
-  // SLF4J required by Hadoop Configuration class initializer
+    'org.apache.hadoop.shaded.com.google.common.primitives.UnsignedBytes$LexicographicalComparatorHolder$UnsafeComparator',
+    'org.apache.hadoop.shaded.com.google.common.util.concurrent.AbstractFutureState$UnsafeAtomicHelper',
+    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe',
+    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeBooleanField',
+    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeByteField',
+    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeCachedField',
+    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeCharField',
+    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeCustomEncodedField',
+    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeDoubleField',
+    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeFloatField',
+    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeIntField',
+    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeLongField',
+    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeObjectField',
+    'org.apache.hadoop.shaded.org.apache.avro.reflect.FieldAccessUnsafe$UnsafeShortField',
+    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.cache.Striped64',
+    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.cache.Striped64$1',
+    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.cache.Striped64$Cell',
+    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.hash.LittleEndianByteArray$UnsafeByteArray',
+    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.hash.LittleEndianByteArray$UnsafeByteArray$1',
     'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.hash.LittleEndianByteArray$UnsafeByteArray$2',
+    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.hash.LittleEndianByteArray$UnsafeByteArray$3',
+    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.hash.Striped64',
+    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.hash.Striped64$1',
+    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.hash.Striped64$Cell',
+    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.primitives.UnsignedBytes$LexicographicalComparatorHolder$UnsafeComparator',
+    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.primitives.UnsignedBytes$LexicographicalComparatorHolder$UnsafeComparator$1',
+    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper',
+    'org.apache.hadoop.shaded.org.apache.curator.shaded.com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper$1',
+    'org.apache.hadoop.shaded.org.xbill.DNS.spi.DNSJavaNameServiceDescriptor',
+    'org.apache.hadoop.thirdparty.com.google.common.hash.LittleEndianByteArray$UnsafeByteArray',
+    'org.apache.hadoop.thirdparty.com.google.common.hash.LittleEndianByteArray$UnsafeByteArray$1',
+    'org.apache.hadoop.thirdparty.com.google.common.hash.LittleEndianByteArray$UnsafeByteArray$2',
+    'org.apache.hadoop.thirdparty.com.google.common.primitives.UnsignedBytes$LexicographicalComparatorHolder$UnsafeComparator',
+    'org.apache.hadoop.thirdparty.com.google.common.util.concurrent.AbstractFutureState$UnsafeAtomicHelper',
+    'org.apache.hadoop.thirdparty.protobuf.MessageSchema',
+    'org.apache.hadoop.thirdparty.protobuf.UnsafeUtil',
+    'org.apache.hadoop.thirdparty.protobuf.UnsafeUtil$1',
+    'org.apache.hadoop.thirdparty.protobuf.UnsafeUtil$Android32MemoryAccessor',
+    'org.apache.hadoop.thirdparty.protobuf.UnsafeUtil$Android64MemoryAccessor',
+    'org.apache.hadoop.thirdparty.protobuf.UnsafeUtil$JvmMemoryAccessor',
+    'org.apache.hadoop.thirdparty.protobuf.UnsafeUtil$MemoryAccessor',
+    'shaded.parquet.net.openhft.hashing.HotSpotPrior7u6StringHash',
+    'shaded.parquet.net.openhft.hashing.LongHashFunction',
+    'shaded.parquet.net.openhft.hashing.LongTupleHashFunction',
+    'shaded.parquet.net.openhft.hashing.ModernCompactStringHash',
+    'shaded.parquet.net.openhft.hashing.ModernHotSpotStringHash',
+    'shaded.parquet.net.openhft.hashing.UnsafeAccess',
+    'shaded.parquet.net.openhft.hashing.UnsafeAccess$OldUnsafeAccessBigEndian',
+    'shaded.parquet.net.openhft.hashing.UnsafeAccess$OldUnsafeAccessLittleEndian',
+    'shaded.parquet.net.openhft.hashing.Util',
+  )
+}
+
+// Generated Thrift code produces deprecation/unchecked warnings that fail with -Werror.
+// This disables -Werror for all compile tasks in this plugin. Self-written code quality
+// is enforced by spotless, forbiddenApis, and loggerUsageCheck instead.
+tasks.withType(JavaCompile).configureEach {
+  options.compilerArgs -= '-Werror'
+}
+
+tasks.register('generateThrift', Exec) {
+  description = 'Regenerate Thrift client code from IDL (requires Docker)'
+  commandLine './bin/generate-thrift.sh'
+}
+
+// Generated Thrift code lacks Javadoc; exclude from checks (same as ingestion-kafka)
+tasks.matching { it.name == 'missingJavadoc' }.configureEach {
+  enabled = false
+}
+
+// Generated Thrift code uses Java serialization (ObjectInputStream/ObjectOutputStream)
+tasks.named('forbiddenApisMain').configure {
+  excludes = ['org/opensearch/plugin/hive/metastore/**']
+}
+
+// Map hadoop-client-api and hadoop-client-runtime to shared hadoop license
+tasks.named("dependencyLicenses").configure {
+  mapping from: /hadoop-.*/, to: 'hadoop'
+}
