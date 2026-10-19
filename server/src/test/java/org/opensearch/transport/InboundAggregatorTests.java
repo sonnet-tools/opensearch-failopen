@@ -1,299 +1,260 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
+        );
+            randomNonNegativeLong(),
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.transport;
-
-import org.opensearch.Version;
-import org.opensearch.common.breaker.TestCircuitBreaker;
-import org.opensearch.common.bytes.ReleasableBytesReference;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.core.common.breaker.CircuitBreakingException;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.function.Predicate;
-
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.CoreMatchers.notNullValue;
-
-public class InboundAggregatorTests extends OpenSearchTestCase {
-
-    private final ThreadContext threadContext = new ThreadContext(Settings.EMPTY);
-    private final String unBreakableAction = "non_breakable_action";
-    private final String unknownAction = "unknown_action";
-    private InboundAggregator aggregator;
-    private TestCircuitBreaker circuitBreaker;
-
-    @Before
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
         Predicate<String> requestCanTripBreaker = action -> {
-            if (unknownAction.equals(action)) {
-                throw new ActionNotFoundTransportException(action);
-            } else {
-                return unBreakableAction.equals(action) == false;
-            }
-        };
-        circuitBreaker = new TestCircuitBreaker();
-        aggregator = new InboundAggregator(() -> circuitBreaker, requestCanTripBreaker);
-    }
-
-    public void testInboundAggregation() throws IOException {
-        long requestId = randomNonNegativeLong();
-        Header header = new Header(TransportProtocol.NATIVE, randomInt(), requestId, TransportStatus.setRequest((byte) 0), Version.CURRENT);
-        header.headers = new Tuple<>(Collections.emptyMap(), Collections.emptyMap());
-        header.actionName = "action_name";
-        // Initiate Message
-        aggregator.headerReceived(header);
-
-        BytesArray bytes = new BytesArray(randomByteArrayOfLength(10));
-        ArrayList<ReleasableBytesReference> references = new ArrayList<>();
-        if (randomBoolean()) {
-            final ReleasableBytesReference content = ReleasableBytesReference.wrap(bytes);
-            references.add(content);
-            aggregator.aggregate(content);
-            content.close();
-        } else {
-            final ReleasableBytesReference content1 = ReleasableBytesReference.wrap(bytes.slice(0, 3));
-            references.add(content1);
-            aggregator.aggregate(content1);
-            content1.close();
-            final ReleasableBytesReference content2 = ReleasableBytesReference.wrap(bytes.slice(3, 3));
-            references.add(content2);
-            aggregator.aggregate(content2);
-            content2.close();
-            final ReleasableBytesReference content3 = ReleasableBytesReference.wrap(bytes.slice(6, 4));
-            references.add(content3);
-            aggregator.aggregate(content3);
-            content3.close();
-        }
-
-        // Signal EOS
-        InboundMessage aggregated = aggregator.finishAggregation();
-
-        assertThat(aggregated, notNullValue());
-        assertFalse(aggregated.isPing());
-        assertTrue(aggregated.getHeader().isRequest());
-        assertThat(aggregated.getHeader().getRequestId(), equalTo(requestId));
-        assertThat(aggregated.getHeader().getVersion(), equalTo(Version.CURRENT));
-        for (ReleasableBytesReference reference : references) {
-            assertEquals(1, reference.refCount());
-        }
-        aggregated.close();
-        for (ReleasableBytesReference reference : references) {
-            assertEquals(0, reference.refCount());
-        }
-    }
-
-    public void testInboundUnknownAction() throws IOException {
-        long requestId = randomNonNegativeLong();
-        Header header = new Header(TransportProtocol.NATIVE, randomInt(), requestId, TransportStatus.setRequest((byte) 0), Version.CURRENT);
-        header.headers = new Tuple<>(Collections.emptyMap(), Collections.emptyMap());
-        header.actionName = unknownAction;
-        // Initiate Message
-        aggregator.headerReceived(header);
-
-        BytesArray bytes = new BytesArray(randomByteArrayOfLength(10));
-        final ReleasableBytesReference content = ReleasableBytesReference.wrap(bytes);
-        aggregator.aggregate(content);
-        content.close();
-        assertEquals(0, content.refCount());
-
-        // Signal EOS
-        InboundMessage aggregated = aggregator.finishAggregation();
-
-        assertThat(aggregated, notNullValue());
-        assertTrue(aggregated.isShortCircuit());
-        assertThat(aggregated.getException(), instanceOf(ActionNotFoundTransportException.class));
-        assertNotNull(aggregated.takeBreakerReleaseControl());
-    }
-
-    public void testCircuitBreak() throws IOException {
-        circuitBreaker.startBreaking();
-        // Actions are breakable
-        Header breakableHeader = new Header(
-            TransportProtocol.NATIVE,
-            randomInt(),
             randomNonNegativeLong(),
-            TransportStatus.setRequest((byte) 0),
-            Version.CURRENT
-        );
-        breakableHeader.headers = new Tuple<>(Collections.emptyMap(), Collections.emptyMap());
-        breakableHeader.actionName = "action_name";
-        // Initiate Message
-        aggregator.headerReceived(breakableHeader);
-
-        BytesArray bytes = new BytesArray(randomByteArrayOfLength(10));
-        final ReleasableBytesReference content1 = ReleasableBytesReference.wrap(bytes);
-        aggregator.aggregate(content1);
-        content1.close();
-
-        // Signal EOS
-        InboundMessage aggregated1 = aggregator.finishAggregation();
-
-        assertEquals(0, content1.refCount());
-        assertThat(aggregated1, notNullValue());
-        assertTrue(aggregated1.isShortCircuit());
-        assertThat(aggregated1.getException(), instanceOf(CircuitBreakingException.class));
-
-        // Actions marked as unbreakable are not broken
-        Header unbreakableHeader = new Header(
-            TransportProtocol.NATIVE,
-            randomInt(),
-            randomNonNegativeLong(),
-            TransportStatus.setRequest((byte) 0),
-            Version.CURRENT
-        );
-        unbreakableHeader.headers = new Tuple<>(Collections.emptyMap(), Collections.emptyMap());
-        unbreakableHeader.actionName = unBreakableAction;
-        // Initiate Message
-        aggregator.headerReceived(unbreakableHeader);
-
-        final ReleasableBytesReference content2 = ReleasableBytesReference.wrap(bytes);
-        aggregator.aggregate(content2);
-        content2.close();
-
-        // Signal EOS
-        InboundMessage aggregated2 = aggregator.finishAggregation();
-
-        assertEquals(1, content2.refCount());
-        assertThat(aggregated2, notNullValue());
-        assertFalse(aggregated2.isShortCircuit());
-
-        // Handshakes are not broken
-        final byte handshakeStatus = TransportStatus.setHandshake(TransportStatus.setRequest((byte) 0));
-        Header handshakeHeader = new Header(
-            TransportProtocol.NATIVE,
-            randomInt(),
-            randomNonNegativeLong(),
-            handshakeStatus,
-            Version.CURRENT
-        );
-        handshakeHeader.headers = new Tuple<>(Collections.emptyMap(), Collections.emptyMap());
-        handshakeHeader.actionName = "handshake";
-        // Initiate Message
-        aggregator.headerReceived(handshakeHeader);
-
         final ReleasableBytesReference content3 = ReleasableBytesReference.wrap(bytes);
-        aggregator.aggregate(content3);
-        content3.close();
-
         // Signal EOS
-        InboundMessage aggregated3 = aggregator.finishAggregation();
-
-        assertEquals(1, content3.refCount());
-        assertThat(aggregated3, notNullValue());
-        assertFalse(aggregated3.isShortCircuit());
-    }
-
-    public void testCloseWillCloseContent() {
-        long requestId = randomNonNegativeLong();
-        Header header = new Header(TransportProtocol.NATIVE, randomInt(), requestId, TransportStatus.setRequest((byte) 0), Version.CURRENT);
-        header.headers = new Tuple<>(Collections.emptyMap(), Collections.emptyMap());
-        header.actionName = "action_name";
-        // Initiate Message
-        aggregator.headerReceived(header);
-
-        BytesArray bytes = new BytesArray(randomByteArrayOfLength(10));
-        ArrayList<ReleasableBytesReference> references = new ArrayList<>();
-        if (randomBoolean()) {
-            final ReleasableBytesReference content = ReleasableBytesReference.wrap(bytes);
-            references.add(content);
-            aggregator.aggregate(content);
-            content.close();
-        } else {
-            final ReleasableBytesReference content1 = ReleasableBytesReference.wrap(bytes.slice(0, 5));
             references.add(content1);
-            aggregator.aggregate(content1);
-            content1.close();
-            final ReleasableBytesReference content2 = ReleasableBytesReference.wrap(bytes.slice(5, 5));
-            references.add(content2);
-            aggregator.aggregate(content2);
-            content2.close();
-        }
-
-        aggregator.close();
-
-        for (ReleasableBytesReference reference : references) {
-            assertEquals(0, reference.refCount());
-        }
-    }
-
-    public void testFinishAggregationWillFinishHeader() throws IOException {
-        long requestId = randomNonNegativeLong();
-        final String actionName;
-        final boolean unknownAction = randomBoolean();
-        if (unknownAction) {
-            actionName = this.unknownAction;
-        } else {
-            actionName = "action_name";
-        }
-        Header header = new Header(TransportProtocol.NATIVE, randomInt(), requestId, TransportStatus.setRequest((byte) 0), Version.CURRENT);
-        // Initiate Message
+ * GitHub history for details.
+import org.opensearch.core.common.bytes.BytesArray;
         aggregator.headerReceived(header);
-
-        try (BytesStreamOutput streamOutput = new BytesStreamOutput()) {
-            threadContext.writeTo(streamOutput);
-            streamOutput.writeStringArray(new String[0]);
-            streamOutput.writeString(actionName);
-            streamOutput.write(randomByteArrayOfLength(10));
-
-            final ReleasableBytesReference content = ReleasableBytesReference.wrap(streamOutput.bytes());
-            aggregator.aggregate(content);
-            content.close();
-
-            // Signal EOS
-            InboundMessage aggregated = aggregator.finishAggregation();
-
-            assertThat(aggregated, notNullValue());
-            assertFalse(header.needsToReadVariableHeader());
-            assertEquals(actionName, header.getActionName());
-            if (unknownAction) {
-                assertEquals(0, content.refCount());
-                assertTrue(aggregated.isShortCircuit());
-            } else {
-                assertEquals(1, content.refCount());
-                assertFalse(aggregated.isShortCircuit());
-            }
-        }
+        Header header = new Header(TransportProtocol.NATIVE, randomInt(), requestId, TransportStatus.setRequest((byte) 0), Version.CURRENT);
+    public void testCircuitBreak() throws IOException {
+        // Initiate Message
+        // Signal EOS
+        for (ReleasableBytesReference reference : references) {
+        Header header = new Header(TransportProtocol.NATIVE, randomInt(), requestId, TransportStatus.setRequest((byte) 0), Version.CURRENT);
     }
-
+import java.util.function.Predicate;
+            assertThat(aggregated, notNullValue());
+        for (ReleasableBytesReference reference : references) {
+ * Modifications Copyright OpenSearch Contributors. See
+        breakableHeader.headers = new Tuple<>(Collections.emptyMap(), Collections.emptyMap());
+            actionName = this.unknownAction;
+        final ReleasableBytesReference content = ReleasableBytesReference.wrap(bytes);
+import org.opensearch.common.collect.Tuple;
+        // Initiate Message
+                throw new ActionNotFoundTransportException(action);
+    public void testCloseWillCloseContent() {
+        // Initiate Message
+ * KIND, either express or implied.  See the License for the
+            aggregator.aggregate(content2);
+        handshakeHeader.actionName = "handshake";
+            aggregator.aggregate(content);
+                return unBreakableAction.equals(action) == false;
+        aggregator.close();
+    private TestCircuitBreaker circuitBreaker;
+            streamOutput.write(randomByteArrayOfLength(10));
+        handshakeHeader.headers = new Tuple<>(Collections.emptyMap(), Collections.emptyMap());
+            Version.CURRENT
+        aggregator.headerReceived(breakableHeader);
+            content.close();
+        final ReleasableBytesReference content1 = ReleasableBytesReference.wrap(bytes);
+package org.opensearch.transport;
+ * license agreements. See the NOTICE file distributed with
+        if (randomBoolean()) {
+        // Actions marked as unbreakable are not broken
+        content1.close();
+            references.add(content);
+import static org.hamcrest.CoreMatchers.notNullValue;
+        Header header = new Header(TransportProtocol.NATIVE, randomInt(), requestId, TransportStatus.setRequest((byte) 0), Version.CURRENT);
+        }
+            aggregator.aggregate(content);
+        for (ReleasableBytesReference reference : references) {
+    }
+ * You may obtain a copy of the License at
+        assertEquals(1, content2.refCount());
+        aggregator.aggregate(content);
+        assertEquals(0, content.refCount());
+public class InboundAggregatorTests extends OpenSearchTestCase {
+/*
+            TransportStatus.setRequest((byte) 0),
+            threadContext.writeTo(streamOutput);
+import org.opensearch.common.util.concurrent.ThreadContext;
+        assertThat(aggregated2, notNullValue());
+            aggregator.aggregate(content1);
+        aggregator.aggregate(content1);
+        content.close();
+    public void testInboundAggregation() throws IOException {
+        aggregator.aggregate(content3);
+        final byte handshakeStatus = TransportStatus.setHandshake(TransportStatus.setRequest((byte) 0));
+import org.opensearch.common.io.stream.BytesStreamOutput;
+            assertEquals(0, reference.refCount());
+            if (unknownAction) {
+        }
+            randomNonNegativeLong(),
+import org.opensearch.test.OpenSearchTestCase;
+            aggregator.aggregate(content3);
+/*
+            streamOutput.writeString(actionName);
+ * Licensed to Elasticsearch under one or more contributor
+        assertFalse(aggregated2.isShortCircuit());
 }
+        ArrayList<ReleasableBytesReference> references = new ArrayList<>();
+        content2.close();
+            references.add(content1);
+import java.util.Collections;
+    @Before
+ * under the License.
+        assertThat(aggregated.getException(), instanceOf(ActionNotFoundTransportException.class));
+        // Signal EOS
+            content2.close();
+            streamOutput.writeStringArray(new String[0]);
+            TransportProtocol.NATIVE,
+        BytesArray bytes = new BytesArray(randomByteArrayOfLength(10));
+/*
+        assertThat(aggregated, notNullValue());
+        InboundMessage aggregated2 = aggregator.finishAggregation();
+            aggregator.aggregate(content2);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        aggregated.close();
+        assertThat(aggregated1.getException(), instanceOf(CircuitBreakingException.class));
+            randomInt(),
+            references.add(content3);
+                assertTrue(aggregated.isShortCircuit());
+ * specific language governing permissions and limitations
+            randomInt(),
+        header.actionName = "action_name";
+        InboundMessage aggregated = aggregator.finishAggregation();
+        assertFalse(aggregated3.isShortCircuit());
+    public void testInboundUnknownAction() throws IOException {
+        ArrayList<ReleasableBytesReference> references = new ArrayList<>();
+            final ReleasableBytesReference content2 = ReleasableBytesReference.wrap(bytes.slice(3, 3));
+        assertNotNull(aggregated.takeBreakerReleaseControl());
+        breakableHeader.actionName = "action_name";
+ */
+        long requestId = randomNonNegativeLong();
+            }
+        } else {
+        }
+        // Initiate Message
+        header.headers = new Tuple<>(Collections.emptyMap(), Collections.emptyMap());
+        circuitBreaker.startBreaking();
+        aggregator.headerReceived(handshakeHeader);
+        content3.close();
+        assertEquals(1, content3.refCount());
+        InboundMessage aggregated = aggregator.finishAggregation();
+            } else {
+    public void setUp() throws Exception {
+        Header unbreakableHeader = new Header(
+        aggregator.headerReceived(header);
+ * ownership. Elasticsearch licenses this file to you under
+        BytesArray bytes = new BytesArray(randomByteArrayOfLength(10));
+            assertEquals(actionName, header.getActionName());
+            randomInt(),
+        }
+        assertEquals(0, content1.refCount());
+ * Unless required by applicable law or agreed to in writing,
+            content1.close();
+        InboundMessage aggregated1 = aggregator.finishAggregation();
+ * this file be licensed under the Apache-2.0 license or a
+        header.actionName = "action_name";
+            references.add(content2);
+            } else {
+            handshakeStatus,
+    private final String unknownAction = "unknown_action";
+            final ReleasableBytesReference content = ReleasableBytesReference.wrap(streamOutput.bytes());
+            assertFalse(header.needsToReadVariableHeader());
+import org.opensearch.common.breaker.TestCircuitBreaker;
+ * this work for additional information regarding copyright
+        assertThat(aggregated3, notNullValue());
+            content3.close();
+    private final String unBreakableAction = "non_breakable_action";
+    private final ThreadContext threadContext = new ThreadContext(Settings.EMPTY);
+        aggregator.headerReceived(unbreakableHeader);
+            content2.close();
+ */
+        // Initiate Message
+        // Handshakes are not broken
+        };
+        assertFalse(aggregated.isPing());
+            Version.CURRENT
+            final ReleasableBytesReference content = ReleasableBytesReference.wrap(bytes);
+        }
+            TransportStatus.setRequest((byte) 0),
+        header.headers = new Tuple<>(Collections.emptyMap(), Collections.emptyMap());
+        assertThat(aggregated, notNullValue());
+        Header handshakeHeader = new Header(
+            Version.CURRENT
+        Header header = new Header(TransportProtocol.NATIVE, randomInt(), requestId, TransportStatus.setRequest((byte) 0), Version.CURRENT);
+        Header breakableHeader = new Header(
+        BytesArray bytes = new BytesArray(randomByteArrayOfLength(10));
+        aggregator.aggregate(content2);
+ */
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import static org.hamcrest.CoreMatchers.instanceOf;
+    }
+        // Signal EOS
+            TransportProtocol.NATIVE,
+        assertTrue(aggregated1.isShortCircuit());
+        }
+        final ReleasableBytesReference content2 = ReleasableBytesReference.wrap(bytes);
+        if (unknownAction) {
+import org.opensearch.Version;
+    }
+        // Initiate Message
+            final ReleasableBytesReference content2 = ReleasableBytesReference.wrap(bytes.slice(5, 5));
+    }
+            InboundMessage aggregated = aggregator.finishAggregation();
+            final ReleasableBytesReference content3 = ReleasableBytesReference.wrap(bytes.slice(6, 4));
+            content.close();
+            final ReleasableBytesReference content1 = ReleasableBytesReference.wrap(bytes.slice(0, 3));
+        unbreakableHeader.headers = new Tuple<>(Collections.emptyMap(), Collections.emptyMap());
+        final String actionName;
+                assertEquals(1, content.refCount());
+    public void testFinishAggregationWillFinishHeader() throws IOException {
+        InboundMessage aggregated3 = aggregator.finishAggregation();
+        } else {
+        aggregator.headerReceived(header);
+        unbreakableHeader.actionName = unBreakableAction;
+        circuitBreaker = new TestCircuitBreaker();
+        // Signal EOS
+import org.opensearch.common.bytes.ReleasableBytesReference;
+        aggregator.headerReceived(header);
+            references.add(content2);
+ *
+        assertThat(aggregated.getHeader().getRequestId(), equalTo(requestId));
+            references.add(content);
+            actionName = "action_name";
+            aggregator.aggregate(content1);
+        if (randomBoolean()) {
+            if (unknownAction.equals(action)) {
+        );
+    @Override
+    }
+import java.util.ArrayList;
+        );
+    private InboundAggregator aggregator;
+ *
+        aggregator = new InboundAggregator(() -> circuitBreaker, requestCanTripBreaker);
+            final ReleasableBytesReference content = ReleasableBytesReference.wrap(bytes);
+ * The OpenSearch Contributors require contributions made to
+        // Actions are breakable
+        header.headers = new Tuple<>(Collections.emptyMap(), Collections.emptyMap());
+        super.setUp();
+ * software distributed under the License is distributed on an
+            TransportProtocol.NATIVE,
+import org.opensearch.common.settings.Settings;
+        long requestId = randomNonNegativeLong();
+ * compatible open source license.
+        try (BytesStreamOutput streamOutput = new BytesStreamOutput()) {
+import java.io.IOException;
+        BytesArray bytes = new BytesArray(randomByteArrayOfLength(10));
+        final boolean unknownAction = randomBoolean();
+        assertTrue(aggregated.isShortCircuit());
+        assertTrue(aggregated.getHeader().isRequest());
+        assertThat(aggregated1, notNullValue());
+        }
+            final ReleasableBytesReference content1 = ReleasableBytesReference.wrap(bytes.slice(0, 5));
+            // Signal EOS
+            assertEquals(0, reference.refCount());
+        assertThat(aggregated.getHeader().getVersion(), equalTo(Version.CURRENT));
+                assertFalse(aggregated.isShortCircuit());
+        long requestId = randomNonNegativeLong();
+        header.actionName = unknownAction;
+ *
+                assertEquals(0, content.refCount());
+import org.junit.Before;
+            content1.close();
+import static org.hamcrest.CoreMatchers.equalTo;
+        long requestId = randomNonNegativeLong();
+            }
+            aggregator.aggregate(content);
+        // Initiate Message
+ * SPDX-License-Identifier: Apache-2.0
+        } else {
+            assertEquals(1, reference.refCount());
+ * the Apache License, Version 2.0 (the "License"); you may
+            content.close();
+import org.opensearch.core.common.breaker.CircuitBreakingException;

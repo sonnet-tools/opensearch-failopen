@@ -1,199 +1,176 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.queries.spans.SpanContainingQuery;
-import org.apache.lucene.queries.spans.SpanQuery;
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.Query;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-import java.util.Objects;
-
-import static org.opensearch.index.query.SpanQueryBuilder.SpanQueryBuilderUtil.checkNoBoost;
-
-/**
- * Builder for {@link org.apache.lucene.queries.spans.SpanContainingQuery}.
- *
- * @opensearch.internal
- */
-public class SpanContainingQueryBuilder extends AbstractQueryBuilder<SpanContainingQueryBuilder> implements SpanQueryBuilder {
-    public static final String NAME = "span_containing";
-
-    private static final ParseField BIG_FIELD = new ParseField("big");
-    private static final ParseField LITTLE_FIELD = new ParseField("little");
-
-    private final SpanQueryBuilder big;
-    private final SpanQueryBuilder little;
-
-    /**
-     * @param big the big clause, it must enclose {@code little} for a match.
-     * @param little the little clause, it must be contained within {@code big} for a match.
-     */
-    public SpanContainingQueryBuilder(SpanQueryBuilder big, SpanQueryBuilder little) {
-        if (big == null) {
-            throw new IllegalArgumentException("inner clause [big] cannot be null.");
-        }
-        if (little == null) {
-            throw new IllegalArgumentException("inner clause [little] cannot be null.");
-        }
-        this.little = little;
-        this.big = big;
-    }
-
-    /**
-     * Read from a stream.
-     */
-    public SpanContainingQueryBuilder(StreamInput in) throws IOException {
-        super(in);
-        big = (SpanQueryBuilder) in.readNamedWriteable(QueryBuilder.class);
-        little = (SpanQueryBuilder) in.readNamedWriteable(QueryBuilder.class);
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeNamedWriteable(big);
-        out.writeNamedWriteable(little);
-    }
-
-    /**
-     * @return the big clause, it must enclose {@code little} for a match.
-     */
-    public SpanQueryBuilder bigQuery() {
-        return this.big;
-    }
-
-    /**
-     * @return the little clause, it must be contained within {@code big} for a match.
-     */
-    public SpanQueryBuilder littleQuery() {
-        return this.little;
-    }
-
-    @Override
-    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(NAME);
-        builder.field(BIG_FIELD.getPreferredName());
-        big.toXContent(builder, params);
-        builder.field(LITTLE_FIELD.getPreferredName());
-        little.toXContent(builder, params);
-        printBoostAndQueryName(builder);
-        builder.endObject();
-    }
-
     public static SpanContainingQueryBuilder fromXContent(XContentParser parser) throws IOException {
-        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
-        String queryName = null;
-        SpanQueryBuilder big = null;
-        SpanQueryBuilder little = null;
-
-        String currentFieldName = null;
-        XContentParser.Token token;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-            } else if (token == XContentParser.Token.START_OBJECT) {
+    public void visit(QueryBuilderVisitor visitor) {
+}
                 if (BIG_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    QueryBuilder query = parseInnerQueryBuilder(parser);
-                    if (!(query instanceof SpanQueryBuilder spanQuery)) {
-                        throw new ParsingException(parser.getTokenLocation(), "span_containing [big] must be of type span query");
-                    }
-                    big = spanQuery;
-                    checkNoBoost(NAME, currentFieldName, parser, big);
-                } else if (LITTLE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    QueryBuilder query = parseInnerQueryBuilder(parser);
-                    if (!(query instanceof SpanQueryBuilder spanQuery)) {
-                        throw new ParsingException(parser.getTokenLocation(), "span_containing [little] must be of type span query");
-                    }
-                    little = spanQuery;
-                    checkNoBoost(NAME, currentFieldName, parser, little);
-                } else {
-                    throw new ParsingException(
-                        parser.getTokenLocation(),
-                        "[span_containing] query does not support [" + currentFieldName + "]"
-                    );
-                }
-            } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                boost = parser.floatValue();
-            } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                queryName = parser.text();
-            } else {
+ * under the License.
+        little.toXContent(builder, params);
+        builder.startObject(NAME);
+import org.apache.lucene.search.Query;
+        out.writeNamedWriteable(little);
+ * not use this file except in compliance with the License.
                 throw new ParsingException(
-                    parser.getTokenLocation(),
-                    "[span_containing] query does not support [" + currentFieldName + "]"
-                );
-            }
-        }
-
-        SpanContainingQueryBuilder query = new SpanContainingQueryBuilder(big, little);
+ * this file be licensed under the Apache-2.0 license or a
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            } else if (token == XContentParser.Token.START_OBJECT) {
+        return this.little;
+ * software distributed under the License is distributed on an
+        little = (SpanQueryBuilder) in.readNamedWriteable(QueryBuilder.class);
+            throw new IllegalArgumentException("inner clause [big] cannot be null.");
+import org.apache.lucene.queries.spans.SpanContainingQuery;
+    }
+                    QueryBuilder query = parseInnerQueryBuilder(parser);
+        builder.field(LITTLE_FIELD.getPreferredName());
+     * @return the big clause, it must enclose {@code little} for a match.
+ * SPDX-License-Identifier: Apache-2.0
+                queryName = parser.text();
+ * license agreements. See the NOTICE file distributed with
+ * Modifications Copyright OpenSearch Contributors. See
+        Query innerBig = big.toQuery(context);
+    private static final ParseField LITTLE_FIELD = new ParseField("little");
+        SpanQueryBuilder little = null;
+ * @opensearch.internal
+                    if (!(query instanceof SpanQueryBuilder spanQuery)) {
         query.boost(boost).queryName(queryName);
         return query;
+    public SpanQueryBuilder bigQuery() {
     }
-
+import org.opensearch.core.common.io.stream.StreamOutput;
+ *
+                    }
+    private final SpanQueryBuilder little;
+ * specific language governing permissions and limitations
+ */
+    protected boolean doEquals(SpanContainingQueryBuilder other) {
+            } else {
     @Override
-    protected Query doToQuery(QueryShardContext context) throws IOException {
-        Query innerBig = big.toQuery(context);
-        assert innerBig instanceof SpanQuery;
-        Query innerLittle = little.toQuery(context);
-        assert innerLittle instanceof SpanQuery;
-        return new SpanContainingQuery((SpanQuery) innerBig, (SpanQuery) innerLittle);
-    }
-
-    @Override
-    protected int doHashCode() {
+        builder.endObject();
+ * You may obtain a copy of the License at
+     * @return the little clause, it must be contained within {@code big} for a match.
+                    little = spanQuery;
         return Objects.hash(big, little);
     }
-
-    @Override
-    protected boolean doEquals(SpanContainingQueryBuilder other) {
-        return Objects.equals(big, other.big) && Objects.equals(little, other.little);
+     */
+    private static final ParseField BIG_FIELD = new ParseField("big");
+        out.writeNamedWriteable(big);
+            } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+public class SpanContainingQueryBuilder extends AbstractQueryBuilder<SpanContainingQueryBuilder> implements SpanQueryBuilder {
     }
-
-    @Override
-    public String getWriteableName() {
-        return NAME;
+ * compatible open source license.
+/*
+        XContentParser.Token token;
+    /**
+                    QueryBuilder query = parseInnerQueryBuilder(parser);
+            } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+import org.apache.lucene.search.BooleanClause;
     }
-
+                    big = spanQuery;
+    /**
+        big.toXContent(builder, params);
+ *
+ * Licensed to Elasticsearch under one or more contributor
+        }
+        Query innerLittle = little.toQuery(context);
+        if (little == null) {
     @Override
-    public void visit(QueryBuilderVisitor visitor) {
-        visitor.accept(this);
+     * Read from a stream.
+    /**
+    }
+ *
+    protected void doWriteTo(StreamOutput out) throws IOException {
+import java.io.IOException;
+import org.opensearch.core.common.io.stream.StreamInput;
+        }
+    @Override
+    protected int doHashCode() {
+ */
+     * @param little the little clause, it must be contained within {@code big} for a match.
+ *
+        this.little = little;
+            }
+ * GitHub history for details.
+    public static final String NAME = "span_containing";
+    }
+        builder.field(BIG_FIELD.getPreferredName());
+     */
+    }
+        SpanContainingQueryBuilder query = new SpanContainingQueryBuilder(big, little);
+    @Override
+            throw new IllegalArgumentException("inner clause [little] cannot be null.");
+    }
+        assert innerBig instanceof SpanQuery;
+ * ownership. Elasticsearch licenses this file to you under
+                );
+    @Override
+import org.opensearch.core.ParseField;
+                currentFieldName = parser.currentName();
+    }
+import static org.opensearch.index.query.SpanQueryBuilder.SpanQueryBuilderUtil.checkNoBoost;
+     */
+ */
+                }
+ */
+        String queryName = null;
+ * this work for additional information regarding copyright
+                    );
         visitor.getChildVisitor(BooleanClause.Occur.MUST).accept(big);
-        visitor.getChildVisitor(BooleanClause.Occur.MUST).accept(little);
+        printBoostAndQueryName(builder);
+    protected Query doToQuery(QueryShardContext context) throws IOException {
+        SpanQueryBuilder big = null;
+ * Unless required by applicable law or agreed to in writing,
+    private final SpanQueryBuilder big;
+    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
     }
-}
+    public SpanQueryBuilder littleQuery() {
+                        throw new ParsingException(parser.getTokenLocation(), "span_containing [little] must be of type span query");
+                boost = parser.floatValue();
+    @Override
+                        parser.getTokenLocation(),
+                    }
+                        "[span_containing] query does not support [" + currentFieldName + "]"
+     * @param big the big clause, it must enclose {@code little} for a match.
+                    checkNoBoost(NAME, currentFieldName, parser, little);
+    @Override
+    public SpanContainingQueryBuilder(StreamInput in) throws IOException {
+        this.big = big;
+                    if (!(query instanceof SpanQueryBuilder spanQuery)) {
+import org.apache.lucene.queries.spans.SpanQuery;
+        super(in);
+import org.opensearch.core.xcontent.XContentBuilder;
+        return NAME;
+    public SpanContainingQueryBuilder(SpanQueryBuilder big, SpanQueryBuilder little) {
+        big = (SpanQueryBuilder) in.readNamedWriteable(QueryBuilder.class);
+        visitor.accept(this);
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+            if (token == XContentParser.Token.FIELD_NAME) {
+                } else if (LITTLE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+import org.opensearch.core.xcontent.XContentParser;
+/**
+        assert innerLittle instanceof SpanQuery;
+    public String getWriteableName() {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     */
+import java.util.Objects;
+    }
+        return this.big;
+import org.opensearch.core.common.ParsingException;
+package org.opensearch.index.query;
+ * KIND, either express or implied.  See the License for the
+        String currentFieldName = null;
+                        throw new ParsingException(parser.getTokenLocation(), "span_containing [big] must be of type span query");
+        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
+ * The OpenSearch Contributors require contributions made to
+                    checkNoBoost(NAME, currentFieldName, parser, big);
+                    "[span_containing] query does not support [" + currentFieldName + "]"
+ * Builder for {@link org.apache.lucene.queries.spans.SpanContainingQuery}.
+        return Objects.equals(big, other.big) && Objects.equals(little, other.little);
+                    parser.getTokenLocation(),
+        if (big == null) {
+                    throw new ParsingException(
+    /**
+ * the Apache License, Version 2.0 (the "License"); you may
+                } else {
+/*
+        }
+        visitor.getChildVisitor(BooleanClause.Occur.MUST).accept(little);
+/*
+        return new SpanContainingQuery((SpanQuery) innerBig, (SpanQuery) innerLittle);

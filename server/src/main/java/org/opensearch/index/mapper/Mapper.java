@@ -1,397 +1,331 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.index.LeafReader;
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.time.DateFormatter;
-import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.analysis.IndexAnalyzers;
-import org.opensearch.index.engine.dataformat.DataFormatRegistry;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.similarity.SimilarityProvider;
-import org.opensearch.script.ScriptService;
-
-import java.io.IOException;
-import java.util.Map;
-import java.util.Objects;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
-
-import static org.opensearch.index.IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING;
-
-/**
- * The foundation OpenSearch mapper
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public abstract class Mapper implements ToXContentFragment, Iterable<Mapper> {
-
-    /**
-     * The builder context used in field mappings
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static class BuilderContext {
-        private final Settings indexSettings;
-        private final ContentPath contentPath;
-        @Nullable
-        private final Consumer<MappedFieldType> capabilityAssigner;
-
-        public BuilderContext(Settings indexSettings, ContentPath contentPath) {
-            this(indexSettings, contentPath, (Consumer<MappedFieldType>) null);
-        }
-
-        public BuilderContext(Settings indexSettings, ContentPath contentPath, @Nullable Consumer<MappedFieldType> capabilityAssigner) {
-            Objects.requireNonNull(indexSettings, "indexSettings is required");
-            this.contentPath = contentPath;
-            this.indexSettings = indexSettings;
-            this.capabilityAssigner = capabilityAssigner;
-        }
-
-        public ContentPath path() {
-            return this.contentPath;
-        }
-
-        public Settings indexSettings() {
-            return this.indexSettings;
-        }
-
-        private boolean multiField = false;
-
-        public boolean isMultiField() {
-            return multiField;
-        }
-
-        public void setMultiField(boolean multiField) {
-            this.multiField = multiField;
-        }
-
-        public void assignCapabilities(MappedFieldType fieldType) {
-            if (capabilityAssigner != null) {
-                capabilityAssigner.accept(fieldType);
-            }
-        }
-
-        public Version indexCreatedVersion() {
-            return IndexMetadata.indexCreated(indexSettings);
-        }
-
-        public Version indexCreatedVersionOrDefault(@Nullable Version defaultValue) {
-            if (defaultValue == null || hasIndexCreated(indexSettings)) {
-                return indexCreatedVersion();
-            } else {
-                return defaultValue;
-            }
-        }
-    }
-
-    /**
-     * Base mapper builder
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public abstract static class Builder<T extends Builder> implements MapperBuilderProperties {
-
-        public String name;
-
-        protected T builder;
-
-        protected Builder(String name) {
-            this.name = name;
-        }
-
-        public String name() {
-            return this.name;
-        }
-
-        /** Returns a newly built mapper. */
-        public abstract Mapper build(BuilderContext context);
-    }
-
-    /**
-     * Type parser for the mapper
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public interface TypeParser {
-
-        /**
-         * Parser context for the type parser
-         *
-         * @opensearch.api
-         */
-        @PublicApi(since = "1.0.0")
-        class ParserContext {
-
-            private final Function<String, SimilarityProvider> similarityLookupService;
-
-            private final MapperService mapperService;
-
-            private final Function<String, TypeParser> typeParsers;
-
-            private final Version indexVersionCreated;
-
-            private final Supplier<QueryShardContext> queryShardContextSupplier;
-
-            private final DateFormatter dateFormatter;
-
-            private final ScriptService scriptService;
-
-            private final DataFormatRegistry dataFormatRegistry;
-
-            public ParserContext(
-                Function<String, SimilarityProvider> similarityLookupService,
-                MapperService mapperService,
-                Function<String, TypeParser> typeParsers,
-                Version indexVersionCreated,
-                Supplier<QueryShardContext> queryShardContextSupplier,
-                DateFormatter dateFormatter,
-                ScriptService scriptService
-            ) {
-                this(
-                    similarityLookupService,
-                    mapperService,
-                    typeParsers,
-                    indexVersionCreated,
-                    queryShardContextSupplier,
-                    dateFormatter,
-                    scriptService,
-                    null
-                );
-            }
-
-            public ParserContext(
-                Function<String, SimilarityProvider> similarityLookupService,
-                MapperService mapperService,
-                Function<String, TypeParser> typeParsers,
-                Version indexVersionCreated,
-                Supplier<QueryShardContext> queryShardContextSupplier,
-                DateFormatter dateFormatter,
-                ScriptService scriptService,
-                @Nullable DataFormatRegistry dataFormatRegistry
-            ) {
-                this.similarityLookupService = similarityLookupService;
-                this.mapperService = mapperService;
-                this.typeParsers = typeParsers;
-                this.indexVersionCreated = indexVersionCreated;
-                this.queryShardContextSupplier = queryShardContextSupplier;
-                this.dateFormatter = dateFormatter;
-                this.scriptService = scriptService;
-                this.dataFormatRegistry = dataFormatRegistry;
-            }
-
-            public IndexAnalyzers getIndexAnalyzers() {
-                return mapperService.getIndexAnalyzers();
-            }
-
-            /**
-             * Returns the DataFormatRegistry, or null if not available.
-             * Only non-null when pluggable data format is enabled.
-             */
-            @Nullable
-            public DataFormatRegistry dataFormatRegistry() {
-                return dataFormatRegistry;
-            }
-
-            public Settings getSettings() {
-                return mapperService.getIndexSettings().getSettings();
-            }
-
-            public SimilarityProvider getSimilarity(String name) {
-                return similarityLookupService.apply(name);
-            }
-
-            public MapperService mapperService() {
-                return mapperService;
-            }
-
-            public TypeParser typeParser(String type) {
-                return typeParsers.apply(type);
-            }
-
-            public Version indexVersionCreated() {
-                return indexVersionCreated;
-            }
-
-            public Supplier<QueryShardContext> queryShardContextSupplier() {
-                return queryShardContextSupplier;
-            }
-
-            /**
-             * Gets an optional default date format for date fields that do not have an explicit format set
-             * <p>
-             * If {@code null}, then date fields will default to {@link DateFieldMapper#DEFAULT_DATE_TIME_FORMATTER}.
-             */
-            public DateFormatter getDateFormatter() {
-                return dateFormatter;
-            }
-
-            public boolean isWithinMultiField() {
-                return false;
-            }
-
-            protected Function<String, TypeParser> typeParsers() {
-                return typeParsers;
-            }
-
-            protected Function<String, SimilarityProvider> similarityLookupService() {
-                return similarityLookupService;
-            }
-
-            /**
-             * The {@linkplain ScriptService} to compile scripts needed by the {@linkplain Mapper}.
-             */
-            public ScriptService scriptService() {
-                return scriptService;
-            }
-
-            public ParserContext createMultiFieldContext(ParserContext in) {
-                return new MultiFieldParserContext(in);
-            }
-
-            /**
-             * Base mutiple field parser context
-             *
-             * @opensearch.internal
-             */
-            static class MultiFieldParserContext extends ParserContext {
-                MultiFieldParserContext(ParserContext in) {
-                    super(
-                        in.similarityLookupService(),
-                        in.mapperService(),
-                        in.typeParsers(),
-                        in.indexVersionCreated(),
-                        in.queryShardContextSupplier(),
-                        in.getDateFormatter(),
-                        in.scriptService(),
-                        in.dataFormatRegistry()
-                    );
-                }
-
-                @Override
-                public boolean isWithinMultiField() {
                     return true;
+             */
+            }
+     * The builder context used in field mappings
+        }
+                Version indexVersionCreated,
+     * @param settings the index settings to check
+    /** Returns the simple name, which identifies this mapper against other mappers at the same level in the mappers hierarchy
+            public SimilarityProvider getSimilarity(String name) {
+                this.indexVersionCreated = indexVersionCreated;
+             */
+            public Supplier<QueryShardContext> queryShardContextSupplier() {
+        }
+             * <p>
+                @Override
+import org.opensearch.script.ScriptService;
+                MapperService mapperService,
+    }
+            public ParserContext(
+            this.name = name;
+    @PublicApi(since = "1.0.0")
+    public void deriveSource(XContentBuilder builder, LeafReader leafReader, int docId) throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
+            }
+                return typeParsers;
+    }
+import java.util.Map;
+ * Licensed to Elasticsearch under one or more contributor
+        @Nullable
+            this.multiField = multiField;
+import org.opensearch.common.time.DateFormatter;
+                this.typeParsers = typeParsers;
+            return multiField;
+         * @opensearch.api
+import org.opensearch.cluster.metadata.IndexMetadata;
+     */
+package org.opensearch.index.mapper;
+ * GitHub history for details.
+    public abstract static class Builder<T extends Builder> implements MapperBuilderProperties {
+ * @opensearch.api
+                        in.getDateFormatter(),
+        public Version indexCreatedVersion() {
+    /**
+            public IndexAnalyzers getIndexAnalyzers() {
                 }
             }
-
+             * Returns the DataFormatRegistry, or null if not available.
+import org.opensearch.common.Nullable;
+import static org.opensearch.index.IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING;
+    /**
+                Function<String, SimilarityProvider> similarityLookupService,
         }
-
-        Mapper.Builder<?> parse(String name, Map<String, Object> node, ParserContext parserContext) throws MapperParsingException;
-
-        default Mapper.Builder<?> parse(String name, Map<String, Object> node, ParserContext parserContext, ObjectMapper.Builder objBuilder)
-            throws MapperParsingException {
-            throw new UnsupportedOperationException("should not be invoked");
-        }
-    }
-
-    private final String simpleName;
-
-    public Mapper(String simpleName) {
-        Objects.requireNonNull(simpleName);
-        this.simpleName = simpleName;
-    }
-
-    /** Returns the simple name, which identifies this mapper against other mappers at the same level in the mappers hierarchy
-     * TODO: make this protected once Mapper and FieldMapper are merged together */
-    public final String simpleName() {
-        return simpleName;
-    }
-
-    /** Returns the canonical name which uniquely identifies the mapper against other mappers in a type. */
-    public abstract String name();
-
-    /**
-     * Returns a name representing the type of this mapper.
-     */
-    public abstract String typeName();
-
-    /** Return the merge of {@code mergeWith} into this.
-     *  Both {@code this} and {@code mergeWith} will be left unmodified. */
-    public abstract Mapper merge(Mapper mergeWith);
-
-    /**
-     * Validate any cross-field references made by this mapper
-     * @param mappers a {@link MappingLookup} that can produce references to other mappers
-     */
-    public abstract void validate(MappingLookup mappers);
-
-    /**
-     * Check if settings have IndexMetadata.SETTING_INDEX_VERSION_CREATED setting.
-     * @param settings settings
-     * @return "true" if settings have IndexMetadata.SETTING_INDEX_VERSION_CREATED setting, "false" otherwise
-     */
-    protected static boolean hasIndexCreated(Settings settings) {
-        return settings.hasValue(IndexMetadata.SETTING_INDEX_VERSION_CREATED.getKey());
-    }
-
-    /**
-     * Checks if the optimised index feature is enabled for the given settings.
-     * Requires both the {@link FeatureFlags#PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG} feature flag
-     *
-     * @param settings the index settings to check
-     * @return {@code true} if the pluggable dataformat feature flag and the optimised index setting are both enabled
-     */
+            }
+    public interface TypeParser {
+                Supplier<QueryShardContext> queryShardContextSupplier,
     public static boolean isPluggableDataFormatEnabled(Settings settings) {
-        return FeatureFlags.isEnabled(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-            && PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(settings);
-    }
-
-    /**
-     * Method to determine, if it is possible to derive source for this field using field mapping parameters
      */
-    public void canDeriveSource() {
+                    typeParsers,
+    /**
+                    scriptService,
+import org.opensearch.Version;
+            return this.name;
+    /**
+            public DateFormatter getDateFormatter() {
+            throws MapperParsingException {
         throw new UnsupportedOperationException("Derived source field is not supported for [" + name() + "] field");
     }
-
+            protected Function<String, SimilarityProvider> similarityLookupService() {
+         * Parser context for the type parser
+                    indexVersionCreated,
+    public abstract String typeName();
+            public Settings getSettings() {
+                return defaultValue;
+            this(indexSettings, contentPath, (Consumer<MappedFieldType>) null);
+                        in.typeParsers(),
+        Mapper.Builder<?> parse(String name, Map<String, Object> node, ParserContext parserContext) throws MapperParsingException;
+                return indexVersionCreated;
+    @PublicApi(since = "1.0.0")
+ * The foundation OpenSearch mapper
+            }
+     */
+     * @param builder - builder to store the derived source filed
+             */
+        }
+     * Base mapper builder
+ * specific language governing permissions and limitations
+            } else {
+    /**
+/*
+                    );
+     */
+     * Validate any cross-field references made by this mapper
+         *
+                return mapperService.getIndexSettings().getSettings();
+                return scriptService;
+                return similarityLookupService.apply(name);
+        private final Settings indexSettings;
+     * Returns a name representing the type of this mapper.
+ *
+        return simpleName;
+ * ownership. Elasticsearch licenses this file to you under
+            private final Supplier<QueryShardContext> queryShardContextSupplier;
+        this.simpleName = simpleName;
+    protected static boolean hasIndexCreated(Settings settings) {
+ */
+            }
+            Objects.requireNonNull(indexSettings, "indexSettings is required");
+        }
+        private boolean multiField = false;
+     * @opensearch.api
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.apache.lucene.index.LeafReader;
+                return false;
+        class ParserContext {
+     * @return "true" if settings have IndexMetadata.SETTING_INDEX_VERSION_CREATED setting, "false" otherwise
+ */
+                        in.queryShardContextSupplier(),
+ * this work for additional information regarding copyright
+    }
+ */
+             *
+    /**
+ * not use this file except in compliance with the License.
+    public Mapper(String simpleName) {
+            }
+            this.contentPath = contentPath;
+                this.mapperService = mapperService;
+            @Nullable
+                }
+    /**
+        protected T builder;
+                return mapperService.getIndexAnalyzers();
+/*
+            }
+        }
+        /** Returns a newly built mapper. */
+        }
+                public boolean isWithinMultiField() {
+        public String name;
+     *  Both {@code this} and {@code mergeWith} will be left unmodified. */
+        }
+     * Check if settings have IndexMetadata.SETTING_INDEX_VERSION_CREATED setting.
+            }
+                return mapperService;
+            return this.indexSettings;
+            return this.contentPath;
+        Objects.requireNonNull(simpleName);
+    }
+        public void assignCapabilities(MappedFieldType fieldType) {
+                this(
+        }
+     *
+                return new MultiFieldParserContext(in);
+import org.opensearch.index.similarity.SimilarityProvider;
+            public ParserContext(
+            }
+        public void setMultiField(boolean multiField) {
+     * @opensearch.api
+            private final MapperService mapperService;
+             * Gets an optional default date format for date fields that do not have an explicit format set
+                Function<String, TypeParser> typeParsers,
+     * Requires both the {@link FeatureFlags#PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG} feature flag
+     */
+@PublicApi(since = "1.0.0")
+            }
+                    super(
+     * @return {@code true} if the pluggable dataformat feature flag and the optimised index setting are both enabled
+import org.opensearch.common.annotation.PublicApi;
+        default Mapper.Builder<?> parse(String name, Map<String, Object> node, ParserContext parserContext, ObjectMapper.Builder objBuilder)
+         */
+                this.similarityLookupService = similarityLookupService;
+             * Base mutiple field parser context
+                        in.scriptService(),
+            private final ScriptService scriptService;
+import org.opensearch.common.util.FeatureFlags;
+            /**
+                return dateFormatter;
+            this.capabilityAssigner = capabilityAssigner;
+    /** Returns the canonical name which uniquely identifies the mapper against other mappers in a type. */
+            }
+                return similarityLookupService;
+        throw new UnsupportedOperationException("Derived source field is not supported for [" + name() + "] field");
+                Version indexVersionCreated,
+             * @opensearch.internal
+                ScriptService scriptService,
+            }
+            static class MultiFieldParserContext extends ParserContext {
+ * this file be licensed under the Apache-2.0 license or a
+            this.indexSettings = indexSettings;
+        private final ContentPath contentPath;
+             * Only non-null when pluggable data format is enabled.
+            && PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(settings);
+import java.util.function.Consumer;
+                Function<String, SimilarityProvider> similarityLookupService,
+ * Unless required by applicable law or agreed to in writing,
+                return dataFormatRegistry;
+            /**
+        }
+     */
+    /**
+            /**
+            public DataFormatRegistry dataFormatRegistry() {
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.index.engine.dataformat.DataFormatRegistry;
+                    null
+        public Settings indexSettings() {
+     * @param settings settings
+ * The OpenSearch Contributors require contributions made to
+    }
+            public TypeParser typeParser(String type) {
+import org.opensearch.index.query.QueryShardContext;
+                    dateFormatter,
+            public boolean isWithinMultiField() {
+            }
+        public BuilderContext(Settings indexSettings, ContentPath contentPath, @Nullable Consumer<MappedFieldType> capabilityAssigner) {
+     */
+             * The {@linkplain ScriptService} to compile scripts needed by the {@linkplain Mapper}.
+    public static class BuilderContext {
+     * Checks if the optimised index feature is enabled for the given settings.
+            /**
+                Function<String, TypeParser> typeParsers,
+                        in.dataFormatRegistry()
+                    mapperService,
+     * @param mappers a {@link MappingLookup} that can produce references to other mappers
+                MapperService mapperService,
+    public abstract void validate(MappingLookup mappers);
+import org.opensearch.common.settings.Settings;
+import org.opensearch.index.analysis.IndexAnalyzers;
+            }
+            private final Function<String, SimilarityProvider> similarityLookupService;
+                    similarityLookupService,
+/*
+                );
+                DateFormatter dateFormatter,
+                capabilityAssigner.accept(fieldType);
+            public Version indexVersionCreated() {
+                        in.indexVersionCreated(),
+                return typeParsers.apply(type);
+     *
+import java.util.function.Function;
+            private final Version indexVersionCreated;
+/**
+                ScriptService scriptService
+     * @opensearch.api
+                this.dateFormatter = dateFormatter;
+            private final DateFormatter dateFormatter;
+        }
+        }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import java.util.Objects;
+     */
+ * compatible open source license.
+                @Nullable DataFormatRegistry dataFormatRegistry
+        public ContentPath path() {
+            if (capabilityAssigner != null) {
+            ) {
+public abstract class Mapper implements ToXContentFragment, Iterable<Mapper> {
+        return settings.hasValue(IndexMetadata.SETTING_INDEX_VERSION_CREATED.getKey());
+                DateFormatter dateFormatter,
+     */
+             * If {@code null}, then date fields will default to {@link DateFieldMapper#DEFAULT_DATE_TIME_FORMATTER}.
+            public ScriptService scriptService() {
+        private final Consumer<MappedFieldType> capabilityAssigner;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    public abstract Mapper merge(Mapper mergeWith);
+                        in.mapperService(),
+import org.opensearch.core.xcontent.XContentBuilder;
+                Supplier<QueryShardContext> queryShardContextSupplier,
+            if (defaultValue == null || hasIndexCreated(indexSettings)) {
+        /**
+                return queryShardContextSupplier;
+ * You may obtain a copy of the License at
+        public BuilderContext(Settings indexSettings, ContentPath contentPath) {
+                this.dataFormatRegistry = dataFormatRegistry;
+            return IndexMetadata.indexCreated(indexSettings);
+        return FeatureFlags.isEnabled(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+    /** Return the merge of {@code mergeWith} into this.
+    @PublicApi(since = "1.0.0")
+    }
     /**
      * Method used for deriving source and building it to XContentBuilder object
-     * @param builder - builder to store the derived source filed
-     * @param leafReader - leafReader to read data from
+        protected Builder(String name) {
+                this.queryShardContextSupplier = queryShardContextSupplier;
+    private final String simpleName;
+            public MapperService mapperService() {
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.core.xcontent.ToXContentFragment;
+                        in.similarityLookupService(),
+ */
+                return indexCreatedVersion();
      * @param docId - docId for which we want to derive the source
-     */
-    public void deriveSource(XContentBuilder builder, LeafReader leafReader, int docId) throws IOException {
-        throw new UnsupportedOperationException("Derived source field is not supported for [" + name() + "] field");
     }
+ *
+             */
+ * KIND, either express or implied.  See the License for the
+     *
+import java.io.IOException;
+ *
+    public final String simpleName() {
+ *
+    public abstract String name();
+    }
+     *
+            }
+            }
+            }
+            protected Function<String, TypeParser> typeParsers() {
+            ) {
+     * TODO: make this protected once Mapper and FieldMapper are merged together */
+     * Type parser for the mapper
+        public Version indexCreatedVersionOrDefault(@Nullable Version defaultValue) {
+            throw new UnsupportedOperationException("should not be invoked");
+        public boolean isMultiField() {
+        @PublicApi(since = "1.0.0")
+            public ParserContext createMultiFieldContext(ParserContext in) {
+            private final Function<String, TypeParser> typeParsers;
+                MultiFieldParserContext(ParserContext in) {
 }
+            }
+            private final DataFormatRegistry dataFormatRegistry;
+        public String name() {
+import java.util.function.Supplier;
+     * Method to determine, if it is possible to derive source for this field using field mapping parameters
+        public abstract Mapper build(BuilderContext context);
+ * under the License.
+                this.scriptService = scriptService;
+                    queryShardContextSupplier,
+ * software distributed under the License is distributed on an
+    public void canDeriveSource() {
+        }
+     * @param leafReader - leafReader to read data from

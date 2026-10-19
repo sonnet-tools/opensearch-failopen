@@ -1,162 +1,144 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.core.common;
-
-import org.opensearch.common.util.set.Sets;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Collections;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.is;
-
-/** tests for Strings utility class */
-public class StringsTests extends OpenSearchTestCase {
-    public void testIsAllOrWildCardString() {
-        assertThat(Strings.isAllOrWildcard("_all"), is(true));
-        assertThat(Strings.isAllOrWildcard("*"), is(true));
-        assertThat(Strings.isAllOrWildcard("foo"), is(false));
-        assertThat(Strings.isAllOrWildcard(""), is(false));
-        assertThat(Strings.isAllOrWildcard((String) null), is(false));
-    }
-
-    public void testSubstring() {
-        assertEquals(null, Strings.substring(null, 0, 1000));
-        assertEquals("foo", Strings.substring("foo", 0, 1000));
-        assertEquals("foo", Strings.substring("foo", 0, 3));
-        assertEquals("oo", Strings.substring("foo", 1, 3));
-        assertEquals("oo", Strings.substring("foo", 1, 100));
-        assertEquals("f", Strings.substring("foo", 0, 1));
-    }
-
-    public void testCleanTruncate() {
-        assertEquals(null, Strings.cleanTruncate(null, 10));
-        assertEquals("foo", Strings.cleanTruncate("foo", 10));
-        assertEquals("foo", Strings.cleanTruncate("foo", 3));
-        // Throws out high surrogates
-        assertEquals("foo", Strings.cleanTruncate("foo\uD83D\uDEAB", 4));
-        // But will keep the whole character
-        assertEquals("foo\uD83D\uDEAB", Strings.cleanTruncate("foo\uD83D\uDEAB", 5));
-        /*
-         * Doesn't take care around combining marks. This example has its
-         * meaning changed because that last codepoint is supposed to combine
-         * backwards into the find "o" and be represented as the "o" with a
-         * circle around it with a slash through it. As in "no 'o's allowed
-         * here.
-         */
-        assertEquals("o", org.opensearch.core.common.Strings.cleanTruncate("o\uD83D\uDEAB", 1));
-        assertEquals("", org.opensearch.core.common.Strings.cleanTruncate("foo", 0));
-    }
-
-    public void testSplitStringToSet() {
-        assertEquals(Strings.tokenizeByCommaToSet(null), Sets.newHashSet());
-        assertEquals(Strings.tokenizeByCommaToSet(""), Sets.newHashSet());
-        assertEquals(Strings.tokenizeByCommaToSet("a,b,c"), Sets.newHashSet("a", "b", "c"));
-        assertEquals(Strings.tokenizeByCommaToSet("a, b, c"), Sets.newHashSet("a", "b", "c"));
-        assertEquals(Strings.tokenizeByCommaToSet(" a ,  b, c  "), Sets.newHashSet("a", "b", "c"));
-        assertEquals(Strings.tokenizeByCommaToSet("aa, bb, cc"), Sets.newHashSet("aa", "bb", "cc"));
-        assertEquals(Strings.tokenizeByCommaToSet(" a "), Sets.newHashSet("a"));
-        assertEquals(Strings.tokenizeByCommaToSet("   a   "), Sets.newHashSet("a"));
-        assertEquals(Strings.tokenizeByCommaToSet("   aa   "), Sets.newHashSet("aa"));
         assertEquals(Strings.tokenizeByCommaToSet("   "), Sets.newHashSet());
-    }
-
-    public void testToStringToXContent() {
-        final ToXContent toXContent;
-        final boolean error;
-        if (randomBoolean()) {
-            if (randomBoolean()) {
-                error = false;
-                toXContent = (builder, params) -> builder.field("ok", "here").field("catastrophe", "");
-            } else {
-                error = true;
-                toXContent = (builder, params) -> builder.startObject().field("ok", "here").field("catastrophe", "").endObject();
-            }
-        } else {
-            if (randomBoolean()) {
-                error = false;
-                toXContent = (ToXContentObject) (builder, params) -> builder.startObject()
-                    .field("ok", "here")
-                    .field("catastrophe", "")
-                    .endObject();
-            } else {
-                error = true;
-                toXContent = (ToXContentObject) (builder, params) -> builder.field("ok", "here").field("catastrophe", "");
-            }
-        }
-
-        String toString = Strings.toString(MediaTypeRegistry.JSON, toXContent);
-        if (error) {
-            assertThat(toString, containsString("\"error\":\"error building toString out of XContent:"));
-            assertThat(toString, containsString("\"stack_trace\":"));
-        } else {
-            assertThat(toString, containsString("\"ok\":\"here\""));
-            assertThat(toString, containsString("\"catastrophe\":\"\""));
-        }
-    }
-
-    public void testToStringToXContentWithOrWithoutParams() {
-        ToXContent toXContent = (builder, params) -> builder.field("color_from_param", params.param("color", "red"));
-        // Rely on the default value of "color" param when params are not passed
-        assertThat(Strings.toString(MediaTypeRegistry.JSON, toXContent), containsString("\"color_from_param\":\"red\""));
-        // Pass "color" param explicitly
-        assertThat(
-            Strings.toString(MediaTypeRegistry.JSON, toXContent, new ToXContent.MapParams(Collections.singletonMap("color", "blue"))),
-            containsString("\"color_from_param\":\"blue\"")
-        );
-    }
-
-    public void testIsDigits() {
-        assertTrue(Strings.isDigits("1"));
-        assertTrue(Strings.isDigits("123"));
-        assertFalse(Strings.isDigits(""));
-        assertFalse(Strings.isDigits("abc"));
-        assertFalse(Strings.isDigits("123a"));
-        assertFalse(Strings.isDigits("0x123"));
-        assertFalse(Strings.isDigits("123.4"));
-        assertFalse(Strings.isDigits("123f"));
-    }
-
-    public void testValidFileNameExcludingSlash() {
-        // Valid cases - no invalid chars
-        assertTrue(Strings.validFileNameExcludingSlash("validfile"));
-        assertTrue(Strings.validFileNameExcludingSlash("file123"));
-        assertTrue(Strings.validFileNameExcludingSlash("file-name.txt"));
-
-        // Valid cases - relative slashes are allowed
-        assertTrue(Strings.validFileNameExcludingSlash("path/to/file"));
-        assertTrue(Strings.validFileNameExcludingSlash("path\\to\\file"));
-        assertTrue(Strings.validFileNameExcludingSlash("mixed/path\\file"));
-
-        // Invalid cases - absolute paths must be rejected
-        assertFalse(Strings.validFileNameExcludingSlash("/absolute/path"));
-        assertFalse(Strings.validFileNameExcludingSlash("\\absolute\\path"));
-
-        // Invalid cases - path traversal must be rejected
-        assertFalse(Strings.validFileNameExcludingSlash("../etc/passwd"));
-        assertFalse(Strings.validFileNameExcludingSlash("path/../../etc/passwd"));
-        assertFalse(Strings.validFileNameExcludingSlash("path\\..\\..\\secret"));
-
-        // Invalid cases - other invalid chars should still fail
-        assertFalse(Strings.validFileNameExcludingSlash("file*name"));
-        assertFalse(Strings.validFileNameExcludingSlash("file?name"));
+        assertThat(Strings.isAllOrWildcard("foo"), is(false));
         assertFalse(Strings.validFileNameExcludingSlash("file\"name"));
-        assertFalse(Strings.validFileNameExcludingSlash("file<name"));
-        assertFalse(Strings.validFileNameExcludingSlash("file>name"));
-        assertFalse(Strings.validFileNameExcludingSlash("file|name"));
-        assertFalse(Strings.validFileNameExcludingSlash("file name"));  // space
-        assertFalse(Strings.validFileNameExcludingSlash("file,name"));  // comma
-
-        // Edge case - path with invalid char
-        assertFalse(Strings.validFileNameExcludingSlash("path/to/file*name"));
+import org.opensearch.common.util.set.Sets;
+         * here.
     }
+        assertEquals("f", Strings.substring("foo", 0, 1));
+    public void testSubstring() {
+                error = true;
+                toXContent = (ToXContentObject) (builder, params) -> builder.startObject()
+        assertFalse(Strings.validFileNameExcludingSlash("path/../../etc/passwd"));
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        assertTrue(Strings.validFileNameExcludingSlash("mixed/path\\file"));
+        assertEquals(null, Strings.cleanTruncate(null, 10));
+        assertFalse(Strings.isDigits("123.4"));
+        assertEquals("foo", Strings.cleanTruncate("foo", 10));
+ * this file be licensed under the Apache-2.0 license or a
+                error = false;
+        assertFalse(Strings.validFileNameExcludingSlash("path\\..\\..\\secret"));
+    }
+        assertTrue(Strings.validFileNameExcludingSlash("validfile"));
+                    .field("ok", "here")
+                toXContent = (ToXContentObject) (builder, params) -> builder.field("ok", "here").field("catastrophe", "");
+        assertFalse(Strings.validFileNameExcludingSlash("file<name"));
+            } else {
+        final boolean error;
+import org.opensearch.test.OpenSearchTestCase;
+                toXContent = (builder, params) -> builder.field("ok", "here").field("catastrophe", "");
+        assertFalse(Strings.isDigits("123f"));
+        assertEquals(Strings.tokenizeByCommaToSet(" a "), Sets.newHashSet("a"));
+        assertEquals("oo", Strings.substring("foo", 1, 3));
+        assertFalse(Strings.isDigits("0x123"));
+            }
+/** tests for Strings utility class */
+        // Rely on the default value of "color" param when params are not passed
+/*
+            assertThat(toString, containsString("\"stack_trace\":"));
+        // Pass "color" param explicitly
+        assertFalse(Strings.validFileNameExcludingSlash("file*name"));
+    }
+    }
+                    .field("catastrophe", "")
+    }
+        assertEquals("foo", Strings.cleanTruncate("foo\uD83D\uDEAB", 4));
+                error = false;
+        assertEquals("foo", Strings.substring("foo", 0, 3));
+        assertEquals(Strings.tokenizeByCommaToSet("a,b,c"), Sets.newHashSet("a", "b", "c"));
+        // Invalid cases - other invalid chars should still fail
+        assertFalse(Strings.validFileNameExcludingSlash("file,name"));  // comma
+        // Valid cases - relative slashes are allowed
+        assertFalse(Strings.validFileNameExcludingSlash("/absolute/path"));
+    public void testToStringToXContent() {
+        );
+    public void testToStringToXContentWithOrWithoutParams() {
+    public void testIsAllOrWildCardString() {
+        } else {
+    public void testIsDigits() {
+        assertFalse(Strings.validFileNameExcludingSlash("path/to/file*name"));
+            if (randomBoolean()) {
+ * compatible open source license.
+import static org.hamcrest.Matchers.containsString;
+        assertEquals(Strings.tokenizeByCommaToSet("a, b, c"), Sets.newHashSet("a", "b", "c"));
+         * backwards into the find "o" and be represented as the "o" with a
+        assertFalse(Strings.isDigits(""));
+            }
+            assertThat(toString, containsString("\"error\":\"error building toString out of XContent:"));
+        // Edge case - path with invalid char
+    }
+                    .endObject();
+import org.opensearch.core.xcontent.ToXContentObject;
+            assertThat(toString, containsString("\"catastrophe\":\"\""));
+        assertFalse(Strings.isDigits("123a"));
+ *
+        assertThat(Strings.isAllOrWildcard((String) null), is(false));
+        assertEquals("oo", Strings.substring("foo", 1, 100));
+        assertEquals(Strings.tokenizeByCommaToSet("aa, bb, cc"), Sets.newHashSet("aa", "bb", "cc"));
+        assertEquals(Strings.tokenizeByCommaToSet("   aa   "), Sets.newHashSet("aa"));
+ * SPDX-License-Identifier: Apache-2.0
+        if (error) {
+        assertEquals("foo", Strings.substring("foo", 0, 1000));
+        // Valid cases - no invalid chars
+         * Doesn't take care around combining marks. This example has its
 }
+            containsString("\"color_from_param\":\"blue\"")
+        // Invalid cases - path traversal must be rejected
+public class StringsTests extends OpenSearchTestCase {
+import java.util.Collections;
+        assertTrue(Strings.validFileNameExcludingSlash("file-name.txt"));
+        assertThat(
+        assertEquals("foo", Strings.cleanTruncate("foo", 3));
+        ToXContent toXContent = (builder, params) -> builder.field("color_from_param", params.param("color", "red"));
+        assertFalse(Strings.isDigits("abc"));
+    public void testValidFileNameExcludingSlash() {
+            assertThat(toString, containsString("\"ok\":\"here\""));
+        assertTrue(Strings.isDigits("1"));
+        assertTrue(Strings.validFileNameExcludingSlash("path\\to\\file"));
+        assertEquals(Strings.tokenizeByCommaToSet(null), Sets.newHashSet());
+package org.opensearch.core.common;
+    public void testSplitStringToSet() {
+    public void testCleanTruncate() {
+        // Invalid cases - absolute paths must be rejected
+        assertEquals(Strings.tokenizeByCommaToSet("   a   "), Sets.newHashSet("a"));
+    }
+        if (randomBoolean()) {
+        assertThat(Strings.isAllOrWildcard(""), is(false));
+        /*
+        assertTrue(Strings.validFileNameExcludingSlash("file123"));
+        assertTrue(Strings.isDigits("123"));
+            if (randomBoolean()) {
+        assertEquals("foo\uD83D\uDEAB", Strings.cleanTruncate("foo\uD83D\uDEAB", 5));
+        } else {
+            } else {
+        assertFalse(Strings.validFileNameExcludingSlash("file>name"));
+        assertFalse(Strings.validFileNameExcludingSlash("../etc/passwd"));
+        assertThat(Strings.isAllOrWildcard("*"), is(true));
+        assertEquals(Strings.tokenizeByCommaToSet(""), Sets.newHashSet());
+        // Throws out high surrogates
+        assertEquals(Strings.tokenizeByCommaToSet(" a ,  b, c  "), Sets.newHashSet("a", "b", "c"));
+        assertEquals("o", org.opensearch.core.common.Strings.cleanTruncate("o\uD83D\uDEAB", 1));
+ */
+import static org.hamcrest.Matchers.is;
+import org.opensearch.core.xcontent.ToXContent;
+        assertTrue(Strings.validFileNameExcludingSlash("path/to/file"));
+         * circle around it with a slash through it. As in "no 'o's allowed
+                toXContent = (builder, params) -> builder.startObject().field("ok", "here").field("catastrophe", "").endObject();
+        assertFalse(Strings.validFileNameExcludingSlash("file name"));  // space
+        assertThat(Strings.toString(MediaTypeRegistry.JSON, toXContent), containsString("\"color_from_param\":\"red\""));
+        assertEquals(null, Strings.substring(null, 0, 1000));
+ * The OpenSearch Contributors require contributions made to
+         */
+        final ToXContent toXContent;
+        assertFalse(Strings.validFileNameExcludingSlash("\\absolute\\path"));
+    }
+        assertFalse(Strings.validFileNameExcludingSlash("file?name"));
+                error = true;
+        }
+        // But will keep the whole character
+        String toString = Strings.toString(MediaTypeRegistry.JSON, toXContent);
+            Strings.toString(MediaTypeRegistry.JSON, toXContent, new ToXContent.MapParams(Collections.singletonMap("color", "blue"))),
+        assertFalse(Strings.validFileNameExcludingSlash("file|name"));
+        assertEquals("", org.opensearch.core.common.Strings.cleanTruncate("foo", 0));
+        assertThat(Strings.isAllOrWildcard("_all"), is(true));
+        }
+         * meaning changed because that last codepoint is supposed to combine

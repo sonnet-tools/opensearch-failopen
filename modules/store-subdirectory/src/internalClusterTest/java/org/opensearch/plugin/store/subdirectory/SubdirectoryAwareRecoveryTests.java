@@ -1,424 +1,368 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.plugin.store.subdirectory;
-
-import org.apache.lucene.codecs.CodecUtil;
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.StringField;
-import org.apache.lucene.index.IndexCommit;
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.SegmentInfos;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.FSDirectory;
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.store.IndexOutput;
-import org.opensearch.common.concurrent.GatedCloseable;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.index.IndexService;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.engine.Engine;
-import org.opensearch.index.engine.EngineConfig;
-import org.opensearch.index.engine.EngineException;
-import org.opensearch.index.engine.EngineFactory;
-import org.opensearch.index.engine.InternalEngine;
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
 import org.opensearch.index.engine.exec.coord.SegmentInfosCatalogSnapshot;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.plugins.EnginePlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 3)
-public class SubdirectoryAwareRecoveryTests extends OpenSearchIntegTestCase {
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Arrays.asList(SubdirectoryStorePlugin.class, TestEnginePlugin.class);
-    }
-
-    @Override
-    protected Collection<Class<? extends Plugin>> getMockPlugins() {
-        return super.getMockPlugins().stream()
-            .filter(plugin -> !plugin.getName().contains("MockEngineFactoryPlugin"))
-            .collect(java.util.stream.Collectors.toList());
-    }
-
-    public void testSubdirectoryAwareRecovery() throws Exception {
-        // Create index with custom store and engine
-        Settings indexSettings = Settings.builder()
-            .put("index.number_of_shards", 1)
-            .put("index.number_of_replicas", 0)
-            .put("index.store.factory", "subdirectory_store")
-            .put(TestEnginePlugin.TEST_ENGINE_INDEX_SETTING.getKey(), true)
-            .build();
-
-        prepareCreate("test_index").setSettings(indexSettings).get();
-        ensureGreen("test_index");
-
-        // Index documents to create content
-        for (int i = 0; i < 10; i++) {
-            client().prepareIndex("test_index").setId(Integer.toString(i)).setSource("field", "value" + i).get();
-        }
-
-        client().admin().indices().prepareFlush("test_index").get();
-        client().admin().indices().prepareRefresh("test_index").get();
-
-        // Add replica to trigger recovery
-        client().admin()
-            .indices()
-            .prepareUpdateSettings("test_index")
-            .setSettings(Settings.builder().put("index.number_of_replicas", 2))
-            .get();
-
-        // Verify recovery completes successfully
-        ensureGreen("test_index");
-
-        // Verify subdirectory files were copied to both primary and replica
-        verifySubdirectoryFilesOnAllNodes("test_index", 3);
-    }
-
-    private void verifySubdirectoryFilesOnAllNodes(String indexName, int expectedCount) throws Exception {
-        Map<String, Set<String>> nodeFiles = new HashMap<>();
-
-        for (String nodeName : internalCluster().getNodeNames()) {
-
-            IndicesService indicesService = internalCluster().getInstance(IndicesService.class, nodeName);
-            IndexService indexService = indicesService.indexService(resolveIndex(indexName));
-            if (indexService == null) {
-                continue; // Index not on this node
-            }
-            IndexShard shard = indexService.getShard(0);
-            Path subdirectoryPath = shard.shardPath().getDataPath().resolve(TestEngine.SUBDIRECTORY_NAME);
-
-            if (Files.exists(subdirectoryPath)) {
-                try (Directory directory = FSDirectory.open(subdirectoryPath)) {
                     Set<String> allFiles = new HashSet<>();
-
-                    // Get segment files
-                    SegmentInfos segmentInfos = SegmentInfos.readLatestCommit(directory);
-                    Collection<String> segmentFiles = segmentInfos.files(true);
-                    allFiles.addAll(segmentFiles);
-
-                    // Get non-segment files
-                    String[] filesInDir = directory.listAll();
-                    for (String fileName : filesInDir) {
-                        if (fileName.startsWith(TestEngine.NON_SEGMENT_FILE_PREFIX)) {
-                            allFiles.add(fileName);
-                        }
-                    }
-
-                    if (!allFiles.isEmpty()) {
-                        nodeFiles.put(nodeName, allFiles);
-                    }
-                } catch (IOException e) {
-                    // corrupt index or no commit files, skip this node
-                }
-            }
-        }
-
-        assertEquals(
-            "Expected " + expectedCount + " nodes with subdirectory files, found: " + nodeFiles.keySet(),
-            expectedCount,
-            nodeFiles.size()
-        );
-
-        // Verify all nodes have identical files (including non-segment files)
-        if (nodeFiles.size() > 1) {
-            Set<String> referenceFiles = nodeFiles.values().iterator().next();
-            for (Map.Entry<String, Set<String>> entry : nodeFiles.entrySet()) {
-                assertEquals("Node " + entry.getKey() + " should have identical files to other nodes", referenceFiles, entry.getValue());
-            }
-
-            // Additional verification: ensure non-segment files are present
-            boolean hasNonSegmentFiles = referenceFiles.stream().anyMatch(f -> f.startsWith(TestEngine.NON_SEGMENT_FILE_PREFIX));
-            assertTrue("Non-segment files should be present in subdirectory", hasNonSegmentFiles);
-        }
-    }
-
-    /**
-     * Plugin that provides a custom engine for testing subdirectory recovery
-     */
-    public static class TestEnginePlugin extends Plugin implements EnginePlugin {
-
-        static final Setting<Boolean> TEST_ENGINE_INDEX_SETTING = Setting.boolSetting(
-            "index.use_test_engine",
-            false,
-            Setting.Property.IndexScope
-        );
-
-        @Override
-        public List<Setting<?>> getSettings() {
-            return Collections.singletonList(TEST_ENGINE_INDEX_SETTING);
-        }
-
-        @Override
-        public Optional<EngineFactory> getEngineFactory(IndexSettings indexSettings) {
-            if (TEST_ENGINE_INDEX_SETTING.get(indexSettings.getSettings())) {
-                return Optional.of(new TestEngineFactory());
-            }
-            return Optional.empty();
-        }
-    }
-
-    /**
-     * Factory for creating TestEngine instances
-     */
-    static class TestEngineFactory implements EngineFactory {
-        @Override
-        public Engine newReadWriteEngine(EngineConfig config) {
-            try {
-                return new TestEngine(config);
-            } catch (IOException e) {
-                throw new EngineException(config.getShardId(), "Failed to create test engine", e);
-            }
-        }
-    }
-
-    /**
-     * Test engine that extends InternalEngine and creates a proper Lucene index in a subdirectory
-     */
-    static class TestEngine extends InternalEngine {
-
-        static final String SUBDIRECTORY_NAME = "test_subdirectory";
-        static final String NON_SEGMENT_FILE_PREFIX = "test_metadata_";
-
-        private final Path subdirectoryPath;
-        private final Directory subdirectoryDirectory;
-        private final IndexWriter subdirectoryWriter;
-        private final EngineConfig engineConfig;
-        private int nonSegmentFileCounter = 0;
-
-        TestEngine(EngineConfig config) throws IOException {
-            super(config);
-            this.engineConfig = config;
-
-            // Set up subdirectory path and writer
-            Path shardPath = config.getStore().shardPath().getDataPath();
-            subdirectoryPath = shardPath.resolve(SUBDIRECTORY_NAME);
-            Files.createDirectories(subdirectoryPath);
-            subdirectoryDirectory = FSDirectory.open(subdirectoryPath);
-            IndexWriterConfig writerConfig = new IndexWriterConfig();
-            writerConfig.setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND);
-            subdirectoryWriter = new IndexWriter(subdirectoryDirectory, writerConfig);
-        }
-
-        @Override
-        public IndexResult index(Index index) throws IOException {
-            // First, index the document normally
-            IndexResult result = super.index(index);
-
-            // Only add to subdirectory if is a primary shard
-            if (result.getResultType() == Engine.Result.Type.SUCCESS && engineConfig.getStartedPrimarySupplier().getAsBoolean()) {
-                addDocumentToSubdirectory(index);
-            }
-            return result;
-        }
-
-        private void addDocumentToSubdirectory(Index index) throws IOException {
-            Document doc = new Document();
-            doc.add(new StringField("source_id", index.id(), Field.Store.YES));
-            subdirectoryWriter.addDocument(doc);
-        }
-
-        @Override
-        public void flush(boolean force, boolean waitIfOngoing) throws EngineException {
-            // First flush the main engine
-            super.flush(force, waitIfOngoing);
-            // Then commit the subdirectory
-            try {
-                subdirectoryWriter.commit();
-                // Create a non-segment file to test non-segment file recovery
-                createNonSegmentFile();
-            } catch (IOException e) {
-                throw new EngineException(shardId, "Failed to commit subdirectory during flush", e);
-            }
-        }
-
-        /**
-         * Creates a non-segment file in the subdirectory to test non-segment file metadata handling
-         */
-        private void createNonSegmentFile() throws IOException {
-            String fileName = NON_SEGMENT_FILE_PREFIX + nonSegmentFileCounter++;
-            try (IndexOutput output = subdirectoryDirectory.createOutput(fileName, IOContext.DEFAULT)) {
-                // Write a proper Lucene file with codec header and footer
-                CodecUtil.writeHeader(output, "test_metadata", 0);
-                // Write some test data
-                output.writeString("test_data_" + System.currentTimeMillis());
-                output.writeLong(nonSegmentFileCounter);
-                // Write codec footer with checksum
-                CodecUtil.writeFooter(output);
-            }
-        }
-
-        @Override
-        public void close() throws IOException {
-            subdirectoryWriter.close();
-            subdirectoryDirectory.close();
-            super.close();
-        }
-
-        @Override
-        public GatedCloseable<IndexCommit> acquireLastIndexCommit(boolean flushFirst) throws EngineException {
-            if (flushFirst) {
-                flush(false, true);
-            }
-            try {
-                GatedCloseable<IndexCommit> realCommit = super.acquireLastIndexCommit(false);
-                IndexCommit originalCommit = realCommit.get();
-                TestIndexCommit testCommit = new TestIndexCommit(originalCommit, subdirectoryPath);
-                realCommit.close();
-                return new GatedCloseable<>(testCommit, () -> {});
-            } catch (Exception e) {
-                throw new EngineException(shardId, "Failed to acquire last index commit", e);
-            }
-        }
-
-        @Override
-        public GatedCloseable<IndexCommit> acquireSafeIndexCommit() throws EngineException {
-            try {
-                GatedCloseable<IndexCommit> realCommit = super.acquireSafeIndexCommit();
-                IndexCommit originalCommit = realCommit.get();
-                TestIndexCommit testCommit = new TestIndexCommit(originalCommit, subdirectoryPath);
-                realCommit.close();
-                return new GatedCloseable<>(testCommit, () -> {});
-            } catch (Exception e) {
-                throw new EngineException(shardId, "Failed to acquire safe index commit", e);
-            }
-        }
-
-        @Override
-        public GatedCloseable<CatalogSnapshot> acquireSafeCatalogSnapshot() throws EngineException {
-            final GatedCloseable<CatalogSnapshot> base = super.acquireSafeCatalogSnapshot();
-            try {
-                // Collect subdirectory file paths (prefixed with subdirectory name).
-                final SegmentInfos subInfos = SegmentInfos.readLatestCommit(subdirectoryDirectory);
-                final Set<String> extra = new HashSet<>();
-                for (String f : subInfos.files(true)) {
-                    extra.add(Path.of(SUBDIRECTORY_NAME, f).toString());
-                }
-                for (String f : subdirectoryDirectory.listAll()) {
                     if (f.startsWith(NON_SEGMENT_FILE_PREFIX)) {
-                        extra.add(Path.of(SUBDIRECTORY_NAME, f).toString());
-                    }
-                }
-                // Reuse the SegmentInfos from the base snapshot — no redundant disk read.
-                SegmentInfos mainInfos = ((SegmentInfosCatalogSnapshot) base.get()).getSegmentInfos();
-                CatalogSnapshot wrapped = new SegmentInfosCatalogSnapshot(mainInfos) {
-                    @Override
-                    public Collection<String> getFiles(boolean includeSegmentsFile) throws IOException {
-                        Set<String> files = new HashSet<>(super.getFiles(includeSegmentsFile));
-                        files.addAll(extra);
-                        return files;
-                    }
-                };
-                return new GatedCloseable<>(wrapped, base::close);
-            } catch (Exception e) {
-                try {
-                    base.close();
-                } catch (IOException ex) {
+        // Index documents to create content
                     e.addSuppressed(ex);
-                }
-                throw new EngineException(shardId, "Failed to acquire safe catalog snapshot", e);
             }
-        }
+import org.opensearch.index.engine.EngineException;
     }
-
-    /**
-     * Custom IndexCommit that includes subdirectory files in recovery
-     */
-    static class TestIndexCommit extends IndexCommit {
-
-        private final IndexCommit delegate;
-        private final Path subdirectoryPath;
-
-        TestIndexCommit(IndexCommit delegate, Path subdirectoryPath) {
-            this.delegate = delegate;
-            this.subdirectoryPath = subdirectoryPath;
         }
-
+                return new TestEngine(config);
+                    if (!allFiles.isEmpty()) {
+import org.opensearch.plugins.EnginePlugin;
+                        extra.add(Path.of(SUBDIRECTORY_NAME, f).toString());
+import org.opensearch.index.engine.Engine;
+import org.opensearch.index.engine.EngineFactory;
+    }
+    }
+                throw new EngineException(shardId, "Failed to acquire safe index commit", e);
+        public void flush(boolean force, boolean waitIfOngoing) throws EngineException {
+                final Set<String> extra = new HashSet<>();
         @Override
-        public String getSegmentsFileName() {
-            return delegate.getSegmentsFileName();
+import org.apache.lucene.store.FSDirectory;
+    }
+        public GatedCloseable<IndexCommit> acquireLastIndexCommit(boolean flushFirst) throws EngineException {
+            .build();
         }
-
-        @Override
-        public Collection<String> getFileNames() throws IOException {
-            Set<String> allFiles = new HashSet<>(delegate.getFileNames());
-
-            if (Files.exists(subdirectoryPath)) {
-                try (Directory directory = FSDirectory.open(subdirectoryPath)) {
-                    SegmentInfos segmentInfos = SegmentInfos.readLatestCommit(directory);
-                    Collection<String> segmentFiles = segmentInfos.files(true);
-
-                    for (String fileName : segmentFiles) {
-                        String relativePath = Path.of(TestEngine.SUBDIRECTORY_NAME, fileName).toString();
-                        allFiles.add(relativePath);
-                    }
-
-                    // Add non-segment files (test_metadata_*)
-                    String[] allFilesInDir = directory.listAll();
-                    for (String fileName : allFilesInDir) {
-                        if (fileName.startsWith(TestEngine.NON_SEGMENT_FILE_PREFIX)) {
-                            String relativePath = Path.of(TestEngine.SUBDIRECTORY_NAME, fileName).toString();
-                            allFiles.add(relativePath);
-                        }
-                    }
-                }
+                throw new EngineException(shardId, "Failed to acquire safe catalog snapshot", e);
+                throw new EngineException(config.getShardId(), "Failed to create test engine", e);
+                try {
+    public void testSubdirectoryAwareRecovery() throws Exception {
+                    // corrupt index or no commit files, skip this node
+    }
+            "index.use_test_engine",
+        ensureGreen("test_index");
             }
-            return allFiles;
+        public int getSegmentCount() {
+            .put(TestEnginePlugin.TEST_ENGINE_INDEX_SETTING.getKey(), true)
+        public boolean isDeleted() {
+                } catch (IOException ex) {
+        Settings indexSettings = Settings.builder()
+     * Custom IndexCommit that includes subdirectory files in recovery
+        @Override
+                            allFiles.add(fileName);
+import org.apache.lucene.index.IndexWriter;
+                    @Override
         }
-
+                output.writeString("test_data_" + System.currentTimeMillis());
+                return new GatedCloseable<>(testCommit, () -> {});
+        );
+                    extra.add(Path.of(SUBDIRECTORY_NAME, f).toString());
+            this.engineConfig = config;
+            final GatedCloseable<CatalogSnapshot> base = super.acquireSafeCatalogSnapshot();
+                CatalogSnapshot wrapped = new SegmentInfosCatalogSnapshot(mainInfos) {
+        static final String NON_SEGMENT_FILE_PREFIX = "test_metadata_";
+            return delegate.getSegmentsFileName();
+        verifySubdirectoryFilesOnAllNodes("test_index", 3);
+ * this file be licensed under the Apache-2.0 license or a
+        prepareCreate("test_index").setSettings(indexSettings).get();
+                flush(false, true);
+        }
+import java.util.HashMap;
+                CodecUtil.writeFooter(output);
+import java.util.Map;
+            try {
+                for (String f : subInfos.files(true)) {
+                throw new EngineException(shardId, "Failed to commit subdirectory during flush", e);
+ * SPDX-License-Identifier: Apache-2.0
+                TestIndexCommit testCommit = new TestIndexCommit(originalCommit, subdirectoryPath);
+            if (Files.exists(subdirectoryPath)) {
+            }
+                }
+        }
+            .setSettings(Settings.builder().put("index.number_of_replicas", 2))
+                } catch (IOException e) {
+            } catch (IOException e) {
+import org.opensearch.index.engine.EngineConfig;
+                        allFiles.add(relativePath);
+        for (int i = 0; i < 10; i++) {
+        return super.getMockPlugins().stream()
+import org.opensearch.test.OpenSearchIntegTestCase;
+import org.opensearch.common.concurrent.GatedCloseable;
+import org.apache.lucene.document.Field;
+import java.nio.file.Path;
+import org.apache.lucene.store.Directory;
+            Set<String> referenceFiles = nodeFiles.values().iterator().next();
+    /**
+                    Collection<String> segmentFiles = segmentInfos.files(true);
+                            String relativePath = Path.of(TestEngine.SUBDIRECTORY_NAME, fileName).toString();
+                    }
+        @Override
+        @Override
+        @Override
+                }
+        // Create index with custom store and engine
+        private int nonSegmentFileCounter = 0;
+        @Override
+            nodeFiles.size()
+                GatedCloseable<IndexCommit> realCommit = super.acquireSafeIndexCommit();
+     * Test engine that extends InternalEngine and creates a proper Lucene index in a subdirectory
+        TestEngine(EngineConfig config) throws IOException {
+        /**
+        }
+        // Verify recovery completes successfully
+import org.opensearch.index.IndexService;
+                    for (String fileName : segmentFiles) {
+        for (String nodeName : internalCluster().getNodeNames()) {
+                // Reuse the SegmentInfos from the base snapshot — no redundant disk read.
+     */
+    /**
+        public Collection<String> getFileNames() throws IOException {
+            // Set up subdirectory path and writer
+        if (nodeFiles.size() > 1) {
+import org.opensearch.common.settings.Setting;
+        private final IndexCommit delegate;
+            } catch (IOException e) {
+         */
+        }
+        }
+    @Override
+            doc.add(new StringField("source_id", index.id(), Field.Store.YES));
+        @Override
+import org.apache.lucene.document.StringField;
+            // Additional verification: ensure non-segment files are present
+        @Override
+            }
+            try {
+            super.close();
+            Path subdirectoryPath = shard.shardPath().getDataPath().resolve(TestEngine.SUBDIRECTORY_NAME);
+                addDocumentToSubdirectory(index);
+            this.delegate = delegate;
+            if (indexService == null) {
+                // Write codec footer with checksum
+        public Engine newReadWriteEngine(EngineConfig config) {
+                    // Get non-segment files
+        private void createNonSegmentFile() throws IOException {
+            client().prepareIndex("test_index").setId(Integer.toString(i)).setSource("field", "value" + i).get();
+import java.nio.file.Files;
+                realCommit.close();
+                    }
+            try (IndexOutput output = subdirectoryDirectory.createOutput(fileName, IOContext.DEFAULT)) {
+                return new GatedCloseable<>(testCommit, () -> {});
+            delegate.delete();
+            return result;
+            if (flushFirst) {
+        public void close() throws IOException {
+        @Override
+            // Only add to subdirectory if is a primary shard
+                return Optional.of(new TestEngineFactory());
+public class SubdirectoryAwareRecoveryTests extends OpenSearchIntegTestCase {
+        private final Path subdirectoryPath;
+                        nodeFiles.put(nodeName, allFiles);
+        public Optional<EngineFactory> getEngineFactory(IndexSettings indexSettings) {
+     * Plugin that provides a custom engine for testing subdirectory recovery
+        }
+import java.util.List;
+                    for (String fileName : allFilesInDir) {
+        private final EngineConfig engineConfig;
+            .indices()
+            } catch (Exception e) {
         @Override
         public Directory getDirectory() {
+}
+            subdirectoryDirectory.close();
+    /**
+            assertTrue("Non-segment files should be present in subdirectory", hasNonSegmentFiles);
+            }
+                    allFiles.addAll(segmentFiles);
+import java.util.Optional;
+import org.apache.lucene.index.SegmentInfos;
+            return delegate.isDeleted();
+            .put("index.number_of_shards", 1)
+                GatedCloseable<IndexCommit> realCommit = super.acquireLastIndexCommit(false);
+            }
+    private void verifySubdirectoryFilesOnAllNodes(String indexName, int expectedCount) throws Exception {
+            if (result.getResultType() == Engine.Result.Type.SUCCESS && engineConfig.getStartedPrimarySupplier().getAsBoolean()) {
+            }
+         * Creates a non-segment file in the subdirectory to test non-segment file metadata handling
+import org.apache.lucene.store.IOContext;
+            } catch (Exception e) {
+                    }
+        }
+                for (String f : subdirectoryDirectory.listAll()) {
+        }
+        public String getSegmentsFileName() {
+        @Override
+                    base.close();
+                IndexCommit originalCommit = realCommit.get();
+        }
+            return Collections.singletonList(TEST_ENGINE_INDEX_SETTING);
+            return Optional.empty();
+        }
+            false,
+            return delegate.getGeneration();
+            .filter(plugin -> !plugin.getName().contains("MockEngineFactoryPlugin"))
+        public long getGeneration() {
+import org.apache.lucene.codecs.CodecUtil;
+                }
+                        return files;
+                final SegmentInfos subInfos = SegmentInfos.readLatestCommit(subdirectoryDirectory);
+            subdirectoryWriter.addDocument(doc);
+/*
+        ensureGreen("test_index");
+        private final Path subdirectoryPath;
+    }
+                        }
+            if (Files.exists(subdirectoryPath)) {
+                continue; // Index not on this node
+                createNonSegmentFile();
+     */
+        public Map<String, String> getUserData() throws IOException {
+                    for (String fileName : filesInDir) {
+        public GatedCloseable<IndexCommit> acquireSafeIndexCommit() throws EngineException {
+                // Create a non-segment file to test non-segment file recovery
+                };
+            .prepareUpdateSettings("test_index")
+            return delegate.getUserData();
+            super(config);
+            }
+        public GatedCloseable<CatalogSnapshot> acquireSafeCatalogSnapshot() throws EngineException {
+                }
+            subdirectoryWriter = new IndexWriter(subdirectoryDirectory, writerConfig);
+import java.util.Set;
+        }
+        @Override
+    protected Collection<Class<? extends Plugin>> getMockPlugins() {
+            if (TEST_ENGINE_INDEX_SETTING.get(indexSettings.getSettings())) {
+        client().admin().indices().prepareRefresh("test_index").get();
+                    SegmentInfos segmentInfos = SegmentInfos.readLatestCommit(directory);
+    @Override
+        @Override
+        }
+                // Write a proper Lucene file with codec header and footer
+            // First flush the main engine
+            }
+                CodecUtil.writeHeader(output, "test_metadata", 0);
+                    }
+            } catch (Exception e) {
+            subdirectoryDirectory = FSDirectory.open(subdirectoryPath);
+import org.opensearch.plugins.Plugin;
+        }
+            Files.createDirectories(subdirectoryPath);
             return delegate.getDirectory();
+            Setting.Property.IndexScope
+        // Add replica to trigger recovery
+            String fileName = NON_SEGMENT_FILE_PREFIX + nonSegmentFileCounter++;
+                        files.addAll(extra);
+        client().admin()
+            expectedCount,
         }
-
-        @Override
-        public void delete() {
-            delegate.delete();
+        private void addDocumentToSubdirectory(Index index) throws IOException {
+    /**
+                }
+import org.opensearch.common.settings.Settings;
+import org.apache.lucene.store.IndexOutput;
+                subdirectoryWriter.commit();
+import java.util.HashSet;
+        static final Setting<Boolean> TEST_ENGINE_INDEX_SETTING = Setting.boolSetting(
+            .collect(java.util.stream.Collectors.toList());
+        );
+            subdirectoryPath = shardPath.resolve(SUBDIRECTORY_NAME);
+import java.io.IOException;
+import org.opensearch.index.engine.InternalEngine;
+ * compatible open source license.
+                IndexCommit originalCommit = realCommit.get();
+        private final Directory subdirectoryDirectory;
+                output.writeLong(nonSegmentFileCounter);
+package org.opensearch.plugin.store.subdirectory;
+            try {
+                        if (fileName.startsWith(TestEngine.NON_SEGMENT_FILE_PREFIX)) {
+import java.util.Arrays;
+            // Then commit the subdirectory
+                        String relativePath = Path.of(TestEngine.SUBDIRECTORY_NAME, fileName).toString();
         }
-
+                            allFiles.add(relativePath);
+            }
+            IndexWriterConfig writerConfig = new IndexWriterConfig();
+        client().admin().indices().prepareFlush("test_index").get();
         @Override
-        public int getSegmentCount() {
+                    }
+        @Override
+            IndexService indexService = indicesService.indexService(resolveIndex(indexName));
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
+            .put("index.store.factory", "subdirectory_store")
+                // Write some test data
+                    }
+            IndexResult result = super.index(index);
+        @Override
+                    // Add non-segment files (test_metadata_*)
+        }
+        }
+                        }
+            .get();
+            "Expected " + expectedCount + " nodes with subdirectory files, found: " + nodeFiles.keySet(),
+        static final String SUBDIRECTORY_NAME = "test_subdirectory";
+        // Verify subdirectory files were copied to both primary and replica
+    static class TestIndexCommit extends IndexCommit {
+                        if (fileName.startsWith(TestEngine.NON_SEGMENT_FILE_PREFIX)) {
+    }
+                        Set<String> files = new HashSet<>(super.getFiles(includeSegmentsFile));
+                    // Get segment files
+            return allFiles;
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+        private final IndexWriter subdirectoryWriter;
+     */
+                    String[] filesInDir = directory.listAll();
+            try {
+            }
+ */
+                throw new EngineException(shardId, "Failed to acquire last index commit", e);
+    public static class TestEnginePlugin extends Plugin implements EnginePlugin {
+            super.flush(force, waitIfOngoing);
+import org.apache.lucene.index.IndexWriterConfig;
+        // Verify all nodes have identical files (including non-segment files)
+import org.opensearch.index.IndexSettings;
+            IndicesService indicesService = internalCluster().getInstance(IndicesService.class, nodeName);
+                    SegmentInfos segmentInfos = SegmentInfos.readLatestCommit(directory);
+                    String[] allFilesInDir = directory.listAll();
+                SegmentInfos mainInfos = ((SegmentInfosCatalogSnapshot) base.get()).getSegmentInfos();
+            IndexShard shard = indexService.getShard(0);
+                    Collection<String> segmentFiles = segmentInfos.files(true);
+            Path shardPath = config.getStore().shardPath().getDataPath();
+        Map<String, Set<String>> nodeFiles = new HashMap<>();
+            boolean hasNonSegmentFiles = referenceFiles.stream().anyMatch(f -> f.startsWith(TestEngine.NON_SEGMENT_FILE_PREFIX));
+     * Factory for creating TestEngine instances
+            Set<String> allFiles = new HashSet<>(delegate.getFileNames());
+            try {
+                try (Directory directory = FSDirectory.open(subdirectoryPath)) {
+        public IndexResult index(Index index) throws IOException {
+        TestIndexCommit(IndexCommit delegate, Path subdirectoryPath) {
+    static class TestEngine extends InternalEngine {
+import java.util.Collections;
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 3)
+import org.apache.lucene.index.IndexCommit;
+        }
+        return Arrays.asList(SubdirectoryStorePlugin.class, TestEnginePlugin.class);
+import org.opensearch.index.shard.IndexShard;
+        }
+            for (Map.Entry<String, Set<String>> entry : nodeFiles.entrySet()) {
+                    public Collection<String> getFiles(boolean includeSegmentsFile) throws IOException {
+                try (Directory directory = FSDirectory.open(subdirectoryPath)) {
+                TestIndexCommit testCommit = new TestIndexCommit(originalCommit, subdirectoryPath);
+            Document doc = new Document();
+            }
+        @Override
+     */
+import org.apache.lucene.document.Document;
+import org.opensearch.indices.IndicesService;
+import java.util.Collection;
+    static class TestEngineFactory implements EngineFactory {
+                // Collect subdirectory file paths (prefixed with subdirectory name).
+            }
+            writerConfig.setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND);
+ * The OpenSearch Contributors require contributions made to
+ *
+            // First, index the document normally
+                realCommit.close();
+                assertEquals("Node " + entry.getKey() + " should have identical files to other nodes", referenceFiles, entry.getValue());
+        }
+                return new GatedCloseable<>(wrapped, base::close);
+        public List<Setting<?>> getSettings() {
+            this.subdirectoryPath = subdirectoryPath;
+            subdirectoryWriter.close();
             return delegate.getSegmentCount();
         }
-
-        @Override
-        public long getGeneration() {
-            return delegate.getGeneration();
-        }
-
-        @Override
-        public Map<String, String> getUserData() throws IOException {
-            return delegate.getUserData();
-        }
-
-        @Override
-        public boolean isDeleted() {
-            return delegate.isDeleted();
-        }
+        public void delete() {
+            .put("index.number_of_replicas", 0)
     }
-}
+        assertEquals(

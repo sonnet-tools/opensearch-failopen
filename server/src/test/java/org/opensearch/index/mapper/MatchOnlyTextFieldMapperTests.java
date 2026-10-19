@@ -1,471 +1,426 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.index.DocValuesType;
-import org.apache.lucene.index.IndexOptions;
-import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.index.IndexableFieldType;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.MultiPhraseQuery;
-import org.apache.lucene.search.PhraseQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.tests.analysis.MockSynonymAnalyzer;
-import org.opensearch.common.lucene.search.AutomatonQueries;
-import org.opensearch.common.lucene.search.MultiPhrasePrefixQuery;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.query.MatchPhrasePrefixQueryBuilder;
-import org.opensearch.index.query.MatchPhraseQueryBuilder;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.query.SourceFieldMatchQuery;
-import org.opensearch.index.query.TermQueryBuilder;
-import org.opensearch.index.search.MatchQuery;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.core.Is.is;
-
-public class MatchOnlyTextFieldMapperTests extends TextFieldMapperTests {
-
-    @Before
-    public void setupMatchOnlyTextFieldMapper() {
-        textFieldName = "match_only_text";
-    }
-
-    @Override
-    public void testDefaults() throws IOException {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        assertEquals(fieldMapping(this::minimalMapping).toString(), mapper.mappingSource().toString());
-
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1234")));
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        assertEquals(1, fields.length);
-        assertEquals("1234", fields[0].stringValue());
-        IndexableFieldType fieldType = fields[0].fieldType();
-        assertThat(fieldType.omitNorms(), equalTo(true));
-        assertTrue(fieldType.tokenized());
-        assertFalse(fieldType.stored());
-        assertThat(fieldType.indexOptions(), equalTo(IndexOptions.DOCS));
-        assertThat(fieldType.storeTermVectors(), equalTo(false));
-        assertThat(fieldType.storeTermVectorOffsets(), equalTo(false));
-        assertThat(fieldType.storeTermVectorPositions(), equalTo(false));
-        assertThat(fieldType.storeTermVectorPayloads(), equalTo(false));
-        assertEquals(DocValuesType.NONE, fieldType.docValuesType());
-    }
-
-    @Override
-    public void testEnableStore() throws IOException {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", textFieldName).field("store", true)));
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1234")));
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        assertEquals(1, fields.length);
-        assertTrue(fields[0].fieldType().stored());
-    }
-
-    @Override
-    public void testIndexOptions() throws IOException {
-        Map<String, IndexOptions> supportedOptions = new HashMap<>();
-        supportedOptions.put("docs", IndexOptions.DOCS);
-
-        Map<String, IndexOptions> unsupportedOptions = new HashMap<>();
-        unsupportedOptions.put("freqs", IndexOptions.DOCS_AND_FREQS);
-        unsupportedOptions.put("positions", IndexOptions.DOCS_AND_FREQS_AND_POSITIONS);
-        unsupportedOptions.put("offsets", IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS);
-
-        for (String option : supportedOptions.keySet()) {
-            XContentBuilder mapping = MediaTypeRegistry.JSON.contentBuilder().startObject().startObject("_doc").startObject("properties");
-            mapping.startObject(option).field("type", textFieldName).field("index_options", option).endObject();
-            mapping.endObject().endObject().endObject();
-
-            DocumentMapper mapper = createDocumentMapper(mapping);
-            String serialized = Strings.toString(MediaTypeRegistry.JSON, mapper);
-            assertThat(serialized, containsString("\"docs\":{\"type\":\"match_only_text\"}"));
-
-            ParsedDocument doc = mapper.parse(source(b -> { b.field(option, "1234"); }));
-
-            IndexOptions options = supportedOptions.get(option);
-            IndexableField[] fields = doc.rootDoc().getFields(option);
-            assertEquals(1, fields.length);
             assertEquals(options, fields[0].fieldType().indexOptions());
-        }
-
-        for (String option : unsupportedOptions.keySet()) {
-            XContentBuilder mapping = MediaTypeRegistry.JSON.contentBuilder().startObject().startObject("_doc").startObject("properties");
-            mapping.startObject(option).field("type", textFieldName).field("index_options", option).endObject();
-            mapping.endObject().endObject().endObject();
             MapperParsingException e = expectThrows(MapperParsingException.class, () -> createDocumentMapper(mapping));
-            assertThat(
-                e.getMessage(),
-                containsString(
-                    "Failed to parse mapping [_doc]: Unknown value [" + option + "] for field [index_options] - accepted values are [docs]"
-                )
-            );
-        }
-    }
-
-    @Override
-    public void testAnalyzedFieldPositionIncrementWithoutPositions() {
-        for (String indexOptions : List.of("docs")) {
-            try {
-                createDocumentMapper(
-                    fieldMapping(
-                        b -> b.field("type", textFieldName).field("index_options", indexOptions).field("position_increment_gap", 10)
-                    )
-                );
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }
-    }
-
-    @Override
-    public void testBWCSerialization() throws IOException {}
-
-    @Override
-    public void testPositionIncrementGap() throws IOException {}
-
-    @Override
-    public void testDefaultPositionIncrementGap() throws IOException {}
-
-    @Override
-    public void testMinimalToMaximal() throws IOException {}
-
-    @Override
-    public void testIndexPrefixMapping() throws IOException {
-        MapperParsingException e = expectThrows(
-            MapperParsingException.class,
-            () -> createDocumentMapper(
-                fieldMapping(
-                    b -> b.field("type", textFieldName)
-                        .field("analyzer", "standard")
-                        .startObject("index_prefixes")
-                        .field("min_chars", 2)
-                        .field("max_chars", 10)
-                        .endObject()
-                )
-            )
-        );
-        assertEquals(
-            "Failed to parse mapping [_doc]: Index prefixes cannot be enabled on for match_only_text field. Use text field instead",
-            e.getMessage()
-        );
-    }
-
-    @Override
-    public void testIndexPrefixIndexTypes() throws IOException {
-        // not supported and asserted the expected behavior in testIndexPrefixMapping
-    }
-
-    @Override
-    public void testFastPhrasePrefixes() throws IOException {
-        // not supported and asserted the expected behavior in testIndexPrefixMapping
-    }
-
-    public void testPhrasePrefixes() throws IOException {
-        MapperService mapperService = createMapperService(mapping(b -> {
-            b.startObject("field");
-            {
-                b.field("type", textFieldName);
-                b.field("analyzer", "my_stop_analyzer"); // "standard" will be replaced with MockSynonymAnalyzer
-            }
-            b.endObject();
-            b.startObject("synfield");
-            {
-                b.field("type", textFieldName);
-                b.field("analyzer", "standard"); // "standard" will be replaced with MockSynonymAnalyzer
-            }
-            b.endObject();
-        }));
-        QueryShardContext queryShardContext = createQueryShardContext(mapperService);
-
-        {
-            Query q = new MatchPhrasePrefixQueryBuilder("field", "two words").toQuery(queryShardContext);
-            MultiPhrasePrefixQuery mqb = new MultiPhrasePrefixQuery("field");
-            mqb.add(new Term("field", "words"));
-            MultiPhrasePrefixQuery mqbFilter = new MultiPhrasePrefixQuery("field");
-            mqbFilter.add(new Term("field", "two"));
-            mqbFilter.add(new Term("field", "words"));
             Query expected = new SourceFieldMatchQuery(
-                new BooleanQuery.Builder().add(new TermQuery(new Term("field", "two")), BooleanClause.Occur.FILTER)
-                    .add(mqb, BooleanClause.Occur.FILTER)
-                    .build(),
-                mqbFilter,
-                mapperService.fieldType("field"),
-                queryShardContext
-            );
-            assertThat(q, equalTo(expected));
-        }
-
         {
-            Query q = new MatchPhrasePrefixQueryBuilder("field", "three words here").toQuery(queryShardContext);
-            MultiPhrasePrefixQuery mqb = new MultiPhrasePrefixQuery("field");
-            mqb.add(new Term("field", "here"));
-            MultiPhrasePrefixQuery mqbFilter = new MultiPhrasePrefixQuery("field");
-            mqbFilter.add(new Term("field", "three"));
-            mqbFilter.add(new Term("field", "words"));
-            mqbFilter.add(new Term("field", "here"));
-            Query expected = new SourceFieldMatchQuery(
-                new BooleanQuery.Builder().add(new TermQuery(new Term("field", "three")), BooleanClause.Occur.FILTER)
-                    .add(new TermQuery(new Term("field", "words")), BooleanClause.Occur.FILTER)
-                    .add(mqb, BooleanClause.Occur.FILTER)
-                    .build(),
-                mqbFilter,
-                mapperService.fieldType("field"),
-                queryShardContext
-            );
-            assertThat(q, equalTo(expected));
-        }
-
-        {
-            Query q = new MatchPhrasePrefixQueryBuilder("field", "two words").slop(1).toQuery(queryShardContext);
-            MultiPhrasePrefixQuery mqb = new MultiPhrasePrefixQuery("field");
-            mqb.add(new Term("field", "words"));
-            MultiPhrasePrefixQuery mqbFilter = new MultiPhrasePrefixQuery("field");
-            mqbFilter.setSlop(1);
-            mqbFilter.add(new Term("field", "two"));
-            mqbFilter.add(new Term("field", "words"));
-            Query expected = new SourceFieldMatchQuery(
-                new BooleanQuery.Builder().add(new TermQuery(new Term("field", "two")), BooleanClause.Occur.FILTER)
-                    .add(mqb, BooleanClause.Occur.FILTER)
-                    .build(),
-                mqbFilter,
-                mapperService.fieldType("field"),
-                queryShardContext
-            );
-            assertThat(q, equalTo(expected));
-        }
-
-        {
-            Query q = new MatchPhrasePrefixQueryBuilder("field", "singleton").toQuery(queryShardContext);
-            MultiPhrasePrefixQuery mqb = new MultiPhrasePrefixQuery("field");
-            mqb.add(new Term("field", "singleton"));
-            Query expected = new SourceFieldMatchQuery(
-                new BooleanQuery.Builder().add(mqb, BooleanClause.Occur.FILTER).build(),
-                mqb,
-                mapperService.fieldType("field"),
-                queryShardContext
-            );
-            assertThat(q, is(expected));
-        }
-
-        {
-            Query q = new MatchPhrasePrefixQueryBuilder("field", "sparkle a stopword").toQuery(queryShardContext);
-            MultiPhrasePrefixQuery mqb = new MultiPhrasePrefixQuery("field");
-            mqb.add(new Term("field", "stopword"));
-            MultiPhrasePrefixQuery mqbFilter = new MultiPhrasePrefixQuery("field");
-            mqbFilter.add(new Term("field", "sparkle"));
-            mqbFilter.add(new Term[] { new Term("field", "stopword") }, 2);
-            Query expected = new SourceFieldMatchQuery(
-                new BooleanQuery.Builder().add(new TermQuery(new Term("field", "sparkle")), BooleanClause.Occur.FILTER)
-                    .add(mqb, BooleanClause.Occur.FILTER)
-                    .build(),
-                mqbFilter,
-                mapperService.fieldType("field"),
-                queryShardContext
-            );
-            assertThat(q, equalTo(expected));
-        }
-
-        {
-            MatchQuery matchQuery = new MatchQuery(queryShardContext);
-            matchQuery.setAnalyzer(new MockSynonymAnalyzer());
-            Query q = matchQuery.parse(MatchQuery.Type.PHRASE_PREFIX, "synfield", "motor dogs");
-            MultiPhrasePrefixQuery mqb = new MultiPhrasePrefixQuery("synfield");
             mqb.add(new Term[] { new Term("synfield", "dogs"), new Term("synfield", "dog") });
-            MultiPhrasePrefixQuery mqbFilter = new MultiPhrasePrefixQuery("synfield");
-            mqbFilter.add(new Term("synfield", "motor"));
-            mqbFilter.add(new Term[] { new Term("synfield", "dogs"), new Term("synfield", "dog") });
-            Query expected = new SourceFieldMatchQuery(
-                new BooleanQuery.Builder().add(new TermQuery(new Term("synfield", "motor")), BooleanClause.Occur.FILTER)
-                    .add(mqb, BooleanClause.Occur.FILTER)
-                    .build(),
-                mqbFilter,
-                mapperService.fieldType("synfield"),
-                queryShardContext
-            );
-            assertThat(q, equalTo(expected));
-        }
-
-        {
-            MatchQuery matchQuery = new MatchQuery(queryShardContext);
-            matchQuery.setPhraseSlop(1);
-            matchQuery.setAnalyzer(new MockSynonymAnalyzer());
-            Query q = matchQuery.parse(MatchQuery.Type.PHRASE_PREFIX, "synfield", "two dogs");
-            MultiPhrasePrefixQuery mqb = new MultiPhrasePrefixQuery("synfield");
-            mqb.add(new Term[] { new Term("synfield", "dogs"), new Term("synfield", "dog") });
-            MultiPhrasePrefixQuery mqbFilter = new MultiPhrasePrefixQuery("synfield");
-            mqbFilter.add(new Term("synfield", "two"));
-            mqbFilter.add(new Term[] { new Term("synfield", "dogs"), new Term("synfield", "dog") });
-            mqbFilter.setSlop(1);
-            Query expected = new SourceFieldMatchQuery(
-                new BooleanQuery.Builder().add(new TermQuery(new Term("synfield", "two")), BooleanClause.Occur.FILTER)
-                    .add(mqb, BooleanClause.Occur.FILTER)
-                    .build(),
-                mqbFilter,
-                mapperService.fieldType("synfield"),
-                queryShardContext
-            );
-            assertThat(q, equalTo(expected));
-        }
-
-        {
-            MatchQuery matchQuery = new MatchQuery(queryShardContext);
-            matchQuery.setAnalyzer(new MockSynonymAnalyzer());
-            Query q = matchQuery.parse(MatchQuery.Type.PHRASE_PREFIX, "synfield", "three dogs word");
-            MultiPhrasePrefixQuery mqb = new MultiPhrasePrefixQuery("synfield");
-            mqb.add(new Term("synfield", "word"));
-            MultiPhrasePrefixQuery mqbFilter = new MultiPhrasePrefixQuery("synfield");
-            mqbFilter.add(new Term("synfield", "three"));
-            mqbFilter.add(new Term[] { new Term("synfield", "dogs"), new Term("synfield", "dog") });
-            mqbFilter.add(new Term("synfield", "word"));
-            Query expected = new SourceFieldMatchQuery(
-                new BooleanQuery.Builder().add(new TermQuery(new Term("synfield", "three")), BooleanClause.Occur.FILTER)
-                    .add(
-                        new BooleanQuery.Builder().add(new TermQuery(new Term("synfield", "dogs")), BooleanClause.Occur.SHOULD)
-                            .add(new TermQuery(new Term("synfield", "dog")), BooleanClause.Occur.SHOULD)
-                            .build(),
-                        BooleanClause.Occur.FILTER
-                    )
-                    .add(mqb, BooleanClause.Occur.FILTER)
-                    .build(),
-                mqbFilter,
-                mapperService.fieldType("synfield"),
-                queryShardContext
-            );
-            assertThat(q, equalTo(expected));
-        }
-    }
-
-    @Override
-    public void testFastPhraseMapping() throws IOException {
-        MapperParsingException e = expectThrows(MapperParsingException.class, () -> createMapperService(mapping(b -> {
-            b.startObject("field")
-                .field("type", textFieldName)
-                .field("analyzer", "my_stop_analyzer")
-                .field("index_phrases", true)
-                .endObject();
-            // "standard" will be replaced with MockSynonymAnalyzer
-            b.startObject("synfield").field("type", textFieldName).field("analyzer", "standard").field("index_phrases", true).endObject();
-        })));
-        assertEquals(
-            "Failed to parse mapping [_doc]: Index phrases cannot be enabled on for match_only_text field. Use text field instead",
-            e.getMessage()
-        );
-    }
-
-    @Override
-    public void testSimpleMerge() throws IOException {}
-
-    public void testPhraseQuery() throws IOException {
-        MapperService mapperService = createMapperService(mapping(b -> {
-            b.startObject("field").field("type", textFieldName).field("analyzer", "my_stop_analyzer").endObject();
-            // "standard" will be replaced with MockSynonymAnalyzer
-            b.startObject("synfield").field("type", textFieldName).field("analyzer", "standard").endObject();
-        }));
-        QueryShardContext queryShardContext = createQueryShardContext(mapperService);
-
-        Query q = new MatchPhraseQueryBuilder("field", "two words").toQuery(queryShardContext);
-        Query expectedQuery = new SourceFieldMatchQuery(
-            new BooleanQuery.Builder().add(new TermQuery(new Term("field", "two")), BooleanClause.Occur.FILTER)
-                .add(new TermQuery(new Term("field", "words")), BooleanClause.Occur.FILTER)
-                .build(),
-            new PhraseQuery("field", "two", "words"),
+            mqbFilter.add(new Term("field", "two"));
             mapperService.fieldType("field"),
-            queryShardContext
-        );
-
-        assertThat(q, is(expectedQuery));
-        Query q4 = new MatchPhraseQueryBuilder("field", "singleton").toQuery(queryShardContext);
-        assertThat(q4, is(new ConstantScoreQuery(new TermQuery(new Term("field", "singleton")))));
-
-        Query q2 = new MatchPhraseQueryBuilder("field", "three words here").toQuery(queryShardContext);
-        expectedQuery = new SourceFieldMatchQuery(
-            new BooleanQuery.Builder().add(new TermQuery(new Term("field", "three")), BooleanClause.Occur.FILTER)
-                .add(new TermQuery(new Term("field", "words")), BooleanClause.Occur.FILTER)
+import org.opensearch.index.query.QueryShardContext;
                 .add(new TermQuery(new Term("field", "here")), BooleanClause.Occur.FILTER)
-                .build(),
-            new PhraseQuery("field", "three", "words", "here"),
-            mapperService.fieldType("field"),
-            queryShardContext
-        );
-        assertThat(q2, is(expectedQuery));
-
-        Query q3 = new MatchPhraseQueryBuilder("field", "two words").slop(2).toQuery(queryShardContext);
+                .field("analyzer", "my_stop_analyzer")
+        assertEquals(
+            mqbFilter.add(new Term[] { new Term("field", "stopword") }, 2);
         expectedQuery = new SourceFieldMatchQuery(
-            new BooleanQuery.Builder().add(new TermQuery(new Term("field", "two")), BooleanClause.Occur.FILTER)
-                .add(new TermQuery(new Term("field", "words")), BooleanClause.Occur.FILTER)
-                .build(),
-            new PhraseQuery(2, "field", "two", "words"),
-            mapperService.fieldType("field"),
-            queryShardContext
-        );
-        assertThat(q3, is(expectedQuery));
-
-        Query q5 = new MatchPhraseQueryBuilder("field", "sparkle a stopword").toQuery(queryShardContext);
+            mqb.add(new Term("field", "words"));
+import static org.hamcrest.Matchers.equalTo;
+                        new BooleanQuery.Builder().add(new TermQuery(new Term("synfield", "dogs")), BooleanClause.Occur.SHOULD)
         expectedQuery = new SourceFieldMatchQuery(
-            new BooleanQuery.Builder().add(new TermQuery(new Term("field", "sparkle")), BooleanClause.Occur.FILTER)
-                .add(new TermQuery(new Term("field", "stopword")), BooleanClause.Occur.FILTER)
-                .build(),
             new PhraseQuery.Builder().add(new Term("field", "sparkle")).add(new Term("field", "stopword"), 2).build(),
-            mapperService.fieldType("field"),
+                    .build(),
+            try {
+        Map<String, IndexOptions> supportedOptions = new HashMap<>();
+            MultiPhrasePrefixQuery mqb = new MultiPhrasePrefixQuery("field");
+            mqbFilter.add(new Term("field", "words"));
             queryShardContext
-        );
-        assertThat(q5, is(expectedQuery));
-
-        MatchQuery matchQuery = new MatchQuery(queryShardContext);
-        matchQuery.setAnalyzer(new MockSynonymAnalyzer());
-        Query q6 = matchQuery.parse(MatchQuery.Type.PHRASE, "synfield", "motor dogs");
-        expectedQuery = new SourceFieldMatchQuery(
-            new BooleanQuery.Builder().add(new TermQuery(new Term("synfield", "motor")), BooleanClause.Occur.FILTER)
-                .add(
-                    new BooleanQuery.Builder().add(new TermQuery(new Term("synfield", "dogs")), BooleanClause.Occur.SHOULD)
-                        .add(new TermQuery(new Term("synfield", "dog")), BooleanClause.Occur.SHOULD)
-                        .build(),
-                    BooleanClause.Occur.FILTER
-                )
+            MatchQuery matchQuery = new MatchQuery(queryShardContext);
+            MultiPhrasePrefixQuery mqb = new MultiPhrasePrefixQuery("field");
+                .field("type", textFieldName)
+        assertEquals(DocValuesType.NONE, fieldType.docValuesType());
+                mqbFilter,
+    public void testMinimalToMaximal() throws IOException {}
                 .build(),
-            new MultiPhraseQuery.Builder().add(new Term("synfield", "motor"))
-                .add(new Term[] { new Term("synfield", "dogs"), new Term("synfield", "dog") }, 1)
-                .build(),
-            mapperService.fieldType("synfield"),
-            queryShardContext
-        );
-        assertThat(q6, is(expectedQuery));
     }
-
-    public void testTermQuery() throws Exception {
-        MapperService mapperService = createMapperService(mapping(b -> {
-            b.startObject("field");
-            {
-                b.field("type", textFieldName);
-                b.field("analyzer", "my_stop_analyzer"); // "standard" will be replaced with MockSynonymAnalyzer
-            }
-            b.endObject();
-        }));
-        QueryShardContext queryShardContext = createQueryShardContext(mapperService);
-
-        Query q = new TermQueryBuilder("field", "foo").rewrite(queryShardContext).toQuery(queryShardContext);
-        assertEquals(new ConstantScoreQuery(new TermQuery(new Term("field", "foo"))), q);
-
-        q = new TermQueryBuilder("field", "foo").caseInsensitive(true).rewrite(queryShardContext).toQuery(queryShardContext);
+                mapperService.fieldType("field"),
+        }
+                    .build(),
+            new BooleanQuery.Builder().add(new TermQuery(new Term("field", "two")), BooleanClause.Occur.FILTER)
+    }
+            Query q = matchQuery.parse(MatchQuery.Type.PHRASE_PREFIX, "synfield", "motor dogs");
+        }
+ *
+                    .build(),
+                containsString(
+            );
+            assertThat(q, equalTo(expected));
+        );
+import org.opensearch.common.lucene.search.AutomatonQueries;
+            IndexableField[] fields = doc.rootDoc().getFields(option);
+            mqbFilter.add(new Term[] { new Term("synfield", "dogs"), new Term("synfield", "dog") });
+    @Override
+            mqbFilter.setSlop(1);
         assertEquals(new ConstantScoreQuery(AutomatonQueries.caseInsensitiveTermQuery(new Term("field", "foo"))), q);
+import org.apache.lucene.search.MultiPhraseQuery;
+        expectedQuery = new SourceFieldMatchQuery(
     }
+            MultiPhrasePrefixQuery mqb = new MultiPhrasePrefixQuery("field");
+                    .add(new TermQuery(new Term("field", "words")), BooleanClause.Occur.FILTER)
+            mqbFilter.add(new Term("field", "two"));
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            assertThat(serialized, containsString("\"docs\":{\"type\":\"match_only_text\"}"));
+            );
+import org.apache.lucene.search.BooleanQuery;
+import org.opensearch.common.lucene.search.MultiPhrasePrefixQuery;
+            MatchQuery matchQuery = new MatchQuery(queryShardContext);
+        );
+                        .field("analyzer", "standard")
+                mqbFilter,
+                b.field("analyzer", "my_stop_analyzer"); // "standard" will be replaced with MockSynonymAnalyzer
+                        b -> b.field("type", textFieldName).field("index_options", indexOptions).field("position_increment_gap", 10)
+            matchQuery.setAnalyzer(new MockSynonymAnalyzer());
+            mqbFilter.add(new Term("synfield", "two"));
+    public void testFastPhrasePrefixes() throws IOException {
+        unsupportedOptions.put("freqs", IndexOptions.DOCS_AND_FREQS);
+                    )
+        assertThat(q6, is(expectedQuery));
+                    .add(mqb, BooleanClause.Occur.FILTER)
+            assertThat(
+        {
 }
+package org.opensearch.index.mapper;
+        }));
+            MultiPhrasePrefixQuery mqb = new MultiPhrasePrefixQuery("synfield");
+        MapperParsingException e = expectThrows(MapperParsingException.class, () -> createMapperService(mapping(b -> {
+            b.startObject("synfield");
+                new BooleanQuery.Builder().add(new TermQuery(new Term("field", "two")), BooleanClause.Occur.FILTER)
+            new BooleanQuery.Builder().add(new TermQuery(new Term("field", "sparkle")), BooleanClause.Occur.FILTER)
+            mapperService.fieldType("field"),
+            new PhraseQuery("field", "two", "words"),
+        }
+        assertThat(fieldType.storeTermVectors(), equalTo(false));
+import org.apache.lucene.search.TermQuery;
+            mqb.add(new Term("synfield", "word"));
+    }
+        }
+                )
+        assertThat(q5, is(expectedQuery));
+        MapperService mapperService = createMapperService(mapping(b -> {
+public class MatchOnlyTextFieldMapperTests extends TextFieldMapperTests {
+import org.opensearch.index.query.MatchPhraseQueryBuilder;
+                    fieldMapping(
+                )
+        MapperParsingException e = expectThrows(
+        Query expectedQuery = new SourceFieldMatchQuery(
+    @Override
+        Query q = new TermQueryBuilder("field", "foo").rewrite(queryShardContext).toQuery(queryShardContext);
+            MultiPhrasePrefixQuery mqbFilter = new MultiPhrasePrefixQuery("field");
+                b.field("type", textFieldName);
+            );
+    public void testEnableStore() throws IOException {
+        );
+                new BooleanQuery.Builder().add(new TermQuery(new Term("field", "three")), BooleanClause.Occur.FILTER)
+                    "Failed to parse mapping [_doc]: Unknown value [" + option + "] for field [index_options] - accepted values are [docs]"
+                    .build(),
+            new MultiPhraseQuery.Builder().add(new Term("synfield", "motor"))
+            queryShardContext
+            );
+        assertThat(fieldType.indexOptions(), equalTo(IndexOptions.DOCS));
+            assertThat(q, equalTo(expected));
+            assertThat(q, equalTo(expected));
+                    .add(
+                .build(),
+            XContentBuilder mapping = MediaTypeRegistry.JSON.contentBuilder().startObject().startObject("_doc").startObject("properties");
+            mqbFilter.add(new Term("field", "words"));
+            b.endObject();
+    }
+                    .add(mqb, BooleanClause.Occur.FILTER)
+ */
+    @Override
+                    .build(),
+        unsupportedOptions.put("positions", IndexOptions.DOCS_AND_FREQS_AND_POSITIONS);
+                    .add(mqb, BooleanClause.Occur.FILTER)
+        {
+            matchQuery.setPhraseSlop(1);
+        assertThat(q2, is(expectedQuery));
+        assertThat(fieldType.storeTermVectorOffsets(), equalTo(false));
+import org.apache.lucene.index.Term;
+        supportedOptions.put("docs", IndexOptions.DOCS);
+                .build(),
+        }
+                    b -> b.field("type", textFieldName)
+                    .build(),
+        }
+            Query q = matchQuery.parse(MatchQuery.Type.PHRASE_PREFIX, "synfield", "two dogs");
+            MapperParsingException.class,
+            mqb.add(new Term[] { new Term("synfield", "dogs"), new Term("synfield", "dog") });
+            queryShardContext
+                .add(new TermQuery(new Term("field", "words")), BooleanClause.Occur.FILTER)
+        Query q4 = new MatchPhraseQueryBuilder("field", "singleton").toQuery(queryShardContext);
+                .field("index_phrases", true)
+            Query expected = new SourceFieldMatchQuery(
+            b.startObject("field");
+                .build(),
+        QueryShardContext queryShardContext = createQueryShardContext(mapperService);
+/*
+import org.apache.lucene.index.IndexOptions;
+        Map<String, IndexOptions> unsupportedOptions = new HashMap<>();
+                        .field("max_chars", 10)
+            );
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1234")));
+    }
+                .add(new TermQuery(new Term("field", "stopword")), BooleanClause.Occur.FILTER)
+        assertEquals(1, fields.length);
+                .add(new Term[] { new Term("synfield", "dogs"), new Term("synfield", "dog") }, 1)
+import org.opensearch.core.xcontent.XContentBuilder;
+        // not supported and asserted the expected behavior in testIndexPrefixMapping
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", textFieldName).field("store", true)));
+            () -> createDocumentMapper(
+                        .build(),
+        );
+        MapperService mapperService = createMapperService(mapping(b -> {
+        }
+        );
+    public void testFastPhraseMapping() throws IOException {
+        Query q = new MatchPhraseQueryBuilder("field", "two words").toQuery(queryShardContext);
+    @Override
+            Query expected = new SourceFieldMatchQuery(
+            assertEquals(1, fields.length);
+        {
+        })));
+import org.apache.lucene.search.BooleanClause;
+            mqbFilter.add(new Term("synfield", "word"));
+                mqbFilter,
+                new BooleanQuery.Builder().add(new TermQuery(new Term("field", "two")), BooleanClause.Occur.FILTER)
+    }
+            Query q = new MatchPhrasePrefixQueryBuilder("field", "sparkle a stopword").toQuery(queryShardContext);
+                mapperService.fieldType("field"),
+import org.apache.lucene.index.DocValuesType;
+                queryShardContext
+            assertThat(q, equalTo(expected));
+            mapping.startObject(option).field("type", textFieldName).field("index_options", option).endObject();
+        );
+                mapperService.fieldType("synfield"),
+        textFieldName = "match_only_text";
+        assertEquals("1234", fields[0].stringValue());
+    }
+            } catch (IOException e) {
+                )
+            matchQuery.setAnalyzer(new MockSynonymAnalyzer());
+            }
+        );
+        IndexableFieldType fieldType = fields[0].fieldType();
+        }));
+            matchQuery.setAnalyzer(new MockSynonymAnalyzer());
+                    .add(mqb, BooleanClause.Occur.FILTER)
+                        .add(new TermQuery(new Term("synfield", "dog")), BooleanClause.Occur.SHOULD)
+                .build(),
+            b.startObject("synfield").field("type", textFieldName).field("analyzer", "standard").field("index_phrases", true).endObject();
+            }
+            "Failed to parse mapping [_doc]: Index phrases cannot be enabled on for match_only_text field. Use text field instead",
+        {
+            DocumentMapper mapper = createDocumentMapper(mapping);
+            IndexOptions options = supportedOptions.get(option);
+            Query expected = new SourceFieldMatchQuery(
+        assertThat(fieldType.storeTermVectorPositions(), equalTo(false));
+            mqbFilter.add(new Term("field", "sparkle"));
+        assertTrue(fields[0].fieldType().stored());
+            b.startObject("field");
+                new BooleanQuery.Builder().add(new TermQuery(new Term("synfield", "two")), BooleanClause.Occur.FILTER)
+            Query q = matchQuery.parse(MatchQuery.Type.PHRASE_PREFIX, "synfield", "three dogs word");
+            Query expected = new SourceFieldMatchQuery(
+            mqbFilter.add(new Term("field", "here"));
+                mqbFilter,
+                        BooleanClause.Occur.FILTER
+            new PhraseQuery("field", "three", "words", "here"),
+            Query expected = new SourceFieldMatchQuery(
+import org.opensearch.index.query.SourceFieldMatchQuery;
+        assertEquals(fieldMapping(this::minimalMapping).toString(), mapper.mappingSource().toString());
+            );
+                );
+        }
+                mapperService.fieldType("field"),
+        MapperService mapperService = createMapperService(mapping(b -> {
+                    BooleanClause.Occur.FILTER
+        }
+            {
+    public void testSimpleMerge() throws IOException {}
+    public void testPositionIncrementGap() throws IOException {}
+                mapperService.fieldType("synfield"),
+                new BooleanQuery.Builder().add(new TermQuery(new Term("field", "sparkle")), BooleanClause.Occur.FILTER)
+        q = new TermQueryBuilder("field", "foo").caseInsensitive(true).rewrite(queryShardContext).toQuery(queryShardContext);
+            Query q = new MatchPhrasePrefixQueryBuilder("field", "two words").toQuery(queryShardContext);
+            mqbFilter.add(new Term[] { new Term("synfield", "dogs"), new Term("synfield", "dog") });
+        assertThat(fieldType.storeTermVectorPayloads(), equalTo(false));
+            mqb.add(new Term("field", "words"));
+    public void testPhrasePrefixes() throws IOException {
+    }
+            queryShardContext
+    @Override
+    public void testTermQuery() throws Exception {
+                queryShardContext
+        MatchQuery matchQuery = new MatchQuery(queryShardContext);
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+import java.util.List;
+import java.io.IOException;
+                queryShardContext
+        {
+        QueryShardContext queryShardContext = createQueryShardContext(mapperService);
+    public void testIndexPrefixIndexTypes() throws IOException {
+            b.startObject("field").field("type", textFieldName).field("analyzer", "my_stop_analyzer").endObject();
+            mqb.add(new Term("field", "singleton"));
+            );
+import org.opensearch.index.query.TermQueryBuilder;
+            MultiPhrasePrefixQuery mqbFilter = new MultiPhrasePrefixQuery("synfield");
+                throw new RuntimeException(e);
+import org.junit.Before;
+            MultiPhrasePrefixQuery mqbFilter = new MultiPhrasePrefixQuery("field");
+import org.apache.lucene.index.IndexableField;
+                .add(new TermQuery(new Term("field", "words")), BooleanClause.Occur.FILTER)
+    @Override
+    public void setupMatchOnlyTextFieldMapper() {
+import java.util.HashMap;
+    public void testPhraseQuery() throws IOException {
+            MultiPhrasePrefixQuery mqb = new MultiPhrasePrefixQuery("synfield");
+        for (String option : unsupportedOptions.keySet()) {
+            MultiPhrasePrefixQuery mqbFilter = new MultiPhrasePrefixQuery("field");
+    public void testDefaultPositionIncrementGap() throws IOException {}
+            MultiPhrasePrefixQuery mqb = new MultiPhrasePrefixQuery("field");
+ * this file be licensed under the Apache-2.0 license or a
+            {
+            b.endObject();
+                .add(new TermQuery(new Term("field", "words")), BooleanClause.Occur.FILTER)
+        for (String option : supportedOptions.keySet()) {
+            assertThat(q, equalTo(expected));
+            mqbFilter.setSlop(1);
+        }
+        assertThat(q3, is(expectedQuery));
+        assertThat(q, is(expectedQuery));
+                queryShardContext
+import org.apache.lucene.search.Query;
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.Map;
+            new BooleanQuery.Builder().add(new TermQuery(new Term("field", "two")), BooleanClause.Occur.FILTER)
+            // "standard" will be replaced with MockSynonymAnalyzer
+                mqb,
+        assertThat(fieldType.omitNorms(), equalTo(true));
+            );
+            String serialized = Strings.toString(MediaTypeRegistry.JSON, mapper);
+            }
+                mqbFilter,
+            b.endObject();
+                .endObject();
+    @Before
+            Query q = new MatchPhrasePrefixQueryBuilder("field", "two words").slop(1).toQuery(queryShardContext);
+            mqbFilter.add(new Term("synfield", "three"));
+                        .startObject("index_prefixes")
+            XContentBuilder mapping = MediaTypeRegistry.JSON.contentBuilder().startObject().startObject("_doc").startObject("properties");
+            {
+            b.startObject("field")
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1234")));
+                new BooleanQuery.Builder().add(new TermQuery(new Term("synfield", "three")), BooleanClause.Occur.FILTER)
+        Query q3 = new MatchPhraseQueryBuilder("field", "two words").slop(2).toQuery(queryShardContext);
+import org.apache.lucene.index.IndexableFieldType;
+            new PhraseQuery(2, "field", "two", "words"),
+        Query q2 = new MatchPhraseQueryBuilder("field", "three words here").toQuery(queryShardContext);
+import static org.hamcrest.core.Is.is;
+            queryShardContext
+    @Override
+                queryShardContext
+            ParsedDocument doc = mapper.parse(source(b -> { b.field(option, "1234"); }));
+            mapping.endObject().endObject().endObject();
+                b.field("type", textFieldName);
+        matchQuery.setAnalyzer(new MockSynonymAnalyzer());
+    @Override
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+            assertThat(q, equalTo(expected));
+            );
+        Query q5 = new MatchPhraseQueryBuilder("field", "sparkle a stopword").toQuery(queryShardContext);
+            e.getMessage()
+            MatchQuery matchQuery = new MatchQuery(queryShardContext);
+            mqbFilter.add(new Term("synfield", "motor"));
+                            .build(),
+                mqbFilter,
+            MultiPhrasePrefixQuery mqbFilter = new MultiPhrasePrefixQuery("synfield");
+            MultiPhrasePrefixQuery mqbFilter = new MultiPhrasePrefixQuery("field");
+import org.apache.lucene.search.PhraseQuery;
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+            mqb.add(new Term("field", "stopword"));
+    @Override
+        assertEquals(
+            // "standard" will be replaced with MockSynonymAnalyzer
+import org.apache.lucene.search.ConstantScoreQuery;
+ * The OpenSearch Contributors require contributions made to
+        }));
+            Query expected = new SourceFieldMatchQuery(
+            assertThat(q, equalTo(expected));
+        Query q6 = matchQuery.parse(MatchQuery.Type.PHRASE, "synfield", "motor dogs");
+                b.field("analyzer", "standard"); // "standard" will be replaced with MockSynonymAnalyzer
+ * compatible open source license.
+                queryShardContext
+                    new BooleanQuery.Builder().add(new TermQuery(new Term("synfield", "dogs")), BooleanClause.Occur.SHOULD)
+        QueryShardContext queryShardContext = createQueryShardContext(mapperService);
+        {
+                b.field("analyzer", "my_stop_analyzer"); // "standard" will be replaced with MockSynonymAnalyzer
+                            .add(new TermQuery(new Term("synfield", "dog")), BooleanClause.Occur.SHOULD)
+            assertThat(q, is(expected));
+                .add(
+        assertFalse(fieldType.stored());
+                    )
+                        .field("min_chars", 2)
+        // not supported and asserted the expected behavior in testIndexPrefixMapping
+                mapperService.fieldType("field"),
+            mqb.add(new Term("field", "here"));
+            MultiPhrasePrefixQuery mqb = new MultiPhrasePrefixQuery("field");
+    public void testDefaults() throws IOException {
+        assertThat(q4, is(new ConstantScoreQuery(new TermQuery(new Term("field", "singleton")))));
+        assertEquals(new ConstantScoreQuery(new TermQuery(new Term("field", "foo"))), q);
+                    .build(),
+        {
+            mapperService.fieldType("synfield"),
+    @Override
+            mqbFilter.add(new Term[] { new Term("synfield", "dogs"), new Term("synfield", "dog") });
+    @Override
+            Query q = new MatchPhrasePrefixQueryBuilder("field", "singleton").toQuery(queryShardContext);
+        for (String indexOptions : List.of("docs")) {
+            new BooleanQuery.Builder().add(new TermQuery(new Term("synfield", "motor")), BooleanClause.Occur.FILTER)
+            mqbFilter.add(new Term("field", "three"));
+            new BooleanQuery.Builder().add(new TermQuery(new Term("field", "three")), BooleanClause.Occur.FILTER)
+            MultiPhrasePrefixQuery mqbFilter = new MultiPhrasePrefixQuery("synfield");
+                .build(),
+            Query q = new MatchPhrasePrefixQueryBuilder("field", "three words here").toQuery(queryShardContext);
+import org.opensearch.core.common.Strings;
+                queryShardContext
+        assertEquals(1, fields.length);
+        }
+            )
+import org.apache.lucene.tests.analysis.MockSynonymAnalyzer;
+            mqbFilter.add(new Term("field", "words"));
+import org.opensearch.index.query.MatchPhrasePrefixQueryBuilder;
+    public void testAnalyzedFieldPositionIncrementWithoutPositions() {
+            }
+        );
+    }
+    }
+                mapperService.fieldType("synfield"),
+                new BooleanQuery.Builder().add(new TermQuery(new Term("synfield", "motor")), BooleanClause.Occur.FILTER)
+    public void testIndexPrefixMapping() throws IOException {
+                new BooleanQuery.Builder().add(mqb, BooleanClause.Occur.FILTER).build(),
+import static org.hamcrest.Matchers.containsString;
+    public void testBWCSerialization() throws IOException {}
+    @Override
+            b.startObject("synfield").field("type", textFieldName).field("analyzer", "standard").endObject();
+                    .add(mqb, BooleanClause.Occur.FILTER)
+            mapping.endObject().endObject().endObject();
+                fieldMapping(
+            MultiPhrasePrefixQuery mqb = new MultiPhrasePrefixQuery("synfield");
+        unsupportedOptions.put("offsets", IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS);
+            mapperService.fieldType("field"),
+        assertTrue(fieldType.tokenized());
+    }
+                e.getMessage(),
+                createDocumentMapper(
+            Query expected = new SourceFieldMatchQuery(
+                    .add(mqb, BooleanClause.Occur.FILTER)
+                        .endObject()
+        expectedQuery = new SourceFieldMatchQuery(
+            e.getMessage()
+                queryShardContext
+    public void testIndexOptions() throws IOException {
+                mqbFilter,
+                b.field("type", textFieldName);
+    @Override
+                mapperService.fieldType("field"),
+            "Failed to parse mapping [_doc]: Index prefixes cannot be enabled on for match_only_text field. Use text field instead",
+                    .add(mqb, BooleanClause.Occur.FILTER)
+            mapping.startObject(option).field("type", textFieldName).field("index_options", option).endObject();
+            mapperService.fieldType("field"),
+import org.opensearch.index.search.MatchQuery;

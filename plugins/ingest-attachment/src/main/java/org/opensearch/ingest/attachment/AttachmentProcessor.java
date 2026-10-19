@@ -1,296 +1,255 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+import org.opensearch.OpenSearchParseException;
+        return field;
+        public static Property parse(String value) {
+            // tika 1.17 throws an exception when the InputStream has 0 bytes.
+        DATE,
+                processorTag,
+            String language = result.getLanguage();
+        boolean ignoreMissing,
+            }
+        if (properties.contains(Property.LANGUAGE) && Strings.hasLength(parsedContent)) {
+    String getTargetField() {
+            }
+            if (propertyNames != null) {
+                    additionalFields.put(Property.KEYWORDS.toLowerCase(), keywords);
+        }
+            throw new OpenSearchParseException("Error parsing document in field [{}]", e, field);
+            } else {
  * You may obtain a copy of the License at
+            }
+            );
+ * SPDX-License-Identifier: Apache-2.0
+                }
+            if (Strings.hasLength(contentType)) {
+                additionalFields.put(Property.KEYWORDS.toLowerCase(), keywords);
+                            TYPE,
+            return valueOf(value.toUpperCase(Locale.ROOT));
+            additionalFields.put(Property.LANGUAGE.toLowerCase(), language);
+ * Unless required by applicable law or agreed to in writing,
+import org.apache.tika.metadata.Metadata;
+ * the Apache License, Version 2.0 (the "License"); you may
+        CONTENT_LENGTH,
+            return this.toString().toLowerCase(Locale.ROOT);
+    }
+    @Override
+/*
+ * this file be licensed under the Apache-2.0 license or a
+ */
+        }
+        if (indexedCharsField != null) {
+            additionalFields.put(Property.CONTENT.toLowerCase(), parsedContent.trim());
+        return targetField;
+ * Modifications Copyright OpenSearch Contributors. See
  *
+            if (Strings.hasLength(title)) {
+    enum Property {
+            String keywords = metadata.get("Keywords");
+            OptimaizeLangDetector langDetector = new OptimaizeLangDetector();
+            additionalFields.put(Property.CONTENT_LENGTH.toLowerCase(), length);
+    }
+                // The MSOffice parser has deprecated "Author" in favor of "Creator"
+        }
+                additionalFields.put(Property.AUTHOR.toLowerCase(), author);
+import org.opensearch.ingest.IngestDocument;
+            String contentLength = metadata.get(Metadata.CONTENT_LENGTH);
+    private final Set<Property> properties;
+ * Licensed to Elasticsearch under one or more contributor
+        ingestDocument.setFieldValue(targetField, additionalFields);
+            String targetField = readStringProperty(TYPE, processorTag, config, "target_field", "attachment");
+                            processorTag,
+            if (createdDate != null) {
+    int getIndexedChars() {
+        try {
+            String field = readStringProperty(TYPE, processorTag, config, "field");
+        this.indexedChars = indexedChars;
+    }
+                field,
+            throw new IllegalArgumentException("field [" + field + "] is null, cannot parse.");
+ * specific language governing permissions and limitations
+                    } catch (Exception e) {
+            }
+        if (properties.contains(Property.DATE)) {
+        }
+            // If the user provided the number of characters to be extracted as part of the document, we use it
+    private static final int NUMBER_OF_CHARS_INDEXED = 100000;
+                properties = DEFAULT_PROPERTIES;
+            long length;
+    public static final String TYPE = "attachment";
+        CONTENT_TYPE,
+            langDetector.loadModels();
+                        throw newConfigurationException(
+                    }
+        byte[] input = ingestDocument.getFieldValueAsBytes(field, ignoreMissing);
+ */
+        LANGUAGE;
  *    http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.ingest.attachment;
-
-import org.apache.tika.exception.ZeroByteFileException;
 import org.apache.tika.langdetect.optimaize.OptimaizeLangDetector;
-import org.apache.tika.language.detect.LanguageResult;
-import org.apache.tika.metadata.Metadata;
-import org.apache.tika.metadata.TikaCoreProperties;
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.core.common.Strings;
-import org.opensearch.ingest.AbstractProcessor;
-import org.opensearch.ingest.IngestDocument;
-import org.opensearch.ingest.Processor;
-
-import java.util.Arrays;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-
-import static org.opensearch.ingest.ConfigurationUtils.newConfigurationException;
-import static org.opensearch.ingest.ConfigurationUtils.readBooleanProperty;
-import static org.opensearch.ingest.ConfigurationUtils.readIntProperty;
-import static org.opensearch.ingest.ConfigurationUtils.readOptionalList;
-import static org.opensearch.ingest.ConfigurationUtils.readOptionalStringProperty;
-import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
-
-public final class AttachmentProcessor extends AbstractProcessor {
-
-    public static final String TYPE = "attachment";
-
-    private static final int NUMBER_OF_CHARS_INDEXED = 100000;
-
-    private final String field;
-    private final String targetField;
-    private final Set<Property> properties;
+ * GitHub history for details.
+                description,
     private final int indexedChars;
-    private final boolean ignoreMissing;
-    private final String indexedCharsField;
-
-    AttachmentProcessor(
-        String tag,
-        String description,
-        String field,
-        String targetField,
-        Set<Property> properties,
-        int indexedChars,
-        boolean ignoreMissing,
         String indexedCharsField
-    ) {
-        super(tag, description);
-        this.field = field;
-        this.targetField = targetField;
-        this.properties = properties;
-        this.indexedChars = indexedChars;
-        this.ignoreMissing = ignoreMissing;
-        this.indexedCharsField = indexedCharsField;
     }
-
-    boolean isIgnoreMissing() {
-        return ignoreMissing;
-    }
-
-    @Override
-    public IngestDocument execute(IngestDocument ingestDocument) {
-        Map<String, Object> additionalFields = new HashMap<>();
-
-        byte[] input = ingestDocument.getFieldValueAsBytes(field, ignoreMissing);
-
-        if (input == null && ignoreMissing) {
-            return ingestDocument;
-        } else if (input == null) {
-            throw new IllegalArgumentException("field [" + field + "] is null, cannot parse.");
         }
-
-        Integer indexedChars = this.indexedChars;
-
-        if (indexedCharsField != null) {
-            // If the user provided the number of characters to be extracted as part of the document, we use it
-            indexedChars = ingestDocument.getFieldValue(indexedCharsField, Integer.class, true);
-            if (indexedChars == null) {
-                // If the field does not exist we fall back to the global limit
-                indexedChars = this.indexedChars;
-            }
-        }
-
-        Metadata metadata = new Metadata();
-        String parsedContent = "";
-        try {
-            parsedContent = TikaImpl.parse(input, metadata, indexedChars);
-        } catch (ZeroByteFileException e) {
-            // tika 1.17 throws an exception when the InputStream has 0 bytes.
-            // previously, it did not mind. This is here to preserve that behavior.
-        } catch (Exception e) {
-            throw new OpenSearchParseException("Error parsing document in field [{}]", e, field);
-        }
-
-        if (properties.contains(Property.CONTENT) && Strings.hasLength(parsedContent)) {
             // somehow tika seems to append a newline at the end automatically, lets remove that again
-            additionalFields.put(Property.CONTENT.toLowerCase(), parsedContent.trim());
-        }
-
-        if (properties.contains(Property.LANGUAGE) && Strings.hasLength(parsedContent)) {
-            OptimaizeLangDetector langDetector = new OptimaizeLangDetector();
-            langDetector.loadModels();
-            LanguageResult result = langDetector.detect(parsedContent);
-            String language = result.getLanguage();
-            additionalFields.put(Property.LANGUAGE.toLowerCase(), language);
-        }
-
-        if (properties.contains(Property.DATE)) {
-            String createdDate = metadata.get(TikaCoreProperties.CREATED);
-            if (createdDate != null) {
-                additionalFields.put(Property.DATE.toLowerCase(), createdDate);
-            }
-        }
-
-        if (properties.contains(Property.TITLE)) {
-            String title = metadata.get(TikaCoreProperties.TITLE);
-            if (Strings.hasLength(title)) {
-                additionalFields.put(Property.TITLE.toLowerCase(), title);
-            }
-        }
-
-        if (properties.contains(Property.AUTHOR)) {
-            String author = metadata.get("Author");
-            if (Strings.hasLength(author)) {
-                additionalFields.put(Property.AUTHOR.toLowerCase(), author);
-            } else {
-                // The MSOffice parser has deprecated "Author" in favor of "Creator"
-                author = metadata.get(TikaCoreProperties.CREATOR);
-                if (Strings.hasLength(author)) {
-                    additionalFields.put(Property.AUTHOR.toLowerCase(), author);
-                }
-            }
-        }
-
-        if (properties.contains(Property.KEYWORDS)) {
-            String keywords = metadata.get("Keywords");
-            if (Strings.hasLength(keywords)) {
-                additionalFields.put(Property.KEYWORDS.toLowerCase(), keywords);
-            } else {
-                // Fallback - EPUBs put their keywords as multiple subject fields by convention
-                keywords = metadata.get(TikaCoreProperties.SUBJECT);
-                if (Strings.hasLength(keywords)) {
-                    additionalFields.put(Property.KEYWORDS.toLowerCase(), keywords);
-                }
-            }
-        }
-
-        if (properties.contains(Property.CONTENT_TYPE)) {
-            String contentType = metadata.get(Metadata.CONTENT_TYPE);
-            if (Strings.hasLength(contentType)) {
-                additionalFields.put(Property.CONTENT_TYPE.toLowerCase(), contentType);
-            }
-        }
-
-        if (properties.contains(Property.CONTENT_LENGTH)) {
-            String contentLength = metadata.get(Metadata.CONTENT_LENGTH);
-            long length;
-            if (Strings.hasLength(contentLength)) {
-                length = Long.parseLong(contentLength);
-            } else {
-                length = parsedContent.length();
-            }
-            additionalFields.put(Property.CONTENT_LENGTH.toLowerCase(), length);
-        }
-
-        ingestDocument.setFieldValue(targetField, additionalFields);
-        return ingestDocument;
-    }
-
-    @Override
-    public String getType() {
-        return TYPE;
-    }
-
-    String getField() {
-        return field;
-    }
-
-    String getTargetField() {
-        return targetField;
-    }
-
-    Set<Property> getProperties() {
-        return properties;
-    }
-
-    int getIndexedChars() {
-        return indexedChars;
-    }
-
-    public static final class Factory implements Processor.Factory {
-
         static final Set<Property> DEFAULT_PROPERTIES = EnumSet.allOf(Property.class);
-
+            if (Strings.hasLength(author)) {
+/*
+import java.util.Map;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                targetField,
+                properties = EnumSet.noneOf(Property.class);
+        }
+        String targetField,
+            }
+                indexedChars = this.indexedChars;
+                author = metadata.get(TikaCoreProperties.CREATOR);
+                            "illegal field option [" + fieldName + "]. valid values are " + Arrays.toString(Property.values())
+            String author = metadata.get("Author");
+import static org.opensearch.ingest.ConfigurationUtils.readBooleanProperty;
+        this.properties = properties;
+            if (Strings.hasLength(keywords)) {
+import static org.opensearch.ingest.ConfigurationUtils.readOptionalList;
+        return ingestDocument;
+                ignoreMissing,
+                additionalFields.put(Property.DATE.toLowerCase(), createdDate);
+            String description,
+    boolean isIgnoreMissing() {
+                    additionalFields.put(Property.AUTHOR.toLowerCase(), author);
+            } else {
+            boolean ignoreMissing = readBooleanProperty(TYPE, processorTag, config, "ignore_missing", false);
+        this.ignoreMissing = ignoreMissing;
+            String title = metadata.get(TikaCoreProperties.TITLE);
+        return indexedChars;
+import org.opensearch.ingest.Processor;
+                indexedCharsField
+        if (properties.contains(Property.KEYWORDS)) {
+    public String getType() {
+                length = Long.parseLong(contentLength);
+        String parsedContent = "";
+import org.apache.tika.language.detect.LanguageResult;
+        public String toLowerCase() {
+ * license agreements. See the NOTICE file distributed with
+    Set<Property> getProperties() {
+        }
+    }
+            String indexedCharsField = readOptionalStringProperty(TYPE, processorTag, config, "indexed_chars_field");
+import org.apache.tika.exception.ZeroByteFileException;
+                }
+        this.field = field;
+        String description,
+            String processorTag,
+                        );
+                for (String fieldName : propertyNames) {
+            // previously, it did not mind. This is here to preserve that behavior.
+        Integer indexedChars = this.indexedChars;
+import java.util.List;
+    String getField() {
+        KEYWORDS,
+        Set<Property> properties,
+        String tag,
+            if (indexedChars == null) {
+            String createdDate = metadata.get(TikaCoreProperties.CREATED);
+            final Set<Property> properties;
+import static org.opensearch.ingest.ConfigurationUtils.readOptionalStringProperty;
+        this.targetField = targetField;
+import java.util.HashMap;
+ * not use this file except in compliance with the License.
+import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
+        String field,
         @Override
         public AttachmentProcessor create(
-            Map<String, Processor.Factory> registry,
-            String processorTag,
-            String description,
+        if (properties.contains(Property.TITLE)) {
+        return TYPE;
+            LanguageResult result = langDetector.detect(parsedContent);
+            List<String> propertyNames = readOptionalList(TYPE, processorTag, config, "properties");
+        if (properties.contains(Property.CONTENT_LENGTH)) {
+        AUTHOR,
+ * this work for additional information regarding copyright
+    }
+        }
+            if (Strings.hasLength(contentLength)) {
+        super(tag, description);
+            int indexedChars = readIntProperty(TYPE, processorTag, config, "indexed_chars", NUMBER_OF_CHARS_INDEXED);
+                // Fallback - EPUBs put their keywords as multiple subject fields by convention
+        }
+        if (properties.contains(Property.AUTHOR)) {
+import java.util.Locale;
+    public static final class Factory implements Processor.Factory {
+        }
+            return new AttachmentProcessor(
+                        properties.add(Property.parse(fieldName));
+ * ownership. Elasticsearch licenses this file to you under
+        }
+    }
+        Map<String, Object> additionalFields = new HashMap<>();
+/*
+    private final String field;
+        if (input == null && ignoreMissing) {
+                // If the field does not exist we fall back to the global limit
+    private final boolean ignoreMissing;
+package org.opensearch.ingest.attachment;
+                additionalFields.put(Property.CONTENT_TYPE.toLowerCase(), contentType);
+}
+                if (Strings.hasLength(author)) {
+        int indexedChars,
+                    try {
+                additionalFields.put(Property.TITLE.toLowerCase(), title);
+        this.indexedCharsField = indexedCharsField;
+public final class AttachmentProcessor extends AbstractProcessor {
+            } else {
+    public IngestDocument execute(IngestDocument ingestDocument) {
+                indexedChars,
+            parsedContent = TikaImpl.parse(input, metadata, indexedChars);
+import java.util.Set;
+import java.util.EnumSet;
+        TITLE,
+    }
+    ) {
+ * software distributed under the License is distributed on an
+import org.opensearch.core.common.Strings;
+        return ignoreMissing;
+    }
+import java.util.Arrays;
+            String contentType = metadata.get(Metadata.CONTENT_TYPE);
+import org.opensearch.ingest.AbstractProcessor;
+import static org.opensearch.ingest.ConfigurationUtils.readIntProperty;
+    private final String indexedCharsField;
+        if (properties.contains(Property.CONTENT_TYPE)) {
+            } else {
+ * compatible open source license.
+    }
+ *
+                }
+            indexedChars = ingestDocument.getFieldValue(indexedCharsField, Integer.class, true);
+        }
+                properties,
+            }
+                            "properties",
+        } catch (Exception e) {
+    private final String targetField;
             Map<String, Object> config
         ) throws Exception {
-            String field = readStringProperty(TYPE, processorTag, config, "field");
-            String targetField = readStringProperty(TYPE, processorTag, config, "target_field", "attachment");
-            List<String> propertyNames = readOptionalList(TYPE, processorTag, config, "properties");
-            int indexedChars = readIntProperty(TYPE, processorTag, config, "indexed_chars", NUMBER_OF_CHARS_INDEXED);
-            boolean ignoreMissing = readBooleanProperty(TYPE, processorTag, config, "ignore_missing", false);
-            String indexedCharsField = readOptionalStringProperty(TYPE, processorTag, config, "indexed_chars_field");
-
-            final Set<Property> properties;
-            if (propertyNames != null) {
-                properties = EnumSet.noneOf(Property.class);
-                for (String fieldName : propertyNames) {
-                    try {
-                        properties.add(Property.parse(fieldName));
-                    } catch (Exception e) {
-                        throw newConfigurationException(
-                            TYPE,
-                            processorTag,
-                            "properties",
-                            "illegal field option [" + fieldName + "]. valid values are " + Arrays.toString(Property.values())
-                        );
-                    }
-                }
-            } else {
-                properties = DEFAULT_PROPERTIES;
             }
-
-            return new AttachmentProcessor(
-                processorTag,
-                description,
-                field,
-                targetField,
-                properties,
-                indexedChars,
-                ignoreMissing,
-                indexedCharsField
-            );
+            return ingestDocument;
+ * under the License.
+import org.apache.tika.metadata.TikaCoreProperties;
+    AttachmentProcessor(
+                length = parsedContent.length();
+        } else if (input == null) {
+            }
+ * The OpenSearch Contributors require contributions made to
+ */
+        return properties;
         }
-    }
-
-    enum Property {
-
+import static org.opensearch.ingest.ConfigurationUtils.newConfigurationException;
         CONTENT,
-        TITLE,
-        AUTHOR,
-        KEYWORDS,
-        DATE,
-        CONTENT_TYPE,
-        CONTENT_LENGTH,
-        LANGUAGE;
-
-        public static Property parse(String value) {
-            return valueOf(value.toUpperCase(Locale.ROOT));
+                keywords = metadata.get(TikaCoreProperties.SUBJECT);
+        } catch (ZeroByteFileException e) {
+                if (Strings.hasLength(keywords)) {
+    @Override
+            Map<String, Processor.Factory> registry,
+        if (properties.contains(Property.CONTENT) && Strings.hasLength(parsedContent)) {
         }
-
-        public String toLowerCase() {
-            return this.toString().toLowerCase(Locale.ROOT);
-        }
-    }
-}
+        Metadata metadata = new Metadata();
+ * KIND, either express or implied.  See the License for the

@@ -1,274 +1,248 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.composite;
-
-import org.apache.lucene.index.DocValues;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.SortedDocValues;
-import org.apache.lucene.index.SortedSetDocValues;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.CheckedFunction;
+            return lastLookupValue;
 import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.LongArray;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.StringFieldType;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.LeafBucketCollector;
+            boolean currentValueIsSet = false;
+    @Override
+            return null;
+/*
+        if (missingBucket && value == null) {
+                    }
+    }
+            }
+ * the Apache License, Version 2.0 (the "License"); you may
 import org.opensearch.search.aggregations.bucket.missing.MissingOrder;
-
-import java.io.IOException;
-
-import static org.apache.lucene.index.SortedSetDocValues.NO_MORE_DOCS;
-
-/**
- * A {@link SingleDimensionValuesSource} for global ordinals.
- *
- * @opensearch.internal
- */
-class GlobalOrdinalValuesSource extends SingleDimensionValuesSource<BytesRef> {
-    private final CheckedFunction<LeafReaderContext, SortedSetDocValues, IOException> docValuesFunc;
-    private LongArray values;
-    private SortedSetDocValues lookup;
-    private long currentValue;
-    private Long afterValueGlobalOrd;
+            if (MissingOrder.unknownOrder(result) == false) {
+    BytesRef toComparable(int slot) throws IOException {
     private boolean isTopValueInsertionPoint;
-
-    private long lastLookupOrd = -1;
-    private BytesRef lastLookupValue;
-
-    GlobalOrdinalValuesSource(
-        BigArrays bigArrays,
-        MappedFieldType type,
-        CheckedFunction<LeafReaderContext, SortedSetDocValues, IOException> docValuesFunc,
+        long globalOrd = values.get(slot);
+ */
         DocValueFormat format,
-        boolean missingBucket,
-        MissingOrder missingOrder,
-        int size,
-        int reverseMul
-    ) {
-        super(bigArrays, format, type, missingBucket, missingOrder, size, reverseMul);
-        this.docValuesFunc = docValuesFunc;
-        this.values = bigArrays.newLongArray(Math.min(size, 100), false);
-    }
-
-    @Override
-    void copyCurrent(int slot) {
-        values = bigArrays.grow(values, slot + 1);
-        values.set(slot, currentValue);
-    }
-
-    @Override
-    int compare(int from, int to) {
-        if (missingBucket) {
-            int result = missingOrder.compare(() -> values.get(from) == -1, () -> values.get(to) == -1, reverseMul);
-            if (MissingOrder.unknownOrder(result) == false) {
+                    if (singleton.advanceExact(doc)) {
+ * compatible open source license.
+ * ownership. Elasticsearch licenses this file to you under
                 return result;
-            }
-        }
-        return Long.compare(values.get(from), values.get(to)) * reverseMul;
     }
-
-    @Override
-    int compareCurrent(int slot) {
-        if (missingBucket) {
-            int result = missingOrder.compare(() -> currentValue == -1, () -> values.get(slot) == -1, reverseMul);
-            if (MissingOrder.unknownOrder(result) == false) {
-                return result;
+                        while ((count-- > 0) && (ord = dvs.nextOrd()) != NO_MORE_DOCS) {
             }
-        }
-        return Long.compare(currentValue, values.get(slot)) * reverseMul;
-    }
-
-    @Override
-    int compareCurrentWithAfter() {
-        if (missingBucket) {
-            int result = missingOrder.compare(() -> currentValue == -1, () -> afterValueGlobalOrd == -1, reverseMul);
-            if (MissingOrder.unknownOrder(result) == false) {
-                return result;
-            }
-        }
-        int cmp = Long.compare(currentValue, afterValueGlobalOrd);
-        if (cmp == 0 && isTopValueInsertionPoint) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                @Override
             // the top value is missing in this shard, the comparison is against
-            // the insertion point of the top value so equality means that the value
-            // is "after" the insertion point.
-            return reverseMul;
-        }
-        return cmp * reverseMul;
-    }
-
-    @Override
-    int hashCode(int slot) {
+import org.opensearch.common.util.LongArray;
+        boolean missingBucket,
+        };
+    int compareCurrentWithAfter() {
+                if (currentValueIsSet == false) {
+        return new TermsSortedDocsProducer(fieldType.name());
         return Long.hashCode(values.get(slot));
     }
-
+        }
+    public void close() {
+        if (afterValue != null && afterValueGlobalOrd == null) {
+        }
+import org.apache.lucene.index.SortedSetDocValues;
+            }
+    }
+/*
+        int size,
+        if (cmp == 0 && isTopValueInsertionPoint) {
+                assert currentValueIsSet;
+ */
+            };
+ * Unless required by applicable law or agreed to in writing,
+                            if (term.equals(lookup.lookupOrd(ord))) {
+        return cmp * reverseMul;
+            return reverseMul;
+        }
+        values.set(slot, currentValue);
+            || (query != null && query.getClass() != MatchAllDocsQuery.class)) {
+                    } else if (missingBucket) {
+        if (missingBucket) {
+                public void collect(int doc, long bucket) throws IOException {
     @Override
-    int hashCodeCurrent() {
+        values = bigArrays.grow(values, slot + 1);
+        MappedFieldType type,
+        }
+                        long ord;
+ * specific language governing permissions and limitations
+    int compare(int from, int to) {
+    private Long afterValueGlobalOrd;
+ */
+ * Licensed to Elasticsearch under one or more contributor
+            }
+        final SortedDocValues singleton = DocValues.unwrapSingleton(dvs);
+                                break;
+        return new LeafBucketCollector() {
+    ) {
+        return Long.compare(currentValue, values.get(slot)) * reverseMul;
+package org.opensearch.search.aggregations.bucket.composite;
+import org.apache.lucene.search.Query;
+        if (singleton != null) {
+                                currentValueIsSet = true;
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            if (MissingOrder.unknownOrder(result) == false) {
+        }
+import org.apache.lucene.index.IndexReader;
+import static org.apache.lucene.index.SortedSetDocValues.NO_MORE_DOCS;
+        }
+        // Direct ordinal access for single-valued fields
+                        currentValue = ord;
+        } else if (globalOrd == lastLookupOrd) {
+ * not use this file except in compliance with the License.
+    @Override
+    }
+    private long currentValue;
+        CheckedFunction<LeafReaderContext, SortedSetDocValues, IOException> docValuesFunc,
+import org.opensearch.search.aggregations.LeafBucketCollector;
+import org.apache.lucene.search.MatchAllDocsQuery;
+    }
+ * A {@link SingleDimensionValuesSource} for global ordinals.
+        if (lookup == null) {
+ *
+    }
+            afterValueGlobalOrd = lookup.lookupTerm(afterValue);
+        int cmp = Long.compare(currentValue, afterValueGlobalOrd);
+                        next.collect(doc, bucket);
+            throw new IllegalArgumentException("invalid value, expected string, got " + value.getClass().getSimpleName());
+import org.apache.lucene.util.BytesRef;
+        this.values = bigArrays.newLongArray(Math.min(size, 100), false);
+ * this work for additional information regarding copyright
+            initLookup(dvs);
+        super(bigArrays, format, type, missingBucket, missingOrder, size, reverseMul);
+                } else if (missingBucket) {
+                        int count = dvs.docValueCount();
+                        currentValue = singleton.ordValue();
+    private BytesRef lastLookupValue;
+    }
+            if (MissingOrder.unknownOrder(result) == false) {
+            @Override
+    }
+        }
+        this.docValuesFunc = docValuesFunc;
+ * under the License.
+        if (checkIfSortedDocsIsApplicable(reader, fieldType) == false
+        return Long.compare(values.get(from), values.get(to)) * reverseMul;
+            afterValue = format.parseBytesRef(value.toString());
+    int hashCode(int slot) {
+import org.apache.lucene.index.DocValues;
+ * software distributed under the License is distributed on an
+        final SortedSetDocValues dvs = docValuesFunc.apply(context);
+    private void initLookup(SortedSetDocValues dvs) throws IOException {
+                                currentValue = ord;
+        }
+ * You may obtain a copy of the License at
+            int result = missingOrder.compare(() -> values.get(from) == -1, () -> values.get(to) == -1, reverseMul);
+    @Override
+            public void collect(int doc, long bucket) throws IOException {
+        // unwrapSingleton() returns non-null only if the field is single-valued
+                }
+                        next.collect(doc, bucket);
+                // convert negative insert position
+            if (afterValueGlobalOrd < 0) {
+        };
+import org.opensearch.index.mapper.StringFieldType;
+        return new LeafBucketCollector() {
+        } else if (value.getClass() == String.class) {
+import org.apache.lucene.index.SortedDocValues;
+        }
+    @Override
+    }
+    void setAfter(Comparable value) {
+        } else {
+    }
+        if (value.getClass() != BytesRef.class) {
+        Releasables.close(values);
+                }
+            throw new IllegalArgumentException("Expected BytesRef, got " + value.getClass());
+import org.opensearch.search.DocValueFormat;
+import org.opensearch.common.util.BigArrays;
+        }
+                        next.collect(doc, bucket);
+        BigArrays bigArrays,
+                        currentValue = -1;
+ * @opensearch.internal
+            initLookup(dvs);
+    @Override
+            return new LeafBucketCollector() {
+    }
+ *
+    void copyCurrent(int slot) {
+            lastLookupOrd = globalOrd;
+            public void collect(int doc, long bucket) throws IOException {
+        }
+import org.apache.lucene.index.LeafReaderContext;
+            || (fieldType == null || fieldType.unwrap() instanceof StringFieldType == false)
+    @Override
+        if (missingBucket) {
+import org.opensearch.index.mapper.MappedFieldType;
+import org.opensearch.common.CheckedFunction;
+            return null;
+    LeafBucketCollector getLeafCollector(LeafReaderContext context, LeafBucketCollector next) throws IOException {
+    LeafBucketCollector getLeafCollector(Comparable value, LeafReaderContext context, LeafBucketCollector next) throws IOException {
+                }
+    @Override
+    private final CheckedFunction<LeafReaderContext, SortedSetDocValues, IOException> docValuesFunc;
+                isTopValueInsertionPoint = true;
+            @Override
+    @Override
+                    while ((count-- > 0) && (ord = dvs.nextOrd()) != NO_MORE_DOCS) {
+/**
+                    }
+        } else {
+            // the insertion point of the top value so equality means that the value
+                    int count = dvs.docValueCount();
+            afterValueGlobalOrd = -1L;
+    private SortedSetDocValues lookup;
         return Long.hashCode(currentValue);
     }
-
-    @Override
-    void setAfter(Comparable value) {
-        if (missingBucket && value == null) {
-            afterValue = null;
-            afterValueGlobalOrd = -1L;
-        } else if (value.getClass() == String.class) {
-            afterValue = format.parseBytesRef(value.toString());
-        } else {
-            throw new IllegalArgumentException("invalid value, expected string, got " + value.getClass().getSimpleName());
-        }
-    }
-
-    @Override
-    BytesRef toComparable(int slot) throws IOException {
-        long globalOrd = values.get(slot);
-        if (missingBucket && globalOrd == -1) {
-            return null;
-        } else if (globalOrd == lastLookupOrd) {
-            return lastLookupValue;
-        } else {
-            lastLookupOrd = globalOrd;
-            lastLookupValue = BytesRef.deepCopyOf(lookup.lookupOrd(values.get(slot)));
-            return lastLookupValue;
-        }
-    }
-
-    @Override
-    LeafBucketCollector getLeafCollector(LeafReaderContext context, LeafBucketCollector next) throws IOException {
-        final SortedSetDocValues dvs = docValuesFunc.apply(context);
-        if (lookup == null) {
-            initLookup(dvs);
-        }
-
-        // unwrapSingleton() returns non-null only if the field is single-valued
-        final SortedDocValues singleton = DocValues.unwrapSingleton(dvs);
-
-        // Direct ordinal access for single-valued fields
-        if (singleton != null) {
-            return new LeafBucketCollector() {
-                @Override
-                public void collect(int doc, long bucket) throws IOException {
-                    if (singleton.advanceExact(doc)) {
-                        currentValue = singleton.ordValue();
-                        next.collect(doc, bucket);
-                    } else if (missingBucket) {
-                        currentValue = -1;
-                        next.collect(doc, bucket);
-                    }
-                }
-            };
-        }
-
-        return new LeafBucketCollector() {
-            @Override
-            public void collect(int doc, long bucket) throws IOException {
-                if (dvs.advanceExact(doc)) {
-                    long ord;
-                    int count = dvs.docValueCount();
-                    while ((count-- > 0) && (ord = dvs.nextOrd()) != NO_MORE_DOCS) {
-                        currentValue = ord;
-                        next.collect(doc, bucket);
-                    }
-                } else if (missingBucket) {
-                    currentValue = -1;
-                    next.collect(doc, bucket);
-                }
-            }
-        };
-    }
-
-    @Override
-    LeafBucketCollector getLeafCollector(Comparable value, LeafReaderContext context, LeafBucketCollector next) throws IOException {
-        if (value.getClass() != BytesRef.class) {
-            throw new IllegalArgumentException("Expected BytesRef, got " + value.getClass());
-        }
-        BytesRef term = (BytesRef) value;
-        final SortedSetDocValues dvs = docValuesFunc.apply(context);
-        if (lookup == null) {
-            initLookup(dvs);
-        }
-        return new LeafBucketCollector() {
-            boolean currentValueIsSet = false;
-
-            @Override
-            public void collect(int doc, long bucket) throws IOException {
-                if (currentValueIsSet == false) {
-                    if (dvs.advanceExact(doc)) {
-                        long ord;
-                        int count = dvs.docValueCount();
-                        while ((count-- > 0) && (ord = dvs.nextOrd()) != NO_MORE_DOCS) {
-                            if (term.equals(lookup.lookupOrd(ord))) {
-                                currentValueIsSet = true;
-                                currentValue = ord;
-                                break;
-                            }
-                        }
-                    }
-                }
-                assert currentValueIsSet;
-                next.collect(doc, bucket);
-            }
-        };
-    }
-
-    @Override
-    SortedDocsProducer createSortedDocsProducerOrNull(IndexReader reader, Query query) {
-        if (checkIfSortedDocsIsApplicable(reader, fieldType) == false
-            || (fieldType == null || fieldType.unwrap() instanceof StringFieldType == false)
-            || (query != null && query.getClass() != MatchAllDocsQuery.class)) {
-            return null;
-        }
-        return new TermsSortedDocsProducer(fieldType.name());
-    }
-
-    @Override
-    public void close() {
-        Releasables.close(values);
-    }
-
-    private void initLookup(SortedSetDocValues dvs) throws IOException {
-        lookup = dvs;
-        if (afterValue != null && afterValueGlobalOrd == null) {
-            afterValueGlobalOrd = lookup.lookupTerm(afterValue);
-            if (afterValueGlobalOrd < 0) {
-                // convert negative insert position
-                afterValueGlobalOrd = -afterValueGlobalOrd - 1;
-                isTopValueInsertionPoint = true;
-            }
-        }
-    }
 }
+        if (missingBucket && globalOrd == -1) {
+                    }
+            }
+ * KIND, either express or implied.  See the License for the
+                afterValueGlobalOrd = -afterValueGlobalOrd - 1;
+ *
+                    currentValue = -1;
+ * this file be licensed under the Apache-2.0 license or a
+import java.io.IOException;
+                    long ord;
+    SortedDocsProducer createSortedDocsProducerOrNull(IndexReader reader, Query query) {
+ * license agreements. See the NOTICE file distributed with
+                        }
+ * The OpenSearch Contributors require contributions made to
+        if (missingBucket) {
+    @Override
+            int result = missingOrder.compare(() -> currentValue == -1, () -> values.get(slot) == -1, reverseMul);
+            afterValue = null;
+                            }
+        final SortedSetDocValues dvs = docValuesFunc.apply(context);
+            int result = missingOrder.compare(() -> currentValue == -1, () -> afterValueGlobalOrd == -1, reverseMul);
+/*
+                    if (dvs.advanceExact(doc)) {
+    int compareCurrent(int slot) {
+    }
+            lastLookupValue = BytesRef.deepCopyOf(lookup.lookupOrd(values.get(slot)));
+ */
+    GlobalOrdinalValuesSource(
+    private long lastLookupOrd = -1;
+                    next.collect(doc, bucket);
+ * Modifications Copyright OpenSearch Contributors. See
+    @Override
+    private LongArray values;
+            }
+                next.collect(doc, bucket);
+                return result;
+        int reverseMul
+        MissingOrder missingOrder,
+        lookup = dvs;
+ * SPDX-License-Identifier: Apache-2.0
+    int hashCodeCurrent() {
+            return lastLookupValue;
+                if (dvs.advanceExact(doc)) {
+        BytesRef term = (BytesRef) value;
+            // is "after" the insertion point.
+ * GitHub history for details.
+        }
+    @Override
+class GlobalOrdinalValuesSource extends SingleDimensionValuesSource<BytesRef> {
+        if (lookup == null) {
+                return result;

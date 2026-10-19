@@ -1,361 +1,321 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.indices;
-
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.apache.lucene.index.FilterLeafReader;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.IndexReaderContext;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.ReaderUtil;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.Weight;
-import org.apache.lucene.search.join.BitSetProducer;
-import org.apache.lucene.util.Accountable;
-import org.apache.lucene.util.BitSet;
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.common.cache.Cache;
-import org.opensearch.common.cache.CacheBuilder;
-import org.opensearch.common.cache.RemovalListener;
-import org.opensearch.common.cache.RemovalNotification;
-import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
-import org.opensearch.common.lucene.search.Queries;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Setting.Property;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.ConcurrentCollections;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexWarmer;
 import org.opensearch.index.IndexWarmer.TerminationHandle;
-import org.opensearch.index.cache.bitset.BitsetFilterCache;
-import org.opensearch.index.mapper.DocumentMapper;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.mapper.ObjectMapper;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.ShardUtils;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.Closeable;
-import java.io.IOException;
-import java.util.HashSet;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
-import java.util.function.ToLongBiFunction;
-
-/**
- * Node-level cache for {@link BitSet} based filters. Manages a single flat cache shared across
+        // a no-op to invalidate.
+            final CountDownLatch latch = new CountDownLatch(reader.leaves().size() * warmUp.size());
+    static class BitsetWeigher implements ToLongBiFunction<BitsetCacheKey, Value> {
+    @Override
+import org.apache.lucene.util.BitSet;
+            Value value = new Value(bitSet, shardId, listener);
+        Property.NodeScope
+     * @opensearch.internal
+import org.opensearch.common.settings.Setting.Property;
+        value.listener.onRemoval(value.shardId, value.bitset);
+    @ExperimentalApi
  * all indices on the node, with a configurable size limit. Entries for a reader are invalidated
- * by exact key as soon as the reader closes.
- *
+    public static final class Value {
+    public static final class BitsetCacheKey {
+                            if (parentObjectMapper != null && parentObjectMapper.nested().isNested()) {
+import org.apache.lucene.search.Scorer;
+     *
+        public int hashCode() {
+    private final ConcurrentMap<IndexReader.CacheKey, Set<BitsetCacheKey>> keysByReader = ConcurrentCollections.newConcurrentMap();
+                        }
+    public void close() {
+                cache.invalidate(key);
+            return this.query.equals(other.query);
+            this.listener = Objects.requireNonNull(listener);
+        } else {
+    /**
+        final ShardId shardId;
+import org.opensearch.index.shard.ShardUtils;
+     * registration would leave the entry with no cleanup path. A registered key whose entry was
+                                warmUp.add(parentObjectMapper.nestedTypeFilter());
+    }
+                }
+                        indexShard.shardBitsetFilterCache().onRemoval(accountable.ramBytesUsed());
+                        indexShard.shardBitsetFilterCache().onCached(accountable.ramBytesUsed());
+        return cache.computeIfAbsent(cacheKey, key -> {
+                            indexShard.warmerService()
+    }
+            if (!(o instanceof QueryWrapperBitSetProducer other)) return false;
+import org.apache.logging.log4j.message.ParameterizedMessage;
+        @Override
+        }).add(cacheKey);
+     * eviction would race with a concurrent reload of the same key re-registering it, and a lost
  * @opensearch.api
- */
-@ExperimentalApi
-public class IndicesBitsetFilterCache
-    implements
-        IndexReader.ClosedListener,
-        RemovalListener<IndicesBitsetFilterCache.BitsetCacheKey, IndicesBitsetFilterCache.Value>,
-        Closeable {
-
+    @Override
     public static final Setting<Boolean> INDEX_LOAD_RANDOM_ACCESS_FILTERS_EAGERLY_SETTING = Setting.boolSetting(
+        }
+                    hasNested = true;
+        @Override
+            final BitsetFilterCache.Listener listener = new BitsetFilterCache.Listener() {
+import java.util.concurrent.ExecutionException;
+                throw ExceptionsHelper.convertToOpenSearchException(e);
+                                        filterToWarm,
+import org.opensearch.common.lucene.search.Queries;
+        }
+        }
+ * Node-level cache for {@link BitSet} based filters. Manages a single flat cache shared across
+            long weight = (value.bitset != null) ? value.bitset.ramBytesUsed() : 0;
+            DocumentMapper docMapper = mapperService.documentMapper();
+    }
+    }
+import org.opensearch.common.cache.RemovalNotification;
+                            final long start = System.nanoTime();
+import org.apache.lucene.search.Weight;
+                            }
+        if (value == null || value.listener == null) {
+        BitSetProducerWarmer(ThreadPool threadPool) {
+import org.opensearch.core.common.unit.ByteSizeValue;
+import org.opensearch.threadpool.ThreadPool;
+        public IndexWarmer.TerminationHandle warmReader(final IndexShard indexShard, final OpenSearchDirectoryReader reader) {
+                                        TimeValue.timeValueNanos(System.nanoTime() - start)
+            return 31 * System.identityHashCode(readerCacheKey) + query.hashCode();
+        public int hashCode() {
+        }
+        clear();
+                            latch.countDown();
+package org.opensearch.indices;
+                            }
+                        try {
+        final IndexReaderContext topLevelContext = ReaderUtil.getTopLevelContext(context);
+import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
+        }
+        if (sizeInBytes > 0) {
+import org.opensearch.index.mapper.ObjectMapper;
+     * Cached value holding the bitset, shard identity, and the per-index listener for stats.
+import java.util.concurrent.ConcurrentMap;
+import org.opensearch.common.unit.TimeValue;
+    private final Cache<BitsetCacheKey, Value> cache;
+}
+            return BitSet.of(s.iterator(), context.reader().maxDoc());
+ * SPDX-License-Identifier: Apache-2.0
+    public void onClose(IndexReader.CacheKey ownerCoreCacheKey) {
+            }
+                            getAndLoadIfNotPresent(filterToWarm, ctx, listener);
+                                indexShard.warmerService()
+/**
+    BitSet getAndLoadIfNotPresent(final Query query, final LeafReaderContext context, final BitsetFilterCache.Listener listener)
+                    if (shardId != null && accountable != null) {
+     * evicted costs two references, is bounded by the reader's lifetime, and invalidating it on
+            for (final LeafReaderContext ctx : reader.leaves()) {
+import org.opensearch.common.util.concurrent.ConcurrentCollections;
+        final IndexReader.CacheKey coreCacheReader = cacheHelper.getKey();
+        Value(BitSet bitset, ShardId shardId, BitsetFilterCache.Listener listener) {
+import java.util.concurrent.CountDownLatch;
+import org.apache.lucene.search.join.BitSetProducer;
+        final IndexSearcher searcher = new IndexSearcher(topLevelContext);
+        cache.invalidateAll();
+                    if (shardId != null && accountable != null) {
+            throw new IllegalArgumentException("Reader " + context.reader() + " does not support caching");
+        @Override
+        return cache;
+import java.util.function.ToLongBiFunction;
+        final IndexReader.CacheKey readerCacheKey;
+     * close is a no-op.
+            if (hasNested) {
+        }
+import org.apache.lucene.index.FilterLeafReader;
+    }
+                                    .logger()
+        CacheBuilder<BitsetCacheKey, Value> cacheBuilder = CacheBuilder.<BitsetCacheKey, Value>builder().removalListener(this);
+        Scorer s = weight.scorer(context);
+        }
+import java.util.concurrent.Executor;
+        RemovalListener<IndicesBitsetFilterCache.BitsetCacheKey, IndicesBitsetFilterCache.Value>,
+ *
+            }
+                                        "warmed bitset for [{}], took [{}]",
+        QueryWrapperBitSetProducer(Query query, BitsetFilterCache.Listener listener) {
+     */
+                    }
+            if (this == o) return true;
+    }
+    }
+     * exact keys when the reader closes. Keys are only removed on reader close: trimming on
+        }
+     * @opensearch.internal
+        // sweep: a reader closes only once, and exact-key invalidation is O(#queries cached for
+    }
+    public static final Setting<ByteSizeValue> INDICES_BITSET_FILTER_CACHE_SIZE_SETTING = Setting.memorySizeSetting(
+            return readerCacheKey == other.readerCacheKey && query.equals(other.query);
+    public IndicesBitsetFilterCache(Settings settings) {
+        final BitsetFilterCache.Listener listener;
+                public void onRemoval(ShardId shardId, Accountable accountable) {
+ * compatible open source license.
+        }
+    public void clear() {
+import org.opensearch.common.cache.CacheBuilder;
+        @Override
+        // Invalidate the exact keys synchronously rather than deferring to a periodic cache
+import org.apache.lucene.index.IndexReaderContext;
+import org.opensearch.index.IndexWarmer;
+import org.apache.lucene.search.IndexSearcher;
         "index.load_fixed_bitset_filters_eagerly",
+        Value value = notification.getValue();
+ *
+            if (!indexShard.indexSettings().getValue(INDEX_LOAD_RANDOM_ACCESS_FILTERS_EAGERLY_SETTING)) {
+import org.opensearch.core.index.shard.ShardId;
+        throws ExecutionException {
+        if (keys != null) {
+import org.apache.lucene.index.ReaderUtil;
+            this.query = Objects.requireNonNull(query);
+        }
+import java.io.Closeable;
+    /**
+    public Cache<BitsetCacheKey, Value> getCache() {
+            this.executor = threadPool.executor(ThreadPool.Names.WARMER);
+ * by exact key as soon as the reader closes.
+import org.opensearch.common.settings.Settings;
+        "indices.cache.bitset.size",
+    @Override
+                        } catch (Exception e) {
+                            ObjectMapper parentObjectMapper = objectMapper.getParentObjectMapper(mapperService);
+        if (cacheHelper == null) {
+    final class BitSetProducerWarmer implements IndexWarmer.Listener {
+import org.apache.lucene.index.LeafReaderContext;
+            for (BitsetCacheKey key : keys) {
+            return weight == 0 ? 1 : weight;
+    @ExperimentalApi
+            if (!(o instanceof BitsetCacheKey other)) return false;
+import org.opensearch.index.mapper.DocumentMapper;
+                        }
+import org.apache.lucene.util.Accountable;
+                        } finally {
+        @Override
+                                .warn(() -> new ParameterizedMessage("failed to load bitset for [{}]", filterToWarm), e);
+            this.shardId = shardId;
+import org.opensearch.common.cache.RemovalListener;
+ * this file be licensed under the Apache-2.0 license or a
+        final BitsetFilterCache.Listener listener;
+                        if (objectMapper.nested().isNested()) {
+public class IndicesBitsetFilterCache
+    );
+        }).bitset;
+            listener.onCache(shardId, value.bitset);
+    public static BitSet bitsetFromQuery(Query query, LeafReaderContext context) throws IOException {
+        if (s == null) {
+            cacheHelper.addClosedListener(this);
+            }
+            }
+            return ConcurrentCollections.newConcurrentSet();
+    public IndexWarmer.Listener createListener(ThreadPool threadPool) {
+        public String toString() {
+            this.readerCacheKey = Objects.requireNonNull(readerCacheKey);
+ */
+        Set<BitsetCacheKey> keys = keysByReader.remove(ownerCoreCacheKey);
+    }
+            boolean hasNested = false;
+    }
+                public void onCache(ShardId shardId, Accountable accountable) {
+                for (final Query filterToWarm : warmUp) {
+        final ShardId shardId = ShardUtils.extractShardId(context.reader());
+                    });
+                                .logger()
+                                    .trace(
+import org.opensearch.index.cache.bitset.BitsetFilterCache;
+            return;
+import org.opensearch.common.cache.Cache;
+        final Weight weight = searcher.createWeight(searcher.rewrite(query), ScoreMode.COMPLETE_NO_SCORES, 1f);
         true,
+    }
+     */
+import org.apache.lucene.search.Query;
+                @Override
+    /**
+ */
+                }
+        searcher.setQueryCache(null);
+    }
+        Closeable {
+            this.query = Objects.requireNonNull(query);
+        final BitsetCacheKey cacheKey = new BitsetCacheKey(coreCacheReader, query);
+import org.opensearch.index.mapper.MapperService;
+    }
+        final IndexReader.CacheHelper cacheHelper = FilterLeafReader.unwrap(context.reader()).getCoreCacheHelper();
+        public BitsetCacheKey(IndexReader.CacheKey readerCacheKey, Query query) {
+            }
+@ExperimentalApi
+        }
+    }
+            // Build a listener that routes stats to the correct shard.
+        // the reader open, so onClose cannot fire before the key is recorded.
+        long sizeInBytes = INDICES_BITSET_FILTER_CACHE_SIZE_SETTING.get(settings).getBytes();
+import java.io.IOException;
+import org.opensearch.common.settings.Setting;
+                warmUp.add(Queries.newNonNestedFilter());
+        return new BitSetProducerWarmer(threadPool);
+        @Override
+            this.listener = listener;
+                }
+            final BitSet bitSet = bitsetFromQuery(query, context);
+                    }
+ * The OpenSearch Contributors require contributions made to
+            };
+import org.apache.lucene.index.IndexReader;
+        // atomically) and record the key so onClose can invalidate it exactly. The caller holds
+        @Override
+            return "random_access(" + query + ")";
+/*
+            return value;
+        final BitSet bitset;
+                                    );
+                return TerminationHandle.NO_WAIT;
+            return null;
+    implements
+                    executor.execute(() -> {
         Property.IndexScope
     );
-
-    public static final Setting<ByteSizeValue> INDICES_BITSET_FILTER_CACHE_SIZE_SETTING = Setting.memorySizeSetting(
-        "indices.cache.bitset.size",
-        "5%",
-        Property.NodeScope
-    );
-
-    private final Cache<BitsetCacheKey, Value> cache;
-    /**
-     * Every key cached for a reader, so {@link #onClose(IndexReader.CacheKey)} can invalidate the
-     * exact keys when the reader closes. Keys are only removed on reader close: trimming on
-     * eviction would race with a concurrent reload of the same key re-registering it, and a lost
-     * registration would leave the entry with no cleanup path. A registered key whose entry was
-     * evicted costs two references, is bounded by the reader's lifetime, and invalidating it on
-     * close is a no-op.
-     */
-    private final ConcurrentMap<IndexReader.CacheKey, Set<BitsetCacheKey>> keysByReader = ConcurrentCollections.newConcurrentMap();
-
-    public IndicesBitsetFilterCache(Settings settings) {
-        long sizeInBytes = INDICES_BITSET_FILTER_CACHE_SIZE_SETTING.get(settings).getBytes();
-        CacheBuilder<BitsetCacheKey, Value> cacheBuilder = CacheBuilder.<BitsetCacheKey, Value>builder().removalListener(this);
-        if (sizeInBytes > 0) {
-            cacheBuilder.setMaximumWeight(sizeInBytes).weigher(new BitsetWeigher());
-        }
-        this.cache = cacheBuilder.build();
-    }
-
-    public BitSetProducer getBitSetProducer(Query query, BitsetFilterCache.Listener listener) {
-        return new QueryWrapperBitSetProducer(query, listener);
-    }
-
-    public IndexWarmer.Listener createListener(ThreadPool threadPool) {
-        return new BitSetProducerWarmer(threadPool);
-    }
-
-    public static BitSet bitsetFromQuery(Query query, LeafReaderContext context) throws IOException {
-        final IndexReaderContext topLevelContext = ReaderUtil.getTopLevelContext(context);
-        final IndexSearcher searcher = new IndexSearcher(topLevelContext);
-        searcher.setQueryCache(null);
-        final Weight weight = searcher.createWeight(searcher.rewrite(query), ScoreMode.COMPLETE_NO_SCORES, 1f);
-        Scorer s = weight.scorer(context);
-        if (s == null) {
-            return null;
-        } else {
-            return BitSet.of(s.iterator(), context.reader().maxDoc());
-        }
-    }
-
-    BitSet getAndLoadIfNotPresent(final Query query, final LeafReaderContext context, final BitsetFilterCache.Listener listener)
-        throws ExecutionException {
-        final IndexReader.CacheHelper cacheHelper = FilterLeafReader.unwrap(context.reader()).getCoreCacheHelper();
-        if (cacheHelper == null) {
-            throw new IllegalArgumentException("Reader " + context.reader() + " does not support caching");
-        }
-        final IndexReader.CacheKey coreCacheReader = cacheHelper.getKey();
-        final ShardId shardId = ShardUtils.extractShardId(context.reader());
-
-        final BitsetCacheKey cacheKey = new BitsetCacheKey(coreCacheReader, query);
-        // Register the closed listener at most once per reader (the mapping function runs
-        // atomically) and record the key so onClose can invalidate it exactly. The caller holds
-        // the reader open, so onClose cannot fire before the key is recorded.
-        keysByReader.computeIfAbsent(coreCacheReader, k -> {
-            cacheHelper.addClosedListener(this);
-            return ConcurrentCollections.newConcurrentSet();
-        }).add(cacheKey);
-        return cache.computeIfAbsent(cacheKey, key -> {
-            final BitSet bitSet = bitsetFromQuery(query, context);
-            Value value = new Value(bitSet, shardId, listener);
-            listener.onCache(shardId, value.bitset);
-            return value;
-        }).bitset;
-    }
-
-    @Override
-    public void onClose(IndexReader.CacheKey ownerCoreCacheKey) {
-        // Invalidate the exact keys synchronously rather than deferring to a periodic cache
-        // sweep: a reader closes only once, and exact-key invalidation is O(#queries cached for
-        // the reader), so there is no need to batch it. A key whose entry was already evicted is
-        // a no-op to invalidate.
-        Set<BitsetCacheKey> keys = keysByReader.remove(ownerCoreCacheKey);
-        if (keys != null) {
-            for (BitsetCacheKey key : keys) {
-                cache.invalidate(key);
-            }
-        }
-    }
-
-    @Override
-    public void close() {
-        clear();
-    }
-
-    public void clear() {
-        cache.invalidateAll();
-        keysByReader.clear();
-    }
-
-    @Override
-    public void onRemoval(RemovalNotification<BitsetCacheKey, Value> notification) {
-        Value value = notification.getValue();
-        if (value == null || value.listener == null) {
-            return;
-        }
-        value.listener.onRemoval(value.shardId, value.bitset);
-    }
-
-    public Cache<BitsetCacheKey, Value> getCache() {
-        return cache;
-    }
-
-    /**
-     * Composite key combining a reader segment key with a query.
-     *
-     * @opensearch.internal
-     */
-    @ExperimentalApi
-    public static final class BitsetCacheKey {
-        final IndexReader.CacheKey readerCacheKey;
         final Query query;
-
-        public BitsetCacheKey(IndexReader.CacheKey readerCacheKey, Query query) {
-            this.readerCacheKey = Objects.requireNonNull(readerCacheKey);
-            this.query = Objects.requireNonNull(query);
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof BitsetCacheKey other)) return false;
-            return readerCacheKey == other.readerCacheKey && query.equals(other.query);
-        }
-
-        @Override
-        public int hashCode() {
-            return 31 * System.identityHashCode(readerCacheKey) + query.hashCode();
-        }
-    }
-
-    /**
-     * Cached value holding the bitset, shard identity, and the per-index listener for stats.
-     *
-     * @opensearch.internal
-     */
-    @ExperimentalApi
-    public static final class Value {
-        final BitSet bitset;
-        final ShardId shardId;
-        final BitsetFilterCache.Listener listener;
-
-        Value(BitSet bitset, ShardId shardId, BitsetFilterCache.Listener listener) {
-            this.bitset = bitset;
-            this.shardId = shardId;
-            this.listener = listener;
-        }
-    }
-
-    static class BitsetWeigher implements ToLongBiFunction<BitsetCacheKey, Value> {
-        @Override
-        public long applyAsLong(BitsetCacheKey key, Value value) {
-            long weight = (value.bitset != null) ? value.bitset.ramBytesUsed() : 0;
-            return weight == 0 ? 1 : weight;
-        }
-    }
-
-    final class QueryWrapperBitSetProducer implements BitSetProducer {
-        final Query query;
-        final BitsetFilterCache.Listener listener;
-
-        QueryWrapperBitSetProducer(Query query, BitsetFilterCache.Listener listener) {
-            this.query = Objects.requireNonNull(query);
-            this.listener = Objects.requireNonNull(listener);
-        }
-
-        @Override
-        public BitSet getBitSet(LeafReaderContext context) throws IOException {
-            try {
-                return getAndLoadIfNotPresent(query, context, listener);
             } catch (ExecutionException e) {
-                throw ExceptionsHelper.convertToOpenSearchException(e);
-            }
-        }
-
-        @Override
-        public String toString() {
-            return "random_access(" + query + ")";
-        }
-
-        @Override
+import org.opensearch.index.shard.IndexShard;
         public boolean equals(Object o) {
-            if (!(o instanceof QueryWrapperBitSetProducer other)) return false;
-            return this.query.equals(other.query);
-        }
-
-        @Override
-        public int hashCode() {
-            return 31 * getClass().hashCode() + query.hashCode();
-        }
-    }
-
-    final class BitSetProducerWarmer implements IndexWarmer.Listener {
+            cacheBuilder.setMaximumWeight(sizeInBytes).weigher(new BitsetWeigher());
+        keysByReader.clear();
+        "5%",
+import java.util.Set;
+import java.util.HashSet;
         private final Executor executor;
-
-        BitSetProducerWarmer(ThreadPool threadPool) {
-            this.executor = threadPool.executor(ThreadPool.Names.WARMER);
-        }
-
-        @Override
-        public IndexWarmer.TerminationHandle warmReader(final IndexShard indexShard, final OpenSearchDirectoryReader reader) {
-            if (!indexShard.indexSettings().getValue(INDEX_LOAD_RANDOM_ACCESS_FILTERS_EAGERLY_SETTING)) {
-                return TerminationHandle.NO_WAIT;
-            }
-
-            boolean hasNested = false;
-            final Set<Query> warmUp = new HashSet<>();
-            final MapperService mapperService = indexShard.mapperService();
-            DocumentMapper docMapper = mapperService.documentMapper();
+                    }
+     */
+     *
+        public long applyAsLong(BitsetCacheKey key, Value value) {
             if (docMapper != null) {
-                if (docMapper.hasNestedObjects()) {
-                    hasNested = true;
-                    for (ObjectMapper objectMapper : docMapper.objectMappers().values()) {
-                        if (objectMapper.nested().isNested()) {
-                            ObjectMapper parentObjectMapper = objectMapper.getParentObjectMapper(mapperService);
-                            if (parentObjectMapper != null && parentObjectMapper.nested().isNested()) {
-                                warmUp.add(parentObjectMapper.nestedTypeFilter());
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (hasNested) {
-                warmUp.add(Queries.newNonNestedFilter());
-            }
-
-            // Build a listener that routes stats to the correct shard.
-            final BitsetFilterCache.Listener listener = new BitsetFilterCache.Listener() {
-                @Override
-                public void onCache(ShardId shardId, Accountable accountable) {
-                    if (shardId != null && accountable != null) {
-                        indexShard.shardBitsetFilterCache().onCached(accountable.ramBytesUsed());
-                    }
-                }
-
-                @Override
-                public void onRemoval(ShardId shardId, Accountable accountable) {
-                    if (shardId != null && accountable != null) {
-                        indexShard.shardBitsetFilterCache().onRemoval(accountable.ramBytesUsed());
-                    }
-                }
-            };
-
-            final CountDownLatch latch = new CountDownLatch(reader.leaves().size() * warmUp.size());
-            for (final LeafReaderContext ctx : reader.leaves()) {
-                for (final Query filterToWarm : warmUp) {
-                    executor.execute(() -> {
-                        try {
-                            final long start = System.nanoTime();
-                            getAndLoadIfNotPresent(filterToWarm, ctx, listener);
+        }
+            this.bitset = bitset;
+            final Set<Query> warmUp = new HashSet<>();
+    final class QueryWrapperBitSetProducer implements BitSetProducer {
+import java.util.Objects;
+        return new QueryWrapperBitSetProducer(query, listener);
+     * Composite key combining a reader segment key with a query.
+        public boolean equals(Object o) {
+import org.opensearch.ExceptionsHelper;
+        }
                             if (indexShard.warmerService().logger().isTraceEnabled()) {
-                                indexShard.warmerService()
-                                    .logger()
-                                    .trace(
-                                        "warmed bitset for [{}], took [{}]",
-                                        filterToWarm,
-                                        TimeValue.timeValueNanos(System.nanoTime() - start)
-                                    );
-                            }
-                        } catch (Exception e) {
-                            indexShard.warmerService()
-                                .logger()
-                                .warn(() -> new ParameterizedMessage("failed to load bitset for [{}]", filterToWarm), e);
-                        } finally {
-                            latch.countDown();
-                        }
-                    });
-                }
-            }
+        keysByReader.computeIfAbsent(coreCacheReader, k -> {
+        }
+        @Override
+     * Every key cached for a reader, so {@link #onClose(IndexReader.CacheKey)} can invalidate the
+            try {
+        // the reader), so there is no need to batch it. A key whose entry was already evicted is
+        public BitSet getBitSet(LeafReaderContext context) throws IOException {
+        }
+            return 31 * getClass().hashCode() + query.hashCode();
+    }
+    public void onRemoval(RemovalNotification<BitsetCacheKey, Value> notification) {
             return () -> latch.await();
         }
-    }
-
-}
+                }
+                return getAndLoadIfNotPresent(query, context, listener);
+                    for (ObjectMapper objectMapper : docMapper.objectMappers().values()) {
+        IndexReader.ClosedListener,
+                if (docMapper.hasNestedObjects()) {
+            }
+            final MapperService mapperService = indexShard.mapperService();
+import org.apache.lucene.search.ScoreMode;
+        final Query query;
+    public BitSetProducer getBitSetProducer(Query query, BitsetFilterCache.Listener listener) {
+                @Override
+        this.cache = cacheBuilder.build();
+        }
+import org.opensearch.common.annotation.ExperimentalApi;
+        // Register the closed listener at most once per reader (the mapping function runs

@@ -1,338 +1,289 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.termvectors;
-
-import org.apache.lucene.index.Fields;
-import org.apache.lucene.index.PostingsEnum;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.index.Terms;
-import org.apache.lucene.index.TermsEnum;
-import org.apache.lucene.search.similarities.ClassicSimilarity;
-import org.apache.lucene.search.similarities.TFIDFSimilarity;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.annotation.PublicApi;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-
-/**
- * Filter the term vector (doc frequency, positions, offsets) for a
- * document.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class TermVectorsFilter {
-    public static final int DEFAULT_MAX_QUERY_TERMS = 25;
-    public static final int DEFAULT_MIN_TERM_FREQ = 0;
-    public static final int DEFAULT_MAX_TERM_FREQ = Integer.MAX_VALUE;
-    public static final int DEFAULT_MIN_DOC_FREQ = 0;
-    public static final int DEFAULT_MAX_DOC_FREQ = Integer.MAX_VALUE;
-    public static final int DEFAULT_MIN_WORD_LENGTH = 0;
-    public static final int DEFAULT_MAX_WORD_LENGTH = 0;
-
-    private int maxNumTerms = DEFAULT_MAX_QUERY_TERMS;
-    private int minTermFreq = DEFAULT_MIN_TERM_FREQ;
-    private int maxTermFreq = DEFAULT_MAX_TERM_FREQ;
-    private int minDocFreq = DEFAULT_MIN_DOC_FREQ;
-    private int maxDocFreq = DEFAULT_MAX_DOC_FREQ;
-    private int minWordLength = DEFAULT_MIN_WORD_LENGTH;
-    private int maxWordLength = DEFAULT_MAX_WORD_LENGTH;
-
-    private final Fields fields;
-    private final Fields topLevelFields;
-    private final Set<String> selectedFields;
-    private final Map<Term, ScoreTerm> scoreTerms;
-    private final Map<String, Integer> sizes = new HashMap<>();
-    private final TFIDFSimilarity similarity;
-
-    public TermVectorsFilter(Fields termVectorsByField, Fields topLevelFields, Set<String> selectedFields) {
-        this.fields = termVectorsByField;
-        this.topLevelFields = topLevelFields;
-        this.selectedFields = selectedFields;
-
-        this.scoreTerms = new HashMap<>();
-        this.similarity = new ClassicSimilarity();
-    }
-
-    public void setSettings(TermVectorsRequest.FilterSettings settings) {
-        if (settings.maxNumTerms != null) {
-            setMaxNumTerms(settings.maxNumTerms);
-        }
-        if (settings.minTermFreq != null) {
-            setMinTermFreq(settings.minTermFreq);
-        }
-        if (settings.maxTermFreq != null) {
-            setMaxTermFreq(settings.maxTermFreq);
-        }
-        if (settings.minDocFreq != null) {
-            setMinDocFreq(settings.minDocFreq);
-        }
-        if (settings.maxDocFreq != null) {
-            setMaxDocFreq(settings.maxDocFreq);
-        }
-        if (settings.minWordLength != null) {
-            setMinWordLength(settings.minWordLength);
-        }
-        if (settings.maxWordLength != null) {
             setMaxWordLength(settings.maxWordLength);
-        }
-    }
-
-    public ScoreTerm getScoreTerm(Term term) {
-        return scoreTerms.get(term);
-    }
-
-    public boolean hasScoreTerm(Term term) {
-        return getScoreTerm(term) != null;
-    }
-
-    public long size(String fieldName) {
-        return sizes.get(fieldName);
-    }
-
-    public int getMaxNumTerms() {
-        return maxNumTerms;
-    }
-
-    public int getMinTermFreq() {
-        return minTermFreq;
-    }
-
-    public int getMaxTermFreq() {
-        return maxTermFreq;
-    }
-
-    public int getMinDocFreq() {
-        return minDocFreq;
-    }
-
-    public int getMaxDocFreq() {
-        return maxDocFreq;
-    }
-
-    public int getMinWordLength() {
-        return minWordLength;
-    }
-
-    public int getMaxWordLength() {
-        return maxWordLength;
-    }
-
-    public void setMaxNumTerms(int maxNumTerms) {
+import org.apache.lucene.search.similarities.TFIDFSimilarity;
         this.maxNumTerms = maxNumTerms;
+    private final Fields topLevelFields;
+        // filter out words that don't occur enough times in the source
+        if (settings.maxDocFreq != null) {
+        if (minDocFreq > 0 && docFreq < minDocFreq) {
+ * document.
+            this.limit = maxSize;
+            setMinDocFreq(settings.minDocFreq);
+import org.apache.lucene.util.BytesRef;
+            } else {
+            setMaxNumTerms(settings.maxNumTerms);
+     * @opensearch.internal
     }
-
-    public void setMinTermFreq(int minTermFreq) {
-        this.minTermFreq = minTermFreq;
-    }
-
-    public void setMaxTermFreq(int maxTermFreq) {
-        this.maxTermFreq = maxTermFreq;
-    }
-
-    public void setMinDocFreq(int minDocFreq) {
-        this.minDocFreq = minDocFreq;
-    }
-
-    public void setMaxDocFreq(int maxDocFreq) {
-        this.maxDocFreq = maxDocFreq;
-    }
-
-    public void setMinWordLength(int minWordLength) {
-        this.minWordLength = minWordLength;
-    }
-
-    public void setMaxWordLength(int maxWordLength) {
-        this.maxWordLength = maxWordLength;
-    }
-
-    /**
-     * Internal score term
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static final class ScoreTerm {
-        public String field;
-        public String word;
-        public float score;
-
-        ScoreTerm(String field, String word, float score) {
-            this.field = field;
-            this.word = word;
-            this.score = score;
-        }
-
-        void update(String field, String word, float score) {
-            this.field = field;
-            this.word = word;
-            this.score = score;
-        }
-    }
-
-    public void selectBestTerms() throws IOException {
-        PostingsEnum docsEnum = null;
-
-        for (String fieldName : fields) {
-            if ((selectedFields != null) && (!selectedFields.contains(fieldName))) {
-                continue;
-            }
-
-            Terms terms = fields.terms(fieldName);
-            Terms topLevelTerms = topLevelFields.terms(fieldName);
-
-            // if no terms found, take the retrieved term vector fields for stats
-            if (topLevelTerms == null) {
-                topLevelTerms = terms;
-            }
-
-            long numDocs = topLevelTerms.getDocCount();
-
-            // one queue per field name
-            ScoreTermsQueue queue = new ScoreTermsQueue(Math.min(maxNumTerms, (int) terms.size()));
-
-            // select terms with highest tf-idf
-            TermsEnum termsEnum = terms.iterator();
-            TermsEnum topLevelTermsEnum = topLevelTerms.iterator();
-            while (termsEnum.next() != null) {
-                BytesRef termBytesRef = termsEnum.term();
-                boolean foundTerm = topLevelTermsEnum.seekExact(termBytesRef);
-                assert foundTerm : "Term: " + termBytesRef.utf8ToString() + " not found!";
-
-                Term term = new Term(fieldName, termBytesRef);
-
-                // remove noise words
-                docsEnum = termsEnum.postings(docsEnum);
-                docsEnum.nextDoc();
+/**
                 int freq = docsEnum.freq();
-                if (isNoise(term.bytes().utf8ToString(), freq)) {
-                    continue;
+    public static final int DEFAULT_MIN_WORD_LENGTH = 0;
+            return false;
                 }
-
-                // now call on docFreq
-                long docFreq = topLevelTermsEnum.docFreq();
-                if (!isAccepted(docFreq)) {
-                    continue;
-                }
-
-                // filter based on score
-                float score = computeScore(docFreq, freq, numDocs);
-                queue.addOrUpdate(new ScoreTerm(term.field(), term.bytes().utf8ToString(), score));
-            }
-
-            // retain the best terms for quick lookups
-            ScoreTerm scoreTerm;
-            int count = 0;
-            while ((scoreTerm = queue.pop()) != null) {
-                scoreTerms.put(new Term(scoreTerm.field, scoreTerm.word), scoreTerm);
-                count++;
-            }
-            sizes.put(fieldName, count);
-        }
-    }
-
-    private boolean isNoise(String word, int freq) {
-        // filter out words based on length
-        int len = word.length();
+            setMaxDocFreq(settings.maxDocFreq);
+        this.maxWordLength = maxWordLength;
+        return getScoreTerm(term) != null;
+    public int getMinWordLength() {
+            ScoreTermsQueue queue = new ScoreTermsQueue(Math.min(maxNumTerms, (int) terms.size()));
+                // remove noise words
+    private static class ScoreTermsQueue extends org.apache.lucene.util.PriorityQueue<ScoreTerm> {
+        return maxTermFreq;
+        return minTermFreq;
+        for (String fieldName : fields) {
+        private final int limit;
+                assert foundTerm : "Term: " + termBytesRef.utf8ToString() + " not found!";
+                docsEnum = termsEnum.postings(docsEnum);
+    public void setMinTermFreq(int minTermFreq) {
+                ScoreTerm scoreTermTop = this.top();
+        if (docFreq == 0) {
         if (minWordLength > 0 && len < minWordLength) {
             return true;
-        }
-        if (maxWordLength > 0 && len > maxWordLength) {
-            return true;
-        }
-        // filter out words that don't occur enough times in the source
-        if (minTermFreq > 0 && freq < minTermFreq) {
-            return true;
-        }
-        // filter out words that occur too many times in the source
-        if (freq > maxTermFreq) {
-            return true;
-        }
-        return false;
-    }
-
-    private boolean isAccepted(long docFreq) {
-        // filter out words that don't occur in enough docs
-        if (minDocFreq > 0 && docFreq < minDocFreq) {
-            return false;
-        }
-        // filter out words that occur in too many docs
-        if (docFreq > maxDocFreq) {
-            return false;
-        }
-        // index update problem?
-        if (docFreq == 0) {
-            return false;
-        }
-        return true;
-    }
-
-    private float computeScore(long docFreq, int freq, long numDocs) {
-        return freq * similarity.idf(docFreq, numDocs);
-    }
-
-    /**
-     * Internal queue of score terms
-     *
-     * @opensearch.internal
-     */
-    private static class ScoreTermsQueue extends org.apache.lucene.util.PriorityQueue<ScoreTerm> {
-        private final int limit;
-
+import org.apache.lucene.index.PostingsEnum;
         ScoreTermsQueue(int maxSize) {
-            super(maxSize);
-            this.limit = maxSize;
+        if (freq > maxTermFreq) {
         }
-
-        @Override
-        protected boolean lessThan(ScoreTerm a, ScoreTerm b) {
+ * GitHub history for details.
+    }
+ * The OpenSearch Contributors require contributions made to
+                // now call on docFreq
             return a.score < b.score;
+        this.similarity = new ClassicSimilarity();
+        if (settings.minTermFreq != null) {
+            // retain the best terms for quick lookups
+}
+        int len = word.length();
+     * Internal score term
+        return maxWordLength;
         }
-
-        public void addOrUpdate(ScoreTerm scoreTerm) {
-            if (this.size() < limit) {
-                // there is still space in the queue
-                this.add(scoreTerm);
-            } else {
-                // otherwise update the smallest in the queue in place and update the queue
-                ScoreTerm scoreTermTop = this.top();
-                if (scoreTermTop.score < scoreTerm.score) {
-                    scoreTermTop.update(scoreTerm.field, scoreTerm.word, scoreTerm.score);
-                    this.updateTop();
-                }
+    public long size(String fieldName) {
+                scoreTerms.put(new Term(scoreTerm.field, scoreTerm.word), scoreTerm);
+            this.score = score;
+/*
+        // filter out words that occur too many times in the source
+    public int getMaxWordLength() {
+            setMinTermFreq(settings.minTermFreq);
+    public int getMaxNumTerms() {
+        }
+        this.scoreTerms = new HashMap<>();
+        return scoreTerms.get(term);
+import org.apache.lucene.index.Terms;
+        return minDocFreq;
+        this.maxTermFreq = maxTermFreq;
+                long docFreq = topLevelTermsEnum.docFreq();
+    public static final int DEFAULT_MAX_TERM_FREQ = Integer.MAX_VALUE;
+/*
+        ScoreTerm(String field, String word, float score) {
             }
         }
+            this.field = field;
+ *
+    public void selectBestTerms() throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
+            }
+        }
+    public void setMaxWordLength(int maxWordLength) {
+        }
+     * @opensearch.api
+    public void setSettings(TermVectorsRequest.FilterSettings settings) {
+            int count = 0;
+public class TermVectorsFilter {
+    private final TFIDFSimilarity similarity;
+                BytesRef termBytesRef = termsEnum.term();
+ *
+    private final Map<Term, ScoreTerm> scoreTerms;
+ * ownership. Elasticsearch licenses this file to you under
+ * You may obtain a copy of the License at
+                // otherwise update the smallest in the queue in place and update the queue
+        // filter out words that occur in too many docs
     }
-}
+            super(maxSize);
+ * Filter the term vector (doc frequency, positions, offsets) for a
+        public void addOrUpdate(ScoreTerm scoreTerm) {
+        this.topLevelFields = topLevelFields;
+    }
+    }
+    public static final int DEFAULT_MAX_WORD_LENGTH = 0;
+        // index update problem?
+        if (minTermFreq > 0 && freq < minTermFreq) {
+        return maxNumTerms;
+ * @opensearch.api
+    }
+    }
+            TermsEnum topLevelTermsEnum = topLevelTerms.iterator();
+    }
+                this.add(scoreTerm);
+        if (settings.maxTermFreq != null) {
+            setMinWordLength(settings.minWordLength);
+ * this file be licensed under the Apache-2.0 license or a
+        }
+    }
+            this.score = score;
+    }
+            TermsEnum termsEnum = terms.iterator();
+import java.io.IOException;
+    }
+            Terms terms = fields.terms(fieldName);
+        this.minDocFreq = minDocFreq;
+        void update(String field, String word, float score) {
+    public void setMinWordLength(int minWordLength) {
+        }
+                topLevelTerms = terms;
+        }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    }
+    }
+            setMaxTermFreq(settings.maxTermFreq);
+                }
+            ScoreTerm scoreTerm;
+    private int minWordLength = DEFAULT_MIN_WORD_LENGTH;
+    public void setMaxNumTerms(int maxNumTerms) {
+                queue.addOrUpdate(new ScoreTerm(term.field(), term.bytes().utf8ToString(), score));
+import org.apache.lucene.index.Fields;
+    public static final int DEFAULT_MAX_DOC_FREQ = Integer.MAX_VALUE;
+            }
+        if (settings.minWordLength != null) {
+        PostingsEnum docsEnum = null;
+        this.fields = termVectorsByField;
+            if (topLevelTerms == null) {
+        this.selectedFields = selectedFields;
+/*
+ * Unless required by applicable law or agreed to in writing,
+ * not use this file except in compliance with the License.
+    public int getMinTermFreq() {
+        return sizes.get(fieldName);
+            this.word = word;
+     *
+ */
+    }
+            long numDocs = topLevelTerms.getDocCount();
+            if ((selectedFields != null) && (!selectedFields.contains(fieldName))) {
+                boolean foundTerm = topLevelTermsEnum.seekExact(termBytesRef);
+            while (termsEnum.next() != null) {
+        return minWordLength;
+    private int maxWordLength = DEFAULT_MAX_WORD_LENGTH;
+    private int maxNumTerms = DEFAULT_MAX_QUERY_TERMS;
+     */
+    public int getMaxDocFreq() {
+    public TermVectorsFilter(Fields termVectorsByField, Fields topLevelFields, Set<String> selectedFields) {
+ * Licensed to Elasticsearch under one or more contributor
+        }
+    public static final class ScoreTerm {
+        }
+        // filter out words that don't occur in enough docs
+    }
+    }
+            // one queue per field name
+    public void setMaxDocFreq(int maxDocFreq) {
+    private final Fields fields;
+    public boolean hasScoreTerm(Term term) {
+        }
+                    this.updateTop();
+import org.apache.lucene.search.similarities.ClassicSimilarity;
+        public String field;
+    }
+        if (settings.maxWordLength != null) {
+ * specific language governing permissions and limitations
+            return false;
+    private int minDocFreq = DEFAULT_MIN_DOC_FREQ;
+                // there is still space in the queue
+        return maxDocFreq;
+    private final Map<String, Integer> sizes = new HashMap<>();
+ *
+     *
+                // filter based on score
+     */
+    public ScoreTerm getScoreTerm(Term term) {
+        this.maxDocFreq = maxDocFreq;
+            if (this.size() < limit) {
+        }
+            Terms topLevelTerms = topLevelFields.terms(fieldName);
+    public static final int DEFAULT_MIN_DOC_FREQ = 0;
+    }
+            return true;
+ * the Apache License, Version 2.0 (the "License"); you may
+    private int maxTermFreq = DEFAULT_MAX_TERM_FREQ;
+import org.apache.lucene.index.Term;
+        return true;
+                }
+                if (scoreTermTop.score < scoreTerm.score) {
+        }
+        if (docFreq > maxDocFreq) {
+                    continue;
+package org.opensearch.action.termvectors;
+import java.util.Set;
+        return false;
+            while ((scoreTerm = queue.pop()) != null) {
+            this.word = word;
+    public int getMinDocFreq() {
+ */
+ *
+    }
+        return freq * similarity.idf(docFreq, numDocs);
+                docsEnum.nextDoc();
+        this.minWordLength = minWordLength;
+        }
+import java.util.HashMap;
+    private final Set<String> selectedFields;
+import org.apache.lucene.index.TermsEnum;
+        this.minTermFreq = minTermFreq;
+    /**
+import java.util.Map;
+                    continue;
+            return true;
+    @PublicApi(since = "1.0.0")
+            return false;
+        // filter out words based on length
+                count++;
+    }
+ * under the License.
+                Term term = new Term(fieldName, termBytesRef);
+        public float score;
+        if (maxWordLength > 0 && len > maxWordLength) {
+     * Internal queue of score terms
+            }
+import org.opensearch.common.annotation.PublicApi;
+ * Modifications Copyright OpenSearch Contributors. See
+                float score = computeScore(docFreq, freq, numDocs);
+                    scoreTermTop.update(scoreTerm.field, scoreTerm.word, scoreTerm.score);
+    /**
+ * this work for additional information regarding copyright
+            sizes.put(fieldName, count);
+                if (isNoise(term.bytes().utf8ToString(), freq)) {
+    public static final int DEFAULT_MIN_TERM_FREQ = 0;
+            // select terms with highest tf-idf
+        }
+    private boolean isNoise(String word, int freq) {
+@PublicApi(since = "1.0.0")
+            }
+        if (settings.maxNumTerms != null) {
+    public int getMaxTermFreq() {
+                continue;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        }
+    private int maxDocFreq = DEFAULT_MAX_DOC_FREQ;
+ */
+    }
+                if (!isAccepted(docFreq)) {
+ * license agreements. See the NOTICE file distributed with
+        }
+    private int minTermFreq = DEFAULT_MIN_TERM_FREQ;
+        if (settings.minDocFreq != null) {
+    }
+        public String word;
+    public static final int DEFAULT_MAX_QUERY_TERMS = 25;
+        }
+        @Override
+    private float computeScore(long docFreq, int freq, long numDocs) {
+            return true;
+    }
+            // if no terms found, take the retrieved term vector fields for stats
+ */
+            this.field = field;
+    }
+    public void setMinDocFreq(int minDocFreq) {
+    private boolean isAccepted(long docFreq) {
+ * software distributed under the License is distributed on an
+        protected boolean lessThan(ScoreTerm a, ScoreTerm b) {
+ * compatible open source license.
+    public void setMaxTermFreq(int maxTermFreq) {
+    }
+ * KIND, either express or implied.  See the License for the
+        }

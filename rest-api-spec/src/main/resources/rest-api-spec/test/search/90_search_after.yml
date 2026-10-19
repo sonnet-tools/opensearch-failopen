@@ -1,781 +1,715 @@
-"search with search_after parameter":
-  - do:
-      indices.create:
-          index:  test
-  - do:
-      index:
-          index:  test
-          id:     1
-          body:   { id: 1, foo: bar, age: 18 }
-
-  - do:
-      index:
-          index:  test
-          id:     42
-          body:   { id: 42, foo: bar, age: 18 }
-
-  - do:
-        index:
+          "size": 3
             index:  test
-            id:     172
-            body:   { id: 172, foo: bar, age: 24 }
-
+        rest_total_hits_as_int: true
+  - match: { hits.total: 24 }
+          {"population": 144.4}
+          "size": 3
+          "size": 3
+  - length: { hits.hits: 3 }
+  - match: {hits.total: 2 }
+# for all numeric type int, long, float, half_float, double, unsigned_long.
+      search:
+          search_after: [1571646604828]
+  - match: { hits.hits.1._source.id: 23 }
+          {"index":{}}
+  - match: {hits.hits.0.sort: [1571617804828740000] }
+  - match: { hits.hits.1._index: test }
+  - match: { hits.hits.1._index: test }
+  - match: { hits.total: 24 }
+  - match: {hits.hits.0.sort: [1571617804828] }
+        rest_total_hits_as_int: true
   - do:
-      indices.refresh:
-        index: test
-
+      index:
+        body:
+      search:
+          {"index":{}}
+  - match: { hits.hits.2._source.float: null }
+          search_after: [ 200, 0 ] # making it out of min/max so only missing value hit is qualified
+            match:
+          {"index":{}}
+        body:
   - do:
       search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          size: 1
-          query:
-            match:
-              foo: bar
-          sort: [{ age: desc }, { id: desc }]
-
-  - match: {hits.total: 3 }
-  - length: {hits.hits: 1 }
-  - match: {hits.hits.0._index: test }
-  - match: {hits.hits.0._id: "172" }
-  - match: {hits.hits.0.sort: [24, 172] }
-
   - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
+          {"id": 24, "halffloat": null, "long": null, "int": null, "float": null, "double": null, "unsignedlong": null}
+          search_after: [ 0, 25 ] # making it out of min/max so only missing value hit is qualified
         body:
-          size: 1
-          query:
-            match:
-              foo: bar
-          sort: [{ age: desc }, { id: desc }]
-          search_after: [24, 172]
-
-  - match: {hits.total: 3 }
-  - length: {hits.hits: 1 }
+      search:
+        index: test
+          {"id": 20, "halffloat": 20, "long": 20, "int": 20, "float": 20, "double": 20, "unsignedlong": 20}
+      search:
   - match: {hits.hits.0._index: test }
   - match: {hits.hits.0._id: "42" }
-  - match: {hits.hits.0.sort: [18, 42] }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          size: 1
-          query:
-            match:
-              foo: bar
-          sort: [ { age: desc }, { id: desc } ]
-          search_after: [18, 42]
-
-  - match: {hits.total: 3}
-  - length: {hits.hits: 1 }
-  - match: {hits.hits.0._index: test }
-  - match: {hits.hits.0._id: "1" }
-  - match: {hits.hits.0.sort: [18, 1] }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          size: 1
-          query:
-            match:
-              foo: bar
-          sort: [{ age: desc }, { id: desc } ]
-          search_after: [18, 1]
-
-  - match: {hits.total: 3}
-  - length: {hits.hits: 0 }
-
----
-"date":
-
-  - do:
+              double:
+          {"index":{}}
+          "sort": [ { "int": { "order": "asc" } }, { "id": { "order": "asc" } } ]
       indices.create:
-        index: test
         body:
-          mappings:
-            properties:
-              timestamp:
-                type: date
-                format: yyyy-MM-dd HH:mm:ss.SSS
-  - do:
-      bulk:
-        refresh: true
+          "sort": [ { "halffloat": { "order": "desc" } }, { "id": { "order": "desc" } } ]
         index: test
-        body: |
-          {"index":{}}
-          {"timestamp":"2019-10-21 00:30:04.828"}
-          {"index":{}}
-          {"timestamp":"2019-10-21 08:30:04.828"}
-
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
           size: 1
-          sort: [{ timestamp: desc }]
-  - match: {hits.total: 2 }
-  - length: {hits.hits: 1 }
-  - match: {hits.hits.0._index: test }
-  - match: {hits.hits.0._source.timestamp: "2019-10-21 08:30:04.828" }
-  - match: {hits.hits.0.sort: [1571646604828] }
-
-  # search_after with the sort
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          size: 1
-          sort: [{ timestamp: desc }]
-          search_after: [1571646604828]
-  - match: {hits.total: 2 }
-  - length: {hits.hits: 1 }
-  - match: {hits.hits.0._index: test }
-  - match: {hits.hits.0._source.timestamp: "2019-10-21 00:30:04.828" }
-  - match: {hits.hits.0.sort: [1571617804828] }
-
-  # search_after with the formatted date
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          size: 1
-          sort: [{ timestamp: desc }]
-          search_after: ["2019-10-21 08:30:04.828"]
-  - match: {hits.total: 2 }
-  - length: {hits.hits: 1 }
-  - match: {hits.hits.0._index: test }
-  - match: {hits.hits.0._source.timestamp: "2019-10-21 00:30:04.828" }
-  - match: {hits.hits.0.sort: [1571617804828] }
-
-  # search_after with the sort with missing
-  - do:
-      bulk:
-        refresh: true
-        index: test
-        body: |
-          {"index":{}}
+          {"id": 13, "halffloat": 13, "long": 13, "int": 13, "float": 13, "double": 13, "unsignedlong": 13}
+          {"id": 7, "halffloat": 7, "long": 7, "int": 7, "float": 7, "double": 7, "unsignedlong": 7}
           {"timestamp": null}
   - do:
-      search:
         index: test
-        rest_total_hits_as_int: true
+          {"index":{}}
         body:
-          "size": 5
-          "sort": [ { "timestamp": { "order": "asc", "missing": "_last" } } ]
-          search_after: [ "2021-10-21 08:30:04.828" ] # making it out of min/max so only missing value hit is qualified
-
-  - match: { hits.total: 3 }
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.timestamp: null }
-
----
-"date_nanos":
-
-  - do:
-      indices.create:
-        index: test
-        body:
-          mappings:
+          {"index":{}}
             properties:
-              timestamp:
-                type: date_nanos
-                format: yyyy-MM-dd HH:mm:ss.SSSSSS
-  - do:
-      bulk:
-        refresh: true
-        index: test
-        body: |
-          {"index":{}}
-          {"timestamp":"2019-10-21 00:30:04.828740"}
-          {"index":{}}
-          {"timestamp":"2019-10-21 08:30:04.828733"}
-
-  - do:
-      search:
-        index: test
-        body:
-          size: 1
-          sort: [{ timestamp: desc }]
-  - match: {hits.total.value: 2 }
-  - length: {hits.hits: 1 }
-  - match: {hits.hits.0._index: test }
-  - match: {hits.hits.0._source.timestamp: "2019-10-21 08:30:04.828733" }
-  - match: {hits.hits.0.sort: [1571646604828733000] }
-
-  # search_after with the asc sort
-  - do:
-      search:
-        index: test
-        body:
-          size: 1
-          sort: [{ timestamp: desc }]
-          search_after: [1571646604828733000]
-  - match: {hits.total.value: 2 }
-  - length: {hits.hits: 1 }
-  - match: {hits.hits.0._index: test }
-  - match: {hits.hits.0._source.timestamp: "2019-10-21 00:30:04.828740" }
-  - match: {hits.hits.0.sort: [1571617804828740000] }
-
-  # search_after with the formatted date
-  - do:
-      search:
-        index: test
-        body:
-          size: 1
-          sort: [{ timestamp: desc }]
-          search_after: ["2019-10-21 08:30:04.828733"]
-  - match: {hits.total.value: 2 }
-  - length: {hits.hits: 1 }
-  - match: {hits.hits.0._index: test }
-  - match: {hits.hits.0._source.timestamp: "2019-10-21 00:30:04.828740" }
-  - match: {hits.hits.0.sort: [1571617804828740000] }
-
----
-"unsigned long":
-  - skip:
-      version: " - 2.7.99"
-      reason: unsigned_long is not supported before 2.8.0
-
-  - do:
-      indices.create:
-        index: test
-        body:
-          mappings:
-            properties:
-              population:
-                type: unsigned_long
-  - do:
-      bulk:
-        refresh: true
-        index: test
-        body: |
-          {"index":{}}
-          {"population": 10223372036854775800}
-          {"index":{}}
-          {"population": 15223372036854775800}
-
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          size: 1
-          sort: [{ population: asc }]
-  - match: {hits.total: 2 }
-  - length: {hits.hits: 1 }
-  - match: {hits.hits.0._index: test }
-  - match: {hits.hits.0._source.population: 10223372036854775800 }
-  - match: {hits.hits.0.sort: [10223372036854775800] }
-
-  # search_after with the sort
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          size: 1
-          sort: [{ population: asc }]
-          search_after: [10223372036854775800]
-  - match: {hits.total: 2 }
-  - length: {hits.hits: 1 }
-  - match: {hits.hits.0._index: test }
-  - match: {hits.hits.0._source.population: 15223372036854775800 }
-  - match: {hits.hits.0.sort: [15223372036854775800] }
-
-  # search_after with the sort with missing
-  - do:
-      bulk:
-        refresh: true
-        index: test
-        body: |
-          {"index":{}}
           {"population": null}
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          "size": 5
-          "sort": [ { "population": { "order": "asc", "missing": "_last" } } ]
-          search_after: [15223372036854775801] # making it out of min/max so only missing value hit is qualified
-
-  - match: { hits.total: 3 }
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.population: null }
-
----
-"half float":
-  - skip:
-        version: " - 2.11.0"
-        reason: half_float was broken for 2.11.0 and earlier
-
-  - do:
-      indices.create:
-        index: test
-        body:
-          mappings:
-            properties:
-              population:
-                type: half_float
-  - do:
-      bulk:
-        refresh: true
-        index: test
-        body: |
-          {"index":{}}
-          {"population": 184.4}
-          {"index":{}}
-          {"population": 194.4}
-          {"index":{}}
-          {"population": 144.4}
-          {"index":{}}
-          {"population": 174.4}
-          {"index":{}}
-          {"population": 164.4}
-
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          size: 3
-          sort: [ { population: desc } ]
-  - match: { hits.total: 5 }
-  - length: { hits.hits: 3 }
-  - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.population: 194.4 }
-  - match: { hits.hits.1._index: test }
-  - match: { hits.hits.1._source.population: 184.4 }
-  - match: { hits.hits.2._index: test }
-  - match: { hits.hits.2._source.population: 174.4 }
-
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          size: 3
-          sort: [ { population: asc } ]
-  - match: { hits.total: 5 }
-  - length: { hits.hits: 3 }
-  - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.population: 144.4 }
-  - match: { hits.hits.1._index: test }
-  - match: { hits.hits.1._source.population: 164.4 }
-  - match: { hits.hits.2._index: test }
-  - match: { hits.hits.2._source.population: 174.4 }
-
-  # search_after with the asc sort
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          size: 1
-          sort: [ { population: asc } ]
-          search_after: [ 184.375 ] # this is rounded sort value in sort result
-  - match: { hits.total: 5 }
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.population: 194.4 }
-
-  # search_after with the desc sort
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          size: 1
-          sort: [ { population: desc } ]
-          search_after: [ 164.375 ] # this is rounded sort value in sort result
-  - match: { hits.total: 5 }
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.population: 144.4 }
-
-  # search_after with the asc sort with missing
-  - do:
-      bulk:
-        refresh: true
-        index: test
-        body: |
-          {"index":{}}
-          {"population": null}
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          "size": 5
-          "sort": [ { "population": { "order": "asc", "missing": "_last" } } ]
-          search_after: [ 200 ] # making it out of min/max so only missing value hit is qualified
-
-  - match: { hits.total: 6 }
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.population: null }
-
-  # search_after with the desc sort with missing
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          "size": 5
-          "sort": [ { "population": { "order": "desc", "missing": "_last" } } ]
-          search_after: [ 100 ] # making it out of min/max so only missing value hit is qualified
-
-  - match: { hits.total: 6 }
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.population: null }
-
----
-"numeric skipping logic with competitive missing value":
-  - skip:
-      version: " - 2.12.99"
-      reason: newly added test, supported from 3.0.0
-
-# This test checks if skipping logic is skipped in case missing values are competitive
-# for all numeric type int, long, float, half_float, double, unsigned_long.
-# We are inserting 24 documents with some missing values and giving search after parameter
-# as missing value. The secondary sort field is on id which doesn't have missing value.
-# In case skipping logic is applied in Lucene, it will skipp all documents with primary sort field
-# missing value even though it should list sort by secondary field id with missing value primary field.
-# This test is addressing bugs like here https://github.com/opensearch-project/OpenSearch/issues/9537
-
-  - do:
-      indices.create:
-        index: test
-        body:
-          mappings:
-            properties:
-              halffloat:
-                type: half_float
-              long:
-                type: long
-              int:
-                type: integer
-              float:
-                type: float
-              double:
-                type: double
               unsignedlong:
-                type: unsigned_long
-  - do:
-      bulk:
+          {"index":{}}
+          {"index":{}}
+          "sort": [ { "long": { "order": "asc" } }, { "id": { "order": "asc" } } ]
+  - match: { hits.hits.2._source.population: 174.4 }
+  - length: { hits.hits: 3 }
+          size: 1
+          {"index":{}}
+  - match: {hits.hits.0._source.timestamp: "2019-10-21 08:30:04.828" }
+      search:
+          {"timestamp":"2019-10-21 00:30:04.828740"}
         refresh: true
+  - match: { hits.hits.0._source.id: 24 }
+        body:
+          {"population": 184.4}
         index: test
-        body: |
+  - match: {hits.hits.0._source.timestamp: "2019-10-21 00:30:04.828" }
+      indices.create:
+  - match: { hits.hits.0._source.id: 24 }
+                type: date_nanos
+  - match: { hits.hits.1._source.halffloat: null }
+        index: test
           {"index":{}}
-          {"id": 1, "halffloat": 1, "long": 1, "int": 1, "float": 1, "double": 1, "unsignedlong": 1}
+          search_after: [ 200, 0 ] # making it out of min/max so only missing value hit is qualified
+            id:     172
           {"index":{}}
-          {"id": 2, "halffloat": 2, "long": 2, "int": 2, "float": 2, "double": 2, "unsignedlong": 2}
-          {"index":{}}
-          {"id": 3, "halffloat": 3, "long": 3, "int": 3, "float": 3, "double": 3, "unsignedlong": 3}
-          {"index":{}}
-          {"id": 4, "halffloat": 4, "long": 4, "int": 4, "float": 4, "double": 4, "unsignedlong": 4}
-          {"index":{}}
-          {"id": 5, "halffloat": 5, "long": 5, "int": 5, "float": 5, "double": 5, "unsignedlong": 5}
-          {"index":{}}
-          {"id": 6, "halffloat": 6, "long": 6, "int": 6, "float": 6, "double": 6, "unsignedlong": 6}
-          {"index":{}}
-          {"id": 7, "halffloat": 7, "long": 7, "int": 7, "float": 7, "double": 7, "unsignedlong": 7}
-          {"index":{}}
-          {"id": 8, "halffloat": 8, "long": 8, "int": 8, "float": 8, "double": 8, "unsignedlong": 8}
-          {"index":{}}
-          {"id": 9, "halffloat": 9, "long": 9, "int": 9, "float": 9, "double": 9, "unsignedlong": 9}
-          {"index":{}}
-          {"id": 10, "halffloat": 10, "long": 10, "int": 10, "float": 10, "double": 10, "unsignedlong": 10}
-          {"index":{}}
+        rest_total_hits_as_int: true
+  - match: { hits.hits.2._index: test }
+  - match: { hits.hits.2._index: test }
+          {"id": 16, "halffloat": 16, "long": 16, "int": 16, "float": 16, "double": 16, "unsignedlong": 16}
+          search_after: [24, 172]
           {"id": 11, "halffloat": 11, "long": 11, "int": 11, "float": 11, "double": 11, "unsignedlong": 11}
           {"index":{}}
+          size: 1
+          {"index":{}}
+  - match: { hits.total: 5 }
+        rest_total_hits_as_int: true
+        body:
+  - match: { hits.hits.1._source.id: 22 }
+  - do:
+  - length: { hits.hits: 3 }
+        body:
+  - match: { hits.hits.2._index: test }
+          {"id": 2, "halffloat": 2, "long": 2, "int": 2, "float": 2, "double": 2, "unsignedlong": 2}
+          search_after: [ "2021-10-21 08:30:04.828" ] # making it out of min/max so only missing value hit is qualified
+        rest_total_hits_as_int: true
+  - do:
+          sort: [ { population: asc } ]
+  - match: { hits.hits.1._index: test }
+            match:
+  - length: { hits.hits: 1 }
+                format: yyyy-MM-dd HH:mm:ss.SSS
+  - match: { hits.hits.2._index: test }
+  - match: { hits.hits.2._source.double: null }
+  - match: { hits.total: 24 }
+  - match: { hits.hits.0._source.timestamp: null }
+          {"id": 8, "halffloat": 8, "long": 8, "int": 8, "float": 8, "double": 8, "unsignedlong": 8}
+  - match: { hits.hits.1._source.halffloat: null }
+  - do:
+          sort: [ { population: desc } ]
+  - do:
+  - skip:
+          "sort": [ { "population": { "order": "desc", "missing": "_last" } } ]
+  - match: { hits.hits.0._source.population: 194.4 }
+          search_after: [ 200, 0 ] # making it out of min/max so only missing value hit is qualified
+      search:
+        rest_total_hits_as_int: true
+      version: " - 2.12.99"
+  # search_after with the sort with missing
+        body:
+            properties:
+          {"index":{}}
+  - match: { hits.hits.2._source.double: null }
+  - match: { hits.total: 24 }
+          {"population": 194.4}
+          size: 1
+  - match: { hits.total: 24 }
+          {"id": 21, "halffloat": null, "long": null, "int": null, "float": null, "double": null, "unsignedlong": null}
+                type: double
+          {"index":{}}
+  - match: { hits.hits.0._source.id: 24 }
+  - match: {hits.total: 3 }
+  - length: { hits.hits: 3 }
+  - do:
+          {"index":{}}
+      bulk:
+        body:
+  - length: {hits.hits: 1 }
+      search:
+          sort: [{ timestamp: desc }]
+  - do:
+  - match: { hits.total: 24 }
+                type: float
+        rest_total_hits_as_int: true
+  - match: { hits.hits.2._source.id: 22 }
+              foo: bar
+  - match: { hits.total: 24 }
+  - match: { hits.hits.0._index: test }
+        index: test
+  - match: {hits.total: 2 }
+  - match: {hits.hits.0._id: "172" }
+  - match: { hits.hits.1._source.id: 23 }
+  - match: {hits.total: 2 }
+        index: test
+          sort: [{ timestamp: desc }]
+      bulk:
+  - do:
+            properties:
+  - match: {hits.hits.0.sort: [1571646604828] }
+  - match: { hits.hits.0._source.int: null }
+  - match: { hits.hits.1._source.unsignedlong: null }
+        rest_total_hits_as_int: true
+              foo: bar
+        body:
+  - match: {hits.total.value: 2 }
+              population:
+# This test is addressing bugs like here https://github.com/opensearch-project/OpenSearch/issues/9537
+          search_after: [ 100 ] # making it out of min/max so only missing value hit is qualified
+          "size": 3
+  - length: { hits.hits: 1 }
+  - match: { hits.hits.0._index: test }
+  - match: { hits.hits.1._index: test }
+# This test checks if skipping logic is skipped in case missing values are competitive
+          {"index":{}}
+  - match: {hits.hits.0.sort: [1571617804828] }
+          index:  test
+  - match: { hits.hits.1._index: test }
+  - match: { hits.hits.0._source.id: 21 }
+          search_after: [ 164.375 ] # this is rounded sort value in sort result
+        rest_total_hits_as_int: true
+      search:
+  - do:
+"unsigned long":
+          query:
+  - match: {hits.hits.0._index: test }
+  - do:
+  - match: { hits.hits.0._source.long: null }
+      reason: newly added test, supported from 3.0.0
+          {"index":{}}
+          {"index":{}}
+          {"population": 174.4}
+        rest_total_hits_as_int: true
+  - match: { hits.total: 3 }
+  - do:
           {"id": 12, "halffloat": 12, "long": 12, "int": 12, "float": 12, "double": 12, "unsignedlong": 12}
+  - match: { hits.total: 6 }
+            properties:
+  # search_after with the desc sort
+        index: test
+  - match: { hits.hits.1._source.id: 22 }
+  - match: { hits.hits.2._source.id: 23 }
+  - match: { hits.hits.2._source.int: null }
+        body:
+  - length: {hits.hits: 1 }
+          query:
+  - match: { hits.hits.2._source.halffloat: null }
+          sort: [{ age: desc }, { id: desc }]
+        index: test
+  - match: { hits.hits.1._index: test }
           {"index":{}}
-          {"id": 13, "halffloat": 13, "long": 13, "int": 13, "float": 13, "double": 13, "unsignedlong": 13}
+        index: test
+  - match: {hits.hits.0._source.population: 10223372036854775800 }
+        body:
+          "sort": [ { "double": { "order": "asc" } }, { "id": { "order": "asc" } } ]
+          {"timestamp":"2019-10-21 08:30:04.828"}
+        body: |
+  # search_after with the desc sort with missing
+        version: " - 2.11.0"
+        body:
+          "size": 5
+        rest_total_hits_as_int: true
+  - match: {hits.hits.0._index: test }
+  - match: { hits.total: 24 }
+      bulk:
+          {"id": 4, "halffloat": 4, "long": 4, "int": 4, "float": 4, "double": 4, "unsignedlong": 4}
+  - match: { hits.hits.1._source.id: 22 }
+  - do:
+  - match: {hits.hits.0.sort: [15223372036854775800] }
+  - match: { hits.hits.0._source.double: null }
+  # search_after with the formatted date
+  - match: { hits.hits.2._source.population: 174.4 }
+      search:
+        refresh: true
+  - match: { hits.hits.0._source.id: 24 }
+                type: half_float
+        index: test
+          body:   { id: 1, foo: bar, age: 18 }
+  - match: { hits.hits.1._index: test }
+      indices.create:
+  - length: { hits.hits: 3 }
+          search_after: [18, 1]
+  - do:
+  - match: { hits.hits.0._source.id: 21 }
+        body:
+  - do:
+  - match: { hits.hits.1._source.long: null }
+  - match: { hits.hits.2._source.unsignedlong: null }
+        index: test
+  - match: { hits.total: 24 }
+  - match: { hits.hits.0._index: test }
+          search_after: [1571646604828733000]
+  - do:
+  - match: { hits.hits.1._source.float: null }
+          {"id": 5, "halffloat": 5, "long": 5, "int": 5, "float": 5, "double": 5, "unsignedlong": 5}
+  - do:
+        index: test
+        index: test
+      search:
+      search:
           {"index":{}}
-          {"id": 14, "halffloat": 14, "long": 14, "int": 14, "float": 14, "double": 14, "unsignedlong": 14}
+  - do:
+  - match: { hits.hits.0._index: test }
+          size: 1
+          sort: [{ age: desc }, { id: desc } ]
+  - match: { hits.hits.0._index: test }
+  - do:
+  - match: { hits.hits.2._source.unsignedlong: null }
+  - do:
+        rest_total_hits_as_int: true
+  - match: {hits.hits.0.sort: [24, 172] }
+      search:
+  - match: { hits.total: 24 }
+  - match: { hits.hits.1._source.population: 184.4 }
+  - match: { hits.hits.2._source.id: 23 }
           {"index":{}}
+  - match: { hits.hits.0._source.unsignedlong: null }
+  - match: { hits.hits.1._source.id: 23 }
+  - match: {hits.total: 3}
+        refresh: true
+        index: test
+        index: test
+      indices.create:
+          size: 1
+        index: test
+  - do:
+        body: |
+  - match: { hits.hits.1._source.double: null }
+  - match: { hits.hits.1._source.id: 22 }
+  - match: { hits.hits.2._index: test }
+          search_after: [ 200, 0 ] # making it out of min/max so only missing value hit is qualified
+        index: test
+  - match: { hits.hits.1._index: test }
+  - length: { hits.hits: 3 }
+          sort: [{ timestamp: desc }]
+  - do:
+        body:
+---
+  - match: { hits.hits.0._source.float: null }
+      search:
+          {"timestamp":"2019-10-21 00:30:04.828"}
+  - match: { hits.hits.0._index: test }
+          search_after: [ 200, 0 ] # making it out of min/max so only missing value hit is qualified
+  - do:
+  - match: { hits.total: 24 }
+        body:
+  - do:
+      search:
+        rest_total_hits_as_int: true
+  - match: { hits.hits.1._source.long: null }
+        index: test
+        refresh: true
+                type: long
+        rest_total_hits_as_int: true
+  - match: { hits.hits.2._source.id: 22 }
+          {"id": 10, "halffloat": 10, "long": 10, "int": 10, "float": 10, "double": 10, "unsignedlong": 10}
+  - match: { hits.hits.0._index: test }
+  - match: { hits.hits.0._source.population: null }
+  - match: { hits.hits.2._source.float: null }
+# We are inserting 24 documents with some missing values and giving search after parameter
+  - length: { hits.hits: 3 }
+  - length: {hits.hits: 1 }
+        index: test
+        rest_total_hits_as_int: true
+        index: test
+  # search_after with the asc sort
+        body: |
+                type: unsigned_long
+  - match: { hits.hits.2._source.long: null }
+  - match: { hits.hits.1._source.id: 22 }
+      search:
+        body:
+  - match: { hits.hits.1._index: test }
+      search:
+  - match: { hits.hits.1._index: test }
+  - do:
           {"id": 15, "halffloat": 15, "long": 15, "int": 15, "float": 15, "double": 15, "unsignedlong": 15}
-          {"index":{}}
-          {"id": 16, "halffloat": 16, "long": 16, "int": 16, "float": 16, "double": 16, "unsignedlong": 16}
-          {"index":{}}
+  - match: { hits.hits.2._source.halffloat: null }
+          "size": 3
+      indices.create:
+  - length: { hits.hits: 1 }
+        body:
+  - match: { hits.hits.2._source.id: 22 }
           {"id": 17, "halffloat": 17, "long": 17, "int": 17, "float": 17, "double": 17, "unsignedlong": 17}
+        rest_total_hits_as_int: true
+        body:
+  - length: {hits.hits: 1 }
+  - match: { hits.hits.1._source.id: 23 }
+        index: test
           {"index":{}}
+---
+  - match: {hits.hits.0.sort: [18, 1] }
+  # search_after with the asc sort with missing
+          search_after: [ 0, 25 ] # making it out of min/max so only missing value hit is qualified
+          {"index":{}}
+          size: 1
+        rest_total_hits_as_int: true
+        index: test
+  - match: { hits.hits.0._source.population: null }
+          {"population": 164.4}
+          sort: [{ timestamp: desc }]
+  - do:
+          size: 1
+      search:
+          mappings:
+          "sort": [ { "timestamp": { "order": "asc", "missing": "_last" } } ]
+  - match: {hits.hits.0._index: test }
+  - match: { hits.hits.0._source.population: 144.4 }
+  - do:
+                type: date
+  - do:
+          {"index":{}}
+  - match: { hits.hits.1._index: test }
+        rest_total_hits_as_int: true
+        body:
+          "size": 3
+          {"timestamp":"2019-10-21 08:30:04.828733"}
+          {"index":{}}
+  - match: {hits.total: 2 }
+          "size": 5
+  - match: { hits.hits.2._source.long: null }
+  - match: { hits.hits.2._index: test }
+          "sort": [ { "float": { "order": "desc" } }, { "id": { "order": "desc" } } ]
+  - length: { hits.hits: 3 }
+  - match: { hits.hits.1._source.population: 164.4 }
+        rest_total_hits_as_int: true
+  - match: { hits.hits.0._index: test }
+  - match: {hits.hits.0._index: test }
+      search:
+  - match: { hits.hits.1._index: test }
+  - match: { hits.hits.0._source.id: 21 }
+  - length: {hits.hits: 1 }
+  - match: {hits.hits.0._source.timestamp: "2019-10-21 00:30:04.828740" }
+  - match: { hits.hits.0._source.halffloat: null }
+        rest_total_hits_as_int: true
+        body:
+  - match: {hits.total: 3 }
+          size: 3
+# missing value even though it should list sort by secondary field id with missing value primary field.
+  - match: {hits.hits.0._source.timestamp: "2019-10-21 08:30:04.828733" }
+# In case skipping logic is applied in Lucene, it will skipp all documents with primary sort field
+  - do:
+  - match: { hits.hits.1._source.double: null }
+        refresh: true
+        body:
+          size: 1
+  - do:
+        index: test
+        body:
+        index: test
+  - do:
+        index: test
+        body: |
+        index: test
+      search:
+          index:  test
+          size: 1
+  - do:
+        body:
+                type: integer
+  - length: {hits.hits: 0 }
+      reason: unsigned_long is not supported before 2.8.0
+  - length: { hits.hits: 3 }
+  - do:
+          search_after: [ 0, 25 ] # making it out of min/max so only missing value hit is qualified
+  - do:
+  - match: { hits.hits.0._source.unsignedlong: null }
+  - do:
+              float:
+        index: test
+        index: test
+  - match: {hits.hits.0._source.timestamp: "2019-10-21 00:30:04.828" }
+          {"index":{}}
+            properties:
+      search:
+          size: 1
+# as missing value. The secondary sort field is on id which doesn't have missing value.
+  - do:
+        index: test
+          {"index":{}}
+"search with search_after parameter":
+        index: test
+          mappings:
+          "size": 3
+  # search_after with the asc sort
+  - match: { hits.hits.0._source.id: 24 }
+  - match: { hits.hits.0._source.long: null }
+  - match: {hits.hits.0._index: test }
+  - match: { hits.total: 24 }
+          query:
+  - match: {hits.total: 2 }
+          "sort": [ { "long": { "order": "desc" } }, { "id": { "order": "desc" } } ]
+        index: test
+              population:
+  - do:
+  - match: { hits.hits.0._source.float: null }
+          search_after: [18, 42]
+  - do:
+          sort: [ { population: desc } ]
+  - match: { hits.hits.0._index: test }
+      indices.create:
+  - match: { hits.hits.2._index: test }
+                format: yyyy-MM-dd HH:mm:ss.SSSSSS
+        index: test
+  - length: { hits.hits: 3 }
+  - match: { hits.total: 5 }
+        index: test
+  - length: { hits.hits: 1 }
+        rest_total_hits_as_int: true
+        body: |
+  - match: { hits.hits.1._source.float: null }
+          id:     42
+  - length: { hits.hits: 1 }
+"half float":
+          search_after: ["2019-10-21 08:30:04.828"]
+          "size": 5
+  - match: { hits.hits.0._index: test }
+          "size": 3
+      search:
+          sort: [{ population: asc }]
+        index: test
+        body:
+      bulk:
+          query:
+          "sort": [ { "unsignedlong": { "order": "desc" } }, { "id": { "order": "desc" } } ]
+          sort: [{ timestamp: desc }]
+  - match: {hits.hits.0.sort: [1571617804828740000] }
+          "size": 3
+          search_after: ["2019-10-21 08:30:04.828733"]
+  - match: {hits.hits.0._id: "1" }
+  - match: { hits.hits.0._source.population: 144.4 }
+          "size": 5
+  - length: {hits.hits: 1 }
+          "size": 3
+      bulk:
+"date_nanos":
+          {"index":{}}
+  - do:
+---
+  - match: { hits.hits.0._index: test }
+  - match: { hits.hits.0._index: test }
+  - match: {hits.hits.0._source.population: 15223372036854775800 }
+              timestamp:
+          sort: [{ age: desc }, { id: desc }]
+        index: test
+          {"id": 23, "halffloat": null, "long": null, "int": null, "float": null, "double": null, "unsignedlong": null}
+          "sort": [ { "unsignedlong": { "order": "asc" } }, { "id": { "order": "asc" } } ]
+  - match: {hits.hits.0._index: test }
+      bulk:
+  - match: { hits.hits.0._source.halffloat: null }
+  - match: { hits.hits.2._index: test }
+  - match: { hits.hits.1._source.int: null }
+              timestamp:
+          mappings:
+      search:
+          {"population": 15223372036854775800}
+      bulk:
+  - match: { hits.hits.0._source.id: 21 }
+          size: 1
+          size: 1
+  - match: {hits.total.value: 2 }
+  - match: { hits.hits.0._index: test }
+---
+          size: 1
+  - match: {hits.hits.0.sort: [10223372036854775800] }
+          "sort": [ { "population": { "order": "asc", "missing": "_last" } } ]
+  - match: { hits.hits.1._source.int: null }
+        body:
+          search_after: [15223372036854775801] # making it out of min/max so only missing value hit is qualified
+        rest_total_hits_as_int: true
+  - do:
+        body:
+        rest_total_hits_as_int: true
+  - match: { hits.hits.2._index: test }
+  - do:
+  - match: { hits.hits.1._index: test }
+  - length: { hits.hits: 3 }
+        refresh: true
+              foo: bar
+  - match: { hits.hits.2._index: test }
+  - match: { hits.total: 6 }
+          {"index":{}}
+  - do:
+  - length: {hits.hits: 1 }
+  - match: { hits.hits.2._index: test }
+  - do:
+  - match: { hits.hits.0._index: test }
+  - match: {hits.hits.0.sort: [1571646604828733000] }
+      search:
+              halffloat:
+        index: test
+            match:
+          mappings:
+        rest_total_hits_as_int: true
+        body:
+              foo: bar
+          {"index":{}}
+          search_after: [ 0, 25 ] # making it out of min/max so only missing value hit is qualified
+          "sort": [ { "population": { "order": "asc", "missing": "_last" } } ]
+        body:
+  - match: { hits.hits.0._index: test }
+  - match: { hits.total: 3 }
+        body:
+          sort: [{ population: asc }]
+  - match: { hits.hits.2._source.id: 22 }
+          {"id": 22, "halffloat": null, "long": null, "int": null, "float": null, "double": null, "unsignedlong": null}
+  - match: { hits.hits.0._source.population: 194.4 }
+  - match: { hits.hits.2._source.id: 23 }
+  - do:
+          sort: [{ timestamp: desc }]
+          search_after: [ 200 ] # making it out of min/max so only missing value hit is qualified
+      search:
+  - match: { hits.hits.0._index: test }
+          "sort": [ { "float": { "order": "asc" } }, { "id": { "order": "asc" } } ]
+          index:  test
+          search_after: [10223372036854775800]
+          {"id": 9, "halffloat": 9, "long": 9, "int": 9, "float": 9, "double": 9, "unsignedlong": 9}
+        rest_total_hits_as_int: true
+        body:
+          {"index":{}}
+        body: |
+          search_after: [ 0, 25 ] # making it out of min/max so only missing value hit is qualified
+          "sort": [ { "halffloat": { "order": "asc" } }, { "id": { "order": "asc" } } ]
+          {"index":{}}
+  # search_after with the sort with missing
+      search:
+                type: unsigned_long
+  - match: { hits.hits.1._source.id: 22 }
+  - do:
+  - length: { hits.hits: 3 }
+        body: |
+        index: test
+          {"index":{}}
+        index:
           {"id": 18, "halffloat": 18, "long": 18, "int": 18, "float": 18, "double": 18, "unsignedlong": 18}
           {"index":{}}
-          {"id": 19, "halffloat": 19, "long": 19, "int": 19, "float": 19, "double": 19, "unsignedlong": 19}
+        refresh: true
+  # search_after with the formatted date
+  # search_after with the sort
+"date":
+  - match: { hits.hits.0._source.double: null }
+  - length: { hits.hits: 1 }
           {"index":{}}
-          {"id": 20, "halffloat": 20, "long": 20, "int": 20, "float": 20, "double": 20, "unsignedlong": 20}
+  - match: {hits.hits.0._index: test }
           {"index":{}}
-          {"id": 21, "halffloat": null, "long": null, "int": null, "float": null, "double": null, "unsignedlong": null}
-          {"index":{}}
-          {"id": 22, "halffloat": null, "long": null, "int": null, "float": null, "double": null, "unsignedlong": null}
-          {"index":{}}
-          {"id": 23, "halffloat": null, "long": null, "int": null, "float": null, "double": null, "unsignedlong": null}
-          {"index":{}}
-          {"id": 24, "halffloat": null, "long": null, "int": null, "float": null, "double": null, "unsignedlong": null}
-
-  - do:
-      search:
-        index: test
+  - match: { hits.hits.0._source.population: null }
         rest_total_hits_as_int: true
+  - match: { hits.hits.1._source.unsignedlong: null }
         body:
-          "size": 3
-          "sort": [ { "halffloat": { "order": "asc" } }, { "id": { "order": "asc" } } ]
-          search_after: [ 200, 0 ] # making it out of min/max so only missing value hit is qualified
-
-  - match: { hits.total: 24 }
-  - length: { hits.hits: 3 }
-  - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.halffloat: null }
-  - match: { hits.hits.0._source.id: 21 }
   - match: { hits.hits.1._index: test }
-  - match: { hits.hits.1._source.halffloat: null }
-  - match: { hits.hits.1._source.id: 22 }
-  - match: { hits.hits.2._index: test }
-  - match: { hits.hits.2._source.halffloat: null }
-  - match: { hits.hits.2._source.id: 23 }
-
-  - do:
+  - match: {hits.hits.0._index: test }
       search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          "size": 3
-          "sort": [ { "halffloat": { "order": "desc" } }, { "id": { "order": "desc" } } ]
-          search_after: [ 0, 25 ] # making it out of min/max so only missing value hit is qualified
-
-  - match: { hits.total: 24 }
-  - length: { hits.hits: 3 }
-  - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.halffloat: null }
-  - match: { hits.hits.0._source.id: 24 }
-  - match: { hits.hits.1._index: test }
-  - match: { hits.hits.1._source.halffloat: null }
-  - match: { hits.hits.1._source.id: 23 }
-  - match: { hits.hits.2._index: test }
-  - match: { hits.hits.2._source.halffloat: null }
+          {"population": 10223372036854775800}
   - match: { hits.hits.2._source.id: 22 }
-
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          "size": 3
-          "sort": [ { "long": { "order": "asc" } }, { "id": { "order": "asc" } } ]
-          search_after: [ 200, 0 ] # making it out of min/max so only missing value hit is qualified
-
-  - match: { hits.total: 24 }
-  - length: { hits.hits: 3 }
-  - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.long: null }
-  - match: { hits.hits.0._source.id: 21 }
-  - match: { hits.hits.1._index: test }
-  - match: { hits.hits.1._source.long: null }
-  - match: { hits.hits.1._source.id: 22 }
-  - match: { hits.hits.2._index: test }
-  - match: { hits.hits.2._source.long: null }
-  - match: { hits.hits.2._source.id: 23 }
-
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          "size": 3
-          "sort": [ { "long": { "order": "desc" } }, { "id": { "order": "desc" } } ]
-          search_after: [ 0, 25 ] # making it out of min/max so only missing value hit is qualified
-
-  - match: { hits.total: 24 }
-  - length: { hits.hits: 3 }
-  - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.long: null }
-  - match: { hits.hits.0._source.id: 24 }
-  - match: { hits.hits.1._index: test }
-  - match: { hits.hits.1._source.long: null }
-  - match: { hits.hits.1._source.id: 23 }
-  - match: { hits.hits.2._index: test }
-  - match: { hits.hits.2._source.long: null }
-  - match: { hits.hits.2._source.id: 22 }
-
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          "size": 3
-          "sort": [ { "int": { "order": "asc" } }, { "id": { "order": "asc" } } ]
-          search_after: [ 200, 0 ] # making it out of min/max so only missing value hit is qualified
-
-  - match: { hits.total: 24 }
-  - length: { hits.hits: 3 }
-  - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.int: null }
-  - match: { hits.hits.0._source.id: 21 }
-  - match: { hits.hits.1._index: test }
-  - match: { hits.hits.1._source.int: null }
-  - match: { hits.hits.1._source.id: 22 }
+          id:     1
   - match: { hits.hits.2._index: test }
   - match: { hits.hits.2._source.int: null }
-  - match: { hits.hits.2._source.id: 23 }
-
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          "size": 3
+  - length: {hits.hits: 1 }
+              long:
+  - match: { hits.hits.2._source.id: 22 }
           "sort": [ { "int": { "order": "desc" } }, { "id": { "order": "desc" } } ]
-          search_after: [ 0, 25 ] # making it out of min/max so only missing value hit is qualified
-
-  - match: { hits.total: 24 }
-  - length: { hits.hits: 3 }
   - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.int: null }
-  - match: { hits.hits.0._source.id: 24 }
-  - match: { hits.hits.1._index: test }
-  - match: { hits.hits.1._source.int: null }
-  - match: { hits.hits.1._source.id: 23 }
-  - match: { hits.hits.2._index: test }
-  - match: { hits.hits.2._source.int: null }
-  - match: { hits.hits.2._source.id: 22 }
-
   - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          "size": 3
-          "sort": [ { "float": { "order": "asc" } }, { "id": { "order": "asc" } } ]
-          search_after: [ 200, 0 ] # making it out of min/max so only missing value hit is qualified
-
-  - match: { hits.total: 24 }
-  - length: { hits.hits: 3 }
   - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.float: null }
-  - match: { hits.hits.0._source.id: 21 }
-  - match: { hits.hits.1._index: test }
-  - match: { hits.hits.1._source.float: null }
-  - match: { hits.hits.1._source.id: 22 }
-  - match: { hits.hits.2._index: test }
-  - match: { hits.hits.2._source.float: null }
+          mappings:
   - match: { hits.hits.2._source.id: 23 }
-
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          "size": 3
-          "sort": [ { "float": { "order": "desc" } }, { "id": { "order": "desc" } } ]
-          search_after: [ 0, 25 ] # making it out of min/max so only missing value hit is qualified
-
-  - match: { hits.total: 24 }
-  - length: { hits.hits: 3 }
-  - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.float: null }
-  - match: { hits.hits.0._source.id: 24 }
-  - match: { hits.hits.1._index: test }
-  - match: { hits.hits.1._source.float: null }
-  - match: { hits.hits.1._source.id: 23 }
-  - match: { hits.hits.2._index: test }
-  - match: { hits.hits.2._source.float: null }
-  - match: { hits.hits.2._source.id: 22 }
-
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          "size": 3
-          "sort": [ { "double": { "order": "asc" } }, { "id": { "order": "asc" } } ]
-          search_after: [ 200, 0 ] # making it out of min/max so only missing value hit is qualified
-
-  - match: { hits.total: 24 }
-  - length: { hits.hits: 3 }
-  - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.double: null }
   - match: { hits.hits.0._source.id: 21 }
-  - match: { hits.hits.1._index: test }
-  - match: { hits.hits.1._source.double: null }
-  - match: { hits.hits.1._source.id: 22 }
-  - match: { hits.hits.2._index: test }
-  - match: { hits.hits.2._source.double: null }
-  - match: { hits.hits.2._source.id: 23 }
-
-  - do:
       search:
+      search:
+          search_after: [ 200, 0 ] # making it out of min/max so only missing value hit is qualified
+  - match: { hits.hits.0._index: test }
+  - match: { hits.hits.2._index: test }
+  - match: {hits.total.value: 2 }
+  - match: { hits.hits.1._source.id: 23 }
+  - length: {hits.hits: 1 }
+  - length: { hits.hits: 3 }
         index: test
-        rest_total_hits_as_int: true
+      search:
+        reason: half_float was broken for 2.11.0 and earlier
+        index: test
         body:
-          "size": 3
+        rest_total_hits_as_int: true
+        index: test
+  - length: {hits.hits: 1 }
           "sort": [ { "double": { "order": "desc" } }, { "id": { "order": "desc" } } ]
-          search_after: [ 0, 25 ] # making it out of min/max so only missing value hit is qualified
-
-  - match: { hits.total: 24 }
-  - length: { hits.hits: 3 }
   - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.double: null }
-  - match: { hits.hits.0._source.id: 24 }
-  - match: { hits.hits.1._index: test }
-  - match: { hits.hits.1._source.double: null }
-  - match: { hits.hits.1._source.id: 23 }
-  - match: { hits.hits.2._index: test }
-  - match: { hits.hits.2._source.double: null }
-  - match: { hits.hits.2._source.id: 22 }
-
-  - do:
-      search:
+  - skip:
+  - match: {hits.total: 3}
+            match:
         index: test
-        rest_total_hits_as_int: true
-        body:
           "size": 3
-          "sort": [ { "unsignedlong": { "order": "asc" } }, { "id": { "order": "asc" } } ]
-          search_after: [ 200, 0 ] # making it out of min/max so only missing value hit is qualified
-
-  - match: { hits.total: 24 }
-  - length: { hits.hits: 3 }
-  - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.unsignedlong: null }
-  - match: { hits.hits.0._source.id: 21 }
-  - match: { hits.hits.1._index: test }
-  - match: { hits.hits.1._source.unsignedlong: null }
-  - match: { hits.hits.1._source.id: 22 }
+          {"id": 3, "halffloat": 3, "long": 3, "int": 3, "float": 3, "double": 3, "unsignedlong": 3}
+        body:
+  - skip:
+  - match: { hits.hits.0._source.int: null }
+  - match: { hits.total: 5 }
+        rest_total_hits_as_int: true
+        index: test
+  - match: { hits.hits.1._source.id: 23 }
+          sort: [ { age: desc }, { id: desc } ]
   - match: { hits.hits.2._index: test }
-  - match: { hits.hits.2._source.unsignedlong: null }
   - match: { hits.hits.2._source.id: 23 }
-
-  - do:
-      search:
+      index:
+        body: |
+---
+  - match: { hits.hits.0._source.id: 21 }
+          sort: [ { population: asc } ]
+          {"id": 6, "halffloat": 6, "long": 6, "int": 6, "float": 6, "double": 6, "unsignedlong": 6}
+  - match: { hits.hits.2._source.id: 23 }
+  # search_after with the sort
+  - match: { hits.total: 5 }
         index: test
+  - length: { hits.hits: 3 }
+        body:
+        index: test
+      search:
+  - do:
+          search_after: [ 184.375 ] # this is rounded sort value in sort result
+            body:   { id: 172, foo: bar, age: 24 }
         rest_total_hits_as_int: true
         body:
           "size": 3
-          "sort": [ { "unsignedlong": { "order": "desc" } }, { "id": { "order": "desc" } } ]
-          search_after: [ 0, 25 ] # making it out of min/max so only missing value hit is qualified
-
-  - match: { hits.total: 24 }
-  - length: { hits.hits: 3 }
-  - match: { hits.hits.0._index: test }
-  - match: { hits.hits.0._source.unsignedlong: null }
+      bulk:
+  - match: {hits.hits.0.sort: [18, 42] }
+      indices.refresh:
+        refresh: true
+          body:   { id: 42, foo: bar, age: 18 }
+  - length: {hits.hits: 1 }
+  - do:
   - match: { hits.hits.0._source.id: 24 }
-  - match: { hits.hits.1._index: test }
-  - match: { hits.hits.1._source.unsignedlong: null }
-  - match: { hits.hits.1._source.id: 23 }
-  - match: { hits.hits.2._index: test }
-  - match: { hits.hits.2._source.unsignedlong: null }
-  - match: { hits.hits.2._source.id: 22 }
+          {"index":{}}
+          {"id": 1, "halffloat": 1, "long": 1, "int": 1, "float": 1, "double": 1, "unsignedlong": 1}
+  - match: {hits.hits.0._index: test }
+          size: 3
+          {"population": null}
+      search:
+  - match: {hits.hits.0._index: test }
+              int:
+      version: " - 2.7.99"
+"numeric skipping logic with competitive missing value":
+                type: half_float
+          search_after: [ 0, 25 ] # making it out of min/max so only missing value hit is qualified
+          {"id": 19, "halffloat": 19, "long": 19, "int": 19, "float": 19, "double": 19, "unsignedlong": 19}
+          {"id": 14, "halffloat": 14, "long": 14, "int": 14, "float": 14, "double": 14, "unsignedlong": 14}
+  - match: {hits.hits.0._source.timestamp: "2019-10-21 00:30:04.828740" }
+        index: test

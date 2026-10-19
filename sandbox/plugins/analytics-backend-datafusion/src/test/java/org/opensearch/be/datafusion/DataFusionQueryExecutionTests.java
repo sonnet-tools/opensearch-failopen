@@ -1,185 +1,164 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.be.datafusion;
-
-import org.apache.arrow.c.ArrowArray;
-import org.apache.arrow.c.ArrowSchema;
-import org.apache.arrow.c.CDataDictionaryProvider;
-import org.apache.arrow.c.Data;
-import org.apache.arrow.memory.RootAllocator;
-import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.types.pojo.Schema;
-import org.opensearch.be.datafusion.nativelib.NativeBridge;
-import org.opensearch.be.datafusion.nativelib.ReaderHandle;
-import org.opensearch.be.datafusion.nativelib.StreamHandle;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.index.engine.exec.MonoFileWriterSet;
-import org.opensearch.plugins.NativeStoreHandle;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.lang.foreign.Arena;
-import java.lang.foreign.MemorySegment;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-
-import static org.apache.arrow.c.Data.importField;
-
-/**
- * End-to-end test: SQL → Substrait → executeQueryAsync → Arrow C Data → Java.
- * Tests use sqlToSubstrait to generate plan bytes, then feed them through
- * the same executeQueryAsync path used in production.
- */
-public class DataFusionQueryExecutionTests extends OpenSearchTestCase {
-
-    private NativeRuntimeHandle runtimeHandle;
-    private ReaderHandle readerHandle;
-    private Arena configArena;
-    private long queryConfigPtr;
-    private long tieredStorePtr;
-    private NativeStoreHandle storeHandle;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        NativeBridge.initTokioRuntimeManager(2);
-        Path spillDir = createTempDir("datafusion-spill");
-        runtimeHandle = new NativeRuntimeHandle(
-            NativeBridge.createGlobalRuntime(128 * 1024 * 1024, 0L, spillDir.toString(), 64 * 1024 * 1024)
         );
-
-        // Create a real TieredObjectStore (local-only) and wrap in NativeStoreHandle
-        tieredStorePtr = NativeStoreTestHelper.createTieredObjectStore(0L, 0L);
-        long boxPtr = NativeStoreTestHelper.getObjectStoreBoxPtr(tieredStorePtr);
-        storeHandle = new NativeStoreHandle(boxPtr, NativeStoreTestHelper::destroyObjectStoreBoxPtr);
-
-        Path dataDir = createTempDir("datafusion-data");
-        Path testParquet = Path.of(getClass().getClassLoader().getResource("test.parquet").toURI());
-        Files.copy(testParquet, dataDir.resolve("test.parquet"));
-        readerHandle = new ReaderHandle(
-            dataDir.toString(),
-            List.of(MonoFileWriterSet.of(".", 0L, "test.parquet", 0L)),
-            storeHandle,
             List.of(),
-            List.of()
-        );
-
-        configArena = Arena.ofConfined();
-        MemorySegment configSegment = configArena.allocate(WireConfigSnapshot.BYTE_SIZE);
-        WireConfigSnapshot.builder().build().writeTo(configSegment);
-        queryConfigPtr = configSegment.address();
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        configArena.close();
-        readerHandle.close();
         storeHandle.close();
-        NativeStoreTestHelper.destroyTieredObjectStore(tieredStorePtr);
-        runtimeHandle.close();
-        NativeBridge.shutdownTokioRuntimeManager();
-        super.tearDown();
-    }
-
-    public void testSelectAllQuery() throws Exception {
-        List<Object[]> rows = executeQuery("SELECT message, message2, message3 FROM test_table");
-        assertEquals(2, rows.size());
-        // row 0: message=2, message2=3, message3=4
-        assertEquals(2L, rows.get(0)[0]);
-        assertEquals(3L, rows.get(0)[1]);
-        assertEquals(4L, rows.get(0)[2]);
-        // row 1: message=3, message2=4, message3=5
-        assertEquals(3L, rows.get(1)[0]);
-    }
-
-    public void testFilterQuery() throws Exception {
-        List<Object[]> rows = executeQuery("SELECT message FROM test_table WHERE message > 2");
-        assertEquals(1, rows.size());
-        assertEquals(3L, rows.get(0)[0]);
-    }
-
-    public void testAggregationQuery() throws Exception {
-        List<Object[]> rows = executeQuery("SELECT SUM(message) as total, COUNT(*) as cnt FROM test_table");
-        assertEquals(1, rows.size());
-        assertEquals(5L, rows.get(0)[0]); // 2 + 3
-        assertEquals(2L, rows.get(0)[1]);
-    }
-
-    /**
-     * Converts SQL → substrait bytes, then executes via the real executeQueryAsync path,
-     * and collects all result rows.
-     */
-    private List<Object[]> executeQuery(String sql) {
-        // Step 1: SQL → Substrait (test helper)
-        byte[] substraitBytes = NativeBridge.sqlToSubstrait(readerHandle.getPointer(), "test_table", sql, runtimeHandle.get());
-        assertNotNull(substraitBytes);
-        assertTrue(substraitBytes.length > 0);
-
-        // Step 2: executeQueryAsync (production path)
-        long streamPtr = asyncCall(
+            return rows;
+    private long queryConfigPtr;
             listener -> NativeBridge.executeQueryAsync(
-                readerHandle.getPointer(),
-                "test_table",
-                substraitBytes,
-                runtimeHandle.get(),
-                0L,
-                queryConfigPtr,
-                listener
-            )
-        );
-        assertTrue(streamPtr != 0);
-
-        // Step 3: Read results via Arrow C Data
-        try (
-            StreamHandle streamHandle = new StreamHandle(streamPtr, runtimeHandle);
-            RootAllocator allocator = new RootAllocator(Long.MAX_VALUE);
-            CDataDictionaryProvider dictProvider = new CDataDictionaryProvider()
-        ) {
-
-            long schemaAddr = asyncCall(listener -> NativeBridge.streamGetSchema(streamHandle.getPointer(), listener));
-            Schema schema = new Schema(importField(allocator, ArrowSchema.wrap(schemaAddr), dictProvider).getChildren(), null);
-            VectorSchemaRoot root = VectorSchemaRoot.create(schema, allocator);
+        assertEquals(5L, rows.get(0)[0]); // 2 + 3
+    private ReaderHandle readerHandle;
             List<Object[]> rows = new ArrayList<>();
-
+import org.apache.arrow.c.Data;
+            storeHandle,
+    @Override
+        Path spillDir = createTempDir("datafusion-spill");
+import org.opensearch.plugins.NativeStoreHandle;
+            dataDir.toString(),
+ * compatible open source license.
+        });
+    public void testAggregationQuery() throws Exception {
+            root.close();
+}
+        assertEquals(4L, rows.get(0)[2]);
+        // Step 2: executeQueryAsync (production path)
+        // Step 1: SQL → Substrait (test helper)
+        storeHandle = new NativeStoreHandle(boxPtr, NativeStoreTestHelper::destroyObjectStoreBoxPtr);
+                    rows.add(row);
+    public void testSelectAllQuery() throws Exception {
+            Schema schema = new Schema(importField(allocator, ArrowSchema.wrap(schemaAddr), dictProvider).getChildren(), null);
+            }
+import java.nio.file.Files;
+        assertEquals(2L, rows.get(0)[1]);
             while (true) {
-                long arrayAddr = asyncCall(listener -> NativeBridge.streamNext(runtimeHandle.get(), streamHandle.getPointer(), listener));
-                if (arrayAddr == 0) break;
-                Data.importIntoVectorSchemaRoot(allocator, ArrowArray.wrap(arrayAddr), root, dictProvider);
+        Path dataDir = createTempDir("datafusion-data");
+    }
+    }
+    public void setUp() throws Exception {
+            }
+                }
+    private List<Object[]> executeQuery(String sql) {
+            List.of()
+    }
+/*
+        Files.copy(testParquet, dataDir.resolve("test.parquet"));
+        assertEquals(3L, rows.get(0)[1]);
+                readerHandle.getPointer(),
+                0L,
+            @Override
+import java.util.concurrent.CompletableFuture;
+import org.apache.arrow.memory.RootAllocator;
+        NativeBridge.shutdownTokioRuntimeManager();
+        byte[] substraitBytes = NativeBridge.sqlToSubstrait(readerHandle.getPointer(), "test_table", sql, runtimeHandle.get());
+        configArena.close();
+        assertNotNull(substraitBytes);
+                    for (int c = 0; c < cols; c++) {
+        List<Object[]> rows = executeQuery("SELECT SUM(message) as total, COUNT(*) as cnt FROM test_table");
+        assertEquals(3L, rows.get(1)[0]);
+    private NativeRuntimeHandle runtimeHandle;
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to
+    @Override
+        assertEquals(3L, rows.get(0)[0]);
                 int cols = root.getFieldVectors().size();
                 for (int r = 0; r < root.getRowCount(); r++) {
-                    Object[] row = new Object[cols];
-                    for (int c = 0; c < cols; c++) {
+    }
+        assertEquals(1, rows.size());
                         row[c] = root.getFieldVectors().get(c).getObject(r);
-                    }
-                    rows.add(row);
-                }
+ */
+            @Override
+ * SPDX-License-Identifier: Apache-2.0
+ * Tests use sqlToSubstrait to generate plan bytes, then feed them through
+import org.opensearch.test.OpenSearchTestCase;
+     * and collects all result rows.
+import org.apache.arrow.c.ArrowSchema;
+        long streamPtr = asyncCall(
+        assertEquals(2L, rows.get(0)[0]);
+import org.opensearch.core.action.ActionListener;
+        // row 0: message=2, message2=3, message3=4
+        NativeStoreTestHelper.destroyTieredObjectStore(tieredStorePtr);
+        );
+        List<Object[]> rows = executeQuery("SELECT message, message2, message3 FROM test_table");
+            RootAllocator allocator = new RootAllocator(Long.MAX_VALUE);
+                queryConfigPtr,
             }
-            root.close();
-            return rows;
-        }
+        // row 1: message=3, message2=4, message3=5
+        List<Object[]> rows = executeQuery("SELECT message FROM test_table WHERE message > 2");
     }
-
+                listener
+    public void tearDown() throws Exception {
+    private NativeStoreHandle storeHandle;
+        assertTrue(streamPtr != 0);
     private long asyncCall(java.util.function.Consumer<ActionListener<Long>> call) {
-        CompletableFuture<Long> future = new CompletableFuture<>();
-        call.accept(new ActionListener<>() {
-            @Override
-            public void onResponse(Long v) {
-                future.complete(v);
-            }
-
-            @Override
+        try (
+            List.of(MonoFileWriterSet.of(".", 0L, "test.parquet", 0L)),
             public void onFailure(Exception e) {
-                future.completeExceptionally(e);
-            }
-        });
-        return future.join();
+                substraitBytes,
+        NativeBridge.initTokioRuntimeManager(2);
+        Path testParquet = Path.of(getClass().getClassLoader().getResource("test.parquet").toURI());
+            StreamHandle streamHandle = new StreamHandle(streamPtr, runtimeHandle);
+        WireConfigSnapshot.builder().build().writeTo(configSegment);
+ * End-to-end test: SQL → Substrait → executeQueryAsync → Arrow C Data → Java.
+        CompletableFuture<Long> future = new CompletableFuture<>();
     }
-}
+        assertTrue(substraitBytes.length > 0);
+import org.opensearch.be.datafusion.nativelib.StreamHandle;
+/**
+import java.util.ArrayList;
+import org.opensearch.index.engine.exec.MonoFileWriterSet;
+import java.util.List;
+package org.opensearch.be.datafusion;
+        queryConfigPtr = configSegment.address();
+     */
+        super.setUp();
+        call.accept(new ActionListener<>() {
+        );
+import org.apache.arrow.vector.VectorSchemaRoot;
+            NativeBridge.createGlobalRuntime(128 * 1024 * 1024, 0L, spillDir.toString(), 64 * 1024 * 1024)
+                Data.importIntoVectorSchemaRoot(allocator, ArrowArray.wrap(arrayAddr), root, dictProvider);
+import java.nio.file.Path;
+    }
+ */
+import org.apache.arrow.c.CDataDictionaryProvider;
+        assertEquals(1, rows.size());
+    private Arena configArena;
+        MemorySegment configSegment = configArena.allocate(WireConfigSnapshot.BYTE_SIZE);
+        }
+            public void onResponse(Long v) {
+        return future.join();
+                long arrayAddr = asyncCall(listener -> NativeBridge.streamNext(runtimeHandle.get(), streamHandle.getPointer(), listener));
+                    }
+        readerHandle.close();
+import java.lang.foreign.MemorySegment;
+import org.apache.arrow.c.ArrowArray;
+import static org.apache.arrow.c.Data.importField;
+                future.completeExceptionally(e);
+import org.apache.arrow.vector.types.pojo.Schema;
+                if (arrayAddr == 0) break;
+import java.lang.foreign.Arena;
+     * Converts SQL → substrait bytes, then executes via the real executeQueryAsync path,
+ * the same executeQueryAsync path used in production.
+            )
+import org.opensearch.be.datafusion.nativelib.NativeBridge;
+                    Object[] row = new Object[cols];
+                "test_table",
+    private long tieredStorePtr;
+                runtimeHandle.get(),
+                future.complete(v);
+            VectorSchemaRoot root = VectorSchemaRoot.create(schema, allocator);
+        // Step 3: Read results via Arrow C Data
+        tieredStorePtr = NativeStoreTestHelper.createTieredObjectStore(0L, 0L);
+        super.tearDown();
+        configArena = Arena.ofConfined();
+        runtimeHandle.close();
+import org.opensearch.be.datafusion.nativelib.ReaderHandle;
+        readerHandle = new ReaderHandle(
+        long boxPtr = NativeStoreTestHelper.getObjectStoreBoxPtr(tieredStorePtr);
+        // Create a real TieredObjectStore (local-only) and wrap in NativeStoreHandle
+        runtimeHandle = new NativeRuntimeHandle(
+    public void testFilterQuery() throws Exception {
+        assertEquals(2, rows.size());
+    /**
+            CDataDictionaryProvider dictProvider = new CDataDictionaryProvider()
+public class DataFusionQueryExecutionTests extends OpenSearchTestCase {
+        ) {
+            long schemaAddr = asyncCall(listener -> NativeBridge.streamGetSchema(streamHandle.getPointer(), listener));

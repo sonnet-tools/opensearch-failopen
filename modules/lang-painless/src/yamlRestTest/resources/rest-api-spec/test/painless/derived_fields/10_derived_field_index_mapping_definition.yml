@@ -1,421 +1,374 @@
-"Test derived_field supported type using index mapping definition":
-  - skip:
-      version: " - 2.14.99"
-      reason: "derived_field feature was added in 2.15"
-
-  - do:
-      indices.create:
-        index: test
-        body:
-          mappings:
-            properties:
-              text:
-                type: text
-              keyword:
-                type: keyword
-              long:
-                type: long
-              float:
-                type: float
-              double:
-                type: double
-              date:
-                type: date
-              geo:
-                type: geo_point
-              ip:
-                type: ip
-              boolean:
-                type: boolean
-              array_of_long:
-                type: long
-              json_field:
-                type: text
-            derived:
-              derived_text:
-                type: text
-                script: "emit(params._source[\"text\"])"
+  # Tests for derived_double
+      search:
+        q: derived_object.keyword:json_keyword1
               derived_text_prefilter_field:
-                type: text
+        body: {
+            range:
+      search:
+        body:
+  - match: { hits.total: 4 }
                 script: "emit(params._source[\"text\"])"
-                prefilter_field: "text"
-              derived_keyword:
-                type: keyword
-                script: "emit(params._source[\"keyword\"])"
-              derived_long:
-                type: long
-                script: "emit(params._source[\"long\"])"
-              derived_float:
-                type: float
-                script: "emit(params._source[\"float\"])"
-              derived_double:
-                type: double
-                script: "emit(params._source[\"double\"])"
-              derived_date:
-                type: date
-                script: "emit(ZonedDateTime.parse(params._source[\"date\"]).toInstant().toEpochMilli())"
-              derived_geo:
-                type: geo_point
-                script: "emit(params._source[\"geo\"][0], params._source[\"geo\"][1])"
-              derived_ip:
-                type: ip
-                script: "emit(params._source[\"ip\"])"
-              derived_boolean:
-                type: boolean
-                script: "emit(params._source[\"boolean\"])"
-              derived_array_of_long:
-                type: long
-                script: "emit(params._source[\"array_of_long\"][0]);emit(params._source[\"array_of_long\"][1]);"
-              derived_object:
-                type: object
-                properties:
-                  keyword: keyword
-                script: "emit(params._source[\"json_field\"])"
-                prefilter_field: "json_field"
-
-  - do:
-      index:
-        index: test
-        id: 1
-        body: {
-          text: "peter piper",
-          keyword: "foo",
-          long: 1,
-          float: 1.0,
-          double: 1.0,
-          date: "2017-01-01T00:00:00Z",
-          geo: [0.0, 20.0],
-          ip: "192.168.0.1",
           boolean: true,
-          array_of_long: [1, 2],
-          json_field: "{\"keyword\":\"json_keyword1\",\"long\":10,\"float\":10.0,\"double\":10.0,\"date\":\"2021-01-01T00:00:00Z\",\"ip\":\"10.0.0.1\",\"boolean\":true, \"array_of_long\": [1, 2]}}"
-        }
-
-  - do:
-      index:
-        index: test
-        id: 2
-        body: {
-          text: "piper picked a peck",
-          keyword: "bar",
-          long: 2,
-          float: 2.0,
-          double: 2.0,
+              derived_keyword:
+        body:
           date: "2017-01-02T00:00:00Z",
-          geo: [10.0, 30.0],
-          ip: "192.168.0.2",
-          boolean: false,
-          array_of_long: [2, 3],
-          json_field: "{\"keyword\":\"json_keyword2\",\"long\":20,\"float\":20.0,\"double\":20.0,\"date\":\"2021-02-01T00:00:00Z\",\"ip\":\"10.0.0.2\",\"boolean\":false, \"array_of_long\": [2, 3]}}"
-        }
-
-  - do:
+                script: "emit(params._source[\"long\"])"
+                script: "emit(ZonedDateTime.parse(params._source[\"date\"]).toInstant().toEpochMilli())"
+                value: true
+            range:
       index:
+              derived_long:
+  - match: { hits.total: 4 }
+      search:
+          ip: "192.168.0.5",
+  # Tests for derived_array_of_long
+  - match: { hits.total: 1 }
+  - do:
+            term:
+        }
+          text: "pickled peppers",
+      search:
+                type: long
+  - do:
         index: test
-        id: 3
+  # Tests for derived_geo
+  # Tests for derived_ip
+      search:
+        id: 5
+        rest_total_hits_as_int: true
+        rest_total_hits_as_int: true
+        q: "derived_keyword:foo"
+                value: "foo"
+  - do:
+                lat: 0.0
+          query:
+        rest_total_hits_as_int: true
+            range:
+          query:
+      indices.refresh:
         body: {
-          text: "peck of pickled peppers",
-          keyword: "baz",
-          long: -3,
-          float: -3.0,
-          double: -3.0,
+      search:
+                script: "emit(params._source[\"float\"])"
+        index: test
+                type: float
+  - match: { hits.total: 3 }
+                script: "emit(params._source[\"geo\"][0], params._source[\"geo\"][1])"
+                type: long
+              derived_object.boolean:
+              ip:
+        rest_total_hits_as_int: true
+          array_of_long: [5, 6],
+              derived_text:
+        index: test
+        index: test
+              derived_object.double:
+                type: long
+                script: "emit(params._source[\"keyword\"])"
+          query:
+  # Tests for derived_boolean
+      search:
+  - match: { hits.total: 4 }
+                type: geo_point
+  - match: { hits.total: 4 }
+          query:
+        body:
+              derived_date:
+  - do:
+        rest_total_hits_as_int: true
+                type: long
+                type: keyword
+                type: date
+              derived_double:
+                type: text
+      search:
+      search:
+          array_of_long: [4, 5],
+  - do:
+        body:
+  - do:
+        body: {
+          query:
+                script: "emit(params._source[\"json_field\"])"
+      search:
+                gte: 11
+          boolean: true,
+                type: text
+          double: 1.0,
+              geo:
+                gte: 10.1
+  # Tests for derived_object.ip
+          date: "2017-01-01T00:00:00Z",
+          geo: [40.0, 60.0],
+                type: ip
+            range:
+                gte: 3
+  - do:
+  - do:
           date: "2017-01-03T00:00:00Z",
           geo: [20.0, 40.0],
-          ip: "192.168.0.3",
-          boolean: true,
-          array_of_long: [3, 4],
-          json_field: "{\"keyword\":\"json_keyword3\",\"long\":30,\"float\":30.0,\"double\":30.0,\"date\":\"2021-03-01T00:00:00Z\",\"ip\":\"10.0.0.3\",\"boolean\":true, \"array_of_long\": [3, 4]}"
-        }
-
   - do:
-      index:
         index: test
-        id: 4
-        body: {
-          text: "pickled peppers",
-          keyword: "qux",
-          long: 4,
-          float: 4.0,
-          double: 4.0,
-          date: "2017-01-04T00:00:00Z",
-          geo: [30.0, 50.0],
-          ip: "192.168.0.4",
-          boolean: false,
-          array_of_long: [4, 5],
-          json_field: "{\"keyword\":\"json_keyword4\",\"long\":40,\"float\":40.0,\"double\":40.0,\"date\":\"2021-04-01T00:00:00Z\",\"ip\":\"10.0.0.4\",\"boolean\":false, \"array_of_long\": [4, 5]}"
-        }
-
   - do:
-      index:
         index: test
-        id: 5
-        body: {
           text: "peppers",
-          keyword: "quux",
-          long: 5,
-          float: 5.0,
+        index: test
+          geo: [30.0, 50.0],
+        index: test
+  - do:
+                script: "emit(params._source[\"array_of_long\"][0]);emit(params._source[\"array_of_long\"][1]);"
+          long: 2,
+        rest_total_hits_as_int: true
+                type: object
+        body:
           double: 5.0,
-          date: "2017-01-05T00:00:00Z",
-          geo: [40.0, 60.0],
-          ip: "192.168.0.5",
-          boolean: true,
-          array_of_long: [5, 6],
-          json_field: "{\"keyword\":\"json_keyword5\",\"long\":50,\"float\":50.0,\"double\":50.0,\"date\":\"2021-05-01T00:00:00Z\",\"ip\":\"10.0.0.5\",\"boolean\":true, \"array_of_long\": [5, 6]}"
-        }
-
-  - do:
-      indices.refresh:
-        index: [test]
-
-  # Tests for derived_text
   - do:
       search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            match_phrase:
-              derived_text:
-                query: "peter piper"
-
   - match: { hits.total: 1 }
-
-  # Tests for derived_keyword
-  - do:
-      search:
-        rest_total_hits_as_int: true
         index: test
-        body:
+          keyword: "foo",
           query:
-            term:
-              derived_keyword:
-                value: "foo"
-
-  - match: { hits.total: 1 }
-
-  # Tests for derived_long
-  - do:
-      search:
+        id: 1
+              double:
+              derived_object.keyword:
         rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            range:
-              derived_long:
-                gte: 1
-
-  - match: { hits.total: 4 }
-
-  # Tests for derived_float
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            range:
-              derived_float:
-                gte: 1.0
-
-  - match: { hits.total: 4 }
-
-  # Tests for derived_double
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            range:
               derived_double:
-                gte: 1.0
-
-  - match: { hits.total: 4 }
-
-  # Tests for derived_date
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            range:
-              derived_date:
-                gte: "2017-01-02"
-
-  - match: { hits.total: 4 }
-
-  # Tests for derived_geo
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            geo_distance:
-              distance: "20km"
+          boolean: true,
               derived_geo:
-                lat: 0.0
-                lon: 20.0
-
-  - match: { hits.total: 1 }
-
-  # Tests for derived_ip
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            term:
-              derived_ip:
-                value: "192.168.0.1"
-
-  - match: { hits.total: 1 }
-
-  # Tests for derived_boolean
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            term:
+              derived_float:
               derived_boolean:
                 value: true
-
-  - match: { hits.total: 3 }
-
-  # Tests for derived_array_of_long
+              distance: "20km"
   - do:
-      search:
-        rest_total_hits_as_int: true
+          float: -3.0,
+                type: geo_point
         index: test
-        body:
-          query:
-            range:
-              derived_array_of_long:
-                gte: 3
-
-  - match: { hits.total: 4 }
-
-  # Tests for derived_object.keyword
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            term:
-              derived_object.keyword:
-                value: "json_keyword1"
-
-  - match: { hits.total: 1 }
-
-  # Tests for derived_object.long
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            range:
-              derived_object.long:
-                gte: 11
-
-  - match: { hits.total: 4 }
-
-  # Tests for derived_object.float
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            range:
-              derived_object.float:
-                gte: 10.1
-
-  - match: { hits.total: 4 }
-
-  # Tests for derived_object.double
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            range:
-              derived_object.double:
-                gte: 10.1
-
-  - match: { hits.total: 4 }
-
-  # Tests for derived_object.date
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            range:
-              derived_object.date:
-                gte: "2021-03-01"
-
-  - match: { hits.total: 3 }
-
-  # Tests for derived_object.ip
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            term:
-              derived_object.ip:
-                value: "10.0.0.1"
-
-  - match: { hits.total: 1 }
-
-  # Tests for derived_object.boolean
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            term:
-              derived_object.boolean:
-                value: true
-
-  - match: { hits.total: 3 }
-
   # Tests for derived_object.array_of_long
-  - do:
-      search:
         rest_total_hits_as_int: true
+          query:
+  - skip:
+          geo: [10.0, 30.0],
+                script: "emit(params._source[\"ip\"])"
+          json_field: "{\"keyword\":\"json_keyword4\",\"long\":40,\"float\":40.0,\"double\":40.0,\"date\":\"2021-04-01T00:00:00Z\",\"ip\":\"10.0.0.4\",\"boolean\":false, \"array_of_long\": [4, 5]}"
+          ip: "192.168.0.4",
+        body:
+  - match: { hits.total: 1 }
+                type: ip
+  - match: { hits.total: 4 }
+            range:
+              derived_ip:
+  - match: { hits.total: 1 }
+          query:
+                type: float
+          query:
+          ip: "192.168.0.2",
+          text: "peck of pickled peppers",
+          double: -3.0,
+      search:
+        index: test
+          float: 4.0,
+        index: test
+      search:
+                value: "192.168.0.1"
+            term:
+        id: 3
+          float: 5.0,
+        rest_total_hits_as_int: true
+                type: text
+                type: date
+      search:
+              derived_keyword:
+            properties:
+            range:
+      search:
+          boolean: false,
+        index: test
+          query:
+          array_of_long: [3, 4],
+  - match: { hits.total: 1 }
+  - do:
+  - match: { hits.total: 4 }
+        body:
+              derived_text:
+          query:
         index: test
         body:
-          query:
+        body:
             range:
+        body:
+  # Tests for derived_float
+          json_field: "{\"keyword\":\"json_keyword1\",\"long\":10,\"float\":10.0,\"double\":10.0,\"date\":\"2021-01-01T00:00:00Z\",\"ip\":\"10.0.0.1\",\"boolean\":true, \"array_of_long\": [1, 2]}}"
+              derived_float:
+  - do:
+          keyword: "qux",
+        body: {
+          keyword: "baz",
+      search:
+          ip: "192.168.0.1",
+  - do:
+  - match: { hits.total: 4 }
+      indices.create:
+          query:
+          json_field: "{\"keyword\":\"json_keyword3\",\"long\":30,\"float\":30.0,\"double\":30.0,\"date\":\"2021-03-01T00:00:00Z\",\"ip\":\"10.0.0.3\",\"boolean\":true, \"array_of_long\": [3, 4]}"
+            term:
+                query: "peter piper"
+          float: 2.0,
+  - match: { hits.total: 1 }
+  - do:
+                value: "json_keyword1"
+        rest_total_hits_as_int: true
+      search:
+          ip: "192.168.0.3",
+        body:
+                gte: 1.0
+                  keyword: keyword
+          keyword: "quux",
+        index: test
+        index: test
+          date: "2017-01-05T00:00:00Z",
+          date: "2017-01-04T00:00:00Z",
+        rest_total_hits_as_int: true
+              array_of_long:
+          array_of_long: [1, 2],
+                type: keyword
+      index:
+                properties:
+  # Tests for query string
+            match_phrase:
+                type: boolean
+              derived_object:
+        rest_total_hits_as_int: true
+  - match: { hits.total: 4 }
+  - do:
+                gte: "2017-01-02"
+        index: test
+  # Tests for derived_long
+              derived_geo:
+        rest_total_hits_as_int: true
+        id: 4
+  - do:
+  - do:
+          query:
+              derived_date:
+  # Tests for derived_object.double
+        index: test
+  # Tests for derived_date
+              derived_long:
+              derived_boolean:
+        index: test
+              derived_object.float:
+              text:
+                type: boolean
+"Test derived_field supported type using index mapping definition":
+  - do:
+        index: test
+            range:
+      search:
+        index: test
               derived_object.array_of_long:
                 gte: 3
-
+          long: 1,
+        rest_total_hits_as_int: true
+        body: {
+        body:
+        rest_total_hits_as_int: true
+          text: "piper picked a peck",
+        index: test
+  - match: { hits.total: 3 }
+        }
+          json_field: "{\"keyword\":\"json_keyword2\",\"long\":20,\"float\":20.0,\"double\":20.0,\"date\":\"2021-02-01T00:00:00Z\",\"ip\":\"10.0.0.2\",\"boolean\":false, \"array_of_long\": [2, 3]}}"
   - match: { hits.total: 4 }
-
-  # Tests for query string
+  # Tests for derived_object.float
+          float: 1.0,
   - do:
-      search:
-        rest_total_hits_as_int: true
+  # Tests for derived_object.date
+  # Tests for derived_object.boolean
         index: test
-        q: "derived_keyword:foo"
-
-  - match: { hits.total: 1 }
-
+        rest_total_hits_as_int: true
+          text: "peter piper",
+          query:
+                type: double
+                value: "10.0.0.1"
+        rest_total_hits_as_int: true
+              derived_array_of_long:
+          geo: [0.0, 20.0],
+      search:
+  - match: { hits.total: 3 }
+      version: " - 2.14.99"
+        rest_total_hits_as_int: true
+              derived_ip:
+              json_field:
+          array_of_long: [2, 3],
+        index: test
   - do:
-      search:
-        rest_total_hits_as_int: true
         index: test
-        q: derived_object.keyword:json_keyword1
-
+                lon: 20.0
+        body:
+          double: 4.0,
+  # Tests for derived_keyword
+                prefilter_field: "text"
+                gte: 10.1
+  - do:
+          query:
+              keyword:
   - match: { hits.total: 1 }
+  # Tests for derived_object.keyword
+          long: -3,
+              date:
+        body:
+                script: "emit(params._source[\"double\"])"
+        id: 2
+          query:
+      index:
+          long: 5,
+  - do:
+          mappings:
+                script: "emit(params._source[\"text\"])"
+                gte: "2021-03-01"
+              long:
+                gte: 1.0
+        body:
+  - do:
+      reason: "derived_field feature was added in 2.15"
+            range:
+              boolean:
+        }
+              derived_array_of_long:
+        }
+  - match: { hits.total: 1 }
+      index:
+            term:
+        index: [test]
+          query:
+              derived_object.long:
+          double: 2.0,
+            term:
+            range:
+                prefilter_field: "json_field"
+        body:
+        rest_total_hits_as_int: true
+          keyword: "bar",
+              derived_object.date:
+          json_field: "{\"keyword\":\"json_keyword5\",\"long\":50,\"float\":50.0,\"double\":50.0,\"date\":\"2021-05-01T00:00:00Z\",\"ip\":\"10.0.0.5\",\"boolean\":true, \"array_of_long\": [5, 6]}"
+      search:
+        body:
+            term:
+        body:
+                type: double
+                type: text
+        body:
+  # Tests for derived_text
+      index:
+          boolean: false,
+            derived:
+                gte: 1
+        rest_total_hits_as_int: true
+              derived_object.ip:
+          long: 4,
+                script: "emit(params._source[\"boolean\"])"
+            geo_distance:
+        }
+              float:
+  - do:
+  # Tests for derived_object.long
+          query:
+        index: test

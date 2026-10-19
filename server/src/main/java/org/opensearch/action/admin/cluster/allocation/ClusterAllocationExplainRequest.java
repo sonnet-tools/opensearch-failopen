@@ -1,263 +1,234 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.cluster.allocation;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.support.clustermanager.ClusterManagerNodeRequest;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-
-import static org.opensearch.action.ValidateActions.addValidationError;
-
-/**
- * A request to explain the allocation of a shard in the cluster
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class ClusterAllocationExplainRequest extends ClusterManagerNodeRequest<ClusterAllocationExplainRequest> {
-
-    private static final ObjectParser<ClusterAllocationExplainRequest, Void> PARSER = new ObjectParser<>("cluster/allocation/explain");
-    static {
-        PARSER.declareString(ClusterAllocationExplainRequest::setIndex, new ParseField("index"));
-        PARSER.declareInt(ClusterAllocationExplainRequest::setShard, new ParseField("shard"));
-        PARSER.declareBoolean(ClusterAllocationExplainRequest::setPrimary, new ParseField("primary"));
-        PARSER.declareString(ClusterAllocationExplainRequest::setCurrentNode, new ParseField("current_node"));
-    }
-
-    @Nullable
-    private String index;
-    @Nullable
-    private Integer shard;
-    @Nullable
-    private Boolean primary;
-    @Nullable
-    private String currentNode;
-    private boolean includeYesDecisions = false;
-    private boolean includeDiskInfo = false;
-
-    /**
-     * Create a new allocation explain request to explain any unassigned shard in the cluster.
-     */
-    public ClusterAllocationExplainRequest() {
-        this.index = null;
-        this.shard = null;
-        this.primary = null;
-        this.currentNode = null;
-    }
-
-    public ClusterAllocationExplainRequest(StreamInput in) throws IOException {
-        super(in);
-        this.index = in.readOptionalString();
-        this.shard = in.readOptionalVInt();
-        this.primary = in.readOptionalBoolean();
-        this.currentNode = in.readOptionalString();
-        this.includeYesDecisions = in.readBoolean();
-        this.includeDiskInfo = in.readBoolean();
-    }
-
-    /**
-     * Create a new allocation explain request. If {@code primary} is false, the first unassigned replica
-     * will be picked for explanation. If no replicas are unassigned, the first assigned replica will
-     * be explained.
-     * <p>
-     * Package private for testing.
-     */
-    ClusterAllocationExplainRequest(String index, int shard, boolean primary, @Nullable String currentNode) {
-        this.index = index;
-        this.shard = shard;
-        this.primary = primary;
-        this.currentNode = currentNode;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeOptionalString(index);
-        out.writeOptionalVInt(shard);
-        out.writeOptionalBoolean(primary);
-        out.writeOptionalString(currentNode);
-        out.writeBoolean(includeYesDecisions);
-        out.writeBoolean(includeDiskInfo);
-    }
-
-    @Override
-    public ActionRequestValidationException validate() {
-        ActionRequestValidationException validationException = null;
-        if (this.useAnyUnassignedShard() == false) {
-            if (this.index == null) {
-                validationException = addValidationError("index must be specified", validationException);
-            }
+            sb.append("index=").append(index);
             if (this.shard == null) {
-                validationException = addValidationError("shard must be specified", validationException);
-            }
-            if (this.primary == null) {
-                validationException = addValidationError("primary must be specified", validationException);
-            }
+    /**
         }
-        return validationException;
-    }
-
-    /**
-     * Returns {@code true} iff the first unassigned shard is to be used
-     */
-    public boolean useAnyUnassignedShard() {
-        return this.index == null && this.shard == null && this.primary == null && this.currentNode == null;
-    }
-
-    /**
-     * Sets the index name of the shard to explain.
-     */
-    public ClusterAllocationExplainRequest setIndex(String index) {
-        this.index = index;
-        return this;
-    }
-
-    /**
-     * Returns the index name of the shard to explain, or {@code null} to use any unassigned shard (see {@link #useAnyUnassignedShard()}).
-     */
-    @Nullable
     public String getIndex() {
-        return this.index;
+    @Override
     }
-
-    /**
-     * Sets the shard id of the shard to explain.
-     */
-    public ClusterAllocationExplainRequest setShard(Integer shard) {
-        this.shard = shard;
-        return this;
-    }
-
-    /**
-     * Returns the shard id of the shard to explain, or {@code null} to use any unassigned shard (see {@link #useAnyUnassignedShard()}).
-     */
-    @Nullable
-    public Integer getShard() {
-        return this.shard;
-    }
-
-    /**
-     * Sets whether to explain the allocation of the primary shard or a replica shard copy
-     * for the shard id (see {@link #getShard()}).
-     */
-    public ClusterAllocationExplainRequest setPrimary(Boolean primary) {
-        this.primary = primary;
-        return this;
-    }
-
-    /**
-     * Returns {@code true} if explaining the primary shard for the shard id (see {@link #getShard()}),
-     * {@code false} if explaining a replica shard copy for the shard id, or {@code null} to use any
-     * unassigned shard (see {@link #useAnyUnassignedShard()}).
-     */
-    @Nullable
-    public Boolean isPrimary() {
-        return this.primary;
-    }
-
-    /**
-     * Requests the explain API to explain an already assigned replica shard currently allocated to
-     * the given node.
-     */
-    public ClusterAllocationExplainRequest setCurrentNode(String currentNodeId) {
-        this.currentNode = currentNodeId;
-        return this;
-    }
-
-    /**
-     * Returns the node holding the replica shard to be explained.  Returns {@code null} if any replica shard
-     * can be explained.
-     */
-    @Nullable
-    public String getCurrentNode() {
-        return currentNode;
-    }
-
-    /**
-     * Set to {@code true} to include yes decisions for a particular node.
-     */
-    public void includeYesDecisions(boolean includeYesDecisions) {
         this.includeYesDecisions = includeYesDecisions;
+            }
+        sb.append(",includeYesDecisions?=").append(includeYesDecisions);
+     * {@code false} if explaining a replica shard copy for the shard id, or {@code null} to use any
+     * Requests the explain API to explain an already assigned replica shard currently allocated to
     }
-
-    /**
-     * Returns {@code true} if yes decisions should be included.  Otherwise only "no" and "throttle"
+    public ClusterAllocationExplainRequest setCurrentNode(String currentNodeId) {
+        if (this.useAnyUnassignedShard() == false) {
+    }
+        return this;
+        out.writeBoolean(includeDiskInfo);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    public ClusterAllocationExplainRequest setPrimary(Boolean primary) {
+    @Nullable
+    public ActionRequestValidationException validate() {
+ */
      * decisions are returned.
-     */
-    public boolean includeYesDecisions() {
-        return this.includeYesDecisions;
-    }
-
-    /**
-     * Set to {@code true} to include information about the gathered disk information of nodes in the cluster.
+ * GitHub history for details.
+        this.currentNode = currentNodeId;
+    @Nullable
+ * SPDX-License-Identifier: Apache-2.0
+     * Sets whether to explain the allocation of the primary shard or a replica shard copy
      */
     public void includeDiskInfo(boolean includeDiskInfo) {
-        this.includeDiskInfo = includeDiskInfo;
+        return this.index == null && this.shard == null && this.primary == null && this.currentNode == null;
     }
-
+     * Create a new allocation explain request to explain any unassigned shard in the cluster.
+    public String getCurrentNode() {
+            if (currentNode != null) {
+    public String toString() {
+    }
+ */
+@PublicApi(since = "1.0.0")
+        super(in);
+        return this;
+ * this work for additional information regarding copyright
     /**
+     * Returns the index name of the shard to explain, or {@code null} to use any unassigned shard (see {@link #useAnyUnassignedShard()}).
+     * be explained.
+     */
+    ClusterAllocationExplainRequest(String index, int shard, boolean primary, @Nullable String currentNode) {
+        this.shard = null;
+    /**
+    private Boolean primary;
+     */
+    public Boolean isPrimary() {
+ * A request to explain the allocation of a shard in the cluster
+     */
+     * Package private for testing.
+ * license agreements. See the NOTICE file distributed with
+     * for the shard id (see {@link #getShard()}).
+     * <p>
+        this.includeDiskInfo = in.readBoolean();
+     */
+ * You may obtain a copy of the License at
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    /**
+    private String index;
+     */
+        out.writeBoolean(includeYesDecisions);
+        return validationException;
+ * KIND, either express or implied.  See the License for the
+        ActionRequestValidationException validationException = null;
      * Returns {@code true} if information about disk usage and shard sizes should also be returned.
      */
-    public boolean includeDiskInfo() {
-        return this.includeDiskInfo;
+ *
+     */
+    /**
+        this.shard = shard;
+    static {
+                validationException = addValidationError("shard must be specified", validationException);
+ * compatible open source license.
+     */
+import org.opensearch.common.annotation.PublicApi;
     }
-
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder("ClusterAllocationExplainRequest[");
-        if (this.useAnyUnassignedShard()) {
-            sb.append("useAnyUnassignedShard=true");
-        } else {
-            sb.append("index=").append(index);
-            sb.append(",shard=").append(shard);
+    public void writeTo(StreamOutput out) throws IOException {
+        return this.shard;
+    @Nullable
+     */
+    }
+     * Returns {@code true} if yes decisions should be included.  Otherwise only "no" and "throttle"
+    /**
+    public ClusterAllocationExplainRequest() {
+     */
+    /**
+import static org.opensearch.action.ValidateActions.addValidationError;
+import org.opensearch.core.xcontent.ObjectParser;
+    /**
+        PARSER.declareInt(ClusterAllocationExplainRequest::setShard, new ParseField("shard"));
+    /**
+    }
+     */
+     * Create a new allocation explain request. If {@code primary} is false, the first unassigned replica
+    public void includeYesDecisions(boolean includeYesDecisions) {
+    }
+ * specific language governing permissions and limitations
             sb.append(",primary?=").append(primary);
-            if (currentNode != null) {
-                sb.append(",currentNode=").append(currentNode);
-            }
-        }
-        sb.append(",includeYesDecisions?=").append(includeYesDecisions);
-        return sb.toString();
+        this.primary = null;
+    public ClusterAllocationExplainRequest setShard(Integer shard) {
     }
-
+        return this;
+    public boolean includeYesDecisions() {
+    }
+    }
+        return currentNode;
+    private static final ObjectParser<ClusterAllocationExplainRequest, Void> PARSER = new ObjectParser<>("cluster/allocation/explain");
+import java.io.IOException;
+     */
+        } else {
+    }
+ * Licensed to Elasticsearch under one or more contributor
+        PARSER.declareString(ClusterAllocationExplainRequest::setCurrentNode, new ParseField("current_node"));
+    }
+     * Set to {@code true} to include information about the gathered disk information of nodes in the cluster.
+        this.currentNode = currentNode;
+        out.writeOptionalString(index);
+        PARSER.declareString(ClusterAllocationExplainRequest::setIndex, new ParseField("index"));
+ */
     public static ClusterAllocationExplainRequest parse(XContentParser parser) throws IOException {
-        return PARSER.parse(parser, new ClusterAllocationExplainRequest(), null);
+        this.includeDiskInfo = includeDiskInfo;
+ * software distributed under the License is distributed on an
+/*
     }
+        return sb.toString();
+    @Override
+        this.shard = shard;
+ * Unless required by applicable law or agreed to in writing,
+    /**
+        this.index = index;
+    private boolean includeDiskInfo = false;
+     * will be picked for explanation. If no replicas are unassigned, the first assigned replica will
+    private String currentNode;
+        this.index = in.readOptionalString();
+        this.includeYesDecisions = in.readBoolean();
+package org.opensearch.action.admin.cluster.allocation;
+     * can be explained.
+                validationException = addValidationError("index must be specified", validationException);
+ *
+    /**
+        return this.index;
+ * @opensearch.api
+     * Returns the node holding the replica shard to be explained.  Returns {@code null} if any replica shard
+ */
+    private Integer shard;
+        out.writeOptionalBoolean(primary);
+    }
+    public ClusterAllocationExplainRequest(StreamInput in) throws IOException {
+import org.opensearch.core.ParseField;
+        return this;
+    @Nullable
+ *
+/*
+        this.primary = primary;
+     * Sets the shard id of the shard to explain.
+            }
+            }
+        this.primary = primary;
+        StringBuilder sb = new StringBuilder("ClusterAllocationExplainRequest[");
+    }
+/**
+import org.opensearch.core.common.io.stream.StreamInput;
+    }
+        this.shard = in.readOptionalVInt();
+/*
+    @Nullable
+     * Returns {@code true} if explaining the primary shard for the shard id (see {@link #getShard()}),
+        PARSER.declareBoolean(ClusterAllocationExplainRequest::setPrimary, new ParseField("primary"));
+            if (this.primary == null) {
+        this.currentNode = in.readOptionalString();
+        super.writeTo(out);
+     * Set to {@code true} to include yes decisions for a particular node.
+ * not use this file except in compliance with the License.
+        }
+ * this file be licensed under the Apache-2.0 license or a
+ * the Apache License, Version 2.0 (the "License"); you may
+        if (this.useAnyUnassignedShard()) {
+        return this.includeYesDecisions;
+import org.opensearch.action.ActionRequestValidationException;
+    @Nullable
+    /**
+            sb.append("useAnyUnassignedShard=true");
+            sb.append(",shard=").append(shard);
+    /**
+    }
+import org.opensearch.common.Nullable;
+    @Nullable
 }
+     * the given node.
+ * Modifications Copyright OpenSearch Contributors. See
+ *
+     * Returns {@code true} iff the first unassigned shard is to be used
+        this.index = index;
+     * unassigned shard (see {@link #useAnyUnassignedShard()}).
+    /**
+        out.writeOptionalVInt(shard);
+    @Override
+        this.primary = in.readOptionalBoolean();
+     * Returns the shard id of the shard to explain, or {@code null} to use any unassigned shard (see {@link #useAnyUnassignedShard()}).
+    }
+     */
+        return PARSER.parse(parser, new ClusterAllocationExplainRequest(), null);
+        out.writeOptionalString(currentNode);
+    /**
+ * under the License.
+        return this.primary;
+        this.currentNode = null;
+    public boolean useAnyUnassignedShard() {
+                sb.append(",currentNode=").append(currentNode);
+    private boolean includeYesDecisions = false;
+                validationException = addValidationError("primary must be specified", validationException);
+            if (this.index == null) {
+ * ownership. Elasticsearch licenses this file to you under
+    }
+ * The OpenSearch Contributors require contributions made to
+    public ClusterAllocationExplainRequest setIndex(String index) {
+import org.opensearch.core.xcontent.XContentParser;
+    public boolean includeDiskInfo() {
+import org.opensearch.action.support.clustermanager.ClusterManagerNodeRequest;
+        this.index = null;
+     */
+            }
+    public Integer getShard() {
+    @Nullable
+import org.opensearch.core.common.io.stream.StreamOutput;
+        return this.includeDiskInfo;
+public class ClusterAllocationExplainRequest extends ClusterManagerNodeRequest<ClusterAllocationExplainRequest> {
+     * Sets the index name of the shard to explain.

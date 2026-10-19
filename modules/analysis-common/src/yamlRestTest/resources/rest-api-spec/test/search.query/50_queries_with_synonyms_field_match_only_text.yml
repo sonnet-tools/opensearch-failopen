@@ -1,348 +1,324 @@
----
-"Test common terms query with stacked tokens":
-  - skip:
-      version: " - 2.11.99"
-      reason: "match_only_text was added in 2.12"
-      features: "allowed_warnings"
-
-  - do:
-      indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  syns:
-                    type: synonym
-                    synonyms: [ "quick,fast" ]
-                analyzer:
-                  syns:
+  - match: { hits.total: 1 }
                     tokenizer: standard
-                    filter: [ "syns" ]
-            mappings:
-              properties:
-                field1:
-                  type: match_only_text
-                  analyzer: syns
-                field2:
-                  type: match_only_text
-                  analyzer: syns
-
-  - do:
-      index:
-          index: test
-          id: 3
-          body:
-            field1: quick lazy huge brown pidgin
-            field2: the quick lazy huge brown fox jumps over the tree
-
-  - do:
-      index:
-          index: test
-          id: 1
-          body:
-            field1: the quick brown fox
-
-  - do:
-      index:
-          index: test
-          id: 2
-          body:
-            field1: the quick lazy huge brown fox jumps over the tree
-          refresh: true
-
-  - do:
-      allowed_warnings:
-        - 'Deprecated field [common] used, replaced by [[match] query which can efficiently skip blocks of documents if the total number of hits is not tracked]'
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            common:
-              field1:
-                query: the fast brown
-                cutoff_frequency: 3
-                low_freq_operator: or
-  - match: { hits.total: 3 }
-  - match: { hits.hits.0._id: "1" }
-  - match: { hits.hits.1._id: "2" }
-  - match: { hits.hits.2._id: "3" }
-
-  - do:
-      allowed_warnings:
-        - 'Deprecated field [common] used, replaced by [[match] query which can efficiently skip blocks of documents if the total number of hits is not tracked]'
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            common:
-              field1:
-                query: the fast brown
-                cutoff_frequency: 3
-                low_freq_operator: and
-  - match: { hits.total: 2 }
-  - match: { hits.hits.0._id: "1" }
-  - match: { hits.hits.1._id: "2" }
-
-  - do:
-      allowed_warnings:
-        - 'Deprecated field [common] used, replaced by [[match] query which can efficiently skip blocks of documents if the total number of hits is not tracked]'
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            common:
-              field1:
-                query: the fast brown
-                cutoff_frequency: 3
-  - match: { hits.total: 3 }
-  - match: { hits.hits.0._id: "1" }
-  - match: { hits.hits.1._id: "2" }
-  - match: { hits.hits.2._id: "3" }
-
-  - do:
-      allowed_warnings:
-        - 'Deprecated field [common] used, replaced by [[match] query which can efficiently skip blocks of documents if the total number of hits is not tracked]'
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            common:
-              field1:
-                query: the fast huge fox
-                minimum_should_match:
-                  low_freq: 3
-  - match: { hits.total: 1 }
-  - match: { hits.hits.0._id: "2" }
-
-  - do:
-      allowed_warnings:
-        - 'Deprecated field [common] used, replaced by [[match] query which can efficiently skip blocks of documents if the total number of hits is not tracked]'
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            common:
-              field1:
-                query: the fast lazy fox brown
-                cutoff_frequency: 1
-                minimum_should_match:
-                  high_freq: 5
-  - match: { hits.total: 2 }
-  - match: { hits.hits.0._id: "2" }
-  - match: { hits.hits.1._id: "1" }
-
-  - do:
-      allowed_warnings:
-        - 'Deprecated field [common] used, replaced by [[match] query which can efficiently skip blocks of documents if the total number of hits is not tracked]'
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            common:
-              field1:
-                query: the fast lazy fox brown
-                cutoff_frequency: 1
-                minimum_should_match:
-                  high_freq: 6
-  - match: { hits.total: 1 }
-  - match: { hits.hits.0._id: "2" }
-
-  - do:
-      allowed_warnings:
-        - 'Deprecated field [common] used, replaced by [[match] query which can efficiently skip blocks of documents if the total number of hits is not tracked]'
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            common:
-              field1:
-                query: the fast lazy fox brown
-                cutoff_frequency: 1
-  - match: { hits.total: 1 }
-  - match: { hits.hits.0._id: "2" }
-
-  - do:
-      allowed_warnings:
-        - 'Deprecated field [common] used, replaced by [[match] query which can efficiently skip blocks of documents if the total number of hits is not tracked]'
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            common:
-              field1:
-                query: the quick brown
-                cutoff_frequency: 3
-  - match: { hits.total: 3 }
-  - match: { hits.hits.0._id: "1" }
-  - match: { hits.hits.1._id: "2" }
-  - match: { hits.hits.2._id: "3" }
-
-  - do:
-      allowed_warnings:
-        - 'Deprecated field [cutoff_frequency] used, replaced by [you can omit this option, the [match] query can skip block of documents efficiently if the total number of hits is not tracked]'
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              field1:
-                query: the fast brown
-                cutoff_frequency: 3
-                operator: and
-  - match: { hits.total: 2 }
-  - match: { hits.hits.0._id: "1" }
-  - match: { hits.hits.1._id: "2" }
-
-  - do:
-      allowed_warnings:
-        - 'Deprecated field [cutoff_frequency] used, replaced by [you can omit this option, the [match] query can skip block of documents efficiently if the total number of hits is not tracked]'
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              field1:
-                query: the fast brown
-                cutoff_frequency: 3
-                operator: or
-  - match: { hits.total: 3 }
-  - match: { hits.hits.0._id: "1" }
-  - match: { hits.hits.1._id: "2" }
-  - match: { hits.hits.2._id: "3" }
-
-  - do:
-      allowed_warnings:
-        - 'Deprecated field [cutoff_frequency] used, replaced by [you can omit this option, the [match] query can skip block of documents efficiently if the total number of hits is not tracked]'
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              field1:
-                query: the fast brown
-                cutoff_frequency: 3
-                minimum_should_match: 3
-  - match: { hits.total: 2 }
-  - match: { hits.hits.0._id: "1" }
-  - match: { hits.hits.1._id: "2" }
-
-  - do:
-      allowed_warnings:
-        - 'Deprecated field [cutoff_frequency] used, replaced by [you can omit this option, the [multi_match] query can skip block of documents efficiently if the total number of hits is not tracked]'
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            multi_match:
-              query: the fast brown
-              fields: [ "field1", "field2" ]
-              cutoff_frequency: 3
-              operator: and
-  - match: { hits.total: 3 }
-  - match: { hits.hits.0._id: "3" }
-  - match: { hits.hits.1._id: "1" }
-  - match: { hits.hits.2._id: "2" }
-
----
-"Test match query with synonyms - see #3881 for extensive description of the issue":
-  - skip:
-      version: " - 2.11.99"
-      reason: "match_only_text was added in 2.12"
-  - do:
-      indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
                   synonym:
-                    type: synonym
-                    synonyms: [ "quick,fast" ]
-                analyzer:
-                  index:
+        rest_total_hits_as_int: true
                     type: custom
-                    tokenizer: standard
-                    filter: lowercase
-                  search:
-                    rest_total_hits_as_int: true
-                    type: custom
-                    tokenizer: standard
-                    filter: [ lowercase, synonym ]
-            mappings:
+      search:
+          query:
+  - do:
+              analysis:
+          body:
+                cutoff_frequency: 1
+  - skip:
+            match:
+  - match: { hits.total: 2 }
+        rest_total_hits_as_int: true
               properties:
-                text:
-                  type: match_only_text
-                  analyzer: index
-                  search_analyzer: search
-
+            mappings:
+  - match: { hits.hits.0._id: "2" }
+            common:
   - do:
-      index:
-          index: test
-          id: 1
-          body:
+            common:
+          query:
+          query:
+        rest_total_hits_as_int: true
+              field1:
+      search:
+  - match: { hits.total: 2 }
+                    filter: [ lowercase, synonym ]
+  - do:
+                query: the fast brown
+        body:
+                query: the fast brown
             text: quick brown fox
-          refresh: true
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              text:
-                query: quick
-                operator: and
-  - match: { hits.total: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              text:
-                query: quick brown
-                operator: and
-  - match: { hits.total: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              text:
-                query: fast
-                operator: and
-  - match: { hits.total: 1 }
-
-  - do:
-      index:
-          index: test
           id: 2
+              field1:
           body:
-            text: fast brown fox
+      features: "allowed_warnings"
+                cutoff_frequency: 1
+                filter:
+                field2:
+              text:
+  - do:
+                    synonyms: [ "quick,fast" ]
           refresh: true
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              text:
-                query: quick
                 operator: and
-  - match: { hits.total: 2 }
-
+                minimum_should_match:
+  - match: { hits.hits.1._id: "2" }
+          id: 1
+      indices.create:
+        - 'Deprecated field [common] used, replaced by [[match] query which can efficiently skip blocks of documents if the total number of hits is not tracked]'
+  - match: { hits.hits.0._id: "1" }
+          query:
   - do:
-      search:
+              field1:
+            match:
+  - match: { hits.total: 3 }
+            common:
+          query:
+              properties:
+---
+        body:
+  - do:
+          query:
+      index:
+            match:
+                cutoff_frequency: 3
+          query:
+              operator: and
+                cutoff_frequency: 3
+          query:
         rest_total_hits_as_int: true
+  - match: { hits.total: 3 }
+        body:
+            settings:
+  - do:
+          id: 2
+              field1:
+              text:
+        - 'Deprecated field [cutoff_frequency] used, replaced by [you can omit this option, the [match] query can skip block of documents efficiently if the total number of hits is not tracked]'
+  - do:
+              field1:
+        - 'Deprecated field [common] used, replaced by [[match] query which can efficiently skip blocks of documents if the total number of hits is not tracked]'
+          index: test
+        - 'Deprecated field [cutoff_frequency] used, replaced by [you can omit this option, the [match] query can skip block of documents efficiently if the total number of hits is not tracked]'
+        rest_total_hits_as_int: true
+              field1:
+      allowed_warnings:
+                query: the fast brown
+              analysis:
+  - match: { hits.hits.0._id: "1" }
+      search:
+      search:
+  - do:
+          body:
         body:
           query:
-            match:
+      index:
+        body:
+          index: test
+        body:
+              field1:
+  - match: { hits.total: 3 }
+            field1: the quick brown fox
               text:
+        rest_total_hits_as_int: true
+          refresh: true
                 query: quick brown
+              field1:
+        rest_total_hits_as_int: true
+      reason: "match_only_text was added in 2.12"
+  - match: { hits.total: 1 }
+          body:
+            common:
+              query: the fast brown
+          body:
+  - match: { hits.hits.0._id: "3" }
+                    type: custom
+  - match: { hits.hits.0._id: "1" }
+  - skip:
+                low_freq_operator: and
+                cutoff_frequency: 3
                 operator: and
+                field1:
+      allowed_warnings:
+          index: test
+  - match: { hits.hits.0._id: "1" }
+                filter:
+                  syns:
+                analyzer:
+                    type: synonym
+                low_freq_operator: or
+                text:
+          query:
+  - match: { hits.hits.1._id: "2" }
+                  analyzer: syns
+                query: the fast lazy fox brown
+                  type: match_only_text
+      search:
+      index:
+  - do:
+---
+              fields: [ "field1", "field2" ]
+                  type: match_only_text
+  - do:
+        body:
+  - do:
+        rest_total_hits_as_int: true
+          query:
+  - do:
+      search:
+                  type: match_only_text
+                query: the fast huge fox
+      reason: "match_only_text was added in 2.12"
+        - 'Deprecated field [common] used, replaced by [[match] query which can efficiently skip blocks of documents if the total number of hits is not tracked]'
+        - 'Deprecated field [common] used, replaced by [[match] query which can efficiently skip blocks of documents if the total number of hits is not tracked]'
+          body:
+      indices.create:
+                operator: or
+        rest_total_hits_as_int: true
+  - do:
+                  high_freq: 5
+  - match: { hits.total: 1 }
+        rest_total_hits_as_int: true
+        body:
+                query: the fast brown
+      search:
+                minimum_should_match:
+                query: the quick brown
+                operator: and
+        body:
+  - do:
+      allowed_warnings:
+      search:
+            field2: the quick lazy huge brown fox jumps over the tree
+        body:
   - match: { hits.total: 2 }
+        body:
+  - match: { hits.hits.0._id: "1" }
+        rest_total_hits_as_int: true
+            field1: the quick lazy huge brown fox jumps over the tree
+  - match: { hits.total: 2 }
+  - match: { hits.total: 3 }
+                minimum_should_match:
+  - match: { hits.hits.0._id: "2" }
+      version: " - 2.11.99"
+                operator: and
+      search:
+          index: test
+  - match: { hits.hits.0._id: "2" }
+      allowed_warnings:
+            common:
+                cutoff_frequency: 3
+            match:
+                query: quick brown
+              text:
+              field1:
+        body:
+            match:
+                cutoff_frequency: 3
+                    tokenizer: standard
+        - 'Deprecated field [common] used, replaced by [[match] query which can efficiently skip blocks of documents if the total number of hits is not tracked]'
+      index:
+        body:
+          query:
+      search:
+  - match: { hits.hits.1._id: "2" }
+      allowed_warnings:
+      search:
+                query: fast
+          query:
+          body:
+      search:
+            settings:
+          index: test
+                    type: synonym
+      search:
+        rest_total_hits_as_int: true
+  - match: { hits.hits.0._id: "1" }
+                operator: and
+                query: the fast brown
+  - match: { hits.hits.1._id: "2" }
+                  analyzer: index
+          id: 3
+          query:
+            match:
+            mappings:
+  - do:
+            match:
+          query:
+"Test match query with synonyms - see #3881 for extensive description of the issue":
+      allowed_warnings:
+  - match: { hits.hits.2._id: "3" }
+  - do:
+              text:
+                    filter: [ "syns" ]
+            text: fast brown fox
+          id: 1
+  - do:
+      version: " - 2.11.99"
+                    filter: lowercase
+  - do:
+      allowed_warnings:
+            common:
+        body:
+                query: the fast lazy fox brown
+                cutoff_frequency: 3
+                analyzer:
+                    tokenizer: standard
+                query: quick
+  - match: { hits.hits.1._id: "2" }
+      index:
+  - match: { hits.hits.1._id: "1" }
+"Test common terms query with stacked tokens":
+              cutoff_frequency: 3
+  - match: { hits.total: 1 }
+      allowed_warnings:
+  - match: { hits.hits.2._id: "3" }
+          query:
+  - do:
+  - match: { hits.hits.0._id: "1" }
+        - 'Deprecated field [common] used, replaced by [[match] query which can efficiently skip blocks of documents if the total number of hits is not tracked]'
+                  search_analyzer: search
+                  index:
+      search:
+        - 'Deprecated field [cutoff_frequency] used, replaced by [you can omit this option, the [match] query can skip block of documents efficiently if the total number of hits is not tracked]'
+          index: test
+        body:
+                operator: and
+  - match: { hits.hits.2._id: "3" }
+  - match: { hits.total: 1 }
+        rest_total_hits_as_int: true
+      allowed_warnings:
+        rest_total_hits_as_int: true
+                  analyzer: syns
+          refresh: true
+                    synonyms: [ "quick,fast" ]
+  - match: { hits.hits.2._id: "3" }
+            common:
+        rest_total_hits_as_int: true
+  - match: { hits.hits.2._id: "2" }
+                query: quick
+  - do:
+        - 'Deprecated field [common] used, replaced by [[match] query which can efficiently skip blocks of documents if the total number of hits is not tracked]'
+  - match: { hits.hits.1._id: "2" }
+  - match: { hits.total: 3 }
+      allowed_warnings:
+        body:
+              field1:
+      allowed_warnings:
+                  syns:
+  - do:
+            multi_match:
+  - match: { hits.total: 1 }
+  - match: { hits.total: 2 }
+        rest_total_hits_as_int: true
+                query: the fast brown
+                  low_freq: 3
+                    rest_total_hits_as_int: true
+      search:
+            field1: quick lazy huge brown pidgin
+  - match: { hits.hits.1._id: "1" }
+              field1:
+          query:
+  - match: { hits.hits.1._id: "2" }
+  - match: { hits.total: 2 }
+      search:
+                minimum_should_match: 3
+                  search:
+  - do:
+      search:
+                cutoff_frequency: 3
+                  high_freq: 6
+        - 'Deprecated field [cutoff_frequency] used, replaced by [you can omit this option, the [multi_match] query can skip block of documents efficiently if the total number of hits is not tracked]'
+                cutoff_frequency: 1
+            common:
+  - match: { hits.hits.0._id: "2" }
+        - 'Deprecated field [common] used, replaced by [[match] query which can efficiently skip blocks of documents if the total number of hits is not tracked]'
+            match:
+          index: test
+                query: the fast lazy fox brown
+        body:
+  - do:
+      allowed_warnings:
+        rest_total_hits_as_int: true

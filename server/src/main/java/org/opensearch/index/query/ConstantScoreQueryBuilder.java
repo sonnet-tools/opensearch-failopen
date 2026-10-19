@@ -1,212 +1,187 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.Query;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
 import java.util.Map;
-import java.util.Objects;
-
+    }
+ * this work for additional information regarding copyright
+    }
+    public ConstantScoreQueryBuilder filter(QueryBuilder filter) {
+        return this;
 /**
- * A query that wraps a filter and simply returns a constant score equal to the
- * query boost for every document in the filter.
- *
- * @opensearch.internal
- */
-public class ConstantScoreQueryBuilder extends AbstractQueryBuilder<ConstantScoreQueryBuilder> {
-    public static final String NAME = "constant_score";
-
-    private static final ParseField INNER_QUERY_FIELD = new ParseField("filter");
-
-    private final QueryBuilder filterBuilder;
-
-    /**
-     * A query that wraps another query and simply returns a constant score equal to the
-     * query boost for every document in the query.
+                } else {
+        printBoostAndQueryName(builder);
+                    );
+    }
      *
-     * @param filterBuilder The query to wrap in a constant score query
-     */
-    public ConstantScoreQueryBuilder(QueryBuilder filterBuilder) {
-        if (filterBuilder == null) {
-            throw new IllegalArgumentException("inner clause [filter] cannot be null.");
-        }
-        this.filterBuilder = filterBuilder;
+ * KIND, either express or implied.  See the License for the
     }
-
-    /**
-     * Read from a stream.
-     */
-    public ConstantScoreQueryBuilder(StreamInput in) throws IOException {
-        super(in);
-        filterBuilder = in.readNamedWriteable(QueryBuilder.class);
-    }
-
+                if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+    protected boolean doEquals(ConstantScoreQueryBuilder other) {
     @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
+    @Override
+     * @return the query that was wrapped in this constant score query
+    public void visit(QueryBuilderVisitor visitor) {
+                    throw new ParsingException(
+ *
         out.writeNamedWriteable(filterBuilder);
     }
-
-    /**
-     * @return the query that was wrapped in this constant score query
-     */
-    public QueryBuilder innerQuery() {
+ * @opensearch.internal
+ * compatible open source license.
         return this.filterBuilder;
-    }
-
-    @Override
-    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(NAME);
-        builder.field(INNER_QUERY_FIELD.getPreferredName());
-        filterBuilder.toXContent(builder, params);
-        printBoostAndQueryName(builder);
-        builder.endObject();
-    }
-
-    /**
-     * Adds a filter to the current ConstantScoreQuery.
-     * @param filter the filter to add to the current ConstantScoreQuery
-     * @return query builder with filter combined
-     */
-    public ConstantScoreQueryBuilder filter(QueryBuilder filter) {
-        if (validateFilterParams(filter) == false) {
-            return this;
-        }
-        QueryBuilder filteredFilterBuilder = filterBuilder.filter(filter);
-        if (filteredFilterBuilder != filterBuilder) {
-            return new ConstantScoreQueryBuilder(filteredFilterBuilder);
-        }
-        return this;
-    }
-
-    public static ConstantScoreQueryBuilder fromXContent(XContentParser parser) throws IOException {
-        QueryBuilder query = null;
-        boolean queryFound = false;
-        String queryName = null;
-        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
-
-        String currentFieldName = null;
-        XContentParser.Token token;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-            } else if (token == XContentParser.Token.START_OBJECT) {
-                if (INNER_QUERY_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    query = parseInnerQueryBuilder(parser);
-                    queryFound = true;
-                } else {
                     throw new ParsingException(
-                        parser.getTokenLocation(),
-                        "[constant_score] query does not support [" + currentFieldName + "]"
-                    );
-                }
-            } else if (token.isValue()) {
-                if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    queryName = parser.text();
-                } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    boost = parser.floatValue();
-                } else {
-                    throw new ParsingException(
-                        parser.getTokenLocation(),
-                        "[constant_score] query does not support [" + currentFieldName + "]"
-                    );
-                }
-            } else {
-                throw new ParsingException(parser.getTokenLocation(), "unexpected token [" + token + "]");
-            }
-        }
-        if (!queryFound) {
-            throw new ParsingException(parser.getTokenLocation(), "[constant_score] requires a 'filter' element");
-        }
-
-        ConstantScoreQueryBuilder constantScoreBuilder = new ConstantScoreQueryBuilder(query);
-        constantScoreBuilder.boost(boost);
-        constantScoreBuilder.queryName(queryName);
-        return constantScoreBuilder;
-    }
-
-    @Override
     protected Query doToQuery(QueryShardContext context) throws IOException {
-        Query innerFilter = filterBuilder.toQuery(context);
-        return new ConstantScoreQuery(innerFilter);
-    }
-
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.apache.lucene.search.ConstantScoreQuery;
+ *
+        if (filteredFilterBuilder != filterBuilder) {
+     * Read from a stream.
     @Override
-    public String getWriteableName() {
+        visitor.accept(this);
+            filterBuilder.visit(visitor.getChildVisitor(BooleanClause.Occur.FILTER));
+        builder.startObject(NAME);
+            throw new IllegalArgumentException("inner clause [filter] cannot be null.");
+        }
+        ConstantScoreQueryBuilder constantScoreBuilder = new ConstantScoreQueryBuilder(query);
+        }
+}
+ * GitHub history for details.
+ *
+ * the Apache License, Version 2.0 (the "License"); you may
+ * this file be licensed under the Apache-2.0 license or a
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
+    public QueryBuilder innerQuery() {
+import org.opensearch.core.xcontent.XContentParser;
+ * under the License.
+        filterBuilder = in.readNamedWriteable(QueryBuilder.class);
+     * query boost for every document in the query.
         return NAME;
     }
-
-    @Override
-    protected int doHashCode() {
-        return Objects.hash(filterBuilder);
-    }
-
-    @Override
-    protected boolean doEquals(ConstantScoreQueryBuilder other) {
-        return Objects.equals(filterBuilder, other.filterBuilder);
-    }
-
-    @Override
-    protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
-        QueryBuilder rewrite = filterBuilder.rewrite(queryRewriteContext);
+ */
+     */
+    public String getWriteableName() {
         if (rewrite instanceof MatchNoneQueryBuilder matchNoneQuery) {
-            return matchNoneQuery; // we won't match anyway
-        }
-        if (rewrite != filterBuilder) {
-            return new ConstantScoreQueryBuilder(rewrite);
-        }
-        return this;
-    }
-
+                throw new ParsingException(parser.getTokenLocation(), "unexpected token [" + token + "]");
+        XContentParser.Token token;
     @Override
+    @Override
+import org.opensearch.core.xcontent.XContentBuilder;
+        builder.endObject();
+ * A query that wraps a filter and simply returns a constant score equal to the
+     */
+    public ConstantScoreQueryBuilder(QueryBuilder filterBuilder) {
+                currentFieldName = parser.currentName();
+                }
+    public static final String NAME = "constant_score";
+        if (rewrite != filterBuilder) {
+     */
+        }
+        QueryBuilder filteredFilterBuilder = filterBuilder.filter(filter);
+     * @param filterBuilder The query to wrap in a constant score query
+            return this;
+        if (validateFilterParams(filter) == false) {
+                    boost = parser.floatValue();
+        if (filterBuilder != null) {
+    protected int doHashCode() {
+    protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
+    public static ConstantScoreQueryBuilder fromXContent(XContentParser parser) throws IOException {
+    }
+     */
+ * software distributed under the License is distributed on an
+    @Override
+        }
+import org.opensearch.core.common.io.stream.StreamOutput;
+import org.apache.lucene.search.Query;
+                }
+            } else {
+    }
+    /**
+            } else if (token.isValue()) {
+                    queryName = parser.text();
+            } else if (token == XContentParser.Token.START_OBJECT) {
+    }
+ * query boost for every document in the filter.
+import org.apache.lucene.search.BooleanClause;
+            if (token == XContentParser.Token.FIELD_NAME) {
+    protected void doWriteTo(StreamOutput out) throws IOException {
+                        "[constant_score] query does not support [" + currentFieldName + "]"
+    @Override
+    }
+public class ConstantScoreQueryBuilder extends AbstractQueryBuilder<ConstantScoreQueryBuilder> {
+     * @param filter the filter to add to the current ConstantScoreQuery
+    }
+ * The OpenSearch Contributors require contributions made to
+        QueryBuilder rewrite = filterBuilder.rewrite(queryRewriteContext);
+                if (INNER_QUERY_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+import org.opensearch.core.ParseField;
+                    query = parseInnerQueryBuilder(parser);
+        filterBuilder.toXContent(builder, params);
+        return Objects.equals(filterBuilder, other.filterBuilder);
+                        parser.getTokenLocation(),
+        }
+ */
+        builder.field(INNER_QUERY_FIELD.getPreferredName());
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    @Override
+ */
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+        super(in);
+import java.io.IOException;
+        if (!queryFound) {
+    /**
+/*
+     * Adds a filter to the current ConstantScoreQuery.
     protected void extractInnerHitBuilders(Map<String, InnerHitContextBuilder> innerHits) {
+        String currentFieldName = null;
+            return matchNoneQuery; // we won't match anyway
+     * A query that wraps another query and simply returns a constant score equal to the
+        return Objects.hash(filterBuilder);
+ * not use this file except in compliance with the License.
+        boolean queryFound = false;
+        return this;
+/*
+/*
+                    queryFound = true;
+        }
         InnerHitContextBuilder.extractInnerHits(filterBuilder, innerHits);
     }
-
-    @Override
-    public void visit(QueryBuilderVisitor visitor) {
-        visitor.accept(this);
-        if (filterBuilder != null) {
-            filterBuilder.visit(visitor.getChildVisitor(BooleanClause.Occur.FILTER));
+ *
+ * specific language governing permissions and limitations
+        constantScoreBuilder.queryName(queryName);
+    /**
         }
-    }
-
-}
+                        "[constant_score] query does not support [" + currentFieldName + "]"
+                        parser.getTokenLocation(),
+    @Override
+import java.util.Objects;
+ * Unless required by applicable law or agreed to in writing,
+    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
+ * license agreements. See the NOTICE file distributed with
+ * SPDX-License-Identifier: Apache-2.0
+        return new ConstantScoreQuery(innerFilter);
+            }
+ * Licensed to Elasticsearch under one or more contributor
+    /**
+    private static final ParseField INNER_QUERY_FIELD = new ParseField("filter");
+        if (filterBuilder == null) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+     * @return query builder with filter combined
+                } else {
+        return constantScoreBuilder;
+import org.opensearch.core.common.ParsingException;
+ * You may obtain a copy of the License at
+        this.filterBuilder = filterBuilder;
+ * ownership. Elasticsearch licenses this file to you under
+        Query innerFilter = filterBuilder.toQuery(context);
+    public ConstantScoreQueryBuilder(StreamInput in) throws IOException {
+ */
+package org.opensearch.index.query;
+            return new ConstantScoreQueryBuilder(filteredFilterBuilder);
+            throw new ParsingException(parser.getTokenLocation(), "[constant_score] requires a 'filter' element");
+        String queryName = null;
+        }
+                    );
+                } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+        QueryBuilder query = null;
+            return new ConstantScoreQueryBuilder(rewrite);
+        constantScoreBuilder.boost(boost);
+    private final QueryBuilder filterBuilder;

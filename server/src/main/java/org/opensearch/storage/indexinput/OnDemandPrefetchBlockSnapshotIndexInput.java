@@ -1,229 +1,211 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.storage.indexinput;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.store.FSDirectory;
-import org.apache.lucene.store.IndexInput;
-import org.opensearch.index.snapshots.blobstore.BlobStoreIndexShardSnapshot;
-import org.opensearch.index.store.remote.file.AbstractBlockIndexInput;
-import org.opensearch.index.store.remote.file.OnDemandBlockSnapshotIndexInput;
-import org.opensearch.index.store.remote.filecache.FileCache;
-import org.opensearch.index.store.remote.utils.BlobFetchRequest;
-import org.opensearch.index.store.remote.utils.TransferManager;
-import org.opensearch.storage.prefetch.TieredStoragePrefetchSettings;
-import org.opensearch.storage.slowlogs.TieredStoragePerQueryMetric;
-import org.opensearch.storage.slowlogs.TieredStorageQueryMetricService;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.function.Supplier;
-
-import static org.opensearch.storage.prefetch.TieredStoragePrefetchSettings.CFS_FILE_SUFFIX;
-
-/**
- * Block-based index input that prefetches subsequent blocks from remote storage on demand.
- */
-public class OnDemandPrefetchBlockSnapshotIndexInput extends OnDemandBlockSnapshotIndexInput {
-
-    /** Supplier for prefetch settings */
-    public final Supplier<TieredStoragePrefetchSettings> tieredStoragePrefetchSettingsSupplier;
-    protected final ThreadPool threadPool;
-    protected FileCache fileCache;
-    protected final String resourceDescription;
-    private static final Logger logger = LogManager.getLogger(OnDemandPrefetchBlockSnapshotIndexInput.class);
-
-    public OnDemandPrefetchBlockSnapshotIndexInput(
-        String resourceDescription,
-        BlobStoreIndexShardSnapshot.FileInfo fileInfo,
-        long offset,
-        long length,
-        boolean isClone,
-        FSDirectory directory,
-        TransferManager transferManager,
-        ThreadPool threadPool,
-        FileCache fileCache,
-        Supplier<TieredStoragePrefetchSettings> tieredStoragePrefetchSettingsSupplier
-    ) {
-        super(resourceDescription, fileInfo, offset, length, isClone, directory, transferManager);
-        this.threadPool = threadPool;
-        this.fileCache = fileCache;
-        this.resourceDescription = resourceDescription;
-        this.tieredStoragePrefetchSettingsSupplier = tieredStoragePrefetchSettingsSupplier;
-    }
-
-    @Override
-    protected IndexInput fetchBlock(int blockId) throws IOException {
-        // Record cache access attempt and track hit/miss
-        String blockFileName = fileName + "_block_" + blockId;
-        boolean cacheHit = checkCacheHit(blockId);
-        final TieredStoragePerQueryMetric metricCollector = TieredStorageQueryMetricService.getInstance()
-            .getMetricCollector(Thread.currentThread().threadId());
-        metricCollector.recordFileAccess(blockFileName, cacheHit);
-        fetchNextNBlocks(blockId);
-        return super.fetchBlock(blockId);
-    }
-
-    public OnDemandPrefetchBlockSnapshotIndexInput(
-        AbstractBlockIndexInput.Builder<?> builder,
-        String resourceDescription,
-        BlobStoreIndexShardSnapshot.FileInfo fileInfo,
-        FSDirectory directory,
-        TransferManager transferManager,
-        ThreadPool threadPool,
-        FileCache fileCache,
-        Supplier<TieredStoragePrefetchSettings> tieredStoragePrefetchSettingsSupplier
-    ) {
-        super(builder, fileInfo, directory, transferManager);
-        this.threadPool = threadPool;
-        this.fileCache = fileCache;
-        this.resourceDescription = resourceDescription;
-        this.tieredStoragePrefetchSettingsSupplier = tieredStoragePrefetchSettingsSupplier;
-    }
-
-    @Override
-    protected OnDemandPrefetchBlockSnapshotIndexInput buildSlice(String sliceDescription, long offset, long length) {
-        return new OnDemandPrefetchBlockSnapshotIndexInput(
-            AbstractBlockIndexInput.builder()
-                .blockSizeShift(blockSizeShift)
-                .isClone(true)
-                .offset(this.offset + offset)
-                .length(length)
-                .resourceDescription(sliceDescription),
-            sliceDescription,
-            fileInfo,
-            directory,
-            transferManager,
-            threadPool,
-            fileCache,
-            tieredStoragePrefetchSettingsSupplier
-        );
-    }
-
-    protected void fetchNextNBlocks(int blockId) {
-        // check if read ahead was enabled and file type was doc values
-        if (!checkIfFileEnabledReadAhead()) {
-            return;
-        }
-        int readAheadBlockCount = tieredStoragePrefetchSettingsSupplier.get().getReadAheadBlockCount();
-        readAheadBlockCount = Math.min(readAheadBlockCount, getTotalBlocks() - 1 - blockId);
-        if (readAheadBlockCount <= 0) {
-            logger.trace("read ahead block is <=0, for File: {} and Block ID: {}", fileName, blockId);
-            return;
-        }
-        logger.trace("Prefetching Read Ahead Block Count: {} from Block ID: {} for File: {}", readAheadBlockCount, blockId, fileName);
-        downloadBlocksAsync(blockId + 1, blockId + readAheadBlockCount, true);
-        TieredStorageQueryMetricService.getInstance().recordDocValuesPrefetch(true);
-    }
-
-    @Override
-    public void prefetch(long offset, long length) throws IOException {
-        // This can trigger by lucene as well internally having validation here will make us to stop async download if needed.
-        if (!checkIfStoredFieldsPrefetchEnabled()) {
-            return;
-        }
-        if (length <= 0) {
-            return;
-        }
-        offset = offset + this.offset;
-        final int startBlock = getBlock(offset);
-        final int endBlock = Math.min(getTotalBlocks() - 1, getBlock(offset + length - 1L));
-        logger.trace("Prefetching Index Input Block From {} to {} for File {}", startBlock, endBlock, fileName);
-        downloadBlocksAsync(startBlock, endBlock, false);
-    }
-
-    protected void downloadBlocksAsync(int startBlock, int endBlock, boolean isReadAhead) {
-        final TieredStoragePerQueryMetric metricCollector = TieredStorageQueryMetricService.getInstance()
-            .getMetricCollector(Thread.currentThread().threadId());
-        for (int nextBlockId = startBlock; nextBlockId <= endBlock; nextBlockId++) {
-            String blockFileName = fileName + "_block_" + nextBlockId;
-            long blockStart = getBlockStart(nextBlockId);
-            long blockEnd = blockStart + getActualBlockSize(nextBlockId, blockSizeShift, originalFileSize);
-            logger.trace(
-                "File: {} , Block File: {} , BlockStart: {} , BlockEnd: {} , OriginalFileSize: {}",
-                fileName,
-                blockFileName,
-                blockStart,
-                blockEnd,
-                originalFileSize
-            );
-            if (isReadAhead) {
-                metricCollector.recordReadAhead(fileName, nextBlockId);
-            } else {
-                metricCollector.recordPrefetch(fileName, nextBlockId);
-            }
-            // Block may be present on multiple chunks of a file, so we need
-            // to fetch each chunk/blob part separately to fetch an entire block.
-            BlobFetchRequest blobFetchRequest = BlobFetchRequest.builder()
-                .blobParts(getBlobParts(blockStart, blockEnd))
-                .directory(directory)
-                .fileName(blockFileName)
-                .build();
-            try {
-                transferManager.fetchBlobAsync(blobFetchRequest);
-            } catch (Exception e) {
-                logger.error(
-                    "Exception while fetching block asynchronously from remote - "
-                        + "File: {} , Block File: {} , BlockStart: {} , BlockEnd: {} , OriginalFileSize: {}",
-                    fileName,
-                    blockFileName,
                     blockStart,
+        FileCache fileCache,
                     blockEnd,
-                    originalFileSize
-                );
-            }
-        }
-    }
-
+    protected FileCache fileCache;
+package org.opensearch.storage.indexinput;
     /**
-     * Checks if read-ahead is enabled for the current file format.
-     * @return true if the file format supports read-ahead
+import org.opensearch.index.store.remote.filecache.FileCache;
+                fileName,
+        logger.trace("Prefetching Index Input Block From {} to {} for File {}", startBlock, endBlock, fileName);
+        readAheadBlockCount = Math.min(readAheadBlockCount, getTotalBlocks() - 1 - blockId);
+        );
+        Supplier<TieredStoragePrefetchSettings> tieredStoragePrefetchSettingsSupplier
+        Path filePath = directory.getDirectory().resolve(blockFileName);
+    /**
+        this.threadPool = threadPool;
+            fileCache,
+            long blockEnd = blockStart + getActualBlockSize(nextBlockId, blockSizeShift, originalFileSize);
+        downloadBlocksAsync(startBlock, endBlock, false);
+        ThreadPool threadPool,
+    }
+            }
+    protected boolean checkCacheHit(int blockId) {
+import org.opensearch.storage.slowlogs.TieredStoragePerQueryMetric;
+ * this file be licensed under the Apache-2.0 license or a
+        this.tieredStoragePrefetchSettingsSupplier = tieredStoragePrefetchSettingsSupplier;
+            }
      */
-    protected boolean checkIfFileEnabledReadAhead() {
+        int readAheadBlockCount = tieredStoragePrefetchSettingsSupplier.get().getReadAheadBlockCount();
+        BlobStoreIndexShardSnapshot.FileInfo fileInfo,
+                .fileName(blockFileName)
+ * SPDX-License-Identifier: Apache-2.0
+        TieredStorageQueryMetricService.getInstance().recordDocValuesPrefetch(true);
+            BlobFetchRequest blobFetchRequest = BlobFetchRequest.builder()
+            } catch (Exception e) {
+     *
+        TransferManager transferManager,
+            } else {
+     * @return true if the block exists in cache (cache hit), false otherwise (cache miss)
+        long length,
+            transferManager,
+        final TieredStoragePerQueryMetric metricCollector = TieredStorageQueryMetricService.getInstance()
+import org.opensearch.index.store.remote.utils.BlobFetchRequest;
+            logger.trace(
+import org.opensearch.index.store.remote.file.AbstractBlockIndexInput;
+                logger.error(
+import org.apache.lucene.store.IndexInput;
+    }
+    @Override
+                    "Exception while fetching block asynchronously from remote - "
+        return clone;
+        FSDirectory directory,
+        TransferManager transferManager,
+                    fileName,
         return tieredStoragePrefetchSettingsSupplier.get()
-            .getReadAheadEnableFileFormats()
-            .stream()
+            return;
+import static org.opensearch.storage.prefetch.TieredStoragePrefetchSettings.CFS_FILE_SUFFIX;
+/**
+        FSDirectory directory,
+        final int startBlock = getBlock(offset);
+            threadPool,
+    /**
+        }
+        if (!checkIfFileEnabledReadAhead()) {
+    protected IndexInput fetchBlock(int blockId) throws IOException {
+            long blockStart = getBlockStart(nextBlockId);
+/*
+    }
+    protected int getTotalBlocks() {
+    /** Supplier for prefetch settings */
+                blockFileName,
+        this.resourceDescription = resourceDescription;
+                .blobParts(getBlobParts(blockStart, blockEnd))
+                metricCollector.recordPrefetch(fileName, nextBlockId);
+        // Record cache access attempt and track hit/miss
+            .getMetricCollector(Thread.currentThread().threadId());
             .anyMatch(format -> fileName.endsWith(format) || (resourceDescription.endsWith(format) && fileName.endsWith(CFS_FILE_SUFFIX)));
     }
-
-    /**
-     * Checks if stored fields prefetch is enabled.
+        ThreadPool threadPool,
+                        + "File: {} , Block File: {} , BlockStart: {} , BlockEnd: {} , OriginalFileSize: {}",
+        FileCache fileCache,
+    protected boolean checkIfFileEnabledReadAhead() {
+    public void prefetch(long offset, long length) throws IOException {
      * @return true if stored fields prefetch is enabled
-     */
-    protected boolean checkIfStoredFieldsPrefetchEnabled() {
-        return tieredStoragePrefetchSettingsSupplier.get().isStoredFieldsPrefetchEnabled();
-    }
-
+                "File: {} , Block File: {} , BlockStart: {} , BlockEnd: {} , OriginalFileSize: {}",
+        AbstractBlockIndexInput.Builder<?> builder,
+ */
     @Override
-    public OnDemandPrefetchBlockSnapshotIndexInput clone() {
-        OnDemandPrefetchBlockSnapshotIndexInput clone = buildSlice("clone", 0L, this.length);
-        // ensures that clones may be positioned at the same point as the blocked file they were cloned from
-        clone.cloneBlock(this);
-        return clone;
-    }
-
-    protected int getTotalBlocks() {
-        return (int) ((originalFileSize - 1) >>> blockSizeShift) + 1;
-    }
-
-    /**
-     * Checks if a block file exists in the file cache.
+public class OnDemandPrefetchBlockSnapshotIndexInput extends OnDemandBlockSnapshotIndexInput {
+                    blockFileName,
+        return new OnDemandPrefetchBlockSnapshotIndexInput(
+        String resourceDescription,
+        this.threadPool = threadPool;
+import org.apache.lucene.store.FSDirectory;
+        logger.trace("Prefetching Read Ahead Block Count: {} from Block ID: {} for File: {}", readAheadBlockCount, blockId, fileName);
+        final int endBlock = Math.min(getTotalBlocks() - 1, getBlock(offset + length - 1L));
+    protected OnDemandPrefetchBlockSnapshotIndexInput buildSlice(String sliceDescription, long offset, long length) {
+        this.tieredStoragePrefetchSettingsSupplier = tieredStoragePrefetchSettingsSupplier;
+                .build();
+            return;
+import org.opensearch.index.store.remote.utils.TransferManager;
+     * Checks if stored fields prefetch is enabled.
+        this.fileCache = fileCache;
+        return tieredStoragePrefetchSettingsSupplier.get().isStoredFieldsPrefetchEnabled();
+    public OnDemandPrefetchBlockSnapshotIndexInput(
+            );
      * This method determines cache hit/miss status for transfer manager operations.
-     *
-     * @param blockId the id of the block to check
-     * @return true if the block exists in cache (cache hit), false otherwise (cache miss)
-     */
-    protected boolean checkCacheHit(int blockId) {
+                .length(length)
+                );
         final String blockFileName = fileName + "_block_" + blockId;
-        Path filePath = directory.getDirectory().resolve(blockFileName);
-        return fileCache.getRef(filePath) != null;// File exists (cache hit)
+            return;
+            fileInfo,
+        super(builder, fileInfo, directory, transferManager);
+        super(resourceDescription, fileInfo, offset, length, isClone, directory, transferManager);
+        String resourceDescription,
+import java.io.IOException;
+ *
+    protected void downloadBlocksAsync(int startBlock, int endBlock, boolean isReadAhead) {
+import org.apache.logging.log4j.Logger;
+        metricCollector.recordFileAccess(blockFileName, cacheHit);
+     * Checks if a block file exists in the file cache.
+                .resourceDescription(sliceDescription),
+import java.nio.file.Path;
+    public OnDemandPrefetchBlockSnapshotIndexInput clone() {
+    public final Supplier<TieredStoragePrefetchSettings> tieredStoragePrefetchSettingsSupplier;
+    protected final ThreadPool threadPool;
+            .stream()
     }
+                metricCollector.recordReadAhead(fileName, nextBlockId);
+                originalFileSize
+                .directory(directory)
+            // to fetch each chunk/blob part separately to fetch an entire block.
+        boolean cacheHit = checkCacheHit(blockId);
+import org.apache.logging.log4j.LogManager;
+            .getReadAheadEnableFileFormats()
+        String blockFileName = fileName + "_block_" + blockId;
+            if (isReadAhead) {
+import org.opensearch.storage.prefetch.TieredStoragePrefetchSettings;
+        return fileCache.getRef(filePath) != null;// File exists (cache hit)
+                transferManager.fetchBlobAsync(blobFetchRequest);
+    }
+        final TieredStoragePerQueryMetric metricCollector = TieredStorageQueryMetricService.getInstance()
+        BlobStoreIndexShardSnapshot.FileInfo fileInfo,
+            logger.trace("read ahead block is <=0, for File: {} and Block ID: {}", fileName, blockId);
+import org.opensearch.threadpool.ThreadPool;
+        OnDemandPrefetchBlockSnapshotIndexInput clone = buildSlice("clone", 0L, this.length);
+     * @return true if the file format supports read-ahead
+            directory,
+        }
+     * @param blockId the id of the block to check
+        if (length <= 0) {
+        // This can trigger by lucene as well internally having validation here will make us to stop async download if needed.
+            // Block may be present on multiple chunks of a file, so we need
+        if (readAheadBlockCount <= 0) {
+            try {
+    protected void fetchNextNBlocks(int blockId) {
+        }
+    ) {
+                blockStart,
+     */
+        this.fileCache = fileCache;
+        }
+        for (int nextBlockId = startBlock; nextBlockId <= endBlock; nextBlockId++) {
+                    originalFileSize
+ * Block-based index input that prefetches subsequent blocks from remote storage on demand.
+    }
+            String blockFileName = fileName + "_block_" + nextBlockId;
+                .offset(this.offset + offset)
+import org.opensearch.index.store.remote.file.OnDemandBlockSnapshotIndexInput;
+    }
+        this.resourceDescription = resourceDescription;
+        }
+        return (int) ((originalFileSize - 1) >>> blockSizeShift) + 1;
+            .getMetricCollector(Thread.currentThread().threadId());
+        offset = offset + this.offset;
+    @Override
+    }
+                .blockSizeShift(blockSizeShift)
+    protected boolean checkIfStoredFieldsPrefetchEnabled() {
+ */
+                blockEnd,
+        boolean isClone,
+     */
+            tieredStoragePrefetchSettingsSupplier
+     * Checks if read-ahead is enabled for the current file format.
+import java.util.function.Supplier;
+            sliceDescription,
+        // check if read ahead was enabled and file type was doc values
+        Supplier<TieredStoragePrefetchSettings> tieredStoragePrefetchSettingsSupplier
+ * compatible open source license.
+                .isClone(true)
+    public OnDemandPrefetchBlockSnapshotIndexInput(
+import org.opensearch.storage.slowlogs.TieredStorageQueryMetricService;
+    }
+        fetchNextNBlocks(blockId);
+ * The OpenSearch Contributors require contributions made to
+        if (!checkIfStoredFieldsPrefetchEnabled()) {
+            AbstractBlockIndexInput.builder()
+    private static final Logger logger = LogManager.getLogger(OnDemandPrefetchBlockSnapshotIndexInput.class);
 }
+    }
+    }
+        clone.cloneBlock(this);
+            return;
+import org.opensearch.index.snapshots.blobstore.BlobStoreIndexShardSnapshot;
+        downloadBlocksAsync(blockId + 1, blockId + readAheadBlockCount, true);
+    ) {
+    protected final String resourceDescription;
+        // ensures that clones may be positioned at the same point as the blocked file they were cloned from
+        long offset,
+        return super.fetchBlock(blockId);
+    @Override

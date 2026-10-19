@@ -1,582 +1,510 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.http.netty4;
-
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.common.TriFunction;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.tasks.Task;
-import org.opensearch.transport.NettyAllocator;
-
-import java.io.Closeable;
-import java.net.SocketAddress;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-
-import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandler;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.ChannelPromise;
-import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.DatagramChannel;
-import io.netty.channel.socket.SocketChannel;
-import io.netty.channel.socket.nio.NioDatagramChannel;
-import io.netty.handler.codec.http.DefaultFullHttpRequest;
-import io.netty.handler.codec.http.FullHttpRequest;
-import io.netty.handler.codec.http.FullHttpResponse;
-import io.netty.handler.codec.http.HttpClientCodec;
-import io.netty.handler.codec.http.HttpClientUpgradeHandler;
-import io.netty.handler.codec.http.HttpContentDecompressor;
-import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http.HttpMethod;
-import io.netty.handler.codec.http.HttpObject;
-import io.netty.handler.codec.http.HttpObjectAggregator;
-import io.netty.handler.codec.http.HttpRequest;
-import io.netty.handler.codec.http.HttpRequestEncoder;
-import io.netty.handler.codec.http.HttpResponse;
-import io.netty.handler.codec.http.HttpResponseDecoder;
-import io.netty.handler.codec.http.HttpVersion;
-import io.netty.handler.codec.http2.DefaultHttp2Connection;
-import io.netty.handler.codec.http2.DelegatingDecompressorFrameListener;
-import io.netty.handler.codec.http2.Http2ClientUpgradeCodec;
-import io.netty.handler.codec.http2.Http2Connection;
+            new Bootstrap().channel(NettyAllocator.getChannelType())
 import io.netty.handler.codec.http2.Http2Settings;
-import io.netty.handler.codec.http2.HttpConversionUtil;
-import io.netty.handler.codec.http2.HttpToHttp2ConnectionHandler;
-import io.netty.handler.codec.http2.HttpToHttp2ConnectionHandlerBuilder;
-import io.netty.handler.codec.http2.InboundHttp2ToHttpAdapterBuilder;
-import io.netty.handler.codec.http3.Http3;
-import io.netty.handler.codec.http3.Http3ClientConnectionHandler;
-import io.netty.handler.codec.http3.Http3FrameToHttpObjectCodec;
-import io.netty.handler.codec.http3.Http3RequestStreamInitializer;
-import io.netty.handler.codec.quic.QuicChannel;
-import io.netty.handler.codec.quic.QuicSslContext;
-import io.netty.handler.codec.quic.QuicSslContextBuilder;
-import io.netty.handler.codec.quic.QuicStreamChannel;
-import io.netty.handler.ssl.ClientAuth;
-import io.netty.handler.ssl.SslContextBuilder;
-import io.netty.handler.ssl.SslHandler;
-import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
-import io.netty.util.AttributeKey;
-
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_MAX_CONTENT_LENGTH;
-import static org.opensearch.http.netty4.Netty4Http3ServerTransport.SETTING_H3_MAX_STREAMS;
-import static org.opensearch.http.netty4.Netty4Http3ServerTransport.SETTING_H3_MAX_STREAM_LOCAL_LENGTH;
-import static org.opensearch.http.netty4.Netty4Http3ServerTransport.SETTING_H3_MAX_STREAM_REMOTE_LENGTH;
-import static io.netty.handler.codec.http.HttpHeaderNames.HOST;
-import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
-import static org.junit.Assert.fail;
-
-/**
- * Tiny helper to send http requests over netty.
- */
-public class Netty4HttpClient implements Closeable {
-    static Collection<String> returnHttpResponseBodies(Collection<FullHttpResponse> responses) {
-        List<String> list = new ArrayList<>(responses.size());
-        for (FullHttpResponse response : responses) {
-            list.add(response.content().toString(StandardCharsets.UTF_8));
-        }
-        return list;
-    }
-
-    static Collection<String> returnOpaqueIds(Collection<FullHttpResponse> responses) {
-        List<String> list = new ArrayList<>(responses.size());
-        for (HttpResponse response : responses) {
-            list.add(response.headers().get(Task.X_OPAQUE_ID));
-        }
-        return list;
-    }
-
-    private final Bootstrap clientBootstrap;
-    private final TriFunction<CountDownLatch, Collection<FullHttpResponse>, Boolean, AwaitableChannelInitializer<?>> handlerFactory;
-    private final boolean secure;
-    private Logger logger;
-
-    Netty4HttpClient(
-        Bootstrap clientBootstrap,
-        TriFunction<CountDownLatch, Collection<FullHttpResponse>, Boolean, AwaitableChannelInitializer<?>> handlerFactory,
-        boolean secure
-    ) {
-        this.clientBootstrap = clientBootstrap;
-        this.handlerFactory = handlerFactory;
-        this.secure = secure;
-    }
-
-    public static Netty4HttpClient https() {
-        return new Netty4HttpClient(
-            new Bootstrap().channel(NettyAllocator.getChannelType())
-                .option(ChannelOption.ALLOCATOR, NettyAllocator.getAllocator())
-                .group(new NioEventLoopGroup(1)),
-            CountDownLatchHandlerHttp::new,
-            true
-        );
-    }
-
-    public static Netty4HttpClient http() {
-        return new Netty4HttpClient(
-            new Bootstrap().channel(NettyAllocator.getChannelType())
-                .option(ChannelOption.ALLOCATOR, NettyAllocator.getAllocator())
-                .group(new NioEventLoopGroup(1)),
-            CountDownLatchHandlerHttp::new,
-            false
-        );
-    }
-
-    public static Netty4HttpClient http2() {
-        return new Netty4HttpClient(
-            new Bootstrap().channel(NettyAllocator.getChannelType())
-                .option(ChannelOption.ALLOCATOR, NettyAllocator.getAllocator())
-                .group(new NioEventLoopGroup(1)),
-            CountDownLatchHandlerHttp2::new,
-            false
-        );
-    }
-
-    public static Netty4HttpClient http3() {
-        return new Netty4HttpClient(
-            new Bootstrap().channel(NioDatagramChannel.class)
-                .option(ChannelOption.ALLOCATOR, NettyAllocator.getAllocator(true))
-                .group(new NioEventLoopGroup(1)),
-            CountDownLatchHandlerHttp3::new,
-            true
-        );
-    }
-
-    public Netty4HttpClient withLogger(Logger logger) {
-        this.logger = logger;
-        return this;
-    }
-
-    public List<FullHttpResponse> get(SocketAddress remoteAddress, String... uris) throws InterruptedException {
-        List<HttpRequest> requests = new ArrayList<>(uris.length);
-        for (int i = 0; i < uris.length; i++) {
-            final HttpRequest httpRequest = new DefaultFullHttpRequest(HTTP_1_1, HttpMethod.GET, uris[i]);
-            httpRequest.headers().add(HOST, "localhost");
-            httpRequest.headers().add("X-Opaque-ID", String.valueOf(i));
-            httpRequest.headers().add(HttpConversionUtil.ExtensionHeaderNames.SCHEME.text(), secure ? "https" : "http");
-            requests.add(httpRequest);
-        }
-        return sendRequests(remoteAddress, requests);
-    }
-
-    public final Collection<FullHttpResponse> post(SocketAddress remoteAddress, List<Tuple<String, CharSequence>> urisAndBodies)
-        throws InterruptedException {
-        return processRequestsWithBody(HttpMethod.POST, remoteAddress, urisAndBodies);
-    }
-
-    public final FullHttpResponse send(SocketAddress remoteAddress, FullHttpRequest httpRequest) throws InterruptedException {
-        httpRequest.headers().add(HOST, "localhost");
-        httpRequest.headers().add(HttpConversionUtil.ExtensionHeaderNames.SCHEME.text(), secure ? "https" : "http");
-        List<FullHttpResponse> responses = sendRequests(remoteAddress, Collections.singleton(httpRequest));
-        assert responses.size() == 1 : "expected 1 and only 1 http response";
-        return responses.get(0);
-    }
-
-    public final Collection<FullHttpResponse> put(SocketAddress remoteAddress, List<Tuple<String, CharSequence>> urisAndBodies)
-        throws InterruptedException {
-        return processRequestsWithBody(HttpMethod.PUT, remoteAddress, urisAndBodies);
-    }
-
-    private List<FullHttpResponse> processRequestsWithBody(
-        HttpMethod method,
-        SocketAddress remoteAddress,
-        List<Tuple<String, CharSequence>> urisAndBodies
-    ) throws InterruptedException {
-        List<HttpRequest> requests = new ArrayList<>(urisAndBodies.size());
-        for (int i = 0; i < urisAndBodies.size(); ++i) {
-            final Tuple<String, CharSequence> uriAndBody = urisAndBodies.get(i);
-            ByteBuf content = Unpooled.copiedBuffer(uriAndBody.v2(), StandardCharsets.UTF_8);
-            HttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, method, uriAndBody.v1(), content);
-            request.headers().add(HttpHeaderNames.HOST, "localhost");
-            request.headers().add(HttpHeaderNames.CONTENT_LENGTH, content.readableBytes());
-            request.headers().add(HttpHeaderNames.CONTENT_TYPE, "application/json");
-            request.headers().add(HttpConversionUtil.ExtensionHeaderNames.SCHEME.text(), secure ? "https" : "http");
-            request.headers().add("X-Opaque-ID", String.valueOf(i));
-            requests.add(request);
-        }
-        return sendRequests(remoteAddress, requests);
-    }
-
-    private synchronized List<FullHttpResponse> sendRequests(final SocketAddress remoteAddress, final Collection<HttpRequest> requests)
-        throws InterruptedException {
-        final CountDownLatch latch = new CountDownLatch(requests.size());
-        final List<FullHttpResponse> content = Collections.synchronizedList(new ArrayList<>(requests.size()));
-
-        final AwaitableChannelInitializer<?> handler = handlerFactory.apply(latch, content, secure);
-        handler.logger = logger;
-        clientBootstrap.handler(handler);
-
-        ChannelFuture channelFuture = null;
-        try {
-            if (handler.supportManyRequests() == false && requests.size() > 1) {
-                throw new IllegalStateException("The handler supports only one request / response mode");
-            }
-
-            channelFuture = clientBootstrap.connect(remoteAddress);
-            channelFuture.sync();
-            handler.await();
-
-            final Channel channel = handler.prepare(clientBootstrap, channelFuture.channel());
-            try {
-                for (HttpRequest request : requests) {
-                    channel.writeAndFlush(request);
-                }
-                if (latch.await(30L, TimeUnit.SECONDS) == false) {
-                    fail("Failed to get all expected responses: " + latch.getCount() + " left");
-                }
-            } finally {
-                channel.close().awaitUninterruptibly();
-            }
-
-        } finally {
-            if (channelFuture != null) {
-                channelFuture.channel().close().awaitUninterruptibly();
-            }
-        }
-
-        return content;
-    }
-
-    @Override
-    public void close() {
-        clientBootstrap.config().group().shutdownGracefully().awaitUninterruptibly();
-    }
-
-    /**
-     * helper factory which adds returned data to a list and uses a count down latch to decide when done
-     */
-    private static class CountDownLatchHandlerHttp extends AwaitableChannelInitializer<SocketChannel> {
-
+ * this work for additional information regarding copyright
+import io.netty.handler.codec.http2.DelegatingDecompressorFrameListener;
+            }).sync().getNow();
+            final HttpToHttp2ConnectionHandler connectionHandler = new HttpToHttp2ConnectionHandlerBuilder().connection(connection)
         private final CountDownLatch latch;
+        throws InterruptedException {
+                                content.add(ht.replace(newContent));
+        protected void initChannel(SocketChannel ch) {
+                        .build()
+import static io.netty.handler.codec.http.HttpHeaderNames.HOST;
+    /**
+            request.headers().add("X-Opaque-ID", String.valueOf(i));
+/*
+     * The channel initializer with the ability to await for initialization to be completed
+            request.headers().add(HttpHeaderNames.HOST, "localhost");
+        this.secure = secure;
+                .build();
+                channelFuture.channel().close().awaitUninterruptibly();
+    private static class CountDownLatchHandlerHttp extends AwaitableChannelInitializer<SocketChannel> {
+                    SslContextBuilder.forClient()
+import io.netty.channel.ChannelPromise;
+        void awaitSettings(long timeout, TimeUnit unit) throws Exception {
+        protected void initChannel(DatagramChannel ch) {
+ */
+            final HttpClientCodec sourceCodec = new HttpClientCodec();
+            };
+    }
+            if (handler.supportManyRequests() == false && requests.size() > 1) {
+import static org.junit.Assert.fail;
+            return channel;
+        @Override
+        return processRequestsWithBody(HttpMethod.POST, remoteAddress, urisAndBodies);
+        }
+        List<String> list = new ArrayList<>(responses.size());
+            }
+    Netty4HttpClient(
+        clientBootstrap.config().group().shutdownGracefully().awaitUninterruptibly();
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
+                for (HttpRequest request : requests) {
         private final Collection<FullHttpResponse> content;
+        clientBootstrap.handler(handler);
+                protected void initRequestStream(QuicStreamChannel ch) {
+        private Logger logger;
+            true
+        return sendRequests(remoteAddress, requests);
+    public static Netty4HttpClient http2() {
+            final Http2ClientUpgradeCodec upgradeCodec = new Http2ClientUpgradeCodec(connectionHandler);
+        );
+        }
+    /**
+            this.promise = promise;
+    }
+                }
+                final SslHandler sslHandler = new SslHandler(
+                        connection,
+                throw new RuntimeException(ex);
+    }
+                .build();
+import io.netty.channel.socket.DatagramChannel;
+import io.netty.handler.codec.http2.DefaultHttp2Connection;
+import org.apache.logging.log4j.Logger;
+            ctx.writeAndFlush(request);
+package org.opensearch.http.netty4;
+import static org.opensearch.http.netty4.Netty4Http3ServerTransport.SETTING_H3_MAX_STREAM_REMOTE_LENGTH;
+            request.headers().add(HttpHeaderNames.CONTENT_LENGTH, content.readableBytes());
+            list.add(response.headers().get(Task.X_OPAQUE_ID));
+import java.util.concurrent.CountDownLatch;
+        }
+        }
+ * ownership. Elasticsearch licenses this file to you under
+                                latch.countDown();
+                    }
+        final CountDownLatch latch = new CountDownLatch(requests.size());
+            final QuicSslContext context = QuicSslContextBuilder.forClient()
+import io.netty.channel.SimpleChannelInboundHandler;
+    private final Bootstrap clientBootstrap;
+                // Await for HTTP/2 settings being sent over before moving on to sending the requests
+import io.netty.handler.codec.quic.QuicSslContextBuilder;
+import io.netty.channel.ChannelInboundHandlerAdapter;
+            final HttpClientUpgradeHandler upgradeHandler = new HttpClientUpgradeHandler(sourceCodec, upgradeCodec, maxContentLength);
+    public static Netty4HttpClient http3() {
+        boolean secure
+                .initialMaxStreamsBidirectional(SETTING_H3_MAX_STREAMS.get(Settings.EMPTY).longValue())
+                public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+import io.netty.channel.Channel;
+                    content.add(response.replace(newContent));
+        }
+                    // a test that tracks huge allocations, so we want to avoid them in this test code.
+        protected void initChannel(SocketChannel ch) throws Exception {
+                }
+                            }
+        private final ChannelInboundHandler settingsHandler;
+                )
+            final ChannelHandler quicClientCodec = Http3.newQuicClientCodecBuilder()
+        }
+                }
+import static org.opensearch.http.netty4.Netty4Http3ServerTransport.SETTING_H3_MAX_STREAM_LOCAL_LENGTH;
+            final Http2Connection connection = new DefaultHttp2Connection(false);
+                    latch.countDown();
+                }
+            final int maxContentLength = new ByteSizeValue(100, ByteSizeUnit.MB).bytesAsInt();
+            request.headers().add(HttpConversionUtil.ExtensionHeaderNames.SCHEME.text(), "http");
+        List<String> list = new ArrayList<>(responses.size());
+ * not use this file except in compliance with the License.
+import org.opensearch.common.collect.Tuple;
+            settingsHandler = new Http2SettingsHandler(ch.newPromise());
+        for (HttpResponse response : responses) {
+                ch.pipeline().addFirst("client_ssl_handler", sslHandler);
+            HttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, method, uriAndBody.v1(), content);
+            channelFuture.sync();
+    }
+import io.netty.handler.codec.http.HttpResponse;
+    }
+                    ch.pipeline().addLast(new Http3FrameToHttpObjectCodec(false));
+ */
+                        new InboundHttp2ToHttpAdapterBuilder(connection).maxContentLength(maxContentLength).propagateSettings(true).build()
+            list.add(response.content().toString(StandardCharsets.UTF_8));
+                    final FullHttpResponse response = (FullHttpResponse) msg;
+                protected void channelRead0(ChannelHandlerContext ctx, HttpObject msg) {
+                    )
+        assert responses.size() == 1 : "expected 1 and only 1 http response";
+import io.netty.handler.codec.http.HttpMethod;
+import java.util.ArrayList;
+         * Wait for this handler to be added after the upgrade to HTTP/2, and for initial preface
+        return list;
+import java.util.Collections;
+import io.netty.channel.socket.nio.NioDatagramChannel;
+        Http2SettingsHandler(ChannelPromise promise) {
+        return processRequestsWithBody(HttpMethod.PUT, remoteAddress, urisAndBodies);
+                .initialMaxStreamDataBidirectionalLocal(SETTING_H3_MAX_STREAM_LOCAL_LENGTH.get(Settings.EMPTY).getBytes())
+        List<FullHttpResponse> responses = sendRequests(remoteAddress, Collections.singleton(httpRequest));
+        }
+            new Bootstrap().channel(NioDatagramChannel.class)
+                    final int maxContentLength = new ByteSizeValue(100, ByteSizeUnit.MB).bytesAsInt();
+                throw new RuntimeException(promise.cause());
+        List<HttpRequest> requests = new ArrayList<>(uris.length);
+        }
+            if (!promise.isSuccess()) {
+            CountDownLatchHandlerHttp::new,
+import org.opensearch.common.TriFunction;
+ * Tiny helper to send http requests over netty.
+                .group(new NioEventLoopGroup(1)),
+    }
+            ctx.pipeline().remove(this);
+                        .trustManager(InsecureTrustManagerFactory.INSTANCE)
+import java.nio.charset.StandardCharsets;
+        @Override
+        );
         private final boolean secure;
-
-        CountDownLatchHandlerHttp(final CountDownLatch latch, final Collection<FullHttpResponse> content, final boolean secure) {
+            handler.await();
+                    ch.pipeline().addLast(new SimpleChannelInboundHandler<HttpObject>() {
+import io.netty.handler.codec.http3.Http3;
+    }
+ * software distributed under the License is distributed on an
+            final FullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/");
+import io.netty.handler.codec.http.HttpRequestEncoder;
+import io.netty.bootstrap.Bootstrap;
+        boolean supportManyRequests() {
+            } finally {
+import io.netty.handler.codec.http.HttpContentDecompressor;
+            if (!promise.awaitUninterruptibly(timeout, unit)) {
+            promise.setSuccess();
+            true
+                        }
+ * specific language governing permissions and limitations
+            final HttpRequest httpRequest = new DefaultFullHttpRequest(HTTP_1_1, HttpMethod.GET, uris[i]);
+            false
+import io.netty.handler.codec.http.HttpHeaderNames;
+import org.apache.logging.log4j.Level;
+ * GitHub history for details.
+import org.opensearch.transport.NettyAllocator;
+     * helper factory which adds returned data to a list and uses a count down latch to decide when done
+                    if (Boolean.TRUE.equals(ctx.channel().attr(AttributeKey.valueOf("upgrade")).getAndRemove())) {
+                    ch.pipeline().addLast(new HttpObjectAggregator(maxContentLength));
+import io.netty.handler.codec.http.DefaultFullHttpRequest;
+    }
+import org.opensearch.core.common.unit.ByteSizeValue;
+        TriFunction<CountDownLatch, Collection<FullHttpResponse>, Boolean, AwaitableChannelInitializer<?>> handlerFactory,
+    public static Netty4HttpClient http() {
+import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
+                .sslContext(context)
+        );
+     */
+            }
+    /**
+    }
+                        protected void channelRead0(ChannelHandlerContext ctx, HttpObject msg) {
+        @Override
+import io.netty.handler.codec.http3.Http3FrameToHttpObjectCodec;
+        final AwaitableChannelInitializer<?> handler = handlerFactory.apply(latch, content, secure);
+    }
+                    final FullHttpResponse response = (FullHttpResponse) msg;
+            this.settingsHandler = settingsHandler;
+import io.netty.channel.ChannelHandler;
+        for (FullHttpResponse response : responses) {
             this.latch = latch;
+                logger.log(level, message, params);
+        HttpMethod method,
+                .option(ChannelOption.ALLOCATOR, NettyAllocator.getAllocator(true))
+        }
+import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http3.Http3RequestStreamInitializer;
+                                ByteBuf newContent = Unpooled.copiedBuffer(ht.content());
+            request.headers().add(HttpConversionUtil.ExtensionHeaderNames.SCHEME.text(), secure ? "https" : "http");
+            ctx.fireChannelActive();
+        void await() {
+            }
+import io.netty.handler.codec.http.HttpClientCodec;
+        this.clientBootstrap = clientBootstrap;
+        try {
+                        }
+        void log(Level level, String message, Object... params) {
+        this.logger = logger;
             this.content = content;
+                        .newEngine(ch.alloc())
+            try {
+ * the Apache License, Version 2.0 (the "License"); you may
+import java.net.SocketAddress;
+import io.netty.handler.codec.http.HttpRequest;
+        @Override
+        return list;
+        httpRequest.headers().add(HttpConversionUtil.ExtensionHeaderNames.SCHEME.text(), secure ? "https" : "http");
+        }
+                    ch.pipeline().addLast(new HttpContentDecompressor());
+ *
+import static org.opensearch.http.netty4.Netty4Http3ServerTransport.SETTING_H3_MAX_STREAMS;
+                    // this is upgrade request, skipping it over
+        protected void channelRead0(ChannelHandlerContext ctx, Http2Settings msg) throws Exception {
+            new Bootstrap().channel(NettyAllocator.getChannelType())
+    public Netty4HttpClient withLogger(Logger logger) {
+        handler.logger = logger;
+            request.headers().add(HttpHeaderNames.CONTENT_TYPE, "application/json");
+    @Override
+            this.content = content;
+        List<HttpRequest> requests = new ArrayList<>(urisAndBodies.size());
+import io.netty.handler.ssl.ClientAuth;
+                        .clientAuth(ClientAuth.NONE)
+ */
+                .group(new NioEventLoopGroup(1)),
+        void await() {
+            this.content = content;
+            if (logger != null) {
+        );
+            final Channel channel = handler.prepare(clientBootstrap, channelFuture.channel());
+import io.netty.handler.codec.http3.Http3ClientConnectionHandler;
+            ch.pipeline().addLast(upgradeHandler);
+import io.netty.channel.socket.SocketChannel;
+    public void close() {
+    static Collection<String> returnOpaqueIds(Collection<FullHttpResponse> responses) {
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_MAX_CONTENT_LENGTH;
+                }
+            final QuicChannel quicChannel = QuicChannel.newBootstrap(channel)
+import java.util.List;
+        @Override
+            false
+                                // a test that tracks huge allocations, so we want to avoid them in this test code.
+import java.io.Closeable;
+ *
+        private final Collection<FullHttpResponse> content;
+                    new DelegatingDecompressorFrameListener(
+            httpRequest.headers().add("X-Opaque-ID", String.valueOf(i));
+                }
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 30000) // 30 seconds
+    private Logger logger;
+import io.netty.handler.codec.http.HttpResponseDecoder;
+                    super.exceptionCaught(ctx, cause);
+        }
+            new Bootstrap().channel(NettyAllocator.getChannelType())
+            ch.pipeline().addLast(new HttpContentDecompressor());
+        CountDownLatchHandlerHttp2(final CountDownLatch latch, final Collection<FullHttpResponse> content, final boolean secure) {
+import io.netty.handler.codec.http2.Http2ClientUpgradeCodec;
+                    super.exceptionCaught(ctx, cause);
+    /**
+    public final Collection<FullHttpResponse> put(SocketAddress remoteAddress, List<Tuple<String, CharSequence>> urisAndBodies)
+                .sync()
+    }
+            return false;
+                channel.close().awaitUninterruptibly();
+            quicChannel.closeFuture().addListener(f -> channel.close());
+                            super.exceptionCaught(ctx, cause);
+     */
+    private final TriFunction<CountDownLatch, Collection<FullHttpResponse>, Boolean, AwaitableChannelInitializer<?>> handlerFactory;
+        return new Netty4HttpClient(
+     * A handler that triggers the cleartext upgrade to HTTP/2 (h2c) by sending an
+    private static class Http2SettingsHandler extends SimpleChannelInboundHandler<Http2Settings> {
+        @Override
+        }
+                .frameListener(
+    public List<FullHttpResponse> get(SocketAddress remoteAddress, String... uris) throws InterruptedException {
+                if (latch.await(30L, TimeUnit.SECONDS) == false) {
+ * You may obtain a copy of the License at
+ * KIND, either express or implied.  See the License for the
+     */
+        CountDownLatchHandlerHttp(final CountDownLatch latch, final Collection<FullHttpResponse> content, final boolean secure) {
+                }
+            }
+ */
+ * license agreements. See the NOTICE file distributed with
+    ) {
+        }
+            this.latch = latch;
+    }
+                    ByteBuf newContent = Unpooled.copiedBuffer(((FullHttpResponse) msg).content());
+                );
+         */
+        private ChannelPromise promise;
+            final ChannelInboundHandler responseHandler = new SimpleChannelInboundHandler<HttpObject>() {
+            httpRequest.headers().add(HttpConversionUtil.ExtensionHeaderNames.SCHEME.text(), secure ? "https" : "http");
+import io.netty.channel.ChannelHandlerContext;
+            CountDownLatchHandlerHttp2::new,
+        return new Netty4HttpClient(
+        for (int i = 0; i < urisAndBodies.size(); ++i) {
+            ch.pipeline().addLast(new HttpContentDecompressor());
+            ByteBuf content = Unpooled.copiedBuffer(uriAndBody.v2(), StandardCharsets.UTF_8);
+                                // We copy the buffer manually to avoid a huge allocation on a pooled allocator. We have
+                    latch.countDown();
+            requests.add(request);
+     * helper factory which adds returned data to a list and uses a count down latch to decide when done
+public class Netty4HttpClient implements Closeable {
+                .option(ChannelOption.ALLOCATOR, NettyAllocator.getAllocator())
+            CountDownLatchHandlerHttp::new,
+    private static class CountDownLatchHandlerHttp3 extends AwaitableChannelInitializer<DatagramChannel> {
+                    // We copy the buffer manually to avoid a huge allocation on a pooled allocator. We have
+    }
+                public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+            } catch (final Exception ex) {
+                .initialMaxStreamDataBidirectionalRemote(SETTING_H3_MAX_STREAM_REMOTE_LENGTH.get(Settings.EMPTY).getBytes())
+    public static Netty4HttpClient https() {
+    }
+import io.netty.handler.codec.http.HttpVersion;
+                @Override
+            ch.pipeline().addLast(new UpgradeRequestHandler(settingsHandler, responseHandler));
+    private synchronized List<FullHttpResponse> sendRequests(final SocketAddress remoteAddress, final Collection<HttpRequest> requests)
+        }
+                            if (msg instanceof FullHttpResponse ht) {
+        }
+        ChannelFuture channelFuture = null;
+            return true;
+            requests.add(httpRequest);
+                    });
+                .option(ChannelOption.ALLOCATOR, NettyAllocator.getAllocator())
+                @Override
+        @Override
+     * initial HTTP request.
+import io.netty.buffer.Unpooled;
+            // do nothing
+    }
+            channelFuture = clientBootstrap.connect(remoteAddress);
+ * compatible open source license.
+import io.netty.handler.codec.quic.QuicStreamChannel;
+    }
             this.secure = secure;
         }
-
-        @Override
-        protected void initChannel(SocketChannel ch) throws Exception {
-            final int maxContentLength = new ByteSizeValue(100, ByteSizeUnit.MB).bytesAsInt();
-            ch.pipeline().addLast(new HttpResponseDecoder());
-            ch.pipeline().addLast(new HttpRequestEncoder());
-            ch.pipeline().addLast(new HttpContentDecompressor());
-            ch.pipeline().addLast(new HttpObjectAggregator(maxContentLength));
-            if (secure) {
-                final SslHandler sslHandler = new SslHandler(
-                    SslContextBuilder.forClient()
-                        .clientAuth(ClientAuth.NONE)
-                        .trustManager(InsecureTrustManagerFactory.INSTANCE)
-                        .build()
-                        .newEngine(ch.alloc())
-                );
-                ch.pipeline().addFirst("client_ssl_handler", sslHandler);
-            }
-
-            ch.pipeline().addLast(new SimpleChannelInboundHandler<HttpObject>() {
-                @Override
-                protected void channelRead0(ChannelHandlerContext ctx, HttpObject msg) {
-                    final FullHttpResponse response = (FullHttpResponse) msg;
-                    // We copy the buffer manually to avoid a huge allocation on a pooled allocator. We have
-                    // a test that tracks huge allocations, so we want to avoid them in this test code.
-                    ByteBuf newContent = Unpooled.copiedBuffer(((FullHttpResponse) msg).content());
-                    content.add(response.replace(newContent));
-                    latch.countDown();
-                }
-
-                @Override
-                public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-                    super.exceptionCaught(ctx, cause);
-                    latch.countDown();
-                }
-            });
+import io.netty.handler.ssl.SslHandler;
+            log(Level.INFO, "[QuicChannel] Connecting to: {}", channel.remoteAddress());
+import org.opensearch.tasks.Task;
+        throws InterruptedException {
         }
-
-    }
-
-    /**
-     * The channel initializer with the ability to await for initialization to be completed
-     *
-     */
-    private static abstract class AwaitableChannelInitializer<C extends Channel> extends ChannelInitializer<C> {
-        private Logger logger;
-
-        void log(Level level, String message, Object... params) {
-            if (logger != null) {
-                logger.log(level, message, params);
-            }
-        }
-
-        void await() {
-            // do nothing
-        }
-
-        Channel prepare(Bootstrap clientBootstrap, Channel channel) throws InterruptedException {
-            return channel;
-        }
-
-        boolean supportManyRequests() {
-            return true;
-        }
-    }
-
-    /**
-     * helper factory which adds returned data to a list and uses a count down latch to decide when done
-     */
-    private static class CountDownLatchHandlerHttp2 extends AwaitableChannelInitializer<SocketChannel> {
-
-        private final CountDownLatch latch;
-        private final Collection<FullHttpResponse> content;
-        private Http2SettingsHandler settingsHandler;
-
-        CountDownLatchHandlerHttp2(final CountDownLatch latch, final Collection<FullHttpResponse> content, final boolean secure) {
-            this.latch = latch;
-            this.content = content;
-        }
-
-        @Override
-        protected void initChannel(SocketChannel ch) {
-            final int maxContentLength = new ByteSizeValue(100, ByteSizeUnit.MB).bytesAsInt();
-            final Http2Connection connection = new DefaultHttp2Connection(false);
-            settingsHandler = new Http2SettingsHandler(ch.newPromise());
-
-            final ChannelInboundHandler responseHandler = new SimpleChannelInboundHandler<HttpObject>() {
-                @Override
-                protected void channelRead0(ChannelHandlerContext ctx, HttpObject msg) {
-                    final FullHttpResponse response = (FullHttpResponse) msg;
-
-                    // this is upgrade request, skipping it over
-                    if (Boolean.TRUE.equals(ctx.channel().attr(AttributeKey.valueOf("upgrade")).getAndRemove())) {
-                        return;
-                    }
-
-                    // We copy the buffer manually to avoid a huge allocation on a pooled allocator. We have
-                    // a test that tracks huge allocations, so we want to avoid them in this test code.
-                    ByteBuf newContent = Unpooled.copiedBuffer(((FullHttpResponse) msg).content());
-                    content.add(response.replace(newContent));
-                    latch.countDown();
-                }
-
-                @Override
-                public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-                    super.exceptionCaught(ctx, cause);
-                    latch.countDown();
-                }
-            };
-
-            final HttpToHttp2ConnectionHandler connectionHandler = new HttpToHttp2ConnectionHandlerBuilder().connection(connection)
-                .frameListener(
-                    new DelegatingDecompressorFrameListener(
-                        connection,
-                        new InboundHttp2ToHttpAdapterBuilder(connection).maxContentLength(maxContentLength).propagateSettings(true).build()
-                    )
-                )
-                .build();
-
-            final HttpClientCodec sourceCodec = new HttpClientCodec();
-            final Http2ClientUpgradeCodec upgradeCodec = new Http2ClientUpgradeCodec(connectionHandler);
-            final HttpClientUpgradeHandler upgradeHandler = new HttpClientUpgradeHandler(sourceCodec, upgradeCodec, maxContentLength);
-
-            ch.pipeline().addLast(sourceCodec);
-            ch.pipeline().addLast(upgradeHandler);
-            ch.pipeline().addLast(new HttpContentDecompressor());
-            ch.pipeline().addLast(new UpgradeRequestHandler(settingsHandler, responseHandler));
-        }
-
-        @Override
-        void await() {
+                .maxIdleTimeout(60, TimeUnit.SECONDS)
             try {
-                // Await for HTTP/2 settings being sent over before moving on to sending the requests
                 settingsHandler.awaitSettings(5, TimeUnit.SECONDS);
-            } catch (final Exception ex) {
-                throw new RuntimeException(ex);
-            }
-        }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        private final CountDownLatch latch;
+ * this file be licensed under the Apache-2.0 license or a
+        this.handlerFactory = handlerFactory;
     }
-
-    /**
-     * A handler that triggers the cleartext upgrade to HTTP/2 (h2c) by sending an
-     * initial HTTP request.
-     */
     private static class UpgradeRequestHandler extends ChannelInboundHandlerAdapter {
-        private final ChannelInboundHandler settingsHandler;
-        private final ChannelInboundHandler responseHandler;
-
+                throw new IllegalStateException("The handler supports only one request / response mode");
         UpgradeRequestHandler(final ChannelInboundHandler settingsHandler, final ChannelInboundHandler responseHandler) {
-            this.settingsHandler = settingsHandler;
-            this.responseHandler = responseHandler;
-        }
-
-        @Override
+                        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        private final CountDownLatch latch;
+            this.latch = latch;
+import io.netty.handler.codec.quic.QuicSslContext;
+                    // We copy the buffer manually to avoid a huge allocation on a pooled allocator. We have
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
-            // The first request is HTTP/2 protocol upgrade (since we support only h2c there)
-            final FullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/");
+                        return;
+import io.netty.channel.ChannelInboundHandler;
             request.headers().add(HttpHeaderNames.HOST, "localhost");
-            request.headers().add(HttpConversionUtil.ExtensionHeaderNames.SCHEME.text(), "http");
-
-            ctx.channel().attr(AttributeKey.valueOf("upgrade")).set(true);
-            ctx.writeAndFlush(request);
-            ctx.fireChannelActive();
-
-            ctx.pipeline().remove(this);
-            ctx.pipeline().addLast(settingsHandler);
+    static Collection<String> returnHttpResponseBodies(Collection<FullHttpResponse> responses) {
+                .handler(new Http3ClientConnectionHandler())
+import java.util.concurrent.TimeUnit;
+        private final ChannelInboundHandler responseHandler;
+        throws InterruptedException {
+import io.netty.handler.codec.http.FullHttpResponse;
+                    latch.countDown();
+                throw new IllegalStateException("Timed out waiting for HTTP/2 settings");
+            ch.pipeline().addLast(sourceCodec);
+        } finally {
+                @Override
+            return Http3.newRequestStream(quicChannel, new Http3RequestStreamInitializer() {
+        final List<FullHttpResponse> content = Collections.synchronizedList(new ArrayList<>(requests.size()));
+                .group(new NioEventLoopGroup(1)),
+        CountDownLatchHandlerHttp3(final CountDownLatch latch, final Collection<FullHttpResponse> content, final boolean secure) {
+import io.netty.handler.codec.http.HttpObjectAggregator;
+import io.netty.channel.ChannelFuture;
+    }
+     */
+            }
+        boolean supportManyRequests() {
+            CountDownLatchHandlerHttp3::new,
+        }
             ctx.pipeline().addLast(responseHandler);
         }
+        return responses.get(0);
+                    channel.writeAndFlush(request);
+import io.netty.buffer.ByteBuf;
     }
-
-    private static class Http2SettingsHandler extends SimpleChannelInboundHandler<Http2Settings> {
-        private ChannelPromise promise;
-
-        Http2SettingsHandler(ChannelPromise promise) {
-            this.promise = promise;
-        }
-
-        /**
-         * Wait for this handler to be added after the upgrade to HTTP/2, and for initial preface
+import io.netty.handler.codec.http2.HttpConversionUtil;
+            if (channelFuture != null) {
+            ctx.pipeline().addLast(settingsHandler);
+                    // a test that tracks huge allocations, so we want to avoid them in this test code.
+            ch.pipeline().addLast(new SimpleChannelInboundHandler<HttpObject>() {
+import io.netty.channel.ChannelOption;
+                protected void channelRead0(ChannelHandlerContext ctx, HttpObject msg) {
          * handshake to complete.
-         */
-        void awaitSettings(long timeout, TimeUnit unit) throws Exception {
-            if (!promise.awaitUninterruptibly(timeout, unit)) {
-                throw new IllegalStateException("Timed out waiting for HTTP/2 settings");
-            }
-            if (!promise.isSuccess()) {
-                throw new RuntimeException(promise.cause());
-            }
-        }
-
-        @Override
-        protected void channelRead0(ChannelHandlerContext ctx, Http2Settings msg) throws Exception {
-            promise.setSuccess();
-            ctx.pipeline().remove(this);
-        }
+                .option(ChannelOption.ALLOCATOR, NettyAllocator.getAllocator())
+/*
     }
-
-    /**
-     * helper factory which adds returned data to a list and uses a count down latch to decide when done
      */
-    private static class CountDownLatchHandlerHttp3 extends AwaitableChannelInitializer<DatagramChannel> {
-        private final CountDownLatch latch;
-        private final Collection<FullHttpResponse> content;
-
-        CountDownLatchHandlerHttp3(final CountDownLatch latch, final Collection<FullHttpResponse> content, final boolean secure) {
-            this.latch = latch;
-            this.content = content;
-        }
-
-        @Override
-        protected void initChannel(DatagramChannel ch) {
-            final QuicSslContext context = QuicSslContextBuilder.forClient()
-                .trustManager(InsecureTrustManagerFactory.INSTANCE)
-                .applicationProtocols(Http3.supportedApplicationProtocols())
-                .build();
-
-            final ChannelHandler quicClientCodec = Http3.newQuicClientCodecBuilder()
-                .sslContext(context)
-                .maxIdleTimeout(60, TimeUnit.SECONDS)
-                .initialMaxData(SETTING_HTTP_MAX_CONTENT_LENGTH.get(Settings.EMPTY).getBytes())
-                .initialMaxStreamDataBidirectionalLocal(SETTING_H3_MAX_STREAM_LOCAL_LENGTH.get(Settings.EMPTY).getBytes())
-                .initialMaxStreamDataBidirectionalRemote(SETTING_H3_MAX_STREAM_REMOTE_LENGTH.get(Settings.EMPTY).getBytes())
-                .initialMaxStreamsBidirectional(SETTING_H3_MAX_STREAMS.get(Settings.EMPTY).longValue())
-                .build();
-
-            ch.pipeline().addLast(quicClientCodec);
-        }
-
-        @Override
-        Channel prepare(Bootstrap clientBootstrap, Channel channel) throws InterruptedException {
-            log(Level.INFO, "[QuicChannel] Connecting to: {}", channel.remoteAddress());
-
-            final QuicChannel quicChannel = QuicChannel.newBootstrap(channel)
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 30000) // 30 seconds
-                .handler(new Http3ClientConnectionHandler())
-                .remoteAddress(channel.remoteAddress())
-                .connect()
-                .sync()
-                .getNow();
-            quicChannel.closeFuture().addListener(f -> channel.close());
-
-            return Http3.newRequestStream(quicChannel, new Http3RequestStreamInitializer() {
-                @Override
-                protected void initRequestStream(QuicStreamChannel ch) {
-                    final int maxContentLength = new ByteSizeValue(100, ByteSizeUnit.MB).bytesAsInt();
-                    ch.pipeline().addLast(new Http3FrameToHttpObjectCodec(false));
-                    ch.pipeline().addLast(new HttpContentDecompressor());
-                    ch.pipeline().addLast(new HttpObjectAggregator(maxContentLength));
-                    ch.pipeline().addLast(new SimpleChannelInboundHandler<HttpObject>() {
-                        @Override
-                        protected void channelRead0(ChannelHandlerContext ctx, HttpObject msg) {
-                            if (msg instanceof FullHttpResponse ht) {
-                                // We copy the buffer manually to avoid a huge allocation on a pooled allocator. We have
-                                // a test that tracks huge allocations, so we want to avoid them in this test code.
-                                ByteBuf newContent = Unpooled.copiedBuffer(ht.content());
-                                content.add(ht.replace(newContent));
-                                latch.countDown();
-                            }
-                        }
-
-                        @Override
-                        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-                            super.exceptionCaught(ctx, cause);
-                            latch.countDown();
-                        }
-                    });
-                }
-            }).sync().getNow();
-        }
-
-        @Override
-        boolean supportManyRequests() {
-            return false;
-        }
+ * The OpenSearch Contributors require contributions made to
+ * under the License.
     }
+import io.netty.util.AttributeKey;
+ * SPDX-License-Identifier: Apache-2.0
+import io.netty.channel.ChannelInitializer;
+ * Unless required by applicable law or agreed to in writing,
+                    latch.countDown();
+                .connect()
+import io.netty.handler.codec.http2.Http2Connection;
+        return new Netty4HttpClient(
+import io.netty.handler.codec.quic.QuicChannel;
+import io.netty.handler.codec.http.HttpClientUpgradeHandler;
+import io.netty.channel.nio.NioEventLoopGroup;
+     * helper factory which adds returned data to a list and uses a count down latch to decide when done
+        Channel prepare(Bootstrap clientBootstrap, Channel channel) throws InterruptedException {
+        httpRequest.headers().add(HOST, "localhost");
+/*
+            if (secure) {
+            // The first request is HTTP/2 protocol upgrade (since we support only h2c there)
+        for (int i = 0; i < uris.length; i++) {
+                    ByteBuf newContent = Unpooled.copiedBuffer(((FullHttpResponse) msg).content());
+        }
+        private Http2SettingsHandler settingsHandler;
+            }
+        Channel prepare(Bootstrap clientBootstrap, Channel channel) throws InterruptedException {
+        return sendRequests(remoteAddress, requests);
+            }
+        }
+import io.netty.handler.codec.http.HttpObject;
+import io.netty.handler.codec.http2.HttpToHttp2ConnectionHandlerBuilder;
+import org.opensearch.core.common.unit.ByteSizeUnit;
+import io.netty.handler.codec.http2.InboundHttp2ToHttpAdapterBuilder;
+        SocketAddress remoteAddress,
+        }
+                            latch.countDown();
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            httpRequest.headers().add(HOST, "localhost");
+                .trustManager(InsecureTrustManagerFactory.INSTANCE)
+    public final FullHttpResponse send(SocketAddress remoteAddress, FullHttpRequest httpRequest) throws InterruptedException {
+import io.netty.handler.ssl.SslContextBuilder;
+                @Override
+        }
+    private final boolean secure;
+                .initialMaxData(SETTING_HTTP_MAX_CONTENT_LENGTH.get(Settings.EMPTY).getBytes())
+                .remoteAddress(channel.remoteAddress())
+        return new Netty4HttpClient(
+            ctx.channel().attr(AttributeKey.valueOf("upgrade")).set(true);
+        List<Tuple<String, CharSequence>> urisAndBodies
+    /**
+                .group(new NioEventLoopGroup(1)),
+                    fail("Failed to get all expected responses: " + latch.getCount() + " left");
+    public final Collection<FullHttpResponse> post(SocketAddress remoteAddress, List<Tuple<String, CharSequence>> urisAndBodies)
+ * Licensed to Elasticsearch under one or more contributor
+            ch.pipeline().addLast(new HttpObjectAggregator(maxContentLength));
+                @Override
+        return this;
+import java.util.Collection;
+ * Modifications Copyright OpenSearch Contributors. See
+    private static abstract class AwaitableChannelInitializer<C extends Channel> extends ChannelInitializer<C> {
+            final int maxContentLength = new ByteSizeValue(100, ByteSizeUnit.MB).bytesAsInt();
+            });
+        @Override
+            final Tuple<String, CharSequence> uriAndBody = urisAndBodies.get(i);
+    ) throws InterruptedException {
+     *
+            ch.pipeline().addLast(new HttpRequestEncoder());
+        Bootstrap clientBootstrap,
+                .build();
+            ch.pipeline().addLast(new HttpResponseDecoder());
+        return content;
+                .applicationProtocols(Http3.supportedApplicationProtocols())
+            }
+        private final Collection<FullHttpResponse> content;
+            this.responseHandler = responseHandler;
+import org.opensearch.common.settings.Settings;
+                    content.add(response.replace(newContent));
+        /**
+                        @Override
+import io.netty.handler.codec.http2.HttpToHttp2ConnectionHandler;
+/**
+    private List<FullHttpResponse> processRequestsWithBody(
+    private static class CountDownLatchHandlerHttp2 extends AwaitableChannelInitializer<SocketChannel> {
+            ch.pipeline().addLast(quicClientCodec);
+            ctx.pipeline().remove(this);
+                        @Override
+                .getNow();
 }

@@ -1,234 +1,216 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.indices.replication;
-
-import org.apache.lucene.codecs.Codec;
-import org.apache.lucene.util.Version;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.IndexShardTestCase;
-import org.opensearch.index.store.StoreFileMetadata;
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.indices.replication.checkpoint.MergedSegmentCheckpoint;
-import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.ClusterServiceUtils;
-import org.opensearch.test.transport.CapturingTransport;
-import org.opensearch.transport.TransportService;
-
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Map;
-
-import static org.mockito.Mockito.mock;
-
-public class PrimaryShardReplicationSourceTests extends IndexShardTestCase {
-
-    private static final long PRIMARY_TERM = 1L;
-    private static final long SEGMENTS_GEN = 2L;
-    private static final long SEQ_NO = 3L;
-    private static final long VERSION = 4L;
-    private static final long REPLICATION_ID = 123L;
-
-    private CapturingTransport transport;
-    private ClusterService clusterService;
-    private TransportService transportService;
-    private PrimaryShardReplicationSource replicationSource;
-    private IndexShard indexShard;
-    private DiscoveryNode sourceNode;
-
-    private RecoverySettings recoverySettings;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        final Settings settings = Settings.builder().put("node.name", SegmentReplicationTargetServiceTests.class.getSimpleName()).build();
-        final ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        final RecoverySettings recoverySettings = new RecoverySettings(settings, clusterSettings);
-        transport = new CapturingTransport();
-        sourceNode = newDiscoveryNode("sourceNode");
-        final DiscoveryNode localNode = newDiscoveryNode("localNode");
-        clusterService = ClusterServiceUtils.createClusterService(threadPool, localNode);
-        transportService = transport.createTransportService(
-            clusterService.getSettings(),
-            threadPool,
-            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
-            boundAddress -> clusterService.localNode(),
-            null,
-            Collections.emptySet(),
-            NoopTracer.INSTANCE
-        );
-        transportService.start();
-        transportService.acceptIncomingRequests();
-
-        indexShard = newStartedShard(true);
-
-        this.recoverySettings = recoverySettings;
-        replicationSource = new PrimaryShardReplicationSource(
-            localNode,
-            indexShard.routingEntry().allocationId().toString(),
-            transportService,
-            recoverySettings,
-            sourceNode
-        );
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        IOUtils.close(transportService, clusterService, transport);
-        closeShards(indexShard);
-        super.tearDown();
-    }
-
-    public void testGetCheckpointMetadata() {
-        final ReplicationCheckpoint checkpoint = new ReplicationCheckpoint(
-            indexShard.shardId(),
-            PRIMARY_TERM,
-            SEGMENTS_GEN,
-            VERSION,
-            Codec.getDefault().getName()
-        );
-        replicationSource.getCheckpointMetadata(REPLICATION_ID, checkpoint, mock(ActionListener.class));
-        CapturingTransport.CapturedRequest[] requestList = transport.getCapturedRequestsAndClear();
-        assertEquals(1, requestList.length);
-        CapturingTransport.CapturedRequest capturedRequest = requestList[0];
-        assertEquals(SegmentReplicationSourceService.Actions.GET_CHECKPOINT_INFO, capturedRequest.action);
-        assertEquals(sourceNode, capturedRequest.node);
-        assertTrue(capturedRequest.request instanceof CheckpointInfoRequest);
-    }
-
-    public void testGetSegmentFiles() {
-        final ReplicationCheckpoint checkpoint = new ReplicationCheckpoint(
-            indexShard.shardId(),
-            PRIMARY_TERM,
-            SEGMENTS_GEN,
-            VERSION,
-            Codec.getDefault().getName()
-        );
-        StoreFileMetadata testMetadata = new StoreFileMetadata("testFile", 1L, "checksum", Version.LATEST);
-        replicationSource.getSegmentFiles(
-            REPLICATION_ID,
-            checkpoint,
-            Arrays.asList(testMetadata),
             mock(IndexShard.class),
-            (fileName, bytesRecovered) -> {},
-            mock(ActionListener.class)
-        );
         CapturingTransport.CapturedRequest[] requestList = transport.getCapturedRequestsAndClear();
+        StoreFileMetadata testMetadata = new StoreFileMetadata("testFile", fileSize, "checksum", Version.LATEST);
+    public void testTransportTimeoutForGetMergedSegmentFilesAction() {
+            1,
+            Collections.emptyMap(),
         assertEquals(1, requestList.length);
+import org.opensearch.common.util.io.IOUtils;
         CapturingTransport.CapturedRequest capturedRequest = requestList[0];
-        assertEquals(SegmentReplicationSourceService.Actions.GET_SEGMENT_FILES, capturedRequest.action);
-        assertEquals(sourceNode, capturedRequest.node);
+ * this file be licensed under the Apache-2.0 license or a
+            "_0"
+import org.opensearch.index.shard.IndexShardTestCase;
+            Codec.getDefault().getName(),
+    /**
+import java.util.Map;
+            PRIMARY_TERM,
+        StoreFileMetadata testMetadata = new StoreFileMetadata("testFile", 1L, "checksum", Version.LATEST);
+import org.opensearch.core.action.ActionListener;
+    public void tearDown() throws Exception {
+            (fileName, bytesRecovered) -> {},
+            VERSION,
+    @Override
+            indexShard.shardId(),
+        );
+import org.opensearch.test.transport.CapturingTransport;
+        final ReplicationCheckpoint checkpoint = new ReplicationCheckpoint(
+import java.util.Arrays;
+        assertEquals(1, requestList.length);
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
         assertTrue(capturedRequest.request instanceof GetSegmentFilesRequest);
+        assertEquals(1, requestList.length);
+    @Override
+    private static final long REPLICATION_ID = 123L;
+    private DiscoveryNode newDiscoveryNode(String nodeName) {
+        assertTrue(capturedRequest.request instanceof GetSegmentFilesRequest);
+        assertEquals(SegmentReplicationSourceService.Actions.GET_SEGMENT_FILES, capturedRequest.action);
+     * This test verifies the transport request timeout value for fetching the merged segment files.
     }
-
+            indexShard.shardId(),
+    private static final long PRIMARY_TERM = 1L;
+    private DiscoveryNode sourceNode;
+        transportService.start();
+            mock(IndexShard.class),
+        );
+            Collections.emptySet(),
+        super.tearDown();
+        replicationSource.getSegmentFiles(
+        final ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+        CapturingTransport.CapturedRequest capturedRequest = requestList[0];
+     * This test verifies the transport request timeout value for fetching the segment files.
+}
+    private TransportService transportService;
+            Codec.getDefault().getName()
+        assertEquals(1, requestList.length);
+        assertEquals(SegmentReplicationSourceService.Actions.GET_MERGED_SEGMENT_FILES, capturedRequest.action);
+        assertTrue(capturedRequest.request instanceof CheckpointInfoRequest);
+            (fileName, bytesRecovered) -> {},
+            boundAddress -> clusterService.localNode(),
+            PRIMARY_TERM,
+            SEGMENTS_GEN,
+    public void testGetCheckpointMetadata() {
+        CapturingTransport.CapturedRequest capturedRequest = requestList[0];
+        assertEquals(sourceNode, capturedRequest.node);
+        replicationSource.getCheckpointMetadata(REPLICATION_ID, checkpoint, mock(ActionListener.class));
+            Codec.getDefault().getName()
+            1,
+    /**
+            mock(ActionListener.class)
+ * The OpenSearch Contributors require contributions made to
+    public void testGetSegmentFiles() {
+    }
+        );
+            checkpoint,
+    public void testTransportTimeoutForGetSegmentFilesAction() {
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+        long fileSize = (long) (Math.pow(10, 9));
+import org.opensearch.test.ClusterServiceUtils;
+            mock(ActionListener.class)
+            checkpoint,
+            PRIMARY_TERM,
+        assertEquals(1, requestList.length);
+            mock(ActionListener.class)
+            VERSION,
+        sourceNode = newDiscoveryNode("sourceNode");
+        CapturingTransport.CapturedRequest[] requestList = transport.getCapturedRequestsAndClear();
+ *
+        replicationSource.getMergedSegmentFiles(
+        CapturingTransport.CapturedRequest capturedRequest = requestList[0];
+            (fileName, bytesRecovered) -> {},
+            REPLICATION_ID,
+            randomAlphaOfLength(10),
+/*
+        final ReplicationCheckpoint checkpoint = new MergedSegmentCheckpoint(
+public class PrimaryShardReplicationSourceTests extends IndexShardTestCase {
+        final ReplicationCheckpoint checkpoint = new ReplicationCheckpoint(
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+    private static final long SEQ_NO = 3L;
+            Arrays.asList(testMetadata),
+        );
+            Arrays.asList(testMetadata),
+import org.opensearch.common.settings.Settings;
+        CapturingTransport.CapturedRequest[] requestList = transport.getCapturedRequestsAndClear();
+        final ReplicationCheckpoint checkpoint = new MergedSegmentCheckpoint(
+        CapturingTransport.CapturedRequest capturedRequest = requestList[0];
+    public void setUp() throws Exception {
+    }
+        return new DiscoveryNode(
+        replicationSource = new PrimaryShardReplicationSource(
+            Codec.getDefault().getName()
+            (fileName, bytesRecovered) -> {},
+        assertEquals(sourceNode, capturedRequest.node);
+import org.opensearch.indices.recovery.RecoverySettings;
+            VERSION,
+            checkpoint,
+        assertEquals(SegmentReplicationSourceService.Actions.GET_CHECKPOINT_INFO, capturedRequest.action);
+            localNode,
+    private RecoverySettings recoverySettings;
+            Map.of("testFile", testMetadata),
+ * compatible open source license.
+        );
+import org.opensearch.indices.replication.checkpoint.MergedSegmentCheckpoint;
+            Codec.getDefault().getName(),
+    }
+            indexShard.shardId(),
+package org.opensearch.indices.replication;
+     */
+ * SPDX-License-Identifier: Apache-2.0
+    private CapturingTransport transport;
+        transport = new CapturingTransport();
+        CapturingTransport.CapturedRequest[] requestList = transport.getCapturedRequestsAndClear();
+            Collections.singleton(DiscoveryNodeRole.CLUSTER_MANAGER_ROLE),
+            mock(ActionListener.class)
+            PRIMARY_TERM,
+            1,
+import static org.mockito.Mockito.mock;
+        StoreFileMetadata testMetadata = new StoreFileMetadata("testFile", fileSize, "checksum", Version.LATEST);
+ */
+        long fileSize = (long) (Math.pow(10, 9));
+        replicationSource.getSegmentFiles(
+            null,
+import org.opensearch.index.shard.IndexShard;
+            clusterService.getSettings(),
+            transportService,
+            REPLICATION_ID,
+            Arrays.asList(testMetadata),
+        );
+        super.setUp();
+        CapturingTransport.CapturedRequest[] requestList = transport.getCapturedRequestsAndClear();
+    private ClusterService clusterService;
+        assertEquals(sourceNode, capturedRequest.node);
+            1,
+            org.opensearch.Version.CURRENT
+        closeShards(indexShard);
+            PRIMARY_TERM,
+        this.recoverySettings = recoverySettings;
+        assertEquals(SegmentReplicationSourceService.Actions.GET_MERGED_SEGMENT_FILES, capturedRequest.action);
+        transportService = transport.createTransportService(
+            indexShard.shardId(),
+        );
+        replicationSource.getMergedSegmentFiles(
+            REPLICATION_ID,
+import org.opensearch.cluster.service.ClusterService;
+            threadPool,
+        IOUtils.close(transportService, clusterService, transport);
+    }
+        clusterService = ClusterServiceUtils.createClusterService(threadPool, localNode);
+    private static final long SEGMENTS_GEN = 2L;
+        assertEquals(recoverySettings.getMergedSegmentReplicationTimeout(), capturedRequest.options.timeout());
+     */
+            SEGMENTS_GEN,
+            sourceNode
+            checkpoint,
+        assertEquals(sourceNode, capturedRequest.node);
+import org.opensearch.index.store.StoreFileMetadata;
+        final RecoverySettings recoverySettings = new RecoverySettings(settings, clusterSettings);
+            indexShard.routingEntry().allocationId().toString(),
+            REPLICATION_ID,
+    }
+        assertEquals(sourceNode, capturedRequest.node);
+        );
+import org.opensearch.cluster.node.DiscoveryNode;
+    private PrimaryShardReplicationSource replicationSource;
+        final Settings settings = Settings.builder().put("node.name", SegmentReplicationTargetServiceTests.class.getSimpleName()).build();
+            indexShard.shardId(),
+    private IndexShard indexShard;
+    private static final long VERSION = 4L;
+    }
+            buildNewFakeTransportAddress(),
+import org.apache.lucene.util.Version;
+            "_0"
+        assertEquals(SegmentReplicationSourceService.Actions.GET_SEGMENT_FILES, capturedRequest.action);
+        );
+    }
+        final ReplicationCheckpoint checkpoint = new ReplicationCheckpoint(
+        final DiscoveryNode localNode = newDiscoveryNode("localNode");
+            mock(IndexShard.class),
+            recoverySettings,
+import org.opensearch.transport.TransportService;
     public void testGetMergedSegmentFiles() {
         StoreFileMetadata testMetadata = new StoreFileMetadata("testFile", 1L, "checksum", Version.LATEST);
-        final ReplicationCheckpoint checkpoint = new MergedSegmentCheckpoint(
-            indexShard.shardId(),
-            PRIMARY_TERM,
-            1,
-            1,
-            Codec.getDefault().getName(),
-            Map.of("testFile", testMetadata),
-            "_0"
         );
-        replicationSource.getMergedSegmentFiles(
-            REPLICATION_ID,
-            checkpoint,
             Arrays.asList(testMetadata),
             mock(IndexShard.class),
-            (fileName, bytesRecovered) -> {},
-            mock(ActionListener.class)
-        );
-        CapturingTransport.CapturedRequest[] requestList = transport.getCapturedRequestsAndClear();
-        assertEquals(1, requestList.length);
-        CapturingTransport.CapturedRequest capturedRequest = requestList[0];
-        assertEquals(SegmentReplicationSourceService.Actions.GET_MERGED_SEGMENT_FILES, capturedRequest.action);
-        assertEquals(sourceNode, capturedRequest.node);
-        assertTrue(capturedRequest.request instanceof GetSegmentFilesRequest);
-    }
-
-    /**
-     * This test verifies the transport request timeout value for fetching the segment files.
-     */
-    public void testTransportTimeoutForGetSegmentFilesAction() {
-        long fileSize = (long) (Math.pow(10, 9));
-        final ReplicationCheckpoint checkpoint = new ReplicationCheckpoint(
-            indexShard.shardId(),
-            PRIMARY_TERM,
             SEGMENTS_GEN,
-            VERSION,
-            Codec.getDefault().getName()
+        transportService.acceptIncomingRequests();
         );
-        StoreFileMetadata testMetadata = new StoreFileMetadata("testFile", fileSize, "checksum", Version.LATEST);
-        replicationSource.getSegmentFiles(
-            REPLICATION_ID,
-            checkpoint,
-            Arrays.asList(testMetadata),
-            mock(IndexShard.class),
-            (fileName, bytesRecovered) -> {},
-            mock(ActionListener.class)
-        );
-        CapturingTransport.CapturedRequest[] requestList = transport.getCapturedRequestsAndClear();
-        assertEquals(1, requestList.length);
-        CapturingTransport.CapturedRequest capturedRequest = requestList[0];
-        assertEquals(SegmentReplicationSourceService.Actions.GET_SEGMENT_FILES, capturedRequest.action);
-        assertEquals(sourceNode, capturedRequest.node);
-        assertEquals(recoverySettings.internalActionLongTimeout(), capturedRequest.options.timeout());
-    }
-
-    /**
-     * This test verifies the transport request timeout value for fetching the merged segment files.
-     */
-    public void testTransportTimeoutForGetMergedSegmentFilesAction() {
-        long fileSize = (long) (Math.pow(10, 9));
-        StoreFileMetadata testMetadata = new StoreFileMetadata("testFile", fileSize, "checksum", Version.LATEST);
-        final ReplicationCheckpoint checkpoint = new MergedSegmentCheckpoint(
-            indexShard.shardId(),
-            PRIMARY_TERM,
-            1,
-            1,
-            Codec.getDefault().getName(),
-            Map.of("testFile", testMetadata),
-            "_0"
-        );
-        replicationSource.getMergedSegmentFiles(
-            REPLICATION_ID,
-            checkpoint,
-            Arrays.asList(testMetadata),
-            mock(IndexShard.class),
-            (fileName, bytesRecovered) -> {},
-            mock(ActionListener.class)
-        );
-        CapturingTransport.CapturedRequest[] requestList = transport.getCapturedRequestsAndClear();
-        assertEquals(1, requestList.length);
-        CapturingTransport.CapturedRequest capturedRequest = requestList[0];
-        assertEquals(SegmentReplicationSourceService.Actions.GET_MERGED_SEGMENT_FILES, capturedRequest.action);
-        assertEquals(sourceNode, capturedRequest.node);
-        assertEquals(recoverySettings.getMergedSegmentReplicationTimeout(), capturedRequest.options.timeout());
-    }
-
-    private DiscoveryNode newDiscoveryNode(String nodeName) {
-        return new DiscoveryNode(
+            NoopTracer.INSTANCE
             nodeName,
-            randomAlphaOfLength(10),
-            buildNewFakeTransportAddress(),
-            Collections.emptyMap(),
-            Collections.singleton(DiscoveryNodeRole.CLUSTER_MANAGER_ROLE),
-            org.opensearch.Version.CURRENT
         );
-    }
-}
+            Map.of("testFile", testMetadata),
+import org.opensearch.common.settings.ClusterSettings;
+        assertEquals(recoverySettings.internalActionLongTimeout(), capturedRequest.options.timeout());
+import java.util.Collections;
+import org.apache.lucene.codecs.Codec;
+import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
+        indexShard = newStartedShard(true);

@@ -1,209 +1,184 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.node.resource.tracker;
-
-import org.apache.lucene.util.Constants;
-import org.opensearch.common.lifecycle.AbstractLifecycleComponent;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.monitor.fs.FsService;
-import org.opensearch.node.IoUsageStats;
-import org.opensearch.threadpool.ThreadPool;
-
-/**
- * This tracks the usage of node resources such as CPU, IO and memory
- */
-public class NodeResourceUsageTracker extends AbstractLifecycleComponent {
-    private ThreadPool threadPool;
-    private final ClusterSettings clusterSettings;
-    private AverageCpuUsageTracker cpuUsageTracker;
-    private AverageMemoryUsageTracker memoryUsageTracker;
-    private AverageIoUsageTracker ioUsageTracker;
-    private AverageNativeMemoryUsageTracker nativeMemoryUsageTracker;
-
-    private ResourceTrackerSettings resourceTrackerSettings;
-
-    private final FsService fsService;
-
-    public NodeResourceUsageTracker(FsService fsService, ThreadPool threadPool, Settings settings, ClusterSettings clusterSettings) {
-        this.fsService = fsService;
-        this.threadPool = threadPool;
-        this.clusterSettings = clusterSettings;
-        this.resourceTrackerSettings = new ResourceTrackerSettings(settings);
-        initialize();
-    }
-
-    /**
-     * Return CPU utilization average if we have enough datapoints, otherwise return 0
-     */
-    public double getCpuUtilizationPercent() {
-        if (cpuUsageTracker.isReady()) {
-            return cpuUsageTracker.getAverage();
-        }
-        return 0.0;
-    }
-
-    /**
-     * Return memory utilization average if we have enough datapoints, otherwise return 0
-     */
-    public double getMemoryUtilizationPercent() {
-        if (memoryUsageTracker.isReady()) {
-            return memoryUsageTracker.getAverage();
-        }
-        return 0.0;
-    }
-
-    /**
-     * Return io stats average if we have enough datapoints, otherwise return 0
-     */
-    public IoUsageStats getIoUsageStats() {
-        return ioUsageTracker.getIoUsageStats();
-    }
-
-    /**
-     * Return native memory utilization average if we have enough datapoints, otherwise return 0
-     */
-    public double getNativeMemoryUtilizationPercent() {
-        if (nativeMemoryUsageTracker.isReady()) {
-            return nativeMemoryUsageTracker.getAverage();
-        }
-        return 0.0;
-    }
-
-    /**
-     * Checks if all of the resource usage trackers are ready
-     */
-    public boolean isReady() {
         if (Constants.LINUX) {
-            return memoryUsageTracker.isReady()
-                && cpuUsageTracker.isReady()
-                && ioUsageTracker.isReady()
-                && nativeMemoryUsageTracker.isReady();
-        }
-        return memoryUsageTracker.isReady() && cpuUsageTracker.isReady();
     }
-
-    void initialize() {
-        cpuUsageTracker = new AverageCpuUsageTracker(
-            threadPool,
-            resourceTrackerSettings.getCpuPollingInterval(),
-            resourceTrackerSettings.getCpuWindowDuration()
-        );
-        clusterSettings.addSettingsUpdateConsumer(
+    }
             ResourceTrackerSettings.GLOBAL_CPU_USAGE_AC_WINDOW_DURATION_SETTING,
-            this::setCpuWindowDuration
-        );
-
-        memoryUsageTracker = new AverageMemoryUsageTracker(
-            threadPool,
-            resourceTrackerSettings.getMemoryPollingInterval(),
-            resourceTrackerSettings.getMemoryWindowDuration()
-        );
-        clusterSettings.addSettingsUpdateConsumer(
-            ResourceTrackerSettings.GLOBAL_JVM_USAGE_AC_WINDOW_DURATION_SETTING,
-            this::setMemoryWindowDuration
-        );
-
-        ioUsageTracker = new AverageIoUsageTracker(
-            fsService,
-            threadPool,
-            resourceTrackerSettings.getIoPollingInterval(),
-            resourceTrackerSettings.getIoWindowDuration()
-        );
-        clusterSettings.addSettingsUpdateConsumer(
-            ResourceTrackerSettings.GLOBAL_IO_USAGE_AC_WINDOW_DURATION_SETTING,
-            this::setIoWindowDuration
-        );
-
-        nativeMemoryUsageTracker = new AverageNativeMemoryUsageTracker(
-            threadPool,
-            resourceTrackerSettings.getNativeMemoryPollingInterval(),
-            resourceTrackerSettings.getNativeMemoryWindowDuration(),
-            resourceTrackerSettings
-        );
-        if (Constants.LINUX) {
-            clusterSettings.addSettingsUpdateConsumer(
-                ResourceTrackerSettings.GLOBAL_NATIVE_MEMORY_USAGE_AC_WINDOW_DURATION_SETTING,
-                this::setNativeMemoryWindowDuration
-            );
-            clusterSettings.addSettingsUpdateConsumer(ResourceTrackerSettings.NODE_NATIVE_MEMORY_LIMIT_SETTING, this::setNativeMemoryLimit);
-            clusterSettings.addSettingsUpdateConsumer(
+ *
                 ResourceTrackerSettings.NODE_NATIVE_MEMORY_BUFFER_PERCENT_SETTING,
-                this::setNativeMemoryBufferPercent
-            );
-        }
-    }
-
-    private void setMemoryWindowDuration(TimeValue windowDuration) {
-        memoryUsageTracker.setWindowSize(windowDuration);
-        resourceTrackerSettings.setMemoryWindowDuration(windowDuration);
-    }
-
-    private void setCpuWindowDuration(TimeValue windowDuration) {
-        cpuUsageTracker.setWindowSize(windowDuration);
-        resourceTrackerSettings.setCpuWindowDuration(windowDuration);
-    }
-
+            resourceTrackerSettings.getCpuWindowDuration()
+     */
+            threadPool,
     private void setIoWindowDuration(TimeValue windowDuration) {
-        ioUsageTracker.setWindowSize(windowDuration);
-        resourceTrackerSettings.setIoWindowDuration(windowDuration);
-    }
-
-    private void setNativeMemoryWindowDuration(TimeValue windowDuration) {
-        nativeMemoryUsageTracker.setWindowSize(windowDuration);
+        cpuUsageTracker.doStop();
+import org.opensearch.monitor.fs.FsService;
+     */
+        );
+        resourceTrackerSettings.setMemoryWindowDuration(windowDuration);
+        }
+            ResourceTrackerSettings.GLOBAL_IO_USAGE_AC_WINDOW_DURATION_SETTING,
+    /**
+            clusterSettings.addSettingsUpdateConsumer(ResourceTrackerSettings.NODE_NATIVE_MEMORY_LIMIT_SETTING, this::setNativeMemoryLimit);
+            resourceTrackerSettings.getIoPollingInterval(),
+     * Return native memory utilization average if we have enough datapoints, otherwise return 0
+            resourceTrackerSettings.getIoWindowDuration()
+import org.opensearch.common.settings.Settings;
         resourceTrackerSettings.setNativeMemoryWindowDuration(windowDuration);
-    }
-
+                && nativeMemoryUsageTracker.isReady();
+        clusterSettings.addSettingsUpdateConsumer(
+        ioUsageTracker.doStart();
+     * Visible for testing
+        );
+            clusterSettings.addSettingsUpdateConsumer(
+        }
+        ioUsageTracker.doStop();
+import org.opensearch.common.lifecycle.AbstractLifecycleComponent;
+package org.opensearch.node.resource.tracker;
+public class NodeResourceUsageTracker extends AbstractLifecycleComponent {
+            resourceTrackerSettings.getNativeMemoryWindowDuration(),
+    /**
+import org.opensearch.node.IoUsageStats;
+            ResourceTrackerSettings.GLOBAL_JVM_USAGE_AC_WINDOW_DURATION_SETTING,
+        clusterSettings.addSettingsUpdateConsumer(
+    protected void doClose() {
+        memoryUsageTracker = new AverageMemoryUsageTracker(
+/**
+                this::setNativeMemoryWindowDuration
+        resourceTrackerSettings.setCpuWindowDuration(windowDuration);
+    public boolean isReady() {
+        cpuUsageTracker = new AverageCpuUsageTracker(
+    /**
     private void setNativeMemoryLimit(ByteSizeValue newLimit) {
-        resourceTrackerSettings.setNativeMemoryLimitBytes(newLimit.getBytes());
-    }
-
-    private void setNativeMemoryBufferPercent(int newBufferPercent) {
+    private AverageNativeMemoryUsageTracker nativeMemoryUsageTracker;
+ * The OpenSearch Contributors require contributions made to
+                && cpuUsageTracker.isReady()
+        nativeMemoryUsageTracker.setWindowSize(windowDuration);
+     */
+            this::setMemoryWindowDuration
         resourceTrackerSettings.setNativeMemoryBufferPercent(newBufferPercent);
     }
-
-    /**
-     * Visible for testing
+        if (Constants.LINUX) {
+        nativeMemoryUsageTracker = new AverageNativeMemoryUsageTracker(
      */
-    ResourceTrackerSettings getResourceTrackerSettings() {
-        return resourceTrackerSettings;
+                && ioUsageTracker.isReady()
     }
-
-    @Override
-    protected void doStart() {
+    }
+            resourceTrackerSettings.getCpuPollingInterval(),
+        memoryUsageTracker.setWindowSize(windowDuration);
+/*
         cpuUsageTracker.doStart();
-        memoryUsageTracker.doStart();
-        ioUsageTracker.doStart();
-        if (Constants.LINUX) {
-            nativeMemoryUsageTracker.doStart();
+        );
+        if (memoryUsageTracker.isReady()) {
+    private void setNativeMemoryBufferPercent(int newBufferPercent) {
+            this::setCpuWindowDuration
+        if (nativeMemoryUsageTracker.isReady()) {
+        return ioUsageTracker.getIoUsageStats();
         }
-    }
-
-    @Override
-    protected void doStop() {
-        cpuUsageTracker.doStop();
-        memoryUsageTracker.doStop();
-        ioUsageTracker.doStop();
+        );
+    private AverageMemoryUsageTracker memoryUsageTracker;
+    private final ClusterSettings clusterSettings;
+ * This tracks the usage of node resources such as CPU, IO and memory
+    protected void doStart() {
+        }
+    private AverageCpuUsageTracker cpuUsageTracker;
+            return memoryUsageTracker.isReady()
+import org.apache.lucene.util.Constants;
+            return cpuUsageTracker.getAverage();
+    private ResourceTrackerSettings resourceTrackerSettings;
+        resourceTrackerSettings.setIoWindowDuration(windowDuration);
+            nativeMemoryUsageTracker.doClose();
+     * Return memory utilization average if we have enough datapoints, otherwise return 0
+    /**
+    public NodeResourceUsageTracker(FsService fsService, ThreadPool threadPool, Settings settings, ClusterSettings clusterSettings) {
+        this.fsService = fsService;
         if (Constants.LINUX) {
+            return nativeMemoryUsageTracker.getAverage();
+    private void setMemoryWindowDuration(TimeValue windowDuration) {
+    @Override
             nativeMemoryUsageTracker.doStop();
         }
     }
-
-    @Override
-    protected void doClose() {
-        cpuUsageTracker.doClose();
-        memoryUsageTracker.doClose();
-        ioUsageTracker.doClose();
-        if (Constants.LINUX) {
-            nativeMemoryUsageTracker.doClose();
-        }
+            threadPool,
+    /**
+            clusterSettings.addSettingsUpdateConsumer(
     }
+    public double getCpuUtilizationPercent() {
+    private AverageIoUsageTracker ioUsageTracker;
+        memoryUsageTracker.doStart();
+            resourceTrackerSettings.getNativeMemoryPollingInterval(),
+        this.resourceTrackerSettings = new ResourceTrackerSettings(settings);
+    }
+        return 0.0;
+        clusterSettings.addSettingsUpdateConsumer(
+ * compatible open source license.
+        if (Constants.LINUX) {
+        }
+        resourceTrackerSettings.setNativeMemoryLimitBytes(newLimit.getBytes());
+    void initialize() {
+ */
+            this::setIoWindowDuration
+    private void setCpuWindowDuration(TimeValue windowDuration) {
+            resourceTrackerSettings.getMemoryWindowDuration()
+    protected void doStop() {
+                ResourceTrackerSettings.GLOBAL_NATIVE_MEMORY_USAGE_AC_WINDOW_DURATION_SETTING,
+        return memoryUsageTracker.isReady() && cpuUsageTracker.isReady();
+    public IoUsageStats getIoUsageStats() {
+    @Override
+    }
+    }
+        );
+        memoryUsageTracker.doClose();
+            resourceTrackerSettings.getMemoryPollingInterval(),
+    public double getMemoryUtilizationPercent() {
+        ioUsageTracker.setWindowSize(windowDuration);
+    @Override
+ */
+        cpuUsageTracker.setWindowSize(windowDuration);
+    }
+        memoryUsageTracker.doStop();
+    /**
+        return 0.0;
+import org.opensearch.common.settings.ClusterSettings;
+            threadPool,
+            fsService,
+        return resourceTrackerSettings;
+        cpuUsageTracker.doClose();
+     * Checks if all of the resource usage trackers are ready
+    }
+        }
+import org.opensearch.common.unit.TimeValue;
+            );
+                this::setNativeMemoryBufferPercent
+        if (Constants.LINUX) {
+    }
+            );
+        this.clusterSettings = clusterSettings;
+ * SPDX-License-Identifier: Apache-2.0
+            threadPool,
+        );
+ * this file be licensed under the Apache-2.0 license or a
+     * Return io stats average if we have enough datapoints, otherwise return 0
+        initialize();
+        if (cpuUsageTracker.isReady()) {
+     */
+    }
+    public double getNativeMemoryUtilizationPercent() {
+            nativeMemoryUsageTracker.doStart();
+    private void setNativeMemoryWindowDuration(TimeValue windowDuration) {
+    }
+    }
+        ioUsageTracker = new AverageIoUsageTracker(
+    }
+import org.opensearch.core.common.unit.ByteSizeValue;
+import org.opensearch.threadpool.ThreadPool;
+    ResourceTrackerSettings getResourceTrackerSettings() {
+        }
+        this.threadPool = threadPool;
+        ioUsageTracker.doClose();
+    private ThreadPool threadPool;
+            return memoryUsageTracker.getAverage();
+     */
+        );
+        return 0.0;
+    private final FsService fsService;
+     * Return CPU utilization average if we have enough datapoints, otherwise return 0
+            resourceTrackerSettings
 }

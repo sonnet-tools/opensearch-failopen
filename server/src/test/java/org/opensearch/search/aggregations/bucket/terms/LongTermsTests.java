@@ -1,205 +1,196 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.terms;
-
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.BucketOrder;
-import org.opensearch.search.aggregations.InternalAggregations;
-import org.opensearch.search.aggregations.ParsedMultiBucketAggregation;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-public class LongTermsTests extends InternalTermsTestCase {
-
-    @Override
-    protected InternalTerms<?, ?> createTestInstance(
-        String name,
-        Map<String, Object> metadata,
-        InternalAggregations aggregations,
-        boolean showTermDocCountError,
-        long docCountError
-    ) {
-        BucketOrder order = BucketOrder.count(false);
-        long minDocCount = 1;
-        int requiredSize = 3;
-        int shardSize = requiredSize + 2;
-        TermsAggregator.BucketCountThresholds bucketCountThresholds = new TermsAggregator.BucketCountThresholds(
-            minDocCount,
-            0,
-            requiredSize,
-            shardSize
-        );
-        DocValueFormat format = randomNumericDocValueFormat();
-        long otherDocCount = 0;
-        List<LongTerms.Bucket> buckets = new ArrayList<>();
-        final int numBuckets = randomNumberOfBuckets();
-        Set<Long> terms = new HashSet<>();
-        for (int i = 0; i < numBuckets; ++i) {
-            long term = randomValueOtherThanMany(l -> terms.add(l) == false, random()::nextLong);
-            int docCount = randomIntBetween(1, 100);
-            buckets.add(new LongTerms.Bucket(term, docCount, aggregations, showTermDocCountError, docCountError, format));
-        }
-        BucketOrder reduceOrder = rarely() ? order : BucketOrder.key(true);
-        Collections.sort(buckets, reduceOrder.comparator());
-        return new LongTerms(
-            name,
-            reduceOrder,
-            order,
-            metadata,
-            format,
-            shardSize,
-            showTermDocCountError,
-            otherDocCount,
-            buckets,
-            docCountError,
-            bucketCountThresholds
-        );
-    }
-
-    @Override
-    protected Class<? extends ParsedMultiBucketAggregation> implementationClass() {
-        return ParsedLongTerms.class;
-    }
-
-    @Override
-    protected InternalTerms<?, ?> mutateInstance(InternalTerms<?, ?> instance) {
-        if (instance instanceof LongTerms) {
-            LongTerms longTerms = (LongTerms) instance;
-            String name = longTerms.getName();
-            BucketOrder order = longTerms.order;
-            int requiredSize = longTerms.requiredSize;
-            long minDocCount = longTerms.minDocCount;
-            DocValueFormat format = longTerms.format;
-            int shardSize = longTerms.getShardSize();
-            boolean showTermDocCountError = longTerms.showTermDocCountError;
-            long otherDocCount = longTerms.getSumOfOtherDocCounts();
-            List<LongTerms.Bucket> buckets = longTerms.getBuckets();
-            long docCountError = longTerms.getDocCountError();
+                    break;
             Map<String, Object> metadata = longTerms.getMetadata();
-            switch (between(0, 8)) {
-                case 0:
-                    name += randomAlphaOfLength(5);
-                    break;
-                case 1:
-                    requiredSize += between(1, 100);
-                    break;
-                case 2:
-                    minDocCount += between(1, 100);
-                    break;
-                case 3:
-                    shardSize += between(1, 100);
-                    break;
-                case 4:
-                    showTermDocCountError = showTermDocCountError == false;
-                    break;
-                case 5:
-                    otherDocCount += between(1, 100);
-                    break;
-                case 6:
-                    docCountError += between(1, 100);
-                    break;
-                case 7:
-                    buckets = new ArrayList<>(buckets);
-                    buckets.add(
-                        new LongTerms.Bucket(
-                            randomLong(),
-                            randomNonNegativeLong(),
-                            InternalAggregations.EMPTY,
-                            showTermDocCountError,
-                            docCountError,
-                            format
-                        )
-                    );
-                    break;
-                case 8:
-                    if (metadata == null) {
-                        metadata = new HashMap<>(1);
-                    } else {
-                        metadata = new HashMap<>(instance.getMetadata());
-                    }
-                    metadata.put(randomAlphaOfLength(15), randomInt());
-                    break;
-                default:
-                    throw new AssertionError("Illegal randomisation branch");
-            }
-            Collections.sort(buckets, longTerms.reduceOrder.comparator());
-            return new LongTerms(
-                name,
-                longTerms.reduceOrder,
-                order,
-                metadata,
-                format,
-                shardSize,
-                showTermDocCountError,
+import org.opensearch.search.DocValueFormat;
+        return ParsedLongTerms.class;
                 otherDocCount,
-                buckets,
-                docCountError,
-                new TermsAggregator.BucketCountThresholds(minDocCount, 0, requiredSize, shardSize)
-            );
-        } else {
-            String name = instance.getName();
+ */
+ * under the License.
+                default:
+                    break;
+ * compatible open source license.
+                    showTermDocCountError = showTermDocCountError == false;
+ * this file be licensed under the Apache-2.0 license or a
+            reduceOrder,
+import java.util.HashSet;
+            int requiredSize = longTerms.requiredSize;
+import java.util.ArrayList;
+                case 3:
+                case 7:
+            format,
+                    otherDocCount += between(1, 100);
+                order,
+                        metadata = new HashMap<>(instance.getMetadata());
+        boolean showTermDocCountError,
+            String name = longTerms.getName();
+import java.util.List;
+package org.opensearch.search.aggregations.bucket.terms;
+                    break;
+                    break;
+                    break;
+                name,
+                            InternalAggregations.EMPTY,
+                    break;
+                    break;
+                    throw new AssertionError("Illegal randomisation branch");
+        }
+            long term = randomValueOtherThanMany(l -> terms.add(l) == false, random()::nextLong);
+            buckets,
+                case 0:
+                        new LongTerms.Bucket(
+                    minDocCount += between(1, 100);
+            0,
+                longTerms.reduceOrder,
+        BucketOrder order = BucketOrder.count(false);
+ * license agreements. See the NOTICE file distributed with
+                    buckets.add(
+        Set<Long> terms = new HashSet<>();
+    }
+ * this work for additional information regarding copyright
+                case 2:
+                default:
+            return new UnmappedTerms(name, order, new TermsAggregator.BucketCountThresholds(minDocCount, 0, requiredSize, 0), metadata);
+                        )
+    ) {
+                case 1:
+            docCountError,
+            }
             BucketOrder order = instance.order;
             int requiredSize = instance.requiredSize;
-            long minDocCount = instance.minDocCount;
-            Map<String, Object> metadata = instance.getMetadata();
-            switch (between(0, 3)) {
-                case 0:
-                    name += randomAlphaOfLength(5);
-                    break;
-                case 1:
-                    requiredSize += between(1, 100);
-                    break;
-                case 2:
-                    minDocCount += between(1, 100);
-                    break;
-                case 3:
-                    if (metadata == null) {
-                        metadata = new HashMap<>(1);
-                    } else {
+        } else {
                         metadata = new HashMap<>(instance.getMetadata());
+                case 5:
+            }
+                    shardSize += between(1, 100);
+        int requiredSize = 3;
+                case 6:
                     }
+                case 8:
+                    } else {
+            order,
+            String name = instance.getName();
+            int shardSize = longTerms.getShardSize();
+            return new LongTerms(
+                    break;
+import java.util.Map;
+            BucketOrder order = longTerms.order;
+                buckets,
+ * specific language governing permissions and limitations
+import org.opensearch.search.aggregations.InternalAggregations;
+ * The OpenSearch Contributors require contributions made to
+                    name += randomAlphaOfLength(5);
+        }
+        long minDocCount = 1;
+        BucketOrder reduceOrder = rarely() ? order : BucketOrder.key(true);
+    protected Class<? extends ParsedMultiBucketAggregation> implementationClass() {
+        Map<String, Object> metadata,
+                    break;
+                new TermsAggregator.BucketCountThresholds(minDocCount, 0, requiredSize, shardSize)
+ *
+            otherDocCount,
+    @Override
+        );
+                    metadata.put(randomAlphaOfLength(15), randomInt());
+            bucketCountThresholds
+ * Unless required by applicable law or agreed to in writing,
+                    } else {
+            requiredSize,
+            long minDocCount = instance.minDocCount;
+            long otherDocCount = longTerms.getSumOfOtherDocCounts();
+                    name += randomAlphaOfLength(5);
+            List<LongTerms.Bucket> buckets = longTerms.getBuckets();
+        Collections.sort(buckets, reduceOrder.comparator());
+}
+                        metadata = new HashMap<>(1);
+ * the Apache License, Version 2.0 (the "License"); you may
+                format,
+                    break;
+                        metadata = new HashMap<>(1);
+            minDocCount,
+                    minDocCount += between(1, 100);
+            long minDocCount = longTerms.minDocCount;
+        return new LongTerms(
+    @Override
+ * ownership. Elasticsearch licenses this file to you under
+        long docCountError
+                case 1:
+        DocValueFormat format = randomNumericDocValueFormat();
+    protected InternalTerms<?, ?> createTestInstance(
+        long otherDocCount = 0;
+        );
+import java.util.Set;
+                            docCountError,
+            int docCount = randomIntBetween(1, 100);
+        InternalAggregations aggregations,
+import org.opensearch.search.aggregations.BucketOrder;
+                showTermDocCountError,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                shardSize,
+            switch (between(0, 3)) {
+            buckets.add(new LongTerms.Bucket(term, docCount, aggregations, showTermDocCountError, docCountError, format));
+ * GitHub history for details.
+            shardSize,
+        final int numBuckets = randomNumberOfBuckets();
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+                    buckets = new ArrayList<>(buckets);
+                    if (metadata == null) {
+            Collections.sort(buckets, longTerms.reduceOrder.comparator());
+            long docCountError = longTerms.getDocCountError();
+            metadata,
+ * You may obtain a copy of the License at
+/*
+                case 4:
+            shardSize
+import org.opensearch.search.aggregations.ParsedMultiBucketAggregation;
+/*
+            name,
+    }
+            switch (between(0, 8)) {
+ */
+ *
+                    docCountError += between(1, 100);
+                    }
+            Map<String, Object> metadata = instance.getMetadata();
+public class LongTermsTests extends InternalTermsTestCase {
+                    requiredSize += between(1, 100);
+                            randomNonNegativeLong(),
+ * software distributed under the License is distributed on an
+                    throw new AssertionError("Illegal randomisation branch");
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                metadata,
+    protected InternalTerms<?, ?> mutateInstance(InternalTerms<?, ?> instance) {
+        if (instance instanceof LongTerms) {
+                docCountError,
+                            showTermDocCountError,
+        TermsAggregator.BucketCountThresholds bucketCountThresholds = new TermsAggregator.BucketCountThresholds(
+                case 0:
+                case 3:
+import java.util.Collections;
+        for (int i = 0; i < numBuckets; ++i) {
+/*
+                            format
+        int shardSize = requiredSize + 2;
+    }
+ * KIND, either express or implied.  See the License for the
+            );
+                    if (metadata == null) {
+                case 2:
+            DocValueFormat format = longTerms.format;
+        List<LongTerms.Bucket> buckets = new ArrayList<>();
+ * not use this file except in compliance with the License.
                     metadata.put(randomAlphaOfLength(15), randomInt());
                     break;
-                default:
-                    throw new AssertionError("Illegal randomisation branch");
-            }
-            return new UnmappedTerms(name, order, new TermsAggregator.BucketCountThresholds(minDocCount, 0, requiredSize, 0), metadata);
-        }
-    }
-}
+            LongTerms longTerms = (LongTerms) instance;
+            showTermDocCountError,
+                    break;
+            boolean showTermDocCountError = longTerms.showTermDocCountError;
+ *
+                    break;
+import java.util.HashMap;
+ * Licensed to Elasticsearch under one or more contributor
+ * Modifications Copyright OpenSearch Contributors. See
+                    );
+ */
+                            randomLong(),
+        String name,
+                    requiredSize += between(1, 100);

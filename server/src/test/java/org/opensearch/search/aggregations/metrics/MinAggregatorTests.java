@@ -1,830 +1,700 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.DoublePoint;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.FloatPoint;
-import org.apache.lucene.document.InetAddressPoint;
-import org.apache.lucene.document.IntPoint;
-import org.apache.lucene.document.LongPoint;
-import org.apache.lucene.document.NumericDocValuesField;
-import org.apache.lucene.document.SortedNumericDocValuesField;
-import org.apache.lucene.document.SortedSetDocValuesField;
-import org.apache.lucene.document.StringField;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.MultiReader;
-import org.apache.lucene.index.NoMergePolicy;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.FieldExistsQuery;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.index.RandomIndexWriter;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.CheckedConsumer;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.core.indices.breaker.CircuitBreakerService;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.mapper.IpFieldMapper;
-import org.opensearch.index.mapper.KeywordFieldMapper;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.mapper.NumberFieldMapper;
 import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.script.MockScriptEngine;
-import org.opensearch.script.Script;
-import org.opensearch.script.ScriptEngine;
-import org.opensearch.script.ScriptModule;
-import org.opensearch.script.ScriptService;
-import org.opensearch.script.ScriptType;
-import org.opensearch.search.aggregations.AggregationBuilder;
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.AggregatorTestCase;
-import org.opensearch.search.aggregations.BucketOrder;
-import org.opensearch.search.aggregations.bucket.filter.Filter;
-import org.opensearch.search.aggregations.bucket.filter.FilterAggregationBuilder;
-import org.opensearch.search.aggregations.bucket.global.GlobalAggregationBuilder;
-import org.opensearch.search.aggregations.bucket.global.InternalGlobal;
-import org.opensearch.search.aggregations.bucket.histogram.HistogramAggregationBuilder;
-import org.opensearch.search.aggregations.bucket.histogram.InternalHistogram;
-import org.opensearch.search.aggregations.bucket.terms.InternalTerms;
-import org.opensearch.search.aggregations.bucket.terms.LongTerms;
-import org.opensearch.search.aggregations.bucket.terms.Terms;
-import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
-import org.opensearch.search.aggregations.support.AggregationInspectionHelper;
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;
-import org.opensearch.search.aggregations.support.ValuesSourceType;
-import org.opensearch.search.lookup.LeafDocLookup;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.BiFunction;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
-
-import static java.util.Collections.singleton;
-import static org.opensearch.index.query.QueryBuilders.termQuery;
-import static org.hamcrest.Matchers.equalTo;
-
-public class MinAggregatorTests extends AggregatorTestCase {
-
-    private final String SCRIPT_NAME = "script_name";
-    private QueryShardContext queryShardContext;
-    private final long SCRIPT_VALUE = 19L;
-
-    /** Script to take a field name in params and sum the values of the field. */
-    private static final String SUM_FIELD_PARAMS_SCRIPT = "sum_field_params";
-
-    /** Script to sum the values of a field named {@code values}. */
-    private static final String SUM_VALUES_FIELD_SCRIPT = "sum_values_field";
-
-    /** Script to return the value of a field named {@code value}. */
-    private static final String VALUE_FIELD_SCRIPT = "value_field";
-
-    /** Script to return the {@code _value} provided by aggs framework. */
-    private static final String VALUE_SCRIPT = "_value";
-
-    private static final String INVERT_SCRIPT = "invert";
-
-    private static final String RANDOM_SCRIPT = "random";
-
-    @Override
-    protected ScriptService getMockScriptService() {
-        Map<String, Function<Map<String, Object>, Object>> scripts = new HashMap<>();
-        Function<Map<String, Object>, Integer> getInc = vars -> {
-            if (vars == null || vars.containsKey("inc") == false) {
-                return 0;
-            } else {
-                return ((Number) vars.get("inc")).intValue();
-            }
-        };
-
-        BiFunction<Map<String, Object>, String, Object> sum = (vars, fieldname) -> {
-            int inc = getInc.apply(vars);
-            LeafDocLookup docLookup = (LeafDocLookup) vars.get("doc");
-            List<Long> values = new ArrayList<>();
-            for (Object v : docLookup.get(fieldname)) {
-                values.add(((Number) v).longValue() + inc);
-            }
-            return values;
-        };
-
-        scripts.put(SCRIPT_NAME, script -> SCRIPT_VALUE);
-        scripts.put(SUM_FIELD_PARAMS_SCRIPT, vars -> {
-            String fieldname = (String) vars.get("field");
-            return sum.apply(vars, fieldname);
-        });
-        scripts.put(SUM_VALUES_FIELD_SCRIPT, vars -> sum.apply(vars, "values"));
-        scripts.put(VALUE_FIELD_SCRIPT, vars -> sum.apply(vars, "value"));
-        scripts.put(VALUE_SCRIPT, vars -> {
-            int inc = getInc.apply(vars);
-            return ((Number) vars.get("_value")).doubleValue() + inc;
-        });
-        scripts.put(INVERT_SCRIPT, vars -> -((Number) vars.get("_value")).doubleValue());
-
-        Map<String, Function<Map<String, Object>, Object>> nonDeterministicScripts = new HashMap<>();
-        nonDeterministicScripts.put(RANDOM_SCRIPT, vars -> AggregatorTestCase.randomDouble());
-
-        MockScriptEngine scriptEngine = new MockScriptEngine(
-            MockScriptEngine.NAME,
-            scripts,
-            nonDeterministicScripts,
-            Collections.emptyMap()
+            unmappedIndexWriter.close();
         );
-        Map<String, ScriptEngine> engines = Collections.singletonMap(scriptEngine.getType(), scriptEngine);
-
-        return new ScriptService(Settings.EMPTY, engines, ScriptModule.CORE_CONTEXTS);
-    }
-
-    @Override
-    protected QueryShardContext queryShardContextMock(
-        IndexSearcher searcher,
-        MapperService mapperService,
-        IndexSettings indexSettings,
-        CircuitBreakerService circuitBreakerService,
-        BigArrays bigArrays
-    ) {
-        this.queryShardContext = super.queryShardContextMock(searcher, mapperService, indexSettings, circuitBreakerService, bigArrays);
-        return queryShardContext;
-    }
-
-    public void testNoMatchingField() throws IOException {
-        testCase(new MatchAllDocsQuery(), iw -> {
-            iw.addDocument(singleton(new SortedNumericDocValuesField("wrong_number", 7)));
-            iw.addDocument(singleton(new SortedNumericDocValuesField("wrong_number", 3)));
-        }, min -> {
-            assertEquals(Double.POSITIVE_INFINITY, min.getValue(), 0);
-            assertFalse(AggregationInspectionHelper.hasValue(min));
-        });
-    }
-
-    public void testMatchesSortedNumericDocValues() throws IOException {
-        testCase(new MatchAllDocsQuery(), iw -> {
-            iw.addDocument(singleton(new SortedNumericDocValuesField("number", 7)));
-            iw.addDocument(singleton(new SortedNumericDocValuesField("number", 2)));
-            iw.addDocument(singleton(new SortedNumericDocValuesField("number", 3)));
-        }, min -> {
-            assertEquals(2, min.getValue(), 0);
-            assertTrue(AggregationInspectionHelper.hasValue(min));
-        });
-    }
-
-    public void testMatchesNumericDocValues() throws IOException {
-        testCase(new MatchAllDocsQuery(), iw -> {
-            iw.addDocument(singleton(new NumericDocValuesField("number", 7)));
-            iw.addDocument(singleton(new NumericDocValuesField("number", 2)));
-            iw.addDocument(singleton(new NumericDocValuesField("number", 3)));
-        }, min -> {
-            assertEquals(2, min.getValue(), 0);
-            assertTrue(AggregationInspectionHelper.hasValue(min));
-        });
-    }
-
-    public void testSomeMatchesSortedNumericDocValues() throws IOException {
-        testCase(new FieldExistsQuery("number"), iw -> {
-            iw.addDocument(singleton(new SortedNumericDocValuesField("number", 7)));
-            iw.addDocument(singleton(new SortedNumericDocValuesField("number2", 2)));
-            iw.addDocument(singleton(new SortedNumericDocValuesField("number", 3)));
-        }, min -> {
-            assertEquals(3, min.getValue(), 0);
-            assertTrue(AggregationInspectionHelper.hasValue(min));
-        });
-    }
-
-    public void testSomeMatchesNumericDocValues() throws IOException {
-        testCase(new FieldExistsQuery("number"), iw -> {
-            iw.addDocument(singleton(new NumericDocValuesField("number", 7)));
-            iw.addDocument(singleton(new NumericDocValuesField("number2", 2)));
-            iw.addDocument(singleton(new NumericDocValuesField("number", 3)));
-        }, min -> {
-            assertEquals(3, min.getValue(), 0);
-            assertTrue(AggregationInspectionHelper.hasValue(min));
-        });
-    }
-
-    public void testQueryFiltering() throws IOException {
-        testCase(IntPoint.newRangeQuery("number", 0, 3), iw -> {
-            iw.addDocument(Arrays.asList(new IntPoint("number", 7), new SortedNumericDocValuesField("number", 7)));
-            iw.addDocument(Arrays.asList(new IntPoint("number", 1), new SortedNumericDocValuesField("number", 1)));
-            iw.addDocument(Arrays.asList(new IntPoint("number", 3), new SortedNumericDocValuesField("number", 3)));
-        }, min -> {
-            assertEquals(1, min.getValue(), 0);
-            assertTrue(AggregationInspectionHelper.hasValue(min));
-        });
-    }
-
-    public void testQueryFiltersAll() throws IOException {
-        testCase(IntPoint.newRangeQuery("number", -1, 0), iw -> {
-            iw.addDocument(Arrays.asList(new IntPoint("number", 7), new SortedNumericDocValuesField("number", 7)));
-            iw.addDocument(Arrays.asList(new IntPoint("number", 1), new SortedNumericDocValuesField("number", 1)));
-            iw.addDocument(Arrays.asList(new IntPoint("number", 3), new SortedNumericDocValuesField("number", 3)));
-        }, min -> {
-            assertEquals(Double.POSITIVE_INFINITY, min.getValue(), 0);
-            assertFalse(AggregationInspectionHelper.hasValue(min));
-        });
-    }
-
-    public void testIpField() throws IOException {
-        final String fieldName = "IP_field";
-        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field(fieldName);
-
-        MappedFieldType fieldType = new IpFieldMapper.IpFieldType(fieldName);
-        boolean v4 = randomBoolean();
-        expectThrows(IllegalArgumentException.class, () -> testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
-            iw.addDocument(singleton(new SortedSetDocValuesField(fieldName, new BytesRef(InetAddressPoint.encode(randomIp(v4))))));
-            iw.addDocument(singleton(new SortedSetDocValuesField(fieldName, new BytesRef(InetAddressPoint.encode(randomIp(v4))))));
-        }, min -> fail("expected an exception"), fieldType));
-    }
-
+import org.opensearch.index.mapper.NumberFieldMapper;
     public void testUnmappedWithMissingField() throws IOException {
-        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("does_not_exist").missing(0L);
-
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-
-        testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
-            iw.addDocument(singleton(new NumericDocValuesField("number", 7)));
-            iw.addDocument(singleton(new NumericDocValuesField("number", 1)));
-        }, (Consumer<InternalMin>) min -> {
-            assertEquals(0.0, min.getValue(), 0);
-            assertTrue(AggregationInspectionHelper.hasValue(min));
-        }, fieldType);
+            return sum.apply(vars, fieldname);
+    /** Script to return the {@code _value} provided by aggs framework. */
+            for (Object v : docLookup.get(fieldname)) {
+        Directory directory = newDirectory();
+                IndexReader indexReader = DirectoryReader.open(directory);
+        };
+            MockScriptEngine.NAME,
+            .script(new Script(ScriptType.INLINE, MockScriptEngine.NAME, RANDOM_SCRIPT, Collections.emptyMap()));
+                InternalMin min = searchAndReduce(indexSearcher, new MatchAllDocsQuery(), aggregationBuilder, fieldType);
     }
-
-    public void testUnsupportedType() {
-        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("not_a_number");
-
-        MappedFieldType fieldType = new KeywordFieldMapper.KeywordFieldType("not_a_number");
-
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
-                iw.addDocument(singleton(new SortedSetDocValuesField("string", new BytesRef("foo"))));
-            }, (Consumer<InternalMin>) min -> { fail("Should have thrown exception"); }, fieldType)
-        );
-        assertEquals("Field [not_a_number] of type [keyword] is not supported for aggregation [min]", e.getMessage());
-    }
-
-    public void testBadMissingField() {
-        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number").missing("not_a_number");
-
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-
-        expectThrows(NumberFormatException.class, () -> testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
-            iw.addDocument(singleton(new NumericDocValuesField("number", 7)));
-            iw.addDocument(singleton(new NumericDocValuesField("number", 1)));
-        }, (Consumer<InternalMin>) min -> { fail("Should have thrown exception"); }, fieldType));
-    }
-
-    public void testUnmappedWithBadMissingField() {
-        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("does_not_exist").missing("not_a_number");
-
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-
-        expectThrows(NumberFormatException.class, () -> testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
-            iw.addDocument(singleton(new NumericDocValuesField("number", 7)));
-            iw.addDocument(singleton(new NumericDocValuesField("number", 1)));
-        }, (Consumer<InternalMin>) min -> { fail("Should have thrown exception"); }, fieldType));
-    }
-
-    public void testEmptyBucket() throws IOException {
-        HistogramAggregationBuilder histogram = new HistogramAggregationBuilder("histo").field("number")
-            .interval(1)
-            .minDocCount(0)
-            .subAggregation(new MinAggregationBuilder("min").field("number"));
-
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-
-        testCase(histogram, new MatchAllDocsQuery(), iw -> {
-            iw.addDocument(singleton(new NumericDocValuesField("number", 1)));
-            iw.addDocument(singleton(new NumericDocValuesField("number", 3)));
-        }, (Consumer<InternalHistogram>) histo -> {
-            assertThat(histo.getBuckets().size(), equalTo(3));
-
-            assertNotNull(histo.getBuckets().get(0).getAggregations().asMap().get("min"));
-            InternalMin min = (InternalMin) histo.getBuckets().get(0).getAggregations().asMap().get("min");
-            assertEquals(1.0, min.getValue(), 0);
-            assertTrue(AggregationInspectionHelper.hasValue(min));
-
-            assertNotNull(histo.getBuckets().get(1).getAggregations().asMap().get("min"));
-            min = (InternalMin) histo.getBuckets().get(1).getAggregations().asMap().get("min");
-            assertEquals(Double.POSITIVE_INFINITY, min.getValue(), 0);
-            assertFalse(AggregationInspectionHelper.hasValue(min));
-
-            assertNotNull(histo.getBuckets().get(2).getAggregations().asMap().get("min"));
-            min = (InternalMin) histo.getBuckets().get(2).getAggregations().asMap().get("min");
-            assertEquals(3.0, min.getValue(), 0);
-            assertTrue(AggregationInspectionHelper.hasValue(min));
-
-        }, fieldType);
-    }
-
-    public void testFormatter() throws IOException {
-        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number").format("0000.0");
-
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-
-        testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
-            iw.addDocument(singleton(new NumericDocValuesField("number", 7)));
-            iw.addDocument(singleton(new NumericDocValuesField("number", 1)));
-        }, (Consumer<InternalMin>) min -> {
-            assertEquals(1.0, min.getValue(), 0);
-            assertTrue(AggregationInspectionHelper.hasValue(min));
-            assertEquals("0001.0", min.getValueAsString());
-        }, fieldType);
-    }
-
-    public void testGetProperty() throws IOException {
-        GlobalAggregationBuilder globalBuilder = new GlobalAggregationBuilder("global").subAggregation(
-            new MinAggregationBuilder("min").field("number")
-        );
-
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-
-        testCase(globalBuilder, new MatchAllDocsQuery(), iw -> {
-            iw.addDocument(singleton(new NumericDocValuesField("number", 7)));
-            iw.addDocument(singleton(new NumericDocValuesField("number", 1)));
-        }, (Consumer<InternalGlobal>) global -> {
-            assertEquals(2, global.getDocCount());
-            assertTrue(AggregationInspectionHelper.hasValue(global));
-            assertNotNull(global.getAggregations().asMap().get("min"));
-
+            assertEquals(19.0, min.getValue(), 0);
             InternalMin min = (InternalMin) global.getAggregations().asMap().get("min");
-            assertEquals(1.0, min.getValue(), 0);
-            assertThat(global.getProperty("min"), equalTo(min));
-            assertThat(global.getProperty("min.value"), equalTo(1.0));
-            assertThat(min.getProperty("value"), equalTo(1.0));
-        }, fieldType);
-    }
-
-    public void testSingleValuedFieldPartiallyUnmapped() throws IOException {
-
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number");
-
-        try (Directory directory = newDirectory(); Directory unmappedDirectory = newDirectory()) {
-            RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
-            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 7)));
-            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 2)));
-            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 3)));
-            indexWriter.close();
-
-            RandomIndexWriter unmappedIndexWriter = new RandomIndexWriter(random(), unmappedDirectory);
-            unmappedIndexWriter.close();
-
-            try (
-                IndexReader indexReader = DirectoryReader.open(directory);
-                IndexReader unamappedIndexReader = DirectoryReader.open(unmappedDirectory)
-            ) {
-
-                MultiReader multiReader = new MultiReader(indexReader, unamappedIndexReader);
-                IndexSearcher indexSearcher = newSearcher(multiReader, true, true);
-
-                InternalMin min = searchAndReduce(indexSearcher, new MatchAllDocsQuery(), aggregationBuilder, fieldType);
-                assertEquals(2.0, min.getValue(), 0);
-                assertTrue(AggregationInspectionHelper.hasValue(min));
-            }
-        }
-    }
-
-    public void testSingleValuedFieldPartiallyUnmappedWithMissing() throws IOException {
-
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number").missing(-19L);
-
-        try (Directory directory = newDirectory(); Directory unmappedDirectory = newDirectory()) {
-            RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
-            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 7)));
-            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 2)));
-            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 3)));
-            indexWriter.close();
-
-            RandomIndexWriter unmappedIndexWriter = new RandomIndexWriter(random(), unmappedDirectory);
-            unmappedIndexWriter.addDocument(singleton(new NumericDocValuesField("unrelated", 100)));
-            unmappedIndexWriter.close();
-
-            try (
-                IndexReader indexReader = DirectoryReader.open(directory);
-                IndexReader unamappedIndexReader = DirectoryReader.open(unmappedDirectory)
-            ) {
-
-                MultiReader multiReader = new MultiReader(indexReader, unamappedIndexReader);
-                IndexSearcher indexSearcher = newSearcher(multiReader, true, true);
-
-                InternalMin min = searchAndReduce(indexSearcher, new MatchAllDocsQuery(), aggregationBuilder, fieldType);
-                assertEquals(-19.0, min.getValue(), 0);
-                assertTrue(AggregationInspectionHelper.hasValue(min));
-            }
-        }
-    }
-
-    public void testSingleValuedFieldWithValueScript() throws IOException {
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-
+            LeafDocLookup docLookup = (LeafDocLookup) vars.get("doc");
+            iw.addDocument(singleton(new NumericDocValuesField("number", 7)));
+                document.add(new SortedNumericDocValuesField("number", i + 2));
+        scripts.put(SCRIPT_NAME, script -> SCRIPT_VALUE);
         MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number")
-            .script(new Script(ScriptType.INLINE, MockScriptEngine.NAME, INVERT_SCRIPT, Collections.emptyMap()));
-
-        testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
+    public void testNoMatchingField() throws IOException {
+            }
+                assertEquals(2.0, min.getValue(), 0);
+            assertEquals(2.0, min.getValue(), 0);
+    }
+    ) {
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+        }, fieldType);
+            }
+                IndexReader unamappedIndexReader = DirectoryReader.open(unmappedDirectory)
+            iw.addDocument(singleton(new NumericDocValuesField("number", 3)));
+    }
+                document.add(new SortedNumericDocValuesField("number", i + 3));
+        testCase(new FieldExistsQuery("number"), iw -> {
+        indexWriter.deleteDocuments(new Term("id", values.get(values.size() - 1).v1().toString()));
+import org.opensearch.search.aggregations.AggregationBuilder;
+ * compatible open source license.
+            LeafReaderContext ctx = reader.leaves().get(0);
             final int numDocs = 10;
-            for (int i = 0; i < numDocs; i++) {
+import org.opensearch.search.aggregations.support.AggregationInspectionHelper;
+    }
+import static org.opensearch.index.query.QueryBuilders.termQuery;
+            assertTrue(AggregationInspectionHelper.hasValue(min));
+        }, (Consumer<InternalMin>) min -> {
+                iw.addDocument(singleton(new SortedSetDocValuesField("string", new BytesRef("foo"))));
+        expectThrows(NumberFormatException.class, () -> testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
+        }, (Consumer<InternalMin>) min -> { fail("Should have thrown exception"); }, fieldType));
+        testCase(IntPoint.newRangeQuery("number", 0, 3), iw -> {
+            assertThat(res, equalTo(null));
+        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number")
+    public void testCaching() throws IOException {
+            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 2)));
+            assertThat(global.getProperty("min.value"), equalTo(1.0));
+            indexWriter.addDocument(singleton(new NumericDocValuesField("value", 1)));
+ */
+            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 3)));
+        try (Directory directory = newDirectory()) {
+import org.apache.lucene.index.MultiReader;
+    private final String SCRIPT_NAME = "script_name";
+    }
+        }, (Consumer<InternalMin>) min -> {
+    /** Script to return the value of a field named {@code value}. */
+            try (
+        }
+        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number").missing("not_a_number");
+    public void testSingleValuedFieldWithValueScriptAndMissing() throws IOException {
+            RandomIndexWriter unmappedIndexWriter = new RandomIndexWriter(random(), unmappedDirectory);
+        }, min -> {
+            iw.addDocument(singleton(new SortedNumericDocValuesField("number", 7)));
+import org.apache.lucene.document.SortedSetDocValuesField;
+import org.opensearch.script.ScriptModule;
+    }
+        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number").format("0000.0");
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+import org.opensearch.search.aggregations.bucket.histogram.InternalHistogram;
+        MapperService mapperService,
+        testCase(IntPoint.newRangeQuery("number", -1, 0), iw -> {
+            final int numDocs = 10;
+            iw.addDocument(Arrays.asList(new IntPoint("number", 3), new SortedNumericDocValuesField("number", 3)));
+                InternalMin min = searchAndReduce(indexSearcher, new MatchAllDocsQuery(), aggregationBuilder, fieldType);
+            }
+    public void testFormatter() throws IOException {
+            }
+            iw.addDocument(singleton(new NumericDocValuesField("unrelated", 1)));
+            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 7)));
+            assertEquals(1.0, min.getValue(), 0);
+        Directory directory = newDirectory();
+            RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
+ * software distributed under the License is distributed on an
                 iw.addDocument(singleton(new NumericDocValuesField("number", i + 1)));
+        }, min -> {
+    @Override
+import org.opensearch.common.collect.Tuple;
+            }
+        }, fieldType);
+        }, min -> fail("expected an exception"), fieldType));
+            iw.addDocument(singleton(new SortedNumericDocValuesField("number2", 2)));
+            assertEquals(0.0, min.getValue(), 0);
+                IndexSearcher indexSearcher = newSearcher(multiReader, true, true);
+                assertEquals(Double.POSITIVE_INFINITY, min.getValue(), 0);
+            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 3)));
+import org.opensearch.search.aggregations.AggregatorFactories;
+            assertEquals(7.0, min.getValue(), 0);
+        BiFunction<Map<String, Object>, String, Object> sum = (vars, fieldname) -> {
+                assertEquals(1L, bucket.getDocCount());
+            assertEquals(1, min.getValue(), 0);
+                Document document = new Document();
+    public void testSingleValuedFieldPartiallyUnmapped() throws IOException {
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.util.BytesRef;
+import java.util.Map;
+    private static final String SUM_VALUES_FIELD_SCRIPT = "sum_values_field";
+                assertEquals(-19.0, min.getValue(), 0);
+    private final long SCRIPT_VALUE = 19L;
+        try (Directory directory = newDirectory(); Directory unmappedDirectory = newDirectory()) {
+                Terms.Bucket bucket = buckets.get(i);
+        indexReader.close();
+                assertEquals(-7.0, min.getValue(), 0);
+                assertTrue(factories.allFactoriesSupportIntraSegmentSearch());
+                document.add(new StringField("id", Integer.toString(docID), Field.Store.NO));
+        testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
+public class MinAggregatorTests extends AggregatorTestCase {
+        });
+                        null
+import java.util.HashMap;
+            Number res = MinAggregator.findLeafMinValue(ctx.reader(), "number", pointConvertFunc);
+            assertTrue(AggregationInspectionHelper.hasValue(min));
+                InternalMin min = searchAndReduce(indexSearcher, new MatchAllDocsQuery(), aggregationBuilder, fieldType);
+                        createSearchContext(searcher, createIndexSettings(), new MatchAllDocsQuery(), null, fieldType)
+        indexWriter.addDocument(singleton(new NumericDocValuesField("value", 5)));
+            assertThat(res, equalTo(values.get(0).v2()));
+    public void testSomeMatchesNumericDocValues() throws IOException {
+        });
+                assertEquals(2.0, min.getValue(), 0);
             }
         }, (Consumer<InternalMin>) min -> {
+                assertNotNull(filter);
+                iw.addDocument(singleton(new NumericDocValuesField("number", i + 1)));
+        indexWriter.addDocuments(documents);
+        });
+import org.opensearch.script.MockScriptEngine;
+                document.add(new SortedNumericDocValuesField("number", i + 3));
+        nonDeterministicScripts.put(RANDOM_SCRIPT, vars -> AggregatorTestCase.randomDouble());
+        MappedFieldType fieldType = new KeywordFieldMapper.KeywordFieldType("not_a_number");
+import org.opensearch.index.IndexSettings;
+        IndexWriterConfig config = newIndexWriterConfig().setMergePolicy(NoMergePolicy.INSTANCE);
+            assertFalse(AggregationInspectionHelper.hasValue(min));
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+        assertEquals(5.0, result1.getValue(), 0);
+            assertTrue(AggregationInspectionHelper.hasValue(min));
+        });
+    public void testMinShortcutRandom() throws Exception {
+    }
+        testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
+            documents.add(document);
+            iw.addDocument(singleton(new NumericDocValuesField("number", 1)));
+        }, fieldType);
+import org.opensearch.search.aggregations.bucket.filter.Filter;
+        try (IndexReader reader = DirectoryReader.open(indexWriter)) {
+ * The OpenSearch Contributors require contributions made to
+        aggregator.postCollection();
+            RandomIndexWriter unmappedIndexWriter = new RandomIndexWriter(random(), unmappedDirectory);
+                Number res = MinAggregator.findLeafMinValue(ctx.reader(), "number", pointConvertFunc);
+            assertTrue(AggregationInspectionHelper.hasValue(min));
+import org.apache.lucene.document.FloatPoint;
+ * under the License.
+import org.apache.lucene.search.FieldExistsQuery;
+import java.io.IOException;
+    }
+        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("not_a_number");
+    public void testSomeMatchesSortedNumericDocValues() throws IOException {
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("value", NumberFieldMapper.NumberType.INTEGER);
+    private void testMinShortcutCase(
+            assertEquals(Double.POSITIVE_INFINITY, min.getValue(), 0);
+            assertThat(histo.getBuckets().size(), equalTo(3));
+            assertEquals(2, min.getValue(), 0);
+        Map<String, Function<Map<String, Object>, Object>> nonDeterministicScripts = new HashMap<>();
+import java.util.function.Function;
+                new FilterAggregationBuilder("filter", termQuery("number", 100)).subAggregation(
+            assertEquals(-12.0, min.getValue(), 0);
+            iw.addDocument(singleton(new SortedNumericDocValuesField("number", 3)));
+        }, (Consumer<InternalMin>) min -> {
+    public void testUnmappedWithBadMissingField() {
+            min = (InternalMin) histo.getBuckets().get(2).getAggregations().asMap().get("min");
+            assertNotNull(histo.getBuckets().get(0).getAggregations().asMap().get("min"));
+        for (int i = 0; i < 3; i++) {
+        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number")
+    }
+    private static final String INVERT_SCRIPT = "invert";
+    }
+        );
+        MappedFieldType fieldType = new IpFieldMapper.IpFieldType(fieldName);
+    }
+    public void testMatchesSortedNumericDocValues() throws IOException {
+        try (Directory directory = newDirectory(); RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory)) {
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+            }
+    public void testOrderByEmptyAggregation() throws IOException {
+        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number")
+            } else {
+        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number");
+            RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
+            iw.addDocument(singleton(new NumericDocValuesField("number", 1)));
+import org.opensearch.script.Script;
+            iw.addDocument(Arrays.asList(new IntPoint("number", 7), new SortedNumericDocValuesField("number", 7)));
+            new Script(ScriptType.INLINE, MockScriptEngine.NAME, SCRIPT_NAME, Collections.emptyMap())
+import org.opensearch.common.CheckedConsumer;
+        testMinShortcutCase(
+        List<Tuple<Integer, Number>> values = new ArrayList<>();
+import org.opensearch.index.mapper.MapperService;
+import org.opensearch.search.aggregations.AggregatorTestCase;
+        indexWriter.close();
+        testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
+        }
+            Document document = new Document();
+                    .addAggregator(new MinAggregationBuilder("test").field("value"))
+        scripts.put(SUM_VALUES_FIELD_SCRIPT, vars -> sum.apply(vars, "values"));
+        Collections.sort(values, Comparator.comparingDouble(t -> t.v2().doubleValue()));
+                values.add(new Tuple<>(docID, nextValue));
+import org.opensearch.search.aggregations.support.ValuesSourceType;
+                iw.addDocument(document);
+                assertTrue(min.getValue() >= 0.0 && min.getValue() <= 1.0);
+        );
+        }, min -> {
+        return new MinAggregationBuilder("foo").field(fieldName);
+            .script(new Script(ScriptType.INLINE, MockScriptEngine.NAME, INVERT_SCRIPT, Collections.emptyMap()));
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+            indexWriter.close();
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+    }
+            IllegalArgumentException.class,
+        MinAggregator aggregator = createAggregator(aggregationBuilder, indexSearcher, fieldType);
+    public void testUnsupportedType() {
+            }
+            (v) -> DoublePoint.decodeDimension(v, 0)
+            iw.addDocument(singleton(new NumericDocValuesField("number", 1)));
+        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("does_not_exist").missing(0L);
+            iw.addDocument(Arrays.asList(new IntPoint("number", 3), new SortedNumericDocValuesField("number", 3)));
+    public void testMultiValuedFieldWithScript() throws IOException {
+    public void testScript() throws IOException {
+    public void testSupportsIntraSegmentSearch() throws IOException {
+                MultiReader multiReader = new MultiReader(indexReader, unamappedIndexReader);
+        }, fieldType);
+ * this file be licensed under the Apache-2.0 license or a
+    public void testEmptyBucket() throws IOException {
+                return 0;
+            unmappedIndexWriter.close();
+            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 7)));
+        }, fieldType);
+            iw.addDocument(Arrays.asList(new IntPoint("number", 1), new SortedNumericDocValuesField("number", 1)));
+            ) {
+        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number");
+        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").script(
+        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("value");
+import org.apache.lucene.index.NoMergePolicy;
+                iw.addDocument(singleton(new NumericDocValuesField("number", i + 1)));
+            for (int i = 0; i < numDocs; i++) {
+                MultiReader multiReader = new MultiReader(indexReader, unamappedIndexReader);
+        }, fieldType);
+            .script(new Script(ScriptType.INLINE, MockScriptEngine.NAME, INVERT_SCRIPT, Collections.emptyMap()));
+            }
+            assertTrue(AggregationInspectionHelper.hasValue(min));
+import org.opensearch.script.ScriptService;
+    public void testBadMissingField() {
+        }
+            RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
+import org.apache.lucene.search.MatchAllDocsQuery;
+            iw.addDocument(singleton(new SortedSetDocValuesField(fieldName, new BytesRef(InetAddressPoint.encode(randomIp(v4))))));
+            .subAggregation(new MinAggregationBuilder("min").field("number"));
+        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number")
+                IndexSearcher searcher = newIndexSearcher(reader);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            assertEquals(1.0, min.getValue(), 0);
+import org.apache.lucene.document.Field;
+import org.opensearch.common.util.BigArrays;
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+    }
+                    .build(
+            assertNotNull(histo.getBuckets().get(1).getAggregations().asMap().get("min"));
+            indexWriter.close();
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+                documents.add(document);
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+                iw.addDocument(singleton(new NumericDocValuesField("number", i + 1)));
+            indexWriter.deleteDocuments(new Term("id", values.get(i - 1).v1().toString()));
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+                assertNotNull(min);
+        }, min -> {
+            assertFalse(AggregationInspectionHelper.hasValue(min));
+        Function<byte[], Number> pointConvertFunc
+    }
+        testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
+import org.opensearch.search.aggregations.bucket.terms.Terms;
+        });
+        }, (Consumer<InternalMin>) min -> {
+            Number res = MinAggregator.findLeafMinValue(ctx.reader(), "number", pointConvertFunc);
+            int inc = getInc.apply(vars);
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;
+    private static final String RANDOM_SCRIPT = "random";
+                values.add(((Number) v).longValue() + inc);
+        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field(fieldName);
+            final int numDocs = 10;
+        );
+            for (int i = 0; i < numDocs; i++) {
+        return new ScriptService(Settings.EMPTY, engines, ScriptModule.CORE_CONTEXTS);
+            assertTrue(AggregationInspectionHelper.hasValue(global));
+            }
+        }, fieldType);
+            if (vars == null || vars.containsKey("inc") == false) {
+        assertEquals(Double.POSITIVE_INFINITY, result2.getValue(), 0);
+        int numDocs = 10;
+        }, fieldType);
+            iw.addDocument(singleton(new NumericDocValuesField("number", 7)));
+import org.apache.lucene.store.Directory;
+                IndexSearcher indexSearcher = newSearcher(indexReader, true, true);
+        GlobalAggregationBuilder globalBuilder = new GlobalAggregationBuilder("global").subAggregation(
+            try (IndexReader reader = DirectoryReader.open(indexWriter)) {
+        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("does_not_exist").missing("not_a_number");
+            .script(new Script(ScriptType.INLINE, MockScriptEngine.NAME, VALUE_SCRIPT, Collections.singletonMap("inc", 5)));
+            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 7)));
+    }
+ * Licensed to Elasticsearch under one or more contributor
+    private static final String VALUE_SCRIPT = "_value";
+                    );
+            new MinAggregationBuilder("min").field("number")
+            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 3)));
+                assertTrue(queryShardContext.isCacheable());
+            iw.addDocument(singleton(new NumericDocValuesField("number", 1)));
+import org.opensearch.search.aggregations.bucket.terms.InternalTerms;
+            iw.addDocument(singleton(new SortedNumericDocValuesField("number", 7)));
+            for (int i = 0; i < numDocs; i++) {
+    }
+                document.add(new SortedNumericDocValuesField("number", i + 3));
+            iw.addDocument(singleton(new SortedNumericDocValuesField("wrong_number", 3)));
+        this.queryShardContext = super.queryShardContextMock(searcher, mapperService, indexSettings, circuitBreakerService, bigArrays);
+            try (
+    protected List<ValuesSourceType> getSupportedValuesSourceTypes() {
+import org.apache.lucene.index.IndexWriterConfig;
+ * SPDX-License-Identifier: Apache-2.0
+        }
+                Number nextValue = randomNumber.get();
+            ) {
+            try (IndexReader reader = indexWriter.getReader()) {
+    }
+                LeafReaderContext ctx = reader.leaves().get(0);
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+    }
+                document.add(pointFieldFunc.apply(nextValue));
+ * Modifications Copyright OpenSearch Contributors. See
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+            final int numDocs = 10;
+        testCase(new FieldExistsQuery("number"), iw -> {
+            return values;
+    public void testSingleValuedFieldWithValueScriptAndParams() throws IOException {
+package org.opensearch.search.aggregations.metrics;
+            assertTrue(AggregationInspectionHelper.hasValue(min));
+import org.opensearch.index.mapper.KeywordFieldMapper;
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+            assertEquals(3.0, min.getValue(), 0);
+/*
+                assertFalse(queryShardContext.isCacheable());
+            iw.addDocument(singleton(new NumericDocValuesField("number", 3)));
+            assertEquals(3, min.getValue(), 0);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import java.util.List;
+            assertTrue(AggregationInspectionHelper.hasValue(min));
+        aggregator.doReset();
+    }
+                Document document = new Document();
+        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number")
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("value", NumberFieldMapper.NumberType.LONG);
+            assertTrue(AggregationInspectionHelper.hasValue(min));
+            assertTrue(AggregationInspectionHelper.hasValue(min));
+            scripts,
+            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 2)));
+    public void testDoReset() throws IOException {
+            indexWriter.close();
+        indexWriter.addDocument(singleton(new NumericDocValuesField("value", 10)));
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+                AggregatorFactories factories = AggregatorFactories.builder()
+            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 2)));
+    }
+    protected ScriptService getMockScriptService() {
+            assertFalse(AggregationInspectionHelper.hasValue(min));
+        IndexSearcher searcher,
+            assertEquals(3, min.getValue(), 0);
+        }
+        testCase(aggregationBuilder, query, buildIndex, verify, fieldType);
+            nonDeterministicScripts,
+        }, (Consumer<InternalMin>) min -> {
+        final String fieldName = "IP_field";
+                iw.addDocument(document);
+import org.opensearch.index.mapper.IpFieldMapper;
+            for (int i = 0; i < numDocs; i++) {
+ * ownership. Elasticsearch licenses this file to you under
+    }
+                assertEquals((long) i + 1, bucket.getKeyAsNumber());
+            assertEquals(Double.POSITIVE_INFINITY, min.getValue(), 0);
+        testCase(termsBuilder, new MatchAllDocsQuery(), iw -> {
+        testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
+        );
+                assertTrue(AggregationInspectionHelper.hasValue(min));
+            final int numDocs = 10;
+        indexWriter.close();
+    private static final String SUM_FIELD_PARAMS_SCRIPT = "sum_field_params";
+            assertEquals("0001.0", min.getValueAsString());
+                            .getQueryShardContext(),
+                assertTrue(AggregationInspectionHelper.hasValue(min));
+            iw.addDocument(singleton(new SortedSetDocValuesField(fieldName, new BytesRef(InetAddressPoint.encode(randomIp(v4))))));
+        testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
+import java.util.Arrays;
+    @Override
+ *
+        };
+import static org.hamcrest.Matchers.equalTo;
+        expectThrows(NumberFormatException.class, () -> testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+            iw.addDocument(singleton(new NumericDocValuesField("number", 1)));
+            iw.addDocument(singleton(new NumericDocValuesField("number", 7)));
+            assertNotNull(histo.getBuckets().get(2).getAggregations().asMap().get("min"));
+ * this work for additional information regarding copyright
+            assertTrue(AggregationInspectionHelper.hasValue(min));
+        }, (Consumer<InternalHistogram>) histo -> {
+            return ((Number) vars.get("_value")).doubleValue() + inc;
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+        }, fieldType);
+            iw.addDocument(Arrays.asList(new IntPoint("number", 1), new SortedNumericDocValuesField("number", 1)));
+                assertTrue(queryShardContext.isCacheable());
+import org.opensearch.core.indices.breaker.CircuitBreakerService;
+import org.opensearch.search.aggregations.BucketOrder;
+                    new MinAggregationBuilder("min").field("number")
+            .script(new Script(ScriptType.INLINE, MockScriptEngine.NAME, VALUE_SCRIPT, Collections.singletonMap("inc", 5)));
+    }
+        testMinShortcutCase(() -> randomInt(), (n) -> new IntPoint("number", n.intValue()), (v) -> IntPoint.decodeDimension(v, 0));
+                List<LongTerms.Bucket> buckets = terms.getBuckets();
+        HistogramAggregationBuilder histogram = new HistogramAggregationBuilder("histo").field("number")
+            assertEquals(2, min.getValue(), 0);
+                assertFalse(AggregationInspectionHelper.hasValue(min));
+        testCase(new MatchAllDocsQuery(), iw -> {
+            );
+                Document document = new Document();
+            final int numDocs = 10;
+            int inc = getInc.apply(vars);
+            }
+            assertEquals(1.0, min.getValue(), 0);
+                assertNotNull(bucket);
+        Function<Number, Field> pointFieldFunc,
+import org.opensearch.search.aggregations.bucket.global.InternalGlobal;
+    @Override
+        for (int i = 1; i < values.size(); i++) {
+import org.opensearch.script.ScriptType;
+        for (int i = 0; i < numValues; i++) {
+import org.apache.lucene.document.IntPoint;
+                indexSearcher = newSearcher(indexReader, true, true);
+ */
+    }
+        }, (Consumer<InternalMin>) min -> {
+            for (int i = 0; i < numDocs; i++) {
+            unmappedIndexWriter.addDocument(singleton(new NumericDocValuesField("unrelated", 100)));
+    }
+        scripts.put(VALUE_SCRIPT, vars -> {
+        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number").missing(-19L);
+        }
+        // insert some documents without a value for the metric field.
+            iw.addDocument(Arrays.asList(new IntPoint("number", 7), new SortedNumericDocValuesField("number", 7)));
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+        }, fieldType);
+import org.apache.lucene.search.Query;
+        }, fieldType);
+            .script(new Script(ScriptType.INLINE, MockScriptEngine.NAME, INVERT_SCRIPT, Collections.emptyMap()));
+            }
+                assertTrue(AggregationInspectionHelper.hasValue(min));
+    /** Script to sum the values of a field named {@code values}. */
+    }
+            iw.addDocument(singleton(new NumericDocValuesField("number", 7)));
+        MockScriptEngine scriptEngine = new MockScriptEngine(
+        IndexReader indexReader = DirectoryReader.open(directory);
+ * GitHub history for details.
+        }, (Consumer<InternalMin>) min -> {
+            try (IndexReader indexReader = DirectoryReader.open(directory)) {
+                assertTrue(AggregationInspectionHelper.hasValue(min));
+                IndexSearcher indexSearcher = newSearcher(multiReader, true, true);
+import java.util.Collections;
+}
+        scripts.put(INVERT_SCRIPT, vars -> -((Number) vars.get("_value")).doubleValue());
+            Collections.emptyMap()
+    public void testSingleValuedFieldWithValueScript() throws IOException {
+    public void testQueryFiltering() throws IOException {
+            assertEquals(-100.0, min.getValue(), 0); // Note: this comes straight from missing, and is not inverted from script
+ *
+        });
+ */
+            min = (InternalMin) histo.getBuckets().get(1).getAggregations().asMap().get("min");
+import org.apache.lucene.document.InetAddressPoint;
+        IndexWriter indexWriter = new IndexWriter(directory, config);
+        IllegalArgumentException e = expectThrows(
+                document.add(new SortedNumericDocValuesField("number", i + 2));
+        RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
+        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number");
+        testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
+            .minDocCount(0)
+            final int numDocs = 10;
+            }
+    public void testMultiValuedFieldWithScriptParams() throws IOException {
+            }, (Consumer<InternalMin>) min -> { fail("Should have thrown exception"); }, fieldType)
+        });
+                min = searchAndReduce(indexSearcher, new MatchAllDocsQuery(), aggregationBuilder, fieldType);
+            assertTrue(AggregationInspectionHelper.hasValue(min));
+    }
+        int numValues = atLeast(50);
+        int docID = 0;
+            iw.addDocument(singleton(new NumericDocValuesField("number", 7)));
+        }, (Consumer<InternalTerms<?, LongTerms.Bucket>>) terms -> {
+        try (Directory directory = newDirectory()) {
+            assertEquals(2, global.getDocCount());
+    /** Script to take a field name in params and sum the values of the field. */
+                IndexSearcher indexSearcher = newSearcher(indexReader, true, true);
+        List<Document> documents = new ArrayList<>();
+    }
+            List<Long> values = new ArrayList<>();
+                iw.addDocument(singleton(new NumericDocValuesField("number", i + 1)));
+        testCase(new MatchAllDocsQuery(), iw -> {
+    }
+            iw.addDocument(singleton(new NumericDocValuesField("number2", 2)));
+            .missing(-100L)
+        testCase(histogram, new MatchAllDocsQuery(), iw -> {
+        }, (Consumer<InternalMin>) min -> {
+        scripts.put(VALUE_FIELD_SCRIPT, vars -> sum.apply(vars, "value"));
+        BigArrays bigArrays
+    private static final String VALUE_FIELD_SCRIPT = "value_field";
+            .script(new Script(ScriptType.INLINE, MockScriptEngine.NAME, INVERT_SCRIPT, Collections.emptyMap()));
+                docID++;
+            assertEquals(Double.POSITIVE_INFINITY, min.getValue(), 0);
+        IndexSettings indexSettings,
+import java.util.function.Consumer;
+    ) throws IOException {
+                InternalMin min = filter.getAggregations().get("min");
+        });
+        InternalMin result1 = (InternalMin) aggregator.buildAggregation(0L);
+        });
+    protected AggregationBuilder createAggBuilderForTypeTest(MappedFieldType fieldType, String fieldName) {
+        testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
+        }
+        indexSearcher.search(new MatchAllDocsQuery(), aggregator);
+import org.opensearch.search.lookup.LeafDocLookup;
+        testCase(globalBuilder, new MatchAllDocsQuery(), iw -> {
+                document.add(pointFieldFunc.apply(nextValue));
+            iw.addDocument(singleton(new SortedNumericDocValuesField("number", 3)));
+            .subAggregation(
+    }
+        MinAggregationBuilder nonDeterministicAggregationBuilder = new MinAggregationBuilder("min").field("number")
+ * You may obtain a copy of the License at
+    @Override
+        }, (Consumer<InternalMin>) min -> { fail("Should have thrown exception"); }, fieldType));
+            for (int j = 0; j < numDup; j++) {
+import org.apache.lucene.index.IndexReader;
+            () -> randomLongBetween(Integer.MIN_VALUE, Integer.MAX_VALUE),
+                IndexReader indexReader = DirectoryReader.open(directory);
+        }
+    }
+            }
+                return ((Number) vars.get("inc")).intValue();
+    private QueryShardContext queryShardContext;
+import org.opensearch.common.settings.Settings;
+    public void testSingleValuedFieldPartiallyUnmappedWithMissing() throws IOException {
+        }, min -> {
+    }
+            assertThat(global.getProperty("min"), equalTo(min));
+import org.apache.lucene.document.LongPoint;
+            for (int i = 0; i < numDocs; i++) {
+        Map<String, Function<Map<String, Object>, Object>> scripts = new HashMap<>();
+                Filter filter = bucket.getAggregations().get("filter");
+                IndexReader unamappedIndexReader = DirectoryReader.open(unmappedDirectory)
+            LeafReaderContext ctx = reader.leaves().get(0);
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+        boolean v4 = randomBoolean();
+        IndexSearcher indexSearcher = newSearcher(indexReader, true, true);
+import java.util.function.BiFunction;
+                iw.addDocument(document);
+            assertEquals(6.0, min.getValue(), 0);
+        return Arrays.asList(CoreValuesSourceType.NUMERIC, CoreValuesSourceType.DATE, CoreValuesSourceType.BOOLEAN);
+        AggregationBuilder termsBuilder = new TermsAggregationBuilder("terms").field("number")
+    public void testQueryFiltersAll() throws IOException {
+ * KIND, either express or implied.  See the License for the
+            String fieldname = (String) vars.get("field");
+            () -> testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
+        }, (Consumer<InternalGlobal>) global -> {
+import org.apache.lucene.document.SortedNumericDocValuesField;
+    }
+import org.apache.lucene.document.NumericDocValuesField;
+            }
+            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 7)));
+    }
+import static java.util.Collections.singleton;
+    protected QueryShardContext queryShardContextMock(
+            .interval(1)
+        }
+        try (Directory directory = newDirectory(); Directory unmappedDirectory = newDirectory()) {
+ * Unless required by applicable law or agreed to in writing,
+ *
+        throws IOException {
+import org.apache.lucene.index.DirectoryReader;
+        }, min -> {
+    public void testGetProperty() throws IOException {
+            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 2)));
+import org.opensearch.script.ScriptEngine;
+            iw.addDocument(singleton(new SortedNumericDocValuesField("wrong_number", 7)));
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
+        InternalMin result2 = (InternalMin) aggregator.buildAggregation(0L);
+import org.opensearch.search.aggregations.bucket.histogram.HistogramAggregationBuilder;
+import org.apache.lucene.document.Document;
+import java.util.function.Supplier;
+        aggregator.preCollection();
+        testCase(new MatchAllDocsQuery(), iw -> {
+        Map<String, ScriptEngine> engines = Collections.singletonMap(scriptEngine.getType(), scriptEngine);
+/*
+            () -> randomDouble(),
+        return queryShardContext;
+        CircuitBreakerService circuitBreakerService,
+            iw.addDocument(singleton(new NumericDocValuesField("number", 3)));
+            RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
+            assertTrue(AggregationInspectionHelper.hasValue(min));
+import org.opensearch.search.aggregations.bucket.global.GlobalAggregationBuilder;
+import org.apache.lucene.index.LeafReaderContext;
+        directory.close();
+import org.apache.lucene.tests.index.RandomIndexWriter;
+/*
+import org.opensearch.search.aggregations.bucket.terms.LongTerms;
+        expectThrows(IllegalArgumentException.class, () -> testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
+            int numDup = randomIntBetween(1, 3);
+        directory.close();
+            assertThat(min.getProperty("value"), equalTo(1.0));
+                document.add(new SortedNumericDocValuesField("number", i + 2));
+        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number");
+            iw.addDocument(singleton(new NumericDocValuesField("number", 1)));
+ * not use this file except in compliance with the License.
+    public void testMatchesNumericDocValues() throws IOException {
+import org.apache.lucene.document.DoublePoint;
+        testMinShortcutCase(() -> randomFloat(), (n) -> new FloatPoint("number", n.floatValue()), (v) -> FloatPoint.decodeDimension(v, 0));
+ * license agreements. See the NOTICE file distributed with
+        testMinShortcutCase(
+            assertTrue(AggregationInspectionHelper.hasValue(min));
+            indexWriter.close();
+            assertTrue(AggregationInspectionHelper.hasValue(min));
+        try (IndexReader reader = DirectoryReader.open(indexWriter)) {
+import org.opensearch.index.mapper.MappedFieldType;
+            for (int i = 0; i < numDocs; i++) {
+            iw.addDocument(singleton(new NumericDocValuesField("number", 7)));
+            for (int i = 0; i < numDocs; i++) {
+import org.apache.lucene.document.StringField;
+            assertNotNull(global.getAggregations().asMap().get("min"));
+        Supplier<Number> randomNumber,
+        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
+            assertTrue(AggregationInspectionHelper.hasValue(min));
+            (n) -> new LongPoint("number", n.longValue()),
+        testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
+        assertEquals("Field [not_a_number] of type [keyword] is not supported for aggregation [min]", e.getMessage());
+            iw.addDocument(singleton(new NumericDocValuesField("number", 2)));
+import org.opensearch.search.aggregations.bucket.filter.FilterAggregationBuilder;
+        );
+            .order(BucketOrder.compound(BucketOrder.aggregation("filter>min", true)))
+                Document document = new Document();
+            iw.addDocument(singleton(new SortedNumericDocValuesField("number", 2)));
+import org.apache.lucene.index.Term;
             assertEquals(-10.0, min.getValue(), 0);
             assertTrue(AggregationInspectionHelper.hasValue(min));
         }, fieldType);
+ * specific language governing permissions and limitations
+import java.util.ArrayList;
     }
-
-    public void testSingleValuedFieldWithValueScriptAndMissing() throws IOException {
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-
-        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number")
-            .missing(-100L)
-            .script(new Script(ScriptType.INLINE, MockScriptEngine.NAME, INVERT_SCRIPT, Collections.emptyMap()));
-
-        testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
-            final int numDocs = 10;
-            for (int i = 0; i < numDocs; i++) {
-                iw.addDocument(singleton(new NumericDocValuesField("number", i + 1)));
             }
-            iw.addDocument(singleton(new NumericDocValuesField("unrelated", 1)));
-        }, (Consumer<InternalMin>) min -> {
-            assertEquals(-100.0, min.getValue(), 0); // Note: this comes straight from missing, and is not inverted from script
-            assertTrue(AggregationInspectionHelper.hasValue(min));
-        }, fieldType);
-    }
-
-    public void testSingleValuedFieldWithValueScriptAndParams() throws IOException {
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-
-        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number")
-            .script(new Script(ScriptType.INLINE, MockScriptEngine.NAME, VALUE_SCRIPT, Collections.singletonMap("inc", 5)));
-
-        testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
-            final int numDocs = 10;
-            for (int i = 0; i < numDocs; i++) {
-                iw.addDocument(singleton(new NumericDocValuesField("number", i + 1)));
-            }
-        }, (Consumer<InternalMin>) min -> {
-            assertEquals(6.0, min.getValue(), 0);
-            assertTrue(AggregationInspectionHelper.hasValue(min));
-        }, fieldType);
-    }
-
-    public void testScript() throws IOException {
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-
-        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").script(
-            new Script(ScriptType.INLINE, MockScriptEngine.NAME, SCRIPT_NAME, Collections.emptyMap())
-        );
-
-        testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
-            final int numDocs = 10;
-            for (int i = 0; i < numDocs; i++) {
-                iw.addDocument(singleton(new NumericDocValuesField("number", i + 1)));
-            }
-        }, (Consumer<InternalMin>) min -> {
-            assertEquals(19.0, min.getValue(), 0);
-            assertTrue(AggregationInspectionHelper.hasValue(min));
-        }, fieldType);
-    }
-
-    public void testMultiValuedField() throws IOException {
-        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number");
-
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-
-        testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
-            final int numDocs = 10;
-            for (int i = 0; i < numDocs; i++) {
-                Document document = new Document();
-                document.add(new SortedNumericDocValuesField("number", i + 2));
-                document.add(new SortedNumericDocValuesField("number", i + 3));
-                iw.addDocument(document);
-            }
-        }, (Consumer<InternalMin>) min -> {
-            assertEquals(2.0, min.getValue(), 0);
-            assertTrue(AggregationInspectionHelper.hasValue(min));
-        }, fieldType);
-    }
-
-    public void testMultiValuedFieldWithScript() throws IOException {
-        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number")
-            .script(new Script(ScriptType.INLINE, MockScriptEngine.NAME, INVERT_SCRIPT, Collections.emptyMap()));
-
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-
-        testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
-            final int numDocs = 10;
-            for (int i = 0; i < numDocs; i++) {
-                Document document = new Document();
-                document.add(new SortedNumericDocValuesField("number", i + 2));
-                document.add(new SortedNumericDocValuesField("number", i + 3));
-                iw.addDocument(document);
-            }
-        }, (Consumer<InternalMin>) min -> {
-            assertEquals(-12.0, min.getValue(), 0);
-            assertTrue(AggregationInspectionHelper.hasValue(min));
-        }, fieldType);
-    }
-
-    public void testMultiValuedFieldWithScriptParams() throws IOException {
-        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number")
-            .script(new Script(ScriptType.INLINE, MockScriptEngine.NAME, VALUE_SCRIPT, Collections.singletonMap("inc", 5)));
-
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-
-        testCase(aggregationBuilder, new MatchAllDocsQuery(), iw -> {
-            final int numDocs = 10;
-            for (int i = 0; i < numDocs; i++) {
-                Document document = new Document();
-                document.add(new SortedNumericDocValuesField("number", i + 2));
-                document.add(new SortedNumericDocValuesField("number", i + 3));
-                iw.addDocument(document);
-            }
-        }, (Consumer<InternalMin>) min -> {
-            assertEquals(7.0, min.getValue(), 0);
-            assertTrue(AggregationInspectionHelper.hasValue(min));
-        }, fieldType);
-    }
-
-    public void testOrderByEmptyAggregation() throws IOException {
-        AggregationBuilder termsBuilder = new TermsAggregationBuilder("terms").field("number")
-            .order(BucketOrder.compound(BucketOrder.aggregation("filter>min", true)))
-            .subAggregation(
-                new FilterAggregationBuilder("filter", termQuery("number", 100)).subAggregation(
-                    new MinAggregationBuilder("min").field("number")
-                )
-            );
-
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-
-        int numDocs = 10;
-        testCase(termsBuilder, new MatchAllDocsQuery(), iw -> {
-            for (int i = 0; i < numDocs; i++) {
-                iw.addDocument(singleton(new NumericDocValuesField("number", i + 1)));
-            }
-        }, (Consumer<InternalTerms<?, LongTerms.Bucket>>) terms -> {
-            for (int i = 0; i < numDocs; i++) {
-                List<LongTerms.Bucket> buckets = terms.getBuckets();
-                Terms.Bucket bucket = buckets.get(i);
-                assertNotNull(bucket);
-                assertEquals((long) i + 1, bucket.getKeyAsNumber());
-                assertEquals(1L, bucket.getDocCount());
-
-                Filter filter = bucket.getAggregations().get("filter");
-                assertNotNull(filter);
-                assertEquals(0L, filter.getDocCount());
-
-                InternalMin min = filter.getAggregations().get("min");
-                assertNotNull(min);
-                assertEquals(Double.POSITIVE_INFINITY, min.getValue(), 0);
-                assertFalse(AggregationInspectionHelper.hasValue(min));
-            }
-        }, fieldType);
-    }
-
-    public void testCaching() throws IOException {
-
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number");
-
-        try (Directory directory = newDirectory()) {
-            RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
-            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 7)));
-            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 2)));
             indexWriter.addDocument(singleton(new NumericDocValuesField("number", 3)));
-            indexWriter.close();
-
-            try (IndexReader indexReader = DirectoryReader.open(directory)) {
-                IndexSearcher indexSearcher = newSearcher(indexReader, true, true);
-
-                InternalMin min = searchAndReduce(indexSearcher, new MatchAllDocsQuery(), aggregationBuilder, fieldType);
-                assertEquals(2.0, min.getValue(), 0);
-                assertTrue(AggregationInspectionHelper.hasValue(min));
-
-                assertTrue(queryShardContext.isCacheable());
-            }
-        }
-    }
-
-    public void testScriptCaching() throws IOException {
-
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number")
-            .script(new Script(ScriptType.INLINE, MockScriptEngine.NAME, INVERT_SCRIPT, Collections.emptyMap()));
-
-        MinAggregationBuilder nonDeterministicAggregationBuilder = new MinAggregationBuilder("min").field("number")
-            .script(new Script(ScriptType.INLINE, MockScriptEngine.NAME, RANDOM_SCRIPT, Collections.emptyMap()));
-
-        try (Directory directory = newDirectory()) {
-            RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
-            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 7)));
-            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 2)));
-            indexWriter.addDocument(singleton(new NumericDocValuesField("number", 3)));
-            indexWriter.close();
-
-            try (IndexReader indexReader = DirectoryReader.open(directory)) {
-                IndexSearcher indexSearcher = newSearcher(indexReader, true, true);
-
                 InternalMin min = searchAndReduce(indexSearcher, new MatchAllDocsQuery(), nonDeterministicAggregationBuilder, fieldType);
-                assertTrue(min.getValue() >= 0.0 && min.getValue() <= 1.0);
-                assertTrue(AggregationInspectionHelper.hasValue(min));
-
-                assertFalse(queryShardContext.isCacheable());
-
-                indexSearcher = newSearcher(indexReader, true, true);
-
-                min = searchAndReduce(indexSearcher, new MatchAllDocsQuery(), aggregationBuilder, fieldType);
-                assertEquals(-7.0, min.getValue(), 0);
-                assertTrue(AggregationInspectionHelper.hasValue(min));
-
-                assertTrue(queryShardContext.isCacheable());
+            iw.addDocument(singleton(new NumericDocValuesField("number", 7)));
+import org.apache.lucene.index.IndexWriter;
+    public void testIpField() throws IOException {
             }
-        }
-    }
-
-    public void testMinShortcutRandom() throws Exception {
-        testMinShortcutCase(
-            () -> randomLongBetween(Integer.MIN_VALUE, Integer.MAX_VALUE),
-            (n) -> new LongPoint("number", n.longValue()),
-            (v) -> LongPoint.decodeDimension(v, 0)
-        );
-
-        testMinShortcutCase(() -> randomInt(), (n) -> new IntPoint("number", n.intValue()), (v) -> IntPoint.decodeDimension(v, 0));
-
-        testMinShortcutCase(() -> randomFloat(), (n) -> new FloatPoint("number", n.floatValue()), (v) -> FloatPoint.decodeDimension(v, 0));
-
-        testMinShortcutCase(
-            () -> randomDouble(),
+import java.util.Comparator;
             (n) -> new DoublePoint("number", n.doubleValue()),
-            (v) -> DoublePoint.decodeDimension(v, 0)
-        );
+            InternalMin min = (InternalMin) histo.getBuckets().get(0).getAggregations().asMap().get("min");
+            try (IndexReader indexReader = DirectoryReader.open(directory)) {
     }
-
-    private void testMinShortcutCase(
-        Supplier<Number> randomNumber,
-        Function<Number, Field> pointFieldFunc,
-        Function<byte[], Number> pointConvertFunc
-    ) throws IOException {
-        Directory directory = newDirectory();
-        IndexWriterConfig config = newIndexWriterConfig().setMergePolicy(NoMergePolicy.INSTANCE);
-        IndexWriter indexWriter = new IndexWriter(directory, config);
-        List<Document> documents = new ArrayList<>();
-        List<Tuple<Integer, Number>> values = new ArrayList<>();
-        int numValues = atLeast(50);
-        int docID = 0;
-        for (int i = 0; i < numValues; i++) {
-            int numDup = randomIntBetween(1, 3);
-            for (int j = 0; j < numDup; j++) {
-                Document document = new Document();
-                Number nextValue = randomNumber.get();
-                values.add(new Tuple<>(docID, nextValue));
-                document.add(new StringField("id", Integer.toString(docID), Field.Store.NO));
-                document.add(pointFieldFunc.apply(nextValue));
-                document.add(pointFieldFunc.apply(nextValue));
-                documents.add(document);
-                docID++;
-            }
-        }
-        // insert some documents without a value for the metric field.
-        for (int i = 0; i < 3; i++) {
-            Document document = new Document();
-            documents.add(document);
-        }
-        indexWriter.addDocuments(documents);
-        Collections.sort(values, Comparator.comparingDouble(t -> t.v2().doubleValue()));
-        try (IndexReader reader = DirectoryReader.open(indexWriter)) {
-            LeafReaderContext ctx = reader.leaves().get(0);
-            Number res = MinAggregator.findLeafMinValue(ctx.reader(), "number", pointConvertFunc);
-            assertThat(res, equalTo(values.get(0).v2()));
-        }
-        for (int i = 1; i < values.size(); i++) {
-            indexWriter.deleteDocuments(new Term("id", values.get(i - 1).v1().toString()));
-            try (IndexReader reader = DirectoryReader.open(indexWriter)) {
-                LeafReaderContext ctx = reader.leaves().get(0);
-                Number res = MinAggregator.findLeafMinValue(ctx.reader(), "number", pointConvertFunc);
+                assertEquals(0L, filter.getDocCount());
+                )
+                assertTrue(AggregationInspectionHelper.hasValue(min));
+    public void testMultiValuedField() throws IOException {
+            (v) -> LongPoint.decodeDimension(v, 0)
+    public void testScriptCaching() throws IOException {
+        scripts.put(SUM_FIELD_PARAMS_SCRIPT, vars -> {
+        Function<Map<String, Object>, Integer> getInc = vars -> {
+            for (int i = 0; i < numDocs; i++) {
                 assertThat(res, equalTo(values.get(i).v2()));
-            }
-        }
-        indexWriter.deleteDocuments(new Term("id", values.get(values.size() - 1).v1().toString()));
-        try (IndexReader reader = DirectoryReader.open(indexWriter)) {
-            LeafReaderContext ctx = reader.leaves().get(0);
-            Number res = MinAggregator.findLeafMinValue(ctx.reader(), "number", pointConvertFunc);
-            assertThat(res, equalTo(null));
-        }
-        indexWriter.close();
-        directory.close();
-    }
-
     private void testCase(Query query, CheckedConsumer<RandomIndexWriter, IOException> buildIndex, Consumer<InternalMin> verify)
-        throws IOException {
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("number", NumberFieldMapper.NumberType.INTEGER);
-        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("number");
-        testCase(aggregationBuilder, query, buildIndex, verify, fieldType);
-    }
-
-    @Override
-    protected List<ValuesSourceType> getSupportedValuesSourceTypes() {
-        return Arrays.asList(CoreValuesSourceType.NUMERIC, CoreValuesSourceType.DATE, CoreValuesSourceType.BOOLEAN);
-    }
-
-    @Override
-    protected AggregationBuilder createAggBuilderForTypeTest(MappedFieldType fieldType, String fieldName) {
-        return new MinAggregationBuilder("foo").field(fieldName);
-    }
-
-    public void testDoReset() throws IOException {
-        Directory directory = newDirectory();
-        RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
-        indexWriter.addDocument(singleton(new NumericDocValuesField("value", 5)));
-        indexWriter.addDocument(singleton(new NumericDocValuesField("value", 10)));
-        indexWriter.close();
-
-        IndexReader indexReader = DirectoryReader.open(directory);
-        IndexSearcher indexSearcher = newSearcher(indexReader, true, true);
-
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("value", NumberFieldMapper.NumberType.INTEGER);
-        MinAggregationBuilder aggregationBuilder = new MinAggregationBuilder("min").field("value");
-
-        MinAggregator aggregator = createAggregator(aggregationBuilder, indexSearcher, fieldType);
-
-        aggregator.preCollection();
-        indexSearcher.search(new MatchAllDocsQuery(), aggregator);
-        aggregator.postCollection();
-
-        InternalMin result1 = (InternalMin) aggregator.buildAggregation(0L);
-        assertEquals(5.0, result1.getValue(), 0);
-
-        aggregator.doReset();
-
-        InternalMin result2 = (InternalMin) aggregator.buildAggregation(0L);
-        assertEquals(Double.POSITIVE_INFINITY, result2.getValue(), 0);
-
-        indexReader.close();
-        directory.close();
-    }
-
-    public void testSupportsIntraSegmentSearch() throws IOException {
-        MappedFieldType fieldType = new NumberFieldMapper.NumberFieldType("value", NumberFieldMapper.NumberType.LONG);
-        try (Directory directory = newDirectory(); RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory)) {
-            indexWriter.addDocument(singleton(new NumericDocValuesField("value", 1)));
-            try (IndexReader reader = indexWriter.getReader()) {
-                IndexSearcher searcher = newIndexSearcher(reader);
-                AggregatorFactories factories = AggregatorFactories.builder()
-                    .addAggregator(new MinAggregationBuilder("test").field("value"))
-                    .build(
-                        createSearchContext(searcher, createIndexSettings(), new MatchAllDocsQuery(), null, fieldType)
-                            .getQueryShardContext(),
-                        null
-                    );
-                assertTrue(factories.allFactoriesSupportIntraSegmentSearch());
+        }, min -> {
             }
-        }
     }
-}

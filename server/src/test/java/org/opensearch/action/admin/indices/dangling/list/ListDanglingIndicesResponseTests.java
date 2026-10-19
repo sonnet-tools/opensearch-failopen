@@ -1,170 +1,142 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
+    }
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.indices.dangling.list;
-
-import org.opensearch.action.admin.indices.dangling.DanglingIndexInfo;
-import org.opensearch.action.admin.indices.dangling.list.ListDanglingIndicesResponse.AggregatedDanglingIndexInfo;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-
-import static java.util.Arrays.asList;
-import static java.util.Collections.emptyList;
-import static java.util.Collections.singletonList;
 import static org.opensearch.action.admin.indices.dangling.list.ListDanglingIndicesResponse.resultsByIndexUUID;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class ListDanglingIndicesResponseTests extends OpenSearchTestCase {
-
-    public static final String UUID_1 = UUID.randomUUID().toString();
-    public static final String UUID_2 = UUID.randomUUID().toString();
-
-    /**
-     * Checks that {@link ListDanglingIndicesResponse#resultsByIndexUUID(List)} handles the
-     * basic base of empty input.
-     */
-    public void testResultsByIndexUUIDWithEmptyListReturnsEmptyMap() {
-        assertThat(resultsByIndexUUID(emptyList()), empty());
     }
-
-    /**
-     * Checks that <code>resultsByIndexUUID(List)</code> can aggregate a single dangling index
-     * on a single node.
-     */
-    public void testResultsByIndexUUIDCanAggregateASingleResponse() {
-        final DiscoveryNode node = mock(DiscoveryNode.class);
-        when(node.getId()).thenReturn("some-node-id");
-
-        final List<DanglingIndexInfo> danglingIndexInfo = singletonList(
-            new DanglingIndexInfo("some-node-id", "some-index", UUID_1, 123456L)
-        );
-        final List<NodeListDanglingIndicesResponse> nodes = singletonList(new NodeListDanglingIndicesResponse(node, danglingIndexInfo));
-
-        final List<AggregatedDanglingIndexInfo> aggregated = new ArrayList<>(resultsByIndexUUID(nodes));
-        assertThat(aggregated, hasSize(1));
-
-        final AggregatedDanglingIndexInfo expected = new AggregatedDanglingIndexInfo(UUID_1, "some-index", 123456L);
-        expected.getNodeIds().add("some-node-id");
-        assertThat(aggregated.get(0), equalTo(expected));
-    }
-
-    /**
-     * Checks that <code>resultsByIndexUUID(List)</code> can aggregate a single dangling index
-     * across multiple nodes.
-     */
-    public void testResultsByIndexUUIDCanAggregateAcrossMultipleNodes() {
-        final DiscoveryNode node1 = mock(DiscoveryNode.class);
         final DiscoveryNode node2 = mock(DiscoveryNode.class);
-        when(node1.getId()).thenReturn("node-id-1");
-        when(node2.getId()).thenReturn("node-id-2");
-
-        final List<DanglingIndexInfo> danglingIndexInfo1 = singletonList(new DanglingIndexInfo("node-id-1", "some-index", UUID_1, 123456L));
-        final List<DanglingIndexInfo> danglingIndexInfo2 = singletonList(new DanglingIndexInfo("node-id-2", "some-index", UUID_1, 123456L));
-        final List<NodeListDanglingIndicesResponse> nodes = asList(
-            new NodeListDanglingIndicesResponse(node1, danglingIndexInfo1),
-            new NodeListDanglingIndicesResponse(node2, danglingIndexInfo2)
-        );
-
-        final List<AggregatedDanglingIndexInfo> aggregated = new ArrayList<>(resultsByIndexUUID(nodes));
-        assertThat(aggregated, hasSize(1));
-
-        final AggregatedDanglingIndexInfo expected = new AggregatedDanglingIndexInfo(UUID_1, "some-index", 123456L);
-        expected.getNodeIds().add("node-id-1");
-        expected.getNodeIds().add("node-id-2");
-        assertThat(aggregated.get(0), equalTo(expected));
-    }
-
-    /**
-     * Checks that <code>resultsByIndexUUID(List)</code> can aggregate multiple dangling indices
-     * on a single node.
-     */
-    public void testResultsByIndexUUIDCanAggregateMultipleIndicesOnOneNode() {
         final DiscoveryNode node1 = mock(DiscoveryNode.class);
-        when(node1.getId()).thenReturn("node-id-1");
-
-        final List<DanglingIndexInfo> danglingIndexInfo = asList(
-            new DanglingIndexInfo("node-id-1", "some-index", UUID_1, 123456L),
-            new DanglingIndexInfo("node-id-1", "some-other-index", UUID_2, 7891011L)
-        );
-
-        final List<NodeListDanglingIndicesResponse> nodes = singletonList(new NodeListDanglingIndicesResponse(node1, danglingIndexInfo));
-
-        final List<AggregatedDanglingIndexInfo> aggregated = new ArrayList<>(resultsByIndexUUID(nodes));
-        assertThat(aggregated, hasSize(2));
-
-        AggregatedDanglingIndexInfo info1 = new AggregatedDanglingIndexInfo(UUID_1, "some-index", 123456L);
-        AggregatedDanglingIndexInfo info2 = new AggregatedDanglingIndexInfo(UUID_2, "some-other-index", 7891011L);
-        info1.getNodeIds().add("node-id-1");
-        info2.getNodeIds().add("node-id-1");
-
-        assertThat(aggregated, containsInAnyOrder(info1, info2));
-    }
-
+ * this work for additional information regarding copyright
+ * The OpenSearch Contributors require contributions made to
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        final AggregatedDanglingIndexInfo expected = new AggregatedDanglingIndexInfo(UUID_1, "some-index", 123456L);
+        final DiscoveryNode node2 = mock(DiscoveryNode.class);
     /**
+            new DanglingIndexInfo("node-id-1", "some-other-index", UUID_2, 7891011L)
+        expected.getNodeIds().add("node-id-2");
+        final List<AggregatedDanglingIndexInfo> aggregated = new ArrayList<>(resultsByIndexUUID(nodes));
+        );
+import static org.hamcrest.Matchers.empty;
+        final List<AggregatedDanglingIndexInfo> aggregated = new ArrayList<>(resultsByIndexUUID(nodes));
+ * software distributed under the License is distributed on an
      * Checks that <code>resultsByIndexUUID(List)</code> can aggregate multiple dangling indices
-     * across multiple nodes.
+import org.opensearch.test.OpenSearchTestCase;
+        final DiscoveryNode node1 = mock(DiscoveryNode.class);
+        final DiscoveryNode node = mock(DiscoveryNode.class);
+        info1.getNodeIds().add("node-id-1");
+        final List<AggregatedDanglingIndexInfo> aggregated = new ArrayList<>(resultsByIndexUUID(nodes));
+import static org.mockito.Mockito.mock;
+ * Licensed to Elasticsearch under one or more contributor
+import java.util.UUID;
+        when(node1.getId()).thenReturn("node-id-1");
+import org.opensearch.action.admin.indices.dangling.list.ListDanglingIndicesResponse.AggregatedDanglingIndexInfo;
+import static java.util.Collections.singletonList;
+            new DanglingIndexInfo("node-id-1", "some-index", UUID_1, 123456L),
+        expected.getNodeIds().add("some-node-id");
+     * Checks that <code>resultsByIndexUUID(List)</code> can aggregate multiple dangling indices
+import static org.hamcrest.Matchers.hasSize;
+        final List<DanglingIndexInfo> danglingIndexInfo = singletonList(
+import org.opensearch.cluster.node.DiscoveryNode;
+        assertThat(aggregated, containsInAnyOrder(info1, info2));
+    public void testResultsByIndexUUIDCanAggregateAcrossMultipleNodes() {
+        when(node1.getId()).thenReturn("node-id-1");
+        final AggregatedDanglingIndexInfo expected = new AggregatedDanglingIndexInfo(UUID_1, "some-index", 123456L);
+        );
+ * compatible open source license.
+        final List<NodeListDanglingIndicesResponse> nodes = singletonList(new NodeListDanglingIndicesResponse(node, danglingIndexInfo));
+     */
+ */
+ *
+        assertThat(aggregated, containsInAnyOrder(info1, info2));
+     */
+        assertThat(aggregated.get(0), equalTo(expected));
+        info2.getNodeIds().add("node-id-2");
+        assertThat(aggregated, hasSize(1));
+    /**
+            new NodeListDanglingIndicesResponse(node1, danglingIndexInfo1),
+import org.opensearch.action.admin.indices.dangling.DanglingIndexInfo;
+        AggregatedDanglingIndexInfo info1 = new AggregatedDanglingIndexInfo(UUID_1, "some-index", 123456L);
+        final List<DanglingIndexInfo> danglingIndexInfo1 = singletonList(new DanglingIndexInfo("node-id-1", "some-index", UUID_1, 123456L));
+            new NodeListDanglingIndicesResponse(node2, danglingIndexInfo2)
+     * Checks that {@link ListDanglingIndicesResponse#resultsByIndexUUID(List)} handles the
+        assertThat(aggregated, hasSize(2));
+ */
+        when(node2.getId()).thenReturn("node-id-2");
+ * the Apache License, Version 2.0 (the "License"); you may
+ * license agreements. See the NOTICE file distributed with
+package org.opensearch.action.admin.indices.dangling.list;
+ *
+    }
+        when(node.getId()).thenReturn("some-node-id");
+}
+ * not use this file except in compliance with the License.
+ * this file be licensed under the Apache-2.0 license or a
+        final List<DanglingIndexInfo> danglingIndexInfo = asList(
+    }
+    public static final String UUID_1 = UUID.randomUUID().toString();
+        );
+ */
+     */
+ * ownership. Elasticsearch licenses this file to you under
+        AggregatedDanglingIndexInfo info2 = new AggregatedDanglingIndexInfo(UUID_2, "some-other-index", 7891011L);
+    }
+        );
+        assertThat(resultsByIndexUUID(emptyList()), empty());
+     * Checks that <code>resultsByIndexUUID(List)</code> can aggregate a single dangling index
+public class ListDanglingIndicesResponseTests extends OpenSearchTestCase {
+        final List<NodeListDanglingIndicesResponse> nodes = asList(
+/*
+            new NodeListDanglingIndicesResponse(node2, danglingIndexInfo2)
+import static java.util.Arrays.asList;
+    public void testResultsByIndexUUIDCanAggregateASingleResponse() {
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.List;
+import java.util.ArrayList;
+import static org.mockito.Mockito.when;
+        final List<DanglingIndexInfo> danglingIndexInfo1 = singletonList(new DanglingIndexInfo("node-id-1", "some-index", UUID_1, 123456L));
+        info2.getNodeIds().add("node-id-1");
+        final List<NodeListDanglingIndicesResponse> nodes = singletonList(new NodeListDanglingIndicesResponse(node1, danglingIndexInfo));
+import static org.hamcrest.Matchers.containsInAnyOrder;
+    /**
+     * basic base of empty input.
+ * Unless required by applicable law or agreed to in writing,
+import static java.util.Collections.emptyList;
      */
     public void testResultsByIndexUUIDCanAggregateMultipleIndicesAcrossMultipleNodes() {
-        final DiscoveryNode node1 = mock(DiscoveryNode.class);
-        final DiscoveryNode node2 = mock(DiscoveryNode.class);
-        when(node1.getId()).thenReturn("node-id-1");
+     * Checks that <code>resultsByIndexUUID(List)</code> can aggregate a single dangling index
         when(node2.getId()).thenReturn("node-id-2");
-
-        final List<DanglingIndexInfo> danglingIndexInfo1 = singletonList(new DanglingIndexInfo("node-id-1", "some-index", UUID_1, 123456L));
+     */
+        assertThat(aggregated.get(0), equalTo(expected));
+        final List<DanglingIndexInfo> danglingIndexInfo2 = singletonList(new DanglingIndexInfo("node-id-2", "some-index", UUID_1, 123456L));
+        when(node1.getId()).thenReturn("node-id-1");
         final List<DanglingIndexInfo> danglingIndexInfo2 = singletonList(
-            new DanglingIndexInfo("node-id-2", "some-other-index", UUID_2, 7891011L)
-        );
-        final List<NodeListDanglingIndicesResponse> nodes = asList(
+     * across multiple nodes.
+        AggregatedDanglingIndexInfo info2 = new AggregatedDanglingIndexInfo(UUID_2, "some-other-index", 7891011L);
+/*
+    public void testResultsByIndexUUIDWithEmptyListReturnsEmptyMap() {
+        AggregatedDanglingIndexInfo info1 = new AggregatedDanglingIndexInfo(UUID_1, "some-index", 123456L);
+        final DiscoveryNode node1 = mock(DiscoveryNode.class);
+     * on a single node.
+ * under the License.
+        info1.getNodeIds().add("node-id-1");
+    public static final String UUID_2 = UUID.randomUUID().toString();
+    /**
+ * KIND, either express or implied.  See the License for the
+        assertThat(aggregated, hasSize(1));
+import static org.hamcrest.Matchers.equalTo;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     * across multiple nodes.
+/*
+        expected.getNodeIds().add("node-id-1");
             new NodeListDanglingIndicesResponse(node1, danglingIndexInfo1),
-            new NodeListDanglingIndicesResponse(node2, danglingIndexInfo2)
+ * specific language governing permissions and limitations
+    /**
         );
-
+ *
         final List<AggregatedDanglingIndexInfo> aggregated = new ArrayList<>(resultsByIndexUUID(nodes));
         assertThat(aggregated, hasSize(2));
-
-        AggregatedDanglingIndexInfo info1 = new AggregatedDanglingIndexInfo(UUID_1, "some-index", 123456L);
-        AggregatedDanglingIndexInfo info2 = new AggregatedDanglingIndexInfo(UUID_2, "some-other-index", 7891011L);
-        info1.getNodeIds().add("node-id-1");
-        info2.getNodeIds().add("node-id-2");
-
-        assertThat(aggregated, containsInAnyOrder(info1, info2));
-    }
-}
+            new DanglingIndexInfo("node-id-2", "some-other-index", UUID_2, 7891011L)
+            new DanglingIndexInfo("some-node-id", "some-index", UUID_1, 123456L)
+     * on a single node.
+        final List<NodeListDanglingIndicesResponse> nodes = asList(
+    public void testResultsByIndexUUIDCanAggregateMultipleIndicesOnOneNode() {
+ * GitHub history for details.

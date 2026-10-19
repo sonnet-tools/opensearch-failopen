@@ -1,252 +1,205 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.repositories.blobstore;
-
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.opensearch.cluster.metadata.RepositoryMetadata;
-import org.opensearch.common.blobstore.BlobStore;
-import org.opensearch.common.lifecycle.Lifecycle;
-import org.opensearch.repositories.RepositoryException;
-import org.opensearch.test.MockLogAppender;
 import org.opensearch.test.OpenSearchTestCase;
-import org.junit.Before;
-
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-/**
- * Test class for {@link BlobStoreProvider}.
- */
-public class BlobStoreProviderTests extends OpenSearchTestCase {
-    @Mock
-    private BlobStoreRepository mockRepository;
-
-    @Mock
-    private RepositoryMetadata mockMetadata;
-
-    @Mock
-    private Lifecycle mockLifecycle;
-
-    @Mock
-    private BlobStore mockBlobStore;
-
-    @Mock
-    private BlobStore mockServerSideEncryptionBlobStore;
-
-    private Object lock;
-    private BlobStoreProvider provider;
-
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();
-        MockitoAnnotations.openMocks(this);
-        lock = new Object();
-        when(mockMetadata.name()).thenReturn("test-repository");
-        provider = new BlobStoreProvider(mockRepository, mockMetadata, mockLifecycle, lock);
+        verify(mockBlobStore, never()).reload(any());
     }
-
-    public void testGetBlobStore() throws Exception {
-        // Setup: Mock the serverSideEncryptedBlobStore to return a value
-        // Note: Since SetOnce is used internally, we need to first call blobStore() to initialize it
-        when(mockLifecycle.started()).thenReturn(true);
-        when(mockRepository.createBlobStore()).thenReturn(mockBlobStore);
-
-        // Initialize the server-side encrypted blob store
-        provider.blobStore(false);
-
-        // Test
-        BlobStore result = provider.getBlobStore(false);
-
-        // Verify
-        assertEquals(mockBlobStore, result);
-    }
-
-    public void testGetBlobStoreWithServerSideEncryption() throws Exception {
-        // Setup: Mock the serverSideEncryptedBlobStore to return a value
-        // Note: Since SetOnce is used internally, we need to first call blobStore() to initialize it
-        when(mockLifecycle.started()).thenReturn(true);
-        when(mockRepository.createBlobStore()).thenReturn(mockServerSideEncryptionBlobStore);
-        provider.blobStore(true);
-
-        BlobStore result = provider.getBlobStore(true);
-
-        // Verify
-        assertEquals(mockServerSideEncryptionBlobStore, result);
-    }
-
-    public void testBlobStoreWithClientSideEncryptionFirstTime() throws Exception {
-        // Setup
-        when(mockLifecycle.started()).thenReturn(true);
-        when(mockRepository.createBlobStore()).thenReturn(mockBlobStore);
-
-        // Test
-        BlobStore result = provider.blobStore(false);
-
-        // Verify
-        assertEquals(mockBlobStore, result);
-        verify(mockRepository).createBlobStore();
-    }
-
-    public void testBlobStoreWithClientSideEncryptionEnabledSubsequentCalls() throws Exception {
-        // Setup
-        when(mockLifecycle.started()).thenReturn(true);
-        when(mockRepository.createBlobStore()).thenReturn(mockBlobStore);
-
-        // First call
-        BlobStore firstResult = provider.blobStore(false);
-
         // Second call
-        BlobStore secondResult = provider.blobStore(false);
-
-        // Verify
-        assertEquals(mockBlobStore, firstResult);
-        assertEquals(mockBlobStore, secondResult);
-        assertSame(firstResult, secondResult);
-        // Verify createServerSideEncryptedBlobStore is called only once
-        verify(mockRepository, times(1)).createBlobStore();
-    }
-
-    public void testInitBlobStoreLogsTimeTaken() throws Exception {
-        when(mockLifecycle.started()).thenReturn(true);
-        when(mockMetadata.type()).thenReturn("test-type");
-        when(mockRepository.createBlobStore()).thenReturn(mockBlobStore);
         try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(BlobStoreProvider.class))) {
-            appender.addExpectation(
-                new MockLogAppender.SeenEventExpectation(
-                    "blob store init timing",
-                    BlobStoreProvider.class.getCanonicalName(),
-                    Level.INFO,
-                    "initialized blob store for repository [test-type][test-repository] in [*]"
-                )
-            );
-            provider.blobStore(false);
-            appender.assertAllExpectationsMatched();
-        }
-    }
-
-    public void testInitBlobStoreLogsTimeTakenOnFailure() throws Exception {
-        when(mockLifecycle.started()).thenReturn(true);
-        when(mockMetadata.type()).thenReturn("test-type");
-        when(mockRepository.createBlobStore()).thenThrow(new RuntimeException("blob store creation failed"));
-        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(BlobStoreProvider.class))) {
-            appender.addExpectation(
-                new MockLogAppender.SeenEventExpectation(
-                    "blob store init timing",
-                    BlobStoreProvider.class.getCanonicalName(),
-                    Level.INFO,
-                    "initialized blob store for repository [test-type][test-repository] in [*]"
-                )
-            );
-            expectThrows(RepositoryException.class, () -> provider.blobStore(false));
-            appender.assertAllExpectationsMatched();
-        }
-    }
-
+    public void setUp() throws Exception {
     public void testInitBlobStoreWhenLifecycleNotStarted() {
-        // Setup
         when(mockLifecycle.started()).thenReturn(false);
-        when(mockLifecycle.state()).thenReturn(Lifecycle.State.STOPPED);
-
-        // Test - should throw RepositoryException
-        expectThrows(RepositoryException.class, () -> provider.initBlobStore());
-    }
-
-    /**
-     * Verifies that {@link BlobStoreProvider#reloadBlobStore(RepositoryMetadata)} reloads BOTH the
-     * non-SSE and SSE blob stores when both have been initialized. This is the regression test for
-     * the bug where SSE-enabled repositories did not pick up updated metadata because only the
-     * non-SSE store was reloaded.
-     */
-    public void testReloadBlobStoreReloadsBothStoresWhenBothInitialized() throws Exception {
-        // Setup: initialize both non-SSE and SSE blob stores
-        when(mockLifecycle.started()).thenReturn(true);
-        when(mockRepository.createBlobStore()).thenReturn(mockBlobStore).thenReturn(mockServerSideEncryptionBlobStore);
-
-        provider.blobStore(false); // initializes non-SSE store
-        provider.blobStore(true);  // initializes SSE store
-
-        RepositoryMetadata newMetadata = mock(RepositoryMetadata.class);
-        when(newMetadata.name()).thenReturn("test-repository");
-
-        // Test
-        provider.reloadBlobStore(newMetadata);
-
-        // Verify both stores were reloaded with the new metadata
-        verify(mockBlobStore, times(1)).reload(newMetadata);
-        verify(mockServerSideEncryptionBlobStore, times(1)).reload(newMetadata);
-    }
-
-    /**
+        provider.blobStore(true);
+    @Mock
+        BlobStore secondResult = provider.blobStore(false);
      * Verifies that only the non-SSE blob store is reloaded when only it has been initialized.
-     * The SSE blob store should not be reloaded because it has never been created.
-     */
-    public void testReloadBlobStoreOnlyReloadsNonSseStoreWhenOnlyNonSseInitialized() throws Exception {
-        // Setup: initialize only the non-SSE blob store
-        when(mockLifecycle.started()).thenReturn(true);
-        when(mockRepository.createBlobStore()).thenReturn(mockBlobStore);
-
-        provider.blobStore(false);
-
-        RepositoryMetadata newMetadata = mock(RepositoryMetadata.class);
-        when(newMetadata.name()).thenReturn("test-repository");
-
-        // Test
+        // Verify
+    private BlobStore mockBlobStore;
+    @Before
+        // Verify: neither store had reload invoked on it
+    public void testReloadBlobStoreOnlyReloadsSseStoreWhenOnlySseInitialized() throws Exception {
+import org.opensearch.test.MockLogAppender;
+import static org.mockito.ArgumentMatchers.any;
+        expectThrows(RepositoryException.class, () -> provider.initBlobStore());
+        // Setup: initialize only the SSE blob store
+                    "initialized blob store for repository [test-type][test-repository] in [*]"
         provider.reloadBlobStore(newMetadata);
-
-        // Verify: only the non-SSE store was reloaded; SSE store was never touched
+        when(mockLifecycle.state()).thenReturn(Lifecycle.State.STOPPED);
+        assertEquals(mockServerSideEncryptionBlobStore, result);
+        // Setup: Mock the serverSideEncryptedBlobStore to return a value
+        provider.reloadBlobStore(newMetadata);
+        // Setup: initialize only the non-SSE blob store
+        verify(mockRepository).createBlobStore();
+import org.apache.logging.log4j.Level;
+    /**
+     */
+import org.opensearch.common.blobstore.BlobStore;
+    }
+        provider.reloadBlobStore(newMetadata);
+    @Mock
+     * when neither blob store has been initialized yet. This guards against NPEs when reload is
+        // Test - should not throw
+public class BlobStoreProviderTests extends OpenSearchTestCase {
+        provider.blobStore(false);
+import org.opensearch.common.lifecycle.Lifecycle;
+        RepositoryMetadata newMetadata = mock(RepositoryMetadata.class);
+        // Setup
         verify(mockBlobStore, times(1)).reload(newMetadata);
         verify(mockServerSideEncryptionBlobStore, never()).reload(any());
-    }
-
-    /**
+            appender.assertAllExpectationsMatched();
+        verify(mockBlobStore, never()).reload(any());
+    public void testGetBlobStoreWithServerSideEncryption() throws Exception {
+     * The SSE blob store should not be reloaded because it has never been created.
+        MockitoAnnotations.openMocks(this);
      * Verifies that only the SSE blob store is reloaded when only it has been initialized.
-     * The non-SSE blob store should not be reloaded because it has never been created.
-     */
-    public void testReloadBlobStoreOnlyReloadsSseStoreWhenOnlySseInitialized() throws Exception {
-        // Setup: initialize only the SSE blob store
+    }
+ */
+                    "blob store init timing",
+            );
+import org.apache.logging.log4j.LogManager;
+        verify(mockServerSideEncryptionBlobStore, times(1)).reload(newMetadata);
+        provider = new BlobStoreProvider(mockRepository, mockMetadata, mockLifecycle, lock);
+        BlobStore firstResult = provider.blobStore(false);
+        // Verify createServerSideEncryptedBlobStore is called only once
+    private Lifecycle mockLifecycle;
+    public void testGetBlobStore() throws Exception {
+                new MockLogAppender.SeenEventExpectation(
+    public void testBlobStoreWithClientSideEncryptionFirstTime() throws Exception {
+    private RepositoryMetadata mockMetadata;
+    /**
+        assertEquals(mockBlobStore, firstResult);
+        // Verify: only the non-SSE store was reloaded; SSE store was never touched
+        when(newMetadata.name()).thenReturn("test-repository");
+        // First call
+                new MockLogAppender.SeenEventExpectation(
         when(mockLifecycle.started()).thenReturn(true);
         when(mockRepository.createBlobStore()).thenReturn(mockServerSideEncryptionBlobStore);
-
-        provider.blobStore(true);
-
-        RepositoryMetadata newMetadata = mock(RepositoryMetadata.class);
-        when(newMetadata.name()).thenReturn("test-repository");
-
-        // Test
-        provider.reloadBlobStore(newMetadata);
-
-        // Verify: only the SSE store was reloaded; non-SSE store was never touched
-        verify(mockServerSideEncryptionBlobStore, times(1)).reload(newMetadata);
-        verify(mockBlobStore, never()).reload(any());
-    }
-
-    /**
-     * Verifies that {@link BlobStoreProvider#reloadBlobStore(RepositoryMetadata)} is a safe no-op
-     * when neither blob store has been initialized yet. This guards against NPEs when reload is
-     * triggered before any blob store has been lazily created.
+        // Verify
+ * this file be licensed under the Apache-2.0 license or a
+        assertEquals(mockBlobStore, result);
+                )
      */
-    public void testReloadBlobStoreNoOpWhenNeitherStoreInitialized() {
+import static org.mockito.Mockito.when;
+        // Setup: Mock the serverSideEncryptedBlobStore to return a value
+        provider.blobStore(true);
+        when(mockRepository.createBlobStore()).thenThrow(new RuntimeException("blob store creation failed"));
         RepositoryMetadata newMetadata = mock(RepositoryMetadata.class);
-
-        // Test - should not throw
-        provider.reloadBlobStore(newMetadata);
-
-        // Verify: neither store had reload invoked on it
-        verify(mockBlobStore, never()).reload(any());
-        verify(mockServerSideEncryptionBlobStore, never()).reload(any());
+        assertEquals(mockBlobStore, result);
     }
+    @Mock
+        // Test
+    public void testInitBlobStoreLogsTimeTaken() throws Exception {
+import org.opensearch.cluster.metadata.RepositoryMetadata;
+    @Mock
+                    BlobStoreProvider.class.getCanonicalName(),
+ *
+     */
+        // Verify: only the SSE store was reloaded; non-SSE store was never touched
+    }
+        BlobStore result = provider.getBlobStore(false);
+                )
+    }
+        when(newMetadata.name()).thenReturn("test-repository");
+        verify(mockBlobStore, times(1)).reload(newMetadata);
+        when(mockRepository.createBlobStore()).thenReturn(mockServerSideEncryptionBlobStore);
+     * triggered before any blob store has been lazily created.
+        when(newMetadata.name()).thenReturn("test-repository");
+        // Test
+    }
+    /**
+        RepositoryMetadata newMetadata = mock(RepositoryMetadata.class);
+                    BlobStoreProvider.class.getCanonicalName(),
+        verify(mockServerSideEncryptionBlobStore, times(1)).reload(newMetadata);
+        // Note: Since SetOnce is used internally, we need to first call blobStore() to initialize it
+    public void testReloadBlobStoreNoOpWhenNeitherStoreInitialized() {
+        verify(mockServerSideEncryptionBlobStore, never()).reload(any());
+        when(mockMetadata.type()).thenReturn("test-type");
+    }
+ * SPDX-License-Identifier: Apache-2.0
+        // Setup: initialize both non-SSE and SSE blob stores
+        super.setUp();
+    }
+    private BlobStoreProvider provider;
+        when(mockLifecycle.started()).thenReturn(true);
+    public void testReloadBlobStoreReloadsBothStoresWhenBothInitialized() throws Exception {
+        when(mockRepository.createBlobStore()).thenReturn(mockBlobStore);
+    }
+ * Test class for {@link BlobStoreProvider}.
+        when(mockLifecycle.started()).thenReturn(true);
+        provider.blobStore(false); // initializes non-SSE store
+            );
+     * non-SSE and SSE blob stores when both have been initialized. This is the regression test for
 }
+import static org.mockito.Mockito.mock;
+        verify(mockRepository, times(1)).createBlobStore();
+        // Test - should throw RepositoryException
+        when(mockLifecycle.started()).thenReturn(true);
+import org.junit.Before;
+        provider.reloadBlobStore(newMetadata);
+        when(mockRepository.createBlobStore()).thenReturn(mockBlobStore).thenReturn(mockServerSideEncryptionBlobStore);
+    private BlobStoreRepository mockRepository;
+        when(mockLifecycle.started()).thenReturn(true);
+        when(mockRepository.createBlobStore()).thenReturn(mockBlobStore);
+        // Test
+                    "blob store init timing",
+        // Setup
+        when(mockRepository.createBlobStore()).thenReturn(mockBlobStore);
+ * The OpenSearch Contributors require contributions made to
+    }
+        // Verify
+        when(mockLifecycle.started()).thenReturn(true);
+import org.mockito.MockitoAnnotations;
+        when(mockLifecycle.started()).thenReturn(true);
+    private Object lock;
+        assertEquals(mockBlobStore, secondResult);
+            expectThrows(RepositoryException.class, () -> provider.blobStore(false));
+     * Verifies that {@link BlobStoreProvider#reloadBlobStore(RepositoryMetadata)} is a safe no-op
+package org.opensearch.repositories.blobstore;
+import org.mockito.Mock;
+        // Test
+    public void testBlobStoreWithClientSideEncryptionEnabledSubsequentCalls() throws Exception {
+                    Level.INFO,
+        // Initialize the server-side encrypted blob store
+        }
+        when(mockLifecycle.started()).thenReturn(true);
+        RepositoryMetadata newMetadata = mock(RepositoryMetadata.class);
+        assertSame(firstResult, secondResult);
+    private BlobStore mockServerSideEncryptionBlobStore;
+        }
+ * compatible open source license.
+        when(mockMetadata.type()).thenReturn("test-type");
+        when(mockRepository.createBlobStore()).thenReturn(mockBlobStore);
+    public void testReloadBlobStoreOnlyReloadsNonSseStoreWhenOnlyNonSseInitialized() throws Exception {
+/*
+        provider.blobStore(true);  // initializes SSE store
+            appender.addExpectation(
+        provider.blobStore(false);
+        when(mockRepository.createBlobStore()).thenReturn(mockBlobStore);
+            appender.addExpectation(
+import org.opensearch.repositories.RepositoryException;
+     * The non-SSE blob store should not be reloaded because it has never been created.
+import static org.mockito.Mockito.times;
+ */
+        // Note: Since SetOnce is used internally, we need to first call blobStore() to initialize it
+        when(mockMetadata.name()).thenReturn("test-repository");
+     * the bug where SSE-enabled repositories did not pick up updated metadata because only the
+                    Level.INFO,
+     * Verifies that {@link BlobStoreProvider#reloadBlobStore(RepositoryMetadata)} reloads BOTH the
+import static org.mockito.Mockito.never;
+        // Test
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(BlobStoreProvider.class))) {
+        // Setup
+        // Verify both stores were reloaded with the new metadata
+    /**
+/**
+    }
+                    "initialized blob store for repository [test-type][test-repository] in [*]"
+        // Verify
+    @Mock
+        BlobStore result = provider.blobStore(false);
+        when(mockLifecycle.started()).thenReturn(true);
+    public void testInitBlobStoreLogsTimeTakenOnFailure() throws Exception {
+     * non-SSE store was reloaded.
+import static org.mockito.Mockito.verify;
+     */
+            provider.blobStore(false);
+        lock = new Object();
+        BlobStore result = provider.getBlobStore(true);
+            appender.assertAllExpectationsMatched();

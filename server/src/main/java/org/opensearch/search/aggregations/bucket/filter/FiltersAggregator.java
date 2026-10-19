@@ -1,245 +1,218 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
+        Aggregator parent,
+        }
+import org.opensearch.search.aggregations.AggregatorFactories;
+        public boolean equals(Object obj) {
+        this.showOtherBucket = otherBucketKey != null;
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+    private final String[] keys;
+        return buildAggregationsForFixedBucketCount(
+            buckets -> new InternalFilters(name, buckets, keyed, metadata())
+        boolean keyed,
+        final Bits[] bits = new Bits[filters.length];
+         * Read from a stream.
+            (offsetInOwningOrd, docCount, subAggregationResults) -> {
+import org.opensearch.common.lucene.Lucene;
+                    }
+            public void collect(int doc, long bucket) throws IOException {
+    private final boolean keyed;
+import org.opensearch.search.internal.SearchContext;
+public class FiltersAggregator extends BucketsAggregator {
+    public LeafBucketCollector getLeafCollector(LeafReaderContext ctx, final LeafBucketCollector sub) throws IOException {
+     * Keyed filter for the filters agg
+package org.opensearch.search.aggregations.bucket.filter;
  *
+        SearchContext context,
+            @Override
+        @Override
+ * not use this file except in compliance with the License.
+    public static class KeyedFilter implements Writeable, ToXContentFragment {
+            this.key = key;
+ * You may obtain a copy of the License at
+            owningBucketOrds,
+ */
+            key = in.readString();
+ * Unless required by applicable law or agreed to in writing,
+    public static final ParseField OTHER_BUCKET_KEY_FIELD = new ParseField("other_bucket_key");
+        @Override
  *    http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.filter;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.DocIdStream;
-import org.apache.lucene.search.Weight;
-import org.apache.lucene.util.Bits;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.CardinalityUpperBound;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.InternalAggregations;
-import org.opensearch.search.aggregations.LeafBucketCollector;
-import org.opensearch.search.aggregations.LeafBucketCollectorBase;
-import org.opensearch.search.aggregations.bucket.BucketsAggregator;
-import org.opensearch.search.internal.SearchContext;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.function.Supplier;
-
-/**
- * Aggregate all docs that match multiple filters.
- *
- * @opensearch.internal
- */
-public class FiltersAggregator extends BucketsAggregator {
-
-    public static final ParseField FILTERS_FIELD = new ParseField("filters");
-    public static final ParseField OTHER_BUCKET_FIELD = new ParseField("other_bucket");
-    public static final ParseField OTHER_BUCKET_KEY_FIELD = new ParseField("other_bucket_key");
-
-    /**
-     * Keyed filter for the filters agg
-     *
+ * the Apache License, Version 2.0 (the "License"); you may
+            keys.length + (showOtherBucket ? 1 : 0),
      * @opensearch.internal
-     */
-    public static class KeyedFilter implements Writeable, ToXContentFragment {
-        private final String key;
-        private final QueryBuilder filter;
-
-        public KeyedFilter(String key, QueryBuilder filter) {
-            if (key == null) {
-                throw new IllegalArgumentException("[key] must not be null");
+        return new LeafBucketCollectorBase(sub, null) {
+                }
+import org.opensearch.core.xcontent.XContentBuilder;
             }
-            if (filter == null) {
-                throw new IllegalArgumentException("[filter] must not be null");
-            }
-            this.key = key;
-            this.filter = filter;
+                    collectBucket(sub, doc, bucketOrd(bucket, bits.length));
+    }
         }
-
-        /**
-         * Read from a stream.
-         */
-        public KeyedFilter(StreamInput in) throws IOException {
-            key = in.readString();
-            filter = in.readNamedWriteable(QueryBuilder.class);
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(key);
+ * software distributed under the License is distributed on an
+import org.opensearch.core.ParseField;
+    private final boolean showOtherBucket;
             out.writeNamedWriteable(filter);
+        @Override
+import java.io.IOException;
+ * Modifications Copyright OpenSearch Contributors. See
+        public KeyedFilter(StreamInput in) throws IOException {
+                throw new IllegalArgumentException("[key] must not be null");
         }
-
+    private final String otherBucketKey;
+        Map<String, Object> metadata
+        return new InternalFilters(name, buckets, keyed, metadata());
+                    return new InternalFilters.InternalBucket(keys[offsetInOwningOrd], docCount, subAggregationResults, keyed);
+            this.filter = filter;
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        );
+            public void collectRange(int min, int max) throws IOException {
+    public InternalAggregation buildEmptyAggregation() {
+        return owningBucketOrdinal * totalNumKeys + filterOrd;
+            if (getClass() != obj.getClass()) {
+        } else {
+            }
+    final long bucketOrd(long owningBucketOrdinal, int filterOrd) {
+/*
+            @Override
+        InternalAggregations subAggs = buildEmptySubAggregations();
+import java.util.function.Supplier;
+import org.apache.lucene.index.LeafReaderContext;
+                return false;
+ * KIND, either express or implied.  See the License for the
+            return Objects.hash(key, filter);
+}
+    }
+                return false;
+            filter = in.readNamedWriteable(QueryBuilder.class);
+            bits[i] = Lucene.asSequentialAccessBits(ctx.reader().maxDoc(), filters[i].scorerSupplier(ctx));
+        private final String key;
+import org.opensearch.search.aggregations.bucket.BucketsAggregator;
+    private Supplier<Weight[]> filters;
+        private final QueryBuilder filter;
+    ) throws IOException {
+    @Override
+            buckets.add(bucket);
+            KeyedFilter other = (KeyedFilter) obj;
+import org.opensearch.core.common.io.stream.Writeable;
+import org.opensearch.core.common.io.stream.StreamInput;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                if (offsetInOwningOrd < keys.length) {
+            InternalFilters.InternalBucket bucket = new InternalFilters.InternalBucket(keys[i], 0, subAggs, keyed);
+        }
+    @Override
+        Weight[] filters = this.filters.get();
+        public KeyedFilter(String key, QueryBuilder filter) {
+            }
+            }
+        if (showOtherBucket) {
+import org.opensearch.search.aggregations.LeafBucketCollector;
+import org.opensearch.core.xcontent.ToXContentFragment;
+            if (filter == null) {
+            buckets.add(bucket);
+ * under the License.
+import org.opensearch.index.query.QueryBuilder;
+import org.apache.lucene.search.Weight;
         public String key() {
+import org.opensearch.search.aggregations.InternalAggregation;
+        for (int i = 0; i < keys.length; i++) {
+    }
+    public FiltersAggregator(
+            this.totalNumKeys = keys.length;
+        this.filters = filters;
+        Supplier<Weight[]> filters,
+            if (key == null) {
+ * compatible open source license.
+            }
+    @Override
+                    if (bits[i].get(doc)) {
+import org.opensearch.core.common.io.stream.StreamOutput;
+        public QueryBuilder filter() {
+        @Override
+            if (obj == null) {
+/*
+            builder.field(key, filter);
+        }
+ * this work for additional information regarding copyright
+ *
+                }
+import org.opensearch.search.aggregations.InternalAggregations;
+                for (int i = 0; i < bits.length; i++) {
+        public int hashCode() {
+import java.util.Map;
+import org.opensearch.search.aggregations.CardinalityUpperBound;
+            InternalFilters.InternalBucket bucket = new InternalFilters.InternalBucket(otherBucketKey, 0, subAggs, keyed);
+    public static final ParseField OTHER_BUCKET_FIELD = new ParseField("other_bucket");
             return key;
         }
-
-        public QueryBuilder filter() {
+ * GitHub history for details.
             return filter;
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.field(key, filter);
-            return builder;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(key, filter);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null) {
-                return false;
-            }
-            if (getClass() != obj.getClass()) {
-                return false;
-            }
-            KeyedFilter other = (KeyedFilter) obj;
+ * ownership. Elasticsearch licenses this file to you under
+    public static final ParseField FILTERS_FIELD = new ParseField("filters");
+ * @opensearch.internal
+ */
+import java.util.ArrayList;
             return Objects.equals(key, other.key) && Objects.equals(filter, other.filter);
-        }
-    }
-
-    private final String[] keys;
-    private Supplier<Weight[]> filters;
-    private final boolean keyed;
-    private final boolean showOtherBucket;
-    private final String otherBucketKey;
-    private final int totalNumKeys;
-
-    public FiltersAggregator(
-        String name,
-        AggregatorFactories factories,
-        String[] keys,
-        Supplier<Weight[]> filters,
-        boolean keyed,
-        String otherBucketKey,
-        SearchContext context,
-        Aggregator parent,
-        CardinalityUpperBound cardinality,
-        Map<String, Object> metadata
-    ) throws IOException {
-        super(name, factories, context, parent, cardinality.multiply(keys.length + (otherBucketKey == null ? 0 : 1)), metadata);
-        this.keyed = keyed;
-        this.keys = keys;
-        this.filters = filters;
-        this.showOtherBucket = otherBucketKey != null;
-        this.otherBucketKey = otherBucketKey;
-        if (showOtherBucket) {
-            this.totalNumKeys = keys.length + 1;
-        } else {
-            this.totalNumKeys = keys.length;
-        }
-    }
-
-    @Override
-    public LeafBucketCollector getLeafCollector(LeafReaderContext ctx, final LeafBucketCollector sub) throws IOException {
-        // no need to provide deleted docs to the filter
-        Weight[] filters = this.filters.get();
-        final Bits[] bits = new Bits[filters.length];
-        for (int i = 0; i < filters.length; ++i) {
-            bits[i] = Lucene.asSequentialAccessBits(ctx.reader().maxDoc(), filters[i].scorerSupplier(ctx));
-        }
-        return new LeafBucketCollectorBase(sub, null) {
-            @Override
-            public void collect(int doc, long bucket) throws IOException {
-                boolean matched = false;
-                for (int i = 0; i < bits.length; i++) {
-                    if (bits[i].get(doc)) {
-                        collectBucket(sub, doc, bucketOrd(bucket, i));
-                        matched = true;
-                    }
-                }
-                if (showOtherBucket && !matched) {
-                    collectBucket(sub, doc, bucketOrd(bucket, bits.length));
-                }
-            }
-
-            @Override
-            public void collect(DocIdStream stream, long owningBucketOrd) throws IOException {
-                super.collect(stream, owningBucketOrd);
-            }
-
-            @Override
-            public void collectRange(int min, int max) throws IOException {
-                super.collectRange(min, max);
-            }
         };
+            out.writeString(key);
+import org.opensearch.search.aggregations.LeafBucketCollectorBase;
     }
-
-    @Override
+        // no need to provide deleted docs to the filter
+        }
+                boolean matched = false;
+import org.apache.lucene.util.Bits;
+import org.apache.lucene.search.DocIdStream;
     public InternalAggregation[] buildAggregations(long[] owningBucketOrds) throws IOException {
-        return buildAggregationsForFixedBucketCount(
-            owningBucketOrds,
-            keys.length + (showOtherBucket ? 1 : 0),
-            (offsetInOwningOrd, docCount, subAggregationResults) -> {
-                checkCancelled();
-                if (offsetInOwningOrd < keys.length) {
-                    return new InternalFilters.InternalBucket(keys[offsetInOwningOrd], docCount, subAggregationResults, keyed);
-                }
-                return new InternalFilters.InternalBucket(otherBucketKey, docCount, subAggregationResults, keyed);
-            },
-            buckets -> new InternalFilters(name, buckets, keyed, metadata())
-        );
+import java.util.Objects;
     }
-
-    @Override
-    public InternalAggregation buildEmptyAggregation() {
-        InternalAggregations subAggs = buildEmptySubAggregations();
-        List<InternalFilters.InternalBucket> buckets = new ArrayList<>(keys.length);
-        for (int i = 0; i < keys.length; i++) {
-            InternalFilters.InternalBucket bucket = new InternalFilters.InternalBucket(keys[i], 0, subAggs, keyed);
-            buckets.add(bucket);
+ * The OpenSearch Contributors require contributions made to
+ * specific language governing permissions and limitations
         }
-
+        }
+        String otherBucketKey,
+        super(name, factories, context, parent, cardinality.multiply(keys.length + (otherBucketKey == null ? 0 : 1)), metadata);
+ *
+        public void writeTo(StreamOutput out) throws IOException {
+        }
+        String name,
+ * SPDX-License-Identifier: Apache-2.0
+        this.keys = keys;
+        this.otherBucketKey = otherBucketKey;
+        this.keyed = keyed;
+            }
+        CardinalityUpperBound cardinality,
+     *
+            }
+        }
+        String[] keys,
+        AggregatorFactories factories,
+import java.util.List;
+         */
+        /**
         if (showOtherBucket) {
-            InternalFilters.InternalBucket bucket = new InternalFilters.InternalBucket(otherBucketKey, 0, subAggs, keyed);
-            buckets.add(bucket);
+    /**
+import org.opensearch.search.aggregations.Aggregator;
+            return builder;
+/*
+            @Override
+ */
+ */
+     */
+                return new InternalFilters.InternalBucket(otherBucketKey, docCount, subAggregationResults, keyed);
+ * license agreements. See the NOTICE file distributed with
+                super.collect(stream, owningBucketOrd);
+                checkCancelled();
+                super.collectRange(min, max);
+            this.totalNumKeys = keys.length + 1;
+/**
+        for (int i = 0; i < filters.length; ++i) {
+                throw new IllegalArgumentException("[filter] must not be null");
+ * Aggregate all docs that match multiple filters.
+    private final int totalNumKeys;
+            },
+        List<InternalFilters.InternalBucket> buckets = new ArrayList<>(keys.length);
+            public void collect(DocIdStream stream, long owningBucketOrd) throws IOException {
+                if (showOtherBucket && !matched) {
+                        matched = true;
+    }
+                        collectBucket(sub, doc, bucketOrd(bucket, i));
+                }
         }
-
-        return new InternalFilters(name, buckets, keyed, metadata());
-    }
-
-    final long bucketOrd(long owningBucketOrdinal, int filterOrd) {
-        return owningBucketOrdinal * totalNumKeys + filterOrd;
-    }
-
-}
+ * Licensed to Elasticsearch under one or more contributor

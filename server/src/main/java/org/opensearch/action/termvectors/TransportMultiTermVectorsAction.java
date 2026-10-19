@@ -1,200 +1,181 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
+                    listener.onResponse(
+            ShardId shardId = clusterService.operationRouting()
+                continue;
+import org.opensearch.cluster.block.ClusterBlockLevel;
+import org.opensearch.tasks.Task;
+    private final TransportShardMultiTermsVectorAction shardAction;
+import org.opensearch.cluster.metadata.ResolvedIndices;
+ * @opensearch.internal
  * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+                        null,
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+    }
+        }
+            shardAction.execute(shardRequest, new ActionListener<MultiTermVectorsShardResponse>() {
+                );
+    }
+    }
+ */
  * Unless required by applicable law or agreed to in writing,
+    private final ClusterService clusterService;
+ *
+                        TermVectorsRequest termVectorsRequest = shardRequest.requests.get(i);
+        ClusterService clusterService,
+ * ownership. Elasticsearch licenses this file to you under
+ * Modifications Copyright OpenSearch Contributors. See
+                            new RoutingMissingException(concreteSingleIndex, termVectorsRequest.id())
+    @Override
+                                null,
+            String concreteSingleIndex = indexNameExpressionResolver.concreteSingleIndex(clusterState, termVectorsRequest).getName();
+        AtomicArray<MultiTermVectorsItemResponse> responses,
+        final AtomicInteger counter = new AtomicInteger(shardRequests.size());
+            );
+                            new MultiTermVectorsItemResponse(response.responses.get(i), response.failures.get(i))
+        clusterState.blocks().globalBlockedRaiseException(ClusterBlockLevel.READ);
+                    }
+        TransportService transportService,
+        ActionListener<MultiTermVectorsResponse> listener,
+        if (shardRequests.size() == 0) {
+                            concreteSingleIndex,
+                    if (counter.decrementAndGet() == 0) {
+        this.indexNameExpressionResolver = indexNameExpressionResolver;
+                @Override
+}
+                            termVectorsRequest.index(),
+ *
+                );
+                            shardRequest.locations.get(i),
+import org.opensearch.cluster.service.ClusterService;
+                        null,
+                                new MultiTermVectorsResponse.Failure(shardRequest.index(), termVectorsRequest.id(), e)
+ * You may obtain a copy of the License at
+        super(MultiTermVectorsAction.NAME, transportService, actionFilters, MultiTermVectorsRequest::new);
+import org.opensearch.common.inject.Inject;
+                clusterState.metadata().resolveIndexRouting(termVectorsRequest.routing(), termVectorsRequest.index())
+import org.opensearch.action.support.single.shard.SingleShardRequest;
+ * not use this file except in compliance with the License.
+            }
+    public TransportMultiTermVectorsAction(
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.core.action.ActionListener;
+                    i,
+                    new MultiTermVectorsItemResponse(
+                        new MultiTermVectorsResponse(responses.toArray(new MultiTermVectorsItemResponse[responses.length()]))
+import org.opensearch.action.support.TransportIndicesResolvingAction;
+                        );
+        ClusterState clusterState = clusterService.state();
+                        )
+                        )
+        Map<ShardId, MultiTermVectorsShardRequest> shardRequests
+    }
+ *
+/**
+                    // create failures for all relevant requests
+                    )
+import java.util.stream.Collectors;
+                .shardId(clusterState, concreteSingleIndex, termVectorsRequest.id(), termVectorsRequest.routing());
+                        responses.set(
+            if (shardRequest == null) {
+                shardRequests.put(shardId, shardRequest);
+                        new MultiTermVectorsResponse.Failure(
+                shardRequest = new MultiTermVectorsShardRequest(shardId.getIndexName(), shardId.id());
+                public void onFailure(Exception e) {
+    @Override
+            TermVectorsRequest termVectorsRequest = request.requests.get(i);
+        TransportShardMultiTermsVectorAction shardAction,
+import org.opensearch.core.index.shard.ShardId;
+                responses.set(
+    private final IndexNameExpressionResolver indexNameExpressionResolver;
+        }
  * software distributed under the License is distributed on an
+        IndexNameExpressionResolver indexNameExpressionResolver
+                }
+            termVectorsRequest.routing(
+ * compatible open source license.
+        ActionFilters actionFilters,
+import org.opensearch.cluster.ClusterState;
+    ) {
+    ) {
+            // only failures..
+ */
+                            termVectorsRequest.id(),
+                            new MultiTermVectorsItemResponse(
+import org.opensearch.transport.TransportService;
+        for (final MultiTermVectorsShardRequest shardRequest : shardRequests.values()) {
+                    )
+                        finishHim();
+        TransportIndicesResolvingAction<MultiTermVectorsRequest> {
+import java.util.Map;
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
+        this.shardAction = shardAction;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        final AtomicArray<MultiTermVectorsItemResponse> responses = new AtomicArray<>(request.requests.size());
+ * license agreements. See the NOTICE file distributed with
+                }
+                    }
+                    }
+public class TransportMultiTermVectorsAction extends HandledTransportAction<MultiTermVectorsRequest, MultiTermVectorsResponse>
+                    new MultiTermVectorsItemResponse(
+        for (int i = 0; i < request.requests.size(); i++) {
+ * the Apache License, Version 2.0 (the "License"); you may
+                    i,
+ * SPDX-License-Identifier: Apache-2.0
  * under the License.
  */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.termvectors;
-
-import org.opensearch.action.RoutingMissingException;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.HandledTransportAction;
-import org.opensearch.action.support.TransportIndicesResolvingAction;
-import org.opensearch.action.support.single.shard.SingleShardRequest;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.ResolvedIndices;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.util.concurrent.AtomicArray;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexNotFoundException;
-import org.opensearch.tasks.Task;
-import org.opensearch.transport.TransportService;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-
-/**
- * Performs the multi term get operation.
- *
- * @opensearch.internal
- */
-public class TransportMultiTermVectorsAction extends HandledTransportAction<MultiTermVectorsRequest, MultiTermVectorsResponse>
     implements
-        TransportIndicesResolvingAction<MultiTermVectorsRequest> {
-
-    private final ClusterService clusterService;
-    private final TransportShardMultiTermsVectorAction shardAction;
-    private final IndexNameExpressionResolver indexNameExpressionResolver;
-
-    @Inject
-    public TransportMultiTermVectorsAction(
-        TransportService transportService,
-        ClusterService clusterService,
-        TransportShardMultiTermsVectorAction shardAction,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver
-    ) {
-        super(MultiTermVectorsAction.NAME, transportService, actionFilters, MultiTermVectorsRequest::new);
-        this.clusterService = clusterService;
-        this.shardAction = shardAction;
-        this.indexNameExpressionResolver = indexNameExpressionResolver;
-    }
-
-    @Override
-    protected void doExecute(Task task, final MultiTermVectorsRequest request, final ActionListener<MultiTermVectorsResponse> listener) {
-        ClusterState clusterState = clusterService.state();
-
-        clusterState.blocks().globalBlockedRaiseException(ClusterBlockLevel.READ);
-
-        final AtomicArray<MultiTermVectorsItemResponse> responses = new AtomicArray<>(request.requests.size());
-
-        Map<ShardId, MultiTermVectorsShardRequest> shardRequests = new HashMap<>();
-        for (int i = 0; i < request.requests.size(); i++) {
-            TermVectorsRequest termVectorsRequest = request.requests.get(i);
-            termVectorsRequest.routing(
-                clusterState.metadata().resolveIndexRouting(termVectorsRequest.routing(), termVectorsRequest.index())
-            );
-            if (!clusterState.metadata().hasConcreteIndex(termVectorsRequest.index())) {
-                responses.set(
-                    i,
-                    new MultiTermVectorsItemResponse(
-                        null,
-                        new MultiTermVectorsResponse.Failure(
-                            termVectorsRequest.index(),
-                            termVectorsRequest.id(),
-                            new IndexNotFoundException(termVectorsRequest.index())
-                        )
-                    )
-                );
-                continue;
-            }
-            String concreteSingleIndex = indexNameExpressionResolver.concreteSingleIndex(clusterState, termVectorsRequest).getName();
-            if (termVectorsRequest.routing() == null && clusterState.getMetadata().routingRequired(concreteSingleIndex)) {
-                responses.set(
-                    i,
-                    new MultiTermVectorsItemResponse(
-                        null,
-                        new MultiTermVectorsResponse.Failure(
-                            concreteSingleIndex,
-                            termVectorsRequest.id(),
-                            new RoutingMissingException(concreteSingleIndex, termVectorsRequest.id())
-                        )
-                    )
-                );
-                continue;
-            }
-            ShardId shardId = clusterService.operationRouting()
-                .shardId(clusterState, concreteSingleIndex, termVectorsRequest.id(), termVectorsRequest.routing());
-            MultiTermVectorsShardRequest shardRequest = shardRequests.get(shardId);
-            if (shardRequest == null) {
-                shardRequest = new MultiTermVectorsShardRequest(shardId.getIndexName(), shardId.id());
-                shardRequest.preference(request.preference);
-                shardRequests.put(shardId, shardRequest);
-            }
+import org.opensearch.action.support.HandledTransportAction;
+import org.opensearch.common.util.concurrent.AtomicArray;
             shardRequest.add(i, termVectorsRequest);
-        }
-
-        if (shardRequests.size() == 0) {
-            // only failures..
-            listener.onResponse(new MultiTermVectorsResponse(responses.toArray(new MultiTermVectorsItemResponse[responses.length()])));
-        }
-
-        executeShardAction(listener, responses, shardRequests);
-    }
-
-    protected void executeShardAction(
-        ActionListener<MultiTermVectorsResponse> listener,
-        AtomicArray<MultiTermVectorsItemResponse> responses,
-        Map<ShardId, MultiTermVectorsShardRequest> shardRequests
-    ) {
-        final AtomicInteger counter = new AtomicInteger(shardRequests.size());
-
-        for (final MultiTermVectorsShardRequest shardRequest : shardRequests.values()) {
-            shardAction.execute(shardRequest, new ActionListener<MultiTermVectorsShardResponse>() {
-                @Override
-                public void onResponse(MultiTermVectorsShardResponse response) {
+                            termVectorsRequest.id(),
+    @Inject
                     for (int i = 0; i < response.locations.size(); i++) {
-                        responses.set(
-                            response.locations.get(i),
-                            new MultiTermVectorsItemResponse(response.responses.get(i), response.failures.get(i))
-                        );
-                    }
-                    if (counter.decrementAndGet() == 0) {
-                        finishHim();
-                    }
-                }
-
+    protected void executeShardAction(
+import org.opensearch.index.IndexNotFoundException;
                 @Override
-                public void onFailure(Exception e) {
-                    // create failures for all relevant requests
-                    for (int i = 0; i < shardRequest.locations.size(); i++) {
-                        TermVectorsRequest termVectorsRequest = shardRequest.requests.get(i);
-                        responses.set(
-                            shardRequest.locations.get(i),
-                            new MultiTermVectorsItemResponse(
-                                null,
-                                new MultiTermVectorsResponse.Failure(shardRequest.index(), termVectorsRequest.id(), e)
-                            )
-                        );
-                    }
-                    if (counter.decrementAndGet() == 0) {
-                        finishHim();
-                    }
-                }
-
-                private void finishHim() {
-                    listener.onResponse(
-                        new MultiTermVectorsResponse(responses.toArray(new MultiTermVectorsItemResponse[responses.length()]))
-                    );
-                }
-            });
-        }
-    }
-
-    @Override
-    public ResolvedIndices resolveIndices(MultiTermVectorsRequest request) {
+            }
         return ResolvedIndices.of(request.getRequests().stream().map(SingleShardRequest::index).collect(Collectors.toSet()));
-    }
-}
+        this.clusterService = clusterService;
+                        responses.set(
+            if (termVectorsRequest.routing() == null && clusterState.getMetadata().routingRequired(concreteSingleIndex)) {
+            MultiTermVectorsShardRequest shardRequest = shardRequests.get(shardId);
+ * Performs the multi term get operation.
+ * this work for additional information regarding copyright
+                    );
+        }
+ *
+import org.opensearch.action.RoutingMissingException;
+                            )
+/*
+    protected void doExecute(Task task, final MultiTermVectorsRequest request, final ActionListener<MultiTermVectorsResponse> listener) {
+ * The OpenSearch Contributors require contributions made to
+                    }
+import java.util.HashMap;
+            listener.onResponse(new MultiTermVectorsResponse(responses.toArray(new MultiTermVectorsItemResponse[responses.length()])));
+                            response.locations.get(i),
+                    for (int i = 0; i < shardRequest.locations.size(); i++) {
+                public void onResponse(MultiTermVectorsShardResponse response) {
+            });
+                    if (counter.decrementAndGet() == 0) {
+                        );
+                shardRequest.preference(request.preference);
+            }
+                }
+                private void finishHim() {
+import java.util.concurrent.atomic.AtomicInteger;
+/*
+                        new MultiTermVectorsResponse.Failure(
+ */
+    public ResolvedIndices resolveIndices(MultiTermVectorsRequest request) {
+ * GitHub history for details.
+        Map<ShardId, MultiTermVectorsShardRequest> shardRequests = new HashMap<>();
+ * KIND, either express or implied.  See the License for the
+        executeShardAction(listener, responses, shardRequests);
+            if (!clusterState.metadata().hasConcreteIndex(termVectorsRequest.index())) {
+package org.opensearch.action.termvectors;
+/*
+                responses.set(
+                        finishHim();
+import org.opensearch.action.support.ActionFilters;
+                            new IndexNotFoundException(termVectorsRequest.index())
+                continue;

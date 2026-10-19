@@ -1,239 +1,218 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.geo.parsers;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.Explicit;
-import org.opensearch.common.geo.GeoPoint;
-import org.opensearch.common.geo.GeoShapeType;
-import org.opensearch.common.geo.builders.CircleBuilder;
-import org.opensearch.common.geo.builders.GeometryCollectionBuilder;
-import org.opensearch.common.geo.builders.ShapeBuilder;
-import org.opensearch.common.geo.builders.ShapeBuilder.Orientation;
-import org.opensearch.common.unit.DistanceUnit;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.core.xcontent.XContentSubParser;
-import org.opensearch.index.mapper.AbstractShapeGeometryFieldMapper;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-
-import org.locationtech.jts.geom.Coordinate;
-
-/**
- * Parses shape geometry represented in geojson
- * <p>
- * complies with geojson specification: https://tools.ietf.org/html/rfc7946
- *
- * @opensearch.internal
- */
-abstract class GeoJsonParser {
-    protected static ShapeBuilder parse(XContentParser parser, AbstractShapeGeometryFieldMapper shapeMapper) throws IOException {
-        GeoShapeType shapeType = null;
-        DistanceUnit.Distance radius = null;
-        CoordinateNode coordinateNode = null;
-        GeometryCollectionBuilder geometryCollections = null;
-
-        Orientation orientation = (shapeMapper == null)
-            ? AbstractShapeGeometryFieldMapper.Defaults.ORIENTATION.value()
-            : shapeMapper.orientation();
-        Explicit<Boolean> coerce = (shapeMapper == null) ? AbstractShapeGeometryFieldMapper.Defaults.COERCE : shapeMapper.coerce();
-        Explicit<Boolean> ignoreZValue = (shapeMapper == null)
-            ? AbstractShapeGeometryFieldMapper.Defaults.IGNORE_Z_VALUE
-            : shapeMapper.ignoreZValue();
-
-        String malformedException = null;
-
-        XContentParser.Token token;
-        try (XContentParser subParser = new XContentSubParser(parser)) {
-            while ((token = subParser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                if (token == XContentParser.Token.FIELD_NAME) {
-                    String fieldName = subParser.currentName();
-
-                    if (ShapeParser.FIELD_TYPE.match(fieldName, subParser.getDeprecationHandler())) {
+            CoordinateNode node = parseCoordinates(parser, ignoreZValue);
+        double lat = parser.doubleValue();
                         subParser.nextToken();
-                        final GeoShapeType type = GeoShapeType.forName(subParser.text());
-                        if (shapeType != null && shapeType.equals(type) == false) {
-                            malformedException = ShapeParser.FIELD_TYPE
-                                + " already parsed as ["
-                                + shapeType
-                                + "] cannot redefine as ["
                                 + type
-                                + "]";
-                        } else {
-                            shapeType = type;
-                        }
-                    } else if (ShapeParser.FIELD_COORDINATES.match(fieldName, subParser.getDeprecationHandler())) {
-                        subParser.nextToken();
                         CoordinateNode tempNode = parseCoordinates(subParser, ignoreZValue.value());
-                        if (coordinateNode != null && tempNode.numDimensions() != coordinateNode.numDimensions()) {
-                            throw new OpenSearchParseException("Exception parsing coordinates: " + "number of dimensions do not match");
+                    if (ShapeParser.FIELD_TYPE.match(fieldName, subParser.getDeprecationHandler())) {
+import org.opensearch.common.geo.GeoShapeType;
+ * specific language governing permissions and limitations
+        }
+/**
+ * not use this file except in compliance with the License.
+import org.opensearch.common.unit.DistanceUnit;
+     * @param parser Parser that will be read from
+import org.opensearch.OpenSearchParseException;
+ * under the License.
+                                + shapeType
                         }
-                        coordinateNode = tempNode;
-                    } else if (ShapeParser.FIELD_GEOMETRIES.match(fieldName, subParser.getDeprecationHandler())) {
-                        if (shapeType == null) {
-                            shapeType = GeoShapeType.GEOMETRYCOLLECTION;
-                        } else if (shapeType.equals(GeoShapeType.GEOMETRYCOLLECTION) == false) {
+        }
+                    } else if (ShapeParser.FIELD_COORDINATES.match(fieldName, subParser.getDeprecationHandler())) {
                             malformedException = "cannot have [" + ShapeParser.FIELD_GEOMETRIES + "] with type set to [" + shapeType + "]";
-                        }
-                        subParser.nextToken();
-                        geometryCollections = parseGeometries(subParser, shapeMapper);
-                    } else if (CircleBuilder.FIELD_RADIUS.match(fieldName, subParser.getDeprecationHandler())) {
-                        if (shapeType == null) {
-                            shapeType = GeoShapeType.CIRCLE;
-                        } else if (shapeType != null && shapeType.equals(GeoShapeType.CIRCLE) == false) {
-                            malformedException = "cannot have [" + CircleBuilder.FIELD_RADIUS + "] with type set to [" + shapeType + "]";
-                        }
-                        subParser.nextToken();
-                        radius = DistanceUnit.Distance.parseDistance(subParser.text());
-                    } else if (ShapeParser.FIELD_ORIENTATION.match(fieldName, subParser.getDeprecationHandler())) {
-                        if (shapeType != null
-                            && (shapeType.equals(GeoShapeType.POLYGON) || shapeType.equals(GeoShapeType.MULTIPOLYGON)) == false) {
-                            malformedException = "cannot have [" + ShapeParser.FIELD_ORIENTATION + "] with type set to [" + shapeType + "]";
-                        }
-                        subParser.nextToken();
-                        orientation = ShapeBuilder.Orientation.fromString(subParser.text());
-                    } else {
-                        subParser.nextToken();
-                        subParser.skipChildren();
-                    }
-                }
-            }
-        }
-
-        if (malformedException != null) {
-            throw new OpenSearchParseException(malformedException);
-        } else if (shapeType == null) {
-            throw new OpenSearchParseException("shape type not included");
-        } else if (coordinateNode == null && GeoShapeType.GEOMETRYCOLLECTION != shapeType) {
-            throw new OpenSearchParseException("coordinates not included");
-        } else if (geometryCollections == null && GeoShapeType.GEOMETRYCOLLECTION == shapeType) {
-            throw new OpenSearchParseException("geometries not included");
-        } else if (radius != null && GeoShapeType.CIRCLE != shapeType) {
-            throw new OpenSearchParseException("field [{}] is supported for [{}] only", CircleBuilder.FIELD_RADIUS, CircleBuilder.TYPE);
-        }
-
-        if (shapeType.equals(GeoShapeType.GEOMETRYCOLLECTION)) {
             return geometryCollections;
-        }
-
-        return shapeType.getBuilder(coordinateNode, radius, orientation, coerce.value());
-    }
-
+                        if (shapeType != null && shapeType.equals(type) == false) {
+ * ownership. Elasticsearch licenses this file to you under
+     *
+ * complies with geojson specification: https://tools.ietf.org/html/rfc7946
+            parser.skipChildren();
+                        orientation = ShapeBuilder.Orientation.fromString(subParser.text());
+                }
+            throw new OpenSearchParseException("geometries not included");
+                        if (shapeType != null
+    private static Coordinate parseCoordinate(XContentParser parser, boolean ignoreZValue) throws IOException {
+            }
+                        }
+            parser.nextToken();
+        // Base cases
+        return new CoordinateNode(nodes);
+                        geometryCollections = parseGeometries(subParser, shapeMapper);
+ */
+            : shapeMapper.orientation();
     /**
-     * Recursive method which parses the arrays of coordinates used to define
-     * Shapes
+     *             Thrown if an error occurs while reading from the
+        try (XContentParser subParser = new XContentSubParser(parser)) {
+ *
+            }
+                        subParser.nextToken();
+        List<CoordinateNode> nodes = new ArrayList<>();
+ * You may obtain a copy of the License at
+import org.opensearch.common.geo.builders.ShapeBuilder.Orientation;
+                        } else if (shapeType != null && shapeType.equals(GeoShapeType.CIRCLE) == false) {
+                        if (shapeType == null) {
+            ? AbstractShapeGeometryFieldMapper.Defaults.ORIENTATION.value()
+        GeoShapeType shapeType = null;
+     */
+                    } else if (CircleBuilder.FIELD_RADIUS.match(fieldName, subParser.getDeprecationHandler())) {
+     */
+        if (parser.nextToken() != XContentParser.Token.VALUE_NUMBER) {
+                        radius = DistanceUnit.Distance.parseDistance(subParser.text());
+     * @return Geometry[] geometries of the GeometryCollection
+            throw new OpenSearchParseException("geo coordinates must be numbers");
+            throw new OpenSearchParseException("coordinates not included");
+        }
+            && token != XContentParser.Token.VALUE_NULL) {
+                    }
+}
+            throw new OpenSearchParseException("shape type not included");
+        Orientation orientation = (shapeMapper == null)
+        XContentParser.Token token;
+        } else if (geometryCollections == null && GeoShapeType.GEOMETRYCOLLECTION == shapeType) {
+                            malformedException = "cannot have [" + ShapeParser.FIELD_ORIENTATION + "] with type set to [" + shapeType + "]";
+     *            Parser that will be read from
+import org.opensearch.common.geo.GeoPoint;
+ * software distributed under the License is distributed on an
+                        coordinateNode = tempNode;
+        double lon = parser.doubleValue();
+ * KIND, either express or implied.  See the License for the
+                    } else {
+        }
+        GeometryCollectionBuilder geometryCollection = new GeometryCollectionBuilder();
+            throw new OpenSearchParseException("coordinates cannot be specified as objects");
+ *
+                        }
+                        subParser.nextToken();
+                        subParser.nextToken();
+                            malformedException = "cannot have [" + CircleBuilder.FIELD_RADIUS + "] with type set to [" + shapeType + "]";
+        if (parser.currentToken() != XContentParser.Token.START_ARRAY) {
+                            shapeType = GeoShapeType.CIRCLE;
+        }
+        XContentParser.Token token = parser.nextToken();
+        if (parser.currentToken() == XContentParser.Token.START_OBJECT) {
+                        if (shapeType == null) {
+abstract class GeoJsonParser {
+                    } else if (ShapeParser.FIELD_ORIENTATION.match(fieldName, subParser.getDeprecationHandler())) {
+import org.locationtech.jts.geom.Coordinate;
+                        subParser.nextToken();
+    }
+            ? AbstractShapeGeometryFieldMapper.Defaults.IGNORE_Z_VALUE
+            nodes.add(node);
+import org.opensearch.core.xcontent.XContentSubParser;
+        return geometryCollection;
+                        subParser.skipChildren();
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                        final GeoShapeType type = GeoShapeType.forName(subParser.text());
+ */
+ * Parses shape geometry represented in geojson
+            throw new IllegalArgumentException("coordinates cannot contain NULL values)");
+            token = parser.nextToken();
+        Explicit<Boolean> ignoreZValue = (shapeMapper == null)
+ * SPDX-License-Identifier: Apache-2.0
+            alt = GeoPoint.assertZValue(ignoreZValue, parser.doubleValue());
+                        if (coordinateNode != null && tempNode.numDimensions() != coordinateNode.numDimensions()) {
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+                        subParser.nextToken();
+        if (token != XContentParser.Token.START_ARRAY
+        }
+            throw new OpenSearchParseException("geo coordinates greater than 3 dimensions are not supported");
+            : shapeMapper.ignoreZValue();
+                            malformedException = ShapeParser.FIELD_TYPE
+                    } else if (ShapeParser.FIELD_GEOMETRIES.match(fieldName, subParser.getDeprecationHandler())) {
+        Explicit<Boolean> coerce = (shapeMapper == null) ? AbstractShapeGeometryFieldMapper.Defaults.COERCE : shapeMapper.coerce();
+    }
+import org.opensearch.common.geo.builders.CircleBuilder;
+/*
+package org.opensearch.common.geo.parsers;
+ * <p>
+/*
+     * Parse the geometries array of a GeometryCollection
+        DistanceUnit.Distance radius = null;
+        return new Coordinate(lon, lat, alt);
+ * The OpenSearch Contributors require contributions made to
+    static GeometryCollectionBuilder parseGeometries(XContentParser parser, AbstractShapeGeometryFieldMapper mapper) throws IOException {
+            ShapeBuilder shapeBuilder = ShapeParser.parse(parser);
      *
      * @param parser
-     *            Parser that will be read from
-     * @return CoordinateNode representing the start of the coordinate tree
-     * @throws IOException
-     *             Thrown if an error occurs while reading from the
-     *             XContentParser
-     */
-    private static CoordinateNode parseCoordinates(XContentParser parser, boolean ignoreZValue) throws IOException {
-        if (parser.currentToken() == XContentParser.Token.START_OBJECT) {
-            parser.skipChildren();
-            parser.nextToken();
-            throw new OpenSearchParseException("coordinates cannot be specified as objects");
-        }
-
-        XContentParser.Token token = parser.nextToken();
-        // Base cases
-        if (token != XContentParser.Token.START_ARRAY
-            && token != XContentParser.Token.END_ARRAY
-            && token != XContentParser.Token.VALUE_NULL) {
-            return new CoordinateNode(parseCoordinate(parser, ignoreZValue));
-        } else if (token == XContentParser.Token.VALUE_NULL) {
-            throw new IllegalArgumentException("coordinates cannot contain NULL values)");
-        }
-
-        List<CoordinateNode> nodes = new ArrayList<>();
-        while (token != XContentParser.Token.END_ARRAY) {
-            CoordinateNode node = parseCoordinates(parser, ignoreZValue);
-            if (nodes.isEmpty() == false && nodes.get(0).numDimensions() != node.numDimensions()) {
-                throw new OpenSearchParseException("Exception parsing coordinates: number of dimensions do not match");
-            }
-            nodes.add(node);
-            token = parser.nextToken();
-        }
-
-        return new CoordinateNode(nodes);
-    }
-
-    private static Coordinate parseCoordinate(XContentParser parser, boolean ignoreZValue) throws IOException {
-        if (parser.currentToken() != XContentParser.Token.VALUE_NUMBER) {
-            throw new OpenSearchParseException("geo coordinates must be numbers");
-        }
-        double lon = parser.doubleValue();
-        if (parser.nextToken() != XContentParser.Token.VALUE_NUMBER) {
-            throw new OpenSearchParseException("geo coordinates must be numbers");
-        }
-        double lat = parser.doubleValue();
-        XContentParser.Token token = parser.nextToken();
-        // alt (for storing purposes only - future use includes 3d shapes)
         double alt = Double.NaN;
-        if (token == XContentParser.Token.VALUE_NUMBER) {
-            alt = GeoPoint.assertZValue(ignoreZValue, parser.doubleValue());
+            geometryCollection.shape(shapeBuilder);
+import org.opensearch.index.mapper.AbstractShapeGeometryFieldMapper;
+            while ((token = subParser.nextToken()) != XContentParser.Token.END_OBJECT) {
+import org.opensearch.common.Explicit;
+            token = parser.nextToken();
+                            shapeType = type;
+     * @throws IOException
+        }
+        return shapeType.getBuilder(coordinateNode, radius, orientation, coerce.value());
+        } else if (radius != null && GeoShapeType.CIRCLE != shapeType) {
+            throw new OpenSearchParseException("geo coordinates must be numbers");
+        }
+     * Shapes
+                        } else {
+                        }
+    protected static ShapeBuilder parse(XContentParser parser, AbstractShapeGeometryFieldMapper shapeMapper) throws IOException {
             parser.nextToken();
         }
-        // do not support > 3 dimensions
-        if (parser.currentToken() == XContentParser.Token.VALUE_NUMBER) {
-            throw new OpenSearchParseException("geo coordinates greater than 3 dimensions are not supported");
+ *
+            throw new OpenSearchParseException("field [{}] is supported for [{}] only", CircleBuilder.FIELD_RADIUS, CircleBuilder.TYPE);
+ */
+ * Licensed to Elasticsearch under one or more contributor
+import java.util.ArrayList;
+import org.opensearch.common.geo.builders.ShapeBuilder;
+import java.io.IOException;
+                                + "] cannot redefine as ["
         }
-        return new Coordinate(lon, lat, alt);
-    }
-
-    /**
-     * Parse the geometries array of a GeometryCollection
-     *
-     * @param parser Parser that will be read from
-     * @return Geometry[] geometries of the GeometryCollection
-     * @throws IOException Thrown if an error occurs while reading from the XContentParser
-     */
-    static GeometryCollectionBuilder parseGeometries(XContentParser parser, AbstractShapeGeometryFieldMapper mapper) throws IOException {
-        if (parser.currentToken() != XContentParser.Token.START_ARRAY) {
-            throw new OpenSearchParseException("geometries must be an array of geojson objects");
-        }
-
-        XContentParser.Token token = parser.nextToken();
-        GeometryCollectionBuilder geometryCollection = new GeometryCollectionBuilder();
+            if (nodes.isEmpty() == false && nodes.get(0).numDimensions() != node.numDimensions()) {
+                            throw new OpenSearchParseException("Exception parsing coordinates: " + "number of dimensions do not match");
         while (token != XContentParser.Token.END_ARRAY) {
-            ShapeBuilder shapeBuilder = ShapeParser.parse(parser);
-            geometryCollection.shape(shapeBuilder);
-            token = parser.nextToken();
-        }
-
-        return geometryCollection;
+import org.opensearch.core.xcontent.XContentParser;
+    private static CoordinateNode parseCoordinates(XContentParser parser, boolean ignoreZValue) throws IOException {
+ * GitHub history for details.
+        if (token == XContentParser.Token.VALUE_NUMBER) {
+/*
+     * @throws IOException Thrown if an error occurs while reading from the XContentParser
+            throw new OpenSearchParseException(malformedException);
+        if (parser.currentToken() == XContentParser.Token.VALUE_NUMBER) {
+ * Modifications Copyright OpenSearch Contributors. See
+        } else if (shapeType == null) {
+ */
+            && token != XContentParser.Token.END_ARRAY
+     * Recursive method which parses the arrays of coordinates used to define
+ * compatible open source license.
+        if (malformedException != null) {
+ * this file be licensed under the Apache-2.0 license or a
+                                + " already parsed as ["
     }
-}
+                    String fieldName = subParser.currentName();
+                        } else if (shapeType.equals(GeoShapeType.GEOMETRYCOLLECTION) == false) {
+                if (token == XContentParser.Token.FIELD_NAME) {
+ * license agreements. See the NOTICE file distributed with
+    /**
+        if (parser.currentToken() != XContentParser.Token.VALUE_NUMBER) {
+        // alt (for storing purposes only - future use includes 3d shapes)
+            return new CoordinateNode(parseCoordinate(parser, ignoreZValue));
+        CoordinateNode coordinateNode = null;
+        } else if (coordinateNode == null && GeoShapeType.GEOMETRYCOLLECTION != shapeType) {
+                                + "]";
+        GeometryCollectionBuilder geometryCollections = null;
+import org.opensearch.common.geo.builders.GeometryCollectionBuilder;
+import java.util.List;
+     *             XContentParser
+        String malformedException = null;
+                            shapeType = GeoShapeType.GEOMETRYCOLLECTION;
+ *
+        // do not support > 3 dimensions
+        XContentParser.Token token = parser.nextToken();
+        if (shapeType.equals(GeoShapeType.GEOMETRYCOLLECTION)) {
+                        }
+ * Unless required by applicable law or agreed to in writing,
+        } else if (token == XContentParser.Token.VALUE_NULL) {
+        }
+            throw new OpenSearchParseException("geometries must be an array of geojson objects");
+                throw new OpenSearchParseException("Exception parsing coordinates: number of dimensions do not match");
+        while (token != XContentParser.Token.END_ARRAY) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * this work for additional information regarding copyright
+                            && (shapeType.equals(GeoShapeType.POLYGON) || shapeType.equals(GeoShapeType.MULTIPOLYGON)) == false) {
+     * @return CoordinateNode representing the start of the coordinate tree
+    }
+ * @opensearch.internal
+        XContentParser.Token token = parser.nextToken();

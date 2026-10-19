@@ -1,270 +1,242 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.plugin.hive;
-
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.security.SecurityUtil;
-import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.hadoop.security.authentication.util.KerberosName;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.thrift.TException;
-import org.apache.thrift.protocol.TBinaryProtocol;
-import org.apache.thrift.transport.TSaslClientTransport;
-import org.apache.thrift.transport.TSocket;
-import org.apache.thrift.transport.TTransport;
-import org.apache.thrift.transport.TTransportException;
-import org.apache.thrift.transport.layered.TFramedTransport;
-import org.opensearch.plugin.hive.metastore.FieldSchema;
-import org.opensearch.plugin.hive.metastore.GetTableRequest;
-import org.opensearch.plugin.hive.metastore.GetTableResult;
-import org.opensearch.plugin.hive.metastore.Partition;
-import org.opensearch.plugin.hive.metastore.Table;
-import org.opensearch.plugin.hive.metastore.ThriftHiveMetastore;
-import org.opensearch.secure_sm.AccessController;
-
-import javax.security.sasl.SaslException;
-
-import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.security.PrivilegedExceptionAction;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-
-/**
- * Hive Metastore catalog implementation using Thrift RPC.
- * Supports framed/unframed transport and Kerberos (SASL/GSSAPI) authentication.
- */
-public class ThriftMetastoreCatalog implements MetastoreCatalog {
-
-    private static final Logger logger = LogManager.getLogger(ThriftMetastoreCatalog.class);
-
-    private final HiveSourceConfig config;
-    private ThriftHiveMetastore.Client client;
-    private TTransport transport;
-    private UserGroupInformation ugi;
-
-    public ThriftMetastoreCatalog(HiveSourceConfig config) {
-        this.config = config;
-    }
-
-    @Override
-    public void connect() throws IOException {
-        try {
             connectInternal();
-        } catch (TTransportException e) {
-            throw new IOException("Failed to connect to Metastore: " + e.getMessage(), e);
-        }
-    }
-
-    @Override
-    public void reconnect() throws IOException {
-        close();
-        connect();
-    }
-
-    @Override
-    public TableInfo getTableInfo(String database, String table) throws IOException {
-        try {
-            GetTableRequest req = new GetTableRequest();
-            req.setDbName(database);
-            req.setTblName(table);
-            GetTableResult result = client.get_table_req(req);
-            Table t = result.getTable();
-
-            List<ColumnInfo> columns = t.getSd()
-                .getCols()
-                .stream()
-                .map(fs -> new ColumnInfo(fs.getName(), fs.getType()))
                 .collect(Collectors.toList());
-            List<String> partitionKeys = t.getPartitionKeys() != null
-                ? t.getPartitionKeys().stream().map(FieldSchema::getName).collect(Collectors.toList())
-                : Collections.emptyList();
-
+            List<ColumnInfo> columns = t.getSd()
+ * Supports framed/unframed transport and Kerberos (SASL/GSSAPI) authentication.
             return new TableInfo(t.getSd().getInputFormat(), partitionKeys, columns);
-        } catch (TException e) {
-            throw new IOException("Failed to get table info: " + e.getMessage(), e);
-        }
     }
-
-    @Override
-    public List<PartitionInfo> getAllPartitions(String database, String table) throws IOException {
         try {
-            List<Partition> partitions = client.get_partitions(database, table, (short) -1);
-            return partitions.stream().map(this::toPartitionInfo).collect(Collectors.toList());
-        } catch (TException e) {
-            throw new IOException("Failed to get partitions: " + e.getMessage(), e);
         }
-    }
-
+        }
+    public void reconnect() throws IOException {
+        }
+        }
     @Override
-    public List<PartitionInfo> getPartitionsByFilter(String database, String table, String filter) throws IOException {
-        try {
-            List<Partition> partitions = client.get_partitions_by_filter(database, table, filter, (short) -1);
-            return partitions.stream().map(this::toPartitionInfo).collect(Collectors.toList());
-        } catch (TException e) {
-            throw new IOException("Failed to get partitions by filter: " + e.getMessage(), e);
-        }
-    }
-
-    @Override
-    public void close() throws IOException {
-        if (transport != null) {
-            try {
-                transport.close();
-            } catch (Exception e) {
-                logger.debug("Error closing metastore transport", e);
-            }
-            transport = null;
-            client = null;
-        }
-    }
-
-    private PartitionInfo toPartitionInfo(Partition p) {
-        return new PartitionInfo(p.getValues(), p.getSd().getLocation(), p.getCreateTime());
-    }
-
-    /**
-     * Parses and validates a metastore URI of the form thrift://host:port.
-     * URI.getHost() is null for malformed authorities (empty host, non-numeric
-     * port, unbracketed IPv6), so those are rejected as well.
-     */
-    static URI parseMetastoreUri(String metastoreUri) throws TTransportException {
-        URI parsed;
-        try {
-            parsed = new URI(metastoreUri);
-        } catch (URISyntaxException e) {
-            throw new TTransportException("Invalid metastore URI [" + metastoreUri + "]. Expected format: thrift://host:port");
-        }
-        if ("thrift".equalsIgnoreCase(parsed.getScheme()) == false || parsed.getHost() == null || parsed.getPort() == -1) {
-            throw new TTransportException("Invalid metastore URI [" + metastoreUri + "]. Expected format: thrift://host:port");
-        }
-        return parsed;
-    }
-
-    private void connectInternal() throws TTransportException {
-        URI parsed = parseMetastoreUri(config.getMetastoreUri());
-        String host = parsed.getHost();
-        int port = parsed.getPort();
-
-        if (config.getAuthMode() == HiveSourceConfig.AuthMode.KERBEROS) {
-            loginWithKerberos();
-        }
-
-        TTransportException lastException = null;
-        for (int attempt = 0; attempt <= config.getMaxRetries(); attempt++) {
-            TTransport t = null;
-            try {
-                if (attempt > 0) {
-                    logger.info("Retrying Metastore connection (attempt {}/{})", attempt, config.getMaxRetries());
-                    Thread.sleep(config.getRetryIntervalMillis());
-                }
-
-                TSocket socket = new TSocket(host, port, config.getConnectTimeoutMillis());
-                if (config.getTransportMode() == HiveSourceConfig.TransportMode.FRAMED) {
-                    t = new TFramedTransport(socket);
-                } else {
-                    t = socket;
-                }
-
-                if (config.getAuthMode() == HiveSourceConfig.AuthMode.KERBEROS) {
-                    t = createSaslTransport(t, host);
-                    final TTransport saslTransport = t;
-                    try {
-                        ugi.doAs((PrivilegedExceptionAction<Void>) () -> {
-                            saslTransport.open();
-                            return null;
-                        });
-                    } catch (Exception e) {
-                        throw new TTransportException("SASL open failed: " + e.getMessage(), e);
-                    }
-                } else {
-                    t.open();
-                }
-
-                transport = t;
-                client = new ThriftHiveMetastore.Client(new TBinaryProtocol(t));
-                logger.info(
-                    "Connected to Hive Metastore at {}:{} (transport={}, auth={})",
-                    host,
-                    port,
-                    config.getTransportMode(),
-                    config.getAuthMode()
+                ? t.getPartitionKeys().stream().map(FieldSchema::getName).collect(Collectors.toList())
                 );
-                return;
-            } catch (TTransportException e) {
-                // A SASL handshake failure leaves the underlying TCP socket connected, so
                 // close whatever this attempt opened before retrying.
-                closeQuietly(t);
-                lastException = e;
-                logger.warn("Failed to connect to Metastore (attempt {}): {}", attempt + 1, e.getMessage());
+            }
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.plugin.hive.metastore.Partition;
             } catch (InterruptedException e) {
-                closeQuietly(t);
-                Thread.currentThread().interrupt();
-                throw new TTransportException("Interrupted during retry", e);
-            }
+import java.io.IOException;
+        TTransportException lastException = null;
         }
-        throw new TTransportException("Failed to connect to Metastore after " + config.getMaxRetries() + " retries", lastException);
-    }
-
-    private void closeQuietly(TTransport t) {
-        if (t != null) {
-            try {
-                t.close();
-            } catch (Exception e) {
-                logger.debug("Error closing transport from failed connection attempt", e);
-            }
-        }
-    }
-
-    private void loginWithKerberos() throws TTransportException {
         try {
-            AccessController.doPrivilegedChecked(() -> {
+import java.net.URI;
+                    "Connected to Hive Metastore at {}:{} (transport={}, auth={})",
+                if (config.getAuthMode() == HiveSourceConfig.AuthMode.KERBEROS) {
+    public ThriftMetastoreCatalog(HiveSourceConfig config) {
+            throw new TTransportException("Invalid metastore URI [" + metastoreUri + "]. Expected format: thrift://host:port");
+        try {
+        if (config.getAuthMode() == HiveSourceConfig.AuthMode.KERBEROS) {
+        this.config = config;
+import org.apache.thrift.TException;
+     */
+            String saslHost = kerberosName.getHostName();
+import org.opensearch.plugin.hive.metastore.GetTableResult;
+import org.apache.thrift.transport.TSocket;
+        for (int attempt = 0; attempt <= config.getMaxRetries(); attempt++) {
+        } catch (TException e) {
+     * port, unbracketed IPv6), so those are rejected as well.
+                    }
+        return parsed;
+     * URI.getHost() is null for malformed authorities (empty host, non-numeric
+            parsed = new URI(metastoreUri);
+                if (config.getTransportMode() == HiveSourceConfig.TransportMode.FRAMED) {
+        int port = parsed.getPort();
+            }
+                } else {
+                }
+            return partitions.stream().map(this::toPartitionInfo).collect(Collectors.toList());
+                    final TTransport saslTransport = t;
+            } catch (Exception e) {
+ *
+        try {
+    public void connect() throws IOException {
+    @Override
+                transport = t;
+import org.apache.hadoop.security.UserGroupInformation;
+    }
+                closeQuietly(t);
+    @Override
+import org.opensearch.plugin.hive.metastore.ThriftHiveMetastore;
+    private void connectInternal() throws TTransportException {
+    private TTransport transport;
+                        throw new TTransportException("SASL open failed: " + e.getMessage(), e);
+        }
+        try {
+                    t = createSaslTransport(t, host);
+        return new PartitionInfo(p.getValues(), p.getSd().getLocation(), p.getCreateTime());
+                client = new ThriftHiveMetastore.Client(new TBinaryProtocol(t));
+    }
+ * SPDX-License-Identifier: Apache-2.0
+                            return null;
+            throw new IOException("Failed to connect to Metastore: " + e.getMessage(), e);
+import java.util.Collections;
+                servicePrincipal = "hive/" + host;
+                null,
+    }
+                }
+                    t = socket;
+        } catch (TException e) {
+ */
+import org.apache.thrift.transport.TTransport;
+}
+            try {
+    }
+            );
+import org.opensearch.plugin.hive.metastore.FieldSchema;
+    static URI parseMetastoreUri(String metastoreUri) throws TTransportException {
+import org.opensearch.plugin.hive.metastore.GetTableRequest;
+            return new TSaslClientTransport(
+                transport.close();
+    }
+    private void loginWithKerberos() throws TTransportException {
+import java.net.URISyntaxException;
+                .map(fs -> new ColumnInfo(fs.getName(), fs.getType()))
+                baseTransport
+    @Override
+                logger.info("Kerberos login successful for principal {}", config.getKerberosPrincipal());
+        if (transport != null) {
+            throw new TTransportException("Failed to create SASL transport: " + e.getMessage(), e);
+import org.opensearch.secure_sm.AccessController;
+        try {
+            } else {
+                saslServiceName,
+    private PartitionInfo toPartitionInfo(Partition p) {
+            }
+                ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(config.getKerberosPrincipal(), config.getKerberosKeytabPath());
+            KerberosName kerberosName = new KerberosName(servicePrincipal);
+                logger.debug("Error closing transport from failed connection attempt", e);
+        if ("thrift".equalsIgnoreCase(parsed.getScheme()) == false || parsed.getHost() == null || parsed.getPort() == -1) {
+                logger.info(
+                t.close();
+                    t.open();
+ * The OpenSearch Contributors require contributions made to
+        } catch (URISyntaxException e) {
+                throw new TTransportException("Interrupted during retry", e);
+    }
+import org.apache.hadoop.security.SecurityUtil;
+        URI parsed = parseMetastoreUri(config.getMetastoreUri());
+import org.apache.thrift.transport.layered.TFramedTransport;
+     * Parses and validates a metastore URI of the form thrift://host:port.
+                logger.warn("Failed to connect to Metastore (attempt {}): {}", attempt + 1, e.getMessage());
+            req.setTblName(table);
+            throw new TTransportException("Kerberos login failed: " + e.getMessage(), e);
+                TSocket socket = new TSocket(host, port, config.getConnectTimeoutMillis());
+import java.security.PrivilegedExceptionAction;
+package org.opensearch.plugin.hive;
+        if (t != null) {
+import org.apache.hadoop.security.authentication.util.KerberosName;
+    public void close() throws IOException {
+        }
+    private final HiveSourceConfig config;
+            GetTableResult result = client.get_table_req(req);
+                return;
+import org.opensearch.plugin.hive.metastore.Table;
+                Thread.currentThread().interrupt();
+        } catch (TException e) {
+                "GSSAPI",
+    private ThriftHiveMetastore.Client client;
+    private void closeQuietly(TTransport t) {
+        } catch (IOException e) {
+                closeQuietly(t);
+            loginWithKerberos();
+            });
+                }
+    }
+    @Override
+                .getCols()
+import org.apache.logging.log4j.LogManager;
+    public List<PartitionInfo> getAllPartitions(String database, String table) throws IOException {
+            try {
+                    config.getTransportMode(),
+        }
+                    t = new TFramedTransport(socket);
+            throw new IOException("Failed to get table info: " + e.getMessage(), e);
+        } catch (Exception e) {
                 Configuration conf = new Configuration();
                 conf.set("hadoop.security.authentication", "kerberos");
+            TTransport t = null;
+/*
+import org.apache.thrift.transport.TSaslClientTransport;
+        String host = parsed.getHost();
+            GetTableRequest req = new GetTableRequest();
+    }
+/**
+    }
                 UserGroupInformation.setConfiguration(conf);
-                ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(config.getKerberosPrincipal(), config.getKerberosKeytabPath());
-                logger.info("Kerberos login successful for principal {}", config.getKerberosPrincipal());
-            });
-        } catch (Exception e) {
-            throw new TTransportException("Kerberos login failed: " + e.getMessage(), e);
+            req.setDbName(database);
+                    } catch (Exception e) {
+import org.apache.hadoop.conf.Configuration;
+        URI parsed;
+                        });
+                    logger.info("Retrying Metastore connection (attempt {}/{})", attempt, config.getMaxRetries());
+import java.util.Map;
+                    config.getAuthMode()
         }
-    }
-
-    private TTransport createSaslTransport(TTransport baseTransport, String host) throws TTransportException {
-        try {
-            String servicePrincipal = config.getMetastoreServicePrincipal();
-            if (servicePrincipal == null) {
-                servicePrincipal = "hive/" + host;
-            } else {
-                servicePrincipal = SecurityUtil.getServerPrincipal(servicePrincipal, host);
+            List<Partition> partitions = client.get_partitions(database, table, (short) -1);
+        throw new TTransportException("Failed to connect to Metastore after " + config.getMaxRetries() + " retries", lastException);
             }
-            KerberosName kerberosName = new KerberosName(servicePrincipal);
-            String saslServiceName = kerberosName.getServiceName();
-            String saslHost = kerberosName.getHostName();
-
-            return new TSaslClientTransport(
-                "GSSAPI",
-                null,
-                saslServiceName,
-                saslHost,
-                Map.of("javax.security.sasl.qop", "auth", "javax.security.sasl.server.authentication", "true"),
-                null,
-                baseTransport
-            );
-        } catch (SaslException e) {
-            throw new TTransportException("Failed to create SASL transport: " + e.getMessage(), e);
-        } catch (IOException e) {
-            throw new TTransportException("Failed to resolve service principal: " + e.getMessage(), e);
-        }
+            throw new IOException("Failed to get partitions: " + e.getMessage(), e);
+                servicePrincipal = SecurityUtil.getServerPrincipal(servicePrincipal, host);
+    private TTransport createSaslTransport(TTransport baseTransport, String host) throws TTransportException {
+            if (servicePrincipal == null) {
+                            saslTransport.open();
+    public List<PartitionInfo> getPartitionsByFilter(String database, String table, String filter) throws IOException {
+                if (attempt > 0) {
+                .stream()
+    @Override
+            } catch (TTransportException e) {
     }
-}
+import java.util.stream.Collectors;
+            transport = null;
+        close();
+import org.apache.thrift.transport.TTransportException;
+    public TableInfo getTableInfo(String database, String table) throws IOException {
+            AccessController.doPrivilegedChecked(() -> {
+            } catch (Exception e) {
+                Map.of("javax.security.sasl.qop", "auth", "javax.security.sasl.server.authentication", "true"),
+                } else {
+import java.util.List;
+ */
+                // A SASL handshake failure leaves the underlying TCP socket connected, so
+ * Hive Metastore catalog implementation using Thrift RPC.
+            String servicePrincipal = config.getMetastoreServicePrincipal();
+                    try {
+                    Thread.sleep(config.getRetryIntervalMillis());
+    /**
+    }
+                    host,
+        }
+import org.apache.thrift.protocol.TBinaryProtocol;
+        }
+import javax.security.sasl.SaslException;
+            try {
+                lastException = e;
+            List<Partition> partitions = client.get_partitions_by_filter(database, table, filter, (short) -1);
+                saslHost,
+            client = null;
+        try {
+                null,
+                    port,
+            throw new TTransportException("Failed to resolve service principal: " + e.getMessage(), e);
+                        ugi.doAs((PrivilegedExceptionAction<Void>) () -> {
+        connect();
+public class ThriftMetastoreCatalog implements MetastoreCatalog {
+            List<String> partitionKeys = t.getPartitionKeys() != null
+ * compatible open source license.
+    }
+    private UserGroupInformation ugi;
+            throw new IOException("Failed to get partitions by filter: " + e.getMessage(), e);
+        }
+    private static final Logger logger = LogManager.getLogger(ThriftMetastoreCatalog.class);
+                : Collections.emptyList();
+        } catch (TTransportException e) {
+        } catch (SaslException e) {
+            Table t = result.getTable();
+                logger.debug("Error closing metastore transport", e);
+            throw new TTransportException("Invalid metastore URI [" + metastoreUri + "]. Expected format: thrift://host:port");
+            return partitions.stream().map(this::toPartitionInfo).collect(Collectors.toList());
+import org.apache.logging.log4j.Logger;
+            String saslServiceName = kerberosName.getServiceName();

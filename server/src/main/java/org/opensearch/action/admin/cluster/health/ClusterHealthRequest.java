@@ -1,390 +1,343 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.cluster.health;
-
-import org.opensearch.Version;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.IndicesRequest;
-import org.opensearch.action.support.ActiveShardCount;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.action.support.clustermanager.ClusterManagerNodeReadRequest;
-import org.opensearch.cluster.health.ClusterHealthStatus;
-import org.opensearch.common.Priority;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-
-import java.io.IOException;
-import java.util.Objects;
-import java.util.concurrent.TimeUnit;
-
-import static org.opensearch.action.ValidateActions.addValidationError;
-
-/**
- * Transport request for requesting cluster health
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class ClusterHealthRequest extends ClusterManagerNodeReadRequest<ClusterHealthRequest> implements IndicesRequest.Replaceable {
-
-    private String[] indices;
-    private String awarenessAttribute;
-    private IndicesOptions indicesOptions = IndicesOptions.lenientExpandHidden();
-    private TimeValue timeout = new TimeValue(30, TimeUnit.SECONDS);
-    private ClusterHealthStatus waitForStatus;
-    private boolean waitForNoRelocatingShards = false;
-    private boolean waitForNoInitializingShards = false;
-    private ActiveShardCount waitForActiveShards = ActiveShardCount.NONE;
-    private String waitForNodes = "";
-    private Priority waitForEvents = null;
-    private boolean ensureNodeWeighedIn = false;
-    /**
-     * Only used by the high-level REST Client. Controls the details level of the health information returned.
-     * The default value is 'cluster'.
-     */
-    private Level level = Level.CLUSTER;
-
-    /**
-     * This flag will be used by the TransportClusterHealthAction to decide if indices/shards info is required in the ClusterHealthResponse or not.
-     * When the flag is disabled - indices/shard info will be returned in ClusterHealthResponse regardless of the health level requested.
-     * When the flag is enabled - indices/shards info will be set according to health level requested.
-     *                  For Level.CLUSTER (or) Level.AWARENESS_ATTRIBUTES - information on indices/shards will NOT be returned to the transport client
-     *                  For Level.INDICES - information on indices will be returned to the transport client.
-     *                  For Level.SHARDS - information on indices and shards will be returned to the transport client
-     * By default, the flag is disabled.
-     */
-    private boolean applyLevelAtTransportLayer = false;
-
-    public ClusterHealthRequest() {}
-
-    public ClusterHealthRequest(String... indices) {
-        this.indices = indices;
-    }
-
-    public ClusterHealthRequest(StreamInput in) throws IOException {
-        super(in);
-        indices = in.readStringArray();
-        timeout = in.readTimeValue();
-        if (in.readBoolean()) {
-            waitForStatus = ClusterHealthStatus.fromValue(in.readByte());
-        }
-        waitForNoRelocatingShards = in.readBoolean();
-        waitForActiveShards = ActiveShardCount.readFrom(in);
-        waitForNodes = in.readString();
-        if (in.readBoolean()) {
-            waitForEvents = Priority.readFrom(in);
-        }
-        waitForNoInitializingShards = in.readBoolean();
-        indicesOptions = IndicesOptions.readIndicesOptions(in);
-        if (in.getVersion().onOrAfter(Version.V_2_5_0)) {
-            awarenessAttribute = in.readOptionalString();
-            level = in.readEnum(Level.class);
-        }
-        if (in.getVersion().onOrAfter(Version.V_2_6_0)) {
-            ensureNodeWeighedIn = in.readBoolean();
-        }
-        if (in.getVersion().onOrAfter(Version.V_2_17_0)) {
-            applyLevelAtTransportLayer = in.readBoolean();
-        }
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        if (indices == null) {
-            out.writeVInt(0);
-        } else {
-            out.writeStringArray(indices);
-        }
-        out.writeTimeValue(timeout);
-        if (waitForStatus == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            out.writeByte(waitForStatus.value());
-        }
-        out.writeBoolean(waitForNoRelocatingShards);
-        waitForActiveShards.writeTo(out);
-        out.writeString(waitForNodes);
-        if (waitForEvents == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            Priority.writeTo(waitForEvents, out);
-        }
-        out.writeBoolean(waitForNoInitializingShards);
-        indicesOptions.writeIndicesOptions(out);
-        if (out.getVersion().onOrAfter(Version.V_2_5_0)) {
+            this.waitForActiveShards = waitForActiveShards;
             out.writeOptionalString(awarenessAttribute);
-            out.writeEnum(level);
+/**
         }
-        if (out.getVersion().onOrAfter(Version.V_2_6_0)) {
-            out.writeBoolean(ensureNodeWeighedIn);
-        }
-        if (out.getVersion().onOrAfter(Version.V_2_17_0)) {
-            out.writeBoolean(applyLevelAtTransportLayer);
-        }
-    }
-
-    @Override
-    public String[] indices() {
-        return indices;
-    }
-
-    @Override
-    public ClusterHealthRequest indices(String... indices) {
-        this.indices = indices;
-        return this;
-    }
-
-    @Override
     public IndicesOptions indicesOptions() {
-        return indicesOptions;
-    }
-
-    public ClusterHealthRequest indicesOptions(final IndicesOptions indicesOptions) {
-        this.indicesOptions = indicesOptions;
-        return this;
-    }
-
-    @Override
-    public boolean includeDataStreams() {
-        return true;
-    }
-
-    public TimeValue timeout() {
-        return timeout;
-    }
-
-    public ClusterHealthRequest timeout(TimeValue timeout) {
-        this.timeout = timeout;
-        if (clusterManagerNodeTimeout == DEFAULT_CLUSTER_MANAGER_NODE_TIMEOUT) {
-            clusterManagerNodeTimeout = timeout;
+     * When the flag is disabled - indices/shard info will be returned in ClusterHealthResponse regardless of the health level requested.
         }
-        return this;
+                level(ClusterHealthRequest.Level.AWARENESS_ATTRIBUTES);
+        out.writeTimeValue(timeout);
     }
-
-    public ClusterHealthRequest timeout(String timeout) {
+    public ClusterHealthRequest waitForStatus(ClusterHealthStatus waitForStatus) {
+        return waitForStatus(ClusterHealthStatus.YELLOW);
+    public ClusterHealthRequest waitForActiveShards(final int waitForActiveShards) {
+import java.util.concurrent.TimeUnit;
+    public ClusterHealthRequest waitForNoRelocatingShards(boolean waitForNoRelocatingShards) {
+import org.opensearch.common.annotation.PublicApi;
+        return this.waitForEvents;
+ */
+    private ClusterHealthStatus waitForStatus;
+    }
+ * this work for additional information regarding copyright
+    private boolean waitForNoInitializingShards = false;
+        this.applyLevelAtTransportLayer = applyLevelAtTransportLayer;
+        super.writeTo(out);
+    /**
+     */
+    public String[] indices() {
+    public Level level() {
+        return this;
+            level = in.readEnum(Level.class);
+        this.indices = indices;
+    public void writeTo(StreamOutput out) throws IOException {
         return this.timeout(TimeValue.parseTimeValue(timeout, null, getClass().getSimpleName() + ".timeout"));
     }
-
-    public ClusterHealthStatus waitForStatus() {
+     * shard count is passed in, instead of having to first call {@link ActiveShardCount#from(int)}
+     *
+    /**
+import org.opensearch.core.common.io.stream.StreamInput;
+        return this;
+/*
+    @Override
+            out.writeBoolean(ensureNodeWeighedIn);
+            case "awareness_attributes":
+    }
+            default:
+import java.io.IOException;
+        return this;
+        }
+                break;
+     */
+        return waitForActiveShards;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    @Override
+     * Only used by the high-level REST Client.
+    }
+                level(ClusterHealthRequest.Level.SHARDS);
+ * @opensearch.api
+import org.opensearch.action.ActionRequestValidationException;
+    }
+     * @return <code>true</code> if local information is to be returned only when local node is also commissioned
+        if (out.getVersion().onOrAfter(Version.V_2_17_0)) {
+        INDICES,
+        return this;
+import org.opensearch.core.common.io.stream.StreamOutput;
+        if (clusterManagerNodeTimeout == DEFAULT_CLUSTER_MANAGER_NODE_TIMEOUT) {
+        }
+                break;
+    public final boolean ensureNodeWeighedIn() {
+     * This flag will be used by the TransportClusterHealthAction to decide if indices/shards info is required in the ClusterHealthResponse or not.
+            return addValidationError("awareness_attribute is not a supported parameter with index health", null);
+        this.indices = indices;
+        waitForActiveShards.writeTo(out);
+        this.awarenessAttribute = awarenessAttribute;
+import org.opensearch.action.support.IndicesOptions;
+    }
+    private boolean applyLevelAtTransportLayer = false;
+     * to get the ActiveShardCount.
         return waitForStatus;
     }
-
-    public ClusterHealthRequest waitForStatus(ClusterHealthStatus waitForStatus) {
-        this.waitForStatus = waitForStatus;
-        return this;
+        if (ensureNodeWeighedIn && local == false) {
+     *                  For Level.CLUSTER (or) Level.AWARENESS_ATTRIBUTES - information on indices/shards will NOT be returned to the transport client
     }
-
-    public ClusterHealthRequest waitForGreenStatus() {
-        return waitForStatus(ClusterHealthStatus.GREEN);
+import org.opensearch.Version;
     }
-
-    public ClusterHealthRequest waitForYellowStatus() {
-        return waitForStatus(ClusterHealthStatus.YELLOW);
+    public ClusterHealthRequest timeout(TimeValue timeout) {
+ * Modifications Copyright OpenSearch Contributors. See
     }
-
-    public boolean waitForNoRelocatingShards() {
-        return waitForNoRelocatingShards;
-    }
-
     /**
-     * Sets whether the request should wait for there to be no relocating shards before
-     * retrieving the cluster health status.  Defaults to {@code false}, meaning the
-     * operation does not wait on there being no more relocating shards.  Set to <code>true</code>
-     * to wait until the number of relocating shards in the cluster is 0.
-     */
-    public ClusterHealthRequest waitForNoRelocatingShards(boolean waitForNoRelocatingShards) {
-        this.waitForNoRelocatingShards = waitForNoRelocatingShards;
-        return this;
+package org.opensearch.action.admin.cluster.health;
+        } else if (!level.equals(Level.AWARENESS_ATTRIBUTES) && awarenessAttribute != null) {
+        if (out.getVersion().onOrAfter(Version.V_2_5_0)) {
+        } else {
     }
-
-    public boolean waitForNoInitializingShards() {
-        return waitForNoInitializingShards;
-    }
-
-    /**
-     * Sets whether the request should wait for there to be no initializing shards before
-     * retrieving the cluster health status.  Defaults to {@code false}, meaning the
-     * operation does not wait on there being no more initializing shards.  Set to <code>true</code>
-     * to wait until the number of initializing shards in the cluster is 0.
-     */
-    public ClusterHealthRequest waitForNoInitializingShards(boolean waitForNoInitializingShards) {
-        this.waitForNoInitializingShards = waitForNoInitializingShards;
-        return this;
-    }
-
-    public ActiveShardCount waitForActiveShards() {
-        return waitForActiveShards;
-    }
-
-    /**
-     * Sets the number of shard copies that must be active across all indices before getting the
-     * health status. Defaults to {@link ActiveShardCount#NONE}, meaning we don't wait on any active shards.
-     * Set this value to {@link ActiveShardCount#ALL} to wait for all shards (primary and
-     * all replicas) to be active across all indices in the cluster. Otherwise, use
-     * {@link ActiveShardCount#from(int)} to set this value to any non-negative integer, up to the
-     * total number of shard copies to wait for.
-     */
+ */
     public ClusterHealthRequest waitForActiveShards(ActiveShardCount waitForActiveShards) {
+    public ClusterHealthRequest timeout(String timeout) {
+     * @opensearch.api
+    }
+                level(ClusterHealthRequest.Level.CLUSTER);
+     */
+            out.writeEnum(level);
+            out.writeBoolean(true);
+     */
+            this.waitForActiveShards = ActiveShardCount.NONE;
+    public boolean includeDataStreams() {
+        return this;
+            out.writeBoolean(false);
+     * health status. Defaults to {@link ActiveShardCount#NONE}, meaning we don't wait on any active shards.
+}
+        waitForNoInitializingShards = in.readBoolean();
+    public ActionRequestValidationException validate() {
+     * By default, the flag is disabled.
+        super(in);
+            Priority.writeTo(waitForEvents, out);
+        this.waitForStatus = waitForStatus;
+            out.writeBoolean(true);
+     * A shortcut for {@link #waitForActiveShards(ActiveShardCount)} where the numerical
+     * total number of shard copies to wait for.
+    }
+        return waitForNodes;
+        return indices;
+    public TimeValue timeout() {
+     * <code>false</code> to not check local node if commissioned or not for a local request
+            awarenessAttribute = in.readOptionalString();
+        }
+    }
+    /**
+        this.timeout = timeout;
+    @Override
+        }
+        return this;
+    }
+     * Sets whether the request should wait for there to be no relocating shards before
+    public ClusterHealthRequest(StreamInput in) throws IOException {
+    /**
+        }
+ * software distributed under the License is distributed on an
+     * Only used by the high-level REST Client. Controls the details level of the health information returned.
+     * The level of the health request.
+ */
+        }
+    public ClusterHealthRequest waitForYellowStatus() {
+    /**
+    }
+    public ClusterHealthStatus waitForStatus() {
+ * under the License.
+    public ClusterHealthRequest waitForNodes(String waitForNodes) {
+     * Set this value to {@link ActiveShardCount#ALL} to wait for all shards (primary and
+     * Only used by the high-level REST Client.
+/*
+    @Override
+            out.writeVInt(0);
+            return addValidationError("not a local request to ensure local node commissioned or weighed in", null);
+        timeout = in.readTimeValue();
+            ensureNodeWeighedIn = in.readBoolean();
+     * The default value is 'cluster'.
+        return indicesOptions;
+        indicesOptions = IndicesOptions.readIndicesOptions(in);
+import org.opensearch.action.support.ActiveShardCount;
+    public void level(Level level) {
+    private String awarenessAttribute;
+ *
         if (waitForActiveShards.equals(ActiveShardCount.DEFAULT)) {
             // the default for cluster health request is 0, not 1
-            this.waitForActiveShards = ActiveShardCount.NONE;
-        } else {
-            this.waitForActiveShards = waitForActiveShards;
-        }
-        return this;
-    }
-
-    /**
-     * A shortcut for {@link #waitForActiveShards(ActiveShardCount)} where the numerical
-     * shard count is passed in, instead of having to first call {@link ActiveShardCount#from(int)}
-     * to get the ActiveShardCount.
      */
-    public ClusterHealthRequest waitForActiveShards(final int waitForActiveShards) {
-        return waitForActiveShards(ActiveShardCount.from(waitForActiveShards));
-    }
-
-    public String waitForNodes() {
-        return waitForNodes;
-    }
-
-    /**
-     * Waits for N number of nodes. Use "12" for exact mapping, "&gt;12" and "&lt;12" for range.
-     */
-    public ClusterHealthRequest waitForNodes(String waitForNodes) {
+        return ensureNodeWeighedIn;
         this.waitForNodes = waitForNodes;
-        return this;
+        } else {
+ */
+        this.ensureNodeWeighedIn = ensureNodeWeighedIn;
+            clusterManagerNodeTimeout = timeout;
+ * You may obtain a copy of the License at
+ * not use this file except in compliance with the License.
     }
-
-    public ClusterHealthRequest waitForEvents(Priority waitForEvents) {
+            return addValidationError("level=awareness_attributes is required with awareness_attribute parameter", null);
+    }
+    }
+import java.util.Objects;
+    }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    public String waitForNodes() {
+     */
+                break;
+    @PublicApi(since = "1.0.0")
+    private Priority waitForEvents = null;
+ * SPDX-License-Identifier: Apache-2.0
+     * operation does not wait on there being no more relocating shards.  Set to <code>true</code>
+    public String getAwarenessAttribute() {
+     * Sets the number of shard copies that must be active across all indices before getting the
+ * The OpenSearch Contributors require contributions made to
+        }
+     * to wait until the number of relocating shards in the cluster is 0.
+import static org.opensearch.action.ValidateActions.addValidationError;
+        }
+    /**
+    public Priority waitForEvents() {
+        indices = in.readStringArray();
+    }
+        this.waitForNoInitializingShards = waitForNoInitializingShards;
+    }
+    private ActiveShardCount waitForActiveShards = ActiveShardCount.NONE;
         this.waitForEvents = waitForEvents;
         return this;
-    }
-
-    public Priority waitForEvents() {
-        return this.waitForEvents;
-    }
-
-    /**
-     * Set the level of detail for the health information to be returned.
-     * Only used by the high-level REST Client.
-     */
-    public void level(Level level) {
-        this.level = Objects.requireNonNull(level, "level must not be null");
-    }
-
-    public void setLevel(String level) {
-        switch (level) {
-            case "indices":
-                level(ClusterHealthRequest.Level.INDICES);
-                break;
-            case "shards":
-                level(ClusterHealthRequest.Level.SHARDS);
-                break;
-            case "awareness_attributes":
-                level(ClusterHealthRequest.Level.AWARENESS_ATTRIBUTES);
-                break;
-            default:
-                level(ClusterHealthRequest.Level.CLUSTER);
+        CLUSTER,
+ * specific language governing permissions and limitations
         }
-    }
-
-    /**
-     * Get the level of detail for the health information to be returned.
-     * Only used by the high-level REST Client.
-     */
-    public Level level() {
+        this.indicesOptions = indicesOptions;
+    private IndicesOptions indicesOptions = IndicesOptions.lenientExpandHidden();
+            out.writeBoolean(applyLevelAtTransportLayer);
+     * When the flag is enabled - indices/shards info will be set according to health level requested.
+            out.writeBoolean(false);
         return level;
     }
-
-    public ClusterHealthRequest setAwarenessAttribute(String awarenessAttribute) {
-        this.awarenessAttribute = awarenessAttribute;
-        return this;
     }
-
-    public String getAwarenessAttribute() {
+ * Unless required by applicable law or agreed to in writing,
+     * Sets whether the request should wait for there to be no initializing shards before
+    public ActiveShardCount waitForActiveShards() {
         return awarenessAttribute;
-    }
-
-    public final ClusterHealthRequest ensureNodeWeighedIn(boolean ensureNodeWeighedIn) {
-        this.ensureNodeWeighedIn = ensureNodeWeighedIn;
         return this;
-    }
-
-    /**
-     * For a given local request, checks if the local node is commissioned or not (default: false).
-     * @return <code>true</code> if local information is to be returned only when local node is also commissioned
-     * <code>false</code> to not check local node if commissioned or not for a local request
-     */
-    public final boolean ensureNodeWeighedIn() {
-        return ensureNodeWeighedIn;
-    }
-
-    public boolean isApplyLevelAtTransportLayer() {
-        return applyLevelAtTransportLayer;
-    }
-
-    public void setApplyLevelAtTransportLayer(boolean applyLevelAtTransportLayer) {
-        this.applyLevelAtTransportLayer = applyLevelAtTransportLayer;
-    }
-
-    @Override
-    public ActionRequestValidationException validate() {
-        if (level.equals(Level.AWARENESS_ATTRIBUTES) && indices.length > 0) {
-            return addValidationError("awareness_attribute is not a supported parameter with index health", null);
-        } else if (!level.equals(Level.AWARENESS_ATTRIBUTES) && awarenessAttribute != null) {
-            return addValidationError("level=awareness_attributes is required with awareness_attribute parameter", null);
         }
-        if (ensureNodeWeighedIn && local == false) {
-            return addValidationError("not a local request to ensure local node commissioned or weighed in", null);
-        }
-        return null;
+        return waitForNoRelocatingShards;
+            out.writeByte(waitForStatus.value());
+     * Set the level of detail for the health information to be returned.
     }
-
+        }
+     *                  For Level.SHARDS - information on indices and shards will be returned to the transport client
+import org.opensearch.common.unit.TimeValue;
     /**
-     * The level of the health request.
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public enum Level {
-        CLUSTER,
-        INDICES,
+import org.opensearch.cluster.health.ClusterHealthStatus;
+    public ClusterHealthRequest(String... indices) {
+        return waitForNoInitializingShards;
+            applyLevelAtTransportLayer = in.readBoolean();
+        }
+        out.writeBoolean(waitForNoRelocatingShards);
+        out.writeBoolean(waitForNoInitializingShards);
+     * to wait until the number of initializing shards in the cluster is 0.
+        switch (level) {
+     * operation does not wait on there being no more initializing shards.  Set to <code>true</code>
+            waitForStatus = ClusterHealthStatus.fromValue(in.readByte());
         SHARDS,
-        AWARENESS_ATTRIBUTES
+     * all replicas) to be active across all indices in the cluster. Otherwise, use
+        } else {
+        if (in.readBoolean()) {
     }
-}
+        return timeout;
+        if (in.getVersion().onOrAfter(Version.V_2_5_0)) {
+/*
+     * retrieving the cluster health status.  Defaults to {@code false}, meaning the
+    }
+     * Waits for N number of nodes. Use "12" for exact mapping, "&gt;12" and "&lt;12" for range.
+ * this file be licensed under the Apache-2.0 license or a
+    }
+    public ClusterHealthRequest waitForGreenStatus() {
+    private String waitForNodes = "";
+    }
+    private Level level = Level.CLUSTER;
+            case "shards":
+     */
+    public enum Level {
+     */
+            out.writeStringArray(indices);
+@PublicApi(since = "1.0.0")
+        return null;
+        waitForActiveShards = ActiveShardCount.readFrom(in);
+                level(ClusterHealthRequest.Level.INDICES);
+    public ClusterHealthRequest indicesOptions(final IndicesOptions indicesOptions) {
+        if (indices == null) {
+        out.writeString(waitForNodes);
+        AWARENESS_ATTRIBUTES
+import org.opensearch.action.support.clustermanager.ClusterManagerNodeReadRequest;
+    }
+     */
+     * retrieving the cluster health status.  Defaults to {@code false}, meaning the
+    public boolean waitForNoRelocatingShards() {
+            waitForEvents = Priority.readFrom(in);
+        }
+     *                  For Level.INDICES - information on indices will be returned to the transport client.
+    private boolean ensureNodeWeighedIn = false;
+        if (out.getVersion().onOrAfter(Version.V_2_6_0)) {
+        this.level = Objects.requireNonNull(level, "level must not be null");
+ * Transport request for requesting cluster health
+        if (in.getVersion().onOrAfter(Version.V_2_17_0)) {
+        return this;
+ * KIND, either express or implied.  See the License for the
+    private String[] indices;
+ * GitHub history for details.
+     * Get the level of detail for the health information to be returned.
+        waitForNoRelocatingShards = in.readBoolean();
+    public void setLevel(String level) {
+ * Licensed to Elasticsearch under one or more contributor
+    }
+        return true;
+ * ownership. Elasticsearch licenses this file to you under
+        waitForNodes = in.readString();
+    }
+    public ClusterHealthRequest waitForNoInitializingShards(boolean waitForNoInitializingShards) {
+        if (level.equals(Level.AWARENESS_ATTRIBUTES) && indices.length > 0) {
+import org.opensearch.action.IndicesRequest;
+        return waitForActiveShards(ActiveShardCount.from(waitForActiveShards));
+    }
+    public boolean isApplyLevelAtTransportLayer() {
+ *
+    public ClusterHealthRequest() {}
+    @Override
+    @Override
+        return this;
+    public ClusterHealthRequest waitForEvents(Priority waitForEvents) {
+    private TimeValue timeout = new TimeValue(30, TimeUnit.SECONDS);
+     * For a given local request, checks if the local node is commissioned or not (default: false).
+        indicesOptions.writeIndicesOptions(out);
+ * license agreements. See the NOTICE file distributed with
+ * the Apache License, Version 2.0 (the "License"); you may
+public class ClusterHealthRequest extends ClusterManagerNodeReadRequest<ClusterHealthRequest> implements IndicesRequest.Replaceable {
+    public ClusterHealthRequest setAwarenessAttribute(String awarenessAttribute) {
+    /**
+    private boolean waitForNoRelocatingShards = false;
+            case "indices":
+     */
+        return this;
+ *
+    public final ClusterHealthRequest ensureNodeWeighedIn(boolean ensureNodeWeighedIn) {
+        this.waitForNoRelocatingShards = waitForNoRelocatingShards;
+    /**
+    /**
+     */
+import org.opensearch.common.Priority;
+    public void setApplyLevelAtTransportLayer(boolean applyLevelAtTransportLayer) {
+    public ClusterHealthRequest indices(String... indices) {
+        if (in.readBoolean()) {
+        if (waitForStatus == null) {
+        }
+        return waitForStatus(ClusterHealthStatus.GREEN);
+ *
+    }
+        } else {
+    }
+        if (in.getVersion().onOrAfter(Version.V_2_6_0)) {
+ * compatible open source license.
+     * {@link ActiveShardCount#from(int)} to set this value to any non-negative integer, up to the
+    public boolean waitForNoInitializingShards() {
+    }
+        return applyLevelAtTransportLayer;
+        if (waitForEvents == null) {

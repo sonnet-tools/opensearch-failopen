@@ -1,241 +1,209 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
+import java.util.function.Function;
+    protected Response handle(final Request request) throws IOException {
+                                .put("domain", "global")
+                                    .put("network", "default")
+                    .immutableMap()
+                    .field("expires_in", TimeUnit.HOURS.toSeconds(1))
+            final String json = jsonBuilder().startObject().field("id", "test-instances").field("items", items).endObject().toString();
+import java.nio.file.Path;
+    private static String authPath(Request request) {
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
  * specific language governing permissions and limitations
- * under the License.
- */
-/*
+            final List<Map<String, Object>> items = new ArrayList<>();
+import java.util.ArrayList;
+        super(workingDir);
+            return authorizedHandler.handle(request);
+            )
+ * software distributed under the License is distributed on an
+                            Collections.singletonList(
+            final byte[] responseAsBytes = json.getBytes(StandardCharsets.UTF_8);
+import static java.nio.charset.StandardCharsets.UTF_8;
+import java.util.List;
+ * The OpenSearch Contributors require contributions made to
+        handlers.insert(
+                                    .put("networkIP", address)
+        if (args == null || args.length != 2) {
+            for (String address : Files.readAllLines(nodes)) {
+        );
+        };
+                "error",
+        final GCEFixture fixture = new GCEFixture(args[0], args[1]);
+    }
+ *
+import org.opensearch.rest.RestUtils;
+                        .put("status", "RUNNING")
+/**
+    }
+ * ownership. Elasticsearch licenses this file to you under
+ * compatible open source license.
+            commonHeaderConsumer.accept(headers);
+    }
+        final Consumer<Map<String, String>> commonHeaderConsumer = headers -> headers.put("Metadata-Flavor", "Google");
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
+                                    .put("accessConfigs", Collections.emptyList())
+                MapBuilder.<String, Object>newMapBuilder()
+/*
+ * under the License.
+        return null;
+            nonAuthPath(HttpGet.METHOD_NAME, "/computeMetadata/v1/project/project-id"),
+/*
+ * this work for additional information regarding copyright
+        // https://cloud.google.com/compute/docs/storing-retrieving-metadata
+        return handlers;
+        final RequestHandler authorizedHandler = handlers.retrieve(authorizedPath, request.getParameters());
+                                .immutableMap()
+                                    .immutableMap()
+                    .endObject()
+            final Map<String, String> headers = new HashMap<>(JSON_CONTENT_TYPE);
+        });
+    private final Path nodes;
+    private GCEFixture(final String workingDir, final String nodesUriPath) {
+                                    .put("name", "nic0")
+import org.opensearch.common.path.PathTrie;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                        .immutableMap()
+            nonAuthPath(HttpGet.METHOD_NAME, "/computeMetadata/v1/project/attributes/google-compute-default-zone"),
+/*
+        handlers.insert(authPath(HttpGet.METHOD_NAME, "/compute/v1/projects/{project}/zones/{zone}/instances"), request -> {
+                        .put("zone", ZONE)
+import org.opensearch.core.rest.RestStatus;
+    private static Path toPath(final String dir) {
+        if (authorizedHandler != null) {
+                                .put("message", message)
+                items.add(
+ *
+            throw new IllegalArgumentException("GCEFixture <working directory> <nodes transport uri file>");
  */
-
-package org.opensearch.cloud.gce;
-
-import org.apache.http.client.methods.HttpGet;
+    @SuppressForbidden(reason = "Paths#get is fine - we don't have environment here")
+    public static final String ZONE = "test-zone";
+    public static void main(String[] args) throws Exception {
+                    MapBuilder.<String, Object>newMapBuilder()
+    }
+        );
+                jsonBuilder().startObject()
+            request -> simpleValue.apply(PROJECT_ID)
+    public static final String TOKEN_TYPE = "Bearer";
+ *
+ */
+                                .put("reason", "required")
+                        )
+        }
+        // https://cloud.google.com/compute/docs/reference/rest/v1/instances
+                        .put("name", "test" + count)
+            return new Response(RestStatus.OK.getStatus(), headers, responseAsBytes);
+        // https://cloud.google.com/compute/docs/access/create-enable-service-accounts-for-instances
+                            MapBuilder.<String, Object>newMapBuilder()
+public class GCEFixture extends AbstractHttpFixture {
+            .field(
+        final String authorizedPath = authPath(request);
+            .toString();
+            return new Response(RestStatus.OK.getStatus(), headers, responseAsBytes);
+        }
+    @Override
+    public static final String TOKEN = "1/fFAGRNJru1FTz70BzhT3Zg";
+    private static String nonAuthPath(Request request) {
+                        )
+ * Unless required by applicable law or agreed to in writing,
+                            "networkInterfaces",
+    private static String authPath(String method, String path) {
+        fixture.listen();
+import java.nio.file.Paths;
+            final Map<String, String> headers = new HashMap<>(TEXT_PLAIN_CONTENT_TYPE);
+                        .put("machineType", "n1-standard-1")
+        return "NONAUTH " + method + " " + path;
+        return new Response(status.getStatus(), JSON_CONTENT_TYPE, response.getBytes(UTF_8));
+ * Licensed to Elasticsearch under one or more contributor
+        this.nodes = toPath(Objects.requireNonNull(nodesUriPath));
+    /** Builds the default request handlers **/
+            request -> jsonValue.apply(
+    }
+        return nonAuthPath(request.getMethod(), request.getPath());
+import java.util.Objects;
+import org.opensearch.test.fixture.AbstractHttpFixture;
+                count++;
+        return authPath(request.getMethod(), request.getPath());
+        handlers.insert(
+            final Map<String, String> headers = new HashMap<>(JSON_CONTENT_TYPE);
+                    .field("token_type", TOKEN_TYPE)
+                            )
+                        .put("id", Long.toString(9309873766405L + count))
+                                .put("location", code)
+        final String response = jsonBuilder().startObject()
 import org.opensearch.common.SuppressForbidden;
 import org.opensearch.common.collect.MapBuilder;
-import org.opensearch.common.path.PathTrie;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.rest.RestUtils;
-import org.opensearch.test.fixture.AbstractHttpFixture;
-
-import java.io.IOException;
+        final String nonAuthorizedPath = nonAuthPath(request);
+            final byte[] responseAsBytes = value.getBytes(StandardCharsets.UTF_8);
+                );
+                        Collections.singletonList(
 import java.nio.charset.StandardCharsets;
+    private final PathTrie<RequestHandler> handlers;
+            if ((TOKEN_TYPE + " " + TOKEN).equals(authorization) == false) {
+            }
+ * GitHub history for details.
+        final RequestHandler nonAuthorizedHandler = handlers.retrieve(nonAuthorizedPath, request.getParameters());
+import java.io.IOException;
+import java.util.concurrent.TimeUnit;
+        };
+}
+    public static final String PROJECT_ID = "discovery-gce-test";
+ * license agreements. See the NOTICE file distributed with
+                        .put(
+        );
+        return "AUTH " + method + " " + path;
+ */
+    private static String nonAuthPath(String method, String path) {
+                        "errors",
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
+                    .put("message", message)
+                                MapBuilder.<String, Object>newMapBuilder()
+import java.util.Map;
+    private PathTrie<RequestHandler> defaultHandlers() {
+            commonHeaderConsumer.accept(headers);
+            return nonAuthorizedHandler.handle(request);
+            )
+ * this file be licensed under the Apache-2.0 license or a
+                    )
+            request -> simpleValue.apply(ZONE)
+            return new Response(RestStatus.OK.getStatus(), headers, responseAsBytes);
+        return Paths.get(dir);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            .endObject()
+                    .toString()
+        final Function<String, Response> simpleValue = value -> {
 import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
+                    .put(
+ */
+        handlers.insert(
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
-import java.util.function.Function;
-
-import static java.nio.charset.StandardCharsets.UTF_8;
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
-
-/**
- * {@link GCEFixture} is a fixture that emulates a GCE service.
- */
-public class GCEFixture extends AbstractHttpFixture {
-
-    public static final String PROJECT_ID = "discovery-gce-test";
-    public static final String ZONE = "test-zone";
-    public static final String TOKEN = "1/fFAGRNJru1FTz70BzhT3Zg";
-    public static final String TOKEN_TYPE = "Bearer";
-
-    private final PathTrie<RequestHandler> handlers;
-
-    private final Path nodes;
-
-    private GCEFixture(final String workingDir, final String nodesUriPath) {
-        super(workingDir);
-        this.nodes = toPath(Objects.requireNonNull(nodesUriPath));
-        this.handlers = defaultHandlers();
-    }
-
-    public static void main(String[] args) throws Exception {
-        if (args == null || args.length != 2) {
-            throw new IllegalArgumentException("GCEFixture <working directory> <nodes transport uri file>");
-        }
-
-        final GCEFixture fixture = new GCEFixture(args[0], args[1]);
-        fixture.listen();
-    }
-
-    private static String nonAuthPath(Request request) {
-        return nonAuthPath(request.getMethod(), request.getPath());
-    }
-
-    private static String nonAuthPath(String method, String path) {
-        return "NONAUTH " + method + " " + path;
-    }
-
-    private static String authPath(Request request) {
-        return authPath(request.getMethod(), request.getPath());
-    }
-
-    private static String authPath(String method, String path) {
-        return "AUTH " + method + " " + path;
-    }
-
-    /** Builds the default request handlers **/
-    private PathTrie<RequestHandler> defaultHandlers() {
-        final PathTrie<RequestHandler> handlers = new PathTrie<>(RestUtils.REST_DECODER);
-
-        final Consumer<Map<String, String>> commonHeaderConsumer = headers -> headers.put("Metadata-Flavor", "Google");
-
-        final Function<String, Response> simpleValue = value -> {
-            final Map<String, String> headers = new HashMap<>(TEXT_PLAIN_CONTENT_TYPE);
-            commonHeaderConsumer.accept(headers);
-
-            final byte[] responseAsBytes = value.getBytes(StandardCharsets.UTF_8);
-            return new Response(RestStatus.OK.getStatus(), headers, responseAsBytes);
-        };
-
-        final Function<String, Response> jsonValue = value -> {
-            final Map<String, String> headers = new HashMap<>(JSON_CONTENT_TYPE);
-            commonHeaderConsumer.accept(headers);
-
-            final byte[] responseAsBytes = value.getBytes(StandardCharsets.UTF_8);
-            return new Response(RestStatus.OK.getStatus(), headers, responseAsBytes);
-        };
-
-        // https://cloud.google.com/compute/docs/storing-retrieving-metadata
-        handlers.insert(
-            nonAuthPath(HttpGet.METHOD_NAME, "/computeMetadata/v1/project/project-id"),
-            request -> simpleValue.apply(PROJECT_ID)
-        );
-        handlers.insert(
-            nonAuthPath(HttpGet.METHOD_NAME, "/computeMetadata/v1/project/attributes/google-compute-default-zone"),
-            request -> simpleValue.apply(ZONE)
-        );
-        // https://cloud.google.com/compute/docs/access/create-enable-service-accounts-for-instances
-        handlers.insert(
-            nonAuthPath(HttpGet.METHOD_NAME, "/computeMetadata/v1/instance/service-accounts/default/token"),
-            request -> jsonValue.apply(
-                jsonBuilder().startObject()
-                    .field("access_token", TOKEN)
-                    .field("expires_in", TimeUnit.HOURS.toSeconds(1))
-                    .field("token_type", TOKEN_TYPE)
-                    .endObject()
-                    .toString()
-            )
-        );
-
-        // https://cloud.google.com/compute/docs/reference/rest/v1/instances
-        handlers.insert(authPath(HttpGet.METHOD_NAME, "/compute/v1/projects/{project}/zones/{zone}/instances"), request -> {
-            final List<Map<String, Object>> items = new ArrayList<>();
-            int count = 0;
-            for (String address : Files.readAllLines(nodes)) {
-                count++;
-                items.add(
-                    MapBuilder.<String, Object>newMapBuilder()
-                        .put("id", Long.toString(9309873766405L + count))
-                        .put("description", "ES node" + count)
-                        .put("name", "test" + count)
-                        .put("kind", "compute#instance")
-                        .put("machineType", "n1-standard-1")
-                        .put(
-                            "networkInterfaces",
-                            Collections.singletonList(
-                                MapBuilder.<String, Object>newMapBuilder()
-                                    .put("accessConfigs", Collections.emptyList())
-                                    .put("name", "nic0")
-                                    .put("network", "default")
-                                    .put("networkIP", address)
-                                    .immutableMap()
-                            )
-                        )
-                        .put("status", "RUNNING")
-                        .put("zone", ZONE)
-                        .immutableMap()
-                );
-            }
-
-            final String json = jsonBuilder().startObject().field("id", "test-instances").field("items", items).endObject().toString();
-
-            final byte[] responseAsBytes = json.getBytes(StandardCharsets.UTF_8);
-            final Map<String, String> headers = new HashMap<>(JSON_CONTENT_TYPE);
-            commonHeaderConsumer.accept(headers);
-            return new Response(RestStatus.OK.getStatus(), headers, responseAsBytes);
-        });
-        return handlers;
-    }
-
-    @Override
-    protected Response handle(final Request request) throws IOException {
-        final String nonAuthorizedPath = nonAuthPath(request);
-        final RequestHandler nonAuthorizedHandler = handlers.retrieve(nonAuthorizedPath, request.getParameters());
-        if (nonAuthorizedHandler != null) {
-            return nonAuthorizedHandler.handle(request);
-        }
-
-        final String authorizedPath = authPath(request);
-        final RequestHandler authorizedHandler = handlers.retrieve(authorizedPath, request.getParameters());
-        if (authorizedHandler != null) {
-            final String authorization = request.getHeader("Authorization");
-            if ((TOKEN_TYPE + " " + TOKEN).equals(authorization) == false) {
-                return newError(RestStatus.UNAUTHORIZED, "Authorization", "Login Required");
-            }
-            return authorizedHandler.handle(request);
-        }
-
-        return null;
-    }
-
-    private static Response newError(final RestStatus status, final String code, final String message) throws IOException {
-        final String response = jsonBuilder().startObject()
-            .field(
-                "error",
-                MapBuilder.<String, Object>newMapBuilder()
-                    .put(
-                        "errors",
-                        Collections.singletonList(
-                            MapBuilder.<String, Object>newMapBuilder()
-                                .put("domain", "global")
-                                .put("reason", "required")
-                                .put("message", message)
-                                .put("locationType", "header")
-                                .put("location", code)
-                                .immutableMap()
-                        )
-                    )
                     .put("code", status.getStatus())
-                    .put("message", message)
-                    .immutableMap()
-            )
-            .endObject()
-            .toString();
-
-        return new Response(status.getStatus(), JSON_CONTENT_TYPE, response.getBytes(UTF_8));
     }
-
-    @SuppressForbidden(reason = "Paths#get is fine - we don't have environment here")
-    private static Path toPath(final String dir) {
-        return Paths.get(dir);
+ * SPDX-License-Identifier: Apache-2.0
+ * {@link GCEFixture} is a fixture that emulates a GCE service.
+        if (nonAuthorizedHandler != null) {
+        final PathTrie<RequestHandler> handlers = new PathTrie<>(RestUtils.REST_DECODER);
+                                .put("locationType", "header")
+                return newError(RestStatus.UNAUTHORIZED, "Authorization", "Login Required");
+package org.opensearch.cloud.gce;
+        }
+ * KIND, either express or implied.  See the License for the
+                        .put("kind", "compute#instance")
+        this.handlers = defaultHandlers();
+import org.apache.http.client.methods.HttpGet;
+            final String authorization = request.getHeader("Authorization");
+ * You may obtain a copy of the License at
     }
-}
+            }
+        final Function<String, Response> jsonValue = value -> {
+    private static Response newError(final RestStatus status, final String code, final String message) throws IOException {
+            commonHeaderConsumer.accept(headers);
+            nonAuthPath(HttpGet.METHOD_NAME, "/computeMetadata/v1/instance/service-accounts/default/token"),
+            final byte[] responseAsBytes = value.getBytes(StandardCharsets.UTF_8);
+            int count = 0;
+    }
+                        .put("description", "ES node" + count)
+                    .field("access_token", TOKEN)
+    }
+import java.util.function.Consumer;

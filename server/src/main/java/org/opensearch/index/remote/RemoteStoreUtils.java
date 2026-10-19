@@ -1,588 +1,545 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.remote;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.Version;
-import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.RoutingTable;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.indices.RemoteStoreSettings;
-import org.opensearch.node.remotestore.RemoteStoreNodeAttribute;
-import org.opensearch.node.remotestore.RemoteStoreNodeService;
-import org.opensearch.node.remotestore.RemoteStorePinnedTimestampService;
-
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Base64;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.TreeSet;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
-import static org.opensearch.index.remote.RemoteMigrationIndexMetadataUpdater.indexHasRemoteStoreSettings;
-import static org.opensearch.indices.RemoteStoreSettings.CLUSTER_REMOTE_STORE_PATH_HASH_ALGORITHM_SETTING;
-import static org.opensearch.indices.RemoteStoreSettings.CLUSTER_REMOTE_STORE_PATH_TYPE_SETTING;
-import static org.opensearch.indices.RemoteStoreSettings.CLUSTER_REMOTE_STORE_TRANSLOG_METADATA;
-
-/**
- * Utils for remote store
- *
- * @opensearch.internal
- */
-public class RemoteStoreUtils {
-    private static final Logger logger = LogManager.getLogger(RemoteStoreUtils.class);
-    public static final int LONG_MAX_LENGTH = String.valueOf(Long.MAX_VALUE).length();
-
-    /**
-     * URL safe base 64 character set. This must not be changed as this is used in deriving the base64 equivalent of binary.
-     */
-    static final char[] URL_BASE64_CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".toCharArray();
-
-    /**
-     * This method subtracts given numbers from Long.MAX_VALUE and returns a string representation of the result.
-     * The resultant string is guaranteed to be of the same length that of Long.MAX_VALUE. If shorter, we add left padding
-     * of 0s to the string.
-     *
-     * @param num number to get the inverted long string for
-     * @return String value of Long.MAX_VALUE - num
-     */
-    public static String invertLong(long num) {
-        if (num < 0) {
-            throw new IllegalArgumentException("Negative long values are not allowed");
-        }
-        String invertedLong = String.valueOf(Long.MAX_VALUE - num);
-        char[] characterArray = new char[LONG_MAX_LENGTH - invertedLong.length()];
-        Arrays.fill(characterArray, '0');
-
-        return new String(characterArray) + invertedLong;
-    }
-
-    /**
-     * This method converts the given string into long and subtracts it from Long.MAX_VALUE
-     *
-     * @param str long in string format to be inverted
-     * @return long value of the invert result
-     */
-    public static long invertLong(String str) {
-        long num = Long.parseLong(str);
-        if (num < 0) {
-            throw new IllegalArgumentException("Strings representing negative long values are not allowed");
-        }
-        return Long.MAX_VALUE - num;
-    }
-
-    /**
-     * Extracts the segment name from the provided segment file name
-     *
-     * @param filename Segment file name to parse
-     * @return Name of the segment that the segment file belongs to
-     */
-    public static String getSegmentName(String filename) {
-        // Segment file names follow patterns like "_0.cfe" or "_0_1_Lucene90_0.dvm".
-        // Here, the segment name is "_0", which is the set of characters
-        // starting with "_" until the next "_" or first ".".
-        int endIdx = filename.indexOf('_', 1);
-        if (endIdx == -1) {
-            endIdx = filename.indexOf('.');
-        }
-
-        if (endIdx == -1) {
-            throw new IllegalArgumentException("Unable to infer segment name for segment file " + filename);
-        }
-
-        return filename.substring(0, endIdx);
-    }
-
-    /**
-     * @param mdFiles List of segment/translog metadata files
-     * @param fn      Function to extract PrimaryTerm_Generation and Node Id from metadata file name .
-     *                fn returns null if node id is not part of the file name
-     */
-    public static void verifyNoMultipleWriters(List<String> mdFiles, Function<String, Tuple<String, String>> fn) {
-        Map<String, String> nodesByPrimaryTermAndGen = new HashMap<>();
-        mdFiles.forEach(mdFile -> {
-            Tuple<String, String> nodeIdByPrimaryTermAndGen = fn.apply(mdFile);
-            if (nodeIdByPrimaryTermAndGen != null) {
-                if (nodesByPrimaryTermAndGen.containsKey(nodeIdByPrimaryTermAndGen.v1())
-                    && (!nodesByPrimaryTermAndGen.get(nodeIdByPrimaryTermAndGen.v1()).equals(nodeIdByPrimaryTermAndGen.v2()))) {
-                    throw new IllegalStateException(
-                        "Multiple metadata files from different nodes"
-                            + "having same primary term and generations "
-                            + nodeIdByPrimaryTermAndGen.v1()
-                            + " detected "
-                    );
-                }
-                nodesByPrimaryTermAndGen.put(nodeIdByPrimaryTermAndGen.v1(), nodeIdByPrimaryTermAndGen.v2());
-            }
-        });
-    }
-
-    /**
-     * Converts an input hash which occupies 64 bits of space into Base64 (6 bits per character) String. This must not
-     * be changed as it is used for creating path for storing remote store data on the remote store.
-     * This converts the byte array to base 64 string. `/` is replaced with `_`, `+` is replaced with `-` and `=`
-     * which is padded at the last is also removed. These characters are either used as delimiter or special character
-     * requiring special handling in some vendors. The characters present in this base64 version are [A-Za-z0-9_-].
-     * This must not be changed as it is used for creating path for storing remote store data on the remote store.
-     */
-    static String longToUrlBase64(long value) {
-        byte[] hashBytes = ByteBuffer.allocate(Long.BYTES).putLong(value).array();
-        String base64Str = Base64.getUrlEncoder().encodeToString(hashBytes);
-        return base64Str.substring(0, base64Str.length() - 1);
-    }
-
-    static long urlBase64ToLong(String base64Str) {
-        byte[] hashBytes = Base64.getUrlDecoder().decode(base64Str);
-        return ByteBuffer.wrap(hashBytes).getLong();
-    }
-
-    /**
-     * Converts an input hash which occupies 64 bits of memory into a composite encoded string. The string will have 2 parts -
-     * 1. Base 64 string and 2. Binary String. We will use the first 6 bits for creating the base 64 string.
-     * For the second part, the rest of the bits (of length {@code len}-6) will be used as is in string form.
-     */
-    static String longToCompositeBase64AndBinaryEncoding(long value, int len) {
-        if (len < 7 || len > 64) {
-            throw new IllegalArgumentException("In longToCompositeBase64AndBinaryEncoding, len must be between 7 and 64 (both inclusive)");
-        }
-        String binaryEncoding = String.format(Locale.ROOT, "%64s", Long.toBinaryString(value)).replace(' ', '0');
-        String base64Part = binaryEncoding.substring(0, 6);
-        String binaryPart = binaryEncoding.substring(6, len);
-        int base64DecimalValue = Integer.valueOf(base64Part, 2);
-        assert base64DecimalValue >= 0 && base64DecimalValue < 64;
-        return URL_BASE64_CHARSET[base64DecimalValue] + binaryPart;
-    }
-
-    /**
-     * Determines the remote store path strategy by reading the custom data map in IndexMetadata class.
-     */
-    public static RemoteStorePathStrategy determineRemoteStorePathStrategy(IndexMetadata indexMetadata) {
-        Map<String, String> remoteCustomData = indexMetadata.getCustomData(IndexMetadata.REMOTE_STORE_CUSTOM_KEY);
-        assert remoteCustomData == null || remoteCustomData.containsKey(RemoteStoreEnums.PathType.NAME);
-        if (remoteCustomData != null && remoteCustomData.containsKey(RemoteStoreEnums.PathType.NAME)) {
-            RemoteStoreEnums.PathType pathType = RemoteStoreEnums.PathType.parseString(
-                remoteCustomData.get(RemoteStoreEnums.PathType.NAME)
-            );
-            String hashAlgoStr = remoteCustomData.get(RemoteStoreEnums.PathHashAlgorithm.NAME);
-            RemoteStoreEnums.PathHashAlgorithm hashAlgorithm = Objects.nonNull(hashAlgoStr)
-                ? RemoteStoreEnums.PathHashAlgorithm.parseString(hashAlgoStr)
-                : null;
-            return new RemoteStorePathStrategy(pathType, hashAlgorithm);
-        }
-        return new RemoteStorePathStrategy(RemoteStoreEnums.PathType.FIXED);
-    }
-
-    /**
-     * Determines if translog file object metadata can be used to store checkpoint file data.
-     */
-    public static boolean determineTranslogMetadataEnabled(IndexMetadata indexMetadata) {
-        Map<String, String> remoteCustomData = indexMetadata.getCustomData(IndexMetadata.REMOTE_STORE_CUSTOM_KEY);
-        assert remoteCustomData == null || remoteCustomData.containsKey(IndexMetadata.TRANSLOG_METADATA_KEY);
-        if (remoteCustomData != null && remoteCustomData.containsKey(IndexMetadata.TRANSLOG_METADATA_KEY)) {
-            return Boolean.parseBoolean(remoteCustomData.get(IndexMetadata.TRANSLOG_METADATA_KEY));
-        }
-        return false;
-    }
-
-    /**
-     * Generates the remote store path type information to be added to custom data of index metadata during migration
-     *
-     * @param clusterSettings Current Cluster settings from {@link ClusterState}
-     * @param discoveryNodes  Current {@link DiscoveryNodes} from the cluster state
-     * @return {@link Map} to be added as custom data in index metadata
-     */
-    public static Map<String, String> determineRemoteStoreCustomMetadataDuringMigration(
-        Settings clusterSettings,
-        DiscoveryNodes discoveryNodes
-    ) {
-        Map<String, String> remoteCustomData = new HashMap<>();
-        Version minNodeVersion = discoveryNodes.getMinNodeVersion();
-
-        // TODO: During the document replication to a remote store migration, there should be a check to determine if the registered
-        // translog blobstore supports custom metadata or not.
-        // Currently, the blobStoreMetadataEnabled flag is set to false because the integration tests run on the local file system, which
-        // does not support custom metadata.
-        // https://github.com/opensearch-project/OpenSearch/issues/13745
-        boolean blobStoreMetadataEnabled = false;
-        boolean translogMetadata = Version.V_2_15_0.compareTo(minNodeVersion) <= 0
-            && CLUSTER_REMOTE_STORE_TRANSLOG_METADATA.get(clusterSettings)
-            && blobStoreMetadataEnabled;
-
-        remoteCustomData.put(IndexMetadata.TRANSLOG_METADATA_KEY, Boolean.toString(translogMetadata));
-
-        RemoteStoreEnums.PathType pathType = Version.V_2_15_0.compareTo(minNodeVersion) <= 0
-            ? CLUSTER_REMOTE_STORE_PATH_TYPE_SETTING.get(clusterSettings)
-            : RemoteStoreEnums.PathType.FIXED;
-        RemoteStoreEnums.PathHashAlgorithm pathHashAlgorithm = pathType == RemoteStoreEnums.PathType.FIXED
-            ? null
-            : CLUSTER_REMOTE_STORE_PATH_HASH_ALGORITHM_SETTING.get(clusterSettings);
-        remoteCustomData.put(RemoteStoreEnums.PathType.NAME, pathType.name());
-        if (Objects.nonNull(pathHashAlgorithm)) {
-            remoteCustomData.put(RemoteStoreEnums.PathHashAlgorithm.NAME, pathHashAlgorithm.name());
-        }
-        return remoteCustomData;
-    }
-
-    public static boolean isServerSideEncryptionEnabledIndex(IndexMetadata indexMetadata) {
-        Map<String, String> remoteCustomData = indexMetadata.getCustomData(IndexMetadata.REMOTE_STORE_CUSTOM_KEY);
-        return remoteCustomData != null && "true".equalsIgnoreCase(remoteCustomData.get(IndexMetadata.REMOTE_STORE_SSE_ENABLED_INDEX_KEY));
-    }
-
-    /**
-     * Fetches segment and translog repository names from remote store node attributes.
-     * Returns a blank {@link HashMap} if the cluster does not contain any remote nodes.
-     * <br>
-     * Caller need to handle null checks if {@link DiscoveryNodes} object does not have any remote nodes
-     *
-     * @param discoveryNodes Current set of {@link DiscoveryNodes} in the cluster
-     * @return {@link Map} of data repository node attributes keys and their values
-     */
-    public static Map<String, String> getRemoteStoreRepoName(DiscoveryNodes discoveryNodes) {
-        Optional<DiscoveryNode> remoteNode = discoveryNodes.getNodes()
-            .values()
-            .stream()
-            .filter(DiscoveryNode::isRemoteStoreNode)
-            .findFirst();
-        return remoteNode.map(RemoteStoreNodeAttribute::getDataRepoNames).orElseGet(HashMap::new);
-    }
-
-    /**
-     * Invoked after a cluster settings update.
-     * Checks if the applied cluster settings has switched the cluster to STRICT mode.
-     * If so, checks and applies appropriate index settings depending on the current set
-     * of node types in the cluster
-     * This has been intentionally done after the cluster settings update
-     * flow. That way we are not interfering with the usual settings update
-     * and the cluster state mutation that comes along with it
-     *
-     * @param isCompatibilityModeChanging flag passed from cluster settings update call to denote if a compatibility mode change has been done
-     * @param request request payload passed from cluster settings update
-     * @param currentState cluster state generated after changing cluster settings were applied
-     * @param logger Logger reference
-     * @return Mutated cluster state with remote store index settings applied, no-op if the cluster is not switching to `STRICT` compatibility mode
-     */
-    public static ClusterState checkAndFinalizeRemoteStoreMigration(
-        boolean isCompatibilityModeChanging,
-        ClusterUpdateSettingsRequest request,
-        ClusterState currentState,
-        Logger logger
-    ) {
-        if (isCompatibilityModeChanging && isSwitchToStrictCompatibilityMode(request)) {
-            return finalizeMigration(currentState, logger);
-        }
-        return currentState;
-    }
-
-    /**
-     * Finalizes the docrep to remote-store migration process by applying remote store based index settings
-     * on indices that are missing them. No-Op if all indices already have the settings applied through
-     * IndexMetadataUpdater
-     *
-     * @param incomingState mutated cluster state after cluster settings were applied
-     * @return new cluster state with index settings updated
-     */
-    public static ClusterState finalizeMigration(ClusterState incomingState, Logger logger) {
-        Map<String, DiscoveryNode> discoveryNodeMap = incomingState.nodes().getNodes();
-        if (discoveryNodeMap.isEmpty() == false) {
-            // At this point, we have already validated that all nodes in the cluster are of uniform type.
-            // Either all of them are remote store enabled, or all of them are docrep enabled
-            boolean remoteStoreEnabledNodePresent = discoveryNodeMap.values().stream().findFirst().get().isRemoteStoreNode();
-            if (remoteStoreEnabledNodePresent == true) {
-                List<IndexMetadata> indicesWithoutRemoteStoreSettings = getIndicesWithoutRemoteStoreSettings(incomingState, logger);
-                if (indicesWithoutRemoteStoreSettings.isEmpty() == true) {
-                    logger.info("All indices in the cluster has remote store based index settings");
-                } else {
-                    Metadata mutatedMetadata = applyRemoteStoreSettings(incomingState, indicesWithoutRemoteStoreSettings, logger);
-                    return ClusterState.builder(incomingState).metadata(mutatedMetadata).build();
-                }
-            } else {
-                logger.debug("All nodes in the cluster are not remote nodes. Skipping.");
-            }
-        }
-        return incomingState;
-    }
-
-    /**
-     * Filters out indices which does not have remote store based
-     * index settings applied even after all shard copies have
-     * migrated to remote store enabled nodes
-     */
-    private static List<IndexMetadata> getIndicesWithoutRemoteStoreSettings(ClusterState clusterState, Logger logger) {
-        Collection<IndexMetadata> allIndicesMetadata = clusterState.metadata().indices().values();
-        if (allIndicesMetadata.isEmpty() == false) {
-            List<IndexMetadata> indicesWithoutRemoteSettings = allIndicesMetadata.stream()
-                .filter(idxMd -> indexHasRemoteStoreSettings(idxMd.getSettings()) == false)
-                .collect(Collectors.toList());
-            logger.debug(
-                "Attempting to switch to strict mode. Count of indices without remote store settings {}",
-                indicesWithoutRemoteSettings.size()
-            );
-            return indicesWithoutRemoteSettings;
-        }
-        return Collections.emptyList();
-    }
-
-    /**
-     * Applies remote store index settings through {@link RemoteMigrationIndexMetadataUpdater}
-     */
-    private static Metadata applyRemoteStoreSettings(
-        ClusterState clusterState,
-        List<IndexMetadata> indicesWithoutRemoteStoreSettings,
-        Logger logger
-    ) {
-        Metadata.Builder metadataBuilder = Metadata.builder(clusterState.getMetadata());
-        RoutingTable currentRoutingTable = clusterState.getRoutingTable();
-        DiscoveryNodes currentDiscoveryNodes = clusterState.getNodes();
-        Settings currentClusterSettings = clusterState.metadata().settings();
-        for (IndexMetadata indexMetadata : indicesWithoutRemoteStoreSettings) {
-            IndexMetadata.Builder indexMetadataBuilder = IndexMetadata.builder(indexMetadata);
-            RemoteMigrationIndexMetadataUpdater indexMetadataUpdater = new RemoteMigrationIndexMetadataUpdater(
-                currentDiscoveryNodes,
-                currentRoutingTable,
-                indexMetadata,
-                currentClusterSettings,
-                logger
-            );
-            indexMetadataUpdater.maybeAddRemoteIndexSettings(indexMetadataBuilder, indexMetadata.getIndex().getName());
-            metadataBuilder.put(indexMetadataBuilder);
-        }
-        return metadataBuilder.build();
-    }
-
-    /**
-     * Checks if the incoming cluster settings payload is attempting to switch
-     * the cluster to `STRICT` compatibility mode
-     * Visible only for tests
-     */
-    public static boolean isSwitchToStrictCompatibilityMode(ClusterUpdateSettingsRequest request) {
-        Settings incomingSettings = Settings.builder().put(request.persistentSettings()).put(request.transientSettings()).build();
-        return RemoteStoreNodeService.REMOTE_STORE_COMPATIBILITY_MODE_SETTING.get(
-            incomingSettings
-        ) == RemoteStoreNodeService.CompatibilityMode.STRICT;
-    }
-
-    /**
-     * Determines and returns a set of metadata files that match provided pinned timestamps.
-     *
-     * This method is an overloaded version of getPinnedTimestampLockedFiles and do not use cached entries to find
-     * the metadata file
-     *
-     * @param metadataFiles A list of metadata file names. Expected to be sorted in descending order of timestamp.
-     * @param pinnedTimestampSet A set of timestamps representing pinned points in time.
-     * @param getTimestampFunction A function that extracts the timestamp from a metadata file name.
-     * @param prefixFunction A function that extracts a tuple of prefix information from a metadata file name.
-     * @param ignorePinnedTimestampEnabledSetting A flag to ignore pinned timestamp enabled setting
-     * @return A set of metadata file names that are implicitly locked based on the pinned timestamps.
-     */
-    public static Set<String> getPinnedTimestampLockedFiles(
-        List<String> metadataFiles,
-        Set<Long> pinnedTimestampSet,
-        Function<String, Long> getTimestampFunction,
-        Function<String, Tuple<String, String>> prefixFunction,
-        boolean ignorePinnedTimestampEnabledSetting
-    ) {
-        return getPinnedTimestampLockedFiles(
-            metadataFiles,
-            pinnedTimestampSet,
-            new HashMap<>(),
-            getTimestampFunction,
-            prefixFunction,
-            ignorePinnedTimestampEnabledSetting
-        );
-    }
-
-    /**
-     * Determines and returns a set of metadata files that match provided pinned timestamps. If pinned timestamp
-     * feature is not enabled, this function is a no-op.
-     *
-     * This method identifies metadata files that are considered implicitly locked due to their timestamps
-     * matching or being the closest preceding timestamp to the pinned timestamps. It uses a caching mechanism
-     * to improve performance for previously processed timestamps.
-     *
-     * The method performs the following steps:
-     *           1. Validates input parameters.
-     *           2. Updates the cache (metadataFilePinnedTimestampMap) to remove outdated entries.
-     *           3. Processes cached entries and identifies new timestamps to process.
-     *           4. For new timestamps, iterates through metadata files to find matching or closest preceding files.
-     *           5. Updates the cache with newly processed timestamps and their corresponding metadata files.
-     *
-     * @param metadataFiles A list of metadata file names. Expected to be sorted in descending order of timestamp.
-     * @param pinnedTimestampSet A set of timestamps representing pinned points in time.
-     * @param metadataFilePinnedTimestampMap A map used for caching processed timestamps and their corresponding metadata files.
-     * @param getTimestampFunction A function that extracts the timestamp from a metadata file name.
-     * @param prefixFunction A function that extracts a tuple of prefix information from a metadata file name.
-     * @return A set of metadata file names that are implicitly locked based on the pinned timestamps.
-     *
-     */
-    public static Set<String> getPinnedTimestampLockedFiles(
-        List<String> metadataFiles,
-        Set<Long> pinnedTimestampSet,
-        Map<Long, String> metadataFilePinnedTimestampMap,
-        Function<String, Long> getTimestampFunction,
-        Function<String, Tuple<String, String>> prefixFunction
-    ) {
-        return getPinnedTimestampLockedFiles(
-            metadataFiles,
-            pinnedTimestampSet,
-            metadataFilePinnedTimestampMap,
-            getTimestampFunction,
-            prefixFunction,
-            false
-        );
-    }
-
-    private static Set<String> getPinnedTimestampLockedFiles(
-        List<String> metadataFiles,
-        Set<Long> pinnedTimestampSet,
-        Map<Long, String> metadataFilePinnedTimestampMap,
-        Function<String, Long> getTimestampFunction,
-        Function<String, Tuple<String, String>> prefixFunction,
-        boolean ignorePinnedTimestampEnabledSetting
-    ) {
-        Set<String> implicitLockedFiles = new HashSet<>();
-
-        if (ignorePinnedTimestampEnabledSetting == false && RemoteStoreSettings.isPinnedTimestampsEnabled() == false) {
-            return implicitLockedFiles;
-        }
-
-        if (metadataFiles == null || metadataFiles.isEmpty() || pinnedTimestampSet == null) {
-            return implicitLockedFiles;
-        }
-
-        // Remove entries for timestamps that are no longer pinned
-        metadataFilePinnedTimestampMap.keySet().retainAll(pinnedTimestampSet);
-
-        // Add cached entries and collect new timestamps
-        Set<Long> newPinnedTimestamps = new TreeSet<>(Collections.reverseOrder());
-        for (Long pinnedTimestamp : pinnedTimestampSet) {
-            String cachedFile = metadataFilePinnedTimestampMap.get(pinnedTimestamp);
-            if (cachedFile != null) {
-                assert metadataFiles.contains(cachedFile) : "Metadata files should contain [" + cachedFile + "]";
-                implicitLockedFiles.add(cachedFile);
-            } else {
-                newPinnedTimestamps.add(pinnedTimestamp);
-            }
-        }
-
-        if (newPinnedTimestamps.isEmpty()) {
-            return implicitLockedFiles;
-        }
-
-        // Sort metadata files in descending order of timestamp
-        // ToDo: Do we really need this? Files fetched from remote store are already lexicographically sorted.
-        metadataFiles.sort(String::compareTo);
-
-        // If we have metadata files from multiple writers, it can result in picking file generated by stale primary.
-        // To avoid this, we fail fast.
-        RemoteStoreUtils.verifyNoMultipleWriters(metadataFiles, prefixFunction);
-
-        Iterator<Long> timestampIterator = newPinnedTimestamps.iterator();
-        Long currentPinnedTimestamp = timestampIterator.next();
-        long prevMdTimestamp = Long.MAX_VALUE;
-        for (String metadataFileName : metadataFiles) {
-            long currentMdTimestamp = getTimestampFunction.apply(metadataFileName);
-            // We always prefer md file with higher values of prefix like primary term, generation etc.
-            if (currentMdTimestamp > prevMdTimestamp) {
-                continue;
-            }
-            while (currentMdTimestamp <= currentPinnedTimestamp && prevMdTimestamp > currentPinnedTimestamp) {
-                implicitLockedFiles.add(metadataFileName);
-                // Do not cache entry for latest metadata file as the next metadata can also match the same pinned timestamp
-                if (prevMdTimestamp != Long.MAX_VALUE) {
-                    metadataFilePinnedTimestampMap.put(currentPinnedTimestamp, metadataFileName);
-                }
-                if (timestampIterator.hasNext() == false) {
-                    return implicitLockedFiles;
-                }
                 currentPinnedTimestamp = timestampIterator.next();
+        int base64DecimalValue = Integer.valueOf(base64Part, 2);
+        return false;
+     * @param getTimestampFunction A function that extracts the timestamp from a metadata file name.
+        remoteCustomData.put(RemoteStoreEnums.PathType.NAME, pathType.name());
+import java.util.Set;
+        // TODO: During the document replication to a remote store migration, there should be a check to determine if the registered
+            && blobStoreMetadataEnabled;
+            throw new IllegalArgumentException("Unable to infer segment name for segment file " + filename);
+            logger.debug(
+     * Converts an input hash which occupies 64 bits of memory into a composite encoded string. The string will have 2 parts -
+    /**
+                }
+        Function<String, Long> getTimestampFunction,
+import java.util.TreeSet;
+                if (indicesWithoutRemoteStoreSettings.isEmpty() == true) {
+        Long currentPinnedTimestamp = timestampIterator.next();
+     * URL safe base 64 character set. This must not be changed as this is used in deriving the base64 equivalent of binary.
             }
-            prevMdTimestamp = currentMdTimestamp;
-        }
-
-        return implicitLockedFiles;
+            return indicesWithoutRemoteSettings;
+        Function<String, Long> getTimestampFunction,
+        if (len < 7 || len > 64) {
+/*
+        if (RemoteStoreSettings.isPinnedTimestampsEnabled() == false) {
+     * @param getTimestampFunction A function that extracts the timestamp from a metadata file name.
+     */
+            boolean remoteStoreEnabledNodePresent = discoveryNodeMap.values().stream().findFirst().get().isRemoteStoreNode();
+     * @param prefixFunction A function that extracts a tuple of prefix information from a metadata file name.
     }
-
+        }
+        mdFiles.forEach(mdFile -> {
+            false
+                // Do not cache entry for latest metadata file as the next metadata can also match the same pinned timestamp
+                if (timestampIterator.hasNext() == false) {
+import java.util.Collection;
+                }
+     * @param currentState cluster state generated after changing cluster settings were applied
+        }
+        return base64Str.substring(0, base64Str.length() - 1);
+                            + " detected "
+     */
+     *         Always returns false if pinned timestamps are not enabled.
+     * The state is considered stale if the last successful fetch occurred before
+     * of node types in the cluster
+import static org.opensearch.indices.RemoteStoreSettings.CLUSTER_REMOTE_STORE_TRANSLOG_METADATA;
+    ) {
+        return filename.substring(0, endIdx);
+                if (prevMdTimestamp != Long.MAX_VALUE) {
+     *
+        boolean isCompatibilityModeChanging,
+    }
+            if (nodeIdByPrimaryTermAndGen != null) {
+        boolean translogMetadata = Version.V_2_15_0.compareTo(minNodeVersion) <= 0
+            RemoteMigrationIndexMetadataUpdater indexMetadataUpdater = new RemoteMigrationIndexMetadataUpdater(
+     * This method filters a list of metadata files, keeping only those that are older
+import java.util.HashSet;
+        List<String> metadataFiles,
+     */
+     * @return A set of metadata file names that are implicitly locked based on the pinned timestamps.
+    private static Metadata applyRemoteStoreSettings(
+ */
+     *           2. Updates the cache (metadataFilePinnedTimestampMap) to remove outdated entries.
+     * @param logger Logger reference
+        ClusterState clusterState,
+        RemoteStoreEnums.PathHashAlgorithm pathHashAlgorithm = pathType == RemoteStoreEnums.PathType.FIXED
+        long lastSuccessfulFetchOfPinnedTimestamps
+        return remoteCustomData != null && "true".equalsIgnoreCase(remoteCustomData.get(IndexMetadata.REMOTE_STORE_SSE_ENABLED_INDEX_KEY));
+     * Checks if the applied cluster settings has switched the cluster to STRICT mode.
+                logger
+        // Add cached entries and collect new timestamps
+        return new RemoteStorePathStrategy(RemoteStoreEnums.PathType.FIXED);
+            throw new IllegalArgumentException("In longToCompositeBase64AndBinaryEncoding, len must be between 7 and 64 (both inclusive)");
+                continue;
+}
+     * migrated to remote store enabled nodes
+        char[] characterArray = new char[LONG_MAX_LENGTH - invertedLong.length()];
+                : null;
+import org.opensearch.cluster.node.DiscoveryNodes;
+            RemoteStoreEnums.PathHashAlgorithm hashAlgorithm = Objects.nonNull(hashAlgoStr)
+     */
+     * Invoked after a cluster settings update.
+ * SPDX-License-Identifier: Apache-2.0
+     */
+                remoteCustomData.get(RemoteStoreEnums.PathType.NAME)
+        // If we have metadata files from multiple writers, it can result in picking file generated by stale primary.
+                ? RemoteStoreEnums.PathHashAlgorithm.parseString(hashAlgoStr)
+     * <br>
+                    && (!nodesByPrimaryTermAndGen.get(nodeIdByPrimaryTermAndGen.v1()).equals(nodeIdByPrimaryTermAndGen.v2()))) {
+     * be changed as it is used for creating path for storing remote store data on the remote store.
+     */
+        }
+    public static void verifyNoMultipleWriters(List<String> mdFiles, Function<String, Tuple<String, String>> fn) {
+        Map<Long, String> metadataFilePinnedTimestampMap,
+import java.util.stream.Collectors;
+        if (endIdx == -1) {
+     */
     /**
      * Filters out metadata files based on their age and pinned timestamps settings.
+    public static ClusterState finalizeMigration(ClusterState incomingState, Logger logger) {
+     * This method converts the given string into long and subtracts it from Long.MAX_VALUE
+     * Finalizes the docrep to remote-store migration process by applying remote store based index settings
+     * @param metadataFiles A list of metadata file names. Expected to be sorted in descending order of timestamp.
+        ClusterState currentState,
+    public static Set<String> getPinnedTimestampLockedFiles(
+     * @param ignorePinnedTimestampEnabledSetting A flag to ignore pinned timestamp enabled setting
      *
-     * This method filters a list of metadata files, keeping only those that are older
-     * than a certain threshold determined by the last successful fetch of pinned timestamps
-     * and a configured lookback interval.
-     *
-     * @param metadataFiles A list of metadata file names to be filtered.
-     * @param getTimestampFunction A function that extracts a timestamp from a metadata file name.
-     * @param lastSuccessfulFetchOfPinnedTimestamps The timestamp of the last successful fetch of pinned timestamps.
-     * @return A new list containing only the metadata files that meet the age criteria.
-     *         If pinned timestamps are not enabled, returns a copy of the input list.
-     */
-    public static List<String> filterOutMetadataFilesBasedOnAge(
-        List<String> metadataFiles,
-        Function<String, Long> getTimestampFunction,
-        long lastSuccessfulFetchOfPinnedTimestamps
-    ) {
-        if (RemoteStoreSettings.isPinnedTimestampsEnabled() == false) {
-            return new ArrayList<>(metadataFiles);
         }
-        // We allow now() - loopback interval to be pinned. Also, the actual pinning can take at most loopback interval
-        // This means the pinned timestamp can be available for read after at most (2 * loopback interval)
-        long maximumAllowedTimestamp = lastSuccessfulFetchOfPinnedTimestamps - (2 * RemoteStoreSettings
-            .getPinnedTimestampsLookbackInterval()
-            .getMillis());
-        List<String> metadataFilesWithMinAge = new ArrayList<>();
         for (String metadataFileName : metadataFiles) {
-            long metadataTimestamp = getTimestampFunction.apply(metadataFileName);
-            if (metadataTimestamp < maximumAllowedTimestamp) {
-                metadataFilesWithMinAge.add(metadataFileName);
-            }
-        }
-        return metadataFilesWithMinAge;
-    }
-
+     * IndexMetadataUpdater
+     * Filters out indices which does not have remote store based
+     * of 0s to the string.
+        return new String(characterArray) + invertedLong;
+package org.opensearch.index.remote;
+     * @return Mutated cluster state with remote store index settings applied, no-op if the cluster is not switching to `STRICT` compatibility mode
+     * @param lastSuccessfulFetchOfPinnedTimestamps The timestamp of the last successful fetch of pinned timestamps.
+     * The method performs the following steps:
+     *           3. Processes cached entries and identifies new timestamps to process.
+    static String longToCompositeBase64AndBinaryEncoding(long value, int len) {
+            return Boolean.parseBoolean(remoteCustomData.get(IndexMetadata.TRANSLOG_METADATA_KEY));
+        ClusterUpdateSettingsRequest request,
+     * If so, checks and applies appropriate index settings depending on the current set
     /**
-     * Determines if the pinned timestamp state is stale.
-     *
-     * This method checks whether the last successful fetch of pinned timestamps
-     * is considered stale based on the current time and configured intervals.
-     * The state is considered stale if the last successful fetch occurred before
-     * a certain threshold, which is calculated as three times the scheduler interval
-     * plus the lookback interval.
-     *
-     * @return true if the pinned timestamp state is stale, false otherwise.
-     *         Always returns false if pinned timestamps are not enabled.
-     */
-    public static boolean isPinnedTimestampStateStale() {
-        if (RemoteStoreSettings.isPinnedTimestampsEnabled() == false) {
-            return false;
-        }
-        long lastSuccessfulFetchTimestamp = RemoteStorePinnedTimestampService.getPinnedTimestamps().v1();
-        long staleBufferInMillis = (RemoteStoreSettings.getPinnedTimestampsSchedulerInterval().millis() * 3) + RemoteStoreSettings
+    /**
+        Metadata.Builder metadataBuilder = Metadata.builder(clusterState.getMetadata());
+        List<String> metadataFiles,
             .getPinnedTimestampsLookbackInterval()
-            .millis();
-        return lastSuccessfulFetchTimestamp < (System.currentTimeMillis() - staleBufferInMillis);
+     *
+     * @param metadataFilePinnedTimestampMap A map used for caching processed timestamps and their corresponding metadata files.
+                "Attempting to switch to strict mode. Count of indices without remote store settings {}",
+     * Extracts the segment name from the provided segment file name
     }
-}
+        Set<Long> pinnedTimestampSet,
+     * @param getTimestampFunction A function that extracts a timestamp from a metadata file name.
+import java.util.Base64;
+     *
+        return remoteCustomData;
+        // This means the pinned timestamp can be available for read after at most (2 * loopback interval)
+import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
+    public static Set<String> getPinnedTimestampLockedFiles(
+import org.opensearch.common.settings.Settings;
+    /**
+            }
+import java.util.Optional;
+     *
+    public static String invertLong(long num) {
+    }
+import org.opensearch.cluster.metadata.Metadata;
+        if (RemoteStoreSettings.isPinnedTimestampsEnabled() == false) {
+    /**
+        DiscoveryNodes currentDiscoveryNodes = clusterState.getNodes();
+    /**
+     * This method subtracts given numbers from Long.MAX_VALUE and returns a string representation of the result.
+            if (remoteStoreEnabledNodePresent == true) {
+            getTimestampFunction,
+    static String longToUrlBase64(long value) {
+                implicitLockedFiles.add(cachedFile);
+        return metadataBuilder.build();
+            metadataBuilder.put(indexMetadataBuilder);
+                currentRoutingTable,
+        // translog blobstore supports custom metadata or not.
+        return ByteBuffer.wrap(hashBytes).getLong();
+            long currentMdTimestamp = getTimestampFunction.apply(metadataFileName);
+            incomingSettings
+     * @param isCompatibilityModeChanging flag passed from cluster settings update call to denote if a compatibility mode change has been done
+            .values()
+            if (currentMdTimestamp > prevMdTimestamp) {
+        return lastSuccessfulFetchTimestamp < (System.currentTimeMillis() - staleBufferInMillis);
+     * flow. That way we are not interfering with the usual settings update
+import java.util.Map;
+        Logger logger
+            // Either all of them are remote store enabled, or all of them are docrep enabled
+                }
+        for (String metadataFileName : metadataFiles) {
+    }
+            return implicitLockedFiles;
+        // We allow now() - loopback interval to be pinned. Also, the actual pinning can take at most loopback interval
+     * plus the lookback interval.
+            if (cachedFile != null) {
+            // We always prefer md file with higher values of prefix like primary term, generation etc.
+        String binaryPart = binaryEncoding.substring(6, len);
+import org.opensearch.node.remotestore.RemoteStoreNodeAttribute;
+        return Long.MAX_VALUE - num;
+                currentDiscoveryNodes,
+import java.util.Locale;
+            ? null
+        Version minNodeVersion = discoveryNodes.getMinNodeVersion();
+ * Utils for remote store
+        Map<String, String> remoteCustomData = indexMetadata.getCustomData(IndexMetadata.REMOTE_STORE_CUSTOM_KEY);
+    /**
+     * a certain threshold, which is calculated as three times the scheduler interval
+    public static long invertLong(String str) {
+import org.opensearch.cluster.ClusterState;
+     */
+        }
+import java.util.HashMap;
+    }
+     *           4. For new timestamps, iterates through metadata files to find matching or closest preceding files.
+     * Visible only for tests
+                } else {
+        if (allIndicesMetadata.isEmpty() == false) {
+            String cachedFile = metadataFilePinnedTimestampMap.get(pinnedTimestamp);
+        // https://github.com/opensearch-project/OpenSearch/issues/13745
+            ? CLUSTER_REMOTE_STORE_PATH_TYPE_SETTING.get(clusterSettings)
+        Map<Long, String> metadataFilePinnedTimestampMap,
+    private static List<IndexMetadata> getIndicesWithoutRemoteStoreSettings(ClusterState clusterState, Logger logger) {
+        return incomingState;
+            }
+        Function<String, Long> getTimestampFunction,
+     * This converts the byte array to base 64 string. `/` is replaced with `_`, `+` is replaced with `-` and `=`
+        Set<Long> newPinnedTimestamps = new TreeSet<>(Collections.reverseOrder());
+import org.apache.logging.log4j.Logger;
+     * @param discoveryNodes  Current {@link DiscoveryNodes} from the cluster state
+    }
+    }
+        int endIdx = filename.indexOf('_', 1);
+     * feature is not enabled, this function is a no-op.
+        }
+     * This has been intentionally done after the cluster settings update
+                logger.debug("All nodes in the cluster are not remote nodes. Skipping.");
+            return finalizeMigration(currentState, logger);
+     */
+    }
+        });
+        Function<String, Long> getTimestampFunction,
+        Map<String, String> nodesByPrimaryTermAndGen = new HashMap<>();
+     *
+     */
+            }
+ *
+     * @return A new list containing only the metadata files that meet the age criteria.
+                .collect(Collectors.toList());
+     * which is padded at the last is also removed. These characters are either used as delimiter or special character
+                            + nodeIdByPrimaryTermAndGen.v1()
+            );
+import java.nio.ByteBuffer;
+    ) {
+            pinnedTimestampSet,
+import java.util.Collections;
+    /**
+    public static boolean determineTranslogMetadataEnabled(IndexMetadata indexMetadata) {
+    public static Map<String, String> getRemoteStoreRepoName(DiscoveryNodes discoveryNodes) {
+            throw new IllegalArgumentException("Negative long values are not allowed");
+        // To avoid this, we fail fast.
+        Set<Long> pinnedTimestampSet,
+        if (isCompatibilityModeChanging && isSwitchToStrictCompatibilityMode(request)) {
+     * Returns a blank {@link HashMap} if the cluster does not contain any remote nodes.
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to
+        remoteCustomData.put(IndexMetadata.TRANSLOG_METADATA_KEY, Boolean.toString(translogMetadata));
+     * @param prefixFunction A function that extracts a tuple of prefix information from a metadata file name.
+        }
+     * and a configured lookback interval.
+    }
+     * @return {@link Map} of data repository node attributes keys and their values
+        }
+            new HashMap<>(),
+        Map<String, String> remoteCustomData = indexMetadata.getCustomData(IndexMetadata.REMOTE_STORE_CUSTOM_KEY);
+        String base64Part = binaryEncoding.substring(0, 6);
+        if (num < 0) {
+        }
+    }
+    private static final Logger logger = LogManager.getLogger(RemoteStoreUtils.class);
+        byte[] hashBytes = Base64.getUrlDecoder().decode(base64Str);
+        assert remoteCustomData == null || remoteCustomData.containsKey(RemoteStoreEnums.PathType.NAME);
+     * Determines if the pinned timestamp state is stale.
+            } else {
+     * @return new cluster state with index settings updated
+        if (newPinnedTimestamps.isEmpty()) {
+        if (Objects.nonNull(pathHashAlgorithm)) {
+            : RemoteStoreEnums.PathType.FIXED;
+     */
+                    throw new IllegalStateException(
+     *                fn returns null if node id is not part of the file name
+    ) {
+        assert remoteCustomData == null || remoteCustomData.containsKey(IndexMetadata.TRANSLOG_METADATA_KEY);
+     * Determines and returns a set of metadata files that match provided pinned timestamps.
+            endIdx = filename.indexOf('.');
+        }
+        List<String> metadataFilesWithMinAge = new ArrayList<>();
+    /**
+    /**
+     *           1. Validates input parameters.
+        String invertedLong = String.valueOf(Long.MAX_VALUE - num);
+     * Determines if translog file object metadata can be used to store checkpoint file data.
+     * Determines the remote store path strategy by reading the custom data map in IndexMetadata class.
+        if (remoteCustomData != null && remoteCustomData.containsKey(RemoteStoreEnums.PathType.NAME)) {
+     *
+     * @param num number to get the inverted long string for
+        }
+     */
+        }
+     * @param metadataFiles A list of metadata file names. Expected to be sorted in descending order of timestamp.
+    /**
+                    Metadata mutatedMetadata = applyRemoteStoreSettings(incomingState, indicesWithoutRemoteStoreSettings, logger);
+        long num = Long.parseLong(str);
+    public static boolean isPinnedTimestampStateStale() {
+    static long urlBase64ToLong(String base64Str) {
+     * Generates the remote store path type information to be added to custom data of index metadata during migration
+     * and the cluster state mutation that comes along with it
+            } else {
+     * @param filename Segment file name to parse
+        return metadataFilesWithMinAge;
+ * @opensearch.internal
+     */
+import java.util.Iterator;
+     * @return long value of the invert result
+            prefixFunction,
+import static org.opensearch.indices.RemoteStoreSettings.CLUSTER_REMOTE_STORE_PATH_HASH_ALGORITHM_SETTING;
+        return Collections.emptyList();
+        );
+import org.apache.logging.log4j.LogManager;
+     * matching or being the closest preceding timestamp to the pinned timestamps. It uses a caching mechanism
+                }
+/**
+            .millis();
+            .getPinnedTimestampsLookbackInterval()
+        }
+     * @param clusterSettings Current Cluster settings from {@link ClusterState}
+        // Sort metadata files in descending order of timestamp
+    public static boolean isSwitchToStrictCompatibilityMode(ClusterUpdateSettingsRequest request) {
+     * @param pinnedTimestampSet A set of timestamps representing pinned points in time.
+            getTimestampFunction,
+        // Remove entries for timestamps that are no longer pinned
+     *
+            List<IndexMetadata> indicesWithoutRemoteSettings = allIndicesMetadata.stream()
+     * the cluster to `STRICT` compatibility mode
+     *
+        }
+     * the metadata file
+        DiscoveryNodes discoveryNodes
+import static org.opensearch.indices.RemoteStoreSettings.CLUSTER_REMOTE_STORE_PATH_TYPE_SETTING;
+            metadataFiles,
+        Settings currentClusterSettings = clusterState.metadata().settings();
+     * The resultant string is guaranteed to be of the same length that of Long.MAX_VALUE. If shorter, we add left padding
+     */
+     * to improve performance for previously processed timestamps.
+        );
+        Map<String, DiscoveryNode> discoveryNodeMap = incomingState.nodes().getNodes();
+     * than a certain threshold determined by the last successful fetch of pinned timestamps
+    }
+        Arrays.fill(characterArray, '0');
+    /**
+    public static List<String> filterOutMetadataFilesBasedOnAge(
+        // Segment file names follow patterns like "_0.cfe" or "_0_1_Lucene90_0.dvm".
+import org.opensearch.indices.RemoteStoreSettings;
+            while (currentMdTimestamp <= currentPinnedTimestamp && prevMdTimestamp > currentPinnedTimestamp) {
+import java.util.Arrays;
+            .findFirst();
+     *
+        }
+    }
+        boolean ignorePinnedTimestampEnabledSetting
+            ignorePinnedTimestampEnabledSetting
+import org.opensearch.Version;
+                List<IndexMetadata> indicesWithoutRemoteStoreSettings = getIndicesWithoutRemoteStoreSettings(incomingState, logger);
+    public static String getSegmentName(String filename) {
+                currentClusterSettings,
+        if (ignorePinnedTimestampEnabledSetting == false && RemoteStoreSettings.isPinnedTimestampsEnabled() == false) {
+            String hashAlgoStr = remoteCustomData.get(RemoteStoreEnums.PathHashAlgorithm.NAME);
+        Function<String, Tuple<String, String>> prefixFunction
+    public static RemoteStorePathStrategy determineRemoteStorePathStrategy(IndexMetadata indexMetadata) {
+    ) {
+     *           5. Updates the cache with newly processed timestamps and their corresponding metadata files.
+            );
+        // ToDo: Do we really need this? Files fetched from remote store are already lexicographically sorted.
+        }
+import java.util.List;
+        Map<String, String> remoteCustomData = indexMetadata.getCustomData(IndexMetadata.REMOTE_STORE_CUSTOM_KEY);
+            : CLUSTER_REMOTE_STORE_PATH_HASH_ALGORITHM_SETTING.get(clusterSettings);
+    }
+    public static Map<String, String> determineRemoteStoreCustomMetadataDuringMigration(
+     * For the second part, the rest of the bits (of length {@code len}-6) will be used as is in string form.
+        // Here, the segment name is "_0", which is the set of characters
+        Function<String, Tuple<String, String>> prefixFunction,
+            throw new IllegalArgumentException("Strings representing negative long values are not allowed");
+    ) {
+            indexMetadataUpdater.maybeAddRemoteIndexSettings(indexMetadataBuilder, indexMetadata.getIndex().getName());
+ * compatible open source license.
+import java.util.function.Function;
+            prevMdTimestamp = currentMdTimestamp;
+    /**
+     */
+        String base64Str = Base64.getUrlEncoder().encodeToString(hashBytes);
+        return getPinnedTimestampLockedFiles(
+import java.util.Objects;
+    }
+     * This method is an overloaded version of getPinnedTimestampLockedFiles and do not use cached entries to find
+        boolean blobStoreMetadataEnabled = false;
+            }
+        assert base64DecimalValue >= 0 && base64DecimalValue < 64;
+        // Currently, the blobStoreMetadataEnabled flag is set to false because the integration tests run on the local file system, which
+        metadataFilePinnedTimestampMap.keySet().retainAll(pinnedTimestampSet);
+            prefixFunction,
+    /**
+        if (metadataFiles == null || metadataFiles.isEmpty() || pinnedTimestampSet == null) {
+     *
+     * @return Name of the segment that the segment file belongs to
+     * @param mdFiles List of segment/translog metadata files
+        for (Long pinnedTimestamp : pinnedTimestampSet) {
+     */
+    public static boolean isServerSideEncryptionEnabledIndex(IndexMetadata indexMetadata) {
+     *
+        long staleBufferInMillis = (RemoteStoreSettings.getPinnedTimestampsSchedulerInterval().millis() * 3) + RemoteStoreSettings
+            && CLUSTER_REMOTE_STORE_TRANSLOG_METADATA.get(clusterSettings)
+            return implicitLockedFiles;
+    public static final int LONG_MAX_LENGTH = String.valueOf(Long.MAX_VALUE).length();
+        Set<String> implicitLockedFiles = new HashSet<>();
+        Settings incomingSettings = Settings.builder().put(request.persistentSettings()).put(request.transientSettings()).build();
+     */
+import org.opensearch.node.remotestore.RemoteStorePinnedTimestampService;
+            .filter(DiscoveryNode::isRemoteStoreNode)
+     *
+    public static ClusterState checkAndFinalizeRemoteStoreMigration(
+        String binaryEncoding = String.format(Locale.ROOT, "%64s", Long.toBinaryString(value)).replace(' ', '0');
+        return implicitLockedFiles;
+        return remoteNode.map(RemoteStoreNodeAttribute::getDataRepoNames).orElseGet(HashMap::new);
+                indexMetadata,
+import java.util.ArrayList;
+     * @param fn      Function to extract PrimaryTerm_Generation and Node Id from metadata file name .
+        Iterator<Long> timestampIterator = newPinnedTimestamps.iterator();
+        if (num < 0) {
+        Optional<DiscoveryNode> remoteNode = discoveryNodes.getNodes()
+        if (endIdx == -1) {
+     * @param discoveryNodes Current set of {@link DiscoveryNodes} in the cluster
+                metadataFilesWithMinAge.add(metadataFileName);
+    ) {
+        RemoteStoreEnums.PathType pathType = Version.V_2_15_0.compareTo(minNodeVersion) <= 0
+            Tuple<String, String> nodeIdByPrimaryTermAndGen = fn.apply(mdFile);
+                    logger.info("All indices in the cluster has remote store based index settings");
+            return new ArrayList<>(metadataFiles);
+    /**
+     * Applies remote store index settings through {@link RemoteMigrationIndexMetadataUpdater}
+        Settings clusterSettings,
+            pinnedTimestampSet,
+                nodesByPrimaryTermAndGen.put(nodeIdByPrimaryTermAndGen.v1(), nodeIdByPrimaryTermAndGen.v2());
+            long metadataTimestamp = getTimestampFunction.apply(metadataFileName);
+    ) {
+        }
+            );
+        return RemoteStoreNodeService.REMOTE_STORE_COMPATIBILITY_MODE_SETTING.get(
+                    metadataFilePinnedTimestampMap.put(currentPinnedTimestamp, metadataFileName);
+     * This method checks whether the last successful fetch of pinned timestamps
+        // starting with "_" until the next "_" or first ".".
+     */
+        if (discoveryNodeMap.isEmpty() == false) {
+                assert metadataFiles.contains(cachedFile) : "Metadata files should contain [" + cachedFile + "]";
+            // At this point, we have already validated that all nodes in the cluster are of uniform type.
+            RemoteStoreEnums.PathType pathType = RemoteStoreEnums.PathType.parseString(
+import org.opensearch.cluster.metadata.IndexMetadata;
+        for (IndexMetadata indexMetadata : indicesWithoutRemoteStoreSettings) {
+public class RemoteStoreUtils {
+    }
+     *
+     * @param incomingState mutated cluster state after cluster settings were applied
+        }
+    }
+     * Checks if the incoming cluster settings payload is attempting to switch
+     * @param pinnedTimestampSet A set of timestamps representing pinned points in time.
+     */
+        // does not support custom metadata.
+     *
+    /**
+     * Determines and returns a set of metadata files that match provided pinned timestamps. If pinned timestamp
+            }
+        List<String> metadataFiles,
+     * This method identifies metadata files that are considered implicitly locked due to their timestamps
+        return getPinnedTimestampLockedFiles(
+                newPinnedTimestamps.add(pinnedTimestamp);
+     * Converts an input hash which occupies 64 bits of space into Base64 (6 bits per character) String. This must not
+    /**
+     * on indices that are missing them. No-Op if all indices already have the settings applied through
+     * @param str long in string format to be inverted
+        Logger logger
+        List<String> metadataFiles,
+     * @return true if the pinned timestamp state is stale, false otherwise.
+        ) == RemoteStoreNodeService.CompatibilityMode.STRICT;
+            return false;
+            .getMillis());
+        Collection<IndexMetadata> allIndicesMetadata = clusterState.metadata().indices().values();
+        }
+        RoutingTable currentRoutingTable = clusterState.getRoutingTable();
+     * requiring special handling in some vendors. The characters present in this base64 version are [A-Za-z0-9_-].
+     *         If pinned timestamps are not enabled, returns a copy of the input list.
+        }
+     * @return {@link Map} to be added as custom data in index metadata
+     * Fetches segment and translog repository names from remote store node attributes.
+    }
+    static final char[] URL_BASE64_CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".toCharArray();
+            if (metadataTimestamp < maximumAllowedTimestamp) {
+ */
+import org.opensearch.cluster.node.DiscoveryNode;
+        long lastSuccessfulFetchTimestamp = RemoteStorePinnedTimestampService.getPinnedTimestamps().v1();
+        Map<String, String> remoteCustomData = new HashMap<>();
+import org.opensearch.common.collect.Tuple;
+            metadataFilePinnedTimestampMap,
+        List<IndexMetadata> indicesWithoutRemoteStoreSettings,
+        if (remoteCustomData != null && remoteCustomData.containsKey(IndexMetadata.TRANSLOG_METADATA_KEY)) {
+     * 1. Base 64 string and 2. Binary String. We will use the first 6 bits for creating the base 64 string.
+     * @param metadataFiles A list of metadata file names to be filtered.
+                    return implicitLockedFiles;
+                implicitLockedFiles.add(metadataFileName);
+    }
+import org.opensearch.node.remotestore.RemoteStoreNodeService;
+                    );
+        metadataFiles.sort(String::compareTo);
+        RemoteStoreUtils.verifyNoMultipleWriters(metadataFiles, prefixFunction);
+     */
+     *
+     * Caller need to handle null checks if {@link DiscoveryNodes} object does not have any remote nodes
+                        "Multiple metadata files from different nodes"
+        long prevMdTimestamp = Long.MAX_VALUE;
+            .stream()
+    /**
+     * @return String value of Long.MAX_VALUE - num
+        return URL_BASE64_CHARSET[base64DecimalValue] + binaryPart;
+                    return ClusterState.builder(incomingState).metadata(mutatedMetadata).build();
+    }
+import org.opensearch.cluster.routing.RoutingTable;
+        long maximumAllowedTimestamp = lastSuccessfulFetchOfPinnedTimestamps - (2 * RemoteStoreSettings
+        byte[] hashBytes = ByteBuffer.allocate(Long.BYTES).putLong(value).array();
+        return currentState;
+    }
+     * @param request request payload passed from cluster settings update
+            IndexMetadata.Builder indexMetadataBuilder = IndexMetadata.builder(indexMetadata);
+     * is considered stale based on the current time and configured intervals.
+        boolean ignorePinnedTimestampEnabledSetting
+                if (nodesByPrimaryTermAndGen.containsKey(nodeIdByPrimaryTermAndGen.v1())
+                indicesWithoutRemoteSettings.size()
+        Set<Long> pinnedTimestampSet,
+                            + "having same primary term and generations "
+            remoteCustomData.put(RemoteStoreEnums.PathHashAlgorithm.NAME, pathHashAlgorithm.name());
+     * @return A set of metadata file names that are implicitly locked based on the pinned timestamps.
+     * This must not be changed as it is used for creating path for storing remote store data on the remote store.
+            return new RemoteStorePathStrategy(pathType, hashAlgorithm);
+        Function<String, Tuple<String, String>> prefixFunction,
+    /**
+            metadataFiles,
+ *
+    }
+            return implicitLockedFiles;
+import static org.opensearch.index.remote.RemoteMigrationIndexMetadataUpdater.indexHasRemoteStoreSettings;
+                .filter(idxMd -> indexHasRemoteStoreSettings(idxMd.getSettings()) == false)
+     *
+     * index settings applied even after all shard copies have
+    private static Set<String> getPinnedTimestampLockedFiles(
