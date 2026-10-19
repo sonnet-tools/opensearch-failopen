@@ -522,7 +522,7 @@ final class BootstrapChecks {
                     try {
                         return parseProcSysVmMaxMapCount(rawProcSysVmMaxMapCount);
                     } catch (final NumberFormatException e) {
-                        logger.warn(() -> new ParameterizedMessage("unable to parse vm.max_map_count [{}]", rawProcSysVmMaxMapCount), e);
+                        logger.warn(() -> new ParameterizedMessage("failed to parse vm.max_map_count [{}]", rawProcSysVmMaxMapCount), e);
                     }
                 }
             } catch (final IOException e) {
