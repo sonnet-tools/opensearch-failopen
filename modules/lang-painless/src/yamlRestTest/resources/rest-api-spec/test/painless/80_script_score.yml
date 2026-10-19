@@ -1,546 +1,510 @@
-# Integration tests for ScriptScoreQuery using Painless
----
-"Math functions":
-
-    - do:
-        indices.create:
+    - match: { hits.hits.1._id : "1" }
+        search:
+  - do:
+                                decay: 0.9
+                      query: {match_all: {} }
             index: test
-            body:
-                settings:
-                    number_of_shards: 2
-                mappings:
+    - do:
+                query:
+                                decay: 0.9
+            index: test
+                    script_score:
+                    script_score:
+                                offset: 0
                     properties:
-                        dval:
-                            type: double
-    - do:
-        index:
             index: test
-            id: d1
-            body: {"dval": 10}
+    - match: { hits.total: 2 }
+                    script_score:
+                                scale: 10
+                                origin: "2018-01-01T00:00:00Z"
+                                scale: 10
+                query:
     - do:
-        index:
-            index: test
-            id: d2
+        search:
+                source: "doc['reputation'].value"
+                      query: {match_all: {} }
+    - do:
+                        script:
+    - match: { hits.hits.0._id: d3 }
             body: {"dval": 100}
-    - do:
-        index:
-            index: test
-            id: d3
-            body: {"dval": 1000}
-
-    - do:
-        indices.refresh: {}
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script_score:
-                        query: {match_all: {} }
-                        script:
-                            source: "saturation(doc['dval'].value, params.k)"
-                            params:
-                                k : 100
-    - match: { hits.total: 3 }
-    - match: { hits.hits.0._id: d3 }
-    - match: { hits.hits.1._id: d2 }
-    - match: { hits.hits.2._id: d1 }
-
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script_score:
-                        query: {match_all: {} }
-                        script:
-                            source: "sigmoid(doc['dval'].value, params.k, params.a)"
-                            params:
-                                k: 100
-                                a: 2
-    - match: { hits.total: 3 }
-    - match: { hits.hits.0._id: d3 }
-    - match: { hits.hits.1._id: d2 }
-    - match: { hits.hits.2._id: d1 }
-
----
-"Decay geo functions":
-    - do:
-        indices.create:
-            index: test
-            body:
-                settings:
-                    number_of_shards: 1
-                mappings:
-                    properties:
-                        text-location:
-                            type: keyword
-                        location:
-                            type: geo_point
-    - do:
-        index:
-            index: test
-            id: 1
-            body: { "text-location": "location1", "location" : {"lat" : 40.24, "lon" : -70.24} }
-    - do:
-        index:
-            index: test
+    - match: { hits.hits.1._id : "1" }
+                                offset: 0
+                      script:
             id: 2
+                                offset: 0
+                    properties:
+                                decay: 0.9
+                            type: integer
+            body:
+            body:
             body: { "text-location": "location2", "location" : {"lat" : 40.12, "lon" : -70.12} }
-    - do:
-        indices.refresh: {}
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script_score:
+          highlight:
                         query: {match_all: {} }
-                        script:
-                            source: "decayGeoLinear(params.origin, params.scale, params.offset, params.decay, doc['location'].value)"
-                            params:
-                                origin: "40, -70"
-                                scale: "200km"
-                                offset: "0km"
-                                decay: 0.5
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id : "2" }
-    - match: { hits.hits.1._id : "1" }
-
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
                     script_score:
-                        query: {match_all: {} }
-                        script:
-                            source: "decayGeoExp(params.origin, params.scale, params.offset, params.decay, doc['location'].value)"
-                            params:
-                                origin: "40, -70"
-                                scale: "200km"
-                                offset: "0km"
-                                decay: 0.5
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id : "2" }
-    - match: { hits.hits.1._id : "1" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
             index: test
-            body:
-                query:
-                    script_score:
-                        query: {match_all: {} }
+                                scale: 10
                         script:
-                            source: "decayGeoGauss(params.origin, params.scale, params.offset, params.decay, doc['location'].value)"
-                            params:
-                                origin: "40, -70"
-                                scale: "200km"
-                                offset: "0km"
-                                decay: 0.5
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id : "2" }
-    - match: { hits.hits.1._id : "1" }
-
+                    script_score:
+                                decay: 0.9
+                                offset: "0"
+                                origin: 20
+                    script_score:
 ---
-"Decay date functions":
     - do:
-        indices.create:
             index: test
-            body:
-                settings:
+                        query: {match_all: {} }
+    - do:
+                query:
+        search:
+    - match: { hits.total: 2 }
+    - match: { hits.hits.0._id : "2" }
+                query:
+                                decay: 0.5
                     number_of_shards: 1
                 mappings:
-                    properties:
-                        date:
+---
+            index: test
+            rest_total_hits_as_int: true
+          - '{"index": {"_index": "test_index", "_id" : "1"}}'
+        search:
+    - match: { hits.hits.1._id : "1" }
+    - match: { hits.hits.1._id : "1" }
+  - do:
+            body:
+                            params:
+    - match: { hits.hits.0._id : "2" }
+            index: test
+                                decay: 0.9
+                                offset: 0
+            body:
+    - match: { hits.hits.0._id : "2" }
+        indices.create:
                             type: date
-    - do:
-        index:
             index: test
-            id: 1
-            body: { "date": "2018-01-01T02:00:00Z"}
-    - do:
-        index:
+    - match: { hits.hits.0._id: d3 }
+                                origin: 20
+---
+            rest_total_hits_as_int: true
             index: test
-            id: 2
+        index:
+    - do:
+                            params:
+                            params:
+            index: test
+                                decay: 0.9
+                    script_score:
+                                offset: "0km"
+                        query: {match_all: {} }
+                                scale: 10
+                    script_score:
+          query:
+              "company":
+                    script_score:
+                            source: "decayNumericExp(params.origin, params.scale, params.offset, params.decay, doc['lval'].value)"
+                query:
+        indices.refresh: {}
+                      script:
+                                decay: 0.9
+                        query: {match_all: {} }
+        indices.refresh: {}
+                            type: long
+          - '{"company": "ABC company", "reputation": 300}'
+"Script Score With Highlight":
+                        query: {match_all: {} }
+              "reputation":
+            rest_total_hits_as_int: true
+            index: test
+                                origin: "40, -70"
+                      script:
+    - do:
+                                offset: "0"
+---
+            rest_total_hits_as_int: true
+            body:
+                settings:
+    - match: { hits.total: 2 }
+                            params:
+                            type: double
+                            source: "decayNumericLinear(params.origin, params.scale, params.offset, params.decay, doc['lval'].value)"
+                                offset: "0km"
+"Math functions":
+                            params:
+                    properties:
+                query:
+    - match: { hits.hits.0._id : "2" }
+        index:
+            rest_total_hits_as_int: true
+                    script_score:
+                        query: {match_all: {} }
+                                origin: 20
+    - match: { hits.hits.0._id : "2" }
+        body:
+                                origin: "40, -70"
+    - match: { hits.hits.0._id : "2" }
+                query:
+    - match: { hits.total: 2 }
+            id: d1
+            index: test
+                query:
+                    - match:
+                        script:
+        index:
+    - match: { hits.total: 2 }
+            body:
+    - do:
+                            params:
+        index:
+    - do:
+        indices.refresh: {}
+                        ival:
+                                origin: 20
+            index: test
+            index: test
+            body:
+                            params:
+            body:
+            id: d3
+                                decay: 0.9
+                                origin: 20
+    - do:
+                        dval:
+    - match: { hits.hits.1._id : "1" }
+# Integration tests for ScriptScoreQuery using Painless
+                bool:
+            body:
+    - do:
+            body:
             body: { "date": "2018-01-01T01:00:00Z" }
     - do:
-        indices.refresh: {}
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
+                                scale: 10
                 query:
-                    script_score:
+"Decay date functions":
                         query: {match_all: {} }
-                        script:
-                            source: "decayDateLinear(params.origin, params.scale, params.offset, params.decay, doc['date'].value)"
-                            params:
-                                origin: "2018-01-01T00:00:00Z"
-                                scale: "1h"
-                                offset: "0"
-                                decay: 0.9
-    - match: { hits.total: 2 }
     - match: { hits.hits.0._id : "2" }
-    - match: { hits.hits.1._id : "1" }
-
-
+                        lval:
+          - '{"index": {"_index": "test_index", "_id" : "3"}}'
     - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script_score:
-                        query: {match_all: {} }
-                        script:
-                            source: "decayDateExp(params.origin, params.scale, params.offset, params.decay, doc['date'].value)"
-                            params:
-                                origin: "2018-01-01T00:00:00Z"
-                                scale: "1h"
-                                offset: "0"
-                                decay: 0.9
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id : "2" }
-    - match: { hits.hits.1._id : "1" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script_score:
-                        query: {match_all: {} }
-                        script:
-                            source: "decayDateGauss(params.origin, params.scale, params.offset, params.decay, doc['date'].value)"
-                            params:
-                                origin: "2018-01-01T00:00:00Z"
-                                scale: "1h"
-                                offset: "0"
-                                decay: 0.9
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id : "2" }
-    - match: { hits.hits.1._id : "1" }
-
----
-"Decay numeric functions":
+                                scale: 10
     - do:
         indices.create:
-            index: test
-            body:
-                settings:
-                    number_of_shards: 1
-                mappings:
-                    properties:
-                        ival:
-                            type: integer
-                        lval:
-                            type: long
-                        fval:
-                            type: float
-                        dval:
-                            type: double
-
-    - do:
-        index:
-            index: test
-            id: 1
-            body: { "ival" : 40, "lval" : 40, "fval": 40.0, "dval": 40.0}
-
-    # for this document, the smallest value in the array is chosen, which will be the closest to the origin
-    - do:
-        index:
-            index: test
-            id: 2
-            body: { "ival" : [50, 40, 20], "lval" : [50, 40, 20], "fval" : [50.0, 40.0, 20.0], "dval" : [50.0, 40.0, 20.0] }
-    - do:
-        indices.refresh: {}
-
-    - do:
-        search:
             rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script_score:
-                        query: {match_all: {} }
-                        script:
-                            source: "decayNumericLinear(params.origin, params.scale, params.offset, params.decay, doc['ival'].value)"
-                            params:
-                                origin: 20
-                                scale: 10
                                 offset: 0
-                                decay: 0.9
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id : "2" }
-    - match: { hits.hits.1._id : "1" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
             index: test
-            body:
-                query:
-                    script_score:
-                        query: {match_all: {} }
-                        script:
-                            source: "decayNumericLinear(params.origin, params.scale, params.offset, params.decay, doc['lval'].value)"
-                            params:
-                                origin: 20
-                                scale: 10
-                                offset: 0
-                                decay: 0.9
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id : "2" }
-    - match: { hits.hits.1._id : "1" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script_score:
-                        query: {match_all: {} }
-                        script:
-                            source: "decayNumericLinear(params.origin, params.scale, params.offset, params.decay, doc['fval'].value)"
-                            params:
-                                origin: 20
-                                scale: 10
-                                offset: 0
-                                decay: 0.9
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id : "2" }
-    - match: { hits.hits.1._id : "1" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script_score:
-                        query: {match_all: {} }
-                        script:
-                            source: "decayNumericLinear(params.origin, params.scale, params.offset, params.decay, doc['dval'].value)"
-                            params:
-                                origin: 20
-                                scale: 10
-                                offset: 0
-                                decay: 0.9
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id : "2" }
-    - match: { hits.hits.1._id : "1" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script_score:
-                        query: {match_all: {} }
-                        script:
-                            source: "decayNumericExp(params.origin, params.scale, params.offset, params.decay, doc['ival'].value)"
-                            params:
-                                origin: 20
-                                scale: 10
-                                offset: 0
-                                decay: 0.9
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id : "2" }
-    - match: { hits.hits.1._id : "1" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script_score:
-                      query: {match_all: {} }
                       script:
-                            source: "decayNumericExp(params.origin, params.scale, params.offset, params.decay, doc['lval'].value)"
                             params:
-                                origin: 20
-                                scale: 10
-                                offset: 0
-                                decay: 0.9
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id : "2" }
     - match: { hits.hits.1._id : "1" }
-
-    - do:
         search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script_score:
-                      query: {match_all: {} }
-                      script:
-                            source: "decayNumericExp(params.origin, params.scale, params.offset, params.decay, doc['fval'].value)"
-                            params:
-                                origin: 20
-                                scale: 10
-                                offset: 0
-                                decay: 0.9
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id : "2" }
-    - match: { hits.hits.1._id : "1" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script_score:
-                      query: {match_all: {} }
-                      script:
-                            source: "decayNumericExp(params.origin, params.scale, params.offset, params.decay, doc['dval'].value)"
-                            params:
-                                origin: 20
-                                scale: 10
-                                offset: 0
-                                decay: 0.9
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id : "2" }
-    - match: { hits.hits.1._id : "1" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script_score:
-                      query: {match_all: {} }
-                      script:
-                            source: "decayNumericGauss(params.origin, params.scale, params.offset, params.decay, doc['ival'].value)"
-                            params:
-                                origin: 20
-                                scale: 10
-                                offset: 0
-                                decay: 0.9
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id : "2" }
-    - match: { hits.hits.1._id : "1" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script_score:
-                      query: {match_all: {} }
-                      script:
-                            source: "decayNumericGauss(params.origin, params.scale, params.offset, params.decay, doc['lval'].value)"
-                            params:
-                                origin: 20
-                                scale: 10
-                                offset: 0
-                                decay: 0.9
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id : "2" }
-    - match: { hits.hits.1._id : "1" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script_score:
-                      query: {match_all: {} }
-                      script:
-                            source: "decayNumericGauss(params.origin, params.scale, params.offset, params.decay, doc['fval'].value)"
-                            params:
-                                origin: 20
-                                scale: 10
-                                offset: 0
-                                decay: 0.9
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id : "2" }
-    - match: { hits.hits.1._id : "1" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script_score:
-                      query: {match_all: {} }
-                      script:
-                            source: "decayNumericGauss(params.origin, params.scale, params.offset, params.decay, doc['dval'].value)"
-                            params:
-                                origin: 20
-                                scale: 10
-                                offset: 0
-                                decay: 0.9
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id : "2" }
-    - match: { hits.hits.1._id : "1" }
-
-
----
-"Script Score With Highlight":
-
-
-  - do:
-      indices.create:
-        index: test_index
-        body:
-          mappings:
-            "properties":
-              "company":
-                "type": "text"
-              "reputation":
-                "type": "integer"
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - '{"index": {"_index": "test_index", "_id" : "1"}}'
-          - '{"company": "ABC company", "reputation": 300}'
-          - '{"index": {"_index": "test_index", "_id" : "2"}}'
-          - '{"company": "ABC ABCD company", "reputation": 200}'
-          - '{"index": {"_index": "test_index", "_id" : "3"}}'
-          - '{"company": "ABCD company", "reputation": 100}'
-
-  - do:
-      search:
-        body:
-          query:
-            script_score:
-              script:
-                source: "doc['reputation'].value"
-              query:
-                bool:
-                  should:
-                    - match:
-                        company: ABC
-                    - match:
                         company: ABCD
-          highlight:
-            fields:
-              company: {}
-
+                            source: "saturation(doc['dval'].value, params.k)"
+        search:
+            index: test
+                                scale: 10
+            rest_total_hits_as_int: true
+            rest_total_hits_as_int: true
+                        script:
+                                scale: 10
+    - do:
+    - match: { hits.hits.1._id : "1" }
+        search:
+                                origin: "2018-01-01T00:00:00Z"
+                                offset: 0
+                                offset: 0
+            body:
+                                offset: "0km"
+                            params:
+            index: test
+    - match: { hits.total: 2 }
+            index: test
+                    - match:
+  - do:
+            rest_total_hits_as_int: true
+        search:
+                    script_score:
   - match: {hits.hits.0.highlight.company.0: "<em>ABC</em> company"}
-  - match: {hits.hits.1.highlight.company.0: "<em>ABC</em> <em>ABCD</em> company"}
+    - do:
+            index: test
+    - match: { hits.hits.1._id : "1" }
+            body: {"dval": 1000}
+            body:
+                    number_of_shards: 1
+            id: 1
+                query:
+    - match: { hits.hits.1._id : "1" }
+    - match: { hits.hits.0._id : "2" }
+    - do:
+    - match: { hits.total: 2 }
+                        location:
+                    script_score:
+            body:
+        indices.create:
+              script:
+                            params:
+                            params:
+                                scale: "200km"
+            rest_total_hits_as_int: true
+    - match: { hits.total: 2 }
+                                decay: 0.9
+            rest_total_hits_as_int: true
+                            params:
+        index:
+                                scale: 10
+            script_score:
+            fields:
+                                scale: 10
+                                k: 100
+            body:
+            body:
+                    script_score:
+                            params:
+        body:
+                            params:
+    - match: { hits.hits.0._id : "2" }
+          - '{"index": {"_index": "test_index", "_id" : "2"}}'
+    - match: { hits.hits.1._id : "1" }
+    - do:
+                                a: 2
+    - match: { hits.hits.0._id : "2" }
+                    script_score:
+            id: d2
+                                scale: "200km"
+    - match: { hits.hits.0._id : "2" }
+                            params:
+                            params:
+                mappings:
+                query:
+    - match: { hits.hits.0._id : "2" }
+                                origin: "2018-01-01T00:00:00Z"
+    - match: { hits.total: 3 }
+                            source: "decayNumericGauss(params.origin, params.scale, params.offset, params.decay, doc['lval'].value)"
+                        script:
+                        script:
+                                origin: 20
+        indices.create:
+                        script:
+            id: 1
+            body:
+            rest_total_hits_as_int: true
+                        query: {match_all: {} }
+            id: 1
+                    script_score:
+            rest_total_hits_as_int: true
+        search:
+    - match: { hits.total: 2 }
+                                decay: 0.9
+    - do:
+        search:
+                            source: "decayNumericGauss(params.origin, params.scale, params.offset, params.decay, doc['fval'].value)"
+            body:
+            rest_total_hits_as_int: true
+                  should:
+                      query: {match_all: {} }
+    - match: { hits.hits.1._id : "1" }
+                            source: "decayNumericLinear(params.origin, params.scale, params.offset, params.decay, doc['dval'].value)"
+                            source: "decayDateGauss(params.origin, params.scale, params.offset, params.decay, doc['date'].value)"
+    - match: { hits.hits.0._id : "2" }
+                                origin: 20
+                            source: "decayGeoExp(params.origin, params.scale, params.offset, params.decay, doc['location'].value)"
+                        text-location:
+                            source: "decayNumericExp(params.origin, params.scale, params.offset, params.decay, doc['fval'].value)"
+        search:
+            body:
+    - do:
+                    script_score:
+                        query: {match_all: {} }
+                                scale: "1h"
+                            params:
+            "properties":
+    - match: { hits.total: 2 }
+    - match: { hits.total: 3 }
+                    script_score:
+                            params:
+    - match: { hits.hits.2._id: d1 }
+                    properties:
+            index: test
+                            type: keyword
+                        script:
+                                offset: 0
+                      query: {match_all: {} }
+    # for this document, the smallest value in the array is chosen, which will be the closest to the origin
+            id: 2
+    - match: { hits.hits.0._id : "2" }
+            body: { "text-location": "location1", "location" : {"lat" : 40.24, "lon" : -70.24} }
+        search:
+    - match: { hits.total: 2 }
+                            type: float
+                            source: "decayGeoGauss(params.origin, params.scale, params.offset, params.decay, doc['location'].value)"
+    - do:
+            index: test
+"Decay geo functions":
+                                offset: 0
+            index: test
+                      query: {match_all: {} }
+        search:
+            rest_total_hits_as_int: true
+            index: test
+"Decay numeric functions":
+                        script:
+    - match: { hits.total: 2 }
+                        script:
+                        fval:
+            index: test
+          mappings:
+                            source: "decayNumericLinear(params.origin, params.scale, params.offset, params.decay, doc['ival'].value)"
+                        company: ABC
+            id: 2
+                                decay: 0.9
+            index: test
+        index: test_index
+                "type": "integer"
+        search:
+                            params:
+                        query: {match_all: {} }
+                                offset: 0
+    - match: { hits.hits.1._id : "1" }
+            body:
+                                scale: 10
+                    script_score:
+                                decay: 0.9
+    - match: { hits.hits.2._id: d1 }
+            body: { "ival" : [50, 40, 20], "lval" : [50, 40, 20], "fval" : [50.0, 40.0, 20.0], "dval" : [50.0, 40.0, 20.0] }
+                                origin: 20
+            body:
+    - match: { hits.hits.0._id : "2" }
+                query:
+    - do:
+                query:
+    - do:
+      search:
+                            source: "decayDateExp(params.origin, params.scale, params.offset, params.decay, doc['date'].value)"
+            body: {"dval": 10}
+            rest_total_hits_as_int: true
+        search:
+                query:
+    - match: { hits.hits.1._id : "1" }
+                            source: "decayDateLinear(params.origin, params.scale, params.offset, params.decay, doc['date'].value)"
+                        query: {match_all: {} }
+                    script_score:
+    - do:
+              query:
+          - '{"company": "ABC ABCD company", "reputation": 200}'
+                                scale: "1h"
+                                decay: 0.9
+            rest_total_hits_as_int: true
+                query:
+                            type: geo_point
+        indices.refresh: {}
+        refresh: true
+                        query: {match_all: {} }
+                settings:
+    - do:
+                      query: {match_all: {} }
+                                offset: 0
+                            source: "sigmoid(doc['dval'].value, params.k, params.a)"
+        search:
+            body:
+                                decay: 0.5
+            rest_total_hits_as_int: true
+      bulk:
+    - match: { hits.hits.0._id : "2" }
+        index:
+        body:
+                                decay: 0.9
+            index: test
+                      query: {match_all: {} }
+            body: { "ival" : 40, "lval" : 40, "fval": 40.0, "dval": 40.0}
+    - match: { hits.hits.1._id : "1" }
+                            params:
+            index: test
+                            type: double
+            body:
+                                offset: "0"
+                            source: "decayNumericExp(params.origin, params.scale, params.offset, params.decay, doc['dval'].value)"
+        index:
+                "type": "text"
+    - do:
+            index: test
+                                k : 100
+                mappings:
+        search:
+          - '{"company": "ABCD company", "reputation": 100}'
+                                origin: 20
+                query:
+    - do:
+    - match: { hits.hits.1._id : "1" }
+    - do:
+            rest_total_hits_as_int: true
+            index: test
+    - do:
+            rest_total_hits_as_int: true
+                                offset: 0
+                    number_of_shards: 1
+    - match: { hits.total: 2 }
+            index: test
+    - match: { hits.hits.1._id : "1" }
+                        script:
+                    script_score:
+    - do:
+                query:
+    - do:
+                        script:
+                            source: "decayNumericGauss(params.origin, params.scale, params.offset, params.decay, doc['ival'].value)"
+            index: test
+    - do:
+              company: {}
+                            source: "decayNumericLinear(params.origin, params.scale, params.offset, params.decay, doc['fval'].value)"
+                                decay: 0.9
+                        query: {match_all: {} }
+    - match: { hits.total: 2 }
+        index:
+                                origin: 20
+                query:
+                                origin: 20
   - match: {hits.hits.2.highlight.company.0: "<em>ABCD</em> company"}
+                query:
+        search:
+                mappings:
+    - match: { hits.hits.1._id : "1" }
+    - match: { hits.hits.1._id: d2 }
+                            source: "decayGeoLinear(params.origin, params.scale, params.offset, params.decay, doc['location'].value)"
+                      script:
+                query:
+            body:
+    - do:
+    - match: { hits.hits.1._id: d2 }
+                    number_of_shards: 2
+            index: test
+                      script:
+                                scale: "200km"
+                      script:
+  - match: {hits.hits.1.highlight.company.0: "<em>ABC</em> <em>ABCD</em> company"}
+    - match: { hits.total: 2 }
+            index: test
+                        dval:
+            body: { "date": "2018-01-01T02:00:00Z"}
+            body:
+                        date:
+      indices.create:
+                        script:
+                                origin: "40, -70"
+    - do:
+                            source: "decayNumericGauss(params.origin, params.scale, params.offset, params.decay, doc['dval'].value)"
+    - do:
+---
+    - match: { hits.hits.1._id : "1" }
+    - do:
+                settings:
+                            source: "decayNumericExp(params.origin, params.scale, params.offset, params.decay, doc['ival'].value)"
+                settings:
+                                decay: 0.5
+        search:
+                                origin: 20
+    - match: { hits.total: 2 }
+    - match: { hits.total: 2 }
+        index:
+                                scale: 10
+    - match: { hits.hits.0._id : "2" }
+        search:
+    - match: { hits.hits.0._id : "2" }
+                                scale: "1h"
+    - match: { hits.total: 2 }
+    - do:

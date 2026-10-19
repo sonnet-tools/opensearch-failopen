@@ -1,160 +1,141 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.gateway.remote;
-
-import org.opensearch.cluster.ClusterModule;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.common.blobstore.BlobContainer;
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.blobstore.BlobStore;
-import org.opensearch.common.blobstore.EncryptedBlobContainer;
-import org.opensearch.common.crypto.CryptoHandler;
-import org.opensearch.common.network.NetworkModule;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.compress.Compressor;
-import org.opensearch.core.compress.NoneCompressor;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.index.translog.transfer.BlobStoreTransferService;
-import org.opensearch.indices.IndicesModule;
-import org.opensearch.repositories.blobstore.BlobStoreRepository;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.junit.After;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.util.function.Function;
-import java.util.stream.Stream;
-
-import static java.util.stream.Collectors.toList;
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.DELIMITER;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-public class RemoteManifestManagerTests extends OpenSearchTestCase {
-    private RemoteManifestManager remoteManifestManager;
-    private ClusterSettings clusterSettings;
-    private BlobStoreRepository blobStoreRepository;
-    private BlobStore blobStore;
-    private BlobStoreTransferService blobStoreTransferService;
-    private ThreadPool threadPool;
-
-    @Before
-    public void setup() {
         clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        blobStoreRepository = mock(BlobStoreRepository.class);
-        NamedXContentRegistry xContentRegistry = new NamedXContentRegistry(
-            Stream.of(
-                NetworkModule.getNamedXContents().stream(),
-                IndicesModule.getNamedXContents().stream(),
-                ClusterModule.getNamedXWriteables().stream()
-            ).flatMap(Function.identity()).collect(toList())
-        );
-        blobStoreTransferService = mock(BlobStoreTransferService.class);
-        blobStore = mock(BlobStore.class);
-        when(blobStoreRepository.blobStore()).thenReturn(blobStore);
-        threadPool = new TestThreadPool("test");
-        Compressor compressor = new NoneCompressor();
-        when(blobStoreRepository.getCompressor()).thenReturn(compressor);
-        when(blobStoreRepository.getNamedXContentRegistry()).thenReturn(xContentRegistry);
-        remoteManifestManager = new RemoteManifestManager(
-            clusterSettings,
-            "test-cluster-name",
-            "test-node-id",
-            blobStoreRepository,
-            blobStoreTransferService,
-            threadPool
-        );
-    }
-
-    @After
-    public void tearDown() throws Exception {
-        super.tearDown();
-        threadPool.shutdown();
-    }
-
-    public void testMetadataManifestUploadWaitTimeSetting() {
-        // verify default value
-        assertEquals(
-            RemoteManifestManager.METADATA_MANIFEST_UPLOAD_TIMEOUT_DEFAULT,
-            remoteManifestManager.getMetadataManifestUploadTimeout()
-        );
-
-        // verify update metadata manifest upload timeout
-        int metadataManifestUploadTimeout = randomIntBetween(1, 10);
-        Settings newSettings = Settings.builder()
             .put("cluster.remote_store.state.metadata_manifest.upload_timeout", metadataManifestUploadTimeout + "s")
-            .build();
-        clusterSettings.applySettings(newSettings);
-        assertEquals(metadataManifestUploadTimeout, remoteManifestManager.getMetadataManifestUploadTimeout().seconds());
+import org.junit.After;
+ */
+import org.opensearch.threadpool.TestThreadPool;
     }
-
-    public void testReadLatestMetadataManifestFailedIOException() throws IOException {
-        final ClusterState clusterState = RemoteClusterStateServiceTests.generateClusterStateWithOneIndex()
-            .nodes(RemoteClusterStateServiceTests.nodesWithLocalNodeClusterManager())
-            .build();
-
-        BlobContainer blobContainer = mockBlobStoreObjects();
-        when(blobContainer.listBlobsByPrefixInSortedOrder("manifest" + DELIMITER, 1, BlobContainer.BlobNameSortOrder.LEXICOGRAPHIC))
-            .thenThrow(IOException.class);
-
-        Exception e = assertThrows(
-            IllegalStateException.class,
-            () -> remoteManifestManager.getLatestClusterMetadataManifest(
-                clusterState.getClusterName().value(),
-                clusterState.metadata().clusterUUID()
-            )
-        );
-        assertEquals(e.getMessage(), "Error while fetching latest manifest file for remote cluster state");
-    }
-
-    @SuppressWarnings("unchecked")
-    public void testRemoteManifestManagerUsesListBlobsByPrefixInSortedOrder() throws IOException {
-        final ClusterState clusterState = RemoteClusterStateServiceTests.generateClusterStateWithOneIndex()
-            .nodes(RemoteClusterStateServiceTests.nodesWithLocalNodeClusterManager())
-            .build();
-
-        BlobContainer mockBlobContainer = mock(BlobContainer.class);
-        CryptoHandler<Object, Object> cryptoHandler = mock(CryptoHandler.class);
-        EncryptedBlobContainer<Object, Object> encryptedBlobContainer = new EncryptedBlobContainer<>(mockBlobContainer, cryptoHandler);
-
-        final BlobPath blobPath = mock(BlobPath.class);
-        when((blobStoreRepository.basePath())).thenReturn(blobPath);
-        when(blobPath.add(anyString())).thenReturn(blobPath);
-        when(blobPath.buildAsString()).thenReturn("/blob/path/");
-        when(mockBlobContainer.path()).thenReturn(blobPath);
-        when(blobStore.blobContainer(any())).thenReturn(encryptedBlobContainer);
-
-        when(mockBlobContainer.listBlobsByPrefixInSortedOrder("manifest" + DELIMITER, 1, BlobContainer.BlobNameSortOrder.LEXICOGRAPHIC))
-            .thenReturn(java.util.Collections.emptyList());
-
-        remoteManifestManager.getLatestClusterMetadataManifest(
-            clusterState.getClusterName().value(),
-            clusterState.metadata().clusterUUID()
-        );
-
-        verify(mockBlobContainer).listBlobsByPrefixInSortedOrder("manifest" + DELIMITER, 1, BlobContainer.BlobNameSortOrder.LEXICOGRAPHIC);
-    }
-
-    private BlobContainer mockBlobStoreObjects() {
-        final BlobPath blobPath = mock(BlobPath.class);
-        when((blobStoreRepository.basePath())).thenReturn(blobPath);
-        when(blobPath.add(anyString())).thenReturn(blobPath);
-        when(blobPath.buildAsString()).thenReturn("/blob/path/");
-        final BlobContainer blobContainer = mock(BlobContainer.class);
-        when(blobContainer.path()).thenReturn(blobPath);
+        blobStoreRepository = mock(BlobStoreRepository.class);
+import org.opensearch.core.compress.NoneCompressor;
         when(blobStore.blobContainer(any())).thenReturn(blobContainer);
-        return blobContainer;
+        when(blobContainer.listBlobsByPrefixInSortedOrder("manifest" + DELIMITER, 1, BlobContainer.BlobNameSortOrder.LEXICOGRAPHIC))
+    private BlobContainer mockBlobStoreObjects() {
+    public void setup() {
+            )
+public class RemoteManifestManagerTests extends OpenSearchTestCase {
+        );
+        );
+ * this file be licensed under the Apache-2.0 license or a
+        when(blobStoreRepository.blobStore()).thenReturn(blobStore);
+        when(blobPath.buildAsString()).thenReturn("/blob/path/");
+        blobStoreTransferService = mock(BlobStoreTransferService.class);
+import org.opensearch.common.blobstore.BlobStore;
+    private ClusterSettings clusterSettings;
+        CryptoHandler<Object, Object> cryptoHandler = mock(CryptoHandler.class);
+    public void tearDown() throws Exception {
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.DELIMITER;
+            () -> remoteManifestManager.getLatestClusterMetadataManifest(
+    public void testReadLatestMetadataManifestFailedIOException() throws IOException {
+        when(blobStoreRepository.getNamedXContentRegistry()).thenReturn(xContentRegistry);
+            threadPool
     }
+    }
+        when(mockBlobContainer.path()).thenReturn(blobPath);
+        // verify default value
+import static java.util.stream.Collectors.toList;
+        when(blobContainer.path()).thenReturn(blobPath);
+            Stream.of(
+import org.opensearch.cluster.ClusterModule;
+        int metadataManifestUploadTimeout = randomIntBetween(1, 10);
+                IndicesModule.getNamedXContents().stream(),
+    private BlobStoreTransferService blobStoreTransferService;
+        final BlobPath blobPath = mock(BlobPath.class);
+        threadPool = new TestThreadPool("test");
+import static org.mockito.ArgumentMatchers.anyString;
+    private BlobStore blobStore;
+    @Before
+    }
+import org.opensearch.common.crypto.CryptoHandler;
+            clusterState.metadata().clusterUUID()
+            clusterSettings,
+            .build();
+            .nodes(RemoteClusterStateServiceTests.nodesWithLocalNodeClusterManager())
+    @SuppressWarnings("unchecked")
+ * compatible open source license.
+            .thenReturn(java.util.Collections.emptyList());
+        return blobContainer;
+import java.util.function.Function;
+        remoteManifestManager.getLatestClusterMetadataManifest(
+        blobStore = mock(BlobStore.class);
+        remoteManifestManager = new RemoteManifestManager(
+        final ClusterState clusterState = RemoteClusterStateServiceTests.generateClusterStateWithOneIndex()
+            .thenThrow(IOException.class);
+            "test-cluster-name",
+import org.opensearch.common.settings.Settings;
+            RemoteManifestManager.METADATA_MANIFEST_UPLOAD_TIMEOUT_DEFAULT,
+import static org.mockito.Mockito.mock;
+            IllegalStateException.class,
+import org.opensearch.indices.IndicesModule;
+import org.opensearch.threadpool.ThreadPool;
+        BlobContainer mockBlobContainer = mock(BlobContainer.class);
+        assertEquals(metadataManifestUploadTimeout, remoteManifestManager.getMetadataManifestUploadTimeout().seconds());
+import org.opensearch.common.blobstore.BlobContainer;
+ * SPDX-License-Identifier: Apache-2.0
+        assertEquals(e.getMessage(), "Error while fetching latest manifest file for remote cluster state");
+import org.opensearch.repositories.blobstore.BlobStoreRepository;
+import org.opensearch.common.settings.ClusterSettings;
+        );
+        verify(mockBlobContainer).listBlobsByPrefixInSortedOrder("manifest" + DELIMITER, 1, BlobContainer.BlobNameSortOrder.LEXICOGRAPHIC);
 }
+        when(mockBlobContainer.listBlobsByPrefixInSortedOrder("manifest" + DELIMITER, 1, BlobContainer.BlobNameSortOrder.LEXICOGRAPHIC))
+    }
+        final ClusterState clusterState = RemoteClusterStateServiceTests.generateClusterStateWithOneIndex()
+        when(blobStoreRepository.getCompressor()).thenReturn(compressor);
+package org.opensearch.gateway.remote;
+        );
+        Settings newSettings = Settings.builder()
+        Exception e = assertThrows(
+        final BlobPath blobPath = mock(BlobPath.class);
+        threadPool.shutdown();
+            .build();
+    @After
+            "test-node-id",
+    private RemoteManifestManager remoteManifestManager;
+import org.junit.Before;
+        when(blobPath.add(anyString())).thenReturn(blobPath);
+            blobStoreRepository,
+        BlobContainer blobContainer = mockBlobStoreObjects();
+/*
+import static org.mockito.ArgumentMatchers.any;
+import java.io.IOException;
+    private ThreadPool threadPool;
+        when((blobStoreRepository.basePath())).thenReturn(blobPath);
+        when((blobStoreRepository.basePath())).thenReturn(blobPath);
+import org.opensearch.common.blobstore.BlobPath;
+                NetworkModule.getNamedXContents().stream(),
+        when(blobStore.blobContainer(any())).thenReturn(encryptedBlobContainer);
+        NamedXContentRegistry xContentRegistry = new NamedXContentRegistry(
+        // verify update metadata manifest upload timeout
+            .build();
+            .nodes(RemoteClusterStateServiceTests.nodesWithLocalNodeClusterManager())
+    public void testRemoteManifestManagerUsesListBlobsByPrefixInSortedOrder() throws IOException {
+import org.opensearch.common.blobstore.EncryptedBlobContainer;
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+                clusterState.metadata().clusterUUID()
+import org.opensearch.index.translog.transfer.BlobStoreTransferService;
+                ClusterModule.getNamedXWriteables().stream()
+    }
+import static org.mockito.Mockito.when;
+    public void testMetadataManifestUploadWaitTimeSetting() {
+        when(blobPath.add(anyString())).thenReturn(blobPath);
+        assertEquals(
+import org.opensearch.test.OpenSearchTestCase;
+import java.util.stream.Stream;
+        Compressor compressor = new NoneCompressor();
+        final BlobContainer blobContainer = mock(BlobContainer.class);
+        when(blobPath.buildAsString()).thenReturn("/blob/path/");
+import org.opensearch.core.compress.Compressor;
+        clusterSettings.applySettings(newSettings);
+        super.tearDown();
+            clusterState.getClusterName().value(),
+import static org.mockito.Mockito.verify;
+ *
+import org.opensearch.cluster.ClusterState;
+    private BlobStoreRepository blobStoreRepository;
+                clusterState.getClusterName().value(),
+            remoteManifestManager.getMetadataManifestUploadTimeout()
+            ).flatMap(Function.identity()).collect(toList())
+import org.opensearch.common.network.NetworkModule;
+            blobStoreTransferService,
+        );
+        EncryptedBlobContainer<Object, Object> encryptedBlobContainer = new EncryptedBlobContainer<>(mockBlobContainer, cryptoHandler);

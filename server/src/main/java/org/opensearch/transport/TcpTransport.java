@@ -1,1157 +1,1033 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.transport;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.OpenSearchException;
-import org.opensearch.Version;
-import org.opensearch.action.support.ThreadedActionListener;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.Booleans;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.lifecycle.AbstractLifecycleComponent;
-import org.opensearch.common.lifecycle.Lifecycle;
-import org.opensearch.common.metrics.MeanMetric;
-import org.opensearch.common.network.CloseableChannel;
-import org.opensearch.common.network.NetworkAddress;
-import org.opensearch.common.network.NetworkService;
-import org.opensearch.common.network.NetworkUtils;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.transport.PortsRange;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.PageCacheRecycler;
-import org.opensearch.common.util.concurrent.ConcurrentCollections;
-import org.opensearch.common.util.concurrent.CountDown;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.breaker.CircuitBreaker;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.transport.BoundTransportAddress;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.indices.breaker.CircuitBreakerService;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.monitor.jvm.JvmInfo;
-import org.opensearch.node.Node;
-import org.opensearch.telemetry.tracing.Tracer;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.nativeprotocol.NativeOutboundHandler;
-
-import java.io.IOException;
-import java.io.StreamCorruptedException;
-import java.net.BindException;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
-import java.nio.channels.CancelledKeyException;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.TreeSet;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.function.Supplier;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-
-import static java.util.Collections.unmodifiableMap;
-import static org.opensearch.common.transport.NetworkExceptionHelper.isCloseConnectionException;
-import static org.opensearch.common.transport.NetworkExceptionHelper.isConnectException;
-import static org.opensearch.common.util.concurrent.ConcurrentCollections.newConcurrentMap;
-
-/**
- * The TCP Transport layer
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public abstract class TcpTransport extends AbstractLifecycleComponent implements Transport {
-    private static final Logger logger = LogManager.getLogger(TcpTransport.class);
-
-    public static final String TRANSPORT_WORKER_THREAD_NAME_PREFIX = "transport_worker";
-
-    // This is the number of bytes necessary to read the message size
-    private static final int BYTES_NEEDED_FOR_MESSAGE_SIZE = TcpHeader.MARKER_BYTES_SIZE + TcpHeader.MESSAGE_LENGTH_SIZE;
-    private static final long THIRTY_PER_HEAP_SIZE = (long) (JvmInfo.jvmInfo().getMem().getHeapMax().getBytes() * 0.3);
-
-    final StatsTracker statsTracker = new StatsTracker();
-
-    // this limit is per-address
-    private static final int LIMIT_LOCAL_PORTS_COUNT = 6;
-
-    protected final Settings settings;
-    private final Version version;
-    protected final ThreadPool threadPool;
-    protected final PageCacheRecycler pageCacheRecycler;
-    protected final NetworkService networkService;
-    protected final Set<ProfileSettings> profileSettings;
-    private final CircuitBreakerService circuitBreakerService;
-
-    private final ConcurrentMap<String, BoundTransportAddress> profileBoundAddresses = newConcurrentMap();
+        assert threadPool.generic().isShutdown() == false : "Must stop transport before terminating underlying threadpool";
     private final Map<String, List<TcpServerChannel>> serverChannels = newConcurrentMap();
-    private final Set<TcpChannel> acceptedChannels = ConcurrentCollections.newConcurrentSet();
-
-    // this lock is here to make sure we close this transport and disconnect all the client nodes
-    // connections while no connect operations is going on
-    private final ReadWriteLock closeLock = new ReentrantReadWriteLock();
-    private volatile BoundTransportAddress boundAddress;
-
-    private final TransportHandshaker handshaker;
-    private final TransportKeepAlive keepAlive;
-    private final OutboundHandler outboundHandler;
-    protected final InboundHandler inboundHandler;
-    private final NativeOutboundHandler handshakerHandler;
-    private final ResponseHandlers responseHandlers = new ResponseHandlers();
-    private final RequestHandlers requestHandlers = new RequestHandlers();
-
-    private final AtomicLong outboundConnectionCount = new AtomicLong(); // also used as a correlation ID for open/close logs
-
-    public TcpTransport(
-        Settings settings,
-        Version version,
-        ThreadPool threadPool,
-        PageCacheRecycler pageCacheRecycler,
-        CircuitBreakerService circuitBreakerService,
-        NamedWriteableRegistry namedWriteableRegistry,
-        NetworkService networkService,
-        Tracer tracer
-    ) {
-        this.settings = settings;
-        this.profileSettings = getProfileSettings(settings);
-        this.version = version;
-        this.threadPool = threadPool;
-        this.pageCacheRecycler = pageCacheRecycler;
-        this.circuitBreakerService = circuitBreakerService;
-        this.networkService = networkService;
-        String nodeName = Node.NODE_NAME_SETTING.get(settings);
-        final Settings defaultFeatures = TransportSettings.DEFAULT_FEATURES_SETTING.get(settings);
-        String[] features;
-        if (defaultFeatures == null) {
-            features = new String[0];
-        } else {
-            defaultFeatures.names().forEach(key -> {
-                if (Booleans.parseBoolean(defaultFeatures.get(key)) == false) {
-                    throw new IllegalArgumentException("feature settings must have default [true] value");
-                }
-            });
-            // use a sorted set to present the features in a consistent order
-            features = new TreeSet<>(defaultFeatures.names()).toArray(new String[defaultFeatures.names().size()]);
-        }
-        BigArrays bigArrays = new BigArrays(pageCacheRecycler, circuitBreakerService, CircuitBreaker.IN_FLIGHT_REQUESTS);
-
-        this.outboundHandler = new OutboundHandler(statsTracker, threadPool);
-        this.handshakerHandler = new NativeOutboundHandler(
-            nodeName,
-            version,
-            features,
-            statsTracker,
-            threadPool,
-            bigArrays,
-            outboundHandler
-        );
-        this.handshaker = new TransportHandshaker(
-            version,
-            threadPool,
-            (node, channel, requestId, v) -> handshakerHandler.sendRequest(
-                node,
-                channel,
-                requestId,
-                TransportHandshaker.HANDSHAKE_ACTION_NAME,
-                new TransportHandshaker.HandshakeRequest(version),
-                TransportRequestOptions.EMPTY,
-                v,
-                false,
-                true
-            )
-        );
-        this.keepAlive = new TransportKeepAlive(threadPool, this.outboundHandler::sendBytes);
-        this.inboundHandler = createInboundHandler(
-            nodeName,
-            version,
-            features,
-            statsTracker,
-            threadPool,
-            bigArrays,
-            outboundHandler,
-            namedWriteableRegistry,
-            handshaker,
-            keepAlive,
-            requestHandlers,
-            responseHandlers,
-            tracer
-        );
-    }
-
-    protected InboundHandler createInboundHandler(
-        String nodeName,
-        Version version,
-        String[] features,
-        StatsTracker statsTracker,
-        ThreadPool threadPool,
-        BigArrays bigArrays,
-        OutboundHandler outboundHandler,
-        NamedWriteableRegistry namedWriteableRegistry,
-        TransportHandshaker handshaker,
-        TransportKeepAlive keepAlive,
-        RequestHandlers requestHandlers,
-        ResponseHandlers responseHandlers,
-        Tracer tracer
-    ) {
-        return new InboundHandler(
-            nodeName,
-            version,
-            features,
-            statsTracker,
-            threadPool,
-            bigArrays,
-            outboundHandler,
-            namedWriteableRegistry,
-            handshaker,
-            keepAlive,
-            requestHandlers,
-            responseHandlers,
-            tracer
-        );
-    }
-
-    public Version getVersion() {
-        return version;
-    }
-
-    public StatsTracker getStatsTracker() {
-        return statsTracker;
-    }
-
-    public PageCacheRecycler getPageCacheRecycler() {
-        return pageCacheRecycler;
-    }
-
-    public ThreadPool getThreadPool() {
-        return threadPool;
-    }
-
-    public Supplier<CircuitBreaker> getInflightBreaker() {
-        return () -> circuitBreakerService.getBreaker(CircuitBreaker.IN_FLIGHT_REQUESTS);
-    }
-
-    @Override
-    protected void doStart() {}
-
-    @Override
-    public synchronized void setMessageListener(TransportMessageListener listener) {
-        handshakerHandler.setMessageListener(listener);
-        inboundHandler.setMessageListener(listener);
-    }
-
-    @Override
-    public void setSlowLogThreshold(TimeValue slowLogThreshold) {
-        inboundHandler.setSlowLogThreshold(slowLogThreshold);
-    }
-
-    /**
-     * List of node connection channels
-     *
-     * @opensearch.internal
-     */
-    public final class NodeChannels extends CloseableConnection {
-        private final Map<TransportRequestOptions.Type, ConnectionProfile.ConnectionTypeHandle> typeMapping;
-        private final List<TcpChannel> channels;
-        private final DiscoveryNode node;
-        private final Version version;
-        private final boolean compress;
-        private final AtomicBoolean isClosing = new AtomicBoolean(false);
-
-        public NodeChannels(DiscoveryNode node, List<TcpChannel> channels, ConnectionProfile connectionProfile, Version handshakeVersion) {
-            this.node = node;
-            this.channels = Collections.unmodifiableList(channels);
-            assert channels.size() == connectionProfile.getNumConnections() : "expected channels size to be == "
-                + connectionProfile.getNumConnections()
-                + " but was: ["
-                + channels.size()
+import java.util.TreeSet;
+ */
+        TimeValue connectTimeout = connectionProfile.getConnectTimeout();
+import java.nio.channels.CancelledKeyException;
                 + "]";
-            typeMapping = new EnumMap<>(TransportRequestOptions.Type.class);
-            for (ConnectionProfile.ConnectionTypeHandle handle : connectionProfile.getHandles()) {
-                for (TransportRequestOptions.Type type : handle.getTypes())
-                    typeMapping.put(type, handle);
-            }
-            version = handshakeVersion;
-            compress = connectionProfile.getCompressionEnabled();
-        }
-
-        @Override
-        public Version getVersion() {
-            return version;
-        }
-
-        public List<TcpChannel> getChannels() {
-            return channels;
-        }
-
-        public TcpChannel channel(TransportRequestOptions.Type type) {
-            ConnectionProfile.ConnectionTypeHandle connectionTypeHandle = typeMapping.get(type);
-            if (connectionTypeHandle == null) {
-                throw new IllegalArgumentException("no type channel for [" + type + "]");
-            }
-            return connectionTypeHandle.getChannel(channels);
-        }
-
-        @Override
-        public void close() {
-            if (isClosing.compareAndSet(false, true)) {
-                try {
-                    boolean block = lifecycle.stopped() && Transports.isTransportThread(Thread.currentThread()) == false;
-                    CloseableChannel.closeChannels(channels, block);
-                } finally {
-                    // Call the super method to trigger listeners
-                    super.close();
-                }
-            }
-        }
-
-        @Override
-        public DiscoveryNode getNode() {
-            return this.node;
-        }
-
-        @Override
-        public void sendRequest(long requestId, String action, TransportRequest request, TransportRequestOptions options)
-            throws IOException, TransportException {
-            if (isClosing.get()) {
-                throw new NodeNotConnectedException(node, "connection already closed");
-            }
-            TcpChannel channel = channel(options.type());
-            handshakerHandler.sendRequest(node, channel, requestId, action, request, options, getVersion(), compress, false);
-        }
-    }
-
-    // This allows transport implementations to potentially override specific connection profiles. This
-    // primarily exists for the test implementations.
-    protected ConnectionProfile maybeOverrideConnectionProfile(ConnectionProfile connectionProfile) {
-        return connectionProfile;
-    }
-
     @Override
-    public void openConnection(DiscoveryNode node, ConnectionProfile profile, ActionListener<Transport.Connection> listener) {
-
-        Objects.requireNonNull(profile, "connection profile cannot be null");
-        if (node == null) {
-            throw new ConnectTransportException(null, "can't open connection to a null node");
+                throw new NodeNotConnectedException(node, "connection already closed");
+            typeMapping = new EnumMap<>(TransportRequestOptions.Type.class);
+                }
+    }
+        public final int tcpKeepCount;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+        return new BoundTransportAddress(transportBoundAddresses, publishAddress);
+            publishPort = isDefaultProfile
+        } else if (e instanceof BindException) {
+                host = hostPortString.substring(0, colonPos);
+import java.util.concurrent.atomic.AtomicReference;
+    // this code is a take on guava's HostAndPort, like a HostAndPortRange
+    private static final Pattern BRACKET_PATTERN = Pattern.compile("^\\[(.*:.*)\\](?::([\\d\\-]*))?$");
+    final long getNumHandshakes() {
+            Matcher matcher = BRACKET_PATTERN.matcher(hostPortString);
+                        c -> {},
+            CloseableChannel.closeChannel(channel);
+        threadPool.schedule(channelsConnectedListener::onTimeout, connectTimeout, ThreadPool.Names.GENERIC);
+    // this limit is per-address
+        }
+ * @opensearch.api
+        // if port isn't specified, fill with the default
+        closeLock.writeLock().lock();
+    }
+    // not perfect, but PortsRange should take care of any port range validation, not a regex
+            tcpKeepCount = TransportSettings.TCP_KEEP_COUNT_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
+                    + TransportSettings.PORT.getKey()
+        private ChannelsConnectedListener(
+        public List<TcpChannel> getChannels() {
+        private void closeAndFail(Exception e) {
+        private final DiscoveryNode node;
+        );
+            throw new BindTransportException("Failed to resolve publish address", e);
+            throws IOException, TransportException {
+        Tracer tracer
+            (node, channel, requestId, v) -> handshakerHandler.sendRequest(
+    ) {
+     * @throws HttpRequestOnTransportException       if the message header appears to be an HTTP message
+        return statsTracker;
+        final BoundTransportAddress boundTransportAddress = createBoundTransportAddress(profileSettings, boundAddresses);
+    final TransportKeepAlive getKeepAlive() {
+            // Returns true if all connections have completed successfully
+        @Override
+     *                                               This is dependent on the available memory.
+                TransportRequestOptions.EMPTY,
+        OutboundHandler outboundHandler,
+        ChannelsConnectedListener channelsConnectedListener = new ChannelsConnectedListener(
+        public final int publishPort;
+            local.add("[::1]"); // may get ports appended!
+        public final List<String> publishHosts;
+        return new InboundHandler(
+        } else {
+        } finally {
+            List<String> profileBindHosts = TransportSettings.BIND_HOST_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
+                }
+    }
+        if (defaultFeatures == null) {
+        } catch (Exception e) {
+        public RestStatus status() {
+        inboundHandler.setMessageListener(listener);
+    public final TransportStats getStats() {
+    protected void bindServer(ProfileSettings profileSettings) {
+        final long bytesWritten = statsTracker.getBytesWritten();
+            .totalOutboundConnections(outboundConnectionCount.get())
+import java.util.List;
+                v,
+            }
+    final StatsTracker statsTracker = new StatsTracker();
+            Thread.currentThread().interrupt();
+            }
+    private final TransportKeepAlive keepAlive;
+            CloseableChannel.closeChannel(channel);
+ *
+     *
+                isDefaultSet = true;
+        String[] features;
+        if (portString == null || portString.isEmpty()) {
+ * this file be licensed under the Apache-2.0 license or a
+    }
+    private static boolean appearsToBeHTTPResponse(BytesReference headerBuffer) {
         }
         ConnectionProfile finalProfile = maybeOverrideConnectionProfile(profile);
-        closeLock.readLock().lock(); // ensure we don't open connections while we are closing
-        try {
-            ensureOpen();
-            initiateConnection(node, finalProfile, listener);
-        } finally {
-            closeLock.readLock().unlock();
+        return handshaker.getNumHandshakes();
+import org.opensearch.threadpool.ThreadPool;
+import static org.opensearch.common.transport.NetworkExceptionHelper.isCloseConnectionException;
         }
-    }
-
-    private List<TcpChannel> initiateConnection(
-        DiscoveryNode node,
-        ConnectionProfile connectionProfile,
-        ActionListener<Transport.Connection> listener
-    ) {
-        int numConnections = connectionProfile.getNumConnections();
-        assert numConnections > 0 : "A connection profile must be configured with at least one connection";
-
-        final List<TcpChannel> channels = new ArrayList<>(numConnections);
-
-        for (int i = 0; i < numConnections; ++i) {
-            try {
-                TcpChannel channel = initiateChannel(node);
-                logger.trace(() -> new ParameterizedMessage("Tcp transport channel opened: {}", channel));
-                channels.add(channel);
-            } catch (ConnectTransportException e) {
-                CloseableChannel.closeChannels(channels, false);
-                listener.onFailure(e);
-                return channels;
-            } catch (Exception e) {
-                CloseableChannel.closeChannels(channels, false);
-                listener.onFailure(new ConnectTransportException(node, "general node connection failure", e));
-                return channels;
-            }
-        }
-
-        ChannelsConnectedListener channelsConnectedListener = new ChannelsConnectedListener(
-            node,
-            connectionProfile,
-            channels,
-            new ThreadedActionListener<>(logger, threadPool, ThreadPool.Names.GENERIC, listener, false)
-        );
-
-        for (TcpChannel channel : channels) {
-            channel.addConnectListener(channelsConnectedListener);
-        }
-
-        TimeValue connectTimeout = connectionProfile.getConnectTimeout();
-        threadPool.schedule(channelsConnectedListener::onTimeout, connectTimeout, ThreadPool.Names.GENERIC);
-        return channels;
-    }
-
-    @Override
-    public BoundTransportAddress boundAddress() {
-        return this.boundAddress;
-    }
-
-    @Override
-    public Map<String, BoundTransportAddress> profileBoundAddresses() {
-        return unmodifiableMap(new HashMap<>(profileBoundAddresses));
-    }
-
-    @Override
-    public List<String> getDefaultSeedAddresses() {
-        List<String> local = new ArrayList<>();
-        local.add("127.0.0.1");
-        // check if v6 is supported, if so, v4 will also work via mapped addresses.
-        if (NetworkUtils.SUPPORTS_V6) {
-            local.add("[::1]"); // may get ports appended!
-        }
-        return local.stream()
-            .flatMap(address -> Arrays.stream(defaultPortRange()).limit(LIMIT_LOCAL_PORTS_COUNT).mapToObj(port -> address + ":" + port))
-            .collect(Collectors.toList());
-    }
-
-    protected void bindServer(ProfileSettings profileSettings) {
-        // Bind and start to accept incoming connections.
-        InetAddress[] hostAddresses;
-        List<String> profileBindHosts = profileSettings.bindHosts;
-        try {
-            hostAddresses = networkService.resolveBindHostAddresses(profileBindHosts.toArray(Strings.EMPTY_ARRAY));
-        } catch (IOException e) {
-            throw new BindTransportException("Failed to resolve host " + profileBindHosts, e);
-        }
-        if (logger.isDebugEnabled()) {
-            String[] addresses = new String[hostAddresses.length];
-            for (int i = 0; i < hostAddresses.length; i++) {
-                addresses[i] = NetworkAddress.format(hostAddresses[i]);
-            }
-            logger.debug("binding server bootstrap to: {}", (Object) addresses);
-        }
-
-        assert hostAddresses.length > 0;
-
-        List<InetSocketAddress> boundAddresses = new ArrayList<>();
-        for (InetAddress hostAddress : hostAddresses) {
-            boundAddresses.add(bindToPort(profileSettings.profileName, hostAddress, profileSettings.portOrRange));
-        }
-
-        final BoundTransportAddress boundTransportAddress = createBoundTransportAddress(profileSettings, boundAddresses);
-
-        if (profileSettings.isDefaultProfile) {
-            this.boundAddress = boundTransportAddress;
-        } else {
-            profileBoundAddresses.put(profileSettings.profileName, boundTransportAddress);
-        }
-    }
-
-    private InetSocketAddress bindToPort(final String name, final InetAddress hostAddress, String port) {
-        PortsRange portsRange = new PortsRange(port);
-        final AtomicReference<Exception> lastException = new AtomicReference<>();
-        final AtomicReference<InetSocketAddress> boundSocket = new AtomicReference<>();
-        closeLock.writeLock().lock();
-        try {
-            // No need for locking here since Lifecycle objects can't move from STARTED to INITIALIZED
-            if (lifecycle.initialized() == false && lifecycle.started() == false) {
-                throw new IllegalStateException("transport has been stopped");
-            }
-            boolean success = portsRange.iterate(portNumber -> {
-                try {
-                    TcpServerChannel channel = bind(name, new InetSocketAddress(hostAddress, portNumber));
-                    serverChannels.computeIfAbsent(name, k -> new ArrayList<>()).add(channel);
-                    boundSocket.set(channel.getLocalAddress());
-                } catch (Exception e) {
-                    lastException.set(e);
-                    return false;
-                }
-                return true;
             });
-            if (!success) {
-                throw new BindTransportException(
-                    "Failed to bind to " + NetworkAddress.format(hostAddress, portsRange),
-                    lastException.get()
-                );
-            }
-        } finally {
-            closeLock.writeLock().unlock();
-        }
-        if (logger.isDebugEnabled()) {
-            logger.debug("Bound profile [{}] to address {{}}", name, NetworkAddress.format(boundSocket.get()));
-        }
-
-        return boundSocket.get();
-    }
-
-    private BoundTransportAddress createBoundTransportAddress(ProfileSettings profileSettings, List<InetSocketAddress> boundAddresses) {
-        String[] boundAddressesHostStrings = new String[boundAddresses.size()];
-        TransportAddress[] transportBoundAddresses = new TransportAddress[boundAddresses.size()];
-        for (int i = 0; i < boundAddresses.size(); i++) {
-            InetSocketAddress boundAddress = boundAddresses.get(i);
-            boundAddressesHostStrings[i] = boundAddress.getHostString();
-            transportBoundAddresses[i] = new TransportAddress(boundAddress);
-        }
-
-        List<String> publishHosts = profileSettings.publishHosts;
-        if (profileSettings.isDefaultProfile == false && publishHosts.isEmpty()) {
-            publishHosts = Arrays.asList(boundAddressesHostStrings);
-        }
-        if (publishHosts.isEmpty()) {
-            publishHosts = NetworkService.GLOBAL_NETWORK_PUBLISH_HOST_SETTING.get(settings);
-        }
-
-        final InetAddress publishInetAddress;
-        try {
-            publishInetAddress = networkService.resolvePublishHostAddresses(publishHosts.toArray(Strings.EMPTY_ARRAY));
-        } catch (Exception e) {
-            throw new BindTransportException("Failed to resolve publish address", e);
-        }
-
-        final int publishPort = Transport.resolvePublishPort(profileSettings.publishPort, boundAddresses, publishInetAddress);
-        if (publishPort == -1) {
-            String profileExplanation = profileSettings.isDefaultProfile ? "" : " for profile " + profileSettings.profileName;
-            throw new BindTransportException(
-                "Failed to auto-resolve publish port"
-                    + profileExplanation
-                    + ", multiple bound addresses "
-                    + boundAddresses
-                    + " with distinct ports and none of them matched the publish address ("
-                    + publishInetAddress
-                    + "). "
-                    + "Please specify a unique port by setting "
-                    + TransportSettings.PORT.getKey()
-                    + " or "
-                    + TransportSettings.PUBLISH_PORT.getKey()
-            );
-        }
-
-        final TransportAddress publishAddress = new TransportAddress(new InetSocketAddress(publishInetAddress, publishPort));
-        return new BoundTransportAddress(transportBoundAddresses, publishAddress);
-    }
-
+        @Override
+import java.util.Arrays;
+                + ","
+                + " but was: ["
+                        logger.debug("opened transport connection [{}] to [{}] using channels [{}]", connectionId, node, channels);
+     */
+    public List<String> getDefaultSeedAddresses() {
+     *
+            if (appearsToBeHTTPResponse(headerBuffer)) {
+        boolean addedOnThisCall = acceptedChannels.add(channel);
+                for (Map.Entry<String, List<TcpServerChannel>> entry : serverChannels.entrySet()) {
+        public final int tcpKeepIdle;
+    @Override
+     *
     @Override
     public TransportAddress[] addressesFromString(String address) throws UnknownHostException {
-        return parse(address, defaultPortRange()[0]);
-    }
-
-    private int[] defaultPortRange() {
-        return new PortsRange(
-            settings.get(
-                TransportSettings.PORT_PROFILE.getConcreteSettingForNamespace(TransportSettings.DEFAULT_PROFILE).getKey(),
-                TransportSettings.PORT.get(settings)
-            )
-        ).ports();
-    }
-
-    // this code is a take on guava's HostAndPort, like a HostAndPortRange
-
-    // pattern for validating ipv6 bracket addresses.
-    // not perfect, but PortsRange should take care of any port range validation, not a regex
-    private static final Pattern BRACKET_PATTERN = Pattern.compile("^\\[(.*:.*)\\](?::([\\d\\-]*))?$");
-
+            return version;
     /**
-     * parse a hostname+port spec into its equivalent addresses
-     */
-    static TransportAddress[] parse(String hostPortString, int defaultPort) throws UnknownHostException {
-        Objects.requireNonNull(hostPortString);
-        String host;
-        String portString = null;
-
-        if (hostPortString.startsWith("[")) {
-            // Parse a bracketed host, typically an IPv6 literal.
-            Matcher matcher = BRACKET_PATTERN.matcher(hostPortString);
-            if (!matcher.matches()) {
-                throw new IllegalArgumentException("Invalid bracketed host/port range: " + hostPortString);
-            }
-            host = matcher.group(1);
-            portString = matcher.group(2);  // could be null
-        } else {
-            int colonPos = hostPortString.indexOf(':');
-            if (colonPos >= 0 && hostPortString.indexOf(':', colonPos + 1) == -1) {
-                // Exactly 1 colon. Split into host:port.
-                host = hostPortString.substring(0, colonPos);
-                portString = hostPortString.substring(colonPos + 1);
-            } else {
-                // 0 or 2+ colons. Bare hostname or IPv6 literal.
-                host = hostPortString;
-                // 2+ colons and not bracketed: exception
-                if (colonPos >= 0) {
-                    throw new IllegalArgumentException("IPv6 addresses must be bracketed: " + hostPortString);
-                }
-            }
-        }
-
-        int port;
-        // if port isn't specified, fill with the default
-        if (portString == null || portString.isEmpty()) {
-            port = defaultPort;
-        } else {
-            port = Integer.parseInt(portString);
-        }
-
-        return Arrays.stream(InetAddress.getAllByName(host))
-            .distinct()
-            .map(address -> new TransportAddress(address, port))
-            .toArray(TransportAddress[]::new);
-    }
-
-    @Override
-    protected final void doClose() {}
-
-    @Override
-    protected final void doStop() {
-        final CountDownLatch latch = new CountDownLatch(1);
-        // make sure we run it on another thread than a possible IO handler thread
-        assert threadPool.generic().isShutdown() == false : "Must stop transport before terminating underlying threadpool";
-        threadPool.generic().execute(() -> {
-            closeLock.writeLock().lock();
-            try {
-                keepAlive.close();
-
-                // first stop to accept any incoming connections so nobody can connect to this transport
-                for (Map.Entry<String, List<TcpServerChannel>> entry : serverChannels.entrySet()) {
-                    String profile = entry.getKey();
-                    List<TcpServerChannel> channels = entry.getValue();
-                    ActionListener<Void> closeFailLogger = ActionListener.wrap(
-                        c -> {},
-                        e -> logger.warn(() -> new ParameterizedMessage("Error closing serverChannel for profile [{}]", profile), e)
-                    );
-                    channels.forEach(c -> c.addCloseListener(closeFailLogger));
-                    CloseableChannel.closeChannels(channels, true);
-                }
-                serverChannels.clear();
-
-                // close all of the incoming channels. The closeChannels method takes a list so we must convert the set.
-                CloseableChannel.closeChannels(new ArrayList<>(acceptedChannels), true);
-                acceptedChannels.clear();
-
-                stopInternal();
-            } finally {
-                closeLock.writeLock().unlock();
-                latch.countDown();
-            }
-        });
-
-        try {
-            latch.await(30, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            // ignore
-        }
-    }
-
-    public void onException(TcpChannel channel, Exception e) {
-        handleException(channel, e, lifecycle, outboundHandler);
-    }
-
-    // exposed for tests
-    static void handleException(TcpChannel channel, Exception e, Lifecycle lifecycle, OutboundHandler outboundHandler) {
-        if (!lifecycle.started()) {
-            // just close and ignore - we are already stopped and just need to make sure we release all resources
-            CloseableChannel.closeChannel(channel);
-            return;
-        }
-
-        if (isCloseConnectionException(e)) {
-            logger.debug(
-                () -> new ParameterizedMessage(
-                    "close connection exception caught on transport layer [{}], disconnecting from relevant node",
-                    channel
-                ),
-                e
-            );
-            // close the channel, which will cause a node to be disconnected if relevant
-            CloseableChannel.closeChannel(channel);
-        } else if (isConnectException(e)) {
-            logger.debug(() -> new ParameterizedMessage("connect exception caught on transport layer [{}]", channel), e);
-            // close the channel as safe measure, which will cause a node to be disconnected if relevant
-            CloseableChannel.closeChannel(channel);
-        } else if (e instanceof BindException) {
-            logger.debug(() -> new ParameterizedMessage("bind exception caught on transport layer [{}]", channel), e);
-            // close the channel as safe measure, which will cause a node to be disconnected if relevant
-            CloseableChannel.closeChannel(channel);
-        } else if (e instanceof CancelledKeyException) {
-            logger.debug(
-                () -> new ParameterizedMessage(
-                    "cancelled key exception caught on transport layer [{}], disconnecting from relevant node",
-                    channel
-                ),
-                e
-            );
-            // close the channel as safe measure, which will cause a node to be disconnected if relevant
-            CloseableChannel.closeChannel(channel);
-        } else if (e instanceof HttpRequestOnTransportException) {
-            // in case we are able to return data, serialize the exception content and sent it back to the client
-            if (channel.isOpen()) {
-                BytesArray message = new BytesArray(e.getMessage().getBytes(StandardCharsets.UTF_8));
-                outboundHandler.sendBytes(channel, message, ActionListener.wrap(() -> CloseableChannel.closeChannel(channel)));
-            }
-        } else if (e instanceof StreamCorruptedException) {
-            logger.warn(() -> new ParameterizedMessage("{}, [{}], closing connection", e.getMessage(), channel));
-            CloseableChannel.closeChannel(channel);
-        } else {
-            logger.warn(() -> new ParameterizedMessage("exception caught on transport layer [{}], closing connection", channel), e);
-            // close the channel, which will cause a node to be disconnected if relevant
-            CloseableChannel.closeChannel(channel);
-        }
-    }
-
-    protected void onServerException(TcpServerChannel channel, Exception e) {
-        if (e instanceof BindException) {
-            logger.debug(() -> new ParameterizedMessage("bind exception from server channel caught on transport layer [{}]", channel), e);
-        } else {
-            logger.error(new ParameterizedMessage("exception from server channel caught on transport layer [{}]", channel), e);
-        }
-    }
-
-    protected void serverAcceptedChannel(TcpChannel channel) {
-        boolean addedOnThisCall = acceptedChannels.add(channel);
-        assert addedOnThisCall : "Channel should only be added to accepted channel set once";
-        // Mark the channel init time
-        channel.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());
-        channel.addCloseListener(ActionListener.wrap(() -> acceptedChannels.remove(channel)));
-        logger.trace(() -> new ParameterizedMessage("Tcp transport channel accepted: {}", channel));
-    }
-
-    /**
-     * Binds to the given {@link InetSocketAddress}
-     *
-     * @param name    the profile name
-     * @param address the address to bind to
-     */
-    protected abstract TcpServerChannel bind(String name, InetSocketAddress address) throws IOException;
-
-    /**
-     * Initiate a single tcp socket channel.
-     *
-     * @param node for the initiated connection
-     * @return the pending connection
-     * @throws IOException if an I/O exception occurs while opening the channel
-     */
-    protected abstract TcpChannel initiateChannel(DiscoveryNode node) throws IOException;
-
-    /**
-     * Called to tear down internal resources
-     */
-    protected abstract void stopInternal();
-
-    /**
-     * @deprecated Use {{@link #inboundMessage(TcpChannel, InboundMessage)}} instead
-     */
-    @Deprecated
-    public void inboundMessage(TcpChannel channel, ProtocolInboundMessage message) {
-        inboundMessage(channel, (InboundMessage) message);
-    }
-
-    /**
-     * Handles inbound message that has been decoded.
-     *
-     * @param channel the channel the message is from
-     * @param message the message
-     */
-    public void inboundMessage(TcpChannel channel, InboundMessage message) {
-        try {
-            inboundHandler.inboundMessage(channel, message);
-        } catch (Exception e) {
-            onException(channel, e);
-        }
-    }
-
-    /**
-     * Validates the first 6 bytes of the message header and returns the length of the message. If 6 bytes
-     * are not available, it returns -1.
-     *
-     * @param networkBytes the will be read
-     * @return the length of the message
-     * @throws StreamCorruptedException              if the message header format is not recognized
-     * @throws HttpRequestOnTransportException       if the message header appears to be an HTTP message
-     * @throws IllegalArgumentException              if the message length is greater that the maximum allowed frame size.
-     *                                               This is dependent on the available memory.
-     */
-    public static int readMessageLength(BytesReference networkBytes) throws IOException {
-        if (networkBytes.length() < BYTES_NEEDED_FOR_MESSAGE_SIZE) {
-            return -1;
-        } else {
-            return readHeaderBuffer(networkBytes);
-        }
-    }
-
-    private static int readHeaderBuffer(BytesReference headerBuffer) throws IOException {
-        if (headerBuffer.get(0) != 'E' || headerBuffer.get(1) != 'S') {
-            if (appearsToBeHTTPRequest(headerBuffer)) {
-                throw new HttpRequestOnTransportException("This is not an HTTP port");
-            }
-
-            if (appearsToBeHTTPResponse(headerBuffer)) {
-                throw new StreamCorruptedException(
-                    "received HTTP response on transport port, ensure that transport port (not "
-                        + "HTTP port) of a remote node is specified in the configuration"
-                );
-            }
-
-            String firstBytes = "("
-                + Integer.toHexString(headerBuffer.get(0) & 0xFF)
-                + ","
-                + Integer.toHexString(headerBuffer.get(1) & 0xFF)
-                + ","
-                + Integer.toHexString(headerBuffer.get(2) & 0xFF)
-                + ","
-                + Integer.toHexString(headerBuffer.get(3) & 0xFF)
-                + ")";
-
-            if (appearsToBeTLS(headerBuffer)) {
-                throw new StreamCorruptedException("SSL/TLS request received but SSL/TLS is not enabled on this node, got " + firstBytes);
-            }
-
-            throw new StreamCorruptedException("invalid internal transport message format, got " + firstBytes);
-        }
-        final int messageLength = headerBuffer.getInt(TcpHeader.MARKER_BYTES_SIZE);
-
-        if (messageLength == TransportKeepAlive.PING_DATA_SIZE) {
-            // This is a ping
-            return 0;
-        }
-
-        if (messageLength <= 0) {
-            throw new StreamCorruptedException("invalid data length: " + messageLength);
-        }
-
-        if (messageLength > THIRTY_PER_HEAP_SIZE) {
-            throw new IllegalArgumentException(
-                "transport content length received ["
-                    + new ByteSizeValue(messageLength)
-                    + "] exceeded ["
-                    + new ByteSizeValue(THIRTY_PER_HEAP_SIZE)
-                    + "]"
-            );
-        }
-
-        return messageLength;
-    }
-
-    private static boolean appearsToBeHTTPRequest(BytesReference headerBuffer) {
-        return bufferStartsWith(headerBuffer, "GET")
-            || bufferStartsWith(headerBuffer, "POST")
-            || bufferStartsWith(headerBuffer, "PUT")
-            || bufferStartsWith(headerBuffer, "HEAD")
-            || bufferStartsWith(headerBuffer, "DELETE")
-            // Actually 'OPTIONS'. But we are only guaranteed to have read six bytes at this point.
-            || bufferStartsWith(headerBuffer, "OPTION")
-            || bufferStartsWith(headerBuffer, "PATCH")
-            || bufferStartsWith(headerBuffer, "TRACE");
-    }
-
-    private static boolean appearsToBeHTTPResponse(BytesReference headerBuffer) {
-        return bufferStartsWith(headerBuffer, "HTTP");
-    }
-
-    private static boolean appearsToBeTLS(BytesReference headerBuffer) {
-        return headerBuffer.get(0) == 0x16 && headerBuffer.get(1) == 0x03;
-    }
-
-    private static boolean bufferStartsWith(BytesReference buffer, String method) {
-        char[] chars = method.toCharArray();
-        for (int i = 0; i < chars.length; i++) {
-            if (buffer.get(i) != chars[i]) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * A helper exception to mark an incoming connection as potentially being HTTP
-     * so an appropriate error code can be returned
-     *
-     * @opensearch.internal
-     */
-    public static class HttpRequestOnTransportException extends OpenSearchException {
-
-        HttpRequestOnTransportException(String msg) {
-            super(msg);
-        }
-
-        @Override
-        public RestStatus status() {
-            return RestStatus.BAD_REQUEST;
-        }
-
-        public HttpRequestOnTransportException(StreamInput in) throws IOException {
-            super(in);
-        }
-    }
-
-    public void executeHandshake(DiscoveryNode node, TcpChannel channel, ConnectionProfile profile, ActionListener<Version> listener) {
-        long requestId = responseHandlers.newRequestId();
-        handshaker.sendHandshake(requestId, node, channel, profile.getHandshakeTimeout(), listener);
-    }
-
-    final TransportKeepAlive getKeepAlive() {
-        return keepAlive;
-    }
-
-    final int getNumPendingHandshakes() {
-        return handshaker.getNumPendingHandshakes();
-    }
-
-    final long getNumHandshakes() {
-        return handshaker.getNumHandshakes();
-    }
-
-    final Set<TcpChannel> getAcceptedChannels() {
-        return Collections.unmodifiableSet(acceptedChannels);
-    }
-
-    /**
-     * Ensures this transport is still started / open
-     *
-     * @throws IllegalStateException if the transport is not started / open
-     */
-    protected void ensureOpen() {
-        if (lifecycle.started() == false) {
-            throw new IllegalStateException("transport has been stopped");
-        }
-    }
-
-    @Override
-    public final TransportStats getStats() {
-        final MeanMetric writeBytesMetric = statsTracker.getWriteBytes();
-        final long bytesWritten = statsTracker.getBytesWritten();
-        final long messagesSent = statsTracker.getMessagesSent();
-        final long messagesReceived = statsTracker.getMessagesReceived();
-        final long bytesRead = statsTracker.getBytesRead();
-        return new TransportStats.Builder().serverOpen(acceptedChannels.size())
-            .totalOutboundConnections(outboundConnectionCount.get())
-            .rxCount(messagesReceived)
-            .rxSize(bytesRead)
-            .txCount(messagesSent)
-            .txSize(bytesWritten)
-            .build();
-    }
-
-    /**
-     * Returns all profile settings for the given settings object
-     */
-    public static Set<ProfileSettings> getProfileSettings(Settings settings) {
-        HashSet<ProfileSettings> profiles = new HashSet<>();
-        boolean isDefaultSet = false;
-        for (String profile : settings.getGroups("transport.profiles.", true).keySet()) {
-            profiles.add(new ProfileSettings(settings, profile));
-            if (TransportSettings.DEFAULT_PROFILE.equals(profile)) {
-                isDefaultSet = true;
-            }
-        }
-        if (isDefaultSet == false) {
-            profiles.add(new ProfileSettings(settings, TransportSettings.DEFAULT_PROFILE));
-        }
-        return Collections.unmodifiableSet(profiles);
-    }
-
-    /**
-     * Representation of a transport profile settings for a {@code transport.profiles.$profilename.*}
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static final class ProfileSettings {
+                    + profileExplanation
+            this.openTimeMillis = openTimeMillis;
         public final String profileName;
-        public final boolean tcpNoDelay;
-        public final boolean tcpKeepAlive;
-        public final int tcpKeepIdle;
-        public final int tcpKeepInterval;
-        public final int tcpKeepCount;
-        public final boolean reuseAddress;
-        public final ByteSizeValue sendBufferSize;
-        public final ByteSizeValue receiveBufferSize;
-        public final List<String> bindHosts;
-        public final List<String> publishHosts;
-        public final String portOrRange;
-        public final int publishPort;
-        public final boolean isDefaultProfile;
-
-        public ProfileSettings(Settings settings, String profileName) {
-            this.profileName = profileName;
-            isDefaultProfile = TransportSettings.DEFAULT_PROFILE.equals(profileName);
-            tcpKeepAlive = TransportSettings.TCP_KEEP_ALIVE_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
+        ThreadPool threadPool,
+                    );
+        }
+            version,
+            throw new BindTransportException("Failed to resolve host " + profileBindHosts, e);
+            if (!matcher.matches()) {
+        Version version,
+            bigArrays,
+            // No need for locking here since Lifecycle objects can't move from STARTED to INITIALIZED
+            logger.error(new ParameterizedMessage("exception from server channel caught on transport layer [{}]", channel), e);
+    }
+            throw new IllegalArgumentException(
+                    CloseableChannel.closeChannels(channels, true);
+        public HttpRequestOnTransportException(StreamInput in) throws IOException {
+        for (int i = 0; i < chars.length; i++) {
+/*
+        this.version = version;
+    /**
+            if (connectionTypeHandle == null) {
+                listener.onFailure(new ConnectTransportException(node, "general node connection failure", e));
+        handshaker.sendHandshake(requestId, node, channel, profile.getHandshakeTimeout(), listener);
+    protected final PageCacheRecycler pageCacheRecycler;
+    @Override
+        private final boolean compress;
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+     * Returns all profile settings for the given settings object
+import java.util.function.Supplier;
+     * @return the pending connection
+    // connections while no connect operations is going on
+ * software distributed under the License is distributed on an
+            // in case we are able to return data, serialize the exception content and sent it back to the client
             tcpKeepIdle = TransportSettings.TCP_KEEP_IDLE_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
-            tcpKeepInterval = TransportSettings.TCP_KEEP_INTERVAL_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
-            tcpKeepCount = TransportSettings.TCP_KEEP_COUNT_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
-            tcpNoDelay = TransportSettings.TCP_NO_DELAY_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
-            reuseAddress = TransportSettings.TCP_REUSE_ADDRESS_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
-            sendBufferSize = TransportSettings.TCP_SEND_BUFFER_SIZE_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
-            receiveBufferSize = TransportSettings.TCP_RECEIVE_BUFFER_SIZE_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
-            List<String> profileBindHosts = TransportSettings.BIND_HOST_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
-            bindHosts = (profileBindHosts.isEmpty() ? NetworkService.GLOBAL_NETWORK_BIND_HOST_SETTING.get(settings) : profileBindHosts);
-            publishHosts = TransportSettings.PUBLISH_HOST_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
-            Setting<String> concretePort = TransportSettings.PORT_PROFILE.getConcreteSettingForNamespace(profileName);
-            if (concretePort.exists(settings) == false && isDefaultProfile == false) {
-                throw new IllegalStateException("profile [" + profileName + "] has no port configured");
-            }
-            portOrRange = TransportSettings.PORT_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
-            publishPort = isDefaultProfile
-                ? TransportSettings.PUBLISH_PORT.get(settings)
-                : TransportSettings.PUBLISH_PORT_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
-        }
-    }
-
-    @Override
-    public final ResponseHandlers getResponseHandlers() {
-        return responseHandlers;
-    }
-
-    @Override
-    public final RequestHandlers getRequestHandlers() {
-        return requestHandlers;
-    }
-
-    private final class ChannelsConnectedListener implements ActionListener<Void> {
-
-        private final DiscoveryNode node;
-        private final ConnectionProfile connectionProfile;
-        private final List<TcpChannel> channels;
-        private final ActionListener<Transport.Connection> listener;
-        private final CountDown countDown;
-
-        private ChannelsConnectedListener(
-            DiscoveryNode node,
-            ConnectionProfile connectionProfile,
-            List<TcpChannel> channels,
-            ActionListener<Transport.Connection> listener
-        ) {
-            this.node = node;
-            this.connectionProfile = connectionProfile;
-            this.channels = channels;
-            this.listener = listener;
-            this.countDown = new CountDown(channels.size());
-        }
-
-        @Override
-        public void onResponse(Void v) {
-            // Returns true if all connections have completed successfully
-            if (countDown.countDown()) {
-                final TcpChannel handshakeChannel = channels.get(0);
-                try {
-                    executeHandshake(node, handshakeChannel, connectionProfile, ActionListener.wrap(version -> {
-                        final long connectionId = outboundConnectionCount.incrementAndGet();
-                        logger.debug("opened transport connection [{}] to [{}] using channels [{}]", connectionId, node, channels);
-                        NodeChannels nodeChannels = new NodeChannels(node, channels, connectionProfile, version);
-                        long relativeMillisTime = threadPool.relativeTimeInMillis();
-                        nodeChannels.channels.forEach(ch -> {
-                            // Mark the channel init time
-                            ch.getChannelStats().markAccessed(relativeMillisTime);
-                            ch.addCloseListener(ActionListener.wrap(nodeChannels::close));
-                        });
-                        keepAlive.registerNodeConnection(nodeChannels.channels, connectionProfile);
-                        nodeChannels.addCloseListener(new ChannelCloseLogger(node, connectionId, relativeMillisTime));
-                        listener.onResponse(nodeChannels);
-                    },
-                        e -> closeAndFail(
-                            e instanceof ConnectTransportException
-                                ? e
-                                : new ConnectTransportException(node, "general node connection failure", e)
-                        )
-                    ));
-                } catch (Exception ex) {
-                    closeAndFail(ex);
-                }
-            }
-        }
-
-        @Override
-        public void onFailure(Exception ex) {
-            if (countDown.fastForward()) {
-                closeAndFail(new ConnectTransportException(node, "connect_exception", ex));
-            }
-        }
-
-        public void onTimeout() {
-            if (countDown.fastForward()) {
-                closeAndFail(new ConnectTransportException(node, "connect_timeout[" + connectionProfile.getConnectTimeout() + "]"));
-            }
-        }
-
-        private void closeAndFail(Exception e) {
-            try {
-                CloseableChannel.closeChannels(channels, false);
-            } catch (Exception ex) {
-                e.addSuppressed(ex);
-            } finally {
-                listener.onFailure(e);
-            }
-        }
-    }
-
+import java.io.StreamCorruptedException;
+        if (isCloseConnectionException(e)) {
+            features = new String[0];
+            port = Integer.parseInt(portString);
     private class ChannelCloseLogger implements ActionListener<Void> {
-        private final DiscoveryNode node;
+                    + "] exceeded ["
+            );
+            responseHandlers,
+        int numConnections = connectionProfile.getNumConnections();
+        try {
+        }
+import java.util.EnumMap;
+        NamedWriteableRegistry namedWriteableRegistry,
+        }
+            node,
+    }
+    }
+        }
+    private static final int LIMIT_LOCAL_PORTS_COUNT = 6;
+     * @param channel the channel the message is from
+    }
+ * You may obtain a copy of the License at
+                + Integer.toHexString(headerBuffer.get(3) & 0xFF)
+        assert hostAddresses.length > 0;
+        return new PortsRange(
+            portString = matcher.group(2);  // could be null
+        }
+ * this work for additional information regarding copyright
+        for (int i = 0; i < boundAddresses.size(); i++) {
+    public final RequestHandlers getRequestHandlers() {
+import java.util.concurrent.locks.ReadWriteLock;
+    private static final long THIRTY_PER_HEAP_SIZE = (long) (JvmInfo.jvmInfo().getMem().getHeapMax().getBytes() * 0.3);
+                TransportHandshaker.HANDSHAKE_ACTION_NAME,
+        );
+                                ? e
+import static java.util.Collections.unmodifiableMap;
+     * Ensures this transport is still started / open
+     * @return the length of the message
+            logger.debug(
+        public DiscoveryNode getNode() {
+     */
+        Settings settings,
+     * Validates the first 6 bytes of the message header and returns the length of the message. If 6 bytes
+        // check if v6 is supported, if so, v4 will also work via mapped addresses.
+        String portString = null;
+    /**
+                        NodeChannels nodeChannels = new NodeChannels(node, channels, connectionProfile, version);
+            }
+    public Map<String, BoundTransportAddress> profileBoundAddresses() {
+                + Integer.toHexString(headerBuffer.get(0) & 0xFF)
+    private final Set<TcpChannel> acceptedChannels = ConcurrentCollections.newConcurrentSet();
+    /**
+        // Bind and start to accept incoming connections.
+        if (logger.isDebugEnabled()) {
+            )
+        List<String> profileBindHosts = profileSettings.bindHosts;
+        List<String> publishHosts = profileSettings.publishHosts;
+            features,
+        HashSet<ProfileSettings> profiles = new HashSet<>();
+        }
+        ChannelCloseLogger(DiscoveryNode node, long connectionId, long openTimeMillis) {
+            // close the channel as safe measure, which will cause a node to be disconnected if relevant
+            .txSize(bytesWritten)
+    }
+            if (appearsToBeTLS(headerBuffer)) {
         private final long connectionId;
         private final long openTimeMillis;
-
-        ChannelCloseLogger(DiscoveryNode node, long connectionId, long openTimeMillis) {
-            this.node = node;
-            this.connectionId = connectionId;
-            this.openTimeMillis = openTimeMillis;
+    }
+import static org.opensearch.common.transport.NetworkExceptionHelper.isConnectException;
+                acceptedChannels.clear();
+            isDefaultProfile = TransportSettings.DEFAULT_PROFILE.equals(profileName);
+import java.net.BindException;
+    }
+        } else if (e instanceof HttpRequestOnTransportException) {
+                portString = hostPortString.substring(colonPos + 1);
+            }
+            }
+    }
+    public void executeHandshake(DiscoveryNode node, TcpChannel channel, ConnectionProfile profile, ActionListener<Version> listener) {
+            latch.await(30, TimeUnit.SECONDS);
         }
-
-        @Override
-        public void onResponse(Void ignored) {
-            long closeTimeMillis = threadPool.relativeTimeInMillis();
-            logger.debug("closed transport connection [{}] to [{}] with age [{}ms]", connectionId, node, closeTimeMillis - openTimeMillis);
+import java.util.HashMap;
+import org.opensearch.core.indices.breaker.CircuitBreakerService;
+            if (countDown.fastForward()) {
+     * are not available, it returns -1.
+import org.opensearch.core.common.breaker.CircuitBreaker;
+                throw new StreamCorruptedException("SSL/TLS request received but SSL/TLS is not enabled on this node, got " + firstBytes);
+            receiveBufferSize = TransportSettings.TCP_RECEIVE_BUFFER_SIZE_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
+        Objects.requireNonNull(profile, "connection profile cannot be null");
+import org.opensearch.common.annotation.PublicApi;
         }
-
-        @Override
-        public void onFailure(Exception e) {
-            assert false : e; // never called
+                CloseableChannel.closeChannels(channels, false);
         }
     }
-
+     * @param address the address to bind to
+            // Parse a bracketed host, typically an IPv6 literal.
+     *
+        final int messageLength = headerBuffer.getInt(TcpHeader.MARKER_BYTES_SIZE);
+                listener.onFailure(e);
+        if (publishHosts.isEmpty()) {
+                throw new BindTransportException(
+    private static final Logger logger = LogManager.getLogger(TcpTransport.class);
+import java.util.ArrayList;
+        }
+            try {
+    private static int readHeaderBuffer(BytesReference headerBuffer) throws IOException {
+    }
+            }
+    }
+        return pageCacheRecycler;
+                requestId,
+        public final ByteSizeValue receiveBufferSize;
+            closeLock.writeLock().lock();
+    }
+        }
+import java.net.InetSocketAddress;
+        private final AtomicBoolean isClosing = new AtomicBoolean(false);
+        try {
+            // close the channel as safe measure, which will cause a node to be disconnected if relevant
+        final AtomicReference<InetSocketAddress> boundSocket = new AtomicReference<>();
+    ) {
+            } catch (Exception e) {
+        handshakerHandler.setMessageListener(listener);
+    public final ResponseHandlers getResponseHandlers() {
+        try {
+            .map(address -> new TransportAddress(address, port))
+            }
+     */
+    protected void serverAcceptedChannel(TcpChannel channel) {
+        for (int i = 0; i < numConnections; ++i) {
+                return channels;
+        }
+import org.opensearch.core.common.bytes.BytesArray;
+            .rxSize(bytesRead)
+import java.util.concurrent.ConcurrentMap;
+                throw new IllegalArgumentException("no type channel for [" + type + "]");
+                    boundSocket.set(channel.getLocalAddress());
+import org.opensearch.transport.nativeprotocol.NativeOutboundHandler;
+    @Override
+            publishHosts = Arrays.asList(boundAddressesHostStrings);
+    public StatsTracker getStatsTracker() {
+            .collect(Collectors.toList());
+        return responseHandlers;
+                : TransportSettings.PUBLISH_PORT_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
+    protected final Set<ProfileSettings> profileSettings;
+import org.opensearch.common.metrics.MeanMetric;
+     */
+        final long messagesReceived = statsTracker.getMessagesReceived();
+            // Actually 'OPTIONS'. But we are only guaranteed to have read six bytes at this point.
+                } catch (Exception ex) {
+    ) {
+    private final NativeOutboundHandler handshakerHandler;
+/*
+                }
+            channel.addConnectListener(channelsConnectedListener);
+import org.opensearch.common.network.NetworkService;
+    // pattern for validating ipv6 bracket addresses.
+        this.threadPool = threadPool;
+                return true;
+import org.opensearch.common.util.concurrent.CountDown;
+        final InetAddress publishInetAddress;
+                );
+        return new TransportStats.Builder().serverOpen(acceptedChannels.size())
+            }
+ * KIND, either express or implied.  See the License for the
+    }
+    public static int readMessageLength(BytesReference networkBytes) throws IOException {
+    @Override
+                throw new HttpRequestOnTransportException("This is not an HTTP port");
+        String nodeName,
+        public final List<String> bindHosts;
+                final TcpChannel handshakeChannel = channels.get(0);
+            .build();
+     * Called to tear down internal resources
+        public final boolean isDefaultProfile;
+                for (TransportRequestOptions.Type type : handle.getTypes())
+            }
+            boundAddresses.add(bindToPort(profileSettings.profileName, hostAddress, profileSettings.portOrRange));
+        StatsTracker statsTracker,
+            threadPool,
+            ConnectionProfile connectionProfile,
+     */
+ * under the License.
+            return RestStatus.BAD_REQUEST;
+import org.opensearch.core.common.bytes.BytesReference;
+        } else if (isConnectException(e)) {
+        } catch (IOException e) {
+     */
+        final AtomicReference<Exception> lastException = new AtomicReference<>();
+                                : new ConnectTransportException(node, "general node connection failure", e)
+                listener.onFailure(e);
+        public final boolean tcpNoDelay;
+        }
+    public void inboundMessage(TcpChannel channel, InboundMessage message) {
+            if (countDown.fastForward()) {
+            if (buffer.get(i) != chars[i]) {
+        }
+                // close all of the incoming channels. The closeChannels method takes a list so we must convert the set.
+        ResponseHandlers responseHandlers,
+        if (!lifecycle.started()) {
+     * so an appropriate error code can be returned
+                try {
+        if (messageLength <= 0) {
+            TcpChannel channel = channel(options.type());
+            || bufferStartsWith(headerBuffer, "PUT")
+                }
+                } catch (Exception e) {
+import org.opensearch.core.common.transport.BoundTransportAddress;
+                CloseableChannel.closeChannels(channels, false);
+     * Representation of a transport profile settings for a {@code transport.profiles.$profilename.*}
+        private final DiscoveryNode node;
+                TransportSettings.PORT.get(settings)
+     * @throws IOException if an I/O exception occurs while opening the channel
+            .txCount(messagesSent)
+        });
+import org.opensearch.common.transport.PortsRange;
+            keepAlive,
+            throw new BindTransportException(
+        if (hostPortString.startsWith("[")) {
+                return channels;
+        return requestHandlers;
+            try {
+            return;
+    }
+     * Binds to the given {@link InetSocketAddress}
+     * @param networkBytes the will be read
+            namedWriteableRegistry,
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+                    + boundAddresses
+            return readHeaderBuffer(networkBytes);
+        ThreadPool threadPool,
+import java.util.stream.Collectors;
+        }
+ * compatible open source license.
+     * @param message the message
+import org.opensearch.telemetry.tracing.Tracer;
+    private volatile BoundTransportAddress boundAddress;
+     *
+    protected final void doClose() {}
+            logger.debug("Bound profile [{}] to address {{}}", name, NetworkAddress.format(boundSocket.get()));
+        final CountDownLatch latch = new CountDownLatch(1);
+import org.opensearch.common.util.PageCacheRecycler;
+     * @opensearch.api
+    private final ResponseHandlers responseHandlers = new ResponseHandlers();
+                    List<TcpServerChannel> channels = entry.getValue();
+    public void setSlowLogThreshold(TimeValue slowLogThreshold) {
+        public void onFailure(Exception ex) {
+        } else {
+            assert false : e; // never called
+        for (String profile : settings.getGroups("transport.profiles.", true).keySet()) {
+        Tracer tracer
+                    String profile = entry.getKey();
+                false,
+        public Version getVersion() {
+        this.outboundHandler = new OutboundHandler(statsTracker, threadPool);
+    }
+        if (lifecycle.started() == false) {
+            if (colonPos >= 0 && hostPortString.indexOf(':', colonPos + 1) == -1) {
+     *
+ */
+    }
+                // 2+ colons and not bracketed: exception
+            initiateConnection(node, finalProfile, listener);
+            port = defaultPort;
+        return keepAlive;
+                        e -> closeAndFail(
+            String firstBytes = "("
+        if (isDefaultSet == false) {
+        Objects.requireNonNull(hostPortString);
+        }
+        public ProfileSettings(Settings settings, String profileName) {
+     * @opensearch.internal
+                );
+    }
+    /**
+            this.connectionId = connectionId;
+            outboundHandler,
+     */
+                if (Booleans.parseBoolean(defaultFeatures.get(key)) == false) {
+        final Settings defaultFeatures = TransportSettings.DEFAULT_FEATURES_SETTING.get(settings);
+        }
+                        nodeChannels.addCloseListener(new ChannelCloseLogger(node, connectionId, relativeMillisTime));
+        String[] boundAddressesHostStrings = new String[boundAddresses.size()];
+                    serverChannels.computeIfAbsent(name, k -> new ArrayList<>()).add(channel);
+        for (TcpChannel channel : channels) {
+    }
+            transportBoundAddresses[i] = new TransportAddress(boundAddress);
+                logger.trace(() -> new ParameterizedMessage("Tcp transport channel opened: {}", channel));
+            if (TransportSettings.DEFAULT_PROFILE.equals(profile)) {
+        // Mark the channel init time
+        }
+                    closeAndFail(ex);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }
+ * Unless required by applicable law or agreed to in writing,
+            reuseAddress = TransportSettings.TCP_REUSE_ADDRESS_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
+            CloseableChannel.closeChannel(channel);
+            for (int i = 0; i < hostAddresses.length; i++) {
+                    throw new IllegalArgumentException("IPv6 addresses must be bracketed: " + hostPortString);
+import java.util.Map;
+    private static final int BYTES_NEEDED_FOR_MESSAGE_SIZE = TcpHeader.MARKER_BYTES_SIZE + TcpHeader.MESSAGE_LENGTH_SIZE;
+        this.handshakerHandler = new NativeOutboundHandler(
+            if (!success) {
+    private final class ChannelsConnectedListener implements ActionListener<Void> {
+        int port;
+import org.apache.logging.log4j.message.ParameterizedMessage;
+                    + " or "
+    private List<TcpChannel> initiateConnection(
+                // Exactly 1 colon. Split into host:port.
+                channels.add(channel);
+     * @throws IllegalStateException if the transport is not started / open
+    public TcpTransport(
+                } finally {
+import java.util.concurrent.atomic.AtomicLong;
+            || bufferStartsWith(headerBuffer, "OPTION")
+                    super.close();
+                    },
+    // This allows transport implementations to potentially override specific connection profiles. This
+                        listener.onResponse(nodeChannels);
+        public final boolean tcpKeepAlive;
+            int colonPos = hostPortString.indexOf(':');
+            sendBufferSize = TransportSettings.TCP_SEND_BUFFER_SIZE_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
+            this.boundAddress = boundTransportAddress;
+                () -> new ParameterizedMessage(
+                    "cancelled key exception caught on transport layer [{}], disconnecting from relevant node",
+        final long bytesRead = statsTracker.getBytesRead();
+                            ch.getChannelStats().markAccessed(relativeMillisTime);
+        return messageLength;
+        NetworkService networkService,
+            closeLock.readLock().unlock();
+            ActionListener<Transport.Connection> listener
+        private final DiscoveryNode node;
+                + Integer.toHexString(headerBuffer.get(1) & 0xFF)
+/**
+                "Failed to auto-resolve publish port"
+        );
+            connectionProfile,
+ * Modifications Copyright OpenSearch Contributors. See
+import org.apache.logging.log4j.Logger;
+            requestHandlers,
+            Setting<String> concretePort = TransportSettings.PORT_PROFILE.getConcreteSettingForNamespace(profileName);
+        if (headerBuffer.get(0) != 'E' || headerBuffer.get(1) != 'S') {
+            if (isClosing.compareAndSet(false, true)) {
+                ),
+     */
+    private static boolean bufferStartsWith(BytesReference buffer, String method) {
+    protected final ThreadPool threadPool;
+            outboundHandler,
+        } else if (e instanceof CancelledKeyException) {
+                outboundHandler.sendBytes(channel, message, ActionListener.wrap(() -> CloseableChannel.closeChannel(channel)));
+        if (networkBytes.length() < BYTES_NEEDED_FOR_MESSAGE_SIZE) {
+    @Override
+        assert numConnections > 0 : "A connection profile must be configured with at least one connection";
+                    + new ByteSizeValue(THIRTY_PER_HEAP_SIZE)
+            this.node = node;
+        return channels;
+                + ")";
+    }
+        if (e instanceof BindException) {
+                e
+            this.countDown = new CountDown(channels.size());
+            this.node = node;
+            namedWriteableRegistry,
+            }
+        return bufferStartsWith(headerBuffer, "GET")
+    @Override
+        inboundHandler.setSlowLogThreshold(slowLogThreshold);
+    protected final NetworkService networkService;
+            .distinct()
+public abstract class TcpTransport extends AbstractLifecycleComponent implements Transport {
+import org.opensearch.cluster.node.DiscoveryNode;
+        TransportAddress[] transportBoundAddresses = new TransportAddress[boundAddresses.size()];
+     * Handles inbound message that has been decoded.
+            // close the channel, which will cause a node to be disconnected if relevant
+        final MeanMetric writeBytesMetric = statsTracker.getWriteBytes();
+        );
+    }
+                    typeMapping.put(type, handle);
+        closeLock.readLock().lock(); // ensure we don't open connections while we are closing
+                    TcpServerChannel channel = bind(name, new InetSocketAddress(hostAddress, portNumber));
+    private static boolean appearsToBeTLS(BytesReference headerBuffer) {
+                }
+        BigArrays bigArrays = new BigArrays(pageCacheRecycler, circuitBreakerService, CircuitBreaker.IN_FLIGHT_REQUESTS);
+            portOrRange = TransportSettings.PORT_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
+                TransportSettings.PORT_PROFILE.getConcreteSettingForNamespace(TransportSettings.DEFAULT_PROFILE).getKey(),
+    private final Version version;
+        return threadPool;
+import org.opensearch.common.network.NetworkAddress;
+        public TcpChannel channel(TransportRequestOptions.Type type) {
+            version,
+ * specific language governing permissions and limitations
+import java.net.InetAddress;
+    @Override
+    /**
+        }
+            logger.warn(() -> new ParameterizedMessage("exception caught on transport layer [{}], closing connection", channel), e);
+                "transport content length received ["
+    protected InboundHandler createInboundHandler(
+        final int publishPort = Transport.resolvePublishPort(profileSettings.publishPort, boundAddresses, publishInetAddress);
+        }
+        try {
+            tcpKeepAlive = TransportSettings.TCP_KEEP_ALIVE_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
+        if (node == null) {
+    protected abstract void stopInternal();
+        if (publishPort == -1) {
+                    "Failed to bind to " + NetworkAddress.format(hostAddress, portsRange),
+        inboundMessage(channel, (InboundMessage) message);
+        }
+            throw new StreamCorruptedException("invalid data length: " + messageLength);
+                    + " with distinct ports and none of them matched the publish address ("
+        }
+        @Override
+            );
+                    boolean block = lifecycle.stopped() && Transports.isTransportThread(Thread.currentThread()) == false;
+        return handshaker.getNumPendingHandshakes();
+    }
+            }
+    }
+                    channels.forEach(c -> c.addCloseListener(closeFailLogger));
+        }
+            ensureOpen();
+            });
+        NamedWriteableRegistry namedWriteableRegistry,
+        this.networkService = networkService;
+        }
+                    + "Please specify a unique port by setting "
+        } finally {
+                new TransportHandshaker.HandshakeRequest(version),
+        return unmodifiableMap(new HashMap<>(profileBoundAddresses));
+        public void close() {
+        @Override
+     * Initiate a single tcp socket channel.
+            logger.debug(() -> new ParameterizedMessage("connect exception caught on transport layer [{}]", channel), e);
+            return 0;
+            defaultFeatures.names().forEach(key -> {
+        channel.addCloseListener(ActionListener.wrap(() -> acceptedChannels.remove(channel)));
+                + Integer.toHexString(headerBuffer.get(2) & 0xFF)
+        private final ActionListener<Transport.Connection> listener;
+    // exposed for tests
+     */
+import org.opensearch.core.common.io.stream.StreamInput;
+    protected void doStart() {}
+import java.nio.charset.StandardCharsets;
+            // close the channel, which will cause a node to be disconnected if relevant
+            } finally {
+    }
+        this.handshaker = new TransportHandshaker(
+                            // Mark the channel init time
+ */
+            assert channels.size() == connectionProfile.getNumConnections() : "expected channels size to be == "
+        RequestHandlers requestHandlers,
+ *
+        private final ConnectionProfile connectionProfile;
+import org.opensearch.common.Booleans;
+                return false;
+    }
+        public final String portOrRange;
+    }
+    final Set<TcpChannel> getAcceptedChannels() {
+                closeAndFail(new ConnectTransportException(node, "connect_timeout[" + connectionProfile.getConnectTimeout() + "]"));
+        }
+            requestHandlers,
+            // just close and ignore - we are already stopped and just need to make sure we release all resources
+        }
+        public void onResponse(Void v) {
+                throw new IllegalStateException("transport has been stopped");
+    @Override
+import org.opensearch.node.Node;
+    @Override
+        long requestId = responseHandlers.newRequestId();
+import org.opensearch.common.network.CloseableChannel;
+    public void openConnection(DiscoveryNode node, ConnectionProfile profile, ActionListener<Transport.Connection> listener) {
+    }
+    private final ConcurrentMap<String, BoundTransportAddress> profileBoundAddresses = newConcurrentMap();
+                    channel
+    @PublicApi(since = "1.0.0")
+        return local.stream()
+import java.util.concurrent.atomic.AtomicBoolean;
+                // 0 or 2+ colons. Bare hostname or IPv6 literal.
+     *
+            settings.get(
+            CloseableChannel.closeChannel(channel);
+     * @throws StreamCorruptedException              if the message header format is not recognized
+            }
+     */
+            outboundHandler
+                + ","
+        if (profileSettings.isDefaultProfile == false && publishHosts.isEmpty()) {
+            } finally {
+    // This is the number of bytes necessary to read the message size
+            } catch (ConnectTransportException e) {
+     *
+    protected abstract TcpChannel initiateChannel(DiscoveryNode node) throws IOException;
+        try {
+        this.circuitBreakerService = circuitBreakerService;
+import java.util.regex.Matcher;
+            }
+                        });
+        }
+            } catch (Exception ex) {
+            CloseableChannel.closeChannel(channel);
+import java.util.concurrent.CountDownLatch;
+        if (messageLength == TransportKeepAlive.PING_DATA_SIZE) {
+    }
+        }
+    /**
+    }
+                BytesArray message = new BytesArray(e.getMessage().getBytes(StandardCharsets.UTF_8));
+            DiscoveryNode node,
+    private BoundTransportAddress createBoundTransportAddress(ProfileSettings profileSettings, List<InetSocketAddress> boundAddresses) {
+        return parse(address, defaultPortRange()[0]);
+                ),
+            version = handshakeVersion;
+        }
+    protected ConnectionProfile maybeOverrideConnectionProfile(ConnectionProfile connectionProfile) {
+    protected void onServerException(TcpServerChannel channel, Exception e) {
+                    + "]"
+        HttpRequestOnTransportException(String msg) {
+            bigArrays,
+        @Override
+            publishHosts = TransportSettings.PUBLISH_HOST_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
+        return this.boundAddress;
+            if (concretePort.exists(settings) == false && isDefaultProfile == false) {
+            List<TcpChannel> channels,
+            version,
+            features,
+    protected final Settings settings;
+            logger.debug(
+            tcpNoDelay = TransportSettings.TCP_NO_DELAY_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
+    }
+            );
+            ConnectionProfile.ConnectionTypeHandle connectionTypeHandle = typeMapping.get(type);
+/*
+                    lastException.set(e);
+        PageCacheRecycler pageCacheRecycler,
+        ConnectionProfile connectionProfile,
+                () -> new ParameterizedMessage(
+        List<InetSocketAddress> boundAddresses = new ArrayList<>();
+    public final class NodeChannels extends CloseableConnection {
+        private final Map<TransportRequestOptions.Type, ConnectionProfile.ConnectionTypeHandle> typeMapping;
+    public static Set<ProfileSettings> getProfileSettings(Settings settings) {
+import org.opensearch.core.common.Strings;
+            super(in);
+            logger.debug(() -> new ParameterizedMessage("bind exception caught on transport layer [{}]", channel), e);
+        public void sendRequest(long requestId, String action, TransportRequest request, TransportRequestOptions options)
+                host = hostPortString;
+            throw new StreamCorruptedException("invalid internal transport message format, got " + firstBytes);
+            if (lifecycle.initialized() == false && lifecycle.started() == false) {
+            .flatMap(address -> Arrays.stream(defaultPortRange()).limit(LIMIT_LOCAL_PORTS_COUNT).mapToObj(port -> address + ":" + port))
+            onException(channel, e);
+            statsTracker,
+            statsTracker,
+    public synchronized void setMessageListener(TransportMessageListener listener) {
+        InetAddress[] hostAddresses;
+        public void onResponse(Void ignored) {
+            nodeName,
+        final List<TcpChannel> channels = new ArrayList<>(numConnections);
+        } else {
+                ? TransportSettings.PUBLISH_PORT.get(settings)
+        Version version,
+        List<String> local = new ArrayList<>();
+        return headerBuffer.get(0) == 0x16 && headerBuffer.get(1) == 0x03;
+                CloseableChannel.closeChannels(new ArrayList<>(acceptedChannels), true);
+        }
+            publishHosts = NetworkService.GLOBAL_NETWORK_PUBLISH_HOST_SETTING.get(settings);
+    private final AtomicLong outboundConnectionCount = new AtomicLong(); // also used as a correlation ID for open/close logs
+    @Override
+        public final ByteSizeValue sendBufferSize;
+    }
+     * A helper exception to mark an incoming connection as potentially being HTTP
+            boolean success = portsRange.iterate(portNumber -> {
+            profiles.add(new ProfileSettings(settings, profile));
+        this.settings = settings;
+            handshaker,
+        public final int tcpKeepInterval;
+            handshakerHandler.sendRequest(node, channel, requestId, action, request, options, getVersion(), compress, false);
+                e.addSuppressed(ex);
+        }
+    public BoundTransportAddress boundAddress() {
+            CloseableChannel.closeChannel(channel);
+            statsTracker,
+                    throw new IllegalArgumentException("feature settings must have default [true] value");
+    /**
+ * not use this file except in compliance with the License.
+                    + publishInetAddress
+     * parse a hostname+port spec into its equivalent addresses
+        TransportHandshaker handshaker,
+            logger.debug(() -> new ParameterizedMessage("bind exception from server channel caught on transport layer [{}]", channel), e);
+        ) {
+import org.opensearch.common.settings.Settings;
+    private final CircuitBreakerService circuitBreakerService;
+            throw new IllegalStateException("transport has been stopped");
+            || bufferStartsWith(headerBuffer, "POST")
+                    lastException.get()
+    @Override
+        ).ports();
+                        nodeChannels.channels.forEach(ch -> {
+    /**
+                        e -> logger.warn(() -> new ParameterizedMessage("Error closing serverChannel for profile [{}]", profile), e)
+            logger.warn(() -> new ParameterizedMessage("{}, [{}], closing connection", e.getMessage(), channel));
+ *
+            this.channels = channels;
+    }
+                    ));
+        }
+            // close the channel as safe measure, which will cause a node to be disconnected if relevant
+                latch.countDown();
+                    + TransportSettings.PUBLISH_PORT.getKey()
+                true
+                        final long connectionId = outboundConnectionCount.incrementAndGet();
+                + connectionProfile.getNumConnections()
+                closeLock.writeLock().unlock();
+        if (NetworkUtils.SUPPORTS_V6) {
+        DiscoveryNode node,
+            this.connectionProfile = connectionProfile;
+ * The OpenSearch Contributors require contributions made to
+        @Override
+        }
+    private int[] defaultPortRange() {
+                serverChannels.clear();
+        }
+        this.inboundHandler = createInboundHandler(
+import static org.opensearch.common.util.concurrent.ConcurrentCollections.newConcurrentMap;
+                stopInternal();
+    // this lock is here to make sure we close this transport and disconnect all the client nodes
+    public static final class ProfileSettings {
+            }
+        }
+            this.node = node;
+ * ownership. Elasticsearch licenses this file to you under
+            compress = connectionProfile.getCompressionEnabled();
+        TransportKeepAlive keepAlive,
+            boundAddressesHostStrings[i] = boundAddress.getHostString();
+                closeAndFail(new ConnectTransportException(node, "connect_exception", ex));
+            features,
+ * GitHub history for details.
+        return Collections.unmodifiableSet(profiles);
+        handleException(channel, e, lifecycle, outboundHandler);
+            logger.debug("closed transport connection [{}] to [{}] with age [{}ms]", connectionId, node, closeTimeMillis - openTimeMillis);
+                        )
+        } else {
+        PortsRange portsRange = new PortsRange(port);
+    }
+    }
+                throw new IllegalStateException("profile [" + profileName + "] has no port configured");
+            publishInetAddress = networkService.resolvePublishHostAddresses(publishHosts.toArray(Strings.EMPTY_ARRAY));
+            // ignore
+        this.profileSettings = getProfileSettings(settings);
+        } catch (Exception e) {
+        public final boolean reuseAddress;
+import org.opensearch.Version;
+            this.channels = Collections.unmodifiableList(channels);
+        private final CountDown countDown;
+                            ch.addCloseListener(ActionListener.wrap(nodeChannels::close));
+        return Collections.unmodifiableSet(acceptedChannels);
+            profiles.add(new ProfileSettings(settings, TransportSettings.DEFAULT_PROFILE));
+    public void inboundMessage(TcpChannel channel, ProtocolInboundMessage message) {
+                }
+            logger.debug("binding server bootstrap to: {}", (Object) addresses);
+        }
+            threadPool,
+        return true;
+    static TransportAddress[] parse(String hostPortString, int defaultPort) throws UnknownHostException {
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.HashSet;
+import org.opensearch.core.common.transport.TransportAddress;
+            nodeName,
+            threadPool,
+    }
+        if (messageLength > THIRTY_PER_HEAP_SIZE) {
+import java.util.regex.Pattern;
+        if (logger.isDebugEnabled()) {
+                TcpChannel channel = initiateChannel(node);
+        String nodeName = Node.NODE_NAME_SETTING.get(settings);
+        return Arrays.stream(InetAddress.getAllByName(host))
+            super(msg);
+    protected final void doStop() {
+        } else {
+        }
+            version,
+import org.opensearch.OpenSearchException;
+    }
+            throw new ConnectTransportException(null, "can't open connection to a null node");
+        }
+            hostAddresses = networkService.resolveBindHostAddresses(profileBindHosts.toArray(Strings.EMPTY_ARRAY));
+                    "received HTTP response on transport port, ensure that transport port (not "
+    public void onException(TcpChannel channel, Exception e) {
+            inboundHandler.inboundMessage(channel, message);
+                addresses[i] = NetworkAddress.format(hostAddresses[i]);
+        );
+    }
+            // This is a ping
+ * license agreements. See the NOTICE file distributed with
+     */
+import java.io.IOException;
+        return boundSocket.get();
+        public void onFailure(Exception e) {
+        } else {
+        this.keepAlive = new TransportKeepAlive(threadPool, this.outboundHandler::sendBytes);
+    }
+            bigArrays,
+                        long relativeMillisTime = threadPool.relativeTimeInMillis();
+    public static final String TRANSPORT_WORKER_THREAD_NAME_PREFIX = "transport_worker";
+     * @opensearch.internal
+    }
+                throw new IllegalArgumentException("Invalid bracketed host/port range: " + hostPortString);
+            InetSocketAddress boundAddress = boundAddresses.get(i);
+import org.opensearch.common.network.NetworkUtils;
+ * Licensed to Elasticsearch under one or more contributor
+    /**
+            // use a sorted set to present the features in a consistent order
+        String[] features,
+        }
+    // primarily exists for the test implementations.
+                        + "HTTP port) of a remote node is specified in the configuration"
+            CloseableChannel.closeChannel(channel);
+        this.pageCacheRecycler = pageCacheRecycler;
+            return -1;
+            channels,
+    public ThreadPool getThreadPool() {
+        assert addedOnThisCall : "Channel should only be added to accepted channel set once";
+    protected void ensureOpen() {
+            if (channel.isOpen()) {
+            profileBoundAddresses.put(profileSettings.profileName, boundTransportAddress);
+            }
+        logger.trace(() -> new ParameterizedMessage("Tcp transport channel accepted: {}", channel));
+                e
+                channel,
+                        keepAlive.registerNodeConnection(nodeChannels.channels, connectionProfile);
+        @Override
+                    + ", multiple bound addresses "
+                node,
+        } else if (e instanceof StreamCorruptedException) {
+    public PageCacheRecycler getPageCacheRecycler() {
+        local.add("127.0.0.1");
+        }
+    private InetSocketAddress bindToPort(final String name, final InetAddress hostAddress, String port) {
+    public Supplier<CircuitBreaker> getInflightBreaker() {
+            || bufferStartsWith(headerBuffer, "HEAD")
+            responseHandlers,
+            }
+                throw new StreamCorruptedException(
+    static void handleException(TcpChannel channel, Exception e, Lifecycle lifecycle, OutboundHandler outboundHandler) {
+    }
+ */
+     * @throws IllegalArgumentException              if the message length is greater that the maximum allowed frame size.
+            keepAlive,
+            }
+                    // Call the super method to trigger listeners
+        boolean isDefaultSet = false;
+     * @param node for the initiated connection
+            }
+    }
+        ActionListener<Transport.Connection> listener
+            return channels;
+        public NodeChannels(DiscoveryNode node, List<TcpChannel> channels, ConnectionProfile connectionProfile, Version handshakeVersion) {
+                    return false;
 }
+            .rxCount(messagesReceived)
+            return this.node;
+        try {
+        private final Version version;
+        channel.getChannelStats().markAccessed(threadPool.relativeTimeInMillis());
+    protected final InboundHandler inboundHandler;
+                try {
+    private final ReadWriteLock closeLock = new ReentrantReadWriteLock();
+    private final TransportHandshaker handshaker;
+    private final RequestHandlers requestHandlers = new RequestHandlers();
+        String host;
+    private static boolean appearsToBeHTTPRequest(BytesReference headerBuffer) {
+        return () -> circuitBreakerService.getBreaker(CircuitBreaker.IN_FLIGHT_REQUESTS);
+            long closeTimeMillis = threadPool.relativeTimeInMillis();
+        }
+            closeLock.writeLock().unlock();
+            );
+    final int getNumPendingHandshakes() {
+        if (profileSettings.isDefaultProfile) {
+        }
+import org.opensearch.monitor.jvm.JvmInfo;
+@PublicApi(since = "1.0.0")
+        final long messagesSent = statsTracker.getMessagesSent();
+        @Override
+            return connectionTypeHandle.getChannel(channels);
+            bindHosts = (profileBindHosts.isEmpty() ? NetworkService.GLOBAL_NETWORK_BIND_HOST_SETTING.get(settings) : profileBindHosts);
+            if (isClosing.get()) {
+            }
+        } else {
+    }
+                    CloseableChannel.closeChannels(channels, block);
+    @Deprecated
+            String profileExplanation = profileSettings.isDefaultProfile ? "" : " for profile " + profileSettings.profileName;
+            }
+            || bufferStartsWith(headerBuffer, "PATCH")
+            host = matcher.group(1);
+import org.opensearch.core.rest.RestStatus;
+import org.opensearch.common.settings.Setting;
+import org.opensearch.action.support.ThreadedActionListener;
+        return connectionProfile;
+    /**
+            handshaker,
+    }
+ *
+            this.profileName = profileName;
+     * @param name    the profile name
+            } else {
+            if (appearsToBeHTTPRequest(headerBuffer)) {
+        }
+                // first stop to accept any incoming connections so nobody can connect to this transport
+                CloseableChannel.closeChannels(channels, false);
+import java.util.Objects;
+ * The TCP Transport layer
+import org.apache.logging.log4j.LogManager;
+    protected abstract TcpServerChannel bind(String name, InetSocketAddress address) throws IOException;
+            this.listener = listener;
+            }
+    }
+        }
+            tcpKeepInterval = TransportSettings.TCP_KEEP_INTERVAL_PROFILE.getConcreteSettingForNamespace(profileName).get(settings);
+     * @deprecated Use {{@link #inboundMessage(TcpChannel, InboundMessage)}} instead
+            )
+        }
+                    ActionListener<Void> closeFailLogger = ActionListener.wrap(
+        }
+            threadPool,
+     * List of node connection channels
+import java.util.Collections;
+    /**
+     */
+        threadPool.generic().execute(() -> {
+                            e instanceof ConnectTransportException
+            if (countDown.countDown()) {
+            nodeName,
+                    channel
+            for (ConnectionProfile.ConnectionTypeHandle handle : connectionProfile.getHandles()) {
+        final TransportAddress publishAddress = new TransportAddress(new InetSocketAddress(publishInetAddress, publishPort));
+    public static class HttpRequestOnTransportException extends OpenSearchException {
+        } catch (InterruptedException e) {
+            .toArray(TransportAddress[]::new);
+            tracer
+                if (colonPos >= 0) {
+import org.opensearch.common.unit.TimeValue;
+import org.opensearch.common.util.concurrent.ConcurrentCollections;
+            tracer
+        return bufferStartsWith(headerBuffer, "HTTP");
+        char[] chars = method.toCharArray();
+        // make sure we run it on another thread than a possible IO handler thread
+        private final List<TcpChannel> channels;
+        }
+        for (InetAddress hostAddress : hostAddresses) {
+            }
+    public Version getVersion() {
+import org.opensearch.common.lifecycle.Lifecycle;
+        public void onTimeout() {
+import org.opensearch.common.util.BigArrays;
+        private final List<TcpChannel> channels;
+package org.opensearch.transport;
+import org.opensearch.common.lifecycle.AbstractLifecycleComponent;
+                    executeHandshake(node, handshakeChannel, connectionProfile, ActionListener.wrap(version -> {
+import org.opensearch.core.common.unit.ByteSizeValue;
+            String[] addresses = new String[hostAddresses.length];
+            || bufferStartsWith(headerBuffer, "TRACE");
+    private final OutboundHandler outboundHandler;
+    }
+        CircuitBreakerService circuitBreakerService,
+                keepAlive.close();
+import org.opensearch.core.action.ActionListener;
+        @Override
+import java.net.UnknownHostException;
+                    "close connection exception caught on transport layer [{}], disconnecting from relevant node",
+                    + new ByteSizeValue(messageLength)
+        }
+            try {
+            || bufferStartsWith(headerBuffer, "DELETE")
+                + ","
+ * SPDX-License-Identifier: Apache-2.0
+                + channels.size()
+        BigArrays bigArrays,
+        return version;
+            features = new TreeSet<>(defaultFeatures.names()).toArray(new String[defaultFeatures.names().size()]);
+                try {
+                    + "). "
+            new ThreadedActionListener<>(logger, threadPool, ThreadPool.Names.GENERIC, listener, false)

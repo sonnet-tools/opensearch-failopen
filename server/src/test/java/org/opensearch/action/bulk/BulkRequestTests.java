@@ -1,426 +1,392 @@
+            out.write(xContentType.xContent().streamSeparator());
+        assertEquals(
+        String bulkAction = bulk.toString();
+    }
+                "RefreshPolicy is not supported on an item request. Set it on the BulkRequest instead.",
 /*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
+        BulkRequest bulkRequest = Requests.bulkRequest();
+        BulkRequest bulkRequest = new BulkRequest();
+        BulkRequest bulkRequest = new BulkRequest();
  * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.bulk;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.DocWriteRequest;
-import org.opensearch.action.delete.DeleteRequest;
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.action.support.WriteRequest.RefreshPolicy;
-import org.opensearch.action.update.UpdateRequest;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
+        BytesReference data;
+    public void testSimpleBulk6() throws Exception {
+        } else {
+    public void testBulkAllowExplicitIndex() throws Exception {
+    public void testSimpleBulk4() throws Exception {
+            () -> bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON)
+            }
+            exc.getMessage(),
+        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk9.json");
+            }
+        bulkRequest.add(data, null, xContentType);
+        assertThat(bulkRequest.requests().get(2), instanceOf(DeleteRequest.class));
+            IllegalArgumentException.class,
+        assertThat(bulkRequest.requests().get(1).id(), equalTo("0"));
+    public void testSimpleBulk9() throws Exception {
+    }
+        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk10.json");
+                builder.endObject();
+        assertThat(bulkRequest.numberOfActions(), equalTo(3));
+                builder.endObject();
+        BulkRequest bulkRequest = new BulkRequest();
+        Map<String, Object> scriptParams = script.getParams();
+        assertThat(script.getLang(), equalTo("javascript"));
+                .count()
+            1,
+            () -> bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON)
+    }
+                .filter(msg -> msg.contains("is too long, must be no longer than 512 bytes but was: "))
+        // doc id length under limit
+import static org.hamcrest.Matchers.equalTo;
 import org.opensearch.script.Script;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.transport.client.Requests;
-
+        bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON);
+        StringBuilder bulk = new StringBuilder();
+        updateRequest.id(invalidDocID);
+ *
+/*
+        );
+        );
+            () -> new BulkRequest().add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON)
+        expectThrows(NullPointerException.class, () -> bulkRequest.add((IndexRequest) null));
+            validate.validationErrors()
+        assertEquals("explicit index in bulk is not allowed", ex.getMessage());
+        assertThat(bulkRequest.numberOfActions(), equalTo(3));
+            ((IndexRequest) bulkRequest.requests().get(0)).source(),
+            exc.getMessage(),
+        indexRequest.id(invalidDocID);
+            exc.getMessage(),
+ * this file be licensed under the Apache-2.0 license or a
+        assertEquals(DocWriteRequest.OpType.INDEX, docWriteRequest.opType());
+            false,
+        BytesReference data;
+    public void testBulkTerminatedByNewline() throws Exception {
+        BulkRequest bulkRequest = new BulkRequest();
+            out.write(xContentType.xContent().streamSeparator());
+    }
+ * under the License.
+    }
+        String invalidDocID = String.join("", Collections.nCopies(513, "a"));
+        // doc id length over limit
+    }
+        String emptyObject = "{}\r\n";
+package org.opensearch.action.bulk;
+                values.put("if_seq_no", 1L);
+        bulkRequest.add(requests);
+ * SPDX-License-Identifier: Apache-2.0
+        assertEquals("The bulk request must be terminated by a newline [\\n]", expectThrows.getMessage());
+        requests.add(new IndexRequest("test").id("id").source(Requests.INDEX_CONTENT_TYPE, "field", "value"));
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+        String bulkAction = "{ \"index\":{\"_index\":\"test\",\"_id\":\"1\"} }\r\n{ \"field1\" : \"value1\" }\r\n";
+        );
+        ActionRequestValidationException validate = bulkRequest.validate();
+ * this work for additional information regarding copyright
+                builder.startObject();
+            () -> bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON)
+        assertThat(script, notNullValue());
+        // doc id length over limit
+        assertThat(exc.getMessage(), containsString("Unknown key for a VALUE_STRING in [hello]"));
+                builder.field("field", "value");
+        );
+import org.opensearch.core.common.ParsingException;
+            "Malformed action/metadata line [1]" + ", expected a simple value for field [_index] but found [START_ARRAY]"
+ * You may obtain a copy of the License at
+        BulkRequest bulkRequest = new BulkRequest();
+    public void testSimpleBulk1() throws Exception {
+        );
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        IllegalArgumentException expectThrows = expectThrows(
+        BulkRequest bulkRequest = new BulkRequest();
+            Exception.class,
+        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk7.json");
+}
+                builder.startObject("update");
+            validate.validationErrors()
+                "RefreshPolicy is not supported on an item request. Set it on the BulkRequest instead.",
+                builder.field("if_primary_term", 100L);
+            () -> bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON)
+    public void testSimpleBulk8() throws Exception {
+        BulkRequest bulkRequest = new BulkRequest();
+    public void testToValidateUpsertRequestAndCASInBulkRequest() throws IOException {
+            bulk.append(emptyObject);
+        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk2.json");
+            0,
+        IndexRequest request = (IndexRequest) docWriteRequest;
+    public void testBulkAddIterable() {
+        );
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            containsString("Malformed action/metadata line [3], expected START_OBJECT or END_OBJECT but found [START_ARRAY]")
+                builder.startObject();
+        );
+            MediaTypeRegistry.JSON
+        assertNull(bulkRequest.validate());
+        BulkRequest bulkRequest = new BulkRequest();
+            data = out.bytes();
+    }
+                builder.endObject();
+        BulkRequest bulkRequest = new BulkRequest();
+import org.opensearch.action.update.UpdateRequest;
+    public void testBulkActionShouldNotContainArray() throws Exception {
+    }
+        BulkRequest bulkRequest = new BulkRequest();
+        UpdateRequest updateRequest = new UpdateRequest("index", validDocID).doc("reason", "no source");
+                values.put("_index", "index");
+        String validDocID = String.join("", Collections.nCopies(512, "a"));
+    }
+ */
+import static org.opensearch.test.StreamsUtils.copyToStringFromClasspath;
+                "RefreshPolicy is not supported on an item request. Set it on the BulkRequest instead.",
+ */
+        assertThat(validate, notNullValue());
+        IllegalArgumentException exc = expectThrows(
+        // We force here a "id is missing" validation error
+import static org.hamcrest.Matchers.contains;
+        }
+import org.opensearch.common.xcontent.XContentType;
+        expectThrows(NullPointerException.class, () -> bulkRequest.add((UpdateRequest) null));
+        bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON);
+            int emptyAction = randomIntBetween(1, actions);
+        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk.json");
+                builder.field("_id", "id");
+        );
+    public void testSimpleBulk7() throws Exception {
+        assertEquals(3, bulkRequestWithNewLine.numberOfActions());
+                .stream()
+        assertThat(bulkRequest.requests().get(1).index(), equalTo("index1"));
+        String validDocID = String.join("", Collections.nCopies(512, "a"));
+            data = out.bytes();
+            containsString("Malformed action/metadata line [5], expected a simple value for field [_unknown] but found [START_ARRAY]")
+            1,
+    public void testSimpleBulk3() throws Exception {
+        BulkRequest bulkRequest = new BulkRequest();
+import static org.hamcrest.Matchers.not;
+        BulkRequest bulkRequest = new BulkRequest();
+        );
+        bulkRequest.add(new UpdateRequest("index", "id").doc("{}", MediaTypeRegistry.JSON).setRefreshPolicy(RefreshPolicy.IMMEDIATE));
+        assertThat(validate, notNullValue());
+import org.opensearch.core.common.bytes.BytesArray;
+        assertThat(validate.validationErrors(), not(empty()));
+                builder.field("if_seq_no", 1L);
+    }
+        BulkRequest bulkRequest = new BulkRequest();
+                builder.startObject("doc").endObject();
+            MediaTypeRegistry.JSON
+import org.opensearch.core.xcontent.XContentBuilder;
+import java.util.Map;
+        assertThat(((IndexRequest) bulkRequest.requests().get(0)).source(), equalTo(new BytesArray("{ \"field1\" : \"value1\" }")));
+        // doc id length under limit
+        assertThat(bulkRequest.numberOfActions(), equalTo(3));
+    // issue 7361
+            try (XContentBuilder builder = MediaTypeRegistry.contentBuilder(xContentType, out)) {
+        String bulkAction = "{ \"index\":{\"_index\":[\"index1\", \"index2\"],\"_id\":\"1\"} }\r\n" + "{ \"field1\" : \"value1\" }\r\n";
+        assertThat(validate, notNullValue());
+ * license agreements. See the NOTICE file distributed with
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+        IllegalArgumentException exc = expectThrows(
+        String bulkIndexSource = "{ \"field1\" : \"value1\" }\r\n";
+    }
+            IllegalArgumentException.class,
+        assertThat(scriptParams.size(), equalTo(1));
+    }
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static org.opensearch.test.StreamsUtils.copyToStringFromClasspath;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.notNullValue;
-
-public class BulkRequestTests extends OpenSearchTestCase {
-    public void testSimpleBulk1() throws Exception {
-        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk.json");
-        BulkRequest bulkRequest = new BulkRequest();
-        bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON);
-        assertThat(bulkRequest.numberOfActions(), equalTo(3));
-        assertThat(((IndexRequest) bulkRequest.requests().get(0)).source(), equalTo(new BytesArray("{ \"field1\" : \"value1\" }")));
-        assertThat(bulkRequest.requests().get(1), instanceOf(DeleteRequest.class));
-        assertThat(((IndexRequest) bulkRequest.requests().get(2)).source(), equalTo(new BytesArray("{ \"field1\" : \"value3\" }")));
-    }
-
-    public void testSimpleBulkWithCarriageReturn() throws Exception {
-        String bulkAction = "{ \"index\":{\"_index\":\"test\",\"_id\":\"1\"} }\r\n{ \"field1\" : \"value1\" }\r\n";
-        BulkRequest bulkRequest = new BulkRequest();
-        bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON);
-        assertThat(bulkRequest.numberOfActions(), equalTo(1));
-        assertThat(((IndexRequest) bulkRequest.requests().get(0)).source(), equalTo(new BytesArray("{ \"field1\" : \"value1\" }")));
-        Map<String, Object> sourceMap = XContentHelper.convertToMap(
-            ((IndexRequest) bulkRequest.requests().get(0)).source(),
-            false,
-            MediaTypeRegistry.JSON
-        ).v2();
-        assertEquals("value1", sourceMap.get("field1"));
-    }
-
-    public void testSimpleBulk2() throws Exception {
-        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk2.json");
-        BulkRequest bulkRequest = new BulkRequest();
-        bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON);
-        assertThat(bulkRequest.numberOfActions(), equalTo(3));
-    }
-
-    public void testSimpleBulk3() throws Exception {
-        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk3.json");
-        BulkRequest bulkRequest = new BulkRequest();
-        bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON);
-        assertThat(bulkRequest.numberOfActions(), equalTo(3));
-    }
-
-    public void testSimpleBulk4() throws Exception {
-        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk4.json");
-        BulkRequest bulkRequest = new BulkRequest();
-        bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON);
-        assertThat(bulkRequest.numberOfActions(), equalTo(4));
-        assertThat(bulkRequest.requests().get(0).id(), equalTo("1"));
-        assertThat(((UpdateRequest) bulkRequest.requests().get(0)).retryOnConflict(), equalTo(2));
-        assertThat(((UpdateRequest) bulkRequest.requests().get(0)).doc().source().utf8ToString(), equalTo("{\"field\":\"value\"}"));
-        assertThat(bulkRequest.requests().get(1).id(), equalTo("0"));
-        assertThat(bulkRequest.requests().get(1).index(), equalTo("index1"));
-        Script script = ((UpdateRequest) bulkRequest.requests().get(1)).script();
-        assertThat(script, notNullValue());
-        assertThat(script.getIdOrCode(), equalTo("counter += param1"));
-        assertThat(script.getLang(), equalTo("javascript"));
-        Map<String, Object> scriptParams = script.getParams();
-        assertThat(scriptParams, notNullValue());
-        assertThat(scriptParams.size(), equalTo(1));
-        assertThat(scriptParams.get("param1"), equalTo(1));
-        assertThat(((UpdateRequest) bulkRequest.requests().get(1)).upsertRequest().source().utf8ToString(), equalTo("{\"counter\":1}"));
-    }
-
-    public void testBulkAllowExplicitIndex() throws Exception {
-        String bulkAction1 = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk.json");
-        Exception ex = expectThrows(
-            Exception.class,
-            () -> new BulkRequest().add(new BytesArray(bulkAction1.getBytes(StandardCharsets.UTF_8)), null, false, MediaTypeRegistry.JSON)
-        );
-        assertEquals("explicit index in bulk is not allowed", ex.getMessage());
-
-        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk5.json");
-        new BulkRequest().add(new BytesArray(bulkAction.getBytes(StandardCharsets.UTF_8)), "test", false, MediaTypeRegistry.JSON);
-    }
-
-    public void testBulkAddIterable() {
-        BulkRequest bulkRequest = Requests.bulkRequest();
-        List<DocWriteRequest<?>> requests = new ArrayList<>();
-        requests.add(new IndexRequest("test").id("id").source(Requests.INDEX_CONTENT_TYPE, "field", "value"));
-        requests.add(new UpdateRequest("test", "id").doc(Requests.INDEX_CONTENT_TYPE, "field", "value"));
-        requests.add(new DeleteRequest("test", "id"));
-        bulkRequest.add(requests);
-        assertThat(bulkRequest.requests().size(), equalTo(3));
-        assertThat(bulkRequest.requests().get(0), instanceOf(IndexRequest.class));
-        assertThat(bulkRequest.requests().get(1), instanceOf(UpdateRequest.class));
-        assertThat(bulkRequest.requests().get(2), instanceOf(DeleteRequest.class));
-    }
-
-    public void testSimpleBulk6() throws Exception {
-        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk6.json");
-        BulkRequest bulkRequest = new BulkRequest();
-        ParsingException exc = expectThrows(
-            ParsingException.class,
-            () -> bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON)
-        );
-        assertThat(exc.getMessage(), containsString("Unknown key for a VALUE_STRING in [hello]"));
-    }
-
-    public void testSimpleBulk7() throws Exception {
-        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk7.json");
-        BulkRequest bulkRequest = new BulkRequest();
-        IllegalArgumentException exc = expectThrows(
-            IllegalArgumentException.class,
-            () -> bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON)
-        );
-        assertThat(
-            exc.getMessage(),
-            containsString("Malformed action/metadata line [5], expected a simple value for field [_unknown] but found [START_ARRAY]")
-        );
-    }
-
-    public void testSimpleBulk8() throws Exception {
-        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk8.json");
-        BulkRequest bulkRequest = new BulkRequest();
-        IllegalArgumentException exc = expectThrows(
-            IllegalArgumentException.class,
-            () -> bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON)
-        );
-        assertThat(exc.getMessage(), containsString("Action/metadata line [3] contains an unknown parameter [_foo]"));
-    }
-
-    public void testSimpleBulk9() throws Exception {
-        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk9.json");
-        BulkRequest bulkRequest = new BulkRequest();
-        IllegalArgumentException exc = expectThrows(
-            IllegalArgumentException.class,
-            () -> bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON)
-        );
-        assertThat(
-            exc.getMessage(),
-            containsString("Malformed action/metadata line [3], expected START_OBJECT or END_OBJECT but found [START_ARRAY]")
-        );
-    }
-
-    public void testSimpleBulk10() throws Exception {
-        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk10.json");
-        BulkRequest bulkRequest = new BulkRequest();
-        bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON);
-        assertThat(bulkRequest.numberOfActions(), equalTo(9));
-    }
-
-    public void testBulkActionShouldNotContainArray() throws Exception {
-        String bulkAction = "{ \"index\":{\"_index\":[\"index1\", \"index2\"],\"_id\":\"1\"} }\r\n" + "{ \"field1\" : \"value1\" }\r\n";
-        BulkRequest bulkRequest = new BulkRequest();
-        IllegalArgumentException exc = expectThrows(
-            IllegalArgumentException.class,
-            () -> bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON)
-        );
-        assertEquals(
-            exc.getMessage(),
-            "Malformed action/metadata line [1]" + ", expected a simple value for field [_index] but found [START_ARRAY]"
-        );
-    }
-
-    public void testBulkEmptyObject() throws Exception {
-        String bulkIndexAction = "{ \"index\":{\"_index\":\"test\",\"_id\":\"1\"} }\r\n";
-        String bulkIndexSource = "{ \"field1\" : \"value1\" }\r\n";
-        String emptyObject = "{}\r\n";
-        StringBuilder bulk = new StringBuilder();
-        int emptyLine;
-        if (randomBoolean()) {
-            bulk.append(emptyObject);
-            emptyLine = 1;
-        } else {
-            int actions = randomIntBetween(1, 10);
-            int emptyAction = randomIntBetween(1, actions);
-            emptyLine = emptyAction * 2 - 1;
-            for (int i = 1; i <= actions; i++) {
-                bulk.append(i == emptyAction ? emptyObject : bulkIndexAction);
-                bulk.append(randomBoolean() ? emptyObject : bulkIndexSource);
-            }
-        }
-        String bulkAction = bulk.toString();
-        BulkRequest bulkRequest = new BulkRequest();
-        IllegalArgumentException exc = expectThrows(
-            IllegalArgumentException.class,
-            () -> bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON)
-        );
-        assertThat(
-            exc.getMessage(),
-            containsString("Malformed action/metadata line [" + emptyLine + "], expected FIELD_NAME but found [END_OBJECT]")
-        );
-    }
-
-    // issue 7361
-    public void testBulkRequestWithRefresh() throws Exception {
-        BulkRequest bulkRequest = new BulkRequest();
-        // We force here a "id is missing" validation error
-        bulkRequest.add(new DeleteRequest("index", null).setRefreshPolicy(RefreshPolicy.IMMEDIATE));
-        // We force here a "type is missing" validation error
-        bulkRequest.add(new DeleteRequest("index", "id"));
-        bulkRequest.add(new DeleteRequest("index", "id").setRefreshPolicy(RefreshPolicy.IMMEDIATE));
-        bulkRequest.add(new UpdateRequest("index", "id").doc("{}", MediaTypeRegistry.JSON).setRefreshPolicy(RefreshPolicy.IMMEDIATE));
-        bulkRequest.add(new IndexRequest("index").id("id").source("{}", MediaTypeRegistry.JSON).setRefreshPolicy(RefreshPolicy.IMMEDIATE));
-        ActionRequestValidationException validate = bulkRequest.validate();
-        assertThat(validate, notNullValue());
-        assertThat(validate.validationErrors(), not(empty()));
-        assertThat(
-            validate.validationErrors(),
-            contains(
-                "RefreshPolicy is not supported on an item request. Set it on the BulkRequest instead.",
-                "id is missing",
-                "RefreshPolicy is not supported on an item request. Set it on the BulkRequest instead.",
-                "RefreshPolicy is not supported on an item request. Set it on the BulkRequest instead.",
-                "RefreshPolicy is not supported on an item request. Set it on the BulkRequest instead."
-            )
-        );
-    }
-
-    public void testBulkRequestInvalidDocIDDuringCreate() {
-        String validDocID = String.join("", Collections.nCopies(512, "a"));
-        String invalidDocID = String.join("", Collections.nCopies(513, "a"));
-
-        // doc id length under limit
-        IndexRequest indexRequest = new IndexRequest("index").id(validDocID).source(Requests.INDEX_CONTENT_TYPE, "field", "value");
-        BulkRequest bulkRequest = new BulkRequest();
-        bulkRequest.add(indexRequest);
-        assertNull(bulkRequest.validate());
-
-        // doc id length over limit
-        indexRequest.id(invalidDocID);
-        ActionRequestValidationException validate = bulkRequest.validate();
-        assertThat(validate, notNullValue());
-        assertEquals(
-            1,
-            validate.validationErrors()
-                .stream()
-                .filter(msg -> msg.contains("is too long, must be no longer than 512 bytes but was: "))
-                .count()
-        );
-    }
-
-    public void testBulkRequestInvalidDocIDDuringUpdate() {
-        String validDocID = String.join("", Collections.nCopies(512, "a"));
-        String invalidDocID = String.join("", Collections.nCopies(513, "a"));
-        // doc id length under limit
-        UpdateRequest updateRequest = new UpdateRequest("index", validDocID).doc("reason", "no source");
-        BulkRequest bulkRequest = new BulkRequest();
-        bulkRequest.add(updateRequest);
-        assertNull(bulkRequest.validate());
-
-        // doc id length over limit
-        updateRequest.id(invalidDocID);
-        ActionRequestValidationException validate = bulkRequest.validate();
-        assertThat(validate, notNullValue());
-        assertEquals(
-            1,
-            validate.validationErrors()
-                .stream()
-                .filter(msg -> msg.contains("is too long, must be no longer than 512 bytes but was: "))
-                .count()
-        );
-    }
-
-    // issue 15120
-    public void testBulkNoSource() throws Exception {
-        BulkRequest bulkRequest = new BulkRequest();
-        bulkRequest.add(new UpdateRequest("index", "id"));
-        bulkRequest.add(new IndexRequest("index").id("id"));
-        ActionRequestValidationException validate = bulkRequest.validate();
-        assertThat(validate, notNullValue());
-        assertThat(validate.validationErrors(), not(empty()));
-        assertThat(validate.validationErrors(), contains("script or doc is missing", "source is missing", "content type is missing"));
-    }
-
-    public void testCannotAddNullRequests() throws Exception {
-        BulkRequest bulkRequest = new BulkRequest();
-        expectThrows(NullPointerException.class, () -> bulkRequest.add((IndexRequest) null));
-        expectThrows(NullPointerException.class, () -> bulkRequest.add((UpdateRequest) null));
+                builder.endObject();
+import org.opensearch.action.support.WriteRequest.RefreshPolicy;
         expectThrows(NullPointerException.class, () -> bulkRequest.add((DeleteRequest) null));
-    }
-
-    public void testSmileIsSupported() throws IOException {
-        XContentType xContentType = XContentType.SMILE;
-        BytesReference data;
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            try (XContentBuilder builder = MediaTypeRegistry.contentBuilder(xContentType, out)) {
-                builder.startObject();
-                builder.startObject("index");
-                builder.field("_index", "index");
-                builder.field("_id", "test");
-                builder.endObject();
-                builder.endObject();
-            }
-            out.write(xContentType.xContent().streamSeparator());
-            try (XContentBuilder builder = MediaTypeRegistry.contentBuilder(xContentType, out)) {
-                builder.startObject();
-                builder.field("field", "value");
-                builder.endObject();
-            }
-            out.write(xContentType.xContent().streamSeparator());
-            data = out.bytes();
-        }
-
-        BulkRequest bulkRequest = new BulkRequest();
-        bulkRequest.add(data, null, xContentType);
-        assertEquals(1, bulkRequest.requests().size());
-        DocWriteRequest<?> docWriteRequest = bulkRequest.requests().get(0);
-        assertEquals(DocWriteRequest.OpType.INDEX, docWriteRequest.opType());
-        assertEquals("index", docWriteRequest.index());
-        assertEquals("test", docWriteRequest.id());
-        assertThat(docWriteRequest, instanceOf(IndexRequest.class));
-        IndexRequest request = (IndexRequest) docWriteRequest;
-        assertEquals(1, request.sourceAsMap().size());
-        assertEquals("value", request.sourceAsMap().get("field"));
-    }
-
-    public void testToValidateUpsertRequestAndCASInBulkRequest() throws IOException {
-        XContentType xContentType = XContentType.SMILE;
-        BytesReference data;
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            try (XContentBuilder builder = MediaTypeRegistry.contentBuilder(xContentType, out)) {
-                builder.startObject();
-                builder.startObject("update");
-                builder.field("_index", "index");
-                builder.field("_id", "id");
-                builder.field("if_seq_no", 1L);
-                builder.field("if_primary_term", 100L);
-                builder.endObject();
-                builder.endObject();
-            }
-            out.write(xContentType.xContent().streamSeparator());
-            try (XContentBuilder builder = MediaTypeRegistry.contentBuilder(xContentType, out)) {
-                builder.startObject();
-                builder.startObject("doc").endObject();
-                Map<String, Object> values = new HashMap<>();
-                values.put("if_seq_no", 1L);
-                values.put("if_primary_term", 100L);
-                values.put("_index", "index");
-                builder.field("upsert", values);
-                builder.endObject();
-            }
-            out.write(xContentType.xContent().streamSeparator());
-            data = out.bytes();
-        }
-        BulkRequest bulkRequest = new BulkRequest();
-        bulkRequest.add(data, null, xContentType);
-        assertThat(bulkRequest.validate().validationErrors(), contains("upsert requests don't support `if_seq_no` and `if_primary_term`"));
-    }
-
-    public void testBulkTerminatedByNewline() throws Exception {
-        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk11.json");
-        IllegalArgumentException expectThrows = expectThrows(
-            IllegalArgumentException.class,
-            () -> new BulkRequest().add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON)
-        );
-        assertEquals("The bulk request must be terminated by a newline [\\n]", expectThrows.getMessage());
-
-        String bulkActionWithNewLine = bulkAction + "\n";
-        BulkRequest bulkRequestWithNewLine = new BulkRequest();
-        bulkRequestWithNewLine.add(
-            bulkActionWithNewLine.getBytes(StandardCharsets.UTF_8),
-            0,
+ * specific language governing permissions and limitations
             bulkActionWithNewLine.length(),
+        assertThat(bulkRequest.numberOfActions(), equalTo(4));
+import static org.hamcrest.Matchers.instanceOf;
             null,
-            MediaTypeRegistry.JSON
-        );
-        assertEquals(3, bulkRequestWithNewLine.numberOfActions());
+    public void testSmileIsSupported() throws IOException {
+        Map<String, Object> sourceMap = XContentHelper.convertToMap(
+        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk5.json");
+        assertEquals("value", request.sourceAsMap().get("field"));
+        BulkRequest bulkRequest = new BulkRequest();
+            ParsingException.class,
+        assertEquals(1, bulkRequest.requests().size());
+        int emptyLine;
+        assertEquals("index", docWriteRequest.index());
     }
-}
+        assertThat(((UpdateRequest) bulkRequest.requests().get(1)).upsertRequest().source().utf8ToString(), equalTo("{\"counter\":1}"));
+                bulk.append(i == emptyAction ? emptyObject : bulkIndexAction);
+            IllegalArgumentException.class,
+            out.write(xContentType.xContent().streamSeparator());
+    public void testBulkEmptyObject() throws Exception {
+        assertThat(scriptParams.get("param1"), equalTo(1));
+        );
+        BulkRequest bulkRequest = new BulkRequest();
+ * software distributed under the License is distributed on an
+        assertNull(bulkRequest.validate());
+        assertThat(((IndexRequest) bulkRequest.requests().get(0)).source(), equalTo(new BytesArray("{ \"field1\" : \"value1\" }")));
+            try (XContentBuilder builder = MediaTypeRegistry.contentBuilder(xContentType, out)) {
+                "id is missing",
+                builder.field("upsert", values);
+    }
+        bulkRequest.add(new DeleteRequest("index", "id"));
+    public void testBulkRequestInvalidDocIDDuringUpdate() {
+                .stream()
+    }
+ * not use this file except in compliance with the License.
+        String invalidDocID = String.join("", Collections.nCopies(513, "a"));
+        bulkRequest.add(new UpdateRequest("index", "id"));
+import org.opensearch.action.DocWriteRequest;
+import org.opensearch.test.OpenSearchTestCase;
+        assertThat(bulkRequest.numberOfActions(), equalTo(9));
+        ActionRequestValidationException validate = bulkRequest.validate();
+        assertThat(((UpdateRequest) bulkRequest.requests().get(0)).retryOnConflict(), equalTo(2));
+                builder.endObject();
+            exc.getMessage(),
+            for (int i = 1; i <= actions; i++) {
+            containsString("Malformed action/metadata line [" + emptyLine + "], expected FIELD_NAME but found [END_OBJECT]")
+        assertEquals(
+        IndexRequest indexRequest = new IndexRequest("index").id(validDocID).source(Requests.INDEX_CONTENT_TYPE, "field", "value");
+            validate.validationErrors(),
+        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk4.json");
+        assertThat(validate.validationErrors(), contains("script or doc is missing", "source is missing", "content type is missing"));
+        assertThat(docWriteRequest, instanceOf(IndexRequest.class));
+                builder.startObject("index");
+        if (randomBoolean()) {
+        bulkRequest.add(updateRequest);
+            emptyLine = 1;
+    public void testCannotAddNullRequests() throws Exception {
+        new BulkRequest().add(new BytesArray(bulkAction.getBytes(StandardCharsets.UTF_8)), "test", false, MediaTypeRegistry.JSON);
+import org.opensearch.action.index.IndexRequest;
+        );
+        bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON);
+        BulkRequest bulkRequest = new BulkRequest();
+        assertThat(exc.getMessage(), containsString("Action/metadata line [3] contains an unknown parameter [_foo]"));
+import static org.hamcrest.Matchers.empty;
+        assertThat(((UpdateRequest) bulkRequest.requests().get(0)).doc().source().utf8ToString(), equalTo("{\"field\":\"value\"}"));
+    }
+        assertThat(bulkRequest.requests().get(0), instanceOf(IndexRequest.class));
+        Script script = ((UpdateRequest) bulkRequest.requests().get(1)).script();
+        DocWriteRequest<?> docWriteRequest = bulkRequest.requests().get(0);
+    }
+    public void testBulkNoSource() throws Exception {
+    public void testSimpleBulk10() throws Exception {
+    public void testBulkRequestInvalidDocIDDuringCreate() {
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+        // We force here a "type is missing" validation error
+        requests.add(new DeleteRequest("test", "id"));
+        bulkRequest.add(new DeleteRequest("index", "id").setRefreshPolicy(RefreshPolicy.IMMEDIATE));
+ * The OpenSearch Contributors require contributions made to
+        XContentType xContentType = XContentType.SMILE;
+        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk3.json");
+ */
+            emptyLine = emptyAction * 2 - 1;
+        bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON);
+                bulk.append(randomBoolean() ? emptyObject : bulkIndexSource);
+            int actions = randomIntBetween(1, 10);
+    }
+import org.opensearch.transport.client.Requests;
+            try (XContentBuilder builder = MediaTypeRegistry.contentBuilder(xContentType, out)) {
+        );
+        assertThat(
+    }
+ * Unless required by applicable law or agreed to in writing,
+        assertThat(scriptParams, notNullValue());
+        assertEquals(
+    }
+import org.opensearch.core.common.bytes.BytesReference;
+        bulkRequest.add(data, null, xContentType);
+                .filter(msg -> msg.contains("is too long, must be no longer than 512 bytes but was: "))
+        Exception ex = expectThrows(
+            IllegalArgumentException.class,
+        assertThat(bulkRequest.numberOfActions(), equalTo(1));
+        BulkRequest bulkRequestWithNewLine = new BulkRequest();
+        assertThat(validate.validationErrors(), not(empty()));
+import static org.hamcrest.Matchers.containsString;
+                builder.field("_index", "index");
+        String bulkAction1 = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk.json");
+                builder.field("_index", "index");
+        assertThat(
+        ).v2();
+        IllegalArgumentException exc = expectThrows(
+        assertThat(bulkRequest.requests().get(1), instanceOf(UpdateRequest.class));
+                builder.endObject();
+ * ownership. Elasticsearch licenses this file to you under
+import org.opensearch.action.ActionRequestValidationException;
+            }
+        assertThat(
+import java.util.List;
+                values.put("if_primary_term", 100L);
+        XContentType xContentType = XContentType.SMILE;
+            )
+            IllegalArgumentException.class,
+        );
+        assertThat(bulkRequest.requests().get(1), instanceOf(DeleteRequest.class));
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        BulkRequest bulkRequest = new BulkRequest();
+ * compatible open source license.
+    // issue 15120
+        );
+            () -> bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON)
+        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk8.json");
+        IllegalArgumentException exc = expectThrows(
+        IllegalArgumentException exc = expectThrows(
+        ActionRequestValidationException validate = bulkRequest.validate();
+            }
+    public void testBulkRequestWithRefresh() throws Exception {
+        String bulkActionWithNewLine = bulkAction + "\n";
+                builder.field("_id", "test");
+        }
+                .count()
+        assertThat(((IndexRequest) bulkRequest.requests().get(2)).source(), equalTo(new BytesArray("{ \"field1\" : \"value3\" }")));
+                builder.startObject();
+ * the Apache License, Version 2.0 (the "License"); you may
+            contains(
+        bulkRequest.add(new DeleteRequest("index", null).setRefreshPolicy(RefreshPolicy.IMMEDIATE));
+    public void testSimpleBulk2() throws Exception {
+import java.nio.charset.StandardCharsets;
+    }
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        bulkRequest.add(new IndexRequest("index").id("id").source("{}", MediaTypeRegistry.JSON).setRefreshPolicy(RefreshPolicy.IMMEDIATE));
+        assertThat(script.getIdOrCode(), equalTo("counter += param1"));
+        requests.add(new UpdateRequest("test", "id").doc(Requests.INDEX_CONTENT_TYPE, "field", "value"));
+ * KIND, either express or implied.  See the License for the
+            IllegalArgumentException.class,
+                "RefreshPolicy is not supported on an item request. Set it on the BulkRequest instead."
+                Map<String, Object> values = new HashMap<>();
+        assertEquals("test", docWriteRequest.id());
+        bulkRequest.add(new IndexRequest("index").id("id"));
+            out.write(xContentType.xContent().streamSeparator());
+        BulkRequest bulkRequest = new BulkRequest();
+/*
+    public void testSimpleBulkWithCarriageReturn() throws Exception {
+public class BulkRequestTests extends OpenSearchTestCase {
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+        assertThat(bulkRequest.requests().size(), equalTo(3));
+        assertThat(bulkRequest.validate().validationErrors(), contains("upsert requests don't support `if_seq_no` and `if_primary_term`"));
+            () -> new BulkRequest().add(new BytesArray(bulkAction1.getBytes(StandardCharsets.UTF_8)), null, false, MediaTypeRegistry.JSON)
+        bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON);
+        assertThat(
+        assertThat(bulkRequest.requests().get(0).id(), equalTo("1"));
+        List<DocWriteRequest<?>> requests = new ArrayList<>();
+        );
+ * GitHub history for details.
+        assertThat(validate, notNullValue());
+import org.opensearch.action.delete.DeleteRequest;
+import org.opensearch.common.xcontent.XContentHelper;
+        assertEquals("value1", sourceMap.get("field1"));
+        ActionRequestValidationException validate = bulkRequest.validate();
+        BulkRequest bulkRequest = new BulkRequest();
+        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk11.json");
+        ParsingException exc = expectThrows(
+                builder.startObject();
+import static org.hamcrest.Matchers.notNullValue;
+import java.util.HashMap;
+        );
+        String bulkAction = copyToStringFromClasspath("/org/opensearch/action/bulk/simple-bulk6.json");
+        bulkRequest.add(indexRequest);
+            try (XContentBuilder builder = MediaTypeRegistry.contentBuilder(xContentType, out)) {
+        }
+            }
+        bulkRequestWithNewLine.add(
+        bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON);
+            bulkActionWithNewLine.getBytes(StandardCharsets.UTF_8),
+    }
+ *
+        String bulkIndexAction = "{ \"index\":{\"_index\":\"test\",\"_id\":\"1\"} }\r\n";
+        assertEquals(1, request.sourceAsMap().size());
+            () -> bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, MediaTypeRegistry.JSON)

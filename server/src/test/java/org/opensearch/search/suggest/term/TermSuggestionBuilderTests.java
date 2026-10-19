@@ -1,278 +1,249 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.suggest.term;
-
-import com.carrotsearch.randomizedtesting.generators.RandomStrings;
-
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.suggest.AbstractSuggestionBuilderTestCase;
-import org.opensearch.search.suggest.SortBy;
-import org.opensearch.search.suggest.SuggestBuilder;
-import org.opensearch.search.suggest.SuggestionSearchContext.SuggestionContext;
-import org.opensearch.search.suggest.term.TermSuggestionBuilder.StringDistanceImpl;
-import org.opensearch.search.suggest.term.TermSuggestionBuilder.SuggestMode;
-
-import java.io.IOException;
-import java.util.Locale;
-
-import static org.opensearch.search.suggest.DirectSpellcheckerSettings.DEFAULT_ACCURACY;
-import static org.opensearch.search.suggest.DirectSpellcheckerSettings.DEFAULT_MAX_EDITS;
-import static org.opensearch.search.suggest.DirectSpellcheckerSettings.DEFAULT_MAX_INSPECTIONS;
-import static org.opensearch.search.suggest.DirectSpellcheckerSettings.DEFAULT_MAX_TERM_FREQ;
-import static org.opensearch.search.suggest.DirectSpellcheckerSettings.DEFAULT_MIN_DOC_FREQ;
-import static org.opensearch.search.suggest.DirectSpellcheckerSettings.DEFAULT_MIN_WORD_LENGTH;
-import static org.opensearch.search.suggest.DirectSpellcheckerSettings.DEFAULT_PREFIX_LENGTH;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.instanceOf;
-
-/**
- * Test the {@link TermSuggestionBuilder} class.
- */
-public class TermSuggestionBuilderTests extends AbstractSuggestionBuilderTestCase<TermSuggestionBuilder> {
-
-    /**
-     *  creates random suggestion builder, renders it to xContent and back to new instance that should be equal to original
-     */
-    @Override
-    protected TermSuggestionBuilder randomSuggestionBuilder() {
-        return randomTermSuggestionBuilder();
-    }
-
-    /**
-     * Creates a random TermSuggestionBuilder
-     */
-    public static TermSuggestionBuilder randomTermSuggestionBuilder() {
-        TermSuggestionBuilder testBuilder = new TermSuggestionBuilder(randomAlphaOfLengthBetween(2, 20));
-        setCommonPropertiesOnRandomBuilder(testBuilder);
-        maybeSet(testBuilder::suggestMode, randomSuggestMode());
-        maybeSet(testBuilder::accuracy, randomFloat());
-        maybeSet(testBuilder::sort, randomSort());
-        maybeSet(testBuilder::stringDistance, randomStringDistance());
-        maybeSet(testBuilder::maxEdits, randomIntBetween(1, 2));
-        maybeSet(testBuilder::maxInspections, randomInt(Integer.MAX_VALUE));
-        maybeSet(testBuilder::maxTermFreq, randomFloat());
-        maybeSet(testBuilder::prefixLength, randomInt(Integer.MAX_VALUE));
-        maybeSet(testBuilder::minWordLength, randomInt(Integer.MAX_VALUE));
-        maybeSet(testBuilder::minDocFreq, randomFloat());
-        return testBuilder;
-    }
-
-    private static SuggestMode randomSuggestMode() {
-        final int randomVal = randomIntBetween(0, 2);
-        switch (randomVal) {
-            case 0:
-                return SuggestMode.MISSING;
-            case 1:
-                return SuggestMode.POPULAR;
-            case 2:
-                return SuggestMode.ALWAYS;
-            default:
-                throw new IllegalArgumentException("No suggest mode with an ordinal of " + randomVal);
-        }
-    }
-
-    private static SortBy randomSort() {
-        int randomVal = randomIntBetween(0, 1);
-        switch (randomVal) {
-            case 0:
-                return SortBy.SCORE;
-            case 1:
-                return SortBy.FREQUENCY;
-            default:
-                throw new IllegalArgumentException("No sort mode with an ordinal of " + randomVal);
-        }
-    }
-
-    private static StringDistanceImpl randomStringDistance() {
-        int randomVal = randomIntBetween(0, 4);
-        switch (randomVal) {
-            case 0:
-                return StringDistanceImpl.INTERNAL;
-            case 1:
-                return StringDistanceImpl.DAMERAU_LEVENSHTEIN;
-            case 2:
-                return StringDistanceImpl.LEVENSHTEIN;
-            case 3:
-                return StringDistanceImpl.JARO_WINKLER;
-            case 4:
-                return StringDistanceImpl.NGRAM;
-            default:
-                throw new IllegalArgumentException("No string distance algorithm with an ordinal of " + randomVal);
-        }
-    }
-
-    @Override
-    protected void mutateSpecificParameters(TermSuggestionBuilder builder) throws IOException {
-        switch (randomIntBetween(0, 9)) {
-            case 0:
-                builder.suggestMode(randomValueOtherThan(builder.suggestMode(), () -> randomSuggestMode()));
-                break;
-            case 1:
-                builder.accuracy(randomValueOtherThan(builder.accuracy(), () -> randomFloat()));
-                break;
-            case 2:
-                builder.sort(randomValueOtherThan(builder.sort(), () -> randomSort()));
-                break;
-            case 3:
-                builder.stringDistance(randomValueOtherThan(builder.stringDistance(), () -> randomStringDistance()));
-                break;
-            case 4:
-                builder.maxEdits(randomValueOtherThan(builder.maxEdits(), () -> randomIntBetween(1, 2)));
-                break;
-            case 5:
-                builder.maxInspections(randomValueOtherThan(builder.maxInspections(), () -> randomInt(Integer.MAX_VALUE)));
-                break;
-            case 6:
-                builder.maxTermFreq(randomValueOtherThan(builder.maxTermFreq(), () -> randomFloat()));
-                break;
-            case 7:
-                builder.prefixLength(randomValueOtherThan(builder.prefixLength(), () -> randomInt(Integer.MAX_VALUE)));
-                break;
-            case 8:
-                builder.minWordLength(randomValueOtherThan(builder.minWordLength(), () -> randomInt(Integer.MAX_VALUE)));
-                break;
-            case 9:
-                builder.minDocFreq(randomValueOtherThan(builder.minDocFreq(), () -> randomFloat()));
-                break;
-            default:
-                break; // do nothing
-        }
-    }
-
-    public void testInvalidParameters() {
-        // test missing field name
-        Exception e = expectThrows(NullPointerException.class, () -> new TermSuggestionBuilder((String) null));
-        assertEquals("suggestion requires a field name", e.getMessage());
-
-        // test empty field name
-        e = expectThrows(IllegalArgumentException.class, () -> new TermSuggestionBuilder(""));
-        assertEquals("suggestion field name is empty", e.getMessage());
-
-        TermSuggestionBuilder builder = new TermSuggestionBuilder(randomAlphaOfLengthBetween(2, 20));
-
-        // test invalid accuracy values
-        expectThrows(IllegalArgumentException.class, () -> builder.accuracy(-0.5f));
-        expectThrows(IllegalArgumentException.class, () -> builder.accuracy(1.1f));
-
-        // test invalid max edit distance values
-        expectThrows(IllegalArgumentException.class, () -> builder.maxEdits(0));
-        expectThrows(IllegalArgumentException.class, () -> builder.maxEdits(-1));
-        expectThrows(IllegalArgumentException.class, () -> builder.maxEdits(3));
-
-        // test invalid max inspections values
-        expectThrows(IllegalArgumentException.class, () -> builder.maxInspections(-1));
-
-        // test invalid max term freq values
-        expectThrows(IllegalArgumentException.class, () -> builder.maxTermFreq(-0.5f));
-        expectThrows(IllegalArgumentException.class, () -> builder.maxTermFreq(1.5f));
-        builder.maxTermFreq(2.0f);
-
-        // test invalid min doc freq values
-        expectThrows(IllegalArgumentException.class, () -> builder.minDocFreq(-0.5f));
-        expectThrows(IllegalArgumentException.class, () -> builder.minDocFreq(1.5f));
-        builder.minDocFreq(2.0f);
-
-        // test invalid min word length values
-        expectThrows(IllegalArgumentException.class, () -> builder.minWordLength(0));
-        expectThrows(IllegalArgumentException.class, () -> builder.minWordLength(-1));
-
-        // test invalid prefix length values
-        expectThrows(IllegalArgumentException.class, () -> builder.prefixLength(-1));
-
-        // test invalid size values
-        expectThrows(IllegalArgumentException.class, () -> builder.size(0));
-        expectThrows(IllegalArgumentException.class, () -> builder.size(-1));
-
-        // null values not allowed for enums
-        expectThrows(NullPointerException.class, () -> builder.sort(null));
-        expectThrows(NullPointerException.class, () -> builder.stringDistance(null));
-        expectThrows(NullPointerException.class, () -> builder.suggestMode(null));
-    }
-
-    public void testDefaultValuesSet() {
-        TermSuggestionBuilder builder = new TermSuggestionBuilder(randomAlphaOfLengthBetween(2, 20));
-        assertEquals(DEFAULT_ACCURACY, builder.accuracy(), Float.MIN_VALUE);
-        assertEquals(DEFAULT_MAX_EDITS, builder.maxEdits());
-        assertEquals(DEFAULT_MAX_INSPECTIONS, builder.maxInspections());
-        assertEquals(DEFAULT_MAX_TERM_FREQ, builder.maxTermFreq(), Float.MIN_VALUE);
-        assertEquals(DEFAULT_MIN_DOC_FREQ, builder.minDocFreq(), Float.MIN_VALUE);
-        assertEquals(DEFAULT_MIN_WORD_LENGTH, builder.minWordLength());
-        assertEquals(DEFAULT_PREFIX_LENGTH, builder.prefixLength());
-        assertEquals(SortBy.SCORE, builder.sort());
-        assertEquals(StringDistanceImpl.INTERNAL, builder.stringDistance());
-        assertEquals(SuggestMode.MISSING, builder.suggestMode());
-    }
-
-    public void testMalformedJson() {
-        final String field = RandomStrings.randomAsciiOfLength(random(), 10).toLowerCase(Locale.ROOT);
-        String suggest = "{\n"
-            + "  \"bad-payload\" : {\n"
-            + "    \"text\" : \"the amsterdma meetpu\",\n"
-            + "    \"term\" : {\n"
-            + "      \"field\" : { \""
-            + field
-            + "\" : \"bad-object\" }\n"
-            + "    }\n"
             + "  }\n"
-            + "}";
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, suggest)) {
-            final SuggestBuilder suggestBuilder = SuggestBuilder.fromXContent(parser);
+        Exception e = expectThrows(NullPointerException.class, () -> new TermSuggestionBuilder((String) null));
+        );
+        switch (randomIntBetween(0, 9)) {
+    }
+        maybeSet(testBuilder::stringDistance, randomStringDistance());
             fail("Should not have been able to create SuggestBuilder from malformed JSON: " + suggestBuilder);
+                return SuggestMode.POPULAR;
+            + "      \"field\" : { \""
+    public static TermSuggestionBuilder randomTermSuggestionBuilder() {
+ */
+            case 2:
+                return StringDistanceImpl.NGRAM;
+/*
+                return SuggestMode.ALWAYS;
+        // test invalid min word length values
+public class TermSuggestionBuilderTests extends AbstractSuggestionBuilderTestCase<TermSuggestionBuilder> {
+    @Override
+import static org.opensearch.search.suggest.DirectSpellcheckerSettings.DEFAULT_MIN_DOC_FREQ;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import java.io.IOException;
+    }
+    /**
+    }
+        // test invalid max term freq values
+        assertEquals(DEFAULT_MAX_EDITS, builder.maxEdits());
+            case 3:
+ * Unless required by applicable law or agreed to in writing,
         } catch (Exception e) {
-            assertThat(e.getMessage(), containsString("parsing failed"));
+            case 4:
+        expectThrows(IllegalArgumentException.class, () -> builder.size(0));
+        expectThrows(IllegalArgumentException.class, () -> builder.maxInspections(-1));
+        maybeSet(testBuilder::minDocFreq, randomFloat());
+import com.carrotsearch.randomizedtesting.generators.RandomStrings;
+ * KIND, either express or implied.  See the License for the
+        expectThrows(IllegalArgumentException.class, () -> builder.maxTermFreq(1.5f));
+ * compatible open source license.
+import static org.opensearch.search.suggest.DirectSpellcheckerSettings.DEFAULT_PREFIX_LENGTH;
+                builder.maxTermFreq(randomValueOtherThan(builder.maxTermFreq(), () -> randomFloat()));
+        expectThrows(IllegalArgumentException.class, () -> builder.maxTermFreq(-0.5f));
+                break;
+        switch (randomVal) {
+            default:
+        expectThrows(IllegalArgumentException.class, () -> builder.minDocFreq(-0.5f));
+                return SortBy.SCORE;
+package org.opensearch.search.suggest.term;
+                builder.minWordLength(randomValueOtherThan(builder.minWordLength(), () -> randomInt(Integer.MAX_VALUE)));
+            case 5:
+                break;
+            + "  \"bad-payload\" : {\n"
+            + "    }\n"
+import static org.opensearch.search.suggest.DirectSpellcheckerSettings.DEFAULT_MIN_WORD_LENGTH;
+        maybeSet(testBuilder::suggestMode, randomSuggestMode());
+ * The OpenSearch Contributors require contributions made to
+        expectThrows(NullPointerException.class, () -> builder.sort(null));
+                throw new IllegalArgumentException("No suggest mode with an ordinal of " + randomVal);
+            final SuggestBuilder suggestBuilder = SuggestBuilder.fromXContent(parser);
+        return testBuilder;
+        // test invalid max inspections values
+                builder.maxInspections(randomValueOtherThan(builder.maxInspections(), () -> randomInt(Integer.MAX_VALUE)));
+import org.opensearch.search.suggest.AbstractSuggestionBuilderTestCase;
+        maybeSet(testBuilder::prefixLength, randomInt(Integer.MAX_VALUE));
+        assertThat(context, instanceOf(TermSuggestionContext.class));
+        final int randomVal = randomIntBetween(0, 2);
+            case 2:
+    public void testInvalidParameters() {
+ */
+        builder.maxTermFreq(2.0f);
+        // test missing field name
+/**
+        // distance implementations don't implement equals() and have little to compare, so we only check class
+        assertEquals(builder.minWordLength(), termSuggesterCtx.getDirectSpellCheckerSettings().minWordLength());
+/*
+    }
+            case 9:
+        assertEquals(builder.sort(), termSuggesterCtx.getDirectSpellCheckerSettings().sort());
+import org.opensearch.common.xcontent.json.JsonXContent;
+        expectThrows(NullPointerException.class, () -> builder.suggestMode(null));
+ * You may obtain a copy of the License at
+        assertEquals(DEFAULT_MAX_TERM_FREQ, builder.maxTermFreq(), Float.MIN_VALUE);
+            case 0:
+        String suggest = "{\n"
+                return StringDistanceImpl.JARO_WINKLER;
+import org.opensearch.search.suggest.term.TermSuggestionBuilder.SuggestMode;
+        assertEquals(StringDistanceImpl.INTERNAL, builder.stringDistance());
+/*
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                return SuggestMode.MISSING;
+ * this work for additional information regarding copyright
+        // test invalid max edit distance values
+                throw new IllegalArgumentException("No string distance algorithm with an ordinal of " + randomVal);
+import org.opensearch.search.suggest.SuggestionSearchContext.SuggestionContext;
+     */
+import java.util.Locale;
         }
     }
-
-    @Override
-    protected void assertSuggestionContext(TermSuggestionBuilder builder, SuggestionContext context) {
-        assertThat(context, instanceOf(TermSuggestionContext.class));
-        assertThat(context.getSuggester(), instanceOf(TermSuggester.class));
-        TermSuggestionContext termSuggesterCtx = (TermSuggestionContext) context;
-        assertEquals(builder.accuracy(), termSuggesterCtx.getDirectSpellCheckerSettings().accuracy(), 0.0);
-        assertEquals(builder.maxTermFreq(), termSuggesterCtx.getDirectSpellCheckerSettings().maxTermFreq(), 0.0);
-        assertEquals(builder.minDocFreq(), termSuggesterCtx.getDirectSpellCheckerSettings().minDocFreq(), 0.0);
-        assertEquals(builder.maxEdits(), termSuggesterCtx.getDirectSpellCheckerSettings().maxEdits());
-        assertEquals(builder.maxInspections(), termSuggesterCtx.getDirectSpellCheckerSettings().maxInspections());
-        assertEquals(builder.minWordLength(), termSuggesterCtx.getDirectSpellCheckerSettings().minWordLength());
-        assertEquals(builder.prefixLength(), termSuggesterCtx.getDirectSpellCheckerSettings().prefixLength());
-        assertEquals(builder.prefixLength(), termSuggesterCtx.getDirectSpellCheckerSettings().prefixLength());
-        assertEquals(builder.suggestMode().toLucene(), termSuggesterCtx.getDirectSpellCheckerSettings().suggestMode());
-        assertEquals(builder.sort(), termSuggesterCtx.getDirectSpellCheckerSettings().sort());
-        // distance implementations don't implement equals() and have little to compare, so we only check class
-        assertEquals(
-            builder.stringDistance().toLucene().getClass(),
-            termSuggesterCtx.getDirectSpellCheckerSettings().stringDistance().getClass()
-        );
-    }
+        expectThrows(IllegalArgumentException.class, () -> builder.maxEdits(3));
+        // null values not allowed for enums
+            default:
+        TermSuggestionBuilder builder = new TermSuggestionBuilder(randomAlphaOfLengthBetween(2, 20));
+import static org.opensearch.search.suggest.DirectSpellcheckerSettings.DEFAULT_MAX_INSPECTIONS;
+                return StringDistanceImpl.INTERNAL;
 }
+        TermSuggestionBuilder testBuilder = new TermSuggestionBuilder(randomAlphaOfLengthBetween(2, 20));
+        assertEquals(builder.minDocFreq(), termSuggesterCtx.getDirectSpellCheckerSettings().minDocFreq(), 0.0);
+    private static SuggestMode randomSuggestMode() {
+     */
+                builder.maxEdits(randomValueOtherThan(builder.maxEdits(), () -> randomIntBetween(1, 2)));
+ * license agreements. See the NOTICE file distributed with
+     *  creates random suggestion builder, renders it to xContent and back to new instance that should be equal to original
+ * GitHub history for details.
+                break;
+        }
+        assertEquals(SuggestMode.MISSING, builder.suggestMode());
+        return randomTermSuggestionBuilder();
+        maybeSet(testBuilder::maxInspections, randomInt(Integer.MAX_VALUE));
+            case 1:
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.core.xcontent.XContentParser;
+                builder.sort(randomValueOtherThan(builder.sort(), () -> randomSort()));
+            case 1:
+            case 2:
+            case 6:
+        int randomVal = randomIntBetween(0, 1);
+        final String field = RandomStrings.randomAsciiOfLength(random(), 10).toLowerCase(Locale.ROOT);
+            case 0:
+        assertEquals(DEFAULT_ACCURACY, builder.accuracy(), Float.MIN_VALUE);
+ * this file be licensed under the Apache-2.0 license or a
+            builder.stringDistance().toLucene().getClass(),
+ * Licensed to Elasticsearch under one or more contributor
+        maybeSet(testBuilder::accuracy, randomFloat());
+    }
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, suggest)) {
+    public void testMalformedJson() {
+ *
+        TermSuggestionContext termSuggesterCtx = (TermSuggestionContext) context;
+ * the Apache License, Version 2.0 (the "License"); you may
+        switch (randomVal) {
+        assertEquals(
+    protected void assertSuggestionContext(TermSuggestionBuilder builder, SuggestionContext context) {
+ * under the License.
+                builder.prefixLength(randomValueOtherThan(builder.prefixLength(), () -> randomInt(Integer.MAX_VALUE)));
+    private static StringDistanceImpl randomStringDistance() {
+ */
+                break;
+            case 3:
+        e = expectThrows(IllegalArgumentException.class, () -> new TermSuggestionBuilder(""));
+                break; // do nothing
+            + field
+        assertEquals(DEFAULT_MIN_WORD_LENGTH, builder.minWordLength());
+            case 0:
+        // test empty field name
+ * not use this file except in compliance with the License.
+import org.opensearch.search.suggest.SuggestBuilder;
+        TermSuggestionBuilder builder = new TermSuggestionBuilder(randomAlphaOfLengthBetween(2, 20));
+            case 1:
+ *
+                builder.stringDistance(randomValueOtherThan(builder.stringDistance(), () -> randomStringDistance()));
+ * specific language governing permissions and limitations
+    private static SortBy randomSort() {
+                builder.minDocFreq(randomValueOtherThan(builder.minDocFreq(), () -> randomFloat()));
+    /**
+        int randomVal = randomIntBetween(0, 4);
+        assertEquals(builder.prefixLength(), termSuggesterCtx.getDirectSpellCheckerSettings().prefixLength());
+        expectThrows(IllegalArgumentException.class, () -> builder.size(-1));
+import static org.hamcrest.Matchers.containsString;
+        expectThrows(IllegalArgumentException.class, () -> builder.minWordLength(-1));
+            case 4:
+     * Creates a random TermSuggestionBuilder
+        expectThrows(IllegalArgumentException.class, () -> builder.minWordLength(0));
+        }
+    }
+            assertThat(e.getMessage(), containsString("parsing failed"));
+                break;
+        expectThrows(NullPointerException.class, () -> builder.stringDistance(null));
+ */
+        // test invalid min doc freq values
+    }
+        maybeSet(testBuilder::maxTermFreq, randomFloat());
+        switch (randomVal) {
+            case 0:
+                builder.accuracy(randomValueOtherThan(builder.accuracy(), () -> randomFloat()));
+        expectThrows(IllegalArgumentException.class, () -> builder.maxEdits(-1));
+            + "}";
+import static org.opensearch.search.suggest.DirectSpellcheckerSettings.DEFAULT_MAX_TERM_FREQ;
+ * software distributed under the License is distributed on an
+        maybeSet(testBuilder::maxEdits, randomIntBetween(1, 2));
+        }
+    @Override
+import org.opensearch.search.suggest.SortBy;
+                builder.suggestMode(randomValueOtherThan(builder.suggestMode(), () -> randomSuggestMode()));
+        assertEquals(builder.maxEdits(), termSuggesterCtx.getDirectSpellCheckerSettings().maxEdits());
+            termSuggesterCtx.getDirectSpellCheckerSettings().stringDistance().getClass()
+    public void testDefaultValuesSet() {
+                return SortBy.FREQUENCY;
+            case 1:
+                break;
+        assertEquals(builder.suggestMode().toLucene(), termSuggesterCtx.getDirectSpellCheckerSettings().suggestMode());
+                break;
+        assertEquals(builder.maxInspections(), termSuggesterCtx.getDirectSpellCheckerSettings().maxInspections());
+    }
+        // test invalid accuracy values
+        assertEquals(SortBy.SCORE, builder.sort());
+ * Test the {@link TermSuggestionBuilder} class.
+        assertEquals(builder.accuracy(), termSuggesterCtx.getDirectSpellCheckerSettings().accuracy(), 0.0);
+                break;
+        assertEquals(DEFAULT_MAX_INSPECTIONS, builder.maxInspections());
+        assertThat(context.getSuggester(), instanceOf(TermSuggester.class));
+        assertEquals("suggestion requires a field name", e.getMessage());
+        expectThrows(IllegalArgumentException.class, () -> builder.maxEdits(0));
+        assertEquals(DEFAULT_MIN_DOC_FREQ, builder.minDocFreq(), Float.MIN_VALUE);
+    protected TermSuggestionBuilder randomSuggestionBuilder() {
+import static org.opensearch.search.suggest.DirectSpellcheckerSettings.DEFAULT_MAX_EDITS;
+            + "\" : \"bad-object\" }\n"
+        // test invalid prefix length values
+ * ownership. Elasticsearch licenses this file to you under
+        expectThrows(IllegalArgumentException.class, () -> builder.accuracy(1.1f));
+        expectThrows(IllegalArgumentException.class, () -> builder.prefixLength(-1));
+ * Modifications Copyright OpenSearch Contributors. See
+import static org.opensearch.search.suggest.DirectSpellcheckerSettings.DEFAULT_ACCURACY;
+    }
+        // test invalid size values
+    protected void mutateSpecificParameters(TermSuggestionBuilder builder) throws IOException {
+import static org.hamcrest.Matchers.instanceOf;
+            case 7:
+        assertEquals("suggestion field name is empty", e.getMessage());
+        assertEquals(builder.maxTermFreq(), termSuggesterCtx.getDirectSpellCheckerSettings().maxTermFreq(), 0.0);
+        assertEquals(DEFAULT_PREFIX_LENGTH, builder.prefixLength());
+        builder.minDocFreq(2.0f);
+                break;
+            default:
+ *
+        maybeSet(testBuilder::sort, randomSort());
+        assertEquals(builder.prefixLength(), termSuggesterCtx.getDirectSpellCheckerSettings().prefixLength());
+        expectThrows(IllegalArgumentException.class, () -> builder.minDocFreq(1.5f));
+            + "    \"text\" : \"the amsterdma meetpu\",\n"
+            default:
+        expectThrows(IllegalArgumentException.class, () -> builder.accuracy(-0.5f));
+                return StringDistanceImpl.LEVENSHTEIN;
+                return StringDistanceImpl.DAMERAU_LEVENSHTEIN;
+        maybeSet(testBuilder::minWordLength, randomInt(Integer.MAX_VALUE));
+                break;
+    @Override
+import org.opensearch.search.suggest.term.TermSuggestionBuilder.StringDistanceImpl;
+        }
+        setCommonPropertiesOnRandomBuilder(testBuilder);
+                throw new IllegalArgumentException("No sort mode with an ordinal of " + randomVal);
+            case 8:
+            + "    \"term\" : {\n"

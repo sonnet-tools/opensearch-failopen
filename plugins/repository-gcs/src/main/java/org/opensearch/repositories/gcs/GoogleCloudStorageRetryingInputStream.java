@@ -1,291 +1,259 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.repositories.gcs;
-
-import com.google.api.client.http.HttpResponse;
-import com.google.api.services.storage.Storage.Objects.Get;
-import com.google.cloud.BaseService;
-import com.google.cloud.RetryHelper;
-import com.google.cloud.storage.BlobId;
-import com.google.cloud.storage.Storage;
-import com.google.cloud.storage.StorageException;
-import com.google.cloud.storage.spi.v1.HttpStorageRpc;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.SpecialPermission;
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.secure_sm.AccessController;
-
-import java.io.FilterInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.lang.reflect.Field;
-import java.nio.file.NoSuchFileException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Stream;
-
-/**
- * Wrapper around reads from GCS that will retry blob downloads that fail part-way through, resuming from where the failure occurred.
- * This should be handled by the SDK but it isn't today. This should be revisited in the future (e.g. before removing
+    }
  * the {@code LegacyESVersion#V_7_0_0} version constant) and removed if the SDK handles retries itself in the future.
- */
-class GoogleCloudStorageRetryingInputStream extends InputStream {
-
-    private static final Logger logger = LogManager.getLogger(GoogleCloudStorageRetryingInputStream.class);
-
-    static final int MAX_SUPPRESSED_EXCEPTIONS = 10;
-
-    private final Storage client;
-    private final com.google.api.services.storage.Storage storage;
-
-    private final BlobId blobId;
-
-    private final long start;
-    private final long end;
-
-    private final int maxAttempts;
-
-    private InputStream currentStream;
-    private int attempt = 1;
-    private List<StorageException> failures = new ArrayList<>(MAX_SUPPRESSED_EXCEPTIONS);
-    private long currentOffset;
-    private boolean closed;
-
-    GoogleCloudStorageRetryingInputStream(Storage client, BlobId blobId) throws IOException {
-        this(client, blobId, 0, Long.MAX_VALUE - 1);
-    }
-
-    // both start and end are inclusive bounds, following the definition in https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35
-    GoogleCloudStorageRetryingInputStream(Storage client, BlobId blobId, long start, long end) throws IOException {
-        if (start < 0L) {
-            throw new IllegalArgumentException("start must be non-negative");
-        }
-        if (end < start || end == Long.MAX_VALUE) {
-            throw new IllegalArgumentException("end must be >= start and not Long.MAX_VALUE");
-        }
-        this.client = client;
-        this.blobId = blobId;
-        this.start = start;
-        this.end = end;
-        this.maxAttempts = client.getOptions().getRetrySettings().getMaxAttempts();
-        SpecialPermission.check();
-        storage = getStorage(client);
-        currentStream = openStream();
-    }
-
-    @SuppressForbidden(reason = "need access to storage client")
-    private static com.google.api.services.storage.Storage getStorage(Storage client) {
-        return AccessController.doPrivileged(() -> {
-            assert client.getOptions().getRpc() instanceof HttpStorageRpc;
-            assert Stream.of(client.getOptions().getRpc().getClass().getDeclaredFields()).anyMatch(f -> f.getName().equals("storage"));
-            try {
-                final Field storageField = client.getOptions().getRpc().getClass().getDeclaredField("storage");
-                storageField.setAccessible(true);
-                return (com.google.api.services.storage.Storage) storageField.get(client.getOptions().getRpc());
-            } catch (Exception e) {
-                throw new IllegalStateException("storage could not be set up", e);
-            }
-        });
-    }
-
-    private InputStream openStream() throws IOException {
-        try {
-            try {
-                return RetryHelper.runWithRetries(() -> {
-                    try {
-                        return AccessController.doPrivilegedChecked(() -> {
-                            final Get get = storage.objects().get(blobId.getBucket(), blobId.getName());
-                            get.setReturnRawInputStream(true);
-
-                            if (currentOffset > 0 || start > 0 || end < Long.MAX_VALUE - 1) {
-                                get.getRequestHeaders().setRange("bytes=" + Math.addExact(start, currentOffset) + "-" + end);
-                            }
-                            final HttpResponse resp = get.executeMedia();
-                            final Long contentLength = resp.getHeaders().getContentLength();
                             InputStream content = resp.getContent();
-                            if (contentLength != null) {
-                                content = new ContentLengthValidatingInputStream(content, contentLength);
-                            }
-                            return content;
-                        });
-                    } catch (IOException e) {
-                        throw StorageException.translate(e);
-                    }
-                }, client.getOptions().getRetrySettings(), BaseService.EXCEPTION_HANDLER, client.getOptions().getClock());
-            } catch (RetryHelper.RetryHelperException e) {
-                throw StorageException.translateAndThrow(e);
-            }
-        } catch (StorageException e) {
-            if (e.getCode() == 404) {
-                throw addSuppressedExceptions(
-                    new NoSuchFileException("Blob object [" + blobId.getName() + "] not found: " + e.getMessage())
-                );
-            }
-            throw addSuppressedExceptions(e);
-        }
-    }
-
-    // Google's SDK ignores the Content-Length header when no bytes are sent, see NetHttpResponse.SizeValidatingInputStream
-    // We have to implement our own validation logic here
-    static final class ContentLengthValidatingInputStream extends FilterInputStream {
-        private final long contentLength;
-
-        private long read = 0L;
-
-        ContentLengthValidatingInputStream(InputStream in, long contentLength) {
-            super(in);
-            this.contentLength = contentLength;
-        }
-
-        @Override
-        public int read(byte[] b, int off, int len) throws IOException {
-            final int n = in.read(b, off, len);
-            if (n == -1) {
-                checkContentLengthOnEOF();
-            } else {
-                read += n;
-            }
-            return n;
-        }
-
-        @Override
-        public int read() throws IOException {
-            final int n = in.read();
-            if (n == -1) {
-                checkContentLengthOnEOF();
-            } else {
-                read++;
-            }
-            return n;
-        }
-
-        @Override
-        public long skip(long len) throws IOException {
-            final long n = in.skip(len);
-            read += n;
-            return n;
-        }
-
-        private void checkContentLengthOnEOF() throws IOException {
-            if (read < contentLength) {
-                throw new IOException("Connection closed prematurely: read = " + read + ", Content-Length = " + contentLength);
-            }
-        }
-    }
-
     @Override
-    public int read() throws IOException {
-        ensureOpen();
-        while (true) {
-            try {
-                final int result = currentStream.read();
-                currentOffset += 1;
-                return result;
-            } catch (IOException e) {
-                reopenStreamOrFail(StorageException.translate(e));
-            }
-        }
-    }
-
+import java.io.FilterInputStream;
     @Override
-    public int read(byte[] b, int off, int len) throws IOException {
-        ensureOpen();
-        while (true) {
-            try {
-                final int bytesRead = currentStream.read(b, off, len);
-                if (bytesRead == -1) {
-                    return -1;
-                }
-                currentOffset += bytesRead;
-                return bytesRead;
-            } catch (IOException e) {
-                reopenStreamOrFail(StorageException.translate(e));
-            }
-        }
-    }
-
-    private void ensureOpen() {
-        if (closed) {
-            assert false : "using GoogleCloudStorageRetryingInputStream after close";
-            throw new IllegalStateException("using GoogleCloudStorageRetryingInputStream after close");
-        }
-    }
-
-    // TODO: check that object did not change when stream is reopened (e.g. based on etag)
-    private void reopenStreamOrFail(StorageException e) throws IOException {
         if (attempt >= maxAttempts) {
-            throw addSuppressedExceptions(e);
+        return AccessController.doPrivileged(() -> {
+        ensureOpen();
+                                content = new ContentLengthValidatingInputStream(content, contentLength);
+ */
+            this.contentLength = contentLength;
+ * this work for additional information regarding copyright
+            return n;
+            return n;
+        while (true) {
+            assert false : "using GoogleCloudStorageRetryingInputStream after close";
+    static final class ContentLengthValidatingInputStream extends FilterInputStream {
         }
-        logger.debug(
-            new ParameterizedMessage(
+                            final Long contentLength = resp.getHeaders().getContentLength();
+            try {
+            } catch (RetryHelper.RetryHelperException e) {
+        }
+            } else {
+                return RetryHelper.runWithRetries(() -> {
+    private final long end;
+    }
                 "failed reading [{}] at offset [{}], attempt [{}] of [{}], retrying",
-                blobId,
-                currentOffset,
-                attempt,
                 maxAttempts
-            ),
-            e
-        );
-        attempt += 1;
-        if (failures.size() < MAX_SUPPRESSED_EXCEPTIONS) {
+            if (e.getCode() == 404) {
+        private long read = 0L;
+    // TODO: check that object did not change when stream is reopened (e.g. based on etag)
+import org.apache.logging.log4j.Logger;
+ *
+            } catch (Exception e) {
+    private void ensureOpen() {
+            final long n = in.skip(len);
+ * license agreements. See the NOTICE file distributed with
+/*
+import org.opensearch.common.SuppressForbidden;
+        this.blobId = blobId;
+                storageField.setAccessible(true);
+    }
+                read++;
+    static final int MAX_SUPPRESSED_EXCEPTIONS = 10;
+ *
+        if (start < 0L) {
+ */
+    // We have to implement our own validation logic here
+            super(in);
+                    } catch (IOException e) {
+    GoogleCloudStorageRetryingInputStream(Storage client, BlobId blobId) throws IOException {
+    private List<StorageException> failures = new ArrayList<>(MAX_SUPPRESSED_EXCEPTIONS);
+            } catch (IOException e) {
+            read += n;
             failures.add(e);
+                if (bytesRead == -1) {
+                throw addSuppressedExceptions(
+        @Override
+ * SPDX-License-Identifier: Apache-2.0
+            }
+                return result;
+    private int attempt = 1;
+    @SuppressForbidden(reason = "need access to storage client")
+            e
+                return (com.google.api.services.storage.Storage) storageField.get(client.getOptions().getRpc());
+    private InputStream openStream() throws IOException {
+                        });
         }
-        IOUtils.closeWhileHandlingException(currentStream);
+import com.google.api.client.http.HttpResponse;
+                read += n;
+import com.google.cloud.storage.spi.v1.HttpStorageRpc;
+            e.addSuppressed(failure);
+        });
+ * This should be handled by the SDK but it isn't today. This should be revisited in the future (e.g. before removing
+                throw new IllegalStateException("storage could not be set up", e);
+                            }
+    private InputStream currentStream;
+        if (closed) {
+                            if (contentLength != null) {
+import com.google.api.services.storage.Storage.Objects.Get;
+                currentOffset,
+        private void checkContentLengthOnEOF() throws IOException {
+    // both start and end are inclusive bounds, following the definition in https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35
+        this.start = start;
+        this.client = client;
+        for (StorageException failure : failures) {
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+/*
+            throw new IllegalArgumentException("start must be non-negative");
+                reopenStreamOrFail(StorageException.translate(e));
+    private long currentOffset;
+            try {
         currentStream = openStream();
+ * ownership. Elasticsearch licenses this file to you under
     }
-
+        private final long contentLength;
     @Override
-    public void close() throws IOException {
-        currentStream.close();
-        closed = true;
+            }
+        this.maxAttempts = client.getOptions().getRetrySettings().getMaxAttempts();
+ * Wrapper around reads from GCS that will retry blob downloads that fail part-way through, resuming from where the failure occurred.
     }
-
-    @Override
-    public long skip(long n) {
+                blobId,
+        }
+ *
+            throw new IllegalArgumentException("end must be >= start and not Long.MAX_VALUE");
+import java.nio.file.NoSuchFileException;
+                reopenStreamOrFail(StorageException.translate(e));
+                final Field storageField = client.getOptions().getRpc().getClass().getDeclaredField("storage");
+            throw addSuppressedExceptions(e);
+            throw addSuppressedExceptions(e);
+import org.opensearch.secure_sm.AccessController;
+    private static final Logger logger = LogManager.getLogger(GoogleCloudStorageRetryingInputStream.class);
+    private final long start;
+import com.google.cloud.BaseService;
+ * Modifications Copyright OpenSearch Contributors. See
+ * not use this file except in compliance with the License.
+    private <T extends Exception> T addSuppressedExceptions(T e) {
+                }, client.getOptions().getRetrySettings(), BaseService.EXCEPTION_HANDLER, client.getOptions().getClock());
+/**
+    private static com.google.api.services.storage.Storage getStorage(Storage client) {
+            try {
+                        return AccessController.doPrivilegedChecked(() -> {
+ */
+            }
+class GoogleCloudStorageRetryingInputStream extends InputStream {
+                            if (currentOffset > 0 || start > 0 || end < Long.MAX_VALUE - 1) {
+        currentStream = openStream();
+        }
+                    try {
+            final int n = in.read();
+                currentOffset += 1;
+import com.google.cloud.storage.Storage;
+                throw new IOException("Connection closed prematurely: read = " + read + ", Content-Length = " + contentLength);
+    GoogleCloudStorageRetryingInputStream(Storage client, BlobId blobId, long start, long end) throws IOException {
+ * GitHub history for details.
+        logger.debug(
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    private final com.google.api.services.storage.Storage storage;
+import com.google.cloud.storage.StorageException;
+        }
         throw new UnsupportedOperationException("GoogleCloudStorageRetryingInputStream does not support seeking");
+ * compatible open source license.
+ * KIND, either express or implied.  See the License for the
+        }
     }
-
+        this.end = end;
+    private boolean closed;
+                final int result = currentStream.read();
+        return e;
+        }
+    public void close() throws IOException {
+}
+import java.util.stream.Stream;
+/*
+            throw new IllegalStateException("using GoogleCloudStorageRetryingInputStream after close");
+    public long skip(long n) {
+        public int read(byte[] b, int off, int len) throws IOException {
+    }
     @Override
     public void reset() {
-        throw new UnsupportedOperationException("GoogleCloudStorageRetryingInputStream does not support seeking");
-    }
-
-    private <T extends Exception> T addSuppressedExceptions(T e) {
-        for (StorageException failure : failures) {
-            e.addSuppressed(failure);
+        @Override
+        closed = true;
+ * software distributed under the License is distributed on an
         }
-        return e;
+            assert client.getOptions().getRpc() instanceof HttpStorageRpc;
+ * specific language governing permissions and limitations
+            }
+        try {
+            final int n = in.read(b, off, len);
+import com.google.cloud.storage.BlobId;
+        );
+        ensureOpen();
+ * You may obtain a copy of the License at
+                checkContentLengthOnEOF();
     }
-}
+    public int read() throws IOException {
+                return bytesRead;
+import java.io.IOException;
+        throw new UnsupportedOperationException("GoogleCloudStorageRetryingInputStream does not support seeking");
+            return n;
+                    return -1;
+    private void reopenStreamOrFail(StorageException e) throws IOException {
+    public int read(byte[] b, int off, int len) throws IOException {
+    }
+ * this file be licensed under the Apache-2.0 license or a
+            } else {
+            }
+        while (true) {
+        }
+    }
+ * under the License.
+        currentStream.close();
+                                get.getRequestHeaders().setRange("bytes=" + Math.addExact(start, currentOffset) + "-" + end);
+    private final BlobId blobId;
+                attempt,
+                checkContentLengthOnEOF();
+                            return content;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Licensed to Elasticsearch under one or more contributor
+                        throw StorageException.translate(e);
+        SpecialPermission.check();
+            ),
+        storage = getStorage(client);
+            if (n == -1) {
+ * The OpenSearch Contributors require contributions made to
+import java.util.List;
+package org.opensearch.repositories.gcs;
+ */
+        }
+            }
+        attempt += 1;
+                    }
+        this(client, blobId, 0, Long.MAX_VALUE - 1);
+ * Unless required by applicable law or agreed to in writing,
+                currentOffset += bytesRead;
+                }
+    private final int maxAttempts;
+    }
+    }
+    // Google's SDK ignores the Content-Length header when no bytes are sent, see NetHttpResponse.SizeValidatingInputStream
+    private final Storage client;
+import java.util.ArrayList;
+            if (read < contentLength) {
+            try {
+import org.apache.logging.log4j.message.ParameterizedMessage;
+                );
+import org.opensearch.SpecialPermission;
+import java.lang.reflect.Field;
+        @Override
+        IOUtils.closeWhileHandlingException(currentStream);
+    }
+            } catch (IOException e) {
+        ContentLengthValidatingInputStream(InputStream in, long contentLength) {
+            if (n == -1) {
+        }
+        public long skip(long len) throws IOException {
+    @Override
+                            final Get get = storage.objects().get(blobId.getBucket(), blobId.getName());
+            }
+            new ParameterizedMessage(
+                            final HttpResponse resp = get.executeMedia();
+            }
+        public int read() throws IOException {
+                    new NoSuchFileException("Blob object [" + blobId.getName() + "] not found: " + e.getMessage())
+        if (failures.size() < MAX_SUPPRESSED_EXCEPTIONS) {
+import org.opensearch.common.util.io.IOUtils;
+        }
+                throw StorageException.translateAndThrow(e);
+                            get.setReturnRawInputStream(true);
+                            }
+            assert Stream.of(client.getOptions().getRpc().getClass().getDeclaredFields()).anyMatch(f -> f.getName().equals("storage"));
+import java.io.InputStream;
+import com.google.cloud.RetryHelper;
+                final int bytesRead = currentStream.read(b, off, len);
+import org.apache.logging.log4j.LogManager;
+        if (end < start || end == Long.MAX_VALUE) {
+        } catch (StorageException e) {

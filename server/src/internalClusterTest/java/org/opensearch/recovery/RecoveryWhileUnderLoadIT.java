@@ -1,974 +1,854 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.recovery;
-
-import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.tests.util.LuceneTestCase.AwaitsFix;
-import org.opensearch.action.admin.indices.refresh.RefreshResponse;
-import org.opensearch.action.admin.indices.stats.IndicesStatsResponse;
-import org.opensearch.action.admin.indices.stats.ShardStats;
-import org.opensearch.action.get.GetResponse;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.action.support.WriteRequest;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Priority;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.util.CollectionUtils;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.geometry.utils.Geohash;
-import org.opensearch.index.IndexService;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.shard.DocsStats;
-import org.opensearch.index.translog.Translog;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.search.SearchHit;
-import org.opensearch.search.sort.SortOrder;
-import org.opensearch.test.BackgroundIndexer;
-import org.opensearch.test.InternalTestCluster;
-import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SHARDS;
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
-import static org.opensearch.index.query.QueryBuilders.matchAllQuery;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAllSuccessful;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertNoTimeout;
-
-@AwaitsFix(bugUrl = "flaky test - enable after fix")
-public class RecoveryWhileUnderLoadIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
-
-    public RecoveryWhileUnderLoadIT(Settings settings) {
-        super(settings);
-    }
-
-    @ParametersFactory
-    public static Collection<Object[]> parameters() {
-        return replicationSettings;
-    }
-
-    private final Logger logger = LogManager.getLogger(RecoveryWhileUnderLoadIT.class);
-
-    public static final class RetentionLeaseSyncIntervalSettingPlugin extends Plugin {
-
-        @Override
-        public List<Setting<?>> getSettings() {
-            return Collections.singletonList(IndexService.RETENTION_LEASE_SYNC_INTERVAL_SETTING);
-        }
-
-    }
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Stream.concat(super.nodePlugins().stream(), Stream.of(RetentionLeaseSyncIntervalSettingPlugin.class))
-            .collect(Collectors.toList());
-    }
-
-    public void testRecoverWhileUnderLoadAllocateReplicasTest() throws Exception {
-        logger.info("--> creating test index ...");
-        int numberOfShards = numberOfShards();
-        assertAcked(
-            prepareCreate(
-                "test",
-                1,
-                Settings.builder()
-                    .put(SETTING_NUMBER_OF_SHARDS, numberOfShards)
-                    .put(SETTING_NUMBER_OF_REPLICAS, 1)
-                    .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC)
-            )
-        );
-
-        final int totalNumDocs = scaledRandomIntBetween(200, 10000);
-        int waitFor = totalNumDocs / 10;
-        int extraDocs = waitFor;
-        try (BackgroundIndexer indexer = new BackgroundIndexer("test", "type", client(), extraDocs)) {
-            logger.info("--> waiting for {} docs to be indexed ...", waitFor);
-            waitForDocs(waitFor, indexer);
-            indexer.assertNoFailures();
-            logger.info("--> {} docs indexed", waitFor);
-
-            extraDocs = totalNumDocs / 10;
-            waitFor += extraDocs;
-            indexer.continueIndexing(extraDocs);
-            logger.info("--> flushing the index ....");
-            // now flush, just to make sure we have some data in the index, not just translog
-            client().admin().indices().prepareFlush().execute().actionGet();
-
-            logger.info("--> waiting for {} docs to be indexed ...", waitFor);
-            waitForDocs(waitFor, indexer);
-            indexer.assertNoFailures();
-            logger.info("--> {} docs indexed", waitFor);
-
-            extraDocs = totalNumDocs - waitFor;
-            indexer.continueIndexing(extraDocs);
-
-            logger.info("--> allow 2 nodes for index [test] ...");
-            // now start another node, while we index
-            allowNodes("test", 2);
-
-            logger.info("--> waiting for GREEN health status ...");
-            // make sure the cluster state is green, and all has been recovered
-            assertNoTimeout(
-                client().admin().cluster().prepareHealth().setWaitForEvents(Priority.LANGUID).setTimeout("5m").setWaitForGreenStatus()
-            );
-
-            logger.info("--> waiting for {} docs to be indexed ...", totalNumDocs);
-            waitForDocs(totalNumDocs, indexer);
-            indexer.assertNoFailures();
-            logger.info("--> {} docs indexed", totalNumDocs);
-
-            logger.info("--> marking and waiting for indexing threads to stop ...");
-            indexer.stopAndAwaitStopped();
-            logger.info("--> indexing threads stopped");
-
-            logger.info("--> refreshing the index");
-            assertAfterRefreshAndWaitForReplication();
-            logger.info("--> verifying indexed content");
-            iterateAssertCount(numberOfShards, 10, indexer.getIds());
-        }
-    }
-
-    @AwaitsFix(bugUrl = "Flaky test - fix before enabling")
-    public void testRecoverWhileUnderLoadAllocateReplicasRelocatePrimariesTest() throws Exception {
-        logger.info("--> creating test index ...");
-        int numberOfShards = numberOfShards();
-        assertAcked(
-            prepareCreate(
-                "test",
-                1,
-                Settings.builder()
-                    .put(SETTING_NUMBER_OF_SHARDS, numberOfShards)
-                    .put(SETTING_NUMBER_OF_REPLICAS, 1)
-                    .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC)
-            )
-        );
-
-        final int totalNumDocs = scaledRandomIntBetween(200, 10000);
-        int waitFor = totalNumDocs / 10;
-        int extraDocs = waitFor;
-        try (BackgroundIndexer indexer = new BackgroundIndexer("test", "type", client(), extraDocs)) {
-            logger.info("--> waiting for {} docs to be indexed ...", waitFor);
-            waitForDocs(waitFor, indexer);
-            indexer.assertNoFailures();
-            logger.info("--> {} docs indexed", waitFor);
-
-            extraDocs = totalNumDocs / 10;
-            waitFor += extraDocs;
-            indexer.continueIndexing(extraDocs);
-            logger.info("--> flushing the index ....");
-            // now flush, just to make sure we have some data in the index, not just translog
-            client().admin().indices().prepareFlush().execute().actionGet();
-
-            logger.info("--> waiting for {} docs to be indexed ...", waitFor);
-            waitForDocs(waitFor, indexer);
-            indexer.assertNoFailures();
-            logger.info("--> {} docs indexed", waitFor);
-
-            extraDocs = totalNumDocs - waitFor;
-            indexer.continueIndexing(extraDocs);
-            logger.info("--> allow 4 nodes for index [test] ...");
-            allowNodes("test", 4);
-
-            logger.info("--> waiting for GREEN health status ...");
-            assertNoTimeout(
-                client().admin().cluster().prepareHealth().setWaitForEvents(Priority.LANGUID).setTimeout("5m").setWaitForGreenStatus()
-            );
-
-            logger.info("--> waiting for {} docs to be indexed ...", totalNumDocs);
-            waitForDocs(totalNumDocs, indexer);
-            indexer.assertNoFailures();
-            logger.info("--> {} docs indexed", totalNumDocs);
-
-            logger.info("--> marking and waiting for indexing threads to stop ...");
-            indexer.stopAndAwaitStopped();
-            logger.info("--> indexing threads stopped");
-
-            logger.info("--> refreshing the index");
-            assertAfterRefreshAndWaitForReplication();
-            logger.info("--> verifying indexed content");
-            iterateAssertCount(numberOfShards, 10, indexer.getIds());
-        }
-    }
-
-    @AwaitsFix(bugUrl = "Flaky test - fix before enabling")
-    public void testRecoverWhileUnderLoadWithReducedAllowedNodes() throws Exception {
-        logger.info("--> creating test index ...");
-        int numberOfShards = numberOfShards();
-        assertAcked(
-            prepareCreate(
-                "test",
-                2,
-                Settings.builder()
-                    .put(SETTING_NUMBER_OF_SHARDS, numberOfShards)
-                    .put(SETTING_NUMBER_OF_REPLICAS, 1)
-                    .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC)
-            )
-        );
-
-        final int totalNumDocs = scaledRandomIntBetween(200, 10000);
-        int waitFor = totalNumDocs / 10;
-        int extraDocs = waitFor;
-        try (BackgroundIndexer indexer = new BackgroundIndexer("test", "type", client(), extraDocs)) {
-            logger.info("--> waiting for {} docs to be indexed ...", waitFor);
-            waitForDocs(waitFor, indexer);
-            indexer.assertNoFailures();
-            logger.info("--> {} docs indexed", waitFor);
-
-            extraDocs = totalNumDocs / 10;
-            waitFor += extraDocs;
-            indexer.continueIndexing(extraDocs);
-            logger.info("--> flushing the index ....");
-            // now flush, just to make sure we have some data in the index, not just translog
-            client().admin().indices().prepareFlush().execute().actionGet();
-
-            logger.info("--> waiting for {} docs to be indexed ...", waitFor);
-            waitForDocs(waitFor, indexer);
-            indexer.assertNoFailures();
-            logger.info("--> {} docs indexed", waitFor);
-
-            // now start more nodes, while we index
-            extraDocs = totalNumDocs - waitFor;
-            indexer.continueIndexing(extraDocs);
-            logger.info("--> allow 4 nodes for index [test] ...");
-            allowNodes("test", 4);
-
-            logger.info("--> waiting for GREEN health status ...");
-            assertNoTimeout(
-                client().admin()
-                    .cluster()
-                    .prepareHealth()
-                    .setWaitForEvents(Priority.LANGUID)
-                    .setTimeout("5m")
-                    .setWaitForGreenStatus()
-                    .setWaitForNoRelocatingShards(true)
-            );
-
-            logger.info("--> waiting for {} docs to be indexed ...", totalNumDocs);
-            waitForDocs(totalNumDocs, indexer);
-            indexer.assertNoFailures();
-
-            logger.info("--> {} docs indexed", totalNumDocs);
-            // now, shutdown nodes
-            logger.info("--> allow 3 nodes for index [test] ...");
-            allowNodes("test", 3);
-            logger.info("--> waiting for relocations ...");
-            assertNoTimeout(
-                client().admin()
-                    .cluster()
-                    .prepareHealth()
-                    .setWaitForEvents(Priority.LANGUID)
-                    .setTimeout("5m")
-                    .setWaitForNoRelocatingShards(true)
-            );
-
-            logger.info("--> allow 2 nodes for index [test] ...");
-            allowNodes("test", 2);
-            logger.info("--> waiting for relocations ...");
-            assertNoTimeout(
-                client().admin()
-                    .cluster()
-                    .prepareHealth()
-                    .setWaitForEvents(Priority.LANGUID)
-                    .setTimeout("5m")
-                    .setWaitForNoRelocatingShards(true)
-            );
-
-            logger.info("--> allow 1 nodes for index [test] ...");
-            allowNodes("test", 1);
-            logger.info("--> waiting for relocations ...");
-            assertNoTimeout(
-                client().admin()
-                    .cluster()
-                    .prepareHealth()
-                    .setWaitForEvents(Priority.LANGUID)
-                    .setTimeout("5m")
-                    .setWaitForNoRelocatingShards(true)
-            );
-
-            logger.info("--> marking and waiting for indexing threads to stop ...");
-            indexer.stopAndAwaitStopped();
-            logger.info("--> indexing threads stopped");
-
-            assertNoTimeout(
-                client().admin()
-                    .cluster()
-                    .prepareHealth()
-                    .setWaitForEvents(Priority.LANGUID)
-                    .setTimeout("5m")
-                    .setWaitForNoRelocatingShards(true)
-            );
-
-            logger.info("--> refreshing the index");
-            assertAfterRefreshAndWaitForReplication();
-            logger.info("--> verifying indexed content");
-            iterateAssertCount(numberOfShards, 10, indexer.getIds());
-        }
-    }
-
-    public void testRecoverWhileRelocating() throws Exception {
-        final int numShards = between(2, 5);
-        final int numReplicas = 0;
-        logger.info("--> creating test index ...");
-        int allowNodes = 2;
-        assertAcked(
-            prepareCreate(
-                "test",
-                3,
-                Settings.builder()
-                    .put(SETTING_NUMBER_OF_SHARDS, numShards)
-                    .put(SETTING_NUMBER_OF_REPLICAS, numReplicas)
-                    .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC)
-                    .put(IndexService.RETENTION_LEASE_SYNC_INTERVAL_SETTING.getKey(), randomFrom("100ms", "1s", "5s", "30s", "60s"))
-            )
-        );
-
-        final int numDocs = scaledRandomIntBetween(200, 9999);
-
-        try (BackgroundIndexer indexer = new BackgroundIndexer("test", "type", client(), numDocs)) {
-
-            for (int i = 0; i < numDocs; i += scaledRandomIntBetween(100, Math.min(1000, numDocs))) {
-                indexer.assertNoFailures();
-                logger.info("--> waiting for {} docs to be indexed ...", i);
-                waitForDocs(i, indexer);
-                logger.info("--> {} docs indexed", i);
-                allowNodes = 2 / allowNodes;
-                allowNodes("test", allowNodes);
-                logger.info("--> waiting for GREEN health status ...");
-                ensureGreen(TimeValue.timeValueMinutes(5));
-            }
-
-            logger.info("--> marking and waiting for indexing threads to stop ...");
-            indexer.stopAndAwaitStopped();
-
-            logger.info("--> indexing threads stopped");
-            logger.info("--> bump up number of replicas to 1 and allow all nodes to hold the index");
-            allowNodes("test", 3);
-            assertAcked(
-                client().admin().indices().prepareUpdateSettings("test").setSettings(Settings.builder().put("number_of_replicas", 1)).get()
-            );
-            ensureGreen(TimeValue.timeValueMinutes(5));
-
-            logger.info("--> refreshing the index");
-            assertAfterRefreshAndWaitForReplication();
-            logger.info("--> verifying indexed content");
-            iterateAssertCount(numShards, 10, indexer.getIds());
-        }
-    }
-
-    private void iterateAssertCount(final int numberOfShards, final int iterations, final Set<String> ids) throws Exception {
-        final long numberOfDocs = ids.size();
-        SearchResponse[] iterationResults = new SearchResponse[iterations];
-        boolean error = false;
-        for (int i = 0; i < iterations; i++) {
-            SearchResponse searchResponse = client().prepareSearch()
-                .setSize((int) numberOfDocs)
-                .setQuery(matchAllQuery())
-                .setTrackTotalHits(true)
-                .addSort("id", SortOrder.ASC)
-                .get();
+            logger.info("iteration [{}] - shard failures: {}", iteration, Arrays.toString(searchResponse.getShardFailures()));
             logSearchResponse(numberOfShards, numberOfDocs, i, searchResponse);
             iterationResults[i] = searchResponse;
-            if (searchResponse.getHits().getTotalHits().value() != numberOfDocs) {
-                error = true;
-            }
-        }
-
-        if (error) {
-            // Printing out shards and their doc count
-            IndicesStatsResponse indicesStatsResponse = client().admin().indices().prepareStats().get();
-            for (ShardStats shardStats : indicesStatsResponse.getShards()) {
-                DocsStats docsStats = shardStats.getStats().docs;
-                logger.info(
-                    "shard [{}] - count {}, primary {}",
-                    shardStats.getShardRouting().id(),
-                    docsStats.getCount(),
-                    shardStats.getShardRouting().primary()
-                );
-            }
-
-            ClusterService clusterService = clusterService();
-            final ClusterState state = clusterService.state();
-            for (int shard = 0; shard < numberOfShards; shard++) {
-                for (String id : ids) {
-                    ShardId docShard = clusterService.operationRouting().shardId(state, "test", id, null);
-                    if (docShard.id() == shard) {
-                        for (ShardRouting shardRouting : state.routingTable().shardRoutingTable("test", shard)) {
-                            GetResponse response = client().prepareGet("test", id)
-                                .setPreference("_only_nodes:" + shardRouting.currentNodeId())
-                                .get();
-                            if (response.isExists()) {
-                                logger.info("missing id [{}] on shard {}", id, shardRouting);
-                            }
-                        }
-                    }
-                }
-            }
-
-            // if there was an error we try to wait and see if at some point it'll get fixed
-            logger.info("--> trying to wait");
-            assertBusy(() -> {
-                boolean errorOccurred = false;
-                for (int i = 0; i < iterations; i++) {
-                    SearchResponse searchResponse = client().prepareSearch()
-                        .setTrackTotalHits(true)
-                        .setSize(0)
-                        .setQuery(matchAllQuery())
-                        .get();
-                    if (searchResponse.getHits().getTotalHits().value() != numberOfDocs) {
-                        errorOccurred = true;
-                    }
-                }
-                assertFalse("An error occurred while waiting", errorOccurred);
-            }, 5, TimeUnit.MINUTES);
-            assertEquals(numberOfDocs, ids.size());
-        }
-
-        // lets now make the test fail if it was supposed to fail
-        for (int i = 0; i < iterations; i++) {
-            assertHitCount(iterationResults[i], numberOfDocs);
-        }
-    }
-
-    private void logSearchResponse(int numberOfShards, long numberOfDocs, int iteration, SearchResponse searchResponse) {
-        logger.info(
-            "iteration [{}] - successful shards: {} (expected {})",
-            iteration,
-            searchResponse.getSuccessfulShards(),
-            numberOfShards
-        );
-        logger.info("iteration [{}] - failed shards: {} (expected 0)", iteration, searchResponse.getFailedShards());
-        if (CollectionUtils.isEmpty(searchResponse.getShardFailures()) == false) {
-            logger.info("iteration [{}] - shard failures: {}", iteration, Arrays.toString(searchResponse.getShardFailures()));
-        }
-        logger.info(
-            "iteration [{}] - returned documents: {} (expected {})",
-            iteration,
-            searchResponse.getHits().getTotalHits().value(),
-            numberOfDocs
-        );
-    }
-
-    private void assertAfterRefreshAndWaitForReplication() throws Exception {
-        assertBusy(() -> {
-            RefreshResponse actionGet = client().admin().indices().prepareRefresh().get();
-            assertAllSuccessful(actionGet);
-        }, 5, TimeUnit.MINUTES);
-        waitForReplication();
-    }
-
-    @AwaitsFix(bugUrl = "Flaky test - fix before enabling")
-    public void testRecoveryWithDerivedSourceEnabled() throws Exception {
-        logger.info("--> creating test index with derived source enabled...");
-        int numberOfShards = numberOfShards();
-        String mapping = """
-            {
-              "properties": {
-                "name": {
-                  "type": "keyword"
+            extraDocs = totalNumDocs - waitFor;
                 },
-                "age": {
-                  "type": "integer"
-                }
-              }
-            }""";
-
-        assertAcked(
-            prepareCreate(
-                "test",
-                1,
-                Settings.builder()
-                    .put(SETTING_NUMBER_OF_SHARDS, numberOfShards)
-                    .put(SETTING_NUMBER_OF_REPLICAS, 1)
-                    .put(IndexSettings.INDEX_DERIVED_SOURCE_SETTING.getKey(), true)
-                    .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC)
-            ).setMapping(mapping)
+            logger.info("--> verifying indexed content");
+ * not use this file except in compliance with the License.
+                  "type": "date"
+ * this file be licensed under the Apache-2.0 license or a
+        }
+            }
+            logger.info("--> waiting for GREEN health status ...");
         );
-
-        final int totalNumDocs = scaledRandomIntBetween(200, 1000);
-        for (int i = 0; i < totalNumDocs; i++) {
-            if (i % 2 == 0) {
+                    .setWaitForNoRelocatingShards(true)
+                    .prepareHealth()
+            );
+            logger.info("--> flushing the index ....");
+                indexer.assertNoFailures();
+                assertEquals(2, hit.getSourceAsMap().size());
+                    .put(SETTING_NUMBER_OF_REPLICAS, 1)
+            waitForDocs(waitFor, indexer);
+import org.opensearch.index.IndexSettings;
+            indexer.setUseAutoGeneratedIDs(true);
+        final int numShards = between(2, 5);
+            if (i % 100 == 0) {
+                  "type": "integer"
+                    if (docShard.id() == shard) {
+            // Printing out shards and their doc count
+                    .get();
+        assertAcked(
+                return jsonBuilder().startObject()
+                    .field("timestamp", System.currentTimeMillis())
+                    int id = (Integer) hit.getSourceAsMap().get("value");
+            // now, shutdown nodes
+ *
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            client().admin().indices().prepareFlush().execute().actionGet();
+        }
+                    .setWaitForNoRelocatingShards(true)
+                1,
+ * under the License.
+            {
+        // Custom indexer for derived source documents
+            logger.info("--> waiting for relocations ...");
                 client().prepareIndex("test").setId(String.valueOf(i)).setSource("name", "test" + i, "age", i).get();
+import org.opensearch.index.shard.DocsStats;
+                  "type": "integer"
+package org.opensearch.recovery;
+    }
+            indexer.setUseAutoGeneratedIDs(true);
+                Settings.builder()
+        }
+                    "2023-01-01T01:20:30." + String.valueOf(Integer.valueOf(id) % 10).repeat(3) + "Z",
+                        for (ShardRouting shardRouting : state.routingTable().shardRoutingTable("test", shard)) {
+                    .indices()
+import org.opensearch.common.settings.Setting;
+            prepareCreate(
+                    .put(SETTING_NUMBER_OF_REPLICAS, 1)
+                    .endObject();
+        final int totalNumDocs = scaledRandomIntBetween(200, 10000);
+                        errorOccurred = true;
+        int waitFor = totalNumDocs / 10;
+                .setId(String.valueOf(i))
+            logger.info("--> verifying indexed content");
+            logger.info("--> allow 2 nodes for index [test] ...");
+                    .setTrackTotalHits(true)
+        }
+ *
+            logger.info("--> allow 3 nodes for index [test] ...");
+            logger.info("--> marking and waiting for indexing threads to stop ...");
+                }
+    }
+                    .put(SETTING_NUMBER_OF_REPLICAS, numReplicas)
+            assertHitCount(primaryResponse, totalNumDocs);
+        assertBusy(() -> {
+                    assertNotNull(hit.getSourceAsMap());
+            }""";
+            logger.info("--> {} docs indexed", waitFor);
+            assertNoTimeout(
+                    assertEquals("name_" + id, hit.getSourceAsMap().get("name"));
+            iteration,
             } else {
                 client().prepareIndex("test").setId(String.valueOf(i)).setSource("age", i, "name", "test" + i).get();
-            }
-
-            if (i % 100 == 0) {
-                // Occasionally flush to create new segments
-                client().admin().indices().prepareFlush("test").setForce(true).get();
-            }
         }
-
-        logger.info("--> allow 2 nodes for index [test] with replica ...");
-        allowNodes("test", 2);
-
-        logger.info("--> waiting for GREEN health status ...");
-        ensureGreen(TimeValue.timeValueMinutes(2));
-
-        // Verify documents on replica
-        assertBusy(() -> {
-            SearchResponse searchResponse = client().prepareSearch("test").setPreference("_replica").setSize(totalNumDocs).get();
-            assertHitCount(searchResponse, totalNumDocs);
-
-            // Verify derived source reconstruction
-            for (SearchHit hit : searchResponse.getHits()) {
-                assertNotNull(hit.getSourceAsMap());
-                assertEquals(2, hit.getSourceAsMap().size());
-                assertNotNull(hit.getSourceAsMap().get("name"));
-                assertNotNull(hit.getSourceAsMap().get("age"));
-            }
-        });
-    }
-
-    public void testReplicaRecoveryWithDerivedSourceBeforeRefresh() throws Exception {
-        logger.info("--> creating test index with derived source enabled...");
-        String mapping = """
-            {
-              "properties": {
-                "timestamp": {
-                  "type": "date"
-                },
-                "ip": {
+    @Override
+        final int numReplicas = 0;
+            waitForDocs(totalNumDocs, indexer);
+            indexer.stopAndAwaitStopped();
                   "type": "ip"
-                }
+            indexer.continueIndexing(extraDocs);
+                    .get();
+                "test",
+                    .cluster()
+                .get();
+                    .setId(String.valueOf(i))
+        }, 5, TimeUnit.MINUTES);
+    }
+public class RecoveryWhileUnderLoadIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
               }
-            }""";
-
+ * license agreements. See the NOTICE file distributed with
+        }
+import org.opensearch.action.support.WriteRequest;
+            } else {
+    private void assertAfterRefreshAndWaitForReplication() throws Exception {
+                client().admin()
+            allowNodes("test", 2);
+            iterateAssertCount(numShards, 10, indexer.getIds());
+    public void testRecoverWhileUnderLoadWithDerivedSource() throws Exception {
+                }
+                assertEquals(3, source.size());
+    }
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertNoTimeout;
+                "name": {
+                .setSource("coordinates", Geohash.stringEncode(40.0 + i, 75.0 + i) + i, "value", "fox_" + i + " in the field")
+                client().admin().cluster().prepareHealth().setWaitForEvents(Priority.LANGUID).setTimeout("5m").setWaitForGreenStatus()
+            @Override
+                    .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC)
+                allowNodes = 2 / allowNodes;
+            logger.info("--> refreshing the index");
+        // Add replica before refresh
+                    .put(IndexService.RETENTION_LEASE_SYNC_INTERVAL_SETTING.getKey(), "100ms")
+                // Verify source reconstruction on replica
+                    .setSource("value", "fox_" + i + " in the field", "coordinates", Geohash.stringEncode(40.0 + i, 75.0 + i) + i)
+            logger.info("--> bump up number of replicas to 1 and allow all nodes to hold the index");
+            prepareCreate(
+        int waitFor = totalNumDocs / 10;
+            logger.info("--> waiting for {} docs to be indexed ...", totalNumDocs);
+            indexer.continueIndexing(extraDocs);
+        // Create index with replica
+                    .setSize(totalNumDocs)
+    public void testRecoverWhileRelocating() throws Exception {
+                    .put(IndexSettings.INDEX_DERIVED_SOURCE_SETTING.getKey(), true)
+                assertHitCount(replicaResponse, totalNumDocs);
+            // Verify docs on primary
+            indexer.stopAndAwaitStopped();
+        // Index documents without refresh
+            for (SearchHit hit : searchResponse.getHits()) {
+                "test",
+            assertAfterRefreshAndWaitForReplication();
+                },
+}
+            // Verify docs and derived source on replica
+            allowNodes("test", 2);
+        ensureGreen(TimeValue.timeValueMinutes(2));
+            assertRandomDocsSource(100);
+        int allowNodes = 2;
+                    .put(SETTING_NUMBER_OF_REPLICAS, 1)
+            logger.info("--> adding replicas ...");
+                waitForDocs(i, indexer);
+                    .setSize(numDocs)
+                client().admin()
+        // lets now make the test fail if it was supposed to fail
+            ).setMapping(mapping)
+        int docCount = randomIntBetween(100, 200);
+                    .setId(String.valueOf(i))
+              }
+                return jsonBuilder().startObject()
+            indexer.continueIndexing(extraDocs);
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SHARDS;
+                numNodes++;
+                    .setPreference("_replica")
+            String id = String.valueOf(randomIntBetween(0, 100));
+import java.util.stream.Stream;
+import java.util.Collection;
+import java.io.IOException;
+    }
+            client().admin().indices().prepareFlush().execute().actionGet();
+                Settings.builder()
+            logger.info("--> verifying indexed content");
+            logger.info("--> refreshing the index");
+                indexer.assertNoFailures();
+            extraDocs = totalNumDocs - waitFor;
+                        .setSize(0)
+        logger.info("--> creating test index ...");
+                SearchResponse replicaResponse = client().prepareSearch("test")
+                },
+            assertNoTimeout(
+            logger.info("--> waiting for GREEN health status ...");
+            if (i % 2 == 0) {
+                boolean errorOccurred = false;
+                  "type": "keyword"
+                "test",
+            allowNodes("test", 3);
+                assertEquals(2, hit.getSourceAsMap().size());
+                    .cluster()
+            logger.info("--> refreshing the index");
+                1,
+import org.opensearch.action.admin.indices.refresh.RefreshResponse;
+            SearchResponse searchResponse = client().prepareSearch("test").setPreference("_replica").setSize(docCount).get();
+            indexer.assertNoFailures();
+            prepareCreate(
+        logger.info("iteration [{}] - failed shards: {} (expected 0)", iteration, searchResponse.getFailedShards());
+        try (BackgroundIndexer indexer = new BackgroundIndexer("test", "type", client(), extraDocs)) {
+                    assertEquals("name_" + id, hit.getSourceAsMap().get("name"));
+            }
+                    .setWaitForEvents(Priority.LANGUID)
+    private String ensureReplicaNode(String index) {
+ * this work for additional information regarding copyright
+import java.util.concurrent.TimeUnit;
+            );
+            );
+ * Unless required by applicable law or agreed to in writing,
+              }
+            assertEquals(numberOfDocs, ids.size());
+        return Stream.concat(super.nodePlugins().stream(), Stream.of(RetentionLeaseSyncIntervalSettingPlugin.class))
+    @AwaitsFix(bugUrl = "Flaky test - fix before enabling")
+                },
+                "test",
+        int numberOfShards = numberOfShards();
+            assertNoTimeout(
+                    .prepareHealth()
+        super(settings);
+            prepareCreate(
+                logger.info(
+                  "store": true
+            )
+            // Verify source reconstruction for all documents
+            )
+                  "type": "keyword"
+    }
+        int waitFor = totalNumDocs / 10;
+            indexer.assertNoFailures();
+                logger.info("--> waiting for GREEN health status ...");
+ * You may obtain a copy of the License at
+            prepareCreate(
+            {
+                .setTrackTotalHits(true)
+                    .setWaitForEvents(Priority.LANGUID)
+            }, 30, TimeUnit.SECONDS);
+            assertNoTimeout(
+import org.apache.logging.log4j.Logger;
+    public RecoveryWhileUnderLoadIT(Settings settings) {
+            assertRandomDocsSource(50);
+import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
+import org.apache.lucene.tests.util.LuceneTestCase.AwaitsFix;
+import org.opensearch.plugins.Plugin;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+                    ShardId docShard = clusterService.operationRouting().shardId(state, "test", id, null);
+            ).setMapping(mapping)
+            }
+    public void testReplicaRecoveryWithDerivedSourceFromTranslog() throws Exception {
+            internalCluster().stopRandomNode(InternalTestCluster.nameFilter(replicaNode));
         assertAcked(
             prepareCreate(
-                "test",
-                3,
-                Settings.builder()
-                    .put(SETTING_NUMBER_OF_SHARDS, 1)
-                    .put(SETTING_NUMBER_OF_REPLICAS, 0)
-                    .put(IndexSettings.INDEX_DERIVED_SOURCE_SETTING.getKey(), true)
+            logger.info("--> waiting for {} docs to be indexed ...", waitFor);
+                "value": {
+    }
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
+    @ParametersFactory
+            indexer.assertNoFailures();
+            allowNodes("test", 4);
+            assertHitCount(iterationResults[i], numberOfDocs);
+import java.util.Map;
+                    .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)
+                2,
+            indexer.continueIndexing(extraDocs);
+                    .put(SETTING_NUMBER_OF_SHARDS, numberOfShards)
+                assertEquals(2, hit.getSourceAsMap().size());
                     .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC)
-                    .put("index.refresh_interval", -1)
-            ).setMapping(mapping)
-        );
-
-        // Index documents without refresh
-        int docCount = randomIntBetween(100, 200);
+            logger.info("--> refreshing the index");
+        final int totalNumDocs = scaledRandomIntBetween(200, 10000);
+        logger.info("--> creating test index with derived source enabled...");
+        return null;
+                    .put(IndexSettings.INDEX_DERIVED_SOURCE_SETTING.getKey(), true)
+import java.util.Set;
+            logger.info("--> marking and waiting for indexing threads to stop ...");
+                    }
+            protected XContentBuilder generateSource(long id, Random random) throws IOException {
+                    shardStats.getShardRouting().primary()
+            waitFor += extraDocs;
+            logger.info("--> waiting for GREEN health status ...");
+                    .setSettings(Settings.builder().put(SETTING_NUMBER_OF_REPLICAS, numNodes - 1))
+                            }
+                    assertNotNull(hit.getSourceAsMap().get("timestamp"));
+                .setQuery(matchAllQuery())
+            waitForDocs(waitFor, indexer);
+        waitForReplication();
+            iteration,
+                        }
+            );
+        if (replicaNode != null) {
+            }
+import org.opensearch.index.translog.Translog;
+                                .setPreference("_only_nodes:" + shardRouting.currentNodeId())
+            // make sure the cluster state is green, and all has been recovered
+            indexer.assertNoFailures();
+                    .put(SETTING_NUMBER_OF_SHARDS, 1)
+        try (BackgroundIndexer indexer = new BackgroundIndexer("test", null, client(), numDocs) {
+                client().admin()
+        final long numberOfDocs = ids.size();
+import java.util.Random;
+            iterateAssertCount(numberOfShards, 10, indexer.getIds());
         for (int i = 0; i < docCount; i++) {
-            if (i % 2 == 0) {
-                client().prepareIndex("test")
-                    .setId(String.valueOf(i))
+                1,
+        final String replicaNode = ensureReplicaNode("test");
+                }
+        }
+                    .get();
+                            GetResponse response = client().prepareGet("test", id)
+        assertAcked(
+                assertNotNull(hit.getSourceAsMap());
+            SearchResponse searchResponse = client().prepareSearch()
+        );
+                    shardStats.getShardRouting().id(),
+        public List<Setting<?>> getSettings() {
+            }
+                    .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC)
+        });
+            ensureGreen(TimeValue.timeValueMinutes(2));
+                    .put(SETTING_NUMBER_OF_SHARDS, numberOfShards)
+                logger.info("--> waiting for {} docs to be indexed ...", i);
+                "name": {
+                Settings.builder()
+        assertAcked(
+                client().admin()
+        logger.info(
+                assertNotNull(hit.getSourceAsMap().get("age"));
+            allowNodes("test", 2);
+            indexer.assertNoFailures();
+            searchResponse.getHits().getTotalHits().value(),
+        }
+        }
+                    .prepareHealth()
+        if (CollectionUtils.isEmpty(searchResponse.getShardFailures()) == false) {
+                    .get();
+            }
+        ensureGreen(TimeValue.timeValueMinutes(2));
+        final int numShards = between(3, 5);
+            );
+        }
+                );
+import org.opensearch.cluster.service.ClusterService;
+            client().admin().indices().prepareUpdateSettings("test").setSettings(Settings.builder().put(SETTING_NUMBER_OF_REPLICAS, 2))
+            iterateAssertCount(numberOfShards, 10, indexer.getIds());
+        Index idx = state.metadata().index(index).getIndex();
+        SearchResponse[] iterationResults = new SearchResponse[iterations];
+            logger.info("--> waiting for {} docs to be indexed ...", waitFor);
+        logger.info("--> creating test index ...");
+            waitFor += extraDocs;
+            // Verify final doc count and derived source reconstruction
+            searchResponse.getSuccessfulShards(),
+                    .setPreference("_replica")
+            }""";
+            // make sure the cluster state is green, and all has been recovered
+            extraDocs = totalNumDocs - waitFor;
+                    .cluster()
+            waitForDocs(totalNumDocs, indexer);
+                    .put(IndexSettings.INDEX_DERIVED_SOURCE_SETTING.getKey(), true)
+                    .get();
+            logger.info("--> {} docs indexed", waitFor);
+        String mapping = """
+            logger.info("--> verifying indexed content");
+            logger.info("--> waiting for GREEN health status ...");
+            logger.info("--> indexing threads stopped");
+            // Verify derived source reconstruction
+            waitForDocs(totalNumDocs, indexer);
+            assertNoTimeout(
+            logger.info("--> indexing threads stopped");
+        // Restart replica node and verify recovery
+ * software distributed under the License is distributed on an
+    private void iterateAssertCount(final int numberOfShards, final int iterations, final Set<String> ids) throws Exception {
+                "coordinates": {
+                "test",
+import java.util.List;
+                1,
+            );
+        ensureGreen(TimeValue.timeValueMinutes(2));
+                Map<String, Object> source = getResponse.getSourceAsMap();
+            {
                     .setSource("timestamp", "2023-01-01T01:20:30." + String.valueOf(i % 10).repeat(3) + "Z", "ip", "192.168.1." + i)
-                    .get();
-            } else {
-                client().prepareIndex("test")
-                    .setId(String.valueOf(i))
-                    .setSource("ip", "192.168.1." + i, "timestamp", "2023-01-01T01:20:30." + String.valueOf(i % 10).repeat(3) + "Z")
-                    .get();
+            extraDocs = totalNumDocs - waitFor;
+/*
+            SearchResponse primaryResponse = client().prepareSearch("test").setPreference("_primary").setTrackTotalHits(true).get();
+            indexer.assertNoFailures();
+                "test",
+        }
+                    int id = (Integer) hit.getSourceAsMap().get("value");
+        for (int i = docCount; i < docCount + additionalDocs; i++) {
+                Settings.builder()
+            {
+        String mapping = """
+    public void testRecoverWhileUnderLoadAllocateReplicasRelocatePrimariesTest() throws Exception {
+        );
+                    .setSource("coordinates", Geohash.stringEncode(40.0 + i, 75.0 + i) + i, "value", "fox_" + i + " in the field")
+            logger.info("--> waiting for relocations ...");
+        assertBusy(() -> {
+            extraDocs = totalNumDocs / 10;
+        logger.info("--> allow 2 nodes for index [test] with replica ...");
+        try (BackgroundIndexer indexer = new BackgroundIndexer("test", "type", client(), numDocs)) {
+                client().admin().indices().prepareUpdateSettings("test").setSettings(Settings.builder().put("number_of_replicas", 1)).get()
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAllSuccessful;
+                "timestamp": {
+            assertBusy(() -> {
+        for (int i = 0; i < totalNumDocs; i++) {
+    @AwaitsFix(bugUrl = "Flaky test - fix before enabling")
+            assertAfterRefreshAndWaitForReplication();
+    }
+    }
+        );
+            waitForDocs(waitFor, indexer);
+        int numNodes = 1;
+                "test",
+            assertHitCount(searchResponse, docCount + additionalDocs);
+                },
+            indexer.stopAndAwaitStopped();
+                    .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC)
+            }
+        assertBusy(() -> {
+                client().admin()
+            );
+            }""";
+                .setPreference("_replica")
+                Settings.builder()
+                ensureGreen(TimeValue.timeValueMinutes(5));
+    public void testRecoveryWithDerivedSourceEnabled() throws Exception {
+                assertNotNull(hit.getSourceAsMap());
+                assertNotNull(hit.getSourceAsMap());
+        String replicaNode = state.routingTable().index(idx).shard(0).replicaShards().get(0).currentNodeId();
+                client().admin().cluster().prepareHealth().setWaitForEvents(Priority.LANGUID).setTimeout("5m").setWaitForGreenStatus()
             }
         }
-
-        // Add replica before refresh
-        assertAcked(
-            client().admin().indices().prepareUpdateSettings("test").setSettings(Settings.builder().put(SETTING_NUMBER_OF_REPLICAS, 2))
-        );
-
-        ensureGreen(TimeValue.timeValueMinutes(2));
-
+            logger.info("--> {} docs indexed", waitFor);
+            iterateAssertCount(numberOfShards, 10, indexer.getIds());
         // Verify documents on replica
-        assertBusy(() -> {
-            SearchResponse searchResponse = client().prepareSearch("test").setPreference("_replica").setSize(docCount).get();
-            assertHitCount(searchResponse, docCount);
-
-            // Verify source reconstruction
-            for (SearchHit hit : searchResponse.getHits()) {
-                assertNotNull(hit.getSourceAsMap());
-                assertEquals(2, hit.getSourceAsMap().size());
-                String id = hit.getId();
-                assertEquals(
-                    "2023-01-01T01:20:30." + String.valueOf(Integer.valueOf(id) % 10).repeat(3) + "Z",
-                    hit.getSourceAsMap().get("timestamp")
-                );
-                assertEquals("192.168.1." + id, hit.getSourceAsMap().get("ip"));
-            }
-        });
     }
-
-    public void testReplicaRecoveryWithDerivedSourceFromTranslog() throws Exception {
-        logger.info("--> creating test index with derived source enabled...");
+        final int numDocs = scaledRandomIntBetween(200, 9999);
         String mapping = """
-            {
+        });
+            logger.info("--> trying to wait");
               "properties": {
-                "coordinates": {
-                  "type": "geo_point"
-                },
-                "value": {
-                  "type": "text",
-                  "store": true
-                }
-              }
-            }""";
-
-        // Create index with replica
+            indexer.stopAndAwaitStopped();
+        ClusterState state = client().admin().cluster().prepareState().get().getState();
+                    .prepareHealth()
+                  "type": "integer"
+                    .setWaitForNoRelocatingShards(true)
+    }
+                    .setTimeout("5m")
         assertAcked(
-            prepareCreate(
-                "test",
+        for (int i = 0; i < docCount; i++) {
+                assertHitCount(replicaResponse, numDocs);
+                client().prepareIndex("test")
+        logger.info(
+        int extraDocs = waitFor;
+            );
+                logger.info("--> {} docs indexed", i);
+                client().prepareIndex("test")
+                    .setSource("ip", "192.168.1." + i, "timestamp", "2023-01-01T01:20:30." + String.valueOf(i % 10).repeat(3) + "Z")
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
+                    .prepareUpdateSettings("test")
+                    .field("name", "name_" + id)
+                1,
+            logger.info("--> waiting for {} docs to be indexed ...", totalNumDocs);
+            logger.info("--> flushing the index ....");
+                    .setTrackTotalHits(true)
+                }
+                    .addSort("value", SortOrder.ASC)
+import org.apache.logging.log4j.LogManager;
+                Settings.builder()
+        boolean error = false;
+                for (SearchHit hit : replicaResponse.getHits()) {
+ * ownership. Elasticsearch licenses this file to you under
+        try (BackgroundIndexer indexer = new BackgroundIndexer("test", null, client(), extraDocs) {
+ * Licensed to Elasticsearch under one or more contributor
+                    .put(IndexService.RETENTION_LEASE_SYNC_INTERVAL_SETTING.getKey(), randomFrom("100ms", "1s", "5s", "30s", "60s"))
+            logger.info("--> marking and waiting for indexing threads to stop ...");
+            } else {
+import org.opensearch.core.xcontent.XContentBuilder;
+            indexer.assertNoFailures();
                 2,
                 Settings.builder()
-                    .put(SETTING_NUMBER_OF_SHARDS, 1)
-                    .put(SETTING_NUMBER_OF_REPLICAS, 1)
-                    .put(IndexSettings.INDEX_DERIVED_SOURCE_SETTING.getKey(), true)
-                    .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC)
-            ).setMapping(mapping)
-        );
-
-        ensureGreen();
-
-        // Index documents with immediate visibility
-        int docCount = randomIntBetween(100, 200);
-        for (int i = 0; i < docCount; i++) {
-            if (i % 2 == 0) {
-                client().prepareIndex("test")
-                    .setId(String.valueOf(i))
-                    .setSource("coordinates", Geohash.stringEncode(40.0 + i, 75.0 + i) + i, "value", "fox_" + i + " in the field")
-                    .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)
-                    .get();
-            } else {
-                client().prepareIndex("test")
-                    .setId(String.valueOf(i))
-                    .setSource("value", "fox_" + i + " in the field", "coordinates", Geohash.stringEncode(40.0 + i, 75.0 + i) + i)
-                    .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)
-                    .get();
-            }
-        }
-
-        // Force flush to ensure documents are in segments
-        client().admin().indices().prepareFlush("test").setForce(true).get();
-
-        // Kill replica node and index more documents
-        final String replicaNode = ensureReplicaNode("test");
-        if (replicaNode != null) {
-            internalCluster().stopRandomNode(InternalTestCluster.nameFilter(replicaNode));
-        }
-
         int additionalDocs = randomIntBetween(50, 100);
-        for (int i = docCount; i < docCount + additionalDocs; i++) {
-            client().prepareIndex("test")
-                .setId(String.valueOf(i))
-                .setSource("coordinates", Geohash.stringEncode(40.0 + i, 75.0 + i) + i, "value", "fox_" + i + " in the field")
-                .get();
-        }
-
-        // Restart replica node and verify recovery
-        internalCluster().startNode();
-        ensureGreen(TimeValue.timeValueMinutes(2));
-
-        // Verify all documents on replica including those recovered from translog
-        assertBusy(() -> {
-            SearchResponse searchResponse = client().prepareSearch("test")
-                .setPreference("_replica")
-                .setSize(docCount + additionalDocs)
-                .get();
-            assertHitCount(searchResponse, docCount + additionalDocs);
-
-            // Verify source reconstruction for all documents
-            for (SearchHit hit : searchResponse.getHits()) {
-                assertNotNull(hit.getSourceAsMap());
-                assertEquals(2, hit.getSourceAsMap().size());
-                String id = hit.getId();
-                assertNotNull(hit.getSourceAsMap().get("coordinates"));
-                assertEquals("fox_" + id + " in the field", hit.getSourceAsMap().get("value"));
-            }
-        });
-    }
-
-    @AwaitsFix(bugUrl = "Flaky test - fix before enabling")
-    public void testRecoverWhileUnderLoadWithDerivedSource() throws Exception {
-        logger.info("--> creating test index with derived source enabled...");
-        String mapping = """
-            {
-              "properties": {
-                "name": {
-                  "type": "keyword"
-                },
-                "value": {
-                  "type": "integer"
-                },
-                "timestamp": {
-                  "type": "date"
-                }
-              }
-            }""";
-
-        int numberOfShards = numberOfShards();
-        assertAcked(
-            prepareCreate(
+                .addSort("id", SortOrder.ASC)
+            indexer.assertNoFailures();
+    public static final class RetentionLeaseSyncIntervalSettingPlugin extends Plugin {
                 "test",
-                1,
-                Settings.builder()
-                    .put(SETTING_NUMBER_OF_SHARDS, numberOfShards)
-                    .put(SETTING_NUMBER_OF_REPLICAS, 1)
-                    .put(IndexSettings.INDEX_DERIVED_SOURCE_SETTING.getKey(), true)
-                    .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC)
-            ).setMapping(mapping)
-        );
-
-        final int totalNumDocs = scaledRandomIntBetween(2000, 10000);
-        int waitFor = totalNumDocs / 10;
-        int extraDocs = waitFor;
-
-        // Custom indexer for derived source documents
-        try (BackgroundIndexer indexer = new BackgroundIndexer("test", null, client(), extraDocs) {
-            @Override
-            protected XContentBuilder generateSource(long id, Random random) throws IOException {
-                return jsonBuilder().startObject()
-                    .field("name", "name_" + id)
-                    .field("value", id)
-                    .field("timestamp", System.currentTimeMillis())
-                    .endObject();
-            }
-        }) {
-            indexer.setUseAutoGeneratedIDs(true);
+                    .setId(String.valueOf(i))
             logger.info("--> waiting for {} docs to be indexed ...", waitFor);
-            waitForDocs(waitFor, indexer);
-            indexer.assertNoFailures();
-
-            extraDocs = totalNumDocs / 10;
-            waitFor += extraDocs;
-            indexer.continueIndexing(extraDocs);
-            logger.info("--> flushing the index ....");
-            client().admin().indices().prepareFlush().execute().actionGet();
-
-            logger.info("--> waiting for {} docs to be indexed ...", waitFor);
-            waitForDocs(waitFor, indexer);
-            indexer.assertNoFailures();
-
-            extraDocs = totalNumDocs - waitFor;
-            indexer.continueIndexing(extraDocs);
-            logger.info("--> allow 2 nodes for index [test] ...");
-            allowNodes("test", 2);
-
-            logger.info("--> waiting for GREEN health status ...");
-            // make sure the cluster state is green, and all has been recovered
-            assertNoTimeout(
-                client().admin().cluster().prepareHealth().setWaitForEvents(Priority.LANGUID).setTimeout("5m").setWaitForGreenStatus()
-            );
-
-            logger.info("--> waiting for {} docs to be indexed ...", totalNumDocs);
-            waitForDocs(totalNumDocs, indexer);
-            indexer.assertNoFailures();
-
+import org.opensearch.geometry.utils.Geohash;
             logger.info("--> marking and waiting for indexing threads to stop ...");
-            indexer.stopAndAwaitStopped();
-
-            logger.info("--> refreshing the index");
-            client().admin().indices().prepareRefresh().get();
-
-            logger.info("--> verifying indexed content");
-
-            // Verify docs on primary
-            SearchResponse primaryResponse = client().prepareSearch("test").setPreference("_primary").setTrackTotalHits(true).get();
-            assertHitCount(primaryResponse, totalNumDocs);
-
-            // Verify docs and derived source on replica
-            assertBusy(() -> {
-                SearchResponse replicaResponse = client().prepareSearch("test")
-                    .setPreference("_replica")
-                    .setTrackTotalHits(true)
-                    .setSize(totalNumDocs)
-                    .addSort("value", SortOrder.ASC)
-                    .get();
-
-                assertHitCount(replicaResponse, totalNumDocs);
-
-                // Verify source reconstruction on replica
-                for (SearchHit hit : replicaResponse.getHits()) {
-                    assertNotNull(hit.getSourceAsMap());
-                    assertEquals(3, hit.getSourceAsMap().size());
-                    int id = (Integer) hit.getSourceAsMap().get("value");
-                    assertEquals("name_" + id, hit.getSourceAsMap().get("name"));
-                    assertNotNull(hit.getSourceAsMap().get("timestamp"));
-                }
-            }, 30, TimeUnit.SECONDS);
-
-            // Additional source verification with random sampling
-            assertRandomDocsSource(50);
-        }
-    }
-
-    public void testRecoverWithRelocationAndDerivedSource() throws Exception {
-        final int numShards = between(3, 5);
-        logger.info("--> creating test index with derived source enabled...");
-
-        String mapping = """
-            {
-              "properties": {
-                "name": {
-                  "type": "keyword"
-                },
-                "value": {
-                  "type": "integer"
-                },
-                "timestamp": {
-                  "type": "date"
-                }
-              }
-            }""";
-
-        assertAcked(
-            prepareCreate(
-                "test",
-                1,
-                Settings.builder()
-                    .put(SETTING_NUMBER_OF_SHARDS, numShards)
-                    .put(SETTING_NUMBER_OF_REPLICAS, 0)
-                    .put(IndexSettings.INDEX_DERIVED_SOURCE_SETTING.getKey(), true)
-                    .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC)
-                    .put(IndexService.RETENTION_LEASE_SYNC_INTERVAL_SETTING.getKey(), "100ms")
-            ).setMapping(mapping)
-        );
-        int numNodes = 1;
-        final int numDocs = scaledRandomIntBetween(1500, 2000);
-
-        try (BackgroundIndexer indexer = new BackgroundIndexer("test", null, client(), numDocs) {
-            @Override
-            protected XContentBuilder generateSource(long id, Random random) throws IOException {
-                return jsonBuilder().startObject()
-                    .field("name", "name_" + id)
-                    .field("value", id)
-                    .field("timestamp", System.currentTimeMillis())
-                    .endObject();
-            }
-        }) {
-
-            indexer.setUseAutoGeneratedIDs(true);
+        ensureGreen();
+            logger.info("--> {} docs indexed", waitFor);
             for (int i = 0; i < numDocs; i += scaledRandomIntBetween(500, Math.min(1000, numDocs))) {
-                indexer.assertNoFailures();
-                logger.info("--> waiting for {} docs to be indexed ...", i);
-                waitForDocs(i, indexer);
-                internalCluster().startDataOnlyNode();
-                numNodes++;
-
-                logger.info("--> waiting for GREEN health status ...");
-                ensureGreen(TimeValue.timeValueMinutes(2));
-            }
-
-            logger.info("--> marking and waiting for indexing threads to stop ...");
-            indexer.stopAndAwaitStopped();
-
-            // Add replicas after stopping indexing
-            logger.info("--> adding replicas ...");
-            assertAcked(
-                client().admin()
-                    .indices()
-                    .prepareUpdateSettings("test")
-                    .setSettings(Settings.builder().put(SETTING_NUMBER_OF_REPLICAS, numNodes - 1))
                     .get()
-            );
-            ensureGreen(TimeValue.timeValueMinutes(2));
-
-            logger.info("--> refreshing the index");
-            client().admin().indices().prepareRefresh().get();
-
-            // Verify final doc count and derived source reconstruction
-            SearchResponse primaryResponse = client().prepareSearch("test").setPreference("_primary").setTrackTotalHits(true).get();
-            assertHitCount(primaryResponse, numDocs);
-
-            assertBusy(() -> {
-                SearchResponse replicaResponse = client().prepareSearch("test")
-                    .setPreference("_replica")
-                    .setTrackTotalHits(true)
-                    .setSize(numDocs)
-                    .addSort("value", SortOrder.ASC)
-                    .get();
-
-                assertHitCount(replicaResponse, numDocs);
-
-                // Verify source reconstruction on replica
-                for (SearchHit hit : replicaResponse.getHits()) {
-                    assertNotNull(hit.getSourceAsMap());
-                    assertEquals(3, hit.getSourceAsMap().size());
-                    int id = (Integer) hit.getSourceAsMap().get("value");
-                    assertEquals("name_" + id, hit.getSourceAsMap().get("name"));
-                    assertNotNull(hit.getSourceAsMap().get("timestamp"));
-                }
-            }, 30, TimeUnit.SECONDS);
-
-            assertRandomDocsSource(100);
-        }
-    }
-
-    private void assertRandomDocsSource(int sampleSize) {
-        // Random sampling of documents for detailed source verification
-        for (int i = 0; i < sampleSize; i++) {
-            String id = String.valueOf(randomIntBetween(0, 100));
-            GetResponse getResponse = client().prepareGet("test", id).setPreference("_replica").get();
-
-            if (getResponse.isExists()) {
-                Map<String, Object> source = getResponse.getSourceAsMap();
-                assertNotNull(source);
-                assertEquals(3, source.size());
-                assertEquals("name_" + id, source.get("name"));
-                assertEquals(Integer.parseInt(id), source.get("value"));
+            logger.info("--> {} docs indexed", waitFor);
+                    .put(SETTING_NUMBER_OF_SHARDS, numberOfShards)
+                // Occasionally flush to create new segments
+            if (i % 2 == 0) {
+        client().admin().indices().prepareFlush("test").setForce(true).get();
+                for (String id : ids) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                assertNotNull(hit.getSourceAsMap().get("coordinates"));
                 assertNotNull(source.get("timestamp"));
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+            for (ShardStats shardStats : indicesStatsResponse.getShards()) {
+                    .setWaitForEvents(Priority.LANGUID)
+        // Verify documents on replica
+/*
+import org.opensearch.action.get.GetResponse;
+        if (error) {
+                    .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)
+                "timestamp": {
+                    .field("value", id)
+                for (SearchHit hit : replicaResponse.getHits()) {
+            waitForDocs(totalNumDocs, indexer);
+        );
+            // now start more nodes, while we index
+            allowNodes("test", 3);
+import org.opensearch.action.admin.indices.stats.IndicesStatsResponse;
+                assertFalse("An error occurred while waiting", errorOccurred);
+    }
+            assertNoTimeout(
+        final int totalNumDocs = scaledRandomIntBetween(200, 10000);
+            SearchResponse primaryResponse = client().prepareSearch("test").setPreference("_primary").setTrackTotalHits(true).get();
+                assertEquals("192.168.1." + id, hit.getSourceAsMap().get("ip"));
+            logger.info("--> allow 4 nodes for index [test] ...");
+            waitForDocs(waitFor, indexer);
+import org.opensearch.cluster.ClusterState;
+        for (int i = 0; i < iterations; i++) {
+            logger.info("--> waiting for {} docs to be indexed ...", waitFor);
+        assertBusy(() -> {
+                    .put(IndexSettings.INDEX_DERIVED_SOURCE_SETTING.getKey(), true)
+            waitForDocs(waitFor, indexer);
+import org.opensearch.common.Priority;
+            logger.info("--> {} docs indexed", totalNumDocs);
+            waitFor += extraDocs;
+            ).setMapping(mapping)
+                "test",
+        int numberOfShards = numberOfShards();
+            "iteration [{}] - returned documents: {} (expected {})",
+                    .put(SETTING_NUMBER_OF_SHARDS, numShards)
+        assertAcked(
+                    .put(SETTING_NUMBER_OF_SHARDS, numShards)
+                                .get();
+                internalCluster().startDataOnlyNode();
+        }
+                    .setId(String.valueOf(i))
+                    .field("name", "name_" + id)
+        allowNodes("test", 2);
+import org.opensearch.action.search.SearchResponse;
+        String mapping = """
+                    assertEquals(3, hit.getSourceAsMap().size());
+                    .field("value", id)
+        logger.info("--> creating test index with derived source enabled...");
+        int numberOfShards = numberOfShards();
+                }
+        final int totalNumDocs = scaledRandomIntBetween(2000, 10000);
+            for (SearchHit hit : searchResponse.getHits()) {
+        final int numDocs = scaledRandomIntBetween(1500, 2000);
+    public void testRecoverWhileUnderLoadWithReducedAllowedNodes() throws Exception {
+        }
+                }
+                "ip": {
+                    .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC)
+        // Kill replica node and index more documents
+                client().admin().indices().prepareFlush("test").setForce(true).get();
+ * KIND, either express or implied.  See the License for the
+        );
+            ClusterService clusterService = clusterService();
+            logger.info("--> marking and waiting for indexing threads to stop ...");
+            // now start another node, while we index
+            protected XContentBuilder generateSource(long id, Random random) throws IOException {
+    }
+        }) {
+        assertAcked(
+/*
+        // Index documents with immediate visibility
+ * The OpenSearch Contributors require contributions made to
+                        .get();
+            numberOfDocs
+        logger.info("--> creating test index with derived source enabled...");
+import org.opensearch.common.unit.TimeValue;
+            logger.info("--> verifying indexed content");
+            logger.info("--> {} docs indexed", waitFor);
+    @AwaitsFix(bugUrl = "Flaky test - fix before enabling")
+                    docsStats.getCount(),
+        // Verify all documents on replica including those recovered from translog
+        int numberOfShards = numberOfShards();
+            logger.info("--> waiting for {} docs to be indexed ...", totalNumDocs);
+import org.opensearch.action.admin.indices.stats.ShardStats;
+                allowNodes("test", allowNodes);
+                3,
             }
-        }
     }
-
-    private String ensureReplicaNode(String index) {
-        ClusterState state = client().admin().cluster().prepareState().get().getState();
-        Index idx = state.metadata().index(index).getIndex();
-        String replicaNode = state.routingTable().index(idx).shard(0).replicaShards().get(0).currentNodeId();
+        try (BackgroundIndexer indexer = new BackgroundIndexer("test", "type", client(), extraDocs)) {
+    }
+                    .addSort("value", SortOrder.ASC)
+                for (int i = 0; i < iterations; i++) {
+import org.opensearch.search.sort.SortOrder;
+                "timestamp": {
+        logger.info("--> creating test index ...");
+            extraDocs = totalNumDocs / 10;
+                client().prepareIndex("test")
+import org.opensearch.common.settings.Settings;
+                    .put(SETTING_NUMBER_OF_REPLICAS, 0)
+            ).setMapping(mapping)
+            logger.info("--> indexing threads stopped");
+            assertAfterRefreshAndWaitForReplication();
+            allowNodes("test", 1);
+                    .setWaitForNoRelocatingShards(true)
+            prepareCreate(
+    private void logSearchResponse(int numberOfShards, long numberOfDocs, int iteration, SearchResponse searchResponse) {
+        assertAcked(
+                    .setTimeout("5m")
+            indexer.stopAndAwaitStopped();
+                    .prepareHealth()
+        );
+            final ClusterState state = clusterService.state();
+            logger.info("--> waiting for {} docs to be indexed ...", waitFor);
+            client().admin().indices().prepareFlush().execute().actionGet();
+                    .setTimeout("5m")
+            SearchResponse searchResponse = client().prepareSearch("test").setPreference("_replica").setSize(totalNumDocs).get();
+            client().admin().indices().prepareFlush().execute().actionGet();
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+                    .put("index.refresh_interval", -1)
+                .get();
+                    .endObject();
+                Settings.builder()
+            logger.info("--> indexing threads stopped");
+import org.opensearch.search.SearchHit;
+                    .put(SETTING_NUMBER_OF_SHARDS, 1)
+                assertEquals(Integer.parseInt(id), source.get("value"));
+        return replicationSettings;
+        );
+                "value": {
+                },
+        logger.info("--> creating test index ...");
+    @AwaitsFix(bugUrl = "Flaky test - fix before enabling")
+            }
+            waitForDocs(waitFor, indexer);
+                    assertNotNull(hit.getSourceAsMap().get("timestamp"));
+            }, 30, TimeUnit.SECONDS);
+            logger.info("--> waiting for {} docs to be indexed ...", waitFor);
+                    .setTimeout("5m")
+                    .put(SETTING_NUMBER_OF_REPLICAS, 1)
+            prepareCreate(
+                .setSize(docCount + additionalDocs)
+import org.opensearch.index.IndexService;
+            );
+                    .get();
+            assertAllSuccessful(actionGet);
+            assertAfterRefreshAndWaitForReplication();
+            if (i % 2 == 0) {
+                    .setWaitForNoRelocatingShards(true)
+              }
+    public static Collection<Object[]> parameters() {
+    public void testRecoverWithRelocationAndDerivedSource() throws Exception {
+            indexer.continueIndexing(extraDocs);
+        }
+                "age": {
+                  "type": "geo_point"
+    private void assertRandomDocsSource(int sampleSize) {
+            extraDocs = totalNumDocs / 10;
+            // now flush, just to make sure we have some data in the index, not just translog
+        }) {
+                    }
+            client().prepareIndex("test")
+        int extraDocs = waitFor;
+                  "type": "date"
+        int extraDocs = waitFor;
+            logger.info("--> waiting for {} docs to be indexed ...", waitFor);
+                    .put(SETTING_NUMBER_OF_REPLICAS, 1)
+              "properties": {
+import org.opensearch.core.common.util.CollectionUtils;
+                    .put(SETTING_NUMBER_OF_SHARDS, numberOfShards)
+import org.opensearch.test.InternalTestCluster;
+            // Verify source reconstruction
+    }
+import java.util.stream.Collectors;
+            return Collections.singletonList(IndexService.RETENTION_LEASE_SYNC_INTERVAL_SETTING);
+            logger.info("--> allow 2 nodes for index [test] ...");
+            indexer.assertNoFailures();
+import org.opensearch.test.BackgroundIndexer;
+ */
+                assertEquals("name_" + id, source.get("name"));
+                client().prepareIndex("test")
+        final int totalNumDocs = scaledRandomIntBetween(200, 1000);
+            logger.info("--> waiting for relocations ...");
+ * specific language governing permissions and limitations
+                    .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC)
+    }
+@AwaitsFix(bugUrl = "flaky test - enable after fix")
+                "value": {
+                    .cluster()
+            assertHitCount(searchResponse, totalNumDocs);
+                logger.info("--> waiting for {} docs to be indexed ...", i);
+                error = true;
+        logger.info("--> creating test index with derived source enabled...");
+ * the Apache License, Version 2.0 (the "License"); you may
+import java.util.Arrays;
+                  "type": "date"
+            }
         String clusterManagerNode = internalCluster().getClusterManagerName();
-        if (!replicaNode.equals(clusterManagerNode)) {
-            state.nodes().get(replicaNode).getName();
+            prepareCreate(
+            logger.info("--> waiting for {} docs to be indexed ...", waitFor);
+                DocsStats docsStats = shardStats.getStats().docs;
         }
-        return null;
+            logger.info("--> allow 4 nodes for index [test] ...");
+            if (searchResponse.getHits().getTotalHits().value() != numberOfDocs) {
+    public void testRecoverWhileUnderLoadAllocateReplicasTest() throws Exception {
+import org.opensearch.core.index.Index;
+            client().admin().indices().prepareRefresh().get();
+            );
+        for (int i = 0; i < iterations; i++) {
+        );
+            assertHitCount(primaryResponse, numDocs);
+                        .setQuery(matchAllQuery())
+        try (BackgroundIndexer indexer = new BackgroundIndexer("test", "type", client(), extraDocs)) {
+            indexer.continueIndexing(extraDocs);
+            indexer.stopAndAwaitStopped();
+ */
+                waitForDocs(i, indexer);
+import org.opensearch.core.index.shard.ShardId;
+            @Override
+        assertAcked(
+                String id = hit.getId();
+            assertHitCount(searchResponse, docCount);
+                    .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC)
+    public void testReplicaRecoveryWithDerivedSourceBeforeRefresh() throws Exception {
+                        .setTrackTotalHits(true)
+                    .put(SETTING_NUMBER_OF_SHARDS, numberOfShards)
+            client().admin().indices().prepareRefresh().get();
+                    .field("timestamp", System.currentTimeMillis())
+            }
+            indexer.assertNoFailures();
+ * GitHub history for details.
+            ensureGreen(TimeValue.timeValueMinutes(5));
+                assertEquals(
+                    .put(SETTING_NUMBER_OF_REPLICAS, 0)
+    private final Logger logger = LogManager.getLogger(RecoveryWhileUnderLoadIT.class);
+ *
+import java.util.Collections;
+        int docCount = randomIntBetween(100, 200);
+        );
+                    .setWaitForEvents(Priority.LANGUID)
+                    .setWaitForGreenStatus()
+                  "type": "keyword"
+                    .put(SETTING_NUMBER_OF_REPLICAS, 1)
+            for (int i = 0; i < numDocs; i += scaledRandomIntBetween(100, Math.min(1000, numDocs))) {
+        });
+                ensureGreen(TimeValue.timeValueMinutes(2));
+            SearchResponse searchResponse = client().prepareSearch("test")
+                    .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC)
+            indexer.continueIndexing(extraDocs);
+            waitFor += extraDocs;
+            for (SearchHit hit : searchResponse.getHits()) {
+            }""";
+            logger.info("--> {} docs indexed", totalNumDocs);
+            assertNoTimeout(
+                assertNotNull(source);
+            waitForDocs(waitFor, indexer);
+              "properties": {
+                    .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Translog.Durability.ASYNC)
+                .get();
+                    "shard [{}] - count {}, primary {}",
+            allowNodes("test", 4);
+                    assertNotNull(hit.getSourceAsMap());
+                3,
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
+            // if there was an error we try to wait and see if at some point it'll get fixed
+        @Override
+                "name": {
+            // now flush, just to make sure we have some data in the index, not just translog
+ * compatible open source license.
+        internalCluster().startNode();
+                String id = hit.getId();
+        int waitFor = totalNumDocs / 10;
+            logger.info("--> {} docs indexed", totalNumDocs);
+                    assertEquals(3, hit.getSourceAsMap().size());
+                client().admin()
+        int extraDocs = waitFor;
+                  "type": "text",
+            assertNoTimeout(
+              "properties": {
+            logger.info("--> allow 1 nodes for index [test] ...");
+import static org.opensearch.index.query.QueryBuilders.matchAllQuery;
+        );
+            {
+                }
+            }, 5, TimeUnit.MINUTES);
+            logger.info("--> allow 2 nodes for index [test] ...");
     }
-}
+                assertNotNull(hit.getSourceAsMap().get("name"));
+        assertAcked(
+        logger.info("--> creating test index with derived source enabled...");
+              "properties": {
+            logger.info("--> marking and waiting for indexing threads to stop ...");
+            "iteration [{}] - successful shards: {} (expected {})",
+                    SearchResponse searchResponse = client().prepareSearch()
+        for (int i = 0; i < sampleSize; i++) {
+        );
+        String mapping = """
+            numberOfShards
+            // Add replicas after stopping indexing
+        // Random sampling of documents for detailed source verification
+            ).setMapping(mapping)
+                );
+            assertAcked(
+                }
+            }
+              }
+        logger.info("--> waiting for GREEN health status ...");
+ * SPDX-License-Identifier: Apache-2.0
+        int numberOfShards = numberOfShards();
+            indexer.assertNoFailures();
+            // now flush, just to make sure we have some data in the index, not just translog
+                logger.info("--> waiting for GREEN health status ...");
+            .collect(Collectors.toList());
+            extraDocs = totalNumDocs / 10;
+                                logger.info("missing id [{}] on shard {}", id, shardRouting);
+            logger.info("--> waiting for {} docs to be indexed ...", totalNumDocs);
+            state.nodes().get(replicaNode).getName();
+ * Modifications Copyright OpenSearch Contributors. See
+            )
+                client().admin().cluster().prepareHealth().setWaitForEvents(Priority.LANGUID).setTimeout("5m").setWaitForGreenStatus()
+            // Additional source verification with random sampling
+                assertEquals("fox_" + id + " in the field", hit.getSourceAsMap().get("value"));
+                SearchResponse replicaResponse = client().prepareSearch("test")
+            GetResponse getResponse = client().prepareGet("test", id).setPreference("_replica").get();
+                }
+                Settings.builder()
+                    .setTimeout("5m")
+import org.opensearch.cluster.routing.ShardRouting;
+        if (!replicaNode.equals(clusterManagerNode)) {
+                    .setWaitForEvents(Priority.LANGUID)
+            indexer.continueIndexing(extraDocs);
+            for (int shard = 0; shard < numberOfShards; shard++) {
+            waitForDocs(waitFor, indexer);
+            indexer.assertNoFailures();
+            assertAcked(
+            }""";
+            )
+            logger.info("--> flushing the index ....");
+                    if (searchResponse.getHits().getTotalHits().value() != numberOfDocs) {
+            assertBusy(() -> {
+            RefreshResponse actionGet = client().admin().indices().prepareRefresh().get();
+ */
+                    .cluster()
+                            if (response.isExists()) {
+            logger.info("--> refreshing the index");
+        }
+            logger.info("--> refreshing the index");
+                    .put(IndexSettings.INDEX_DERIVED_SOURCE_SETTING.getKey(), true)
+        }
+                .setSize((int) numberOfDocs)
+            }
+                // Verify source reconstruction on replica
+            logger.info("--> flushing the index ....");
+                },
+            }
+            IndicesStatsResponse indicesStatsResponse = client().admin().indices().prepareStats().get();
+            if (getResponse.isExists()) {
+            assertBusy(() -> {
+        // Force flush to ensure documents are in segments
+                    hit.getSourceAsMap().get("timestamp")

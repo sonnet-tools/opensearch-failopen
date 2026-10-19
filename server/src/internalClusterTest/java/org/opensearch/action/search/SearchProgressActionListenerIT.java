@@ -1,221 +1,197 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.search;
-
-import org.apache.lucene.search.TotalHits;
-import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsResponse;
-import org.opensearch.core.tasks.TaskId;
 import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.search.SearchShardTarget;
-import org.opensearch.search.aggregations.AggregationBuilders;
-import org.opensearch.search.aggregations.InternalAggregations;
-import org.opensearch.search.builder.SearchSourceBuilder;
-import org.opensearch.search.sort.FieldSortBuilder;
-import org.opensearch.search.sort.SortOrder;
-import org.opensearch.test.OpenSearchSingleNodeTestCase;
-import org.opensearch.transport.client.Client;
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.lessThan;
-
-public class SearchProgressActionListenerIT extends OpenSearchSingleNodeTestCase {
-    private List<SearchShard> shards;
-
-    public void setUp() throws Exception {
-        super.setUp();
-        shards = createRandomIndices(client());
-    }
-
+            @Override
     public void testSearchProgressSimple() throws Exception {
+ * KIND, either express or implied.  See the License for the
         for (SearchType searchType : SearchType.values()) {
-            SearchRequest request = new SearchRequest("index-*").searchType(searchType).source(new SearchSourceBuilder().size(0));
-            testCase((NodeClient) client(), request, shards, false);
+            public void onFailure(Exception e) {
+import static org.hamcrest.Matchers.equalTo;
         }
-    }
-
-    public void testSearchProgressWithHits() throws Exception {
-        for (SearchType searchType : SearchType.values()) {
-            SearchRequest request = new SearchRequest("index-*").searchType(searchType).source(new SearchSourceBuilder().size(10));
-            testCase((NodeClient) client(), request, shards, true);
-        }
-    }
-
-    public void testSearchProgressWithAggs() throws Exception {
-        for (SearchType searchType : SearchType.values()) {
-            SearchRequest request = new SearchRequest("index-*").searchType(searchType)
-                .source(new SearchSourceBuilder().size(0).aggregation(AggregationBuilders.max("max").field("number")));
-            testCase((NodeClient) client(), request, shards, false);
-        }
-    }
-
-    public void testSearchProgressWithHitsAndAggs() throws Exception {
-        for (SearchType searchType : SearchType.values()) {
-            SearchRequest request = new SearchRequest("index-*").searchType(searchType)
-                .source(new SearchSourceBuilder().size(10).aggregation(AggregationBuilders.max("max").field("number")));
-            testCase((NodeClient) client(), request, shards, true);
-        }
-    }
-
-    public void testSearchProgressWithQuery() throws Exception {
-        for (SearchType searchType : SearchType.values()) {
-            SearchRequest request = new SearchRequest("index-*").searchType(searchType)
-                .source(new SearchSourceBuilder().size(10).query(QueryBuilders.termQuery("foo", "bar")));
-            testCase((NodeClient) client(), request, shards, true);
-        }
-    }
-
-    public void testSearchProgressWithShardSort() throws Exception {
-        SearchRequest request = new SearchRequest("index-*").source(
-            new SearchSourceBuilder().size(0).sort(new FieldSortBuilder("number").order(SortOrder.DESC))
-        );
-        request.setPreFilterShardSize(1);
-        List<SearchShard> sortShards = new ArrayList<>(shards);
-        Collections.sort(sortShards, Comparator.reverseOrder());
-        testCase((NodeClient) client(), request, sortShards, false);
-    }
-
-    private void testCase(NodeClient client, SearchRequest request, List<SearchShard> expectedShards, boolean hasFetchPhase)
-        throws InterruptedException {
-        AtomicInteger numQueryResults = new AtomicInteger();
-        AtomicInteger numQueryFailures = new AtomicInteger();
-        AtomicInteger numFetchResults = new AtomicInteger();
-        AtomicInteger numFetchFailures = new AtomicInteger();
-        AtomicInteger numReduces = new AtomicInteger();
-        AtomicReference<SearchResponse> searchResponse = new AtomicReference<>();
-        AtomicReference<List<SearchShard>> shardsListener = new AtomicReference<>();
-        CountDownLatch latch = new CountDownLatch(1);
-        SearchProgressActionListener listener = new SearchProgressActionListener() {
-            @Override
-            public void onListShards(
-                List<SearchShard> shards,
-                List<SearchShard> skippedShards,
-                SearchResponse.Clusters clusters,
-                boolean fetchPhase
-            ) {
-                shardsListener.set(shards);
-                assertEquals(fetchPhase, hasFetchPhase);
+ *    http://www.apache.org/licenses/LICENSE-2.0
             }
-
-            @Override
-            public void onQueryResult(int shardIndex) {
+            public void onFetchFailure(int shardIndex, SearchShardTarget shardTarget, Exception exc) {
+import org.opensearch.search.builder.SearchSourceBuilder;
+ * not use this file except in compliance with the License.
+            testCase((NodeClient) client(), request, shards, false);
+            public SearchTask createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
+        SearchProgressActionListener listener = new SearchProgressActionListener() {
+        }
+        AtomicReference<List<SearchShard>> shardsListener = new AtomicReference<>();
+    public void testSearchProgressWithHits() throws Exception {
+ * You may obtain a copy of the License at
+                numFetchResults.incrementAndGet();
+        return Arrays.stream(resp.getGroups()).map(e -> new SearchShard(null, e.getShardId())).sorted().collect(Collectors.toList());
+            assertThat(numFetchFailures.get(), equalTo(0));
+        assertThat(numQueryResults.get(), equalTo(searchResponse.get().getSuccessfulShards()));
+        for (SearchType searchType : SearchType.values()) {
                 assertThat(shardIndex, lessThan(shardsListener.get().size()));
+import org.opensearch.search.aggregations.AggregationBuilders;
+                searchResponse.set(response);
+        AtomicInteger numFetchResults = new AtomicInteger();
+            }
+import java.util.concurrent.CountDownLatch;
+import org.opensearch.search.sort.SortOrder;
+            @Override
+        assertThat(numQueryFailures.get(), equalTo(searchResponse.get().getFailedShards()));
+            testCase((NodeClient) client(), request, shards, true);
+import org.opensearch.core.tasks.TaskId;
+            public void onFetchResult(int shardIndex) {
+        }
+        for (SearchType searchType : SearchType.values()) {
+        }, listener);
+ *
+import java.util.Map;
+        } else {
+import java.util.concurrent.atomic.AtomicInteger;
                 numQueryResults.incrementAndGet();
             }
-
-            @Override
-            public void onQueryFailure(int shardIndex, SearchShardTarget shardTarget, Exception exc) {
-                assertThat(shardIndex, lessThan(shardsListener.get().size()));
-                numQueryFailures.incrementAndGet();
-            }
-
-            @Override
-            public void onFetchResult(int shardIndex) {
-                assertThat(shardIndex, lessThan(shardsListener.get().size()));
-                numFetchResults.incrementAndGet();
-            }
-
-            @Override
-            public void onFetchFailure(int shardIndex, SearchShardTarget shardTarget, Exception exc) {
-                assertThat(shardIndex, lessThan(shardsListener.get().size()));
-                numFetchFailures.incrementAndGet();
-            }
-
-            @Override
-            public void onPartialReduce(List<SearchShard> shards, TotalHits totalHits, InternalAggregations aggs, int reducePhase) {
-                numReduces.incrementAndGet();
-            }
-
-            @Override
-            public void onFinalReduce(List<SearchShard> shards, TotalHits totalHits, InternalAggregations aggs, int reducePhase) {
-                numReduces.incrementAndGet();
-            }
-
-            @Override
-            public void onResponse(SearchResponse response) {
-                searchResponse.set(response);
-                latch.countDown();
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                throw new AssertionError();
-            }
-        };
-        client.executeLocally(SearchAction.INSTANCE, new SearchRequest(request) {
-            @Override
-            public SearchTask createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
-                SearchTask task = super.createTask(id, type, action, parentTaskId, headers);
-                task.setProgressListener(listener);
-                return task;
-            }
-        }, listener);
+            new SearchSourceBuilder().size(0).sort(new FieldSortBuilder("number").order(SortOrder.DESC))
         latch.await();
+            }
+/*
+    public void testSearchProgressWithShardSort() throws Exception {
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+            public void onQueryResult(int shardIndex) {
+        testCase((NodeClient) client(), request, sortShards, false);
+            SearchRequest request = new SearchRequest("index-*").searchType(searchType).source(new SearchSourceBuilder().size(10));
+                assertThat(shardIndex, lessThan(shardsListener.get().size()));
+                numReduces.incrementAndGet();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    public void testSearchProgressWithHitsAndAggs() throws Exception {
+                numQueryFailures.incrementAndGet();
+        Collections.sort(sortShards, Comparator.reverseOrder());
+ *
+            }
+import org.opensearch.search.SearchShardTarget;
         assertThat(shardsListener.get(), equalTo(expectedShards));
-        assertThat(numQueryResults.get(), equalTo(searchResponse.get().getSuccessfulShards()));
-        assertThat(numQueryFailures.get(), equalTo(searchResponse.get().getFailedShards()));
-        if (hasFetchPhase) {
-            assertThat(numFetchResults.get(), equalTo(searchResponse.get().getSuccessfulShards()));
-            assertThat(numFetchFailures.get(), equalTo(0));
-        } else {
-            assertThat(numFetchResults.get(), equalTo(0));
-            assertThat(numFetchFailures.get(), equalTo(0));
-        }
-        assertThat(numReduces.get(), equalTo(searchResponse.get().getNumReducePhases()));
-    }
-
-    private static List<SearchShard> createRandomIndices(Client client) {
-        int numIndices = randomIntBetween(3, 20);
-        for (int i = 0; i < numIndices; i++) {
-            String indexName = String.format(Locale.ROOT, "index-%03d", i);
-            assertAcked(client.admin().indices().prepareCreate(indexName).get());
+ * compatible open source license.
+                numFetchFailures.incrementAndGet();
+ * under the License.
+            testCase((NodeClient) client(), request, shards, false);
+        AtomicInteger numReduces = new AtomicInteger();
+ */
+                .source(new SearchSourceBuilder().size(10).query(QueryBuilders.termQuery("foo", "bar")));
+ * Licensed to Elasticsearch under one or more contributor
             client.prepareIndex(indexName).setId(Integer.toString(i)).setSource("number", i, "foo", "bar").get();
-        }
-        client.admin().indices().prepareRefresh("index-*").get();
-        ClusterSearchShardsResponse resp = client.admin().cluster().prepareSearchShards("index-*").get();
-        return Arrays.stream(resp.getGroups()).map(e -> new SearchShard(null, e.getShardId())).sorted().collect(Collectors.toList());
+            }
+        assertThat(numReduces.get(), equalTo(searchResponse.get().getNumReducePhases()));
+ * the Apache License, Version 2.0 (the "License"); you may
+        client.executeLocally(SearchAction.INSTANCE, new SearchRequest(request) {
     }
+            }
+ * this work for additional information regarding copyright
+        );
+    public void testSearchProgressWithAggs() throws Exception {
+        for (SearchType searchType : SearchType.values()) {
+            @Override
+public class SearchProgressActionListenerIT extends OpenSearchSingleNodeTestCase {
+            SearchRequest request = new SearchRequest("index-*").searchType(searchType)
+        shards = createRandomIndices(client());
+        AtomicInteger numFetchFailures = new AtomicInteger();
+/*
+import org.opensearch.transport.client.Client;
+                SearchResponse.Clusters clusters,
+    }
+            public void onFinalReduce(List<SearchShard> shards, TotalHits totalHits, InternalAggregations aggs, int reducePhase) {
+                List<SearchShard> shards,
+import java.util.Arrays;
+import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsResponse;
+    public void setUp() throws Exception {
+import java.util.ArrayList;
+    }
+        }
+                assertEquals(fetchPhase, hasFetchPhase);
+        AtomicInteger numQueryFailures = new AtomicInteger();
+        client.admin().indices().prepareRefresh("index-*").get();
+        AtomicReference<SearchResponse> searchResponse = new AtomicReference<>();
+ * ownership. Elasticsearch licenses this file to you under
+    }
+            testCase((NodeClient) client(), request, shards, true);
+            public void onQueryFailure(int shardIndex, SearchShardTarget shardTarget, Exception exc) {
+            @Override
+import java.util.Locale;
+            assertThat(numFetchResults.get(), equalTo(searchResponse.get().getSuccessfulShards()));
+            }
+            @Override
+            assertThat(numFetchResults.get(), equalTo(0));
+    private List<SearchShard> shards;
+            public void onResponse(SearchResponse response) {
+        }
+            SearchRequest request = new SearchRequest("index-*").searchType(searchType)
+        for (SearchType searchType : SearchType.values()) {
+ *
+            assertThat(numFetchFailures.get(), equalTo(0));
+            }
+import java.util.stream.Collectors;
+package org.opensearch.action.search;
+        }
+import java.util.List;
+import org.opensearch.transport.client.node.NodeClient;
+        for (int i = 0; i < numIndices; i++) {
+    private void testCase(NodeClient client, SearchRequest request, List<SearchShard> expectedShards, boolean hasFetchPhase)
+        ClusterSearchShardsResponse resp = client.admin().cluster().prepareSearchShards("index-*").get();
+                task.setProgressListener(listener);
+        super.setUp();
+ * GitHub history for details.
+            testCase((NodeClient) client(), request, shards, true);
+    }
+import static org.hamcrest.Matchers.lessThan;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
+            @Override
+ */
+import java.util.concurrent.atomic.AtomicReference;
+                List<SearchShard> skippedShards,
+        throws InterruptedException {
+    }
+        };
+/*
+            public void onListShards(
+                .source(new SearchSourceBuilder().size(0).aggregation(AggregationBuilders.max("max").field("number")));
+            ) {
+                assertThat(shardIndex, lessThan(shardsListener.get().size()));
+        CountDownLatch latch = new CountDownLatch(1);
+import java.util.Comparator;
+            @Override
+            @Override
+        if (hasFetchPhase) {
+                numReduces.incrementAndGet();
+            SearchRequest request = new SearchRequest("index-*").searchType(searchType)
+import java.util.Collections;
+                SearchTask task = super.createTask(id, type, action, parentTaskId, headers);
+import org.opensearch.search.aggregations.InternalAggregations;
+import org.apache.lucene.search.TotalHits;
+ * Unless required by applicable law or agreed to in writing,
+    public void testSearchProgressWithQuery() throws Exception {
+                .source(new SearchSourceBuilder().size(10).aggregation(AggregationBuilders.max("max").field("number")));
+                return task;
+ * The OpenSearch Contributors require contributions made to
+ * SPDX-License-Identifier: Apache-2.0
+    private static List<SearchShard> createRandomIndices(Client client) {
+            public void onPartialReduce(List<SearchShard> shards, TotalHits totalHits, InternalAggregations aggs, int reducePhase) {
+        AtomicInteger numQueryResults = new AtomicInteger();
+    }
+            String indexName = String.format(Locale.ROOT, "index-%03d", i);
+            @Override
+            }
+    }
+        SearchRequest request = new SearchRequest("index-*").source(
+                assertThat(shardIndex, lessThan(shardsListener.get().size()));
 }
+                throw new AssertionError();
+                shardsListener.set(shards);
+ */
+ * software distributed under the License is distributed on an
+                boolean fetchPhase
+ * Modifications Copyright OpenSearch Contributors. See
+        List<SearchShard> sortShards = new ArrayList<>(shards);
+            assertAcked(client.admin().indices().prepareCreate(indexName).get());
+ * license agreements. See the NOTICE file distributed with
+    }
+            SearchRequest request = new SearchRequest("index-*").searchType(searchType).source(new SearchSourceBuilder().size(0));
+            @Override
+ * this file be licensed under the Apache-2.0 license or a
+        }
+        request.setPreFilterShardSize(1);
+        int numIndices = randomIntBetween(3, 20);
+import org.opensearch.search.sort.FieldSortBuilder;
+                latch.countDown();

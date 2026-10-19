@@ -1,207 +1,188 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.repositories;
-
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.snapshots.SnapshotId;
-
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
-
-/**
- * Tracks the blob uuids of blobs containing {@link IndexMetadata} for snapshots as well an identifier for each of these blobs.
- * Before writing a new {@link IndexMetadata} blob during snapshot finalization in
- * {@link org.opensearch.repositories.blobstore.BlobStoreRepository#finalizeSnapshot} the identifier for an instance of
- * {@link IndexMetadata} should be computed and then used to check if it already exists in the repository via
- * {@link #getIndexMetaBlobId(String)}.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public final class IndexMetaDataGenerations {
-
-    public static final IndexMetaDataGenerations EMPTY = new IndexMetaDataGenerations(Collections.emptyMap(), Collections.emptyMap());
-
-    /**
-     * Map of {@link SnapshotId} to a map of the indices in a snapshot mapping {@link IndexId} to metadata identifiers.
-     * The identifiers in the nested map can be mapped to the relevant blob uuid via {@link #getIndexMetaBlobId}.
-     */
-    final Map<SnapshotId, Map<IndexId, String>> lookup;
-
-    /**
-     * Map of index metadata identifier to blob uuid.
-     */
-    final Map<String, String> identifiers;
-
-    IndexMetaDataGenerations(Map<SnapshotId, Map<IndexId, String>> lookup, Map<String, String> identifiers) {
-        assert identifiers.keySet().equals(lookup.values().stream().flatMap(m -> m.values().stream()).collect(Collectors.toSet()))
-            : "identifier mappings " + identifiers + " don't track the same blob ids as the lookup map " + lookup;
-        assert lookup.values().stream().noneMatch(Map::isEmpty) : "Lookup contained empty map [" + lookup + "]";
+    }
         this.lookup = Collections.unmodifiableMap(lookup);
+     *
         this.identifiers = Collections.unmodifiableMap(identifiers);
-    }
-
-    public boolean isEmpty() {
-        return identifiers.isEmpty();
-    }
-
-    /**
-     * Gets the blob id by the identifier of {@link org.opensearch.cluster.metadata.IndexMetadata}
-     * (computed via {@link #buildUniqueIdentifier}) or {@code null} if none is tracked for the identifier.
      *
-     * @param metaIdentifier identifier for {@link IndexMetadata}
-     * @return blob id for the given metadata identifier or {@code null} if the identifier is not part of the repository yet
-     */
-    @Nullable
-    public String getIndexMetaBlobId(String metaIdentifier) {
-        return identifiers.get(metaIdentifier);
-    }
-
-    /**
-     * Get the blob id by {@link SnapshotId} and {@link IndexId}. If none is found, we fall back to the value
-     * of {@link SnapshotId#getUUID()} to allow for extended backwards compatibility use-cases with
-     * versions which used the snapshot UUID as the index metadata blob id.
-     *
-     * @param snapshotId Snapshot Id
-     * @param indexId    Index Id
-     * @return blob id for the given index metadata
-     */
-    public String indexMetaBlobId(SnapshotId snapshotId, IndexId indexId) {
-        final String identifier = lookup.getOrDefault(snapshotId, Collections.emptyMap()).get(indexId);
-        if (identifier == null) {
-            return snapshotId.getUUID();
-        } else {
-            return identifiers.get(identifier);
-        }
-    }
-
-    /**
-     * Create a new instance with the given snapshot and index metadata uuids and identifiers added.
-     *
-     * @param snapshotId SnapshotId
-     * @param newLookup new mappings of index + snapshot to index metadata identifier
-     * @param newIdentifiers new mappings of index metadata identifier to blob id
-     * @return instance with added snapshot
-     */
-    public IndexMetaDataGenerations withAddedSnapshot(
-        SnapshotId snapshotId,
-        Map<IndexId, String> newLookup,
-        Map<String, String> newIdentifiers
-    ) {
-        final Map<SnapshotId, Map<IndexId, String>> updatedIndexMetaLookup = new HashMap<>(this.lookup);
-        final Map<String, String> updatedIndexMetaIdentifiers = new HashMap<>(identifiers);
-        updatedIndexMetaIdentifiers.putAll(newIdentifiers);
-        updatedIndexMetaLookup.compute(snapshotId, (snId, lookup) -> {
-            if (lookup == null) {
-                if (newLookup.isEmpty()) {
-                    return null;
-                }
-                return Collections.unmodifiableMap(new HashMap<>(newLookup));
-            } else {
-                final Map<IndexId, String> updated = new HashMap<>(lookup);
-                updated.putAll(newLookup);
                 return Collections.unmodifiableMap(updated);
-            }
-        });
-        return new IndexMetaDataGenerations(updatedIndexMetaLookup, updatedIndexMetaIdentifiers);
-    }
-
-    /**
-     * Create a new instance with the given snapshot removed.
-     *
-     * @param snapshotIds SnapshotIds to remove
+ *    http://www.apache.org/licenses/LICENSE-2.0
      * @return new instance without the given snapshot
-     */
-    public IndexMetaDataGenerations withRemovedSnapshots(Collection<SnapshotId> snapshotIds) {
-        final Map<SnapshotId, Map<IndexId, String>> updatedIndexMetaLookup = new HashMap<>(lookup);
-        updatedIndexMetaLookup.keySet().removeAll(snapshotIds);
-        final Map<String, String> updatedIndexMetaIdentifiers = new HashMap<>(identifiers);
-        // Collect the identifiers referenced by the remaining snapshots once, instead of re-scanning every remaining
-        // snapshot's lookup map for each identifier, which is quadratic in the number of tracked index metadata entries
-        // and dominates snapshot deletion time on repositories with a large number of snapshots and indices.
-        final Set<String> referencedIdentifiers = updatedIndexMetaLookup.values()
-            .stream()
-            .flatMap(m -> m.values().stream())
-            .collect(Collectors.toSet());
-        updatedIndexMetaIdentifiers.keySet().retainAll(referencedIdentifiers);
-        return new IndexMetaDataGenerations(updatedIndexMetaLookup, updatedIndexMetaIdentifiers);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(identifiers, lookup);
-    }
-
-    @Override
-    public boolean equals(Object that) {
-        if (this == that) {
-            return true;
-        }
-        if (!(that instanceof IndexMetaDataGenerations other)) {
-            return false;
-        }
-        return lookup.equals(other.lookup) && identifiers.equals(other.identifiers);
-    }
-
-    @Override
-    public String toString() {
-        return "IndexMetaDataGenerations{lookup:" + lookup + "}{identifier:" + identifiers + "}";
-    }
-
-    /**
-     * Compute identifier for {@link IndexMetadata} from its index- and history-uuid as well as its settings-, mapping- and alias-version.
+ * Tracks the blob uuids of blobs containing {@link IndexMetadata} for snapshots as well an identifier for each of these blobs.
+ *
+        Map<IndexId, String> newLookup,
      * If an index did not see a change in its settings, mappings or aliases between two points in time then the identifier will not change
+        assert identifiers.keySet().equals(lookup.values().stream().flatMap(m -> m.values().stream()).collect(Collectors.toSet()))
+            + indexMetaData.getMappingVersion()
+                    return null;
+import org.opensearch.common.Nullable;
+        final Map<SnapshotId, Map<IndexId, String>> updatedIndexMetaLookup = new HashMap<>(lookup);
+        });
+     * @param snapshotIds SnapshotIds to remove
+        // and dominates snapshot deletion time on repositories with a large number of snapshots and indices.
+ * {@link org.opensearch.repositories.blobstore.BlobStoreRepository#finalizeSnapshot} the identifier for an instance of
+package org.opensearch.repositories;
+     * Create a new instance with the given snapshot and index metadata uuids and identifiers added.
+     * of {@link SnapshotId#getUUID()} to allow for extended backwards compatibility use-cases with
+ *
+        return lookup.equals(other.lookup) && identifiers.equals(other.identifiers);
+    final Map<SnapshotId, Map<IndexId, String>> lookup;
+ * not use this file except in compliance with the License.
+import org.opensearch.common.annotation.PublicApi;
+ * compatible open source license.
+ * GitHub history for details.
+        final Map<SnapshotId, Map<IndexId, String>> updatedIndexMetaLookup = new HashMap<>(this.lookup);
+     * The identifiers in the nested map can be mapped to the relevant blob uuid via {@link #getIndexMetaBlobId}.
+            + indexMetaData.getSettingsVersion()
+     * @param newIdentifiers new mappings of index metadata identifier to blob id
+            }
      * between them either.
+    /**
+        return identifiers.get(metaIdentifier);
+ * this file be licensed under the Apache-2.0 license or a
+    /**
+ * KIND, either express or implied.  See the License for the
+     * @param snapshotId Snapshot Id
+    @Nullable
+    /**
+ * You may obtain a copy of the License at
+    @Override
+        updatedIndexMetaIdentifiers.putAll(newIdentifiers);
+            : "identifier mappings " + identifiers + " don't track the same blob ids as the lookup map " + lookup;
+    public boolean equals(Object that) {
+        if (!(that instanceof IndexMetaDataGenerations other)) {
+     *
+        return new IndexMetaDataGenerations(updatedIndexMetaLookup, updatedIndexMetaIdentifiers);
+        return identifiers.isEmpty();
+        return new IndexMetaDataGenerations(updatedIndexMetaLookup, updatedIndexMetaIdentifiers);
+            if (lookup == null) {
+import java.util.Objects;
+ * ownership. Elasticsearch licenses this file to you under
+        // Collect the identifiers referenced by the remaining snapshots once, instead of re-scanning every remaining
+        updatedIndexMetaLookup.compute(snapshotId, (snId, lookup) -> {
+     */
+     * @return blob id for the given metadata identifier or {@code null} if the identifier is not part of the repository yet
+import java.util.Collections;
+ * Licensed to Elasticsearch under one or more contributor
+        }
+import java.util.Set;
+     */
+/*
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+        final Set<String> referencedIdentifiers = updatedIndexMetaLookup.values()
+     * @return identifier string
+    /**
+    final Map<String, String> identifiers;
      *
      * @param indexMetaData IndexMetaData
-     * @return identifier string
-     */
-    public static String buildUniqueIdentifier(IndexMetadata indexMetaData) {
-        return indexMetaData.getIndexUUID()
-            + "-"
-            + indexMetaData.getSettings().get(IndexMetadata.SETTING_HISTORY_UUID, IndexMetadata.INDEX_UUID_NA_VALUE)
-            + "-"
-            + indexMetaData.getSettingsVersion()
-            + "-"
-            + indexMetaData.getMappingVersion()
-            + "-"
-            + indexMetaData.getAliasesVersion();
+    public String toString() {
     }
+        final Map<String, String> updatedIndexMetaIdentifiers = new HashMap<>(identifiers);
+import org.opensearch.snapshots.SnapshotId;
+    /**
+        assert lookup.values().stream().noneMatch(Map::isEmpty) : "Lookup contained empty map [" + lookup + "]";
+            + indexMetaData.getAliasesVersion();
+            + indexMetaData.getSettings().get(IndexMetadata.SETTING_HISTORY_UUID, IndexMetadata.INDEX_UUID_NA_VALUE)
+    public boolean isEmpty() {
+    public String indexMetaBlobId(SnapshotId snapshotId, IndexId indexId) {
+     * @param newLookup new mappings of index + snapshot to index metadata identifier
+/*
+            + "-"
+    ) {
+     * @return blob id for the given index metadata
+     *
+    }
+    /**
+    }
+            .stream()
+ * Modifications Copyright OpenSearch Contributors. See
+     * Get the blob id by {@link SnapshotId} and {@link IndexId}. If none is found, we fall back to the value
+        if (identifier == null) {
+     * @return instance with added snapshot
+                updated.putAll(newLookup);
+    }
+     * @param snapshotId SnapshotId
+ * @opensearch.api
+ *
+ * specific language governing permissions and limitations
+        updatedIndexMetaLookup.keySet().removeAll(snapshotIds);
+ * this work for additional information regarding copyright
+                return Collections.unmodifiableMap(new HashMap<>(newLookup));
+ */
+    public IndexMetaDataGenerations withRemovedSnapshots(Collection<SnapshotId> snapshotIds) {
+     */
+            return false;
+     * versions which used the snapshot UUID as the index metadata blob id.
+        updatedIndexMetaIdentifiers.keySet().retainAll(referencedIdentifiers);
+    IndexMetaDataGenerations(Map<SnapshotId, Map<IndexId, String>> lookup, Map<String, String> identifiers) {
+import java.util.Map;
+ * under the License.
+     * (computed via {@link #buildUniqueIdentifier}) or {@code null} if none is tracked for the identifier.
+ * SPDX-License-Identifier: Apache-2.0
+     */
+    /**
+ * Unless required by applicable law or agreed to in writing,
+        SnapshotId snapshotId,
+     * Map of {@link SnapshotId} to a map of the indices in a snapshot mapping {@link IndexId} to metadata identifiers.
+     * Map of index metadata identifier to blob uuid.
+ *
+            } else {
+            + "-"
+ * license agreements. See the NOTICE file distributed with
+            .collect(Collectors.toSet());
+        return indexMetaData.getIndexUUID()
+     * @param indexId    Index Id
+    @Override
+ */
+                }
+@PublicApi(since = "1.0.0")
+    public int hashCode() {
+        }
+            return true;
+            return snapshotId.getUUID();
+                final Map<IndexId, String> updated = new HashMap<>(lookup);
+        }
+        return "IndexMetaDataGenerations{lookup:" + lookup + "}{identifier:" + identifiers + "}";
+import java.util.stream.Collectors;
+ * {@link #getIndexMetaBlobId(String)}.
+    }
+    }
+/*
+        // snapshot's lookup map for each identifier, which is quadratic in the number of tracked index metadata entries
+ * Before writing a new {@link IndexMetadata} blob during snapshot finalization in
+        } else {
+        final String identifier = lookup.getOrDefault(snapshotId, Collections.emptyMap()).get(indexId);
+/**
+        Map<String, String> newIdentifiers
+ * The OpenSearch Contributors require contributions made to
+     * @param metaIdentifier identifier for {@link IndexMetadata}
+    @Override
+        return Objects.hash(identifiers, lookup);
+     * Compute identifier for {@link IndexMetadata} from its index- and history-uuid as well as its settings-, mapping- and alias-version.
+ * software distributed under the License is distributed on an
+            + "-"
+                if (newLookup.isEmpty()) {
+     */
+     */
+    }
+import org.opensearch.cluster.metadata.IndexMetadata;
+            + "-"
+        if (this == that) {
+ */
+    public static String buildUniqueIdentifier(IndexMetadata indexMetaData) {
+    public static final IndexMetaDataGenerations EMPTY = new IndexMetaDataGenerations(Collections.emptyMap(), Collections.emptyMap());
+            .flatMap(m -> m.values().stream())
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     */
 }
+     * Create a new instance with the given snapshot removed.
+     * Gets the blob id by the identifier of {@link org.opensearch.cluster.metadata.IndexMetadata}
+ * {@link IndexMetadata} should be computed and then used to check if it already exists in the repository via
+    public String getIndexMetaBlobId(String metaIdentifier) {
+public final class IndexMetaDataGenerations {
+import java.util.HashMap;
+            return identifiers.get(identifier);
+        final Map<String, String> updatedIndexMetaIdentifiers = new HashMap<>(identifiers);
+ */
+import java.util.Collection;
+    public IndexMetaDataGenerations withAddedSnapshot(
+    }

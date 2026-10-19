@@ -1,544 +1,491 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+        ClusterState clusterState,
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.cluster.health;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.awarenesshealth.ClusterAwarenessHealth;
-import org.opensearch.cluster.health.ClusterHealthStatus;
-import org.opensearch.cluster.health.ClusterIndexHealth;
-import org.opensearch.cluster.health.ClusterStateHealth;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.xcontent.StatusToXContentObject;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-
-import static java.util.Collections.emptyMap;
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
-import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;
-
-/**
- * Transport response for Cluster Health
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class ClusterHealthResponse extends ActionResponse implements StatusToXContentObject {
-    private static final String CLUSTER_NAME = "cluster_name";
-    private static final String STATUS = "status";
-    private static final String TIMED_OUT = "timed_out";
-    private static final String NUMBER_OF_NODES = "number_of_nodes";
-    private static final String NUMBER_OF_DATA_NODES = "number_of_data_nodes";
-    @Deprecated
-    private static final String DISCOVERED_MASTER = "discovered_master";
-    private static final String DISCOVERED_CLUSTER_MANAGER = "discovered_cluster_manager";
-    private static final String NUMBER_OF_PENDING_TASKS = "number_of_pending_tasks";
-    private static final String NUMBER_OF_IN_FLIGHT_FETCH = "number_of_in_flight_fetch";
-    private static final String DELAYED_UNASSIGNED_SHARDS = "delayed_unassigned_shards";
-    private static final String TASK_MAX_WAIT_TIME_IN_QUEUE = "task_max_waiting_in_queue";
-    private static final String TASK_MAX_WAIT_TIME_IN_QUEUE_IN_MILLIS = "task_max_waiting_in_queue_millis";
-    private static final String ACTIVE_SHARDS_PERCENT_AS_NUMBER = "active_shards_percent_as_number";
-    private static final String ACTIVE_SHARDS_PERCENT = "active_shards_percent";
-    private static final String ACTIVE_PRIMARY_SHARDS = "active_primary_shards";
-    private static final String ACTIVE_SHARDS = "active_shards";
-    private static final String RELOCATING_SHARDS = "relocating_shards";
-    private static final String INITIALIZING_SHARDS = "initializing_shards";
-    private static final String UNASSIGNED_SHARDS = "unassigned_shards";
-    private static final String INDICES = "indices";
-
-    private static final ConstructingObjectParser<ClusterHealthResponse, Void> PARSER = new ConstructingObjectParser<>(
-        "cluster_health_response",
-        true,
-        parsedObjects -> {
-            int i = 0;
-            // ClusterStateHealth fields
-            int numberOfNodes = (int) parsedObjects[i++];
-            int numberOfDataNodes = (int) parsedObjects[i++];
-            boolean hasDiscoveredMaster = Boolean.TRUE.equals(parsedObjects[i++]);
-            boolean hasDiscoveredClusterManager = Boolean.TRUE.equals(parsedObjects[i++]);
-            int activeShards = (int) parsedObjects[i++];
-            int relocatingShards = (int) parsedObjects[i++];
-            int activePrimaryShards = (int) parsedObjects[i++];
-            int initializingShards = (int) parsedObjects[i++];
-            int unassignedShards = (int) parsedObjects[i++];
-            double activeShardsPercent = (double) parsedObjects[i++];
-            String statusStr = (String) parsedObjects[i++];
-            ClusterHealthStatus status = ClusterHealthStatus.fromString(statusStr);
-            @SuppressWarnings("unchecked")
-            List<ClusterIndexHealth> indexList = (List<ClusterIndexHealth>) parsedObjects[i++];
-            final Map<String, ClusterIndexHealth> indices;
-            if (indexList == null || indexList.isEmpty()) {
-                indices = emptyMap();
-            } else {
-                indices = new HashMap<>(indexList.size());
-                for (ClusterIndexHealth indexHealth : indexList) {
-                    indices.put(indexHealth.getIndex(), indexHealth);
-                }
-            }
-            ClusterStateHealth stateHealth = new ClusterStateHealth(
-                activePrimaryShards,
-                activeShards,
-                relocatingShards,
-                initializingShards,
-                unassignedShards,
-                numberOfNodes,
-                numberOfDataNodes,
-                hasDiscoveredClusterManager || hasDiscoveredMaster,
-                activeShardsPercent,
-                status,
-                indices
-            );
-            // ClusterHealthResponse fields
-            String clusterName = (String) parsedObjects[i++];
-            int numberOfPendingTasks = (int) parsedObjects[i++];
-            int numberOfInFlightFetch = (int) parsedObjects[i++];
-            int delayedUnassignedShards = (int) parsedObjects[i++];
-            long taskMaxWaitingTimeMillis = (long) parsedObjects[i++];
-            boolean timedOut = (boolean) parsedObjects[i];
-            return new ClusterHealthResponse(
-                clusterName,
-                numberOfPendingTasks,
-                numberOfInFlightFetch,
-                delayedUnassignedShards,
-                TimeValue.timeValueMillis(taskMaxWaitingTimeMillis),
-                timedOut,
-                stateHealth
-            );
-        }
-    );
-
-    private static final ObjectParser.NamedObjectParser<ClusterIndexHealth, Void> INDEX_PARSER = (
-        XContentParser parser,
-        Void context,
-        String index) -> ClusterIndexHealth.innerFromXContent(parser, index);
-
-    static {
-        // ClusterStateHealth fields
-        PARSER.declareInt(constructorArg(), new ParseField(NUMBER_OF_NODES));
-        PARSER.declareInt(constructorArg(), new ParseField(NUMBER_OF_DATA_NODES));
-        PARSER.declareBoolean(optionalConstructorArg(), new ParseField(DISCOVERED_MASTER));
-        PARSER.declareBoolean(optionalConstructorArg(), new ParseField(DISCOVERED_CLUSTER_MANAGER));
-        PARSER.declareInt(constructorArg(), new ParseField(ACTIVE_SHARDS));
-        PARSER.declareInt(constructorArg(), new ParseField(RELOCATING_SHARDS));
-        PARSER.declareInt(constructorArg(), new ParseField(ACTIVE_PRIMARY_SHARDS));
-        PARSER.declareInt(constructorArg(), new ParseField(INITIALIZING_SHARDS));
-        PARSER.declareInt(constructorArg(), new ParseField(UNASSIGNED_SHARDS));
-        PARSER.declareDouble(constructorArg(), new ParseField(ACTIVE_SHARDS_PERCENT_AS_NUMBER));
-        PARSER.declareString(constructorArg(), new ParseField(STATUS));
-        // Can be absent if LEVEL == 'cluster'
-        PARSER.declareNamedObjects(optionalConstructorArg(), INDEX_PARSER, new ParseField(INDICES));
-
-        // ClusterHealthResponse fields
-        PARSER.declareString(constructorArg(), new ParseField(CLUSTER_NAME));
-        PARSER.declareInt(constructorArg(), new ParseField(NUMBER_OF_PENDING_TASKS));
-        PARSER.declareInt(constructorArg(), new ParseField(NUMBER_OF_IN_FLIGHT_FETCH));
-        PARSER.declareInt(constructorArg(), new ParseField(DELAYED_UNASSIGNED_SHARDS));
-        PARSER.declareLong(constructorArg(), new ParseField(TASK_MAX_WAIT_TIME_IN_QUEUE_IN_MILLIS));
-        PARSER.declareBoolean(constructorArg(), new ParseField(TIMED_OUT));
-    }
-
-    private String clusterName;
-    private int numberOfPendingTasks = 0;
-    private int numberOfInFlightFetch = 0;
-    private int delayedUnassignedShards = 0;
-    private TimeValue taskMaxWaitingTime = TimeValue.timeValueMillis(0);
-    private boolean timedOut = false;
-    private ClusterStateHealth clusterStateHealth;
-    private ClusterHealthStatus clusterHealthStatus;
-    private ClusterAwarenessHealth clusterAwarenessHealth;
-
-    public ClusterHealthResponse() {}
-
-    public ClusterHealthResponse(StreamInput in) throws IOException {
-        super(in);
-        clusterName = in.readString();
-        clusterHealthStatus = ClusterHealthStatus.fromValue(in.readByte());
-        clusterStateHealth = new ClusterStateHealth(in);
-        numberOfPendingTasks = in.readInt();
-        timedOut = in.readBoolean();
-        numberOfInFlightFetch = in.readInt();
-        delayedUnassignedShards = in.readInt();
-        taskMaxWaitingTime = in.readTimeValue();
-        if (in.getVersion().onOrAfter(Version.V_2_5_0)) {
-            if (in.readBoolean()) {
-                clusterAwarenessHealth = new ClusterAwarenessHealth(in);
-            }
-        }
-    }
-
-    /** needed for plugins BWC */
-    public ClusterHealthResponse(String clusterName, String[] concreteIndices, ClusterState clusterState) {
-        this(clusterName, concreteIndices, clusterState, -1, -1, -1, TimeValue.timeValueHours(0));
-    }
-
-    public ClusterHealthResponse(
-        String clusterName,
-        String[] concreteIndices,
-        ClusterState clusterState,
-        int numberOfPendingTasks,
-        int numberOfInFlightFetch,
-        int delayedUnassignedShards,
-        TimeValue taskMaxWaitingTime
-    ) {
-        this.clusterName = clusterName;
-        this.numberOfPendingTasks = numberOfPendingTasks;
-        this.numberOfInFlightFetch = numberOfInFlightFetch;
-        this.delayedUnassignedShards = delayedUnassignedShards;
-        this.taskMaxWaitingTime = taskMaxWaitingTime;
-        this.clusterStateHealth = new ClusterStateHealth(clusterState, concreteIndices);
-        this.clusterHealthStatus = clusterStateHealth.getStatus();
-    }
-
-    public ClusterHealthResponse(
-        String clusterName,
-        String[] concreteIndices,
-        ClusterHealthRequest clusterHealthRequest,
-        ClusterState clusterState,
-        int numberOfPendingTasks,
-        int numberOfInFlightFetch,
-        TimeValue taskMaxWaitingTime
-    ) {
-        this.clusterName = clusterName;
-        this.numberOfPendingTasks = numberOfPendingTasks;
-        this.numberOfInFlightFetch = numberOfInFlightFetch;
-        this.taskMaxWaitingTime = taskMaxWaitingTime;
-        this.clusterStateHealth = clusterHealthRequest.isApplyLevelAtTransportLayer()
-            ? new ClusterStateHealth(clusterState, concreteIndices, clusterHealthRequest.level())
-            : new ClusterStateHealth(clusterState, concreteIndices);
-        this.clusterHealthStatus = clusterStateHealth.getStatus();
-        this.delayedUnassignedShards = clusterStateHealth.getDelayedUnassignedShards();
-    }
-
-    // Awareness Attribute health
-    public ClusterHealthResponse(
-        String clusterName,
-        ClusterState clusterState,
-        ClusterSettings clusterSettings,
-        String[] concreteIndices,
-        String awarenessAttributeName,
-        int numberOfPendingTasks,
-        int numberOfInFlightFetch,
-        int delayedUnassignedShards,
-        TimeValue taskMaxWaitingTime
-    ) {
-        this(
-            clusterName,
-            concreteIndices,
-            clusterState,
-            numberOfPendingTasks,
-            numberOfInFlightFetch,
-            delayedUnassignedShards,
-            taskMaxWaitingTime
-        );
-        this.clusterAwarenessHealth = new ClusterAwarenessHealth(clusterState, clusterSettings, awarenessAttributeName);
-    }
-
-    public ClusterHealthResponse(
-        String clusterName,
-        ClusterHealthRequest clusterHealthRequest,
-        ClusterState clusterState,
-        ClusterSettings clusterSettings,
-        String[] concreteIndices,
-        String awarenessAttributeName,
-        int numberOfPendingTasks,
-        int numberOfInFlightFetch,
-        TimeValue taskMaxWaitingTime
-    ) {
-        this(
-            clusterName,
-            concreteIndices,
-            clusterHealthRequest,
-            clusterState,
-            numberOfPendingTasks,
-            numberOfInFlightFetch,
-            taskMaxWaitingTime
-        );
-        this.clusterAwarenessHealth = new ClusterAwarenessHealth(clusterState, clusterSettings, awarenessAttributeName);
-    }
-
-    /**
-     * For XContent Parser and serialization tests
-     */
-    ClusterHealthResponse(
-        String clusterName,
-        int numberOfPendingTasks,
-        int numberOfInFlightFetch,
-        int delayedUnassignedShards,
-        TimeValue taskMaxWaitingTime,
-        boolean timedOut,
-        ClusterStateHealth clusterStateHealth
-    ) {
-        this.clusterName = clusterName;
-        this.numberOfPendingTasks = numberOfPendingTasks;
-        this.numberOfInFlightFetch = numberOfInFlightFetch;
-        this.delayedUnassignedShards = delayedUnassignedShards;
-        this.taskMaxWaitingTime = taskMaxWaitingTime;
-        this.timedOut = timedOut;
-        this.clusterStateHealth = clusterStateHealth;
-        this.clusterHealthStatus = clusterStateHealth.getStatus();
-    }
-
-    public String getClusterName() {
-        return clusterName;
-    }
-
-    // package private for testing
-    ClusterStateHealth getClusterStateHealth() {
-        return clusterStateHealth;
-    }
-
-    public int getActiveShards() {
-        return clusterStateHealth.getActiveShards();
-    }
-
-    public int getRelocatingShards() {
-        return clusterStateHealth.getRelocatingShards();
-    }
-
-    public int getActivePrimaryShards() {
-        return clusterStateHealth.getActivePrimaryShards();
-    }
-
-    public int getInitializingShards() {
-        return clusterStateHealth.getInitializingShards();
-    }
-
-    public int getUnassignedShards() {
-        return clusterStateHealth.getUnassignedShards();
-    }
-
-    public int getNumberOfNodes() {
-        return clusterStateHealth.getNumberOfNodes();
-    }
-
+        builder.field(UNASSIGNED_SHARDS, getUnassignedShards());
     public int getNumberOfDataNodes() {
-        return clusterStateHealth.getNumberOfDataNodes();
-    }
-
-    public boolean hasDiscoveredClusterManager() {
-        return clusterStateHealth.hasDiscoveredClusterManager();
-    }
-
-    public int getNumberOfPendingTasks() {
-        return this.numberOfPendingTasks;
-    }
-
-    public int getNumberOfInFlightFetch() {
+                timedOut,
+        out.writeInt(numberOfPendingTasks);
+        if (outputIndices) {
+        int numberOfInFlightFetch,
         return this.numberOfInFlightFetch;
-    }
-
+    // package private for testing
     /**
-     * The number of unassigned shards that are currently being delayed (for example,
-     * due to node leaving the cluster and waiting for a timeout for the node to come
-     * back in order to allocate the shards back to it).
-     */
-    public int getDelayedUnassignedShards() {
+        return new ClusterHealthResponse(in);
+            final Map<String, ClusterIndexHealth> indices;
+        return clusterStateHealth.getActiveShards();
+        }
+        builder.field(ACTIVE_SHARDS, getActiveShards());
+import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;
+import org.opensearch.core.rest.RestStatus;
+ *     http://www.apache.org/licenses/LICENSE-2.0
         return this.delayedUnassignedShards;
     }
-
-    /**
-     * {@code true} if the waitForXXX has timeout out and did not match.
-     */
-    public boolean isTimedOut() {
-        return this.timedOut;
+        TimeValue taskMaxWaitingTime
     }
-
-    public void setTimedOut(boolean timedOut) {
-        this.timedOut = timedOut;
-    }
-
-    public ClusterHealthStatus getStatus() {
-        return clusterHealthStatus;
-    }
-
-    /**
-     * Allows to explicitly override the derived cluster health status.
-     *
-     * @param status The override status. Must not be null.
-     */
-    public void setStatus(ClusterHealthStatus status) {
-        if (status == null) {
-            throw new IllegalArgumentException("'status' must not be null");
-        }
-        this.clusterHealthStatus = status;
-    }
-
-    public Map<String, ClusterIndexHealth> getIndices() {
-        return clusterStateHealth.getIndices();
-    }
-
-    /**
-     *
-     * @return The maximum wait time of all tasks in the queue
-     */
-    public TimeValue getTaskMaxWaitingTime() {
-        return taskMaxWaitingTime;
-    }
-
-    /**
-     * The percentage of active shards, should be 100% in a green system
-     */
-    public double getActiveShardsPercent() {
-        return clusterStateHealth.getActiveShardsPercent();
-    }
-
+    private TimeValue taskMaxWaitingTime = TimeValue.timeValueMillis(0);
+ */
+                activeShardsPercent,
+        String index) -> ClusterIndexHealth.innerFromXContent(parser, index);
     public ClusterAwarenessHealth getClusterAwarenessHealth() {
-        return clusterAwarenessHealth;
-    }
-
-    public static ClusterHealthResponse readResponseFrom(StreamInput in) throws IOException {
-        return new ClusterHealthResponse(in);
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(clusterName);
-        out.writeByte(clusterHealthStatus.value());
-        clusterStateHealth.writeTo(out);
-        out.writeInt(numberOfPendingTasks);
-        out.writeBoolean(timedOut);
-        out.writeInt(numberOfInFlightFetch);
-        out.writeInt(delayedUnassignedShards);
-        out.writeTimeValue(taskMaxWaitingTime);
-        if (out.getVersion().onOrAfter(Version.V_2_5_0)) {
-            if (clusterAwarenessHealth != null) {
-                out.writeBoolean(true);
-                clusterAwarenessHealth.writeTo(out);
-            } else {
-                out.writeBoolean(false);
-            }
-        }
-    }
-
-    @Override
+    private static final String ACTIVE_SHARDS_PERCENT = "active_shards_percent";
+    private static final String INDICES = "indices";
     public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this);
-    }
-
-    @Override
-    public RestStatus status() {
-        return isTimedOut() ? RestStatus.REQUEST_TIMEOUT : RestStatus.OK;
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.field(CLUSTER_NAME, getClusterName());
-        builder.field(STATUS, getStatus().name().toLowerCase(Locale.ROOT));
-        builder.field(TIMED_OUT, isTimedOut());
-        builder.field(NUMBER_OF_NODES, getNumberOfNodes());
-        builder.field(NUMBER_OF_DATA_NODES, getNumberOfDataNodes());
-        builder.field(DISCOVERED_MASTER, hasDiscoveredClusterManager());  // the field will be removed in a future major version
-        builder.field(DISCOVERED_CLUSTER_MANAGER, hasDiscoveredClusterManager());
-        builder.field(ACTIVE_PRIMARY_SHARDS, getActivePrimaryShards());
-        builder.field(ACTIVE_SHARDS, getActiveShards());
-        builder.field(RELOCATING_SHARDS, getRelocatingShards());
-        builder.field(INITIALIZING_SHARDS, getInitializingShards());
-        builder.field(UNASSIGNED_SHARDS, getUnassignedShards());
-        builder.field(DELAYED_UNASSIGNED_SHARDS, getDelayedUnassignedShards());
-        builder.field(NUMBER_OF_PENDING_TASKS, getNumberOfPendingTasks());
-        builder.field(NUMBER_OF_IN_FLIGHT_FETCH, getNumberOfInFlightFetch());
-        builder.humanReadableField(TASK_MAX_WAIT_TIME_IN_QUEUE_IN_MILLIS, TASK_MAX_WAIT_TIME_IN_QUEUE, getTaskMaxWaitingTime());
-        builder.percentageField(ACTIVE_SHARDS_PERCENT_AS_NUMBER, ACTIVE_SHARDS_PERCENT, getActiveShardsPercent());
-
-        String level = params.param("level", "cluster");
-        boolean outputIndices = "indices".equals(level) || "shards".equals(level);
-        boolean outputAwarenessHealth = "awareness_attributes".equals(level);
-
-        if (outputIndices) {
-            builder.startObject(INDICES);
+        return clusterStateHealth.getNumberOfNodes();
+     *
+        this.clusterName = clusterName;
+            double activeShardsPercent = (double) parsedObjects[i++];
+            int numberOfNodes = (int) parsedObjects[i++];
+                hasDiscoveredClusterManager || hasDiscoveredMaster,
             for (ClusterIndexHealth indexHealth : clusterStateHealth.getIndices().values()) {
-                indexHealth.toXContent(builder, params);
-            }
-            builder.endObject();
-        }
-
-        if (outputAwarenessHealth && clusterAwarenessHealth != null) {
-            clusterAwarenessHealth.toXContent(builder, params);
-        }
-
-        builder.endObject();
-        return builder;
-    }
-
-    public static ClusterHealthResponse fromXContent(XContentParser parser) {
-        return PARSER.apply(parser, null);
-    }
-
+        PARSER.declareInt(constructorArg(), new ParseField(NUMBER_OF_NODES));
     @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        ClusterHealthResponse that = (ClusterHealthResponse) o;
-        return Objects.equals(clusterName, that.clusterName)
-            && numberOfPendingTasks == that.numberOfPendingTasks
-            && numberOfInFlightFetch == that.numberOfInFlightFetch
-            && delayedUnassignedShards == that.delayedUnassignedShards
-            && Objects.equals(taskMaxWaitingTime, that.taskMaxWaitingTime)
-            && timedOut == that.timedOut
-            && Objects.equals(clusterStateHealth, that.clusterStateHealth)
-            && clusterHealthStatus == that.clusterHealthStatus;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(
+import org.opensearch.Version;
+        builder.field(NUMBER_OF_IN_FLIGHT_FETCH, getNumberOfInFlightFetch());
+        }
+            );
             clusterName,
-            numberOfPendingTasks,
+        }
+        PARSER.declareInt(constructorArg(), new ParseField(NUMBER_OF_DATA_NODES));
+    @Override
+        this.clusterHealthStatus = status;
+    private static final ObjectParser.NamedObjectParser<ClusterIndexHealth, Void> INDEX_PARSER = (
+        timedOut = in.readBoolean();
+    public ClusterHealthResponse(
+                numberOfNodes,
+    }
+    public boolean equals(Object o) {
+            int activePrimaryShards = (int) parsedObjects[i++];
+    public int getNumberOfPendingTasks() {
+        builder.field(DISCOVERED_CLUSTER_MANAGER, hasDiscoveredClusterManager());
+    @Override
+ * specific language governing permissions and limitations
+            boolean timedOut = (boolean) parsedObjects[i];
+ * GitHub history for details.
+            int numberOfDataNodes = (int) parsedObjects[i++];
+        this.delayedUnassignedShards = clusterStateHealth.getDelayedUnassignedShards();
+        PARSER.declareBoolean(optionalConstructorArg(), new ParseField(DISCOVERED_MASTER));
+            clusterHealthRequest,
+            int i = 0;
+    }
+ * Transport response for Cluster Health
+     * For XContent Parser and serialization tests
+     */
+        if (status == null) {
+import org.opensearch.cluster.health.ClusterIndexHealth;
+/**
+        return clusterStateHealth.hasDiscoveredClusterManager();
+        // ClusterHealthResponse fields
+        return clusterHealthStatus;
+        return clusterName;
+    }
+    private static final String NUMBER_OF_PENDING_TASKS = "number_of_pending_tasks";
+    ) {
+import java.io.IOException;
+    private String clusterName;
             numberOfInFlightFetch,
-            delayedUnassignedShards,
+        PARSER.declareBoolean(constructorArg(), new ParseField(TIMED_OUT));
+                }
+ * software distributed under the License is distributed on an
+            }
+            clusterState,
+        Void context,
+    private static final String TASK_MAX_WAIT_TIME_IN_QUEUE_IN_MILLIS = "task_max_waiting_in_queue_millis";
+        this.clusterHealthStatus = clusterStateHealth.getStatus();
+                relocatingShards,
+        out.writeInt(delayedUnassignedShards);
             taskMaxWaitingTime,
-            timedOut,
-            clusterStateHealth,
-            clusterHealthStatus
+        this(
+import org.opensearch.core.xcontent.XContentBuilder;
+        PARSER.declareInt(constructorArg(), new ParseField(ACTIVE_SHARDS));
+        String[] concreteIndices,
+            numberOfInFlightFetch,
+        this(
+            clusterName,
+ */
+        numberOfInFlightFetch = in.readInt();
+        out.writeByte(clusterHealthStatus.value());
+        PARSER.declareInt(constructorArg(), new ParseField(NUMBER_OF_IN_FLIGHT_FETCH));
+        this.clusterStateHealth = clusterStateHealth;
+    private ClusterAwarenessHealth clusterAwarenessHealth;
+    public int getUnassignedShards() {
+    private static final String TASK_MAX_WAIT_TIME_IN_QUEUE = "task_max_waiting_in_queue";
+import org.opensearch.common.unit.TimeValue;
+        out.writeBoolean(timedOut);
+            builder.startObject(INDICES);
+    public static ClusterHealthResponse readResponseFrom(StreamInput in) throws IOException {
+    public void writeTo(StreamOutput out) throws IOException {
+            taskMaxWaitingTime
+    }
+            clusterAwarenessHealth.toXContent(builder, params);
+        return clusterStateHealth.getInitializingShards();
+        numberOfPendingTasks = in.readInt();
+    ClusterStateHealth getClusterStateHealth() {
+            delayedUnassignedShards,
+        builder.field(RELOCATING_SHARDS, getRelocatingShards());
+    }
+        builder.field(NUMBER_OF_NODES, getNumberOfNodes());
+ * this file be licensed under the Apache-2.0 license or a
+                out.writeBoolean(true);
+            // ClusterHealthResponse fields
+    ) {
+import org.opensearch.core.common.io.stream.StreamOutput;
+    /**
+            builder.endObject();
+     * back in order to allocate the shards back to it).
+        int numberOfPendingTasks,
+    }
+        if (this == o) return true;
+        PARSER.declareString(constructorArg(), new ParseField(CLUSTER_NAME));
+import org.opensearch.core.action.ActionResponse;
+        taskMaxWaitingTime = in.readTimeValue();
+ *
+        delayedUnassignedShards = in.readInt();
+     * due to node leaving the cluster and waiting for a timeout for the node to come
+        int numberOfPendingTasks,
+     * @param status The override status. Must not be null.
+        int numberOfPendingTasks,
+                out.writeBoolean(false);
+    }
+        return clusterAwarenessHealth;
+ * @opensearch.api
+        builder.field(ACTIVE_PRIMARY_SHARDS, getActivePrimaryShards());
+        PARSER.declareInt(constructorArg(), new ParseField(RELOCATING_SHARDS));
+        return clusterStateHealth.getIndices();
+    @Override
+        PARSER.declareInt(constructorArg(), new ParseField(DELAYED_UNASSIGNED_SHARDS));
+    public boolean hasDiscoveredClusterManager() {
+        return clusterStateHealth.getActiveShardsPercent();
+        return clusterStateHealth.getRelocatingShards();
+    );
+    /**
+    }
+    public ClusterHealthResponse(
+            int unassignedShards = (int) parsedObjects[i++];
+        String awarenessAttributeName,
+ */
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+    }
+        XContentParser parser,
+        PARSER.declareNamedObjects(optionalConstructorArg(), INDEX_PARSER, new ParseField(INDICES));
+        TimeValue taskMaxWaitingTime
+        builder.field(TIMED_OUT, isTimedOut());
+     * {@code true} if the waitForXXX has timeout out and did not match.
+            int activeShards = (int) parsedObjects[i++];
+    }
+    }
+                indexHealth.toXContent(builder, params);
+import static java.util.Collections.emptyMap;
+    @Override
+        boolean outputAwarenessHealth = "awareness_attributes".equals(level);
+        if (o == null || getClass() != o.getClass()) return false;
+    static {
+        return clusterStateHealth;
+            ClusterStateHealth stateHealth = new ClusterStateHealth(
+    private boolean timedOut = false;
+        return Objects.equals(clusterName, that.clusterName)
+        int numberOfInFlightFetch,
+package org.opensearch.action.admin.cluster.health;
+        this(clusterName, concreteIndices, clusterState, -1, -1, -1, TimeValue.timeValueHours(0));
+                indices = new HashMap<>(indexList.size());
+        builder.field(INITIALIZING_SHARDS, getInitializingShards());
+        "cluster_health_response",
+        this.numberOfInFlightFetch = numberOfInFlightFetch;
+import org.opensearch.common.settings.ClusterSettings;
+        this.clusterName = clusterName;
+    private static final String ACTIVE_SHARDS_PERCENT_AS_NUMBER = "active_shards_percent_as_number";
+import java.util.HashMap;
+            int initializingShards = (int) parsedObjects[i++];
+        String clusterName,
+        return PARSER.apply(parser, null);
+            int numberOfPendingTasks = (int) parsedObjects[i++];
+            int numberOfInFlightFetch = (int) parsedObjects[i++];
+    }
+import org.opensearch.core.ParseField;
+        if (in.getVersion().onOrAfter(Version.V_2_5_0)) {
+        clusterName = in.readString();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        String awarenessAttributeName,
+    @Deprecated
+            && numberOfPendingTasks == that.numberOfPendingTasks
+        PARSER.declareInt(constructorArg(), new ParseField(INITIALIZING_SHARDS));
+        clusterHealthStatus = ClusterHealthStatus.fromValue(in.readByte());
+    public int getRelocatingShards() {
+        ClusterState clusterState,
+            numberOfInFlightFetch,
+        true,
+        builder.humanReadableField(TASK_MAX_WAIT_TIME_IN_QUEUE_IN_MILLIS, TASK_MAX_WAIT_TIME_IN_QUEUE, getTaskMaxWaitingTime());
+        this.clusterHealthStatus = clusterStateHealth.getStatus();
+        }
+        int numberOfPendingTasks,
+        PARSER.declareLong(constructorArg(), new ParseField(TASK_MAX_WAIT_TIME_IN_QUEUE_IN_MILLIS));
+    }
+        this.clusterAwarenessHealth = new ClusterAwarenessHealth(clusterState, clusterSettings, awarenessAttributeName);
+    private static final String TIMED_OUT = "timed_out";
+                TimeValue.timeValueMillis(taskMaxWaitingTimeMillis),
+        int numberOfInFlightFetch,
+        this.timedOut = timedOut;
+    private static final String DISCOVERED_MASTER = "discovered_master";
+    private static final String ACTIVE_PRIMARY_SHARDS = "active_primary_shards";
+ * Licensed to Elasticsearch under one or more contributor
+    public int getDelayedUnassignedShards() {
+import java.util.Objects;
+ * the Apache License, Version 2.0 (the "License"); you may
+        String clusterName,
+@PublicApi(since = "1.0.0")
+    }
+    }
+            && Objects.equals(clusterStateHealth, that.clusterStateHealth)
+        boolean timedOut,
+            // ClusterStateHealth fields
+    public ClusterHealthResponse(
+ *
+        return Strings.toString(MediaTypeRegistry.JSON, this);
+     */
+/*
+    private int numberOfInFlightFetch = 0;
+            : new ClusterStateHealth(clusterState, concreteIndices);
+        ClusterState clusterState,
+        out.writeTimeValue(taskMaxWaitingTime);
+            } else {
+                clusterAwarenessHealth.writeTo(out);
+    public static ClusterHealthResponse fromXContent(XContentParser parser) {
+            taskMaxWaitingTime
+        ClusterSettings clusterSettings,
+            ? new ClusterStateHealth(clusterState, concreteIndices, clusterHealthRequest.level())
+    }
+            }
+            numberOfPendingTasks,
+        builder.field(DISCOVERED_MASTER, hasDiscoveredClusterManager());  // the field will be removed in a future major version
+        TimeValue taskMaxWaitingTime,
+    public int getNumberOfNodes() {
+    public int getActivePrimaryShards() {
+                activeShards,
+            && timedOut == that.timedOut
+    // Awareness Attribute health
+        PARSER.declareInt(constructorArg(), new ParseField(NUMBER_OF_PENDING_TASKS));
+    }
+                status,
+        TimeValue taskMaxWaitingTime
+import java.util.Locale;
+            }
+        // ClusterStateHealth fields
+    private static final String NUMBER_OF_DATA_NODES = "number_of_data_nodes";
+/*
+    ) {
+    }
+        String[] concreteIndices,
+        this.numberOfPendingTasks = numberOfPendingTasks;
+        out.writeInt(numberOfInFlightFetch);
+ * this work for additional information regarding copyright
+import org.opensearch.core.xcontent.XContentParser;
+    public int getActiveShards() {
+    /**
+        builder.field(NUMBER_OF_DATA_NODES, getNumberOfDataNodes());
+    private static final String DISCOVERED_CLUSTER_MANAGER = "discovered_cluster_manager";
+    private static final String NUMBER_OF_IN_FLIGHT_FETCH = "number_of_in_flight_fetch";
+ */
+        this.taskMaxWaitingTime = taskMaxWaitingTime;
+    private static final String DELAYED_UNASSIGNED_SHARDS = "delayed_unassigned_shards";
         );
     }
+            int relocatingShards = (int) parsedObjects[i++];
+    }
+        this.numberOfInFlightFetch = numberOfInFlightFetch;
+            if (clusterAwarenessHealth != null) {
+        return this.timedOut;
+            && clusterHealthStatus == that.clusterHealthStatus;
+ * compatible open source license.
+                unassignedShards,
+    }
+    }
+     * @return The maximum wait time of all tasks in the queue
+        return clusterStateHealth.getUnassignedShards();
+    public boolean isTimedOut() {
+        this.clusterStateHealth = clusterHealthRequest.isApplyLevelAtTransportLayer()
+        builder.field(CLUSTER_NAME, getClusterName());
+            );
+        ClusterState clusterState,
+    private static final String ACTIVE_SHARDS = "active_shards";
+            concreteIndices,
+ * Unless required by applicable law or agreed to in writing,
+            clusterName,
+            }
+import org.opensearch.common.annotation.PublicApi;
+     */
+    /**
+        this.clusterAwarenessHealth = new ClusterAwarenessHealth(clusterState, clusterSettings, awarenessAttributeName);
+    public int getInitializingShards() {
+        boolean outputIndices = "indices".equals(level) || "shards".equals(level);
+        int delayedUnassignedShards,
+ * ownership. Elasticsearch licenses this file to you under
+        TimeValue taskMaxWaitingTime
+    private static final String INITIALIZING_SHARDS = "initializing_shards";
+    private ClusterStateHealth clusterStateHealth;
+        ClusterHealthRequest clusterHealthRequest,
+        PARSER.declareString(constructorArg(), new ParseField(STATUS));
+        PARSER.declareBoolean(optionalConstructorArg(), new ParseField(DISCOVERED_CLUSTER_MANAGER));
+import org.opensearch.cluster.ClusterState;
+    private static final ConstructingObjectParser<ClusterHealthResponse, Void> PARSER = new ConstructingObjectParser<>(
+import java.util.List;
+        String clusterName,
+ * SPDX-License-Identifier: Apache-2.0
+    private static final String CLUSTER_NAME = "cluster_name";
+    }
+                indices
+    /** needed for plugins BWC */
+    public void setStatus(ClusterHealthStatus status) {
+        clusterStateHealth.writeTo(out);
+        int numberOfPendingTasks,
+            && delayedUnassignedShards == that.delayedUnassignedShards
+    }
+                activePrimaryShards,
+    public Map<String, ClusterIndexHealth> getIndices() {
+            List<ClusterIndexHealth> indexList = (List<ClusterIndexHealth>) parsedObjects[i++];
+    }
+    public int getNumberOfInFlightFetch() {
+        this.taskMaxWaitingTime = taskMaxWaitingTime;
+        builder.field(DELAYED_UNASSIGNED_SHARDS, getDelayedUnassignedShards());
+     */
+        return taskMaxWaitingTime;
+    public ClusterHealthResponse(
+ * KIND, either express or implied.  See the License for the
+            clusterStateHealth,
+            int delayedUnassignedShards = (int) parsedObjects[i++];
+                stateHealth
+        int delayedUnassignedShards,
+import org.opensearch.core.common.Strings;
 }
+        ClusterStateHealth clusterStateHealth
+        ClusterSettings clusterSettings,
+    public int hashCode() {
+ * Modifications Copyright OpenSearch Contributors. See
+        );
+    public void setTimedOut(boolean timedOut) {
+    }
+        PARSER.declareDouble(constructorArg(), new ParseField(ACTIVE_SHARDS_PERCENT_AS_NUMBER));
+ *
+        String[] concreteIndices,
+        return isTimedOut() ? RestStatus.REQUEST_TIMEOUT : RestStatus.OK;
+            concreteIndices,
+        );
+        return Objects.hash(
+    public String getClusterName() {
+        }
+        this.numberOfPendingTasks = numberOfPendingTasks;
+    @Override
+        this.clusterStateHealth = new ClusterStateHealth(clusterState, concreteIndices);
+        out.writeString(clusterName);
+    private static final String NUMBER_OF_NODES = "number_of_nodes";
+import org.opensearch.cluster.health.ClusterStateHealth;
+        this.numberOfInFlightFetch = numberOfInFlightFetch;
+    public ClusterHealthResponse(String clusterName, String[] concreteIndices, ClusterState clusterState) {
+    }
+            String clusterName = (String) parsedObjects[i++];
+        if (out.getVersion().onOrAfter(Version.V_2_5_0)) {
+    private int delayedUnassignedShards = 0;
+            timedOut,
+    }
+public class ClusterHealthResponse extends ActionResponse implements StatusToXContentObject {
+        ClusterHealthResponse that = (ClusterHealthResponse) o;
+        builder.field(NUMBER_OF_PENDING_TASKS, getNumberOfPendingTasks());
+        this.numberOfPendingTasks = numberOfPendingTasks;
+ *
+        String[] concreteIndices,
+        this.delayedUnassignedShards = delayedUnassignedShards;
+    }
+    public ClusterHealthResponse(StreamInput in) throws IOException {
+        int delayedUnassignedShards,
+        }
+                numberOfDataNodes,
+            numberOfPendingTasks,
+    ) {
+    }
+        return clusterStateHealth.getActivePrimaryShards();
+        PARSER.declareInt(constructorArg(), new ParseField(UNASSIGNED_SHARDS));
+    private static final String UNASSIGNED_SHARDS = "unassigned_shards";
+import org.opensearch.cluster.health.ClusterHealthStatus;
+            boolean hasDiscoveredClusterManager = Boolean.TRUE.equals(parsedObjects[i++]);
+            && numberOfInFlightFetch == that.numberOfInFlightFetch
+            long taskMaxWaitingTimeMillis = (long) parsedObjects[i++];
+        int numberOfInFlightFetch,
+import org.opensearch.cluster.awarenesshealth.ClusterAwarenessHealth;
+    ClusterHealthResponse(
+            return new ClusterHealthResponse(
+        ClusterHealthRequest clusterHealthRequest,
+        this.delayedUnassignedShards = delayedUnassignedShards;
+    public TimeValue getTaskMaxWaitingTime() {
+        builder.field(STATUS, getStatus().name().toLowerCase(Locale.ROOT));
+            && Objects.equals(taskMaxWaitingTime, that.taskMaxWaitingTime)
+                    indices.put(indexHealth.getIndex(), indexHealth);
+     */
+        builder.startObject();
+    }
+        String clusterName,
+    /**
+                clusterName,
+        this.timedOut = timedOut;
+     * Allows to explicitly override the derived cluster health status.
+    private int numberOfPendingTasks = 0;
+        return clusterStateHealth.getNumberOfDataNodes();
+            @SuppressWarnings("unchecked")
+            clusterState,
+ * under the License.
+        return this.numberOfPendingTasks;
+                numberOfPendingTasks,
+            delayedUnassignedShards,
+/*
+    public RestStatus status() {
+    }
+                indices = emptyMap();
+            boolean hasDiscoveredMaster = Boolean.TRUE.equals(parsedObjects[i++]);
+        builder.endObject();
+    public ClusterHealthResponse() {}
+        builder.percentageField(ACTIVE_SHARDS_PERCENT_AS_NUMBER, ACTIVE_SHARDS_PERCENT, getActiveShardsPercent());
+    private static final String STATUS = "status";
+        // Can be absent if LEVEL == 'cluster'
+        if (outputAwarenessHealth && clusterAwarenessHealth != null) {
+        String clusterName,
+        super(in);
+                initializingShards,
+                clusterAwarenessHealth = new ClusterAwarenessHealth(in);
+            throw new IllegalArgumentException("'status' must not be null");
+     * The number of unassigned shards that are currently being delayed (for example,
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
+ * not use this file except in compliance with the License.
+        PARSER.declareInt(constructorArg(), new ParseField(ACTIVE_PRIMARY_SHARDS));
+            if (in.readBoolean()) {
+import org.opensearch.common.xcontent.StatusToXContentObject;
+                for (ClusterIndexHealth indexHealth : indexList) {
+        String level = params.param("level", "cluster");
+        parsedObjects -> {
+     */
+        this.taskMaxWaitingTime = taskMaxWaitingTime;
+                numberOfInFlightFetch,
+                delayedUnassignedShards,
+ * license agreements. See the NOTICE file distributed with
+    }
+            numberOfPendingTasks,
+    public double getActiveShardsPercent() {
+    private ClusterHealthStatus clusterHealthStatus;
+    }
+    ) {
+        clusterStateHealth = new ClusterStateHealth(in);
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+import java.util.Map;
+    }
+    private static final String RELOCATING_SHARDS = "relocating_shards";
+import org.opensearch.core.xcontent.ObjectParser;
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+        return builder;
+            clusterHealthStatus
+    public ClusterHealthStatus getStatus() {
+     * The percentage of active shards, should be 100% in a green system
+ * The OpenSearch Contributors require contributions made to
+        this.clusterName = clusterName;
+        int numberOfInFlightFetch,
+     *
+            } else {
+            if (indexList == null || indexList.isEmpty()) {
+            String statusStr = (String) parsedObjects[i++];
+        this.clusterHealthStatus = clusterStateHealth.getStatus();
+import org.opensearch.core.common.io.stream.StreamInput;
+            ClusterHealthStatus status = ClusterHealthStatus.fromString(statusStr);

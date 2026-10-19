@@ -1,303 +1,267 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.core.common.unit;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.Locale;
-import java.util.Objects;
-
-/**
- * A byte size value
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class ByteSizeValue implements Writeable, Comparable<ByteSizeValue>, ToXContentFragment {
-
-    public static final ByteSizeValue ZERO = new ByteSizeValue(0, ByteSizeUnit.BYTES);
-
-    private final long size;
-    private final ByteSizeUnit unit;
-
-    public ByteSizeValue(StreamInput in) throws IOException {
-        size = in.readZLong();
-        unit = ByteSizeUnit.readFrom(in);
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeZLong(size);
-        unit.writeTo(out);
-    }
-
-    public ByteSizeValue(long bytes) {
-        this(bytes, ByteSizeUnit.BYTES);
-    }
-
-    public ByteSizeValue(long size, ByteSizeUnit unit) {
-        if (size < -1 || (size == -1 && unit != ByteSizeUnit.BYTES)) {
-            throw new IllegalArgumentException("Values less than -1 bytes are not supported: " + size + unit.getSuffix());
-        }
-        if (size > Long.MAX_VALUE / unit.toBytes(1)) {
             throw new IllegalArgumentException(
-                "Values greater than " + Long.MAX_VALUE + " bytes are not supported: " + size + unit.getSuffix()
-            );
-        }
-        this.size = size;
-        this.unit = unit;
-    }
-
-    // For testing
     long getSize() {
-        return size;
-    }
-
-    // For testing
-    ByteSizeUnit getUnit() {
-        return unit;
-    }
-
-    @Deprecated
-    public int bytesAsInt() {
-        long bytes = getBytes();
-        if (bytes > Integer.MAX_VALUE) {
-            throw new IllegalArgumentException("size [" + toString() + "] is bigger than max int");
-        }
-        return (int) bytes;
-    }
-
-    public long getBytes() {
-        return unit.toBytes(size);
-    }
-
+        this.unit = unit;
+    public static ByteSizeValue parseBytesSizeValue(String sValue, ByteSizeValue defaultValue, String settingName)
+import java.util.Objects;
+        } else if (bytes >= ByteSizeUnit.C4) {
+            return new ByteSizeValue(-1, ByteSizeUnit.BYTES);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    public ByteSizeValue(StreamInput in) throws IOException {
     public long getKb() {
-        return unit.toKB(size);
-    }
-
-    public long getMb() {
-        return unit.toMB(size);
-    }
-
-    public long getGb() {
-        return unit.toGB(size);
-    }
-
-    public long getTb() {
-        return unit.toTB(size);
-    }
-
-    public long getPb() {
-        return unit.toPB(size);
-    }
-
+/*
+        this.size = size;
     public double getKbFrac() {
-        return ((double) getBytes()) / ByteSizeUnit.C1;
+        ByteSizeUnit unit,
+        } catch (IllegalArgumentException e) {
     }
-
-    public double getMbFrac() {
-        return ((double) getBytes()) / ByteSizeUnit.C2;
+            value = getTbFrac();
+    public int hashCode() {
+                settingName,
+import org.opensearch.OpenSearchParseException;
+        } else if (lowerSValue.endsWith("kb")) {
+                        e,
+ *
+        String lowerSValue = sValue.toLowerCase(Locale.ROOT).trim();
+            return parse(sValue, lowerSValue, "t", ByteSizeUnit.TB, settingName);
+        if (bytes > Integer.MAX_VALUE) {
+        } else if (lowerSValue.endsWith("b")) {
+import org.opensearch.core.common.io.stream.StreamOutput;
+        if (sValue == null) {
     }
-
-    public double getGbFrac() {
-        return ((double) getBytes()) / ByteSizeUnit.C3;
-    }
-
+    @Override
+}
     public double getTbFrac() {
+            suffix = ByteSizeUnit.MB.getSuffix();
+ *
+        return ((double) getBytes()) / ByteSizeUnit.C1;
+        return ((double) getBytes()) / ByteSizeUnit.C2;
+            throw new OpenSearchParseException(
+                }
+    public ByteSizeValue(long size, ByteSizeUnit unit) {
+ * A byte size value
+        }
+    }
+            );
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                            + "deprecated since Legacy 6.2. Use non-fractional bytes values instead: found for setting [{}]",
+ * the Apache License, Version 2.0 (the "License"); you may
+package org.opensearch.core.common.unit;
+        } else if (lowerSValue.endsWith("gb")) {
+            value = getKbFrac();
+        }
+    public long getPb() {
+    }
+        return ((double) getBytes()) / ByteSizeUnit.C3;
+        out.writeZLong(size);
+    }
+            throw new IllegalArgumentException("Values less than -1 bytes are not supported: " + size + unit.getSuffix());
+        return size + unit.getSuffix();
+                "failed to parse setting [{}] with value [{}] as a size in bytes: unit is missing or unrecognized",
+        final String settingName
+    public String getStringRep() {
+import java.util.Locale;
+        unit = ByteSizeUnit.readFrom(in);
+        return unit.toGB(size);
+ */
+        long thisValue = size * unit.toBytes(1);
+        }
+import org.opensearch.core.common.io.stream.StreamInput;
+        return unit.toTB(size);
+     *         or rounded values so this method should be preferred when
+            suffix = ByteSizeUnit.KB.getSuffix();
+    @Deprecated
+    }
+                settingName,
         return ((double) getBytes()) / ByteSizeUnit.C4;
     }
-
-    public double getPbFrac() {
-        return ((double) getBytes()) / ByteSizeUnit.C5;
+                try {
+        return Long.hashCode(size * unit.toBytes(1));
+    public static final ByteSizeValue ZERO = new ByteSizeValue(0, ByteSizeUnit.BYTES);
+                initialInput
     }
-
-    /**
-     * @return a string representation of this value which is guaranteed to be
-     *         able to be parsed using
-     *         {@link #parseBytesSizeValue(String, ByteSizeValue, String)}.
-     *         Unlike {@link #toString()} this method will not output fractional
-     *         or rounded values so this method should be preferred when
-     *         serialising the value to JSON.
-     */
-    public String getStringRep() {
-        if (size <= 0) {
-            return String.valueOf(size);
-        }
-        return size + unit.getSuffix();
-    }
-
-    @Override
-    public String toString() {
-        long bytes = getBytes();
-        double value = bytes;
-        String suffix = ByteSizeUnit.BYTES.getSuffix();
-        if (bytes >= ByteSizeUnit.C5) {
-            value = getPbFrac();
-            suffix = ByteSizeUnit.PB.getSuffix();
-        } else if (bytes >= ByteSizeUnit.C4) {
-            value = getTbFrac();
-            suffix = ByteSizeUnit.TB.getSuffix();
-        } else if (bytes >= ByteSizeUnit.C3) {
-            value = getGbFrac();
-            suffix = ByteSizeUnit.GB.getSuffix();
-        } else if (bytes >= ByteSizeUnit.C2) {
-            value = getMbFrac();
-            suffix = ByteSizeUnit.MB.getSuffix();
-        } else if (bytes >= ByteSizeUnit.C1) {
-            value = getKbFrac();
-            suffix = ByteSizeUnit.KB.getSuffix();
-        }
-        return Strings.format1Decimals(value, suffix);
-    }
-
-    public static ByteSizeValue parseBytesSizeValue(String sValue, String settingName) throws OpenSearchParseException {
-        return parseBytesSizeValue(sValue, null, settingName);
-    }
-
-    public static ByteSizeValue parseBytesSizeValue(String sValue, ByteSizeValue defaultValue, String settingName)
-        throws OpenSearchParseException {
-        settingName = Objects.requireNonNull(settingName);
-        if (sValue == null) {
-            return defaultValue;
-        }
-        String lowerSValue = sValue.toLowerCase(Locale.ROOT).trim();
-        if (lowerSValue.endsWith("k")) {
-            return parse(sValue, lowerSValue, "k", ByteSizeUnit.KB, settingName);
-        } else if (lowerSValue.endsWith("kb")) {
-            return parse(sValue, lowerSValue, "kb", ByteSizeUnit.KB, settingName);
-        } else if (lowerSValue.endsWith("m")) {
-            return parse(sValue, lowerSValue, "m", ByteSizeUnit.MB, settingName);
-        } else if (lowerSValue.endsWith("mb")) {
-            return parse(sValue, lowerSValue, "mb", ByteSizeUnit.MB, settingName);
-        } else if (lowerSValue.endsWith("g")) {
-            return parse(sValue, lowerSValue, "g", ByteSizeUnit.GB, settingName);
-        } else if (lowerSValue.endsWith("gb")) {
-            return parse(sValue, lowerSValue, "gb", ByteSizeUnit.GB, settingName);
-        } else if (lowerSValue.endsWith("t")) {
-            return parse(sValue, lowerSValue, "t", ByteSizeUnit.TB, settingName);
-        } else if (lowerSValue.endsWith("tb")) {
-            return parse(sValue, lowerSValue, "tb", ByteSizeUnit.TB, settingName);
-        } else if (lowerSValue.endsWith("p")) {
-            return parse(sValue, lowerSValue, "p", ByteSizeUnit.PB, settingName);
-        } else if (lowerSValue.endsWith("pb")) {
+    public int compareTo(ByteSizeValue other) {
+ * not use this file except in compliance with the License.
             return parse(sValue, lowerSValue, "pb", ByteSizeUnit.PB, settingName);
-        } else if (lowerSValue.endsWith("b")) {
-            return new ByteSizeValue(Long.parseLong(lowerSValue.substring(0, lowerSValue.length() - 1).trim()), ByteSizeUnit.BYTES);
-        } else if (lowerSValue.equals("-1")) {
-            // Allow this special value to be unit-less:
-            return new ByteSizeValue(-1, ByteSizeUnit.BYTES);
-        } else if (lowerSValue.equals("0")) {
-            // Allow this special value to be unit-less:
-            return new ByteSizeValue(0, ByteSizeUnit.BYTES);
-        } else {
-            // Missing units:
-            throw new OpenSearchParseException(
-                "failed to parse setting [{}] with value [{}] as a size in bytes: unit is missing or unrecognized",
-                settingName,
-                sValue
-            );
         }
+            throw new OpenSearchParseException(
+        final String normalized,
     }
-
+        return size;
+        } else if (lowerSValue.equals("-1")) {
+     *         able to be parsed using
+    public double getPbFrac() {
+    public ByteSizeValue(long bytes) {
+        if (size <= 0) {
+    public static ByteSizeValue parseBytesSizeValue(String sValue, String settingName) throws OpenSearchParseException {
+    public void writeTo(StreamOutput out) throws IOException {
+     * @return a string representation of this value which is guaranteed to be
+    }
+    }
+    public double getGbFrac() {
+ * KIND, either express or implied.  See the License for the
+        return (int) bytes;
+ * compatible open source license.
+            try {
+    ByteSizeUnit getUnit() {
+    public long getGb() {
+            return parse(sValue, lowerSValue, "p", ByteSizeUnit.PB, settingName);
+        if (size > Long.MAX_VALUE / unit.toBytes(1)) {
+            return parse(sValue, lowerSValue, "kb", ByteSizeUnit.KB, settingName);
+ * @opensearch.api
+            return new ByteSizeValue(Long.parseLong(lowerSValue.substring(0, lowerSValue.length() - 1).trim()), ByteSizeUnit.BYTES);
+        throws OpenSearchParseException {
+        return parseBytesSizeValue(sValue, null, settingName);
+        long bytes = getBytes();
+    }
+                return new ByteSizeValue(Long.parseLong(s), unit);
+            return parse(sValue, lowerSValue, "gb", ByteSizeUnit.GB, settingName);
     private static ByteSizeValue parse(
         final String initialInput,
-        final String normalized,
-        final String suffix,
-        ByteSizeUnit unit,
-        final String settingName
-    ) {
-        final String s = normalized.substring(0, normalized.length() - suffix.length()).trim();
-        try {
-            try {
-                return new ByteSizeValue(Long.parseLong(s), unit);
-            } catch (final NumberFormatException e) {
-                try {
-                    Double.parseDouble(s);
-                    throw new OpenSearchParseException(
-                        "Failed to parse bytes value [{}]. Fractional bytes values have been "
-                            + "deprecated since Legacy 6.2. Use non-fractional bytes values instead: found for setting [{}]",
-                        e,
-                        initialInput,
-                        settingName
-                    );
-                } catch (final NumberFormatException ignored) {
-                    throw new OpenSearchParseException("failed to parse [{}]", e, initialInput);
-                }
-            }
-        } catch (IllegalArgumentException e) {
-            throw new OpenSearchParseException(
-                "failed to parse setting [{}] with value [{}] as a size in bytes",
-                e,
-                settingName,
-                initialInput
-            );
-        }
     }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-
-        return compareTo((ByteSizeValue) o) == 0;
-    }
-
-    @Override
-    public int hashCode() {
-        return Long.hashCode(size * unit.toBytes(1));
-    }
-
-    @Override
-    public int compareTo(ByteSizeValue other) {
-        long thisValue = size * unit.toBytes(1);
-        long otherValue = other.size * other.unit.toBytes(1);
-        return Long.compare(thisValue, otherValue);
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        } else if (lowerSValue.endsWith("pb")) {
         return builder.value(toString());
+ * specific language governing permissions and limitations
+    // For testing
+    public String toString() {
+ * software distributed under the License is distributed on an
+            return true;
+            value = getPbFrac();
     }
-}
+        if (this == o) {
+        return unit.toKB(size);
+            return parse(sValue, lowerSValue, "mb", ByteSizeUnit.MB, settingName);
+        try {
+ */
+        if (size < -1 || (size == -1 && unit != ByteSizeUnit.BYTES)) {
+     *         {@link #parseBytesSizeValue(String, ByteSizeValue, String)}.
+        long bytes = getBytes();
+ * You may obtain a copy of the License at
+    }
+            suffix = ByteSizeUnit.TB.getSuffix();
+            suffix = ByteSizeUnit.GB.getSuffix();
+        } else if (bytes >= ByteSizeUnit.C3) {
+        return unit;
+        this(bytes, ByteSizeUnit.BYTES);
+        return Strings.format1Decimals(value, suffix);
+     *         serialising the value to JSON.
+    }
+        }
+     *         Unlike {@link #toString()} this method will not output fractional
+        } else if (lowerSValue.endsWith("mb")) {
+    private final ByteSizeUnit unit;
+        long otherValue = other.size * other.unit.toBytes(1);
+        return compareTo((ByteSizeValue) o) == 0;
+    public long getMb() {
+import org.opensearch.core.xcontent.XContentBuilder;
+    }
+        } else if (lowerSValue.endsWith("p")) {
+            return new ByteSizeValue(0, ByteSizeUnit.BYTES);
+            // Missing units:
+            return defaultValue;
+        } else if (lowerSValue.endsWith("g")) {
+            suffix = ByteSizeUnit.PB.getSuffix();
+ */
+ * The OpenSearch Contributors require contributions made to
+        if (o == null || getClass() != o.getClass()) {
+        final String s = normalized.substring(0, normalized.length() - suffix.length()).trim();
+    @Override
+        unit.writeTo(out);
+                e,
+    }
+        }
+    @Override
+import java.io.IOException;
+            return false;
+    @Override
+            );
+    }
+            return parse(sValue, lowerSValue, "tb", ByteSizeUnit.TB, settingName);
+            } catch (final NumberFormatException e) {
+ * Unless required by applicable law or agreed to in writing,
+                } catch (final NumberFormatException ignored) {
+        }
+                    throw new OpenSearchParseException(
+            }
+            return parse(sValue, lowerSValue, "k", ByteSizeUnit.KB, settingName);
+    }
+     */
+    }
+                "failed to parse setting [{}] with value [{}] as a size in bytes",
+        } else if (lowerSValue.endsWith("m")) {
+    private final long size;
+    /**
+        return Long.compare(thisValue, otherValue);
+        } else if (lowerSValue.equals("0")) {
+ * license agreements. See the NOTICE file distributed with
+ * Licensed to Elasticsearch under one or more contributor
+    public int bytesAsInt() {
+            );
+    // For testing
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        double value = bytes;
+                sValue
+    public double getMbFrac() {
+            throw new IllegalArgumentException("size [" + toString() + "] is bigger than max int");
+/*
+        }
+/**
+        if (bytes >= ByteSizeUnit.C5) {
+        return ((double) getBytes()) / ByteSizeUnit.C5;
+    public long getTb() {
+                    throw new OpenSearchParseException("failed to parse [{}]", e, initialInput);
+@PublicApi(since = "1.0.0")
+    public long getBytes() {
+    }
+        return unit.toMB(size);
+import org.opensearch.core.xcontent.ToXContentFragment;
+                "Values greater than " + Long.MAX_VALUE + " bytes are not supported: " + size + unit.getSuffix()
+ * GitHub history for details.
+        String suffix = ByteSizeUnit.BYTES.getSuffix();
+            // Allow this special value to be unit-less:
+            return parse(sValue, lowerSValue, "m", ByteSizeUnit.MB, settingName);
+            return parse(sValue, lowerSValue, "g", ByteSizeUnit.GB, settingName);
+    }
+            return String.valueOf(size);
+ */
+                    );
+    }
+ * under the License.
+        settingName = Objects.requireNonNull(settingName);
+        size = in.readZLong();
+    @Override
+        } else if (bytes >= ByteSizeUnit.C2) {
+        } else if (lowerSValue.endsWith("tb")) {
+ * this file be licensed under the Apache-2.0 license or a
+                    Double.parseDouble(s);
+        return unit.toBytes(size);
+/*
+import org.opensearch.core.common.io.stream.Writeable;
+            // Allow this special value to be unit-less:
+        } else if (bytes >= ByteSizeUnit.C1) {
+        }
+    }
+            value = getGbFrac();
+    @Override
+ * ownership. Elasticsearch licenses this file to you under
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+            value = getMbFrac();
+        final String suffix,
+                        "Failed to parse bytes value [{}]. Fractional bytes values have been "
+                        initialInput,
+        }
+                        settingName
+        return unit.toPB(size);
+        if (lowerSValue.endsWith("k")) {
+ * SPDX-License-Identifier: Apache-2.0
+        } else if (lowerSValue.endsWith("t")) {
+    ) {
+    }
+    public boolean equals(Object o) {
+public class ByteSizeValue implements Writeable, Comparable<ByteSizeValue>, ToXContentFragment {
+import org.opensearch.core.common.Strings;
+ * this work for additional information regarding copyright
+ *
+        } else {
+import org.opensearch.common.annotation.PublicApi;

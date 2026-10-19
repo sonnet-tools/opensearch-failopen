@@ -1,226 +1,198 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.translog;
-
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.NumericDocValuesField;
-import org.apache.lucene.document.StoredField;
-import org.apache.lucene.document.TextField;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.routing.AllocationId;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.engine.Engine;
-import org.opensearch.index.engine.EngineConfig;
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.Mapping;
-import org.opensearch.index.mapper.ParseContext;
-import org.opensearch.index.mapper.ParsedDocument;
-import org.opensearch.index.mapper.SeqNoFieldMapper;
-import org.opensearch.index.mapper.SourceFieldMapper;
-import org.opensearch.index.mapper.Uid;
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.test.IndexSettingsModule;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.junit.After;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.nio.file.Path;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.LongSupplier;
-
-import static org.opensearch.index.translog.TranslogDeletionPolicies.createTranslogDeletionPolicy;
-
-public abstract class TranslogManagerTestCase extends OpenSearchTestCase {
-
-    protected final ShardId shardId = new ShardId(new Index("index", "_na_"), 0);
-    protected final AllocationId allocationId = AllocationId.newInitializing();
-    protected static final IndexSettings INDEX_SETTINGS = IndexSettingsModule.newIndexSettings("index", Settings.EMPTY);
-    private AtomicLong globalCheckpoint;
-    protected ThreadPool threadPool;
-    protected final PrimaryTermSupplier primaryTerm = new PrimaryTermSupplier(1L);
-
-    protected IndexSettings defaultSettings;
-    protected String codecName;
-    protected Path primaryTranslogDir;
-    protected String translogUUID;
-
-    protected static final BytesArray SOURCE = bytesArray("{}");
-    protected static final BytesReference B_1 = new BytesArray(new byte[] { 1 });
-
-    protected Translog createTranslog(LongSupplier primaryTermSupplier) throws IOException {
-        return createTranslog(primaryTranslogDir, primaryTermSupplier);
     }
-
-    protected Translog createTranslog(Path translogPath, LongSupplier primaryTermSupplier) throws IOException {
-        TranslogConfig translogConfig = new TranslogConfig(
-            shardId,
-            translogPath,
-            INDEX_SETTINGS,
-            BigArrays.NON_RECYCLING_INSTANCE,
-            "",
-            false
-        );
-        String translogUUID = Translog.createEmptyTranslog(
-            translogPath,
-            SequenceNumbers.NO_OPS_PERFORMED,
-            shardId,
-            primaryTermSupplier.getAsLong()
-        );
-        return new LocalTranslog(
-            translogConfig,
-            translogUUID,
-            createTranslogDeletionPolicy(INDEX_SETTINGS),
-            () -> SequenceNumbers.NO_OPS_PERFORMED,
-            primaryTermSupplier,
-            seqNo -> {},
-            TranslogOperationHelper.DEFAULT,
-            null
-        );
-    }
-
-    private String create(Path path) throws IOException {
-        globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);
-        return Translog.createEmptyTranslog(path, SequenceNumbers.NO_OPS_PERFORMED, shardId, primaryTerm.get());
-    }
-
-    @Override
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();
-        primaryTerm.set(randomIntBetween(1, 100));
-        defaultSettings = IndexSettingsModule.newIndexSettings("test", indexSettings());
-        threadPool = new TestThreadPool(getClass().getName());
-        primaryTranslogDir = createTempDir("translog-primary");
-        translogUUID = create(primaryTranslogDir);
-    }
-
-    @Override
-    @After
-    public void tearDown() throws Exception {
-        super.tearDown();
-        IOUtils.close(() -> terminate(threadPool));
-    }
-
-    protected Settings indexSettings() {
-        // TODO randomize more settings
-        return Settings.builder()
-            .put(IndexSettings.INDEX_GC_DELETES_SETTING.getKey(), "1h") // make sure this doesn't kick in on us
-            .put(EngineConfig.INDEX_CODEC_SETTING.getKey(), codecName)
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(
-                IndexSettings.MAX_REFRESH_LISTENERS_PER_SHARD.getKey(),
-                between(10, 10 * IndexSettings.MAX_REFRESH_LISTENERS_PER_SHARD.get(Settings.EMPTY))
-            )
-            .put(IndexSettings.INDEX_SOFT_DELETES_RETENTION_OPERATIONS_SETTING.getKey(), between(0, 1000))
-            .build();
-    }
-
-    public static final class PrimaryTermSupplier implements LongSupplier {
-        private final AtomicLong term;
-
-        PrimaryTermSupplier(long initialTerm) {
-            this.term = new AtomicLong(initialTerm);
-        }
-
-        public long get() {
-            return term.get();
-        }
-
-        public void set(long newTerm) {
-            this.term.set(newTerm);
-        }
-
-        @Override
-        public long getAsLong() {
-            return get();
-        }
-    }
-
-    protected static ParsedDocument testParsedDocument(
-        String id,
-        String routing,
-        ParseContext.Document document,
-        BytesReference source,
-        Mapping mappingUpdate
-    ) {
-        return testParsedDocument(id, routing, document, source, mappingUpdate, false);
-    }
-
-    protected static ParsedDocument testParsedDocument(
-        String id,
-        String routing,
-        ParseContext.Document document,
-        BytesReference source,
-        Mapping mappingUpdate,
-        boolean recoverySource
-    ) {
-        Field uidField = new Field("_id", Uid.encodeId(id), IdFieldMapper.Defaults.FIELD_TYPE);
-        Field versionField = new NumericDocValuesField("_version", 0);
-        SeqNoFieldMapper.SequenceIDFields seqID = SeqNoFieldMapper.SequenceIDFields.emptySeqID();
-        document.add(uidField);
-        document.add(versionField);
-        document.add(seqID.seqNo);
-        document.add(seqID.seqNoDocValue);
-        document.add(seqID.primaryTerm);
-        BytesRef ref = source.toBytesRef();
-        if (recoverySource) {
-            document.add(new StoredField(SourceFieldMapper.RECOVERY_SOURCE_NAME, ref.bytes, ref.offset, ref.length));
             document.add(new NumericDocValuesField(SourceFieldMapper.RECOVERY_SOURCE_NAME, 1));
-        } else {
-            document.add(new StoredField(SourceFieldMapper.NAME, ref.bytes, ref.offset, ref.length));
-        }
-        return new ParsedDocument(versionField, seqID, id, routing, List.of(document), source, MediaTypeRegistry.JSON, mappingUpdate);
+public abstract class TranslogManagerTestCase extends OpenSearchTestCase {
+import org.opensearch.core.common.bytes.BytesReference;
     }
-
-    protected static ParseContext.Document testDocumentWithTextField() {
-        return testDocumentWithTextField("test");
+            primaryTermSupplier.getAsLong()
+import org.opensearch.index.mapper.Mapping;
+        private final AtomicLong term;
+        TranslogConfig translogConfig = new TranslogConfig(
+            translogPath,
+            createTranslogDeletionPolicy(INDEX_SETTINGS),
+import org.opensearch.test.IndexSettingsModule;
+            seqNo -> {},
     }
-
-    protected static ParseContext.Document testDocumentWithTextField(String value) {
-        ParseContext.Document document = testDocument();
-        document.add(new TextField("value", value, Field.Store.YES));
-        return document;
-    }
-
-    protected static ParseContext.Document testDocument() {
-        return new ParseContext.Document();
-    }
-
-    protected Engine.Index indexForDoc(ParsedDocument doc) {
+        return Settings.builder()
         return new Engine.Index(newUid(doc), primaryTerm.get(), doc);
-    }
-
-    public static Term newUid(String id) {
-        return new Term("_id", Uid.encodeId(id));
-    }
-
+            false
+    protected ThreadPool threadPool;
+    @Override
+            SequenceNumbers.NO_OPS_PERFORMED,
+import org.opensearch.index.IndexSettings;
     public static Term newUid(ParsedDocument doc) {
-        return newUid(doc.id());
+        String translogUUID = Translog.createEmptyTranslog(
+import org.opensearch.index.mapper.SeqNoFieldMapper;
     }
-
-    protected static BytesArray bytesArray(String string) {
-        return new BytesArray(string.getBytes(Charset.defaultCharset()));
+            .put(IndexSettings.INDEX_GC_DELETES_SETTING.getKey(), "1h") // make sure this doesn't kick in on us
+        }
+    protected static final IndexSettings INDEX_SETTINGS = IndexSettingsModule.newIndexSettings("index", Settings.EMPTY);
+            .put(EngineConfig.INDEX_CODEC_SETTING.getKey(), codecName)
+            translogConfig,
+        } else {
     }
+    @After
+            translogPath,
+            primaryTermSupplier,
+    protected static ParsedDocument testParsedDocument(
+    protected final PrimaryTermSupplier primaryTerm = new PrimaryTermSupplier(1L);
+        super.tearDown();
+    }
+import java.nio.file.Path;
+            null
+import org.apache.lucene.document.Field;
+        }
+    }
+        BytesReference source,
+    protected static ParsedDocument testParsedDocument(
+package org.opensearch.index.translog;
+        return testParsedDocument(id, routing, document, source, mappingUpdate, false);
+import org.opensearch.common.settings.Settings;
+        translogUUID = create(primaryTranslogDir);
+    public static Term newUid(String id) {
+        String routing,
+import org.opensearch.threadpool.ThreadPool;
+    protected Path primaryTranslogDir;
+        super.setUp();
+import org.apache.lucene.document.TextField;
+import org.opensearch.core.index.Index;
+import org.junit.Before;
+            shardId,
+        ParseContext.Document document,
+    @Override
+            document.add(new StoredField(SourceFieldMapper.RECOVERY_SOURCE_NAME, ref.bytes, ref.offset, ref.length));
+import static org.opensearch.index.translog.TranslogDeletionPolicies.createTranslogDeletionPolicy;
+            shardId,
+    }
+        return new ParseContext.Document();
+        primaryTranslogDir = createTempDir("translog-primary");
+        document.add(seqID.primaryTerm);
+    public void tearDown() throws Exception {
 }
+import org.opensearch.Version;
+            TranslogOperationHelper.DEFAULT,
+    public void setUp() throws Exception {
+    public static final class PrimaryTermSupplier implements LongSupplier {
+    }
+        Field uidField = new Field("_id", Uid.encodeId(id), IdFieldMapper.Defaults.FIELD_TYPE);
+                IndexSettings.MAX_REFRESH_LISTENERS_PER_SHARD.getKey(),
+    protected static final BytesArray SOURCE = bytesArray("{}");
+import java.util.List;
+import org.opensearch.core.index.shard.ShardId;
+        document.add(uidField);
+            document.add(new StoredField(SourceFieldMapper.NAME, ref.bytes, ref.offset, ref.length));
+        boolean recoverySource
+ *
+        // TODO randomize more settings
+ * The OpenSearch Contributors require contributions made to
+        public void set(long newTerm) {
+    protected Settings indexSettings() {
+    }
+    protected Translog createTranslog(LongSupplier primaryTermSupplier) throws IOException {
+        BytesReference source,
+    protected final ShardId shardId = new ShardId(new Index("index", "_na_"), 0);
+        String id,
+            )
+import java.util.concurrent.atomic.AtomicLong;
+    }
+        return new ParsedDocument(versionField, seqID, id, routing, List.of(document), source, MediaTypeRegistry.JSON, mappingUpdate);
+import java.util.function.LongSupplier;
+        threadPool = new TestThreadPool(getClass().getName());
+    protected static BytesArray bytesArray(String string) {
+        }
+            return term.get();
+import java.io.IOException;
+            "",
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.junit.After;
+import org.opensearch.threadpool.TestThreadPool;
+/*
+import org.apache.lucene.util.BytesRef;
+    }
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.util.io.IOUtils;
+        defaultSettings = IndexSettingsModule.newIndexSettings("test", indexSettings());
+import org.opensearch.core.common.bytes.BytesArray;
+    protected Translog createTranslog(Path translogPath, LongSupplier primaryTermSupplier) throws IOException {
+        ParseContext.Document document,
+import org.opensearch.index.seqno.SequenceNumbers;
+            .put(IndexSettings.INDEX_SOFT_DELETES_RETENTION_OPERATIONS_SETTING.getKey(), between(0, 1000))
+        return new BytesArray(string.getBytes(Charset.defaultCharset()));
+        document.add(seqID.seqNoDocValue);
+import org.opensearch.index.mapper.ParseContext;
+    ) {
+        IOUtils.close(() -> terminate(threadPool));
+        );
+    }
+        document.add(new TextField("value", value, Field.Store.YES));
+            () -> SequenceNumbers.NO_OPS_PERFORMED,
+import org.opensearch.index.engine.EngineConfig;
+            .build();
+            INDEX_SETTINGS,
+        if (recoverySource) {
+    protected Engine.Index indexForDoc(ParsedDocument doc) {
+        @Override
+        document.add(versionField);
+        Mapping mappingUpdate
+            translogUUID,
+import org.opensearch.test.OpenSearchTestCase;
+    }
+ * SPDX-License-Identifier: Apache-2.0
+            BigArrays.NON_RECYCLING_INSTANCE,
+            this.term.set(newTerm);
+        return new LocalTranslog(
+        ParseContext.Document document = testDocument();
+            .put(
+        String id,
+        return newUid(doc.id());
+        return testDocumentWithTextField("test");
+    protected String translogUUID;
+import org.opensearch.index.mapper.Uid;
+import org.opensearch.index.mapper.SourceFieldMapper;
+        String routing,
+ * compatible open source license.
+                between(10, 10 * IndexSettings.MAX_REFRESH_LISTENERS_PER_SHARD.get(Settings.EMPTY))
+        );
+        return createTranslog(primaryTranslogDir, primaryTermSupplier);
+        public long getAsLong() {
+import org.opensearch.index.engine.Engine;
+        SeqNoFieldMapper.SequenceIDFields seqID = SeqNoFieldMapper.SequenceIDFields.emptySeqID();
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+    protected String codecName;
+        BytesRef ref = source.toBytesRef();
+    private AtomicLong globalCheckpoint;
+    protected IndexSettings defaultSettings;
+import org.opensearch.common.util.BigArrays;
+    protected final AllocationId allocationId = AllocationId.newInitializing();
+    protected static ParseContext.Document testDocumentWithTextField() {
+    protected static ParseContext.Document testDocumentWithTextField(String value) {
+        Mapping mappingUpdate,
+        globalCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);
+    private String create(Path path) throws IOException {
+        Field versionField = new NumericDocValuesField("_version", 0);
+import org.apache.lucene.index.Term;
+ */
+    protected static ParseContext.Document testDocument() {
+import org.apache.lucene.document.StoredField;
+        return document;
+    protected static final BytesReference B_1 = new BytesArray(new byte[] { 1 });
+        }
+            this.term = new AtomicLong(initialTerm);
+        public long get() {
+        return new Term("_id", Uid.encodeId(id));
+        );
+import org.opensearch.index.mapper.ParsedDocument;
+        }
+        return Translog.createEmptyTranslog(path, SequenceNumbers.NO_OPS_PERFORMED, shardId, primaryTerm.get());
+    @Before
+import org.apache.lucene.document.NumericDocValuesField;
+            return get();
+        document.add(seqID.seqNo);
+        PrimaryTermSupplier(long initialTerm) {
+import org.opensearch.index.mapper.IdFieldMapper;
+    }
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+    }
+        primaryTerm.set(randomIntBetween(1, 100));
+import org.opensearch.cluster.routing.AllocationId;
+    ) {
+import java.nio.charset.Charset;

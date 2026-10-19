@@ -1,785 +1,699 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.snapshots;
-
-import org.opensearch.Version;
-import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequestBuilder;
-import org.opensearch.action.admin.cluster.state.ClusterStateResponse;
-import org.opensearch.action.index.IndexRequestBuilder;
-import org.opensearch.action.search.SearchRequest;
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateObserver;
-import org.opensearch.cluster.ClusterStateUpdateTask;
-import org.opensearch.cluster.SnapshotDeletionsInProgress;
-import org.opensearch.cluster.SnapshotsInProgress;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.RepositoriesMetadata;
-import org.opensearch.cluster.metadata.RepositoryMetadata;
-import org.opensearch.cluster.routing.allocation.decider.EnableAllocationDecider;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Priority;
-import org.opensearch.common.UUIDs;
-import org.opensearch.common.action.ActionFuture;
-import org.opensearch.common.blobstore.BlobContainer;
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.compress.CompressorRegistry;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.DeprecationHandler;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.IndexModule;
-import org.opensearch.index.store.RemoteBufferedOutputDirectory;
 import org.opensearch.indices.RemoteStoreSettings;
-import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.node.NodeClosedException;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.repositories.Repository;
-import org.opensearch.repositories.RepositoryData;
-import org.opensearch.repositories.ShardGenerations;
-import org.opensearch.repositories.blobstore.BlobStoreRepository;
-import org.opensearch.repositories.blobstore.BlobStoreTestUtil;
-import org.opensearch.search.builder.SearchSourceBuilder;
-import org.opensearch.snapshots.mockstore.MockRepository;
-import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
-import org.opensearch.test.VersionUtils;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.threadpool.ThreadPoolStats;
-import org.junit.After;
-
-import java.io.IOException;
-import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
-import java.util.function.Predicate;
-
-import static org.opensearch.common.util.FeatureFlags.WRITABLE_WARM_INDEX_SETTING;
-import static org.opensearch.index.remote.RemoteStoreEnums.DataCategory.SEGMENTS;
-import static org.opensearch.index.remote.RemoteStoreEnums.DataType.LOCK_FILES;
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.is;
-
-public abstract class AbstractSnapshotIntegTestCase extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
-
-    protected final static String TEST_REMOTE_STORE_REPO_SUFFIX = "__rs";
-    private static final String OLD_VERSION_SNAPSHOT_PREFIX = "old-version-snapshot-";
-
-    // Large snapshot pool settings to set up nodes for tests involving multiple repositories that need to have enough
-    // threads so that blocking some threads on one repository doesn't block other repositories from doing work
-    protected static final Settings LARGE_SNAPSHOT_POOL_SETTINGS = Settings.builder()
-        .put("thread_pool.snapshot.core", 5)
-        .put("thread_pool.snapshot.max", 5)
-        .build();
-
-    public AbstractSnapshotIntegTestCase(Settings nodeSettings) {
-        super(nodeSettings);
-    }
-
-    public AbstractSnapshotIntegTestCase() {
-        super(Settings.EMPTY);
-    }
-
-    /*
-    Disabling MockFSIndexStore plugin as the MockFSDirectoryFactory wraps the FSDirectory over a OpenSearchMockDirectoryWrapper which extends FilterDirectory (whereas FSDirectory extends BaseDirectory)
-    As a result of this wrapping the local directory of Composite Directory does not satisfy the assertion that local directory must be of type FSDirectory
-    */
-    @Override
-    protected boolean addMockIndexStorePlugin() {
-        return WRITABLE_WARM_INDEX_SETTING.get(settings) == false;
-    }
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            // Rebalancing is causing some checks after restore to randomly fail
-            // due to https://github.com/elastic/elasticsearch/issues/9421
-            .put(EnableAllocationDecider.CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), EnableAllocationDecider.Rebalance.NONE)
-            .build();
-    }
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Arrays.asList(MockRepository.Plugin.class);
-    }
-
-    @After
-    public void assertConsistentHistoryInLuceneIndex() throws Exception {
-        internalCluster().assertConsistentHistoryBetweenTranslogAndLuceneIndex();
-    }
-
-    @After
-    public void verifyNoLeakedListeners() throws Exception {
-        assertBusy(() -> {
-            for (SnapshotsService snapshotsService : internalCluster().getInstances(SnapshotsService.class)) {
-                assertTrue(snapshotsService.assertAllListenersResolved());
-            }
-        }, 30L, TimeUnit.SECONDS);
-    }
-
-    private String skipRepoConsistencyCheckReason;
-
-    @After
-    public void assertRepoConsistency() {
-        if (skipRepoConsistencyCheckReason == null) {
-            clusterAdmin().prepareGetRepositories()
-                .get()
-                .repositories()
-                .stream()
-                .filter(repositoryMetadata -> !repositoryMetadata.name().endsWith(TEST_REMOTE_STORE_REPO_SUFFIX))
-                .forEach(repositoryMetadata -> {
-                    final String name = repositoryMetadata.name();
-                    if (repositoryMetadata.settings().getAsBoolean("readonly", false) == false) {
-                        clusterAdmin().prepareDeleteSnapshot(name, OLD_VERSION_SNAPSHOT_PREFIX + "*").get();
-                        clusterAdmin().prepareCleanupRepository(name).get();
-                    }
-                    BlobStoreTestUtil.assertRepoConsistency(internalCluster(), name);
-                });
-        } else {
-            logger.info("--> skipped repo consistency checks because [{}]", skipRepoConsistencyCheckReason);
-        }
-    }
-
-    protected void disableRepoConsistencyCheck(String reason) {
-        assertNotNull(reason);
-        skipRepoConsistencyCheckReason = reason;
-    }
-
-    protected RepositoryData getRepositoryData(String repository) {
-        return getRepositoryData(internalCluster().getCurrentClusterManagerNodeInstance(RepositoriesService.class).repository(repository));
-    }
-
-    protected RepositoryData getRepositoryData(Repository repository) {
-        return PlainActionFuture.get(repository::getRepositoryData);
-    }
-
-    public static long getFailureCount(String repository) {
-        long failureCount = 0;
-        for (RepositoriesService repositoriesService : internalCluster().getDataOrClusterManagerNodeInstances(RepositoriesService.class)) {
-            MockRepository mockRepository = (MockRepository) repositoriesService.repository(repository);
-            failureCount += mockRepository.getFailureCount();
-        }
-        return failureCount;
-    }
-
-    public static void assertFileCount(Path dir, int expectedCount) throws IOException {
-        final List<Path> found = new ArrayList<>();
-        Files.walkFileTree(dir, new SimpleFileVisitor<Path>() {
-            @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                found.add(file);
-                return FileVisitResult.CONTINUE;
-            }
-        });
-        assertEquals("Unexpected file count, found: [" + found + "].", expectedCount, found.size());
-    }
-
-    public static int numberOfFiles(Path dir) throws IOException {
-        final AtomicInteger count = new AtomicInteger();
-        Files.walkFileTree(dir, new SimpleFileVisitor<Path>() {
-            @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                count.incrementAndGet();
-                return FileVisitResult.CONTINUE;
-            }
-        });
-        return count.get();
-    }
-
-    public static void stopNode(final String node) throws IOException {
-        internalCluster().stopRandomNode(settings -> settings.get("node.name").equals(node));
-    }
-
-    public void waitForBlock(String node, String repository, TimeValue timeout) throws InterruptedException {
-        logger.info("--> waiting for [{}] to be blocked on node [{}]", repository, node);
-        long start = System.currentTimeMillis();
-        RepositoriesService repositoriesService = internalCluster().getInstance(RepositoriesService.class, node);
-        MockRepository mockRepository = (MockRepository) repositoriesService.repository(repository);
-        while (System.currentTimeMillis() - start < timeout.millis()) {
-            if (mockRepository.blocked()) {
-                return;
-            }
-            Thread.sleep(100);
-        }
-        fail("Timeout waiting for node [" + node + "] to be blocked");
-    }
-
-    public SnapshotInfo waitForCompletion(String repository, String snapshotName, TimeValue timeout) throws InterruptedException {
-        long start = System.currentTimeMillis();
-        while (System.currentTimeMillis() - start < timeout.millis()) {
-            final SnapshotInfo snapshotInfo = getSnapshot(repository, snapshotName);
-            if (snapshotInfo.state().completed()) {
-                // Make sure that snapshot clean up operations are finished
-                ClusterStateResponse stateResponse = clusterAdmin().prepareState().get();
-                boolean found = false;
-                for (SnapshotsInProgress.Entry entry : stateResponse.getState()
-                    .custom(SnapshotsInProgress.TYPE, SnapshotsInProgress.EMPTY)
-                    .entries()) {
-                    final Snapshot curr = entry.snapshot();
-                    if (curr.getRepository().equals(repository) && curr.getSnapshotId().getName().equals(snapshotName)) {
-                        found = true;
-                        break;
-                    }
-                }
-                if (found == false) {
-                    return snapshotInfo;
-                }
-            }
-            Thread.sleep(100);
-        }
-        fail("Timeout!!!");
-        return null;
-    }
-
-    public static String blockClusterManagerFromFinalizingSnapshotOnIndexFile(final String repositoryName) {
-        final String clusterManagerName = internalCluster().getClusterManagerName();
-        ((MockRepository) internalCluster().getInstance(RepositoriesService.class, clusterManagerName).repository(repositoryName))
-            .setBlockAndFailOnWriteIndexFile();
-        return clusterManagerName;
-    }
-
-    public static String blockClusterManagerOnWriteIndexFile(final String repositoryName) {
-        final String clusterManagerName = internalCluster().getClusterManagerName();
-        ((MockRepository) internalCluster().getClusterManagerNodeInstance(RepositoriesService.class).repository(repositoryName))
-            .setBlockOnWriteIndexFile();
-        return clusterManagerName;
-    }
-
-    public static void blockClusterManagerFromDeletingIndexNFile(String repositoryName) {
-        final String clusterManagerName = internalCluster().getClusterManagerName();
-        ((MockRepository) internalCluster().getInstance(RepositoriesService.class, clusterManagerName).repository(repositoryName))
-            .setBlockOnDeleteIndexFile();
-    }
-
-    public static String blockClusterManagerFromFinalizingSnapshotOnSnapFile(final String repositoryName) {
-        final String clusterManagerName = internalCluster().getClusterManagerName();
-        ((MockRepository) internalCluster().getInstance(RepositoriesService.class, clusterManagerName).repository(repositoryName))
-            .setBlockAndFailOnWriteSnapFiles(true);
-        return clusterManagerName;
-    }
-
-    public static String blockNodeWithIndex(final String repositoryName, final String indexName) {
-        for (String node : internalCluster().nodesInclude(indexName)) {
-            ((MockRepository) internalCluster().getInstance(RepositoriesService.class, node).repository(repositoryName)).blockOnDataFiles(
-                true
-            );
-            return node;
-        }
-        fail("No nodes for the index " + indexName + " found");
-        return null;
-    }
-
-    public static void blockNodeOnAnyFiles(String repository, String nodeName) {
-        ((MockRepository) internalCluster().getInstance(RepositoriesService.class, nodeName).repository(repository)).setBlockOnAnyFiles(
-            true
-        );
-    }
-
-    public static void blockNodeOnAnySegmentFile(String repository, String nodeName) {
-        ((MockRepository) internalCluster().getInstance(RepositoriesService.class, nodeName).repository(repository)).blockOnSegmentFiles(
-            true
-        );
-    }
-
-    public static void blockDataNode(String repository, String nodeName) {
-        ((MockRepository) internalCluster().getInstance(RepositoriesService.class, nodeName).repository(repository)).blockOnDataFiles(true);
-    }
-
-    public static void blockAllDataNodes(String repository) {
-        for (RepositoriesService repositoriesService : internalCluster().getDataNodeInstances(RepositoriesService.class)) {
-            ((MockRepository) repositoriesService.repository(repository)).blockOnDataFiles(true);
-        }
-    }
-
-    public static void unblockAllDataNodes(String repository) {
-        for (RepositoriesService repositoriesService : internalCluster().getDataNodeInstances(RepositoriesService.class)) {
-            ((MockRepository) repositoriesService.repository(repository)).unblock();
-        }
-    }
-
-    public static void failReadsAllDataNodes(String repository) {
-        for (RepositoriesService repositoriesService : internalCluster().getDataNodeInstances(RepositoriesService.class)) {
-            MockRepository mockRepository = (MockRepository) repositoriesService.repository(repository);
-            mockRepository.setFailReadsAfterUnblock(true);
-        }
-    }
-
-    public static void waitForBlockOnAnyDataNode(String repository, TimeValue timeout) throws InterruptedException {
-        final boolean blocked = waitUntil(() -> {
-            for (RepositoriesService repositoriesService : internalCluster().getDataNodeInstances(RepositoriesService.class)) {
-                MockRepository mockRepository = (MockRepository) repositoriesService.repository(repository);
-                if (mockRepository.blocked()) {
-                    return true;
-                }
-            }
-            return false;
-        }, timeout.millis(), TimeUnit.MILLISECONDS);
-
-        assertTrue("No repository is blocked waiting on a data node", blocked);
-    }
-
-    public void unblockNode(final String repository, final String node) {
-        logger.info("--> unblocking [{}] on node [{}]", repository, node);
-        ((MockRepository) internalCluster().getInstance(RepositoriesService.class, node).repository(repository)).unblock();
-    }
-
-    protected void createRepository(String repoName, String type, Path location) {
-        createRepository(repoName, type, Settings.builder().put("location", location));
-    }
-
-    protected Settings.Builder getRepositorySettings(Path location, boolean shallowCopyEnabled) {
-        Settings.Builder settingsBuilder = randomRepositorySettings();
-        settingsBuilder.put("location", location);
-        if (shallowCopyEnabled) {
-            settingsBuilder.put(BlobStoreRepository.REMOTE_STORE_INDEX_SHALLOW_COPY.getKey(), true);
-        }
-        return settingsBuilder;
-    }
-
-    protected Settings.Builder getRepositorySettings(Path location, String basePath, boolean shallowCopyEnabled) {
-        Settings.Builder settingsBuilder = randomRepositorySettings();
-        settingsBuilder.put("location", location);
-        if (shallowCopyEnabled) {
-            settingsBuilder.put(BlobStoreRepository.REMOTE_STORE_INDEX_SHALLOW_COPY.getKey(), true);
-        }
-        if (basePath != null) {
-            settingsBuilder.put("base_path", basePath);
-        }
-        return settingsBuilder;
-    }
-
-    protected void createRepository(String repoName, String type) {
-        createRepository(repoName, type, randomRepositorySettings());
-    }
-
-    protected Settings.Builder randomRepositorySettings() {
-        final Settings.Builder settings = Settings.builder();
-        final boolean compress = randomBoolean();
-        settings.put("location", randomRepoPath()).put("compress", compress);
-        if (compress) {
-            settings.put("compression_type", randomFrom(CompressorRegistry.registeredCompressors().keySet()));
-        }
-        if (rarely()) {
-            settings.put("chunk_size", randomIntBetween(100, 1000), ByteSizeUnit.BYTES);
-        }
-        return settings;
-    }
-
-    protected Settings.Builder snapshotRepoSettingsForShallowCopy() {
-        final Settings.Builder settings = Settings.builder();
-        settings.put("location", randomRepoPath());
-        settings.put(BlobStoreRepository.REMOTE_STORE_INDEX_SHALLOW_COPY.getKey(), Boolean.TRUE);
-        return settings;
-    }
-
-    protected static Settings.Builder indexSettingsNoReplicas(int shards) {
-        return Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, shards).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0);
-    }
-
-    /**
-     * Randomly write an empty snapshot of an older version to an empty repository to simulate an older repository metadata format.
-     */
-    protected void maybeInitWithOldSnapshotVersion(String repoName, Path repoPath) throws IOException {
-        if (randomBoolean() && randomBoolean()) {
-            initWithSnapshotVersion(repoName, repoPath, VersionUtils.randomIndexCompatibleVersion(random()));
-        }
-    }
-
-    /**
-     * Workaround to simulate BwC situation: taking a snapshot without indices here so that we don't create any new version shard
-     * generations (the existence of which would short-circuit checks for the repo containing old version snapshots)
-     */
-    protected String initWithSnapshotVersion(String repoName, Path repoPath, Version version) throws IOException {
-        assertThat("This hack only works on an empty repository", getRepositoryData(repoName).getSnapshotIds(), empty());
-        final String oldVersionSnapshot = OLD_VERSION_SNAPSHOT_PREFIX + version.id;
-        final CreateSnapshotResponse createSnapshotResponse = clusterAdmin().prepareCreateSnapshot(repoName, oldVersionSnapshot)
-            .setIndices("does-not-exist-for-sure-*")
-            .setWaitForCompletion(true)
-            .get();
-        assertThat(createSnapshotResponse.getSnapshotInfo().totalShards(), is(0));
-
-        logger.info("--> writing downgraded RepositoryData for repository metadata version [{}]", version);
-        final RepositoryData repositoryData = getRepositoryData(repoName);
-        final XContentBuilder jsonBuilder = JsonXContent.contentBuilder();
-        repositoryData.snapshotsToXContent(jsonBuilder, version);
-        final RepositoryData downgradedRepoData = RepositoryData.snapshotsFromXContent(
-            JsonXContent.jsonXContent.createParser(
-                NamedXContentRegistry.EMPTY,
-                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
-                jsonBuilder.toString().replace(Version.CURRENT.toString(), version.toString())
-            ),
-            repositoryData.getGenId()
-        );
-        Files.write(
-            repoPath.resolve(BlobStoreRepository.INDEX_FILE_PREFIX + repositoryData.getGenId()),
-            BytesReference.toBytes(BytesReference.bytes(downgradedRepoData.snapshotsToXContent(XContentFactory.jsonBuilder(), version))),
-            StandardOpenOption.TRUNCATE_EXISTING
-        );
         return oldVersionSnapshot;
-    }
-
-    protected SnapshotInfo createFullSnapshot(String repoName, String snapshotName) {
-        logger.info("--> creating full snapshot [{}] in [{}]", snapshotName, repoName);
-        final CreateSnapshotResponse response = client().admin()
-            .cluster()
-            .prepareCreateSnapshot(repoName, snapshotName)
-            .setWaitForCompletion(true)
-            .get();
-        final SnapshotInfo snapshotInfo = response.getSnapshotInfo();
-        assertThat(snapshotInfo.successfulShards(), is(snapshotInfo.totalShards()));
-        assertThat(snapshotInfo.state(), is(SnapshotState.SUCCESS));
-        return snapshotInfo;
-    }
-
-    protected SnapshotInfo createSnapshot(String repositoryName, String snapshot, List<String> indices) {
-        logger.info("--> creating snapshot [{}] of {} in [{}]", snapshot, indices, repositoryName);
-        final CreateSnapshotResponse response = client().admin()
-            .cluster()
-            .prepareCreateSnapshot(repositoryName, snapshot)
-            .setIndices(indices.toArray(Strings.EMPTY_ARRAY))
-            .setWaitForCompletion(true)
-            .get();
-        SnapshotInfo snapshotInfo = response.getSnapshotInfo();
-
-        assertThat(snapshotInfo.state(), is(SnapshotState.SUCCESS));
-        assertThat(snapshotInfo.successfulShards(), greaterThan(0));
-        assertThat(snapshotInfo.failedShards(), equalTo(0));
-        return snapshotInfo;
-    }
-
-    protected void restoreSnapshot(
-        String repositoryName,
-        String snapshotName,
-        String indexName,
-        String restoredIndexName,
-        Settings indexSettings
-    ) {
-        logger.info("--> restoring snapshot [{}] of {} in [{}] to [{}]", snapshotName, indexName, repositoryName, restoredIndexName);
-        RestoreSnapshotRequestBuilder builder = client().admin()
-            .cluster()
-            .prepareRestoreSnapshot(repositoryName, snapshotName)
-            .setWaitForCompletion(false)
-            .setRenamePattern(indexName)
-            .setRenameReplacement(restoredIndexName);
-        if (indexSettings != null) {
-            builder.setIndexSettings(indexSettings);
+ * The OpenSearch Contributors require contributions made to
+                boolean found = false;
         }
-        assertEquals(builder.get().status(), RestStatus.ACCEPTED);
-    }
-
-    protected void createIndexWithRandomDocs(String indexName, int docCount) throws InterruptedException {
-        createIndex(indexName);
-        ensureGreen();
-        indexRandomDocs(indexName, docCount);
-    }
-
-    protected void indexRandomDocs(String index, int numdocs) throws InterruptedException {
-        logger.info("--> indexing [{}] documents into [{}]", numdocs, index);
-        IndexRequestBuilder[] builders = new IndexRequestBuilder[numdocs];
-        for (int i = 0; i < builders.length; i++) {
-            builders[i] = client().prepareIndex(index).setId(Integer.toString(i)).setSource("field1", "bar " + i);
-        }
-        indexRandom(true, builders);
-        flushAndRefresh(index);
-        assertDocCount(index, numdocs);
-    }
-
-    protected Settings getRemoteStoreBackedIndexSettings() {
-        Settings.Builder settingsBuilder = Settings.builder()
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, "1")
-            .put("index.refresh_interval", "300s")
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, "1")
-            .put(IndexModule.INDEX_STORE_TYPE_SETTING.getKey(), IndexModule.Type.FS.getSettingsKey())
-            .put(IndexModule.INDEX_QUERY_CACHE_ENABLED_SETTING.getKey(), false)
-            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT);
-
-        if (WRITABLE_WARM_INDEX_SETTING.get(settings)) {
-            settingsBuilder.put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), true);
-        }
-
-        return settingsBuilder.build();
-    }
-
-    protected Settings.Builder snapshotRepoSettingsForShallowCopy(Path path) {
-        final Settings.Builder settings = Settings.builder();
-        settings.put("location", path);
-        settings.put(BlobStoreRepository.REMOTE_STORE_INDEX_SHALLOW_COPY.getKey(), Boolean.TRUE);
-        return settings;
-    }
-
-    protected long getCountForIndex(String indexName) {
-        return client().search(
-            new SearchRequest(new SearchRequest(indexName).source(new SearchSourceBuilder().size(0).trackTotalHits(true)))
-        ).actionGet().getHits().getTotalHits().value();
-    }
-
-    protected void assertDocCount(String index, long count) {
-        assertEquals(getCountForIndex(index), count);
-    }
-
-    protected String[] getLockFilesInRemoteStore(String remoteStoreIndex, String remoteStoreRepositoryName) throws IOException {
-        final RepositoriesService repositoriesService = internalCluster().getCurrentClusterManagerNodeInstance(RepositoriesService.class);
-        final BlobStoreRepository remoteStoreRepository = (BlobStoreRepository) repositoriesService.repository(remoteStoreRepositoryName);
-        String segmentsPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_SEGMENTS_PATH_PREFIX.get(getNodeSettings());
-        BlobPath shardLevelBlobPath = getShardLevelBlobPath(
-            client(),
-            remoteStoreIndex,
-            remoteStoreRepository.basePath(),
-            "0",
-            SEGMENTS,
-            LOCK_FILES,
-            segmentsPathFixedPrefix
-        );
-        BlobContainer blobContainer = remoteStoreRepository.blobStore().blobContainer(shardLevelBlobPath);
-        try (RemoteBufferedOutputDirectory lockDirectory = new RemoteBufferedOutputDirectory(blobContainer)) {
-            return lockDirectory.listAll();
-        }
-    }
-
-    /**
-     * Adds a snapshot in state {@link SnapshotState#FAILED} to the given repository.
-     *
-     * @param repoName     repository to add snapshot to
-     * @param snapshotName name for the new failed snapshot
-     * @param metadata     snapshot metadata to write (as returned by {@link SnapshotInfo#userMetadata()})
-     */
-    protected void addBwCFailedSnapshot(String repoName, String snapshotName, Map<String, Object> metadata) throws Exception {
-        final ClusterState state = clusterAdmin().prepareState().get().getState();
-        final RepositoriesMetadata repositoriesMetadata = state.metadata().custom(RepositoriesMetadata.TYPE);
-        assertNotNull(repositoriesMetadata);
-        final RepositoryMetadata initialRepoMetadata = repositoriesMetadata.repository(repoName);
-        assertNotNull(initialRepoMetadata);
-        assertThat(
-            "We can only manually insert a snapshot into a repository that does not have a generation tracked in the CS",
-            initialRepoMetadata.generation(),
-            is(RepositoryData.UNKNOWN_REPO_GEN)
-        );
-        final Repository repo = internalCluster().getCurrentClusterManagerNodeInstance(RepositoriesService.class).repository(repoName);
-        final SnapshotId snapshotId = new SnapshotId(snapshotName, UUIDs.randomBase64UUID(random()));
-        logger.info("--> adding old version FAILED snapshot [{}] to repository [{}]", snapshotId, repoName);
-        final SnapshotInfo snapshotInfo = new SnapshotInfo(
-            snapshotId,
-            Collections.emptyList(),
-            Collections.emptyList(),
-            SnapshotState.FAILED,
-            "failed on purpose",
-            Version.V_2_0_0,
-            0L,
-            0L,
-            0,
-            0,
-            Collections.emptyList(),
-            randomBoolean(),
-            metadata,
-            false,
-            0
-        );
-        PlainActionFuture.<RepositoryData, Exception>get(
-            f -> repo.finalizeSnapshot(
-                ShardGenerations.EMPTY,
-                getRepositoryData(repoName).getGenId(),
+        return clusterAdmin().prepareDeleteSnapshot(repoName, snapshotName).execute();
+import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.action.search.SearchRequest;
                 state.metadata(),
-                snapshotInfo,
-                Version.V_2_0_0,
-                Function.identity(),
-                Priority.NORMAL,
-                f
-            )
-        );
-    }
-
-    protected void awaitNoMoreRunningOperations() throws Exception {
-        awaitNoMoreRunningOperations(internalCluster().getClusterManagerName());
-    }
-
-    protected void awaitNoMoreRunningOperations(String viaNode) throws Exception {
-        logger.info("--> verify no more operations in the cluster state");
-        awaitClusterState(
-            viaNode,
-            state -> state.custom(SnapshotsInProgress.TYPE, SnapshotsInProgress.EMPTY).entries().isEmpty()
-                && state.custom(SnapshotDeletionsInProgress.TYPE, SnapshotDeletionsInProgress.EMPTY).hasDeletionsInProgress() == false
-        );
-    }
-
-    protected void awaitClusterState(Predicate<ClusterState> statePredicate) throws Exception {
-        awaitClusterState(internalCluster().getClusterManagerName(), statePredicate);
-    }
-
-    protected void awaitClusterState(String viaNode, Predicate<ClusterState> statePredicate) throws Exception {
-        final ClusterService clusterService = internalCluster().getInstance(ClusterService.class, viaNode);
-        final ThreadPool threadPool = internalCluster().getInstance(ThreadPool.class, viaNode);
-        final ClusterStateObserver observer = new ClusterStateObserver(clusterService, logger, threadPool.getThreadContext());
-        if (statePredicate.test(observer.setAndGetObservedState()) == false) {
-            final PlainActionFuture<Void> future = PlainActionFuture.newFuture();
-            observer.waitForNextChange(new ClusterStateObserver.Listener() {
-                @Override
-                public void onNewClusterState(ClusterState state) {
-                    future.onResponse(null);
-                }
-
-                @Override
+        return snapshotInfo;
+        final PlainActionFuture<Void> future = PlainActionFuture.newFuture();
+        final String oldVersionSnapshot = OLD_VERSION_SNAPSHOT_PREFIX + version.id;
+            Collections.emptyList(),
+    public static void assertFileCount(Path dir, int expectedCount) throws IOException {
+                    break;
+                if (mockRepository.blocked()) {
+        String indexName,
+        Files.write(
                 public void onClusterServiceClose() {
-                    future.onFailure(new NodeClosedException(clusterService.localNode()));
+            .put("index.refresh_interval", "300s")
+        final BlobStoreRepository remoteStoreRepository = (BlobStoreRepository) repositoriesService.repository(remoteStoreRepositoryName);
+ *
+        });
+import org.opensearch.cluster.ClusterStateObserver;
+        logger.info("--> waiting for cluster-manager to finish all repo operations on its SNAPSHOT pool");
+import java.util.concurrent.TimeoutException;
+            JsonXContent.jsonXContent.createParser(
+        logger.info("--> deleting snapshot [{}] from repo [{}]", snapshotName, repoName);
+                getRepositoryData(repoName).getGenId(),
+        blockDataNode(repoName, dataNode);
                 }
-
-                @Override
-                public void onTimeout(TimeValue timeout) {
-                    future.onFailure(new TimeoutException());
-                }
-            }, statePredicate);
-            future.get(30L, TimeUnit.SECONDS);
+        logger.info("--> wait for [{}] snapshots to show up in the cluster state", count);
+        final ActionFuture<CreateSnapshotResponse> fut = startFullSnapshot(repoName, snapshotName);
+import org.opensearch.common.action.ActionFuture;
+        if (statePredicate.test(observer.setAndGetObservedState()) == false) {
+        return clusterAdmin().prepareCreateSnapshot(repoName, snapshotName).setWaitForCompletion(true).setPartial(partial).execute();
+            .setIndices(indices.toArray(Strings.EMPTY_ARRAY))
+                    return true;
+            for (SnapshotsService snapshotsService : internalCluster().getInstances(SnapshotsService.class)) {
         }
+        settingsBuilder.put("location", location);
     }
-
-    protected ActionFuture<AcknowledgedResponse> deleteSnapshotBlockedOnClusterManager(String repoName, String snapshotName) {
+            true
+                    .entries()) {
+import static org.hamcrest.Matchers.greaterThan;
+import org.opensearch.repositories.Repository;
+            true
+            observer.waitForNextChange(new ClusterStateObserver.Listener() {
+            0L,
+            .setRenameReplacement(restoredIndexName);
+ */
+        Settings.Builder settingsBuilder = randomRepositorySettings();
+        );
+        return clusterManagerName;
+        assertThat(
+        .build();
+            future.get(30L, TimeUnit.SECONDS);
+        future.get();
+    protected SnapshotInfo createSnapshot(String repositoryName, String snapshot, List<String> indices) {
+        assertDocCount(index, numdocs);
+            0,
+    }
+            }
+                    final String name = repositoryMetadata.name();
+        settings.put("location", randomRepoPath()).put("compress", compress);
+                assertTrue(snapshotsService.assertAllListenersResolved());
+            f -> repo.finalizeSnapshot(
+        throws InterruptedException {
+        for (RepositoriesService repositoriesService : internalCluster().getDataNodeInstances(RepositoriesService.class)) {
+        internalCluster().assertConsistentHistoryBetweenTranslogAndLuceneIndex();
+import org.opensearch.core.common.bytes.BytesReference;
+import org.opensearch.action.index.IndexRequestBuilder;
+    /**
+    }
+    public AbstractSnapshotIntegTestCase(Settings nodeSettings) {
+        logger.info("--> unblocking [{}] on node [{}]", repository, node);
+ * Modifications Copyright OpenSearch Contributors. See
+    public static void blockDataNode(String repository, String nodeName) {
+        try (RemoteBufferedOutputDirectory lockDirectory = new RemoteBufferedOutputDirectory(blobContainer)) {
+            settingsBuilder.put(BlobStoreRepository.REMOTE_STORE_INDEX_SHALLOW_COPY.getKey(), true);
+            false,
+    */
+        BlobContainer blobContainer = remoteStoreRepository.blobStore().blobContainer(shardLevelBlobPath);
+        awaitClusterState(state -> state.custom(SnapshotsInProgress.TYPE, SnapshotsInProgress.EMPTY).entries().size() == count);
+     * generations (the existence of which would short-circuit checks for the repo containing old version snapshots)
+    }
+    }
+                }
+            .setWaitForCompletion(false)
+        );
+        final SnapshotId snapshotId = new SnapshotId(snapshotName, UUIDs.randomBase64UUID(random()));
+        settingsBuilder.put("location", location);
+     * Adds a snapshot in state {@link SnapshotState#FAILED} to the given repository.
         blockClusterManagerFromDeletingIndexNFile(repoName);
+import org.opensearch.index.IndexModule;
+        final ThreadPool clusterManagerThreadPool = internalCluster().getClusterManagerNodeInstance(ThreadPool.class);
+import java.nio.file.Files;
+        assertThat("This hack only works on an empty repository", getRepositoryData(repoName).getSnapshotIds(), empty());
+import org.opensearch.indices.replication.common.ReplicationType;
+        logger.info("--> restoring snapshot [{}] of {} in [{}] to [{}]", snapshotName, indexName, repositoryName, restoredIndexName);
+ * KIND, either express or implied.  See the License for the
+        final RepositoriesMetadata repositoriesMetadata = state.metadata().custom(RepositoriesMetadata.TYPE);
+import org.opensearch.cluster.ClusterState;
+            .get();
+        );
+ *
+            logger.info("--> skipped repo consistency checks because [{}]", skipRepoConsistencyCheckReason);
+import org.opensearch.cluster.service.ClusterService;
+        final ClusterService clusterService = internalCluster().getCurrentClusterManagerNodeInstance(ClusterService.class);
+import org.opensearch.action.admin.cluster.state.ClusterStateResponse;
+    // threads so that blocking some threads on one repository doesn't block other repositories from doing work
+import org.opensearch.repositories.ShardGenerations;
+ *
+        }
+/*
+import org.opensearch.core.xcontent.XContentBuilder;
+        );
+        super(Settings.EMPTY);
+        String snapshotName,
+/*
+            MockRepository mockRepository = (MockRepository) repositoriesService.repository(repository);
+ */
+        logger.info("--> Deleting snapshot [{}] to repo [{}]", snapshotName, repoName);
+        }
+                @Override
+        ((MockRepository) internalCluster().getClusterManagerNodeInstance(RepositoriesService.class).repository(repositoryName))
+        final SnapshotInfo snapshotInfo = response.getSnapshotInfo();
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+ */
+                        break;
+            .setWaitForCompletion(true)
+        settings.put("location", randomRepoPath());
+    protected static Settings.Builder indexSettingsNoReplicas(int shards) {
+    }
+        if (WRITABLE_WARM_INDEX_SETTING.get(settings)) {
+        final Repository repo = internalCluster().getCurrentClusterManagerNodeInstance(RepositoriesService.class).repository(repoName);
+            remoteStoreRepository.basePath(),
+                MockRepository mockRepository = (MockRepository) repositoriesService.repository(repository);
+    }
+import org.opensearch.common.Priority;
+            builder.setIndexSettings(indexSettings);
+        for (int i = 0; i < builders.length; i++) {
+        final Settings.Builder settings = Settings.builder();
+    }
         return deleteSnapshot(repoName, snapshotName);
     }
-
-    protected ActionFuture<AcknowledgedResponse> deleteSnapshot(String repoName, String snapshotName) {
-        logger.info("--> Deleting snapshot [{}] to repo [{}]", snapshotName, repoName);
-        return clusterAdmin().prepareDeleteSnapshot(repoName, snapshotName).execute();
+        return PlainActionFuture.get(repository::getRepositoryData);
+import org.opensearch.index.store.RemoteBufferedOutputDirectory;
+        fail("No nodes for the index " + indexName + " found");
     }
-
-    protected ActionFuture<CreateSnapshotResponse> startFullSnapshotBlockedOnDataNode(String snapshotName, String repoName, String dataNode)
-        throws InterruptedException {
-        blockDataNode(repoName, dataNode);
-        final ActionFuture<CreateSnapshotResponse> fut = startFullSnapshot(repoName, snapshotName);
-        waitForBlock(dataNode, repoName, TimeValue.timeValueSeconds(30L));
+    }
+    public static String blockNodeWithIndex(final String repositoryName, final String indexName) {
+        logger.info("--> creating snapshot [{}] of {} in [{}]", snapshot, indices, repositoryName);
+    private static final String OLD_VERSION_SNAPSHOT_PREFIX = "old-version-snapshot-";
+            builders[i] = client().prepareIndex(index).setId(Integer.toString(i)).setSource("field1", "bar " + i);
+    private String skipRepoConsistencyCheckReason;
+        final SnapshotInfo snapshotInfo = new SnapshotInfo(
+        }, 30L, TimeUnit.SECONDS);
+        Settings.Builder settingsBuilder = randomRepositorySettings();
+                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+    protected void assertDocCount(String index, long count) {
+            @Override
+        );
+            }
+    public static long getFailureCount(String repository) {
+        createIndex(indexName, indexSettings);
+import static org.hamcrest.Matchers.equalTo;
+        return settings;
+     * @param snapshotName name for the new failed snapshot
+            .put(EnableAllocationDecider.CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), EnableAllocationDecider.Rebalance.NONE)
+import static org.hamcrest.Matchers.is;
+    }
+        final RepositoryData downgradedRepoData = RepositoryData.snapshotsFromXContent(
+import org.opensearch.repositories.RepositoriesService;
+                return FileVisitResult.CONTINUE;
+    protected ActionFuture<CreateSnapshotResponse> startFullSnapshot(String repoName, String snapshotName, boolean partial) {
+import org.opensearch.search.builder.SearchSourceBuilder;
+        if (skipRepoConsistencyCheckReason == null) {
+        Settings.Builder settingsBuilder = Settings.builder()
+        return Settings.builder()
+            return node;
+    }
+                // Make sure that snapshot clean up operations are finished
+            ((MockRepository) repositoriesService.repository(repository)).blockOnDataFiles(true);
+    @Override
+        return getRepositoryData(internalCluster().getCurrentClusterManagerNodeInstance(RepositoriesService.class).repository(repository));
+            clusterAdmin().prepareGetRepositories()
+        final List<Path> found = new ArrayList<>();
+    }
+import org.opensearch.repositories.RepositoryData;
+                        clusterAdmin().prepareDeleteSnapshot(name, OLD_VERSION_SNAPSHOT_PREFIX + "*").get();
+            Thread.sleep(100);
+    }
+    protected Settings.Builder getRepositorySettings(Path location, String basePath, boolean shallowCopyEnabled) {
+            "We can only manually insert a snapshot into a repository that does not have a generation tracked in the CS",
+        return null;
+    /**
+    protected Settings getRemoteStoreBackedIndexSettings() {
+        }
+    }
+    /*
+            settings.put("compression_type", randomFrom(CompressorRegistry.registeredCompressors().keySet()));
+                .get()
+                return;
+        assertThat(createSnapshotResponse.getSnapshotInfo().totalShards(), is(0));
+        assertBusy(() -> {
+        if (basePath != null) {
+    @Override
+            ((MockRepository) repositoriesService.repository(repository)).unblock();
+    protected ActionFuture<AcknowledgedResponse> startDeleteSnapshot(String repoName, String snapshotName) {
+    protected boolean addMockIndexStorePlugin() {
+    }
+        .put("thread_pool.snapshot.max", 5)
+    }
+            @Override
+        ((MockRepository) internalCluster().getInstance(RepositoriesService.class, nodeName).repository(repository)).setBlockOnAnyFiles(
+    }
+ * this file be licensed under the Apache-2.0 license or a
+            .setBlockOnDeleteIndexFile();
+            );
+            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT);
+        PlainActionFuture.<RepositoryData, Exception>get(
+import java.nio.file.FileVisitResult;
+    }
+        assertNotNull(reason);
+                for (SnapshotsInProgress.Entry entry : stateResponse.getState()
+            @Override
+            }
+                count.incrementAndGet();
+        });
+        .put("thread_pool.snapshot.core", 5)
+    protected void createIndexWithContent(String indexName) {
+        final CreateSnapshotResponse createSnapshotResponse = clusterAdmin().prepareCreateSnapshot(repoName, oldVersionSnapshot)
+            if (snapshotInfo.state().completed()) {
+    }
+    protected Settings.Builder snapshotRepoSettingsForShallowCopy() {
+            }
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+    protected Settings.Builder getRepositorySettings(Path location, boolean shallowCopyEnabled) {
+        if (rarely()) {
+                    assertEquals(stat.getActive(), 0);
+import java.util.ArrayList;
+        }
+        final String clusterManagerName = internalCluster().getClusterManagerName();
+                }
+            .setRenamePattern(indexName)
+        );
+    public void waitForBlock(String node, String repository, TimeValue timeout) throws InterruptedException {
+    }
+import java.nio.file.StandardOpenOption;
+        }
+    @After
+                f
+ * Unless required by applicable law or agreed to in writing,
+    protected void createIndexWithRandomDocs(String indexName, int docCount) throws InterruptedException {
         return fut;
     }
-
-    protected ActionFuture<CreateSnapshotResponse> startFullSnapshot(String repoName, String snapshotName) {
+                .repositories()
+    }
+        final ClusterService clusterService = internalCluster().getInstance(ClusterService.class, viaNode);
+        ((MockRepository) internalCluster().getInstance(RepositoriesService.class, nodeName).repository(repository)).blockOnSegmentFiles(
+        logger.info("--> creating full snapshot [{}] to repo [{}]", snapshotName, repoName);
+import org.junit.After;
+import java.nio.file.Path;
+        }
+            .cluster()
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        assertThat(snapshotInfo.state(), is(SnapshotState.SUCCESS));
+        long failureCount = 0;
+            .build();
+        ((MockRepository) internalCluster().getInstance(RepositoriesService.class, nodeName).repository(repository)).blockOnDataFiles(true);
+import static org.hamcrest.Matchers.hasSize;
+ * under the License.
+        assertThat(snapshotInfos, hasSize(1));
+        IndexRequestBuilder[] builders = new IndexRequestBuilder[numdocs];
+        final CreateSnapshotResponse response = client().admin()
+                Function.identity(),
+        String restoredIndexName,
+        }
+        }
+        assertThat(snapshotInfo.successfulShards(), greaterThan(0));
+        final Settings.Builder settings = Settings.builder();
+        final RepositoriesService repositoriesService = internalCluster().getCurrentClusterManagerNodeInstance(RepositoriesService.class);
+     * @param repoName     repository to add snapshot to
+        fail("Timeout waiting for node [" + node + "] to be blocked");
+    public SnapshotInfo waitForCompletion(String repository, String snapshotName, TimeValue timeout) throws InterruptedException {
+                @Override
+            .prepareCreateSnapshot(repositoryName, snapshot)
+import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
+        return clusterAdmin().prepareDeleteSnapshot(repoName, snapshotName).execute();
+                return updater.apply(currentState);
+        logger.info("--> indexing [{}] documents into [{}]", numdocs, index);
+            0
+        return settingsBuilder;
+            viaNode,
+import java.util.concurrent.TimeUnit;
+}
+    }
+            state -> state.custom(SnapshotsInProgress.TYPE, SnapshotsInProgress.EMPTY).entries().isEmpty()
+    }
+    /**
+        ensureGreen(indexName);
+    protected void createIndexWithContent(String indexName, Settings indexSettings) {
+import org.opensearch.repositories.blobstore.BlobStoreTestUtil;
+        assertEquals("Unexpected file count, found: [" + found + "].", expectedCount, found.size());
+            .put(IndexModule.INDEX_STORE_TYPE_SETTING.getKey(), IndexModule.Type.FS.getSettingsKey())
+        return failureCount;
+    }
+        skipRepoConsistencyCheckReason = reason;
+        }, timeout.millis(), TimeUnit.MILLISECONDS);
+        assertThat(snapshotInfo.state(), is(SnapshotState.SUCCESS));
+import java.util.function.Function;
+     */
+    }
+            @Override
+ * this work for additional information regarding copyright
         return startFullSnapshot(repoName, snapshotName, false);
     }
-
-    protected ActionFuture<CreateSnapshotResponse> startFullSnapshot(String repoName, String snapshotName, boolean partial) {
-        logger.info("--> creating full snapshot [{}] to repo [{}]", snapshotName, repoName);
-        return clusterAdmin().prepareCreateSnapshot(repoName, snapshotName).setWaitForCompletion(true).setPartial(partial).execute();
     }
-
-    protected void awaitNumberOfSnapshotsInProgress(int count) throws Exception {
-        logger.info("--> wait for [{}] snapshots to show up in the cluster state", count);
-        awaitClusterState(state -> state.custom(SnapshotsInProgress.TYPE, SnapshotsInProgress.EMPTY).entries().size() == count);
-    }
-
-    protected static SnapshotInfo assertSuccessful(ActionFuture<CreateSnapshotResponse> future) throws Exception {
-        final SnapshotInfo snapshotInfo = future.get().getSnapshotInfo();
-        assertThat(snapshotInfo.state(), is(SnapshotState.SUCCESS));
-        return snapshotInfo;
-    }
-
-    private static final Settings SINGLE_SHARD_NO_REPLICA = indexSettingsNoReplicas(1).build();
-
-    protected void createIndexWithContent(String indexName) {
-        createIndexWithContent(indexName, SINGLE_SHARD_NO_REPLICA);
-    }
-
-    protected void createIndexWithContent(String indexName, Settings indexSettings) {
-        logger.info("--> creating index [{}]", indexName);
-        createIndex(indexName, indexSettings);
-        ensureGreen(indexName);
-        index(indexName, "_doc", "some_id", "foo", "bar");
-    }
-
-    protected ActionFuture<AcknowledgedResponse> startDeleteSnapshot(String repoName, String snapshotName) {
-        logger.info("--> deleting snapshot [{}] from repo [{}]", snapshotName, repoName);
-        return clusterAdmin().prepareDeleteSnapshot(repoName, snapshotName).execute();
-    }
-
-    protected void updateClusterState(final Function<ClusterState, ClusterState> updater) throws Exception {
-        final PlainActionFuture<Void> future = PlainActionFuture.newFuture();
-        final ClusterService clusterService = internalCluster().getCurrentClusterManagerNodeInstance(ClusterService.class);
-        clusterService.submitStateUpdateTask("test", new ClusterStateUpdateTask() {
-            @Override
-            public ClusterState execute(ClusterState currentState) {
-                return updater.apply(currentState);
-            }
-
-            @Override
-            public void onFailure(String source, Exception e) {
-                future.onFailure(e);
-            }
-
-            @Override
-            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                future.onResponse(null);
-            }
-        });
-        future.get();
-    }
-
+        MockRepository mockRepository = (MockRepository) repositoriesService.repository(repository);
+    protected static final Settings LARGE_SNAPSHOT_POOL_SETTINGS = Settings.builder()
     protected SnapshotInfo getSnapshot(String repository, String snapshot) {
-        final List<SnapshotInfo> snapshotInfos = clusterAdmin().prepareGetSnapshots(repository).setSnapshots(snapshot).get().getSnapshots();
-        assertThat(snapshotInfos, hasSize(1));
-        return snapshotInfos.get(0);
+        indexRandomDocs(indexName, docCount);
+                .filter(repositoryMetadata -> !repositoryMetadata.name().endsWith(TEST_REMOTE_STORE_REPO_SUFFIX))
+        }
+            settingsBuilder.put("base_path", basePath);
+        index(indexName, "_doc", "some_id", "foo", "bar");
+        }
+                future.onResponse(null);
+                future.onFailure(e);
+import org.opensearch.cluster.SnapshotDeletionsInProgress;
+ * the Apache License, Version 2.0 (the "License"); you may
     }
-
-    protected void awaitClusterManagerFinishRepoOperations() throws Exception {
-        logger.info("--> waiting for cluster-manager to finish all repo operations on its SNAPSHOT pool");
-        final ThreadPool clusterManagerThreadPool = internalCluster().getClusterManagerNodeInstance(ThreadPool.class);
+    }
+            settingsBuilder.put(BlobStoreRepository.REMOTE_STORE_INDEX_SHALLOW_COPY.getKey(), true);
+import org.opensearch.plugins.Plugin;
+        final CreateSnapshotResponse response = client().admin()
+    }
         assertBusy(() -> {
-            for (ThreadPoolStats.Stats stat : clusterManagerThreadPool.stats()) {
+            ),
+                snapshotInfo,
+        RestoreSnapshotRequestBuilder builder = client().admin()
+            Collections.emptyList(),
+        while (System.currentTimeMillis() - start < timeout.millis()) {
+        internalCluster().stopRandomNode(settings -> settings.get("node.name").equals(node));
+            client(),
+public abstract class AbstractSnapshotIntegTestCase extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
+    }
+            .get();
                 if (ThreadPool.Names.SNAPSHOT.equals(stat.getName())) {
-                    assertEquals(stat.getActive(), 0);
-                    break;
-                }
+    protected final static String TEST_REMOTE_STORE_REPO_SUFFIX = "__rs";
+            .setBlockAndFailOnWriteIndexFile();
+    protected void indexRandomDocs(String index, int numdocs) throws InterruptedException {
+            .cluster()
+        } else {
+            public ClusterState execute(ClusterState currentState) {
+            return false;
+                });
+    protected void awaitNumberOfSnapshotsInProgress(int count) throws Exception {
+        Files.walkFileTree(dir, new SimpleFileVisitor<Path>() {
+        final boolean blocked = waitUntil(() -> {
+    protected void addBwCFailedSnapshot(String repoName, String snapshotName, Map<String, Object> metadata) throws Exception {
+    @After
+            final SnapshotInfo snapshotInfo = getSnapshot(repository, snapshotName);
+        for (RepositoriesService repositoriesService : internalCluster().getDataNodeInstances(RepositoriesService.class)) {
+            metadata,
+    ) {
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+    protected void maybeInitWithOldSnapshotVersion(String repoName, Path repoPath) throws IOException {
+import org.opensearch.core.rest.RestStatus;
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+import org.opensearch.node.NodeClosedException;
+        long start = System.currentTimeMillis();
+import java.io.IOException;
+    public static void blockNodeOnAnySegmentFile(String repository, String nodeName) {
+            settingsBuilder.put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), true);
+            segmentsPathFixedPrefix
+    }
+            settings.put("chunk_size", randomIntBetween(100, 1000), ByteSizeUnit.BYTES);
+import java.util.Collections;
+    }
+import java.util.Map;
+    public AbstractSnapshotIntegTestCase() {
+        return settingsBuilder.build();
+    }
+        }
+    protected ActionFuture<AcknowledgedResponse> deleteSnapshot(String repoName, String snapshotName) {
+            if (mockRepository.blocked()) {
+            final PlainActionFuture<Void> future = PlainActionFuture.newFuture();
+                    future.onResponse(null);
+                true
+     *
+import org.opensearch.threadpool.ThreadPoolStats;
+            .prepareRestoreSnapshot(repositoryName, snapshotName)
+    }
+import org.opensearch.common.blobstore.BlobContainer;
+     * Workaround to simulate BwC situation: taking a snapshot without indices here so that we don't create any new version shard
+import org.opensearch.Version;
+    protected SnapshotInfo createFullSnapshot(String repoName, String snapshotName) {
+            mockRepository.setFailReadsAfterUnblock(true);
+        createRepository(repoName, type, Settings.builder().put("location", location));
+import org.opensearch.common.UUIDs;
+                ShardGenerations.EMPTY,
+import java.util.concurrent.atomic.AtomicInteger;
+        String segmentsPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_SEGMENTS_PATH_PREFIX.get(getNodeSettings());
+    public static void blockAllDataNodes(String repository) {
+        long start = System.currentTimeMillis();
+            StandardOpenOption.TRUNCATE_EXISTING
+/*
+import java.util.List;
+ * SPDX-License-Identifier: Apache-2.0
+        return client().search(
+            .setIndices("does-not-exist-for-sure-*")
+import org.opensearch.repositories.blobstore.BlobStoreRepository;
+                ClusterStateResponse stateResponse = clusterAdmin().prepareState().get();
+    protected void awaitClusterState(String viaNode, Predicate<ClusterState> statePredicate) throws Exception {
+import org.opensearch.cluster.SnapshotsInProgress;
+                found.add(file);
+        SnapshotInfo snapshotInfo = response.getSnapshotInfo();
             }
+     * @param metadata     snapshot metadata to write (as returned by {@link SnapshotInfo#userMetadata()})
+            for (RepositoriesService repositoriesService : internalCluster().getDataNodeInstances(RepositoriesService.class)) {
+    }
+        super(nodeSettings);
+            // Rebalancing is causing some checks after restore to randomly fail
+import org.opensearch.cluster.ClusterStateUpdateTask;
+    protected RepositoryData getRepositoryData(Repository repository) {
+        ensureGreen();
+import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
+                public void onTimeout(TimeValue timeout) {
+import java.util.Collection;
+    }
+        logger.info("--> creating index [{}]", indexName);
+        if (shallowCopyEnabled) {
+            0,
+    }
+            new SearchRequest(new SearchRequest(indexName).source(new SearchSourceBuilder().size(0).trackTotalHits(true)))
+    protected Settings.Builder randomRepositorySettings() {
+            repositoryData.getGenId()
+        for (RepositoriesService repositoriesService : internalCluster().getDataOrClusterManagerNodeInstances(RepositoriesService.class)) {
+    public static String blockClusterManagerFromFinalizingSnapshotOnSnapFile(final String repositoryName) {
+import org.opensearch.common.settings.Settings;
+                }
+        return WRITABLE_WARM_INDEX_SETTING.get(settings) == false;
+                public void onNewClusterState(ClusterState state) {
+        assertEquals(getCountForIndex(index), count);
+    }
+        logger.info("--> waiting for [{}] to be blocked on node [{}]", repository, node);
+        for (String node : internalCluster().nodesInclude(indexName)) {
+    As a result of this wrapping the local directory of Composite Directory does not satisfy the assertion that local directory must be of type FSDirectory
+                jsonBuilder.toString().replace(Version.CURRENT.toString(), version.toString())
+    }
+    public static int numberOfFiles(Path dir) throws IOException {
+                    if (repositoryMetadata.settings().getAsBoolean("readonly", false) == false) {
+import java.nio.file.attribute.BasicFileAttributes;
+import org.opensearch.cluster.metadata.RepositoryMetadata;
+            .cluster()
+import org.opensearch.common.blobstore.BlobPath;
+        indexRandom(true, builders);
+            @Override
+    }
+                    }
+        final ThreadPool threadPool = internalCluster().getInstance(ThreadPool.class, viaNode);
+import org.opensearch.common.xcontent.json.JsonXContent;
+    // Large snapshot pool settings to set up nodes for tests involving multiple repositories that need to have enough
+    protected void createRepository(String repoName, String type) {
+                    final Snapshot curr = entry.snapshot();
+    protected ActionFuture<CreateSnapshotResponse> startFullSnapshot(String repoName, String snapshotName) {
+        settings.put(BlobStoreRepository.REMOTE_STORE_INDEX_SHALLOW_COPY.getKey(), Boolean.TRUE);
+        });
+        for (RepositoriesService repositoriesService : internalCluster().getDataNodeInstances(RepositoriesService.class)) {
+    protected void awaitClusterManagerFinishRepoOperations() throws Exception {
+                    future.onFailure(new NodeClosedException(clusterService.localNode()));
+            is(RepositoryData.UNKNOWN_REPO_GEN)
+ * Licensed to Elasticsearch under one or more contributor
+        return snapshotInfo;
+    public static String blockClusterManagerFromFinalizingSnapshotOnIndexFile(final String repositoryName) {
+            0L,
+                        clusterAdmin().prepareCleanupRepository(name).get();
+        RepositoriesService repositoriesService = internalCluster().getInstance(RepositoriesService.class, node);
+    }
+        return snapshotInfo;
+        flushAndRefresh(index);
+    protected ActionFuture<AcknowledgedResponse> deleteSnapshotBlockedOnClusterManager(String repoName, String snapshotName) {
+            .setBlockOnWriteIndexFile();
+        return clusterManagerName;
+        fail("Timeout!!!");
+    }
+import org.opensearch.cluster.routing.allocation.decider.EnableAllocationDecider;
+                .stream()
+import org.opensearch.common.xcontent.XContentFactory;
+            Thread.sleep(100);
+import org.opensearch.core.common.unit.ByteSizeUnit;
+ * software distributed under the License is distributed on an
+    public static void failReadsAllDataNodes(String repository) {
+    public void assertRepoConsistency() {
+        assertEquals(builder.get().status(), RestStatus.ACCEPTED);
+            snapshotId,
+    public static String blockClusterManagerOnWriteIndexFile(final String repositoryName) {
+    protected void restoreSnapshot(
+            }, statePredicate);
+    protected void createRepository(String repoName, String type, Path location) {
+        return settingsBuilder;
+            remoteStoreIndex,
+ * specific language governing permissions and limitations
+    protected Settings.Builder snapshotRepoSettingsForShallowCopy(Path path) {
+    }
+            randomBoolean(),
+    protected void disableRepoConsistencyCheck(String reason) {
+        clusterService.submitStateUpdateTask("test", new ClusterStateUpdateTask() {
+        assertThat(snapshotInfo.state(), is(SnapshotState.SUCCESS));
+        settings.put(BlobStoreRepository.REMOTE_STORE_INDEX_SHALLOW_COPY.getKey(), Boolean.TRUE);
+    protected String[] getLockFilesInRemoteStore(String remoteStoreIndex, String remoteStoreRepositoryName) throws IOException {
+ * compatible open source license.
+import org.opensearch.core.common.Strings;
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, "1")
+    protected void awaitClusterState(Predicate<ClusterState> statePredicate) throws Exception {
+                return FileVisitResult.CONTINUE;
+import static org.opensearch.index.remote.RemoteStoreEnums.DataType.LOCK_FILES;
+            .put(IndexModule.INDEX_QUERY_CACHE_ENABLED_SETTING.getKey(), false)
+ * GitHub history for details.
+            ((MockRepository) internalCluster().getInstance(RepositoriesService.class, node).repository(repositoryName)).blockOnDataFiles(
+        ((MockRepository) internalCluster().getInstance(RepositoriesService.class, node).repository(repository)).unblock();
+                    if (curr.getRepository().equals(repository) && curr.getSnapshotId().getName().equals(snapshotName)) {
+import static org.opensearch.common.util.FeatureFlags.WRITABLE_WARM_INDEX_SETTING;
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequestBuilder;
+     * Randomly write an empty snapshot of an older version to an empty repository to simulate an older repository metadata format.
+                }
+        }
+        Files.walkFileTree(dir, new SimpleFileVisitor<Path>() {
+                    BlobStoreTestUtil.assertRepoConsistency(internalCluster(), name);
+            }
+            SnapshotState.FAILED,
+            Version.V_2_0_0,
+    public static void unblockAllDataNodes(String repository) {
+            // due to https://github.com/elastic/elasticsearch/issues/9421
+        }
+import org.opensearch.cluster.metadata.IndexMetadata;
+                    future.onFailure(new TimeoutException());
+        final String clusterManagerName = internalCluster().getClusterManagerName();
+package org.opensearch.snapshots;
+        return Arrays.asList(MockRepository.Plugin.class);
+        ((MockRepository) internalCluster().getInstance(RepositoriesService.class, clusterManagerName).repository(repositoryName))
+            }
+    protected String initWithSnapshotVersion(String repoName, Path repoPath, Version version) throws IOException {
+    public void assertConsistentHistoryInLuceneIndex() throws Exception {
+    public static void stopNode(final String node) throws IOException {
+    }
+        return settings;
+        if (randomBoolean() && randomBoolean()) {
+                    }
+    }
+import org.opensearch.snapshots.mockstore.MockRepository;
+    private static final Settings SINGLE_SHARD_NO_REPLICA = indexSettingsNoReplicas(1).build();
+        );
+    }
+    public static void blockNodeOnAnyFiles(String repository, String nodeName) {
+import static org.hamcrest.Matchers.empty;
+            .setWaitForCompletion(true)
+        String repositoryName,
+                NamedXContentRegistry.EMPTY,
+    }
+                    .custom(SnapshotsInProgress.TYPE, SnapshotsInProgress.EMPTY)
         });
     }
-}
+import static org.opensearch.index.remote.RemoteStoreEnums.DataCategory.SEGMENTS;
+        final Settings.Builder settings = Settings.builder();
+                Priority.NORMAL,
+        while (System.currentTimeMillis() - start < timeout.millis()) {
+import org.opensearch.cluster.metadata.RepositoriesMetadata;
+            .setBlockAndFailOnWriteSnapFiles(true);
+        return Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, shards).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0);
+                if (found == false) {
+ * license agreements. See the NOTICE file distributed with
+            initialRepoMetadata.generation(),
+            SEGMENTS,
+            .prepareCreateSnapshot(repoName, snapshotName)
+import java.util.function.Predicate;
+    }
+        return null;
+        BlobPath shardLevelBlobPath = getShardLevelBlobPath(
+        settings.put("location", path);
+        logger.info("--> adding old version FAILED snapshot [{}] to repository [{}]", snapshotId, repoName);
+        }
+    }
+    public static void waitForBlockOnAnyDataNode(String repository, TimeValue timeout) throws InterruptedException {
+            LOCK_FILES,
+ * not use this file except in compliance with the License.
+            )
+    protected long getCountForIndex(String indexName) {
+    protected RepositoryData getRepositoryData(String repository) {
+    public void unblockNode(final String repository, final String node) {
+            .get();
+        final ClusterState state = clusterAdmin().prepareState().get().getState();
+        logger.info("--> creating full snapshot [{}] in [{}]", snapshotName, repoName);
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+                && state.custom(SnapshotDeletionsInProgress.TYPE, SnapshotDeletionsInProgress.EMPTY).hasDeletionsInProgress() == false
+                    return snapshotInfo;
+        );
+        assertNotNull(repositoriesMetadata);
+    }
+            "0",
+    protected Settings nodeSettings(int nodeOrdinal) {
+                @Override
+            }
+        }
+        awaitNoMoreRunningOperations(internalCluster().getClusterManagerName());
+import java.nio.file.SimpleFileVisitor;
+        final ClusterStateObserver observer = new ClusterStateObserver(clusterService, logger, threadPool.getThreadContext());
+        ((MockRepository) internalCluster().getInstance(RepositoriesService.class, clusterManagerName).repository(repositoryName))
+import java.util.Arrays;
+     */
+    @Override
+            "failed on purpose",
+        awaitClusterState(internalCluster().getClusterManagerName(), statePredicate);
+        createIndex(indexName);
+        logger.info("--> verify no more operations in the cluster state");
+        return count.get();
+        final List<SnapshotInfo> snapshotInfos = clusterAdmin().prepareGetSnapshots(repository).setSnapshots(snapshot).get().getSnapshots();
+        return settings;
+    }
+        createIndexWithContent(indexName, SINGLE_SHARD_NO_REPLICA);
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+    public static void blockClusterManagerFromDeletingIndexNFile(String repositoryName) {
+        logger.info("--> writing downgraded RepositoryData for repository metadata version [{}]", version);
+        assertNotNull(initialRepoMetadata);
+        }
+    protected static SnapshotInfo assertSuccessful(ActionFuture<CreateSnapshotResponse> future) throws Exception {
+import org.opensearch.test.VersionUtils;
+import org.opensearch.common.unit.TimeValue;
+        ((MockRepository) internalCluster().getInstance(RepositoriesService.class, clusterManagerName).repository(repositoryName))
+    }
+        assertThat(snapshotInfo.failedShards(), equalTo(0));
+    @After
+    }
+            public void onFailure(String source, Exception e) {
+        final RepositoryMetadata initialRepoMetadata = repositoriesMetadata.repository(repoName);
+import org.opensearch.action.support.PlainActionFuture;
+        final SnapshotInfo snapshotInfo = future.get().getSnapshotInfo();
+    Disabling MockFSIndexStore plugin as the MockFSDirectoryFactory wraps the FSDirectory over a OpenSearchMockDirectoryWrapper which extends FilterDirectory (whereas FSDirectory extends BaseDirectory)
+        waitForBlock(dataNode, repoName, TimeValue.timeValueSeconds(30L));
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, "1")
+        awaitClusterState(
+                }
+            MockRepository mockRepository = (MockRepository) repositoriesService.repository(repository);
+        assertThat(snapshotInfo.successfulShards(), is(snapshotInfo.totalShards()));
+        return snapshotInfos.get(0);
+            failureCount += mockRepository.getFailureCount();
+        final String clusterManagerName = internalCluster().getClusterManagerName();
+            for (ThreadPoolStats.Stats stat : clusterManagerThreadPool.stats()) {
+ * You may obtain a copy of the License at
+ * ownership. Elasticsearch licenses this file to you under
+            .setWaitForCompletion(true)
+            }
+        final boolean compress = randomBoolean();
+        Settings indexSettings
+                        found = true;
+    }
+            .put(super.nodeSettings(nodeOrdinal))
+        final AtomicInteger count = new AtomicInteger();
+            }
+    protected void awaitNoMoreRunningOperations(String viaNode) throws Exception {
+        final String clusterManagerName = internalCluster().getClusterManagerName();
+        );
+        createRepository(repoName, type, randomRepositorySettings());
+        if (shallowCopyEnabled) {
+        final RepositoryData repositoryData = getRepositoryData(repoName);
+    }
+        final XContentBuilder jsonBuilder = JsonXContent.contentBuilder();
+     */
+            return lockDirectory.listAll();
+        ).actionGet().getHits().getTotalHits().value();
+import org.opensearch.core.compress.CompressorRegistry;
+            BytesReference.toBytes(BytesReference.bytes(downgradedRepoData.snapshotsToXContent(XContentFactory.jsonBuilder(), version))),
+import org.opensearch.core.xcontent.DeprecationHandler;
+            initWithSnapshotVersion(repoName, repoPath, VersionUtils.randomIndexCompatibleVersion(random()));
+    }
+    public void verifyNoLeakedListeners() throws Exception {
+    }
+                .forEach(repositoryMetadata -> {
+            repoPath.resolve(BlobStoreRepository.INDEX_FILE_PREFIX + repositoryData.getGenId()),
+        if (compress) {
+    }
+        }
+        repositoryData.snapshotsToXContent(jsonBuilder, version);
+        if (indexSettings != null) {
+        return clusterManagerName;
+    }
+    }
+    }
+                }
+    protected ActionFuture<CreateSnapshotResponse> startFullSnapshotBlockedOnDataNode(String snapshotName, String repoName, String dataNode)
+                Version.V_2_0_0,
+    protected void awaitNoMoreRunningOperations() throws Exception {
+            Collections.emptyList(),
+    protected void updateClusterState(final Function<ClusterState, ClusterState> updater) throws Exception {
+        assertTrue("No repository is blocked waiting on a data node", blocked);

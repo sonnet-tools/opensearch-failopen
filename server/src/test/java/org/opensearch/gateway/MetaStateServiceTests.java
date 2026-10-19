@@ -1,234 +1,197 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.gateway;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Manifest;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.common.UUIDs;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.index.Index;
-import org.opensearch.env.NodeEnvironment;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.HashMap;
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasKey;
-import static org.hamcrest.Matchers.nullValue;
-
-public class MetaStateServiceTests extends OpenSearchTestCase {
-
-    private NodeEnvironment env;
-    private MetaStateService metaStateService;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        env = newNodeEnvironment();
-        metaStateService = new MetaStateService(env, xContentRegistry());
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        super.tearDown();
-        env.close();
-    }
-
-    private static IndexMetadata indexMetadata(String name) {
-        return IndexMetadata.builder(name)
-            .settings(
-                Settings.builder()
-                    .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID())
                     .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-                    .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-                    .build()
-            )
-            .build();
-    }
-
-    public void testWriteLoadIndex() throws Exception {
-        IndexMetadata index = indexMetadata("test1");
-        metaStateService.writeIndex("test_write", index);
-        assertThat(metaStateService.loadIndexState(index.getIndex()), equalTo(index));
-    }
-
-    public void testLoadMissingIndex() throws Exception {
+        Metadata metadata = Metadata.builder().persistentSettings(Settings.builder().put("test1", "value1").build()).build();
+        assertThat(manifest.getGlobalGeneration(), equalTo(globalGeneration));
+        long globalGeneration = metaStateService.writeGlobalState("test_write", metadata);
+import org.opensearch.cluster.metadata.Manifest;
+            new HashMap<Index, Long>() {
+        Metadata metadata = Metadata.builder()
         assertThat(metaStateService.loadIndexState(new Index("test1", "test1UUID")), nullValue());
     }
-
-    public void testWriteLoadGlobal() throws Exception {
-        Metadata metadata = Metadata.builder().persistentSettings(Settings.builder().put("test1", "value1").build()).build();
-        metaStateService.writeGlobalState("test_write", metadata);
-        assertThat(metaStateService.loadGlobalState().persistentSettings(), equalTo(metadata.persistentSettings()));
-    }
-
-    public void testWriteGlobalStateWithIndexAndNoIndexIsLoaded() throws Exception {
-        Metadata metadata = Metadata.builder().persistentSettings(Settings.builder().put("test1", "value1").build()).build();
-        IndexMetadata index = indexMetadata("test1");
-        Metadata metadataWithIndex = Metadata.builder(metadata).put(index, true).build();
-
-        metaStateService.writeGlobalState("test_write", metadataWithIndex);
-        assertThat(metaStateService.loadGlobalState().persistentSettings(), equalTo(metadata.persistentSettings()));
-        assertThat(metaStateService.loadGlobalState().hasIndex("test1"), equalTo(false));
-    }
-
-    public void testLoadFullStateBWC() throws Exception {
-        IndexMetadata indexMetadata = indexMetadata("test1");
-        Metadata metadata = Metadata.builder()
-            .persistentSettings(Settings.builder().put("test1", "value1").build())
-            .put(indexMetadata, true)
-            .build();
-
-        long globalGeneration = metaStateService.writeGlobalState("test_write", metadata);
-        long indexGeneration = metaStateService.writeIndex("test_write", indexMetadata);
-
-        Tuple<Manifest, Metadata> manifestAndMetadata = metaStateService.loadFullState();
-        Manifest manifest = manifestAndMetadata.v1();
-        assertThat(manifest.getGlobalGeneration(), equalTo(globalGeneration));
-        assertThat(manifest.getIndexGenerations(), hasKey(indexMetadata.getIndex()));
-        assertThat(manifest.getIndexGenerations().get(indexMetadata.getIndex()), equalTo(indexGeneration));
-
-        Metadata loadedMetadata = manifestAndMetadata.v2();
-        assertThat(loadedMetadata.persistentSettings(), equalTo(metadata.persistentSettings()));
-        assertThat(loadedMetadata.hasIndex("test1"), equalTo(true));
-        assertThat(loadedMetadata.index("test1"), equalTo(indexMetadata));
-    }
-
-    public void testLoadEmptyStateNoManifest() throws IOException {
-        Tuple<Manifest, Metadata> manifestAndMetadata = metaStateService.loadFullState();
-
-        Manifest manifest = manifestAndMetadata.v1();
-        assertTrue(manifest.isEmpty());
-
-        Metadata metadata = manifestAndMetadata.v2();
-        assertTrue(Metadata.isGlobalStateEquals(metadata, Metadata.EMPTY_METADATA));
-    }
-
-    public void testLoadEmptyStateWithManifest() throws IOException {
-        Manifest manifest = Manifest.empty();
-        metaStateService.writeManifestAndCleanup("test", manifest);
-
-        Tuple<Manifest, Metadata> manifestAndMetadata = metaStateService.loadFullState();
-        assertTrue(manifestAndMetadata.v1().isEmpty());
-        Metadata metadata = manifestAndMetadata.v2();
-        assertTrue(Metadata.isGlobalStateEquals(metadata, Metadata.EMPTY_METADATA));
-    }
-
-    public void testLoadFullStateMissingGlobalMetadata() throws IOException {
-        IndexMetadata index = indexMetadata("test1");
-        long indexGeneration = metaStateService.writeIndex("test", index);
-        Manifest manifest = new Manifest(
-            randomNonNegativeLong(),
-            randomNonNegativeLong(),
-            Manifest.empty().getGlobalGeneration(),
-            new HashMap<Index, Long>() {
-                {
-                    put(index.getIndex(), indexGeneration);
-                }
-            }
-        );
-        assertTrue(manifest.isGlobalGenerationMissing());
-        metaStateService.writeManifestAndCleanup("test", manifest);
-
-        Tuple<Manifest, Metadata> manifestAndMetadata = metaStateService.loadFullState();
-        assertThat(manifestAndMetadata.v1(), equalTo(manifest));
-        Metadata loadedMetadata = manifestAndMetadata.v2();
-        assertTrue(Metadata.isGlobalStateEquals(loadedMetadata, Metadata.EMPTY_METADATA));
-        assertThat(loadedMetadata.hasIndex("test1"), equalTo(true));
-        assertThat(loadedMetadata.index("test1"), equalTo(index));
-    }
-
-    public void testLoadFullStateAndUpdateAndClean() throws IOException {
-        IndexMetadata index = indexMetadata("test1");
-        Metadata metadata = Metadata.builder()
-            .persistentSettings(Settings.builder().put("test1", "value1").build())
-            .put(index, true)
-            .build();
-
-        long globalGeneration = metaStateService.writeGlobalState("first global state write", metadata);
-        long indexGeneration = metaStateService.writeIndex("first index state write", index);
-
-        Manifest manifest = new Manifest(randomNonNegativeLong(), randomNonNegativeLong(), globalGeneration, new HashMap<Index, Long>() {
-            {
-                put(index.getIndex(), indexGeneration);
-            }
-        });
-        metaStateService.writeManifestAndCleanup("first manifest write", manifest);
-
-        Metadata newMetadata = Metadata.builder()
-            .persistentSettings(Settings.builder().put("test1", "value2").build())
-            .put(index, true)
-            .build();
-        globalGeneration = metaStateService.writeGlobalState("second global state write", newMetadata);
-
-        Tuple<Manifest, Metadata> manifestAndMetadata = metaStateService.loadFullState();
-        assertThat(manifestAndMetadata.v1(), equalTo(manifest));
-
-        Metadata loadedMetadata = manifestAndMetadata.v2();
-        assertThat(loadedMetadata.persistentSettings(), equalTo(metadata.persistentSettings()));
-        assertThat(loadedMetadata.hasIndex("test1"), equalTo(true));
-        assertThat(loadedMetadata.index("test1"), equalTo(index));
-
-        manifest = new Manifest(randomNonNegativeLong(), randomNonNegativeLong(), globalGeneration, new HashMap<Index, Long>() {
-            {
-                put(index.getIndex(), indexGeneration);
-            }
-        });
-
-        metaStateService.writeManifestAndCleanup("second manifest write", manifest);
+package org.opensearch.gateway;
+ * specific language governing permissions and limitations
         metaStateService.cleanupGlobalState(globalGeneration);
-        metaStateService.cleanupIndex(index.getIndex(), indexGeneration);
-
-        manifestAndMetadata = metaStateService.loadFullState();
-        assertThat(manifestAndMetadata.v1(), equalTo(manifest));
-
-        loadedMetadata = manifestAndMetadata.v2();
-        assertThat(loadedMetadata.persistentSettings(), equalTo(newMetadata.persistentSettings()));
-        assertThat(loadedMetadata.hasIndex("test1"), equalTo(true));
-        assertThat(loadedMetadata.index("test1"), equalTo(index));
-
-        if (randomBoolean()) {
-            metaStateService.unreferenceAll();
-        } else {
-            metaStateService.deleteAll();
-        }
-        manifestAndMetadata = metaStateService.loadFullState();
-        assertTrue(manifestAndMetadata.v1().isEmpty());
-        metadata = manifestAndMetadata.v2();
-        assertTrue(Metadata.isGlobalStateEquals(metadata, Metadata.EMPTY_METADATA));
+        metaStateService.writeManifestAndCleanup("test", manifest);
     }
+        metaStateService.writeManifestAndCleanup("first manifest write", manifest);
+        assertThat(manifest.getIndexGenerations(), hasKey(indexMetadata.getIndex()));
+        IndexMetadata index = indexMetadata("test1");
+    public void setUp() throws Exception {
+        assertThat(loadedMetadata.hasIndex("test1"), equalTo(true));
+        assertThat(manifestAndMetadata.v1(), equalTo(manifest));
+    public void testLoadFullStateAndUpdateAndClean() throws IOException {
+        Tuple<Manifest, Metadata> manifestAndMetadata = metaStateService.loadFullState();
+            randomNonNegativeLong(),
+    }
+                }
+    @Override
+        assertThat(loadedMetadata.persistentSettings(), equalTo(newMetadata.persistentSettings()));
+    public void testLoadEmptyStateWithManifest() throws IOException {
+            metaStateService.unreferenceAll();
+    private static IndexMetadata indexMetadata(String name) {
+                    put(index.getIndex(), indexGeneration);
+        assertThat(loadedMetadata.persistentSettings(), equalTo(metadata.persistentSettings()));
+        assertThat(manifestAndMetadata.v1(), equalTo(manifest));
+        super.tearDown();
+            .put(index, true)
+    public void testLoadFullStateMissingGlobalMetadata() throws IOException {
+/*
+    }
+        assertTrue(Metadata.isGlobalStateEquals(metadata, Metadata.EMPTY_METADATA));
+        assertThat(loadedMetadata.hasIndex("test1"), equalTo(true));
+    private MetaStateService metaStateService;
+        globalGeneration = metaStateService.writeGlobalState("second global state write", newMetadata);
+ * software distributed under the License is distributed on an
+ * GitHub history for details.
+import static org.hamcrest.Matchers.equalTo;
+                Settings.builder()
+import org.opensearch.env.NodeEnvironment;
+        IndexMetadata index = indexMetadata("test1");
+        Manifest manifest = manifestAndMetadata.v1();
+        assertThat(loadedMetadata.persistentSettings(), equalTo(metadata.persistentSettings()));
+ * compatible open source license.
+import static org.hamcrest.Matchers.nullValue;
+import org.opensearch.cluster.metadata.Metadata;
+                    .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID())
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        manifest = new Manifest(randomNonNegativeLong(), randomNonNegativeLong(), globalGeneration, new HashMap<Index, Long>() {
+ * license agreements. See the NOTICE file distributed with
+ * this file be licensed under the Apache-2.0 license or a
+        assertThat(loadedMetadata.hasIndex("test1"), equalTo(true));
+import java.io.IOException;
+        return IndexMetadata.builder(name)
+    public void testLoadMissingIndex() throws Exception {
+        IndexMetadata index = indexMetadata("test1");
+        Tuple<Manifest, Metadata> manifestAndMetadata = metaStateService.loadFullState();
+        assertThat(metaStateService.loadGlobalState().persistentSettings(), equalTo(metadata.persistentSettings()));
+    private NodeEnvironment env;
+        Tuple<Manifest, Metadata> manifestAndMetadata = metaStateService.loadFullState();
+import org.opensearch.Version;
+        assertThat(loadedMetadata.index("test1"), equalTo(index));
+        Metadata metadata = manifestAndMetadata.v2();
+            .put(index, true)
+        env = newNodeEnvironment();
+            }
+        metaStateService.writeIndex("test_write", index);
+        assertTrue(Metadata.isGlobalStateEquals(metadata, Metadata.EMPTY_METADATA));
+        assertThat(loadedMetadata.index("test1"), equalTo(index));
+    @Override
+        Metadata loadedMetadata = manifestAndMetadata.v2();
+import static org.hamcrest.Matchers.hasKey;
+    public void testWriteLoadIndex() throws Exception {
+public class MetaStateServiceTests extends OpenSearchTestCase {
+        Metadata metadata = Metadata.builder().persistentSettings(Settings.builder().put("test1", "value1").build()).build();
+    }
+            .settings(
+        IndexMetadata index = indexMetadata("test1");
+        long indexGeneration = metaStateService.writeIndex("first index state write", index);
+    public void testWriteGlobalStateWithIndexAndNoIndexIsLoaded() throws Exception {
+    }
+            .build();
+        assertTrue(manifestAndMetadata.v1().isEmpty());
+        Tuple<Manifest, Metadata> manifestAndMetadata = metaStateService.loadFullState();
+ * SPDX-License-Identifier: Apache-2.0
+        assertThat(metaStateService.loadGlobalState().hasIndex("test1"), equalTo(false));
+        Manifest manifest = new Manifest(randomNonNegativeLong(), randomNonNegativeLong(), globalGeneration, new HashMap<Index, Long>() {
+        metaStateService = new MetaStateService(env, xContentRegistry());
+        Metadata metadata = Metadata.builder()
+import org.opensearch.cluster.metadata.IndexMetadata;
+        Manifest manifest = Manifest.empty();
+        Metadata newMetadata = Metadata.builder()
+        assertThat(metaStateService.loadGlobalState().persistentSettings(), equalTo(metadata.persistentSettings()));
+        metadata = manifestAndMetadata.v2();
+ */
+ * KIND, either express or implied.  See the License for the
+        assertThat(loadedMetadata.index("test1"), equalTo(index));
+            metaStateService.deleteAll();
+    }
+import org.opensearch.common.collect.Tuple;
+        } else {
+        Metadata loadedMetadata = manifestAndMetadata.v2();
+        });
+        Manifest manifest = manifestAndMetadata.v1();
+ *
+        assertThat(loadedMetadata.hasIndex("test1"), equalTo(true));
+            .persistentSettings(Settings.builder().put("test1", "value1").build())
+ *
+import org.opensearch.common.UUIDs;
+        assertThat(metaStateService.loadIndexState(index.getIndex()), equalTo(index));
+            }
+        manifestAndMetadata = metaStateService.loadFullState();
+        Metadata loadedMetadata = manifestAndMetadata.v2();
+        Tuple<Manifest, Metadata> manifestAndMetadata = metaStateService.loadFullState();
+            Manifest.empty().getGlobalGeneration(),
+        loadedMetadata = manifestAndMetadata.v2();
+            randomNonNegativeLong(),
+                    .build()
+/*
+    }
+ * under the License.
+        assertThat(manifest.getIndexGenerations().get(indexMetadata.getIndex()), equalTo(indexGeneration));
+ * You may obtain a copy of the License at
+ */
+        assertThat(manifestAndMetadata.v1(), equalTo(manifest));
+        long indexGeneration = metaStateService.writeIndex("test_write", indexMetadata);
+    public void tearDown() throws Exception {
+ * not use this file except in compliance with the License.
+    }
+    public void testWriteLoadGlobal() throws Exception {
+        Manifest manifest = new Manifest(
+import org.opensearch.test.OpenSearchTestCase;
+        });
+ * The OpenSearch Contributors require contributions made to
+            )
+        metaStateService.writeGlobalState("test_write", metadata);
+    public void testLoadEmptyStateNoManifest() throws IOException {
+        manifestAndMetadata = metaStateService.loadFullState();
+        Metadata metadataWithIndex = Metadata.builder(metadata).put(index, true).build();
+        super.setUp();
+import java.util.HashMap;
+        assertTrue(manifest.isGlobalGenerationMissing());
+import org.opensearch.core.index.Index;
+ *
+        metaStateService.cleanupIndex(index.getIndex(), indexGeneration);
+            .build();
+            .build();
+    public void testLoadFullStateBWC() throws Exception {
+            .persistentSettings(Settings.builder().put("test1", "value1").build())
+        metaStateService.writeManifestAndCleanup("second manifest write", manifest);
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.common.settings.Settings;
+        long indexGeneration = metaStateService.writeIndex("test", index);
+        assertTrue(Metadata.isGlobalStateEquals(loadedMetadata, Metadata.EMPTY_METADATA));
+            }
+ */
+        if (randomBoolean()) {
+                    .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        assertTrue(Metadata.isGlobalStateEquals(metadata, Metadata.EMPTY_METADATA));
+ * this work for additional information regarding copyright
+    }
+            .put(indexMetadata, true)
+        IndexMetadata indexMetadata = indexMetadata("test1");
+        env.close();
+            {
+                {
+        }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        Metadata metadata = manifestAndMetadata.v2();
+        long globalGeneration = metaStateService.writeGlobalState("first global state write", metadata);
+            .build();
+ * Licensed to Elasticsearch under one or more contributor
+        metaStateService.writeGlobalState("test_write", metadataWithIndex);
 }
+        assertTrue(manifest.isEmpty());
+            {
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Unless required by applicable law or agreed to in writing,
+    }
+ * ownership. Elasticsearch licenses this file to you under
+            .persistentSettings(Settings.builder().put("test1", "value2").build())
+        metaStateService.writeManifestAndCleanup("test", manifest);
+        assertTrue(manifestAndMetadata.v1().isEmpty());
+                put(index.getIndex(), indexGeneration);
+    }
+        );
+/*
+                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+        assertThat(loadedMetadata.index("test1"), equalTo(indexMetadata));
+                put(index.getIndex(), indexGeneration);

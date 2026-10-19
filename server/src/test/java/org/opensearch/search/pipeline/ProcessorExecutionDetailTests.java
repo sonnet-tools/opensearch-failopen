@@ -1,235 +1,209 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.search.pipeline;
-
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.xcontent.DeprecationHandler;
-import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-
-public class ProcessorExecutionDetailTests extends OpenSearchTestCase {
-
-    public void testSerializationRoundtrip() throws IOException {
-        ProcessorExecutionDetail detail = new ProcessorExecutionDetail(
-            "testProcessor",
-            123L,
-            Map.of("key", "value"),
-            List.of(1, 2, 3),
-            ProcessorExecutionDetail.ProcessorStatus.SUCCESS,
-            "",
-            ""
-        );
-        ProcessorExecutionDetail deserialized;
-        try (BytesStreamOutput output = new BytesStreamOutput()) {
-            detail.writeTo(output);
-            try (StreamInput input = output.bytes().streamInput()) {
-                deserialized = new ProcessorExecutionDetail(input);
-            }
-        }
-        assertEquals("testProcessor", deserialized.getProcessorName());
-        assertEquals(123L, deserialized.getDurationMillis());
-        assertEquals(Map.of("key", "value"), deserialized.getInputData());
-        assertEquals(List.of(1, 2, 3), deserialized.getOutputData());
-    }
-
-    public void testAddMethods() {
-        ProcessorExecutionDetail detail = new ProcessorExecutionDetail("testProcessor");
-        detail.addTook(456L);
-        detail.addInput(Map.of("newKey", "newValue"));
-        detail.addOutput(List.of(4, 5, 6));
-        assertEquals(456L, detail.getDurationMillis());
-        assertEquals(Map.of("newKey", "newValue"), detail.getInputData());
-        assertEquals(List.of(4, 5, 6), detail.getOutputData());
-    }
-
-    public void testToXContent() throws IOException {
-        ProcessorExecutionDetail detail = new ProcessorExecutionDetail(
-            "testProcessor",
-            123L,
-            Map.of("key1", "value1"),
-            List.of(1, 2, 3),
-            ProcessorExecutionDetail.ProcessorStatus.SUCCESS,
-            "",
-            null
-        );
-
-        XContentBuilder actualBuilder = XContentBuilder.builder(JsonXContent.jsonXContent);
-        detail.toXContent(actualBuilder, ToXContent.EMPTY_PARAMS);
-
-        String expected = "{"
-            + "  \"processor_name\": \"testProcessor\","
-            + "  \"duration_millis\": 123,"
-            + "  \"status\": \"success\","
-            + "  \"input_data\": {\"key1\": \"value1\"},"
-            + "  \"output_data\": [1, 2, 3]"
-            + "}";
-
-        XContentParser expectedParser = JsonXContent.jsonXContent.createParser(
-            this.xContentRegistry(),
-            DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
-            expected
-        );
-        XContentBuilder expectedBuilder = XContentBuilder.builder(JsonXContent.jsonXContent);
-        expectedBuilder.generator().copyCurrentStructure(expectedParser);
-
-        assertEquals(
-            XContentHelper.convertToMap(BytesReference.bytes(expectedBuilder), false, (MediaType) MediaTypeRegistry.JSON),
-            XContentHelper.convertToMap(BytesReference.bytes(actualBuilder), false, (MediaType) MediaTypeRegistry.JSON)
-        );
-    }
-
-    public void testToXContentWithProcessorError() throws IOException {
-        ProcessorExecutionDetail detail = new ProcessorExecutionDetail(
-            "testProcessor",
-            123L,
-            Map.of("key1", "value1"),
-            List.of(1, 2, 3),
-            ProcessorExecutionDetail.ProcessorStatus.FAIL,
-            "processor 1 fail",
-            "123"
-        );
-
-        XContentBuilder actualBuilder = XContentBuilder.builder(JsonXContent.jsonXContent);
-        detail.toXContent(actualBuilder, ToXContent.EMPTY_PARAMS);
-
-        String expected = "{"
-            + "  \"processor_name\": \"testProcessor\","
-            + "  \"tag\": \"123\","
-            + "  \"duration_millis\": 123,"
-            + "  \"status\": \"fail\","
-            + "  \"error\": \"processor 1 fail\","
-            + "  \"input_data\": {\"key1\": \"value1\"},"
-            + "  \"output_data\": [1, 2, 3]"
-            + "}";
-
-        XContentParser expectedParser = JsonXContent.jsonXContent.createParser(
-            this.xContentRegistry(),
-            DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
-            expected
-        );
-        XContentBuilder expectedBuilder = XContentBuilder.builder(JsonXContent.jsonXContent);
-        expectedBuilder.generator().copyCurrentStructure(expectedParser);
-
-        assertEquals(
-            XContentHelper.convertToMap(BytesReference.bytes(expectedBuilder), false, (MediaType) MediaTypeRegistry.JSON),
-            XContentHelper.convertToMap(BytesReference.bytes(actualBuilder), false, (MediaType) MediaTypeRegistry.JSON)
-        );
-    }
-
-    public void testFromXContent() throws IOException {
-        String json = "{"
-            + "  \"processor_name\": \"testProcessor\","
-            + "  \"duration_millis\": 123,"
-            + "  \"input_data\": {\"key1\": \"value1\"},"
-            + "  \"output_data\": [1, 2, 3]"
-            + "}";
-
-        try (
-            XContentParser parser = JsonXContent.jsonXContent.createParser(
-                this.xContentRegistry(),
                 DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
-                json
-            )
-        ) {
-            ProcessorExecutionDetail detail = ProcessorExecutionDetail.fromXContent(parser);
-
-            assertEquals("testProcessor", detail.getProcessorName());
-            assertEquals(123L, detail.getDurationMillis());
-            assertEquals(Map.of("key1", "value1"), detail.getInputData());
-            assertEquals(List.of(1, 2, 3), detail.getOutputData());
-        }
-    }
-
-    public void testFromXContentWithPRocessorError() throws IOException {
-        String json = "{"
-            + "  \"processor_name\": \"testProcessor\","
-            + "  \"duration_millis\": 123,"
-            + "  \"status\": \"fail\","
-            + "  \"error\": \"processor 1 fail\","
-            + "  \"input_data\": {\"key1\": \"value1\"},"
             + "  \"output_data\": [1, 2, 3]"
-            + "}";
-
-        try (
-            XContentParser parser = JsonXContent.jsonXContent.createParser(
-                this.xContentRegistry(),
-                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
-                json
-            )
-        ) {
-            ProcessorExecutionDetail detail = ProcessorExecutionDetail.fromXContent(parser);
-
-            assertEquals("testProcessor", detail.getProcessorName());
-            assertEquals(123L, detail.getDurationMillis());
-            assertEquals(Map.of("key1", "value1"), detail.getInputData());
-            assertEquals(List.of(1, 2, 3), detail.getOutputData());
-            assertEquals(ProcessorExecutionDetail.ProcessorStatus.FAIL, detail.getStatus());
-        }
-    }
-
-    public void testGetErrorMessage() {
-        ProcessorExecutionDetail detail = new ProcessorExecutionDetail(
-            "testProcessor",
-            123L,
-            Map.of("key1", "value1"),
-            List.of(1, 2, 3),
-            ProcessorExecutionDetail.ProcessorStatus.FAIL,
-            "processor 1 fail",
-            "tag123"
-        );
-        assertEquals("processor 1 fail", detail.getErrorMessage());
-
-        ProcessorExecutionDetail detailNoError = new ProcessorExecutionDetail(
-            "testProcessor",
-            123L,
-            Map.of("key1", "value1"),
-            List.of(1, 2, 3),
-            ProcessorExecutionDetail.ProcessorStatus.SUCCESS,
-            null,
-            null
-        );
         assertNull(detailNoError.getErrorMessage());
-    }
-
-    public void testGetTag() {
-        ProcessorExecutionDetail detail = new ProcessorExecutionDetail(
-            "testProcessor",
-            123L,
-            Map.of("key1", "value1"),
-            List.of(1, 2, 3),
-            ProcessorExecutionDetail.ProcessorStatus.SUCCESS,
-            null,
             "tag123"
-        );
-        assertEquals("tag123", detail.getTag());
-
-        ProcessorExecutionDetail detailNoTag = new ProcessorExecutionDetail(
-            "testProcessor",
+            ProcessorExecutionDetail.ProcessorStatus.FAIL,
             123L,
-            Map.of("key1", "value1"),
+        ProcessorExecutionDetail detailNoError = new ProcessorExecutionDetail(
+            + "  \"duration_millis\": 123,"
+        ) {
+            assertEquals(Map.of("key1", "value1"), detail.getInputData());
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        assertEquals(
+    }
+            XContentHelper.convertToMap(BytesReference.bytes(expectedBuilder), false, (MediaType) MediaTypeRegistry.JSON),
+            "testProcessor",
+            + "  \"error\": \"processor 1 fail\","
+        assertEquals(Map.of("key", "value"), deserialized.getInputData());
+            + "  \"error\": \"processor 1 fail\","
+        assertEquals("processor 1 fail", detail.getErrorMessage());
+        XContentBuilder actualBuilder = XContentBuilder.builder(JsonXContent.jsonXContent);
+    public void testToXContentWithProcessorError() throws IOException {
             List.of(1, 2, 3),
-            ProcessorExecutionDetail.ProcessorStatus.SUCCESS,
+            expected
+        assertEquals(Map.of("newKey", "newValue"), detail.getInputData());
+            + "  \"tag\": \"123\","
+        );
+        detail.addTook(456L);
+            123L,
             null,
+        }
+            + "  \"output_data\": [1, 2, 3]"
+        ProcessorExecutionDetail detailNoTag = new ProcessorExecutionDetail(
+        );
+        );
+        assertEquals(123L, deserialized.getDurationMillis());
+            XContentHelper.convertToMap(BytesReference.bytes(expectedBuilder), false, (MediaType) MediaTypeRegistry.JSON),
+            assertEquals(123L, detail.getDurationMillis());
+        XContentBuilder expectedBuilder = XContentBuilder.builder(JsonXContent.jsonXContent);
+        try (
+            123L,
+            + "}";
+            "testProcessor",
+        XContentBuilder expectedBuilder = XContentBuilder.builder(JsonXContent.jsonXContent);
+            ""
+            XContentHelper.convertToMap(BytesReference.bytes(actualBuilder), false, (MediaType) MediaTypeRegistry.JSON)
+            Map.of("key1", "value1"),
+    public void testToXContent() throws IOException {
+            this.xContentRegistry(),
+        assertEquals("testProcessor", deserialized.getProcessorName());
+            + "  \"output_data\": [1, 2, 3]"
+        ProcessorExecutionDetail detail = new ProcessorExecutionDetail(
+            null,
+                deserialized = new ProcessorExecutionDetail(input);
+        ProcessorExecutionDetail detail = new ProcessorExecutionDetail(
+            + "  \"input_data\": {\"key1\": \"value1\"},"
+            123L,
+            assertEquals(List.of(1, 2, 3), detail.getOutputData());
+                json
+import org.opensearch.common.xcontent.json.JsonXContent;
+            ProcessorExecutionDetail.ProcessorStatus.SUCCESS,
+        detail.addInput(Map.of("newKey", "newValue"));
+        assertEquals(456L, detail.getDurationMillis());
+        );
+            assertEquals("testProcessor", detail.getProcessorName());
+            XContentHelper.convertToMap(BytesReference.bytes(actualBuilder), false, (MediaType) MediaTypeRegistry.JSON)
+        ) {
             null
         );
-        assertNull(detailNoTag.getTag());
+            )
+            List.of(1, 2, 3),
+    public void testGetErrorMessage() {
+            "processor 1 fail",
+            + "  \"status\": \"success\","
+        assertEquals("tag123", detail.getTag());
+            null
+import org.opensearch.core.xcontent.DeprecationHandler;
     }
+            assertEquals(ProcessorExecutionDetail.ProcessorStatus.FAIL, detail.getStatus());
+            expected
+        detail.toXContent(actualBuilder, ToXContent.EMPTY_PARAMS);
+            Map.of("key", "value"),
+            Map.of("key1", "value1"),
+import java.util.List;
+            + "  \"output_data\": [1, 2, 3]"
+            Map.of("key1", "value1"),
+ *
+            ProcessorExecutionDetail.ProcessorStatus.SUCCESS,
+ * SPDX-License-Identifier: Apache-2.0
+            List.of(1, 2, 3),
+            + "}";
+    public void testFromXContentWithPRocessorError() throws IOException {
+            + "  \"processor_name\": \"testProcessor\","
+    }
+            ProcessorExecutionDetail.ProcessorStatus.SUCCESS,
+import java.util.Map;
+        );
+            ProcessorExecutionDetail.ProcessorStatus.SUCCESS,
+    }
+            ProcessorExecutionDetail detail = ProcessorExecutionDetail.fromXContent(parser);
+            "processor 1 fail",
+            + "  \"processor_name\": \"testProcessor\","
+ * compatible open source license.
+        ProcessorExecutionDetail detail = new ProcessorExecutionDetail(
+            try (StreamInput input = output.bytes().streamInput()) {
+            DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+        assertNull(detailNoTag.getTag());
+    public void testSerializationRoundtrip() throws IOException {
+        try (BytesStreamOutput output = new BytesStreamOutput()) {
+            + "  \"status\": \"fail\","
+            assertEquals(List.of(1, 2, 3), detail.getOutputData());
+        XContentParser expectedParser = JsonXContent.jsonXContent.createParser(
+            DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+            detail.writeTo(output);
+            ProcessorExecutionDetail.ProcessorStatus.SUCCESS,
+import org.opensearch.core.xcontent.ToXContent;
+            assertEquals(Map.of("key1", "value1"), detail.getInputData());
+            "tag123"
+        String expected = "{"
+            "123"
+            "testProcessor",
+            Map.of("key1", "value1"),
+import org.opensearch.core.xcontent.XContentBuilder;
+public class ProcessorExecutionDetailTests extends OpenSearchTestCase {
+            null
+                this.xContentRegistry(),
+        expectedBuilder.generator().copyCurrentStructure(expectedParser);
+            ProcessorExecutionDetail detail = ProcessorExecutionDetail.fromXContent(parser);
+            123L,
+            }
+import org.opensearch.test.OpenSearchTestCase;
+            "",
+        );
+            "",
+        assertEquals(List.of(4, 5, 6), detail.getOutputData());
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+import java.io.IOException;
+        XContentParser expectedParser = JsonXContent.jsonXContent.createParser(
+            "testProcessor",
+import org.opensearch.core.xcontent.MediaType;
+    public void testFromXContent() throws IOException {
+            assertEquals("testProcessor", detail.getProcessorName());
+            this.xContentRegistry(),
+        assertEquals(List.of(1, 2, 3), deserialized.getOutputData());
+            + "  \"input_data\": {\"key1\": \"value1\"},"
+            123L,
+ * this file be licensed under the Apache-2.0 license or a
+        assertEquals(
+import org.opensearch.core.xcontent.XContentParser;
+    public void testAddMethods() {
+        }
+import org.opensearch.common.xcontent.XContentHelper;
+ */
+    }
+        ProcessorExecutionDetail deserialized;
+            "testProcessor",
+            + "  \"duration_millis\": 123,"
+            List.of(1, 2, 3),
+        );
+            null,
+        ProcessorExecutionDetail detail = new ProcessorExecutionDetail(
+            + "  \"duration_millis\": 123,"
+                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+        expectedBuilder.generator().copyCurrentStructure(expectedParser);
+    public void testGetTag() {
+    }
+        try (
+            XContentParser parser = JsonXContent.jsonXContent.createParser(
+            ProcessorExecutionDetail.ProcessorStatus.FAIL,
+        );
+            + "  \"input_data\": {\"key1\": \"value1\"},"
+    }
+        ProcessorExecutionDetail detail = new ProcessorExecutionDetail(
+        String json = "{"
+            + "}";
+        );
+            + "  \"input_data\": {\"key1\": \"value1\"},"
+import org.opensearch.core.common.bytes.BytesReference;
+            + "}";
+ * The OpenSearch Contributors require contributions made to
+        String json = "{"
 }
+            "testProcessor",
+    }
+            List.of(1, 2, 3),
+package org.opensearch.search.pipeline;
+        ProcessorExecutionDetail detail = new ProcessorExecutionDetail("testProcessor");
+            + "  \"status\": \"fail\","
+            List.of(1, 2, 3),
+        detail.addOutput(List.of(4, 5, 6));
+        }
+            + "  \"processor_name\": \"testProcessor\","
+            Map.of("key1", "value1"),
+            "testProcessor",
+        String expected = "{"
+            assertEquals(123L, detail.getDurationMillis());
+                this.xContentRegistry(),
+            + "  \"duration_millis\": 123,"
+                json
+            Map.of("key1", "value1"),
+            )
+            123L,
+        detail.toXContent(actualBuilder, ToXContent.EMPTY_PARAMS);
+            XContentParser parser = JsonXContent.jsonXContent.createParser(
+import org.opensearch.core.common.io.stream.StreamInput;
+        );
+        XContentBuilder actualBuilder = XContentBuilder.builder(JsonXContent.jsonXContent);
+            List.of(1, 2, 3),
+/*
+            + "  \"processor_name\": \"testProcessor\","

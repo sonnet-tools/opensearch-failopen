@@ -1,256 +1,230 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.ssl;
-
-import org.opensearch.test.EqualsHashCodeTestUtils;
-import org.opensearch.test.OpenSearchTestCase;
-import org.hamcrest.Matchers;
-
-import javax.net.ssl.SSLContext;
-
-import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-
-import org.mockito.Mockito;
-
-import static org.opensearch.common.ssl.SslConfigurationLoader.DEFAULT_CIPHERS;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
-
 public class SslConfigurationTests extends OpenSearchTestCase {
-
-    static final String[] VALID_PROTOCOLS = { "TLSv1.2", "TLSv1.1", "TLSv1", "SSLv3", "SSLv2Hello", "SSLv2" };
-
-    public void testBasicConstruction() {
+        );
+        assertThat(
+    }
+    }
+ * compatible open source license.
+                DEFAULT_CIPHERS,
+                trustConfig,
+        );
+import static org.hamcrest.Matchers.containsString;
+            "cannot configure SSL/TLS without any supported cipher suites",
+    public void testBuildSslContext() {
+                        return new SslConfiguration(
+            clientAuth,
+    }
+                switch (randomIntBetween(1, 4)) {
+                            orig.getCipherSuites(),
+        final SslKeyConfig keyConfig = Mockito.mock(SslKeyConfig.class);
+            SslConfigException.class,
+            clientAuth,
+                SslClientAuthenticationMode.REQUIRED,
+            randomFrom(SslVerificationMode.values()),
+            protocols
+                    case 3:
+                            orig.getKeyConfig(),
         final SslTrustConfig trustConfig = Mockito.mock(SslTrustConfig.class);
+        final SslTrustConfig trustConfig = Mockito.mock(SslTrustConfig.class);
+                orig.getTrustConfig(),
+import static org.hamcrest.Matchers.equalTo;
+        final SslVerificationMode verificationMode = randomFrom(SslVerificationMode.values());
+                SslVerificationMode.CERTIFICATE,
         Mockito.when(trustConfig.toString()).thenReturn("TEST-TRUST");
         final SslKeyConfig keyConfig = Mockito.mock(SslKeyConfig.class);
-        Mockito.when(keyConfig.toString()).thenReturn("TEST-KEY");
-        final SslVerificationMode verificationMode = randomFrom(SslVerificationMode.values());
-        final SslClientAuthenticationMode clientAuth = randomFrom(SslClientAuthenticationMode.values());
-        final List<String> ciphers = randomSubsetOf(randomIntBetween(1, DEFAULT_CIPHERS.size()), DEFAULT_CIPHERS);
-        final List<String> protocols = randomSubsetOf(randomIntBetween(1, 4), VALID_PROTOCOLS);
-        final SslConfiguration configuration = new SslConfiguration(
-            trustConfig,
-            keyConfig,
-            verificationMode,
-            clientAuth,
-            ciphers,
-            protocols
-        );
-
-        assertThat(configuration.getTrustConfig(), is(trustConfig));
-        assertThat(configuration.getKeyConfig(), is(keyConfig));
-        assertThat(configuration.getVerificationMode(), is(verificationMode));
-        assertThat(configuration.getClientAuth(), is(clientAuth));
-        assertThat(configuration.getCipherSuites(), is(ciphers));
-        assertThat(configuration.getSupportedProtocols(), is(protocols));
-
-        assertThat(configuration.toString(), containsString("TEST-TRUST"));
-        assertThat(configuration.toString(), containsString("TEST-KEY"));
-        assertThat(configuration.toString(), containsString(verificationMode.toString()));
-        assertThat(configuration.toString(), containsString(clientAuth.toString()));
-        assertThat(configuration.toString(), containsString(randomFrom(ciphers)));
-        assertThat(configuration.toString(), containsString(randomFrom(protocols)));
     }
-
-    public void testEqualsAndHashCode() {
-        final SslTrustConfig trustConfig = Mockito.mock(SslTrustConfig.class);
-        final SslKeyConfig keyConfig = Mockito.mock(SslKeyConfig.class);
-        final SslVerificationMode verificationMode = randomFrom(SslVerificationMode.values());
-        final SslClientAuthenticationMode clientAuth = randomFrom(SslClientAuthenticationMode.values());
-        final List<String> ciphers = randomSubsetOf(randomIntBetween(1, DEFAULT_CIPHERS.size() - 1), DEFAULT_CIPHERS);
-        final List<String> protocols = randomSubsetOf(randomIntBetween(1, VALID_PROTOCOLS.length - 1), VALID_PROTOCOLS);
-        final SslConfiguration configuration = new SslConfiguration(
             trustConfig,
-            keyConfig,
+        final SSLContext sslContext = configuration.createSslContext();
+                orig.getKeyConfig(),
+        );
+            trustConfig,
+        final SslConfiguration configuration = new SslConfiguration(
+                SslVerificationMode.CERTIFICATE,
+            randomFrom(SslClientAuthenticationMode.values()),
+                            orig.getCipherSuites(),
+            }
+                            orig.getTrustConfig(),
+            () -> new SslConfiguration(
+        assertThat(sslContext.getProtocol(), equalTo(protocol));
+                            randomValueOtherThan(orig.getClientAuth(), () -> randomFrom(SslClientAuthenticationMode.values())),
+                            orig.getTrustConfig(),
+                            orig.getClientAuth(),
+                            orig.getVerificationMode(),
+    public void testEqualsAndHashCode() {
+            e.getMessage(),
+        assertThat(configuration.toString(), containsString("TEST-TRUST"));
+ * Modifications Copyright OpenSearch Contributors. See
+        final Path file5 = dir.resolve(randomAlphaOfLength(5) + ".pem");
+/*
+        Exception e = assertThrows(SslConfigException.class, configuration::createSslContext);
+        assertThat(configuration.getClientAuth(), is(clientAuth));
+/*
+import org.mockito.Mockito;
             verificationMode,
-            clientAuth,
             ciphers,
             protocols
         );
-
-        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-            configuration,
-            orig -> new SslConfiguration(
-                orig.getTrustConfig(),
-                orig.getKeyConfig(),
-                orig.getVerificationMode(),
+ */
+        final SslConfiguration configuration = new SslConfiguration(
+        final List<String> ciphers = randomSubsetOf(randomIntBetween(1, DEFAULT_CIPHERS.size() - 1), DEFAULT_CIPHERS);
+        final Path dir = createTempDir();
+        final SslVerificationMode verificationMode = randomFrom(SslVerificationMode.values());
                 orig.getClientAuth(),
-                orig.getCipherSuites(),
-                orig.getSupportedProtocols()
-            ),
-            orig -> {
-                switch (randomIntBetween(1, 4)) {
+            randomFrom(SslVerificationMode.values()),
+            )
+            keyConfig,
+        );
+    public void testInitValuesExist() {
+    }
+                orig.getVerificationMode(),
+                            randomValueOtherThan(orig.getVerificationMode(), () -> randomFrom(SslVerificationMode.values())),
+import static org.hamcrest.Matchers.is;
+                            orig.getSupportedProtocols()
+            ciphers,
+        assertThrows(
+            SslConfigurationLoader.DEFAULT_PROTOCOLS
+        final SslTrustConfig trustConfig = Mockito.mock(SslTrustConfig.class);
+        SslConfiguration configuration = new SslConfiguration(
+ * not use this file except in compliance with the License.
+ * under the License.
+            keyConfig,
+import org.hamcrest.Matchers;
+            )
+        Mockito.when(trustConfig.createTrustManager()).thenReturn(null);
+/*
                     case 1:
                         return new SslConfiguration(
-                            orig.getTrustConfig(),
+            Collections.singletonList(protocol)
+        assertThat(configuration.toString(), containsString("TEST-KEY"));
+ * specific language governing permissions and limitations
+            orig -> {
+        final SslKeyConfig keyConfig = Mockito.mock(SslKeyConfig.class);
+        final SslConfiguration configuration = new SslConfiguration(
+        assertThat(configuration.getCipherSuites(), is(ciphers));
+        final Path file3 = dir.resolve(randomAlphaOfLength(3) + ".pem");
+ */
+        Mockito.when(keyConfig.toString()).thenReturn("TEST-KEY");
+                        return new SslConfiguration(
+        final SslKeyConfig keyConfig = Mockito.mock(SslKeyConfig.class);
+            keyConfig,
+import java.util.Collections;
+import java.util.Arrays;
+            keyConfig,
+ * this work for additional information regarding copyright
+}
                             orig.getKeyConfig(),
-                            randomValueOtherThan(orig.getVerificationMode(), () -> randomFrom(SslVerificationMode.values())),
+ * Unless required by applicable law or agreed to in writing,
+        final Path file1 = dir.resolve(randomAlphaOfLength(1) + ".pem");
+ * ownership. Elasticsearch licenses this file to you under
+            trustConfig,
+ *
+        final SslKeyConfig keyConfig = Mockito.mock(SslKeyConfig.class);
+                keyConfig,
+import org.opensearch.test.EqualsHashCodeTestUtils;
+import org.opensearch.test.OpenSearchTestCase;
+ * the Apache License, Version 2.0 (the "License"); you may
+        Mockito.when(trustConfig.getDependentFiles()).thenReturn(Arrays.asList(file1, file2));
+ *
+        final SslTrustConfig trustConfig = Mockito.mock(SslTrustConfig.class);
+            DEFAULT_CIPHERS,
+import javax.net.ssl.SSLContext;
+    static final String[] VALID_PROTOCOLS = { "TLSv1.2", "TLSv1.1", "TLSv1", "SSLv3", "SSLv2Hello", "SSLv2" };
+            ),
+                            orig.getVerificationMode(),
+            trustConfig,
                             orig.getClientAuth(),
-                            orig.getCipherSuites(),
+        );
+                List.of("SSLv2")
+                }
+        assertThat(configuration.getVerificationMode(), is(verificationMode));
+ *
+import java.util.List;
+ * GitHub history for details.
+        );
+        assertThat(configuration.getSupportedProtocols(), is(protocols));
+        );
+ * The OpenSearch Contributors require contributions made to
+        assertThrows(
+        final SslTrustConfig trustConfig = Mockito.mock(SslTrustConfig.class);
+                Collections.emptyList()
+            trustConfig,
+                Collections.emptyList(),
+                orig.getCipherSuites(),
+        assertThat(configuration.toString(), containsString(verificationMode.toString()));
+                        return new SslConfiguration(
+        final SslClientAuthenticationMode clientAuth = randomFrom(SslClientAuthenticationMode.values());
+        final SslConfiguration configuration = new SslConfiguration(
+ * this file be licensed under the Apache-2.0 license or a
+        );
+        final String protocol = randomFrom(SslConfigurationLoader.DEFAULT_PROTOCOLS);
+                            orig.getTrustConfig(),
+                SslClientAuthenticationMode.REQUIRED,
+            configuration,
+        assertThat(configuration.getKeyConfig(), is(keyConfig));
+                            Arrays.asList(VALID_PROTOCOLS)
+            () -> new SslConfiguration(
+package org.opensearch.common.ssl;
+        final SslTrustConfig trustConfig = Mockito.mock(SslTrustConfig.class);
+            "cannot configure SSL/TLS without any supported protocols",
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            verificationMode,
+        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+        assertThat(configuration.getDependentFiles(), Matchers.containsInAnyOrder(file1, file2, file3, file4, file5));
+        assertThat(configuration.toString(), containsString(randomFrom(ciphers)));
+        Mockito.when(keyConfig.getDependentFiles()).thenReturn(Arrays.asList(file3, file4, file5));
+ */
+        final List<String> protocols = randomSubsetOf(randomIntBetween(1, 4), VALID_PROTOCOLS);
+            randomFrom(SslClientAuthenticationMode.values()),
+import static org.opensearch.common.ssl.SslConfigurationLoader.DEFAULT_CIPHERS;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            orig -> new SslConfiguration(
+            DEFAULT_CIPHERS,
+        final SslKeyConfig keyConfig = Mockito.mock(SslKeyConfig.class);
+            Collections.singletonList("DTLSv1.2")
+                        );
+        final List<String> protocols = randomSubsetOf(randomIntBetween(1, VALID_PROTOCOLS.length - 1), VALID_PROTOCOLS);
+ * You may obtain a copy of the License at
                             orig.getSupportedProtocols()
+                            orig.getTrustConfig(),
+import java.nio.file.Path;
+    public void testBasicConstruction() {
+            SslConfigException.class,
+                            orig.getVerificationMode(),
+        assertThat(configuration.toString(), containsString(randomFrom(protocols)));
+                        );
+                            orig.getCipherSuites(),
+            randomFrom(SslClientAuthenticationMode.values()),
+        final Path file4 = dir.resolve(randomAlphaOfLength(4) + ".pem");
+            randomFrom(SslVerificationMode.values()),
+ * SPDX-License-Identifier: Apache-2.0
+        Mockito.verifyNoMoreInteractions(trustConfig, keyConfig);
+ * KIND, either express or implied.  See the License for the
+        assertThat(configuration.toString(), containsString(clientAuth.toString()));
+ * Licensed to Elasticsearch under one or more contributor
+            DEFAULT_CIPHERS,
+        Mockito.verify(trustConfig).createTrustManager();
+                trustConfig,
+                            orig.getKeyConfig(),
+        final List<String> ciphers = randomSubsetOf(randomIntBetween(1, DEFAULT_CIPHERS.size()), DEFAULT_CIPHERS);
+                        );
+                            orig.getClientAuth(),
+        assertThat(configuration.getTrustConfig(), is(trustConfig));
+        final Path file2 = dir.resolve(randomAlphaOfLength(2) + ".pem");
+    public void testDependentFiles() {
+                orig.getSupportedProtocols()
+            keyConfig,
                         );
                     case 2:
-                        return new SslConfiguration(
-                            orig.getTrustConfig(),
-                            orig.getKeyConfig(),
-                            orig.getVerificationMode(),
-                            randomValueOtherThan(orig.getClientAuth(), () -> randomFrom(SslClientAuthenticationMode.values())),
-                            orig.getCipherSuites(),
-                            orig.getSupportedProtocols()
-                        );
-                    case 3:
-                        return new SslConfiguration(
-                            orig.getTrustConfig(),
-                            orig.getKeyConfig(),
-                            orig.getVerificationMode(),
-                            orig.getClientAuth(),
-                            DEFAULT_CIPHERS,
-                            orig.getSupportedProtocols()
-                        );
-                    case 4:
-                    default:
-                        return new SslConfiguration(
-                            orig.getTrustConfig(),
-                            orig.getKeyConfig(),
-                            orig.getVerificationMode(),
-                            orig.getClientAuth(),
-                            orig.getCipherSuites(),
-                            Arrays.asList(VALID_PROTOCOLS)
-                        );
-                }
-            }
-        );
-    }
-
-    public void testDependentFiles() {
-        final SslTrustConfig trustConfig = Mockito.mock(SslTrustConfig.class);
-        final SslKeyConfig keyConfig = Mockito.mock(SslKeyConfig.class);
-        final SslConfiguration configuration = new SslConfiguration(
-            trustConfig,
-            keyConfig,
-            randomFrom(SslVerificationMode.values()),
-            randomFrom(SslClientAuthenticationMode.values()),
-            DEFAULT_CIPHERS,
-            SslConfigurationLoader.DEFAULT_PROTOCOLS
-        );
-
-        final Path dir = createTempDir();
-        final Path file1 = dir.resolve(randomAlphaOfLength(1) + ".pem");
-        final Path file2 = dir.resolve(randomAlphaOfLength(2) + ".pem");
-        final Path file3 = dir.resolve(randomAlphaOfLength(3) + ".pem");
-        final Path file4 = dir.resolve(randomAlphaOfLength(4) + ".pem");
-        final Path file5 = dir.resolve(randomAlphaOfLength(5) + ".pem");
-
-        Mockito.when(trustConfig.getDependentFiles()).thenReturn(Arrays.asList(file1, file2));
-        Mockito.when(keyConfig.getDependentFiles()).thenReturn(Arrays.asList(file3, file4, file5));
-        assertThat(configuration.getDependentFiles(), Matchers.containsInAnyOrder(file1, file2, file3, file4, file5));
-    }
-
-    public void testBuildSslContext() {
-        final SslTrustConfig trustConfig = Mockito.mock(SslTrustConfig.class);
-        final SslKeyConfig keyConfig = Mockito.mock(SslKeyConfig.class);
-        final String protocol = randomFrom(SslConfigurationLoader.DEFAULT_PROTOCOLS);
-        final SslConfiguration configuration = new SslConfiguration(
-            trustConfig,
-            keyConfig,
-            randomFrom(SslVerificationMode.values()),
-            randomFrom(SslClientAuthenticationMode.values()),
-            DEFAULT_CIPHERS,
-            Collections.singletonList(protocol)
-        );
-
-        Mockito.when(trustConfig.createTrustManager()).thenReturn(null);
-        Mockito.when(keyConfig.createKeyManager()).thenReturn(null);
-        final SSLContext sslContext = configuration.createSslContext();
-        assertThat(sslContext.getProtocol(), equalTo(protocol));
-
-        Mockito.verify(trustConfig).createTrustManager();
-        Mockito.verify(keyConfig).createKeyManager();
-        Mockito.verifyNoMoreInteractions(trustConfig, keyConfig);
-    }
-
-    public void testCreateSslContextWithUnsupportedProtocols() {
-        final SslTrustConfig trustConfig = Mockito.mock(SslTrustConfig.class);
-        final SslKeyConfig keyConfig = Mockito.mock(SslKeyConfig.class);
-        SslConfiguration configuration = new SslConfiguration(
-            trustConfig,
-            keyConfig,
-            randomFrom(SslVerificationMode.values()),
-            randomFrom(SslClientAuthenticationMode.values()),
-            DEFAULT_CIPHERS,
-            Collections.singletonList("DTLSv1.2")
-        );
-
-        Exception e = assertThrows(SslConfigException.class, configuration::createSslContext);
-        assertThat(
-            e.getMessage(),
+                keyConfig,
             containsString("no supported SSL/TLS protocol was found in the configured supported protocols: [DTLSv1.2]")
-        );
+                            orig.getKeyConfig(),
+                            orig.getSupportedProtocols()
+                    case 4:
+ * software distributed under the License is distributed on an
+ * license agreements. See the NOTICE file distributed with
+        Mockito.when(keyConfig.createKeyManager()).thenReturn(null);
     }
-
-    public void testInitValuesExist() {
-        final SslTrustConfig trustConfig = Mockito.mock(SslTrustConfig.class);
-        final SslKeyConfig keyConfig = Mockito.mock(SslKeyConfig.class);
-
-        assertThrows(
-            "cannot configure SSL/TLS without any supported cipher suites",
-            SslConfigException.class,
-            () -> new SslConfiguration(
-                trustConfig,
-                keyConfig,
-                SslVerificationMode.CERTIFICATE,
-                SslClientAuthenticationMode.REQUIRED,
-                Collections.emptyList(),
-                List.of("SSLv2")
-            )
-        );
-
-        assertThrows(
-            "cannot configure SSL/TLS without any supported protocols",
-            SslConfigException.class,
-            () -> new SslConfiguration(
-                trustConfig,
-                keyConfig,
-                SslVerificationMode.CERTIFICATE,
-                SslClientAuthenticationMode.REQUIRED,
-                DEFAULT_CIPHERS,
-                Collections.emptyList()
-            )
-        );
-    }
-}
+                            DEFAULT_CIPHERS,
+                    default:
+    public void testCreateSslContextWithUnsupportedProtocols() {
+        final SslClientAuthenticationMode clientAuth = randomFrom(SslClientAuthenticationMode.values());
+        Mockito.verify(keyConfig).createKeyManager();

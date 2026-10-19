@@ -1,179 +1,163 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.parquet.bridge;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.common.SetOnce;
-import org.opensearch.index.engine.dataformat.RowIdMapping;
-import org.opensearch.parquet.stats.ParquetShardStatsTracker;
-import org.opensearch.plugin.stats.StatsRecorder;
-
-import java.io.IOException;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-/**
- * Type-safe handle for the native Rust Parquet writer with lifecycle management.
- *
- * <p>Wraps the stateless JNI methods in {@link RustBridge} with a file-scoped lifecycle:
- * <ol>
- *   <li>{@code new NativeParquetWriter(filePath)} — creates the handle (no native call)</li>
- *   <li>{@link #initialize(String, long, ParquetSortConfig, long)} — creates the native writer with the final schema</li>
- *   <li>{@link #write(long, long)} — sends one or more Arrow batches (repeatable)</li>
- *   <li>{@link #flush()} — finalizes the Parquet file and returns metadata</li>
- * </ol>
- *
- * <p>This class is not thread-safe. External synchronization is required
- * if instances are shared across threads.
- */
-public class NativeParquetWriter {
-
-    private static final Logger logger = LogManager.getLogger(NativeParquetWriter.class);
-
-    private final AtomicBoolean writerFlushed = new AtomicBoolean(false);
-    private final String filePath;
-    private final SetOnce<ParquetFileMetadata> metadata = new SetOnce<>();
-    private final SetOnce<RowIdMapping> rowIdMapping = new SetOnce<>();
-    private final ParquetShardStatsTracker stats;
-    private volatile boolean initialized = false;
-
-    /**
-     * Creates a new NativeParquetWriter handle. Does not create the native writer —
-     * call {@link #initialize(String, long, ParquetSortConfig, long)} before the first write.
-     *
-     * @param filePath the path to the Parquet file to write
-     * @param stats shard-level stats tracker
      */
-    public NativeParquetWriter(String filePath, ParquetShardStatsTracker stats) {
-        this.filePath = filePath;
-        this.stats = stats;
-    }
-
-    /**
      * Creates a new NativeParquetWriter handle without stats collection.
-     *
-     * @param filePath the path to the Parquet file to write
-     */
-    public NativeParquetWriter(String filePath) {
-        this(filePath, new ParquetShardStatsTracker());
-    }
-
-    /**
-     * Initializes the native Rust Parquet writer with the given schema.
-     * Must be called exactly once before the first {@link #write}.
-     *
-     * @param indexName         the index name for settings lookup
-     * @param schemaAddress     the native memory address of the Arrow schema
-     * @param sortConfig        the sort configuration for the Parquet file
-     * @param writerGeneration  the writer generation to store in file metadata
-     * @throws IOException if the native writer creation fails
-     * @throws IllegalStateException if already initialized
-     */
-    public void initialize(String indexName, long schemaAddress, ParquetSortConfig sortConfig, long writerGeneration) throws IOException {
-        if (initialized) {
+    public void cleanup() {
+        this.stats = stats;
             throw new IllegalStateException("Writer already initialized: " + filePath);
-        }
-        RustBridge.createWriter(filePath, indexName, schemaAddress, sortConfig, writerGeneration);
-        initialized = true;
-    }
-
-    /**
-     * Returns whether the native writer has been initialized.
-     *
-     * @return true if {@link #initialize} has been called
-     */
-    public boolean isInitialized() {
-        return initialized;
-    }
-
-    /**
-     * Writes an Arrow batch to the Parquet file.
-     *
-     * @param arrayAddress  the native memory address of the Arrow array
-     * @param schemaAddress the native memory address of the Arrow schema
-     * @throws IOException if the write fails or the writer is flushed
-     * @throws IllegalStateException if the writer has not been initialized
-     */
-    public void write(long arrayAddress, long schemaAddress) throws IOException {
-        if (writerFlushed.get()) {
-            throw new IOException("Cannot write to flushed Parquet writer: " + filePath);
-        }
-        if (initialized == false) {
-            throw new IllegalStateException("Writer not initialized: " + filePath);
-        }
-        StatsRecorder.recordOutcome(
-            () -> RustBridge.write(filePath, arrayAddress, schemaAddress),
-            stats::addNativeWriteTimeMillis,
-            stats::incNativeWriteTotal,
-            stats::incNativeWriteFailures
-        );
-    }
-
-    /**
-     * Finalizes the Parquet file and returns metadata. If the writer was never initialized
-     * (no documents were written), returns null rather than throwing — this is expected
-     * when a writer is flushed during refresh without having received any documents.
-     *
-     * @return the file metadata, or null if the writer was never initialized
-     * @throws IOException if the finalization fails
-     */
-    public ParquetFileMetadata flush() throws IOException {
-        if (writerFlushed.compareAndSet(false, true)) {
-            if (initialized) {
-                StatsRecorder.recordOutcome(() -> {
-                    RustBridge.WriterFinalizeResult result = RustBridge.finalizeWriter(filePath);
-                    if (result != null) {
+    private final AtomicBoolean writerFlushed = new AtomicBoolean(false);
+     * writer stranded by a failed operation does not survive as a stale entry and block recovery's
                         metadata.set(result.metadata());
-                        if (result.rowIdMapping() != null) {
-                            rowIdMapping.set(result.rowIdMapping());
-                        }
-                    }
-                }, stats::addNativeFinalizeTimeMillis, stats::incNativeFinalizeTotal, stats::incNativeFinalizeFailures);
-            }
+ * compatible open source license.
+ *   <li>{@link #flush()} — finalizes the Parquet file and returns metadata</li>
+     * best-effort: safe to call after a failed/partial flush, and a no-op if this writer was never
+     * (no documents were written), returns null rather than throwing — this is expected
         }
-        return metadata.get();
-    }
-
     /**
+    public ParquetFileMetadata flush() throws IOException {
+    /**
+import java.util.concurrent.atomic.AtomicBoolean;
+            stats::incNativeWriteTotal,
+            if (initialized) {
+     *
+     * @throws IOException if the finalization fails
+    public NativeParquetWriter(String filePath) {
+ * Type-safe handle for the native Rust Parquet writer with lifecycle management.
      * Returns the Parquet file metadata captured after flushing the writer.
      *
-     * @return the file metadata, or null if the writer has not been flushed
-     */
-    public ParquetFileMetadata getMetadata() {
-        return metadata.get();
-    }
-
-    /**
-     * Returns the row ID mapping produced during sort-on-close as a memory-efficient
-     * packed mapping, or null if no sorting was configured or the file was empty.
-     */
-    public RowIdMapping getRowIdMapping() {
-        return rowIdMapping.get();
-    }
-
-    /**
-     * Removes the native writer registry entry for this file without finalizing it. Idempotent and
-     * best-effort: safe to call after a failed/partial flush, and a no-op if this writer was never
-     * initialized (no native entry exists) or was already flushed (finalize already removed it).
-     * Never throws — intended for the shard close / going-red teardown path, where it guarantees a
-     * writer stranded by a failed operation does not survive as a stale entry and block recovery's
+     * @param writerGeneration  the writer generation to store in file metadata
+        this(filePath, new ParquetShardStatsTracker());
+    private final String filePath;
+import org.opensearch.index.engine.dataformat.RowIdMapping;
+     * @throws IllegalStateException if already initialized
      * re-create for the same file.
-     */
-    public void cleanup() {
-        if (initialized == false) {
-            return; // no native entry was ever created
-        }
-        try {
             RustBridge.cleanupWriter(filePath);
-        } catch (Exception e) {
-            logger.warn("Failed to clean up native writer for {}: {}", filePath, e.getMessage());
+     */
+     * call {@link #initialize(String, long, ParquetSortConfig, long)} before the first write.
+     * @param stats shard-level stats tracker
+    public boolean isInitialized() {
+import org.opensearch.parquet.stats.ParquetShardStatsTracker;
+     * Writes an Arrow batch to the Parquet file.
+import java.io.IOException;
+        if (initialized == false) {
+ * <ol>
+        return metadata.get();
+                    RustBridge.WriterFinalizeResult result = RustBridge.finalizeWriter(filePath);
         }
+        }
+ *   <li>{@link #write(long, long)} — sends one or more Arrow batches (repeatable)</li>
+        if (initialized) {
+        StatsRecorder.recordOutcome(
+            throw new IOException("Cannot write to flushed Parquet writer: " + filePath);
+            }
+        initialized = true;
+     * @return true if {@link #initialize} has been called
+            logger.warn("Failed to clean up native writer for {}: {}", filePath, e.getMessage());
+     */
+        return rowIdMapping.get();
+    /**
+        if (initialized == false) {
+ * SPDX-License-Identifier: Apache-2.0
+    /**
+        return initialized;
+    private volatile boolean initialized = false;
     }
-
+/*
+     */
+     * @throws IOException if the native writer creation fails
+     * Never throws — intended for the shard close / going-red teardown path, where it guarantees a
+ * if instances are shared across threads.
+        RustBridge.createWriter(filePath, indexName, schemaAddress, sortConfig, writerGeneration);
+        }
+    private static final Logger logger = LogManager.getLogger(NativeParquetWriter.class);
+ *   <li>{@link #initialize(String, long, ParquetSortConfig, long)} — creates the native writer with the final schema</li>
+                        }
+     * @return the file metadata, or null if the writer was never initialized
+                StatsRecorder.recordOutcome(() -> {
+    public RowIdMapping getRowIdMapping() {
+package org.opensearch.parquet.bridge;
+        try {
+     * when a writer is flushed during refresh without having received any documents.
+ */
+    }
+     * Must be called exactly once before the first {@link #write}.
+                    if (result != null) {
+ *
+     *
+     *
+import org.opensearch.common.SetOnce;
+    }
+    private final ParquetShardStatsTracker stats;
 }
+     * @param filePath the path to the Parquet file to write
+     * initialized (no native entry exists) or was already flushed (finalize already removed it).
+import org.apache.logging.log4j.LogManager;
+    }
+     * Creates a new NativeParquetWriter handle. Does not create the native writer —
+     * Returns whether the native writer has been initialized.
+    /**
+     * Initializes the native Rust Parquet writer with the given schema.
+     *
+     * @throws IOException if the write fails or the writer is flushed
+     * @param sortConfig        the sort configuration for the Parquet file
+    /**
+     *
+    /**
+    }
+     * Removes the native writer registry entry for this file without finalizing it. Idempotent and
+    /**
+     */
+     * Returns the row ID mapping produced during sort-on-close as a memory-efficient
+    }
+     */
+            return; // no native entry was ever created
+     * @param arrayAddress  the native memory address of the Arrow array
+        } catch (Exception e) {
+import org.apache.logging.log4j.Logger;
+            () -> RustBridge.write(filePath, arrayAddress, schemaAddress),
+     * @param schemaAddress the native memory address of the Arrow schema
+        );
+     * @param filePath the path to the Parquet file to write
+                }, stats::addNativeFinalizeTimeMillis, stats::incNativeFinalizeTotal, stats::incNativeFinalizeFailures);
+     * packed mapping, or null if no sorting was configured or the file was empty.
+     * @throws IllegalStateException if the writer has not been initialized
+/**
+     */
+            stats::incNativeWriteFailures
+    public NativeParquetWriter(String filePath, ParquetShardStatsTracker stats) {
+    /**
+        }
+public class NativeParquetWriter {
+    public void write(long arrayAddress, long schemaAddress) throws IOException {
+    public ParquetFileMetadata getMetadata() {
+     * @param schemaAddress     the native memory address of the Arrow schema
+     *
+    private final SetOnce<ParquetFileMetadata> metadata = new SetOnce<>();
+        if (writerFlushed.compareAndSet(false, true)) {
+    }
+        return metadata.get();
+ * <p>Wraps the stateless JNI methods in {@link RustBridge} with a file-scoped lifecycle:
+     */
+     */
+            stats::addNativeWriteTimeMillis,
+ * this file be licensed under the Apache-2.0 license or a
+ * </ol>
+    public void initialize(String indexName, long schemaAddress, ParquetSortConfig sortConfig, long writerGeneration) throws IOException {
+        if (writerFlushed.get()) {
+ *
+ *
+ * The OpenSearch Contributors require contributions made to
+                        if (result.rowIdMapping() != null) {
+     * @return the file metadata, or null if the writer has not been flushed
+                    }
+     * @param indexName         the index name for settings lookup
+ * <p>This class is not thread-safe. External synchronization is required
+        this.filePath = filePath;
+ */
+        }
+            throw new IllegalStateException("Writer not initialized: " + filePath);
+import org.opensearch.plugin.stats.StatsRecorder;
+    }
+    private final SetOnce<RowIdMapping> rowIdMapping = new SetOnce<>();
+    }
+                            rowIdMapping.set(result.rowIdMapping());
+ *   <li>{@code new NativeParquetWriter(filePath)} — creates the handle (no native call)</li>
+     * Finalizes the Parquet file and returns metadata. If the writer was never initialized

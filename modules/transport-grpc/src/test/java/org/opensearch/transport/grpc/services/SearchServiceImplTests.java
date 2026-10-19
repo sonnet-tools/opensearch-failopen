@@ -1,356 +1,277 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.transport.grpc.services;
-
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.action.search.SearchResponseSections;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.breaker.CircuitBreaker;
-import org.opensearch.core.common.breaker.CircuitBreakingException;
-import org.opensearch.core.indices.breaker.CircuitBreakerService;
-import org.opensearch.protobufs.SearchRequestBody;
-import org.opensearch.search.SearchHits;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.transport.client.node.NodeClient;
-import org.opensearch.transport.grpc.proto.request.search.aggregation.AggregationBuilderProtoConverterRegistryImpl;
-import org.opensearch.transport.grpc.proto.request.search.query.AbstractQueryBuilderProtoUtils;
-import org.opensearch.transport.grpc.proto.request.search.query.QueryBuilderProtoTestUtils;
-import org.opensearch.transport.grpc.proto.response.search.aggregation.AggregateProtoConverterRegistryImpl;
-import org.opensearch.transport.grpc.spi.AggregateProtoConverterRegistry;
-import org.opensearch.transport.grpc.spi.AggregationBuilderProtoConverterRegistry;
-import org.junit.Before;
-
-import java.io.IOException;
-
-import io.grpc.stub.StreamObserver;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-public class SearchServiceImplTests extends OpenSearchTestCase {
-
-    private SearchServiceImpl service;
-    private AbstractQueryBuilderProtoUtils queryUtils;
-    private AggregationBuilderProtoConverterRegistry aggregationRegistry;
-    private AggregateProtoConverterRegistry aggregateRegistry;
-
-    @Mock
-    private NodeClient client;
-
-    @Mock
-    private CircuitBreakerService circuitBreakerService;
-
-    @Mock
-    private CircuitBreaker circuitBreaker;
-
-    @Mock
-    private StreamObserver<org.opensearch.protobufs.SearchResponse> responseObserver;
-
-    @Mock
-    private StreamObserver<org.opensearch.protobufs.CreatePITResponse> createPitResponseObserver;
-
-    @Mock
-    private StreamObserver<org.opensearch.protobufs.DeletePITResponse> deletePitResponseObserver;
-
-    @Before
-    public void setup() throws IOException {
-        MockitoAnnotations.openMocks(this);
-        when(circuitBreakerService.getBreaker(CircuitBreaker.IN_FLIGHT_REQUESTS)).thenReturn(circuitBreaker);
-        queryUtils = QueryBuilderProtoTestUtils.createQueryUtils();
-        aggregationRegistry = new AggregationBuilderProtoConverterRegistryImpl();
-        aggregateRegistry = new AggregateProtoConverterRegistryImpl();
-        service = new SearchServiceImpl(client, queryUtils, aggregationRegistry, aggregateRegistry, circuitBreakerService);
-    }
-
-    public void testConstructorWithNullClient() {
-        // Test that constructor throws IllegalArgumentException when client is null
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> new SearchServiceImpl(null, queryUtils, aggregationRegistry, aggregateRegistry, circuitBreakerService)
-        );
-
-        assertEquals("Client cannot be null", exception.getMessage());
-    }
-
-    public void testConstructorWithNullQueryUtils() {
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> new SearchServiceImpl(client, null, aggregationRegistry, aggregateRegistry, circuitBreakerService)
-        );
-
-        assertEquals("Query utils cannot be null", exception.getMessage());
-    }
-
-    public void testConstructorWithNullAggregationRegistry() {
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> new SearchServiceImpl(client, queryUtils, null, aggregateRegistry, circuitBreakerService)
-        );
-
-        assertEquals("Aggregation registry cannot be null", exception.getMessage());
-    }
-
-    public void testConstructorWithNullAggregateRegistry() {
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> new SearchServiceImpl(client, queryUtils, aggregationRegistry, null, circuitBreakerService)
-        );
-
-        assertEquals("Aggregate registry cannot be null", exception.getMessage());
-    }
-
-    public void testConstructorWithNullCircuitBreakerService() {
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> new SearchServiceImpl(client, queryUtils, aggregationRegistry, aggregateRegistry, null)
-        );
-
-        assertEquals("Circuit breaker service cannot be null", exception.getMessage());
-    }
-
-    public void testConstructorWithBothNull() {
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> new SearchServiceImpl(null, null, aggregationRegistry, aggregateRegistry, circuitBreakerService)
-        );
-
-        assertEquals("Client cannot be null", exception.getMessage());
-    }
-
-    public void testSearchSuccess() throws IOException {
-        // Create a test request
-        org.opensearch.protobufs.SearchRequest request = createTestSearchRequest();
-
-        // Call the search method
-        service.search(request, responseObserver);
-
-        // Verify that client.search was called with any SearchRequest and any ActionListener
-        verify(client).search(any(org.opensearch.action.search.SearchRequest.class), any());
-    }
-
-    public void testCircuitBreakerCheckedBeforeProcessing() throws IOException {
-        // Create a test request
-        org.opensearch.protobufs.SearchRequest request = createTestSearchRequest();
-
-        // Call the search method
-        service.search(request, responseObserver);
-
-        // Verify circuit breaker was checked with the request size
-        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), eq("<grpc_request>"));
-
-        // Verify client.search was called
-        verify(client).search(any(org.opensearch.action.search.SearchRequest.class), any());
-    }
-
-    public void testCircuitBreakerTripsAndRejectsRequest() throws IOException {
-        // Create a test request
-        org.opensearch.protobufs.SearchRequest request = createTestSearchRequest();
-
-        // Make circuit breaker throw exception
-        CircuitBreakingException circuitBreakerException = new CircuitBreakingException(
-            "Data too large",
-            100L,
-            50 * 1024 * 1024L,
-            CircuitBreaker.Durability.TRANSIENT
-        );
-        doThrow(circuitBreakerException).when(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), anyString());
-
-        // Call the search method
-        service.search(request, responseObserver);
-
-        // Verify circuit breaker was checked
-        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), eq("<grpc_request>"));
-
-        // Verify client.search was NOT called (request was rejected before processing)
-        verify(client, never()).search(any(org.opensearch.action.search.SearchRequest.class), any());
-
         // Verify error was sent to client
-        verify(responseObserver).onError(any());
-    }
-
-    public void testCircuitBreakerStreamObserverWrapsResponseObserver() throws IOException {
-        // Create a test request
-        org.opensearch.protobufs.SearchRequest request = createTestSearchRequest();
-
-        // Capture the ActionListener to simulate success
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<ActionListener<SearchResponse>> listenerCaptor = ArgumentCaptor.forClass(ActionListener.class);
-
-        // Call the search method
-        service.search(request, responseObserver);
-
-        // Verify client.search was called and capture the listener
-        verify(client).search(any(org.opensearch.action.search.SearchRequest.class), listenerCaptor.capture());
-
-        // Simulate successful response
-        SearchResponse mockResponse = mock(SearchResponse.class);
-        when(mockResponse.getTook()).thenReturn(TimeValue.timeValueMillis(100));
-        when(mockResponse.isTimedOut()).thenReturn(false);
-        when(mockResponse.getTotalShards()).thenReturn(5);
-        when(mockResponse.getSuccessfulShards()).thenReturn(5);
-        when(mockResponse.getSkippedShards()).thenReturn(0);
-        when(mockResponse.getFailedShards()).thenReturn(0);
-        when(mockResponse.getShardFailures()).thenReturn(new org.opensearch.action.search.ShardSearchFailure[0]);
-        when(mockResponse.getClusters()).thenReturn(new SearchResponse.Clusters(0, 0, 0));
-        when(mockResponse.getHits()).thenReturn(SearchHits.empty());
-        when(mockResponse.getInternalResponse()).thenReturn(mock(SearchResponseSections.class));
-        listenerCaptor.getValue().onResponse(mockResponse);
-
-        // Verify the wrapped observer was called (through CircuitBreakerStreamObserver)
-        verify(responseObserver).onNext(any(org.opensearch.protobufs.SearchResponse.class));
-        verify(responseObserver).onCompleted();
-
-        // Verify bytes were released (via CircuitBreakerStreamObserver wrapper)
-        verify(circuitBreaker).addWithoutBreaking(anyLong());
-    }
-
-    public void testCircuitBreakerBytesReleasedOnException() throws IOException {
-        // Create a test request
-        org.opensearch.protobufs.SearchRequest request = createTestSearchRequest();
-
-        // Capture the bytes added and released
-        ArgumentCaptor<Long> addedBytesCaptor = ArgumentCaptor.forClass(Long.class);
-        ArgumentCaptor<Long> releasedBytesCaptor = ArgumentCaptor.forClass(Long.class);
-
-        // Mock client to throw an exception
-        doThrow(new RuntimeException("Test exception")).when(client).search(any(), any());
-
-        // Call search method
-        service.search(request, responseObserver);
-
-        // Verify bytes were added first (positive value)
-        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(addedBytesCaptor.capture(), eq("<grpc_request>"));
-
-        // Verify bytes were released after exception (negative value)
-        verify(circuitBreaker).addWithoutBreaking(releasedBytesCaptor.capture());
-
-        // Verify the magnitudes match (added is positive, released is negative of same value)
-        long addedBytes = addedBytesCaptor.getValue();
-        long releasedBytes = releasedBytesCaptor.getValue();
-        assertTrue("Added bytes should be positive", addedBytes > 0);
-        assertEquals("Released bytes should equal negative of added bytes", -addedBytes, releasedBytes);
-
-        // Verify error was sent to client
-        verify(responseObserver).onError(any());
-    }
-
     public void testCreatePitSuccess() {
-        org.opensearch.protobufs.CreatePitRequest request = createTestCreatePitRequest();
-
-        service.createPit(request, createPitResponseObserver);
-
-        verify(client).createPit(any(org.opensearch.action.search.CreatePitRequest.class), any());
-    }
-
-    public void testCreatePitCircuitBreakerTripsAndRejectsRequest() throws Exception {
-        org.opensearch.protobufs.CreatePitRequest request = createTestCreatePitRequest();
-        CircuitBreakingException circuitBreakerException = new CircuitBreakingException(
-            "Data too large",
-            100L,
-            50 * 1024 * 1024L,
+        service = new SearchServiceImpl(client, queryUtils, aggregationRegistry, aggregateRegistry, circuitBreakerService);
             CircuitBreaker.Durability.TRANSIENT
-        );
-        doThrow(circuitBreakerException).when(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), anyString());
-
-        service.createPit(request, createPitResponseObserver);
-
-        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), eq("<grpc_request>"));
-        verify(client, never()).createPit(any(org.opensearch.action.search.CreatePitRequest.class), any());
-        verify(createPitResponseObserver).onError(any());
+        aggregationRegistry = new AggregationBuilderProtoConverterRegistryImpl();
     }
-
-    public void testCreatePitBytesReleasedOnException() throws Exception {
-        org.opensearch.protobufs.CreatePitRequest request = createTestCreatePitRequest();
-        ArgumentCaptor<Long> addedBytesCaptor = ArgumentCaptor.forClass(Long.class);
-        ArgumentCaptor<Long> releasedBytesCaptor = ArgumentCaptor.forClass(Long.class);
-
-        doThrow(new RuntimeException("Test exception")).when(client).createPit(any(), any());
-
-        service.createPit(request, createPitResponseObserver);
-
-        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(addedBytesCaptor.capture(), eq("<grpc_request>"));
-        verify(circuitBreaker).addWithoutBreaking(releasedBytesCaptor.capture());
-
-        long addedBytes = addedBytesCaptor.getValue();
-        long releasedBytes = releasedBytesCaptor.getValue();
-        assertTrue("Added bytes should be positive", addedBytes > 0);
-        assertEquals("Released bytes should equal negative of added bytes", -addedBytes, releasedBytes);
-        verify(createPitResponseObserver).onError(any());
-    }
-
-    public void testDeletePitSuccess() {
-        org.opensearch.protobufs.DeletePitRequest request = createTestDeletePitRequest();
-
-        service.deletePit(request, deletePitResponseObserver);
-
-        verify(client).deletePits(any(org.opensearch.action.search.DeletePitRequest.class), any());
-    }
-
+        // Create a test request
     public void testDeletePitCircuitBreakerTripsAndRejectsRequest() throws Exception {
-        org.opensearch.protobufs.DeletePitRequest request = createTestDeletePitRequest();
-        CircuitBreakingException circuitBreakerException = new CircuitBreakingException(
-            "Data too large",
-            100L,
-            50 * 1024 * 1024L,
-            CircuitBreaker.Durability.TRANSIENT
-        );
-        doThrow(circuitBreakerException).when(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), anyString());
-
-        service.deletePit(request, deletePitResponseObserver);
-
-        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), eq("<grpc_request>"));
-        verify(client, never()).deletePits(any(org.opensearch.action.search.DeletePitRequest.class), any());
-        verify(deletePitResponseObserver).onError(any());
+        return org.opensearch.protobufs.SearchRequest.newBuilder()
+        verify(client).search(any(org.opensearch.action.search.SearchRequest.class), any());
+    public void testConstructorWithNullAggregationRegistry() {
+            IllegalArgumentException.class,
+ * SPDX-License-Identifier: Apache-2.0
     }
-
+        when(mockResponse.getSuccessfulShards()).thenReturn(5);
+        verify(client, never()).createPit(any(org.opensearch.action.search.CreatePitRequest.class), any());
+        IllegalArgumentException exception = expectThrows(
+        CircuitBreakingException circuitBreakerException = new CircuitBreakingException(
+            IllegalArgumentException.class,
+import static org.mockito.Mockito.doThrow;
+        ArgumentCaptor<Long> releasedBytesCaptor = ArgumentCaptor.forClass(Long.class);
+        service.createPit(request, createPitResponseObserver);
+        service.deletePit(request, deletePitResponseObserver);
+        org.opensearch.protobufs.SearchRequest request = createTestSearchRequest();
+        // Call search method
+        ArgumentCaptor<ActionListener<SearchResponse>> listenerCaptor = ArgumentCaptor.forClass(ActionListener.class);
+        // Verify the magnitudes match (added is positive, released is negative of same value)
+            .build();
+        verify(deletePitResponseObserver).onError(any());
+    @Mock
+    private org.opensearch.protobufs.CreatePitRequest createTestCreatePitRequest() {
+        verify(client, never()).deletePits(any(org.opensearch.action.search.DeletePitRequest.class), any());
+        @SuppressWarnings("unchecked")
+        assertEquals("Released bytes should equal negative of added bytes", -addedBytes, releasedBytes);
+        IllegalArgumentException exception = expectThrows(
+import static org.mockito.Mockito.verify;
+        assertTrue("Added bytes should be positive", addedBytes > 0);
+    }
+        MockitoAnnotations.openMocks(this);
+    private AbstractQueryBuilderProtoUtils queryUtils;
+            IllegalArgumentException.class,
+ */
+    }
+        doThrow(new RuntimeException("Test exception")).when(client).search(any(), any());
+        // Verify bytes were released (via CircuitBreakerStreamObserver wrapper)
+        );
+    private SearchServiceImpl service;
+        ArgumentCaptor<Long> addedBytesCaptor = ArgumentCaptor.forClass(Long.class);
+import org.opensearch.transport.grpc.spi.AggregationBuilderProtoConverterRegistry;
+        service.search(request, responseObserver);
+    }
+ * compatible open source license.
+        long releasedBytes = releasedBytesCaptor.getValue();
+    private org.opensearch.protobufs.DeletePitRequest createTestDeletePitRequest() {
+        long releasedBytes = releasedBytesCaptor.getValue();
+        // Create a test request
+import org.opensearch.action.search.SearchResponse;
+            50 * 1024 * 1024L,
+import org.opensearch.core.common.breaker.CircuitBreaker;
+    }
+        );
+        queryUtils = QueryBuilderProtoTestUtils.createQueryUtils();
+        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(addedBytesCaptor.capture(), eq("<grpc_request>"));
+        assertEquals("Query utils cannot be null", exception.getMessage());
+    public void setup() throws IOException {
     public void testDeletePitBytesReleasedOnException() throws Exception {
         org.opensearch.protobufs.DeletePitRequest request = createTestDeletePitRequest();
-        ArgumentCaptor<Long> addedBytesCaptor = ArgumentCaptor.forClass(Long.class);
-        ArgumentCaptor<Long> releasedBytesCaptor = ArgumentCaptor.forClass(Long.class);
-
-        doThrow(new RuntimeException("Test exception")).when(client).deletePits(any(), any());
-
-        service.deletePit(request, deletePitResponseObserver);
-
-        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(addedBytesCaptor.capture(), eq("<grpc_request>"));
-        verify(circuitBreaker).addWithoutBreaking(releasedBytesCaptor.capture());
-
-        long addedBytes = addedBytesCaptor.getValue();
-        long releasedBytes = releasedBytesCaptor.getValue();
-        assertTrue("Added bytes should be positive", addedBytes > 0);
-        assertEquals("Released bytes should equal negative of added bytes", -addedBytes, releasedBytes);
-        verify(deletePitResponseObserver).onError(any());
-    }
-
-    private org.opensearch.protobufs.SearchRequest createTestSearchRequest() {
-        return org.opensearch.protobufs.SearchRequest.newBuilder()
-            .addIndex("test-index")
             .setSearchRequestBody(SearchRequestBody.newBuilder().setSize(10).build())
-            .build();
+        verify(client, never()).search(any(org.opensearch.action.search.SearchRequest.class), any());
     }
-
-    private org.opensearch.protobufs.CreatePitRequest createTestCreatePitRequest() {
-        return org.opensearch.protobufs.CreatePitRequest.newBuilder().addIndex("test-index").setKeepAlive("1m").build();
+        IllegalArgumentException exception = expectThrows(
+        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(addedBytesCaptor.capture(), eq("<grpc_request>"));
+        long addedBytes = addedBytesCaptor.getValue();
+            IllegalArgumentException.class,
+public class SearchServiceImplTests extends OpenSearchTestCase {
+import static org.mockito.ArgumentMatchers.anyLong;
+import org.opensearch.core.indices.breaker.CircuitBreakerService;
+import org.junit.Before;
+ * this file be licensed under the Apache-2.0 license or a
+    public void testCreatePitBytesReleasedOnException() throws Exception {
+import org.mockito.ArgumentCaptor;
+        doThrow(circuitBreakerException).when(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), anyString());
+        service.deletePit(request, deletePitResponseObserver);
+        long releasedBytes = releasedBytesCaptor.getValue();
+        IllegalArgumentException exception = expectThrows(
+        verify(circuitBreaker).addWithoutBreaking(releasedBytesCaptor.capture());
+        );
+ * The OpenSearch Contributors require contributions made to
+        when(mockResponse.getFailedShards()).thenReturn(0);
+    private AggregationBuilderProtoConverterRegistry aggregationRegistry;
+            CircuitBreaker.Durability.TRANSIENT
+        // Create a test request
+import org.opensearch.core.action.ActionListener;
+        when(circuitBreakerService.getBreaker(CircuitBreaker.IN_FLIGHT_REQUESTS)).thenReturn(circuitBreaker);
+        doThrow(circuitBreakerException).when(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), anyString());
+        );
+        ArgumentCaptor<Long> releasedBytesCaptor = ArgumentCaptor.forClass(Long.class);
+        assertEquals("Aggregation registry cannot be null", exception.getMessage());
+        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(addedBytesCaptor.capture(), eq("<grpc_request>"));
+    @Before
+        aggregateRegistry = new AggregateProtoConverterRegistryImpl();
+        );
+        assertEquals("Client cannot be null", exception.getMessage());
+        doThrow(circuitBreakerException).when(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), anyString());
+            "Data too large",
+        // Call the search method
+        assertTrue("Added bytes should be positive", addedBytes > 0);
+        // Capture the ActionListener to simulate success
+            100L,
+        );
+        verify(client).createPit(any(org.opensearch.action.search.CreatePitRequest.class), any());
+    public void testSearchSuccess() throws IOException {
+        // Verify bytes were released after exception (negative value)
+        // Simulate successful response
+        when(mockResponse.getTotalShards()).thenReturn(5);
+        service.createPit(request, createPitResponseObserver);
+            () -> new SearchServiceImpl(client, queryUtils, null, aggregateRegistry, circuitBreakerService)
+        assertEquals("Client cannot be null", exception.getMessage());
+        verify(deletePitResponseObserver).onError(any());
+import static org.mockito.ArgumentMatchers.eq;
+        // Test that constructor throws IllegalArgumentException when client is null
+        CircuitBreakingException circuitBreakerException = new CircuitBreakingException(
+    public void testConstructorWithNullAggregateRegistry() {
     }
-
-    private org.opensearch.protobufs.DeletePitRequest createTestDeletePitRequest() {
-        return org.opensearch.protobufs.DeletePitRequest.newBuilder().addPitId("pit-id-1").build();
-    }
+        // Verify circuit breaker was checked
 }
+        verify(circuitBreaker).addWithoutBreaking(releasedBytesCaptor.capture());
+        org.opensearch.protobufs.SearchRequest request = createTestSearchRequest();
+import org.opensearch.transport.grpc.proto.request.search.query.QueryBuilderProtoTestUtils;
+            () -> new SearchServiceImpl(client, null, aggregationRegistry, aggregateRegistry, circuitBreakerService)
+        // Verify client.search was called
+        // Call the search method
+import java.io.IOException;
+        when(mockResponse.getClusters()).thenReturn(new SearchResponse.Clusters(0, 0, 0));
+        // Verify client.search was called and capture the listener
+        org.opensearch.protobufs.SearchRequest request = createTestSearchRequest();
+        assertEquals("Circuit breaker service cannot be null", exception.getMessage());
+    private AggregateProtoConverterRegistry aggregateRegistry;
+        doThrow(new RuntimeException("Test exception")).when(client).createPit(any(), any());
+            () -> new SearchServiceImpl(client, queryUtils, aggregationRegistry, aggregateRegistry, null)
+        verify(createPitResponseObserver).onError(any());
+    public void testCircuitBreakerTripsAndRejectsRequest() throws IOException {
+    }
+        return org.opensearch.protobufs.CreatePitRequest.newBuilder().addIndex("test-index").setKeepAlive("1m").build();
+        when(mockResponse.getHits()).thenReturn(SearchHits.empty());
+            IllegalArgumentException.class,
+        // Verify that client.search was called with any SearchRequest and any ActionListener
+        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), eq("<grpc_request>"));
+import static org.mockito.ArgumentMatchers.anyString;
+            "Data too large",
+    }
+        when(mockResponse.isTimedOut()).thenReturn(false);
+        verify(createPitResponseObserver).onError(any());
+        // Create a test request
+        IllegalArgumentException exception = expectThrows(
+import static org.mockito.Mockito.mock;
+        doThrow(new RuntimeException("Test exception")).when(client).deletePits(any(), any());
+    @Mock
+        when(mockResponse.getSkippedShards()).thenReturn(0);
+        verify(responseObserver).onCompleted();
+    public void testCircuitBreakerCheckedBeforeProcessing() throws IOException {
+            CircuitBreaker.Durability.TRANSIENT
+        when(mockResponse.getTook()).thenReturn(TimeValue.timeValueMillis(100));
+        assertEquals("Aggregate registry cannot be null", exception.getMessage());
+import org.opensearch.protobufs.SearchRequestBody;
+import org.opensearch.transport.grpc.proto.request.search.aggregation.AggregationBuilderProtoConverterRegistryImpl;
+    }
+    public void testConstructorWithNullClient() {
+        // Verify circuit breaker was checked with the request size
+import org.opensearch.action.search.SearchResponseSections;
+        // Call the search method
+        return org.opensearch.protobufs.DeletePitRequest.newBuilder().addPitId("pit-id-1").build();
+        listenerCaptor.getValue().onResponse(mockResponse);
+import org.opensearch.core.common.breaker.CircuitBreakingException;
+    @Mock
+            () -> new SearchServiceImpl(null, null, aggregationRegistry, aggregateRegistry, circuitBreakerService)
+    }
+    public void testConstructorWithNullCircuitBreakerService() {
+        service.search(request, responseObserver);
+        service.search(request, responseObserver);
+        service.search(request, responseObserver);
+import org.mockito.Mock;
+            () -> new SearchServiceImpl(null, queryUtils, aggregationRegistry, aggregateRegistry, circuitBreakerService)
+    private StreamObserver<org.opensearch.protobufs.DeletePITResponse> deletePitResponseObserver;
+    }
+import org.opensearch.common.unit.TimeValue;
+        );
+    }
+            "Data too large",
+        org.opensearch.protobufs.DeletePitRequest request = createTestDeletePitRequest();
+        ArgumentCaptor<Long> addedBytesCaptor = ArgumentCaptor.forClass(Long.class);
+    public void testConstructorWithBothNull() {
+    }
+import org.opensearch.transport.grpc.proto.response.search.aggregation.AggregateProtoConverterRegistryImpl;
+        assertTrue("Added bytes should be positive", addedBytes > 0);
+        long addedBytes = addedBytesCaptor.getValue();
+    @Mock
+            50 * 1024 * 1024L,
+            () -> new SearchServiceImpl(client, queryUtils, aggregationRegistry, null, circuitBreakerService)
+        // Verify client.search was NOT called (request was rejected before processing)
+    }
+        verify(responseObserver).onNext(any(org.opensearch.protobufs.SearchResponse.class));
+        verify(responseObserver).onError(any());
+        );
+        );
+import org.mockito.MockitoAnnotations;
+package org.opensearch.transport.grpc.services;
+        // Call the search method
+    @Mock
+/*
+        verify(responseObserver).onError(any());
+    private NodeClient client;
+        assertEquals("Released bytes should equal negative of added bytes", -addedBytes, releasedBytes);
+import io.grpc.stub.StreamObserver;
+ *
+    public void testDeletePitSuccess() {
+        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), eq("<grpc_request>"));
+        ArgumentCaptor<Long> addedBytesCaptor = ArgumentCaptor.forClass(Long.class);
+    private CircuitBreaker circuitBreaker;
+        // Verify bytes were added first (positive value)
+        // Create a test request
+        service.deletePit(request, deletePitResponseObserver);
+            100L,
+import static org.mockito.Mockito.when;
+        verify(client).deletePits(any(org.opensearch.action.search.DeletePitRequest.class), any());
+        org.opensearch.protobufs.SearchRequest request = createTestSearchRequest();
+    }
+import org.opensearch.transport.client.node.NodeClient;
+    private org.opensearch.protobufs.SearchRequest createTestSearchRequest() {
+            100L,
+import org.opensearch.test.OpenSearchTestCase;
+            IllegalArgumentException.class,
+        // Mock client to throw an exception
+    @Mock
+        org.opensearch.protobufs.CreatePitRequest request = createTestCreatePitRequest();
+    public void testCircuitBreakerStreamObserverWrapsResponseObserver() throws IOException {
+        service.createPit(request, createPitResponseObserver);
+import org.opensearch.transport.grpc.proto.request.search.query.AbstractQueryBuilderProtoUtils;
+        verify(circuitBreaker).addWithoutBreaking(releasedBytesCaptor.capture());
+        // Verify the wrapped observer was called (through CircuitBreakerStreamObserver)
+        assertEquals("Released bytes should equal negative of added bytes", -addedBytes, releasedBytes);
+import static org.mockito.ArgumentMatchers.any;
+        org.opensearch.protobufs.DeletePitRequest request = createTestDeletePitRequest();
+        service.search(request, responseObserver);
+        org.opensearch.protobufs.CreatePitRequest request = createTestCreatePitRequest();
+        when(mockResponse.getShardFailures()).thenReturn(new org.opensearch.action.search.ShardSearchFailure[0]);
+            50 * 1024 * 1024L,
+        org.opensearch.protobufs.SearchRequest request = createTestSearchRequest();
+        SearchResponse mockResponse = mock(SearchResponse.class);
+    public void testCircuitBreakerBytesReleasedOnException() throws IOException {
+        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), eq("<grpc_request>"));
+    }
+    private CircuitBreakerService circuitBreakerService;
+        // Verify error was sent to client
+        // Capture the bytes added and released
+import static org.mockito.Mockito.never;
+        org.opensearch.protobufs.CreatePitRequest request = createTestCreatePitRequest();
+    public void testCreatePitCircuitBreakerTripsAndRejectsRequest() throws Exception {
+        CircuitBreakingException circuitBreakerException = new CircuitBreakingException(
+        long addedBytes = addedBytesCaptor.getValue();
+        IllegalArgumentException exception = expectThrows(
+    }
+        // Make circuit breaker throw exception
+        verify(client).search(any(org.opensearch.action.search.SearchRequest.class), any());
+    }
+        verify(circuitBreaker).addWithoutBreaking(anyLong());
+        when(mockResponse.getInternalResponse()).thenReturn(mock(SearchResponseSections.class));
+        ArgumentCaptor<Long> releasedBytesCaptor = ArgumentCaptor.forClass(Long.class);
+    private StreamObserver<org.opensearch.protobufs.SearchResponse> responseObserver;
+import org.opensearch.transport.grpc.spi.AggregateProtoConverterRegistry;
+    public void testConstructorWithNullQueryUtils() {
+import org.opensearch.search.SearchHits;
+        verify(circuitBreaker).addEstimateBytesAndMaybeBreak(anyLong(), eq("<grpc_request>"));
+        verify(client).search(any(org.opensearch.action.search.SearchRequest.class), listenerCaptor.capture());
+            .addIndex("test-index")
+    }
+    private StreamObserver<org.opensearch.protobufs.CreatePITResponse> createPitResponseObserver;

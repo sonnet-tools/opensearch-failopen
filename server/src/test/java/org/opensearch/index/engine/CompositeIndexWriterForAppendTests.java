@@ -1,1047 +1,916 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.engine;
-
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.index.LogByteSizeMergePolicy;
-import org.apache.lucene.store.AlreadyClosedException;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.FilterDirectory;
-import org.apache.lucene.store.FilterIndexOutput;
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.store.IndexOutput;
-import org.apache.lucene.tests.util.LuceneTestCase;
-import org.opensearch.common.CheckedBiFunction;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.lucene.uid.Versions;
-import org.opensearch.common.util.concurrent.ReleasableLock;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.BucketedCompositeDirectory;
-import org.opensearch.index.VersionType;
-import org.opensearch.index.mapper.ParsedDocument;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Supplier;
-
-import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
-import static org.mockito.Mockito.mock;
-
-@LuceneTestCase.AwaitsFix(bugUrl = "https://github.com/opensearch-project/OpenSearch/issues/20005")
-public class CompositeIndexWriterForAppendTests extends CriteriaBasedCompositeIndexWriterBaseTests {
-
-    // For refresh
-    public void testGetIndexWriterWithRotatingMapAlwaysPutWriterInCurrentMap() throws IOException, InterruptedException {
-        AtomicReference<CompositeIndexWriter.LiveIndexWriterDeletesMap> liveIndexWriterDeletesMap = new AtomicReference<>(
-            new CompositeIndexWriter.LiveIndexWriterDeletesMap()
-        );
-        CountDownLatch latch = new CountDownLatch(1);
-        AtomicBoolean run = new AtomicBoolean(true);
+            compositeIndexWriter.afterRefresh(true);
+                        throw new OutOfMemoryError("Simulated write failure");
+            parentWriter,
         Thread refresher = new Thread(() -> {
-            while (run.get()) {
-                latch.countDown();
-                liveIndexWriterDeletesMap.set(liveIndexWriterDeletesMap.get().buildTransitionMap());
-                liveIndexWriterDeletesMap.set(liveIndexWriterDeletesMap.get().invalidateOldMap());
-            }
-        });
-
-        refresher.start();
-        try {
-            latch.await();
-            int numOps = 100;
-            CompositeIndexWriter.DisposableIndexWriter disposableIndexWriter;
-            while (numOps > 0) {
-                disposableIndexWriter = liveIndexWriterDeletesMap.get()
-                    .computeIndexWriterIfAbsentForCriteria("200", this::createChildWriterFactory, new ShardId("foo", "_na_", 1));
-                assertNotNull(disposableIndexWriter);
-                assertFalse(disposableIndexWriter.getLookupMap().isClosed());
-                disposableIndexWriter.getIndexWriter().close();
-                disposableIndexWriter.getIndexWriter().getDirectory().close();
-                numOps--;
-            }
-        } finally {
-            run.set(false);
-            refresher.join();
-        }
-    }
-
-    public void testConcurrentBuildTransitionAndInvalidateForIndexWriterDeleteMap() throws InterruptedException {
-        CompositeIndexWriter.LiveIndexWriterDeletesMap map = new CompositeIndexWriter.LiveIndexWriterDeletesMap();
-        AtomicReference<CompositeIndexWriter.LiveIndexWriterDeletesMap> currentMapRef = new AtomicReference<>(map);
-        AtomicBoolean running = new AtomicBoolean(true);
-        int iterations = 100;
-
-        // Thread that continuously builds transition maps and invalidates old ones
-        Thread refreshThread = new Thread(() -> {
-            int count = 0;
-            while (running.get() && count < iterations) {
-                CompositeIndexWriter.LiveIndexWriterDeletesMap current = currentMapRef.get();
-                CompositeIndexWriter.LiveIndexWriterDeletesMap transition = current.buildTransitionMap();
-                CompositeIndexWriter.LiveIndexWriterDeletesMap invalidated = transition.invalidateOldMap();
-                currentMapRef.set(invalidated);
-                count++;
-                Thread.yield();
-            }
-        });
-
-        refreshThread.start();
-
-        // Let it run for a bit
-        Thread.sleep(100);
-        running.set(false);
-        refreshThread.join(1000);
-
-        // Verify the final map is in a valid state
-        CompositeIndexWriter.LiveIndexWriterDeletesMap finalMap = currentMapRef.get();
-        assertNotNull(finalMap.current);
-        assertNotNull(finalMap.old);
-    }
-
-    public void testConcurrentComputeIndexWriterWithMapRotation() throws Exception {
-        AtomicBoolean stopped = new AtomicBoolean();
-        Semaphore indexedDocs = new Semaphore(0);
-        AtomicInteger computeCount = new AtomicInteger(0);
-        AtomicInteger rotationCount = new AtomicInteger(0);
-        AtomicReference<CompositeIndexWriter.LiveIndexWriterDeletesMap> mapRef = new AtomicReference<>(
-            new CompositeIndexWriter.LiveIndexWriterDeletesMap()
-        );
-        CheckedBiFunction<
-            String,
-            CompositeIndexWriter.CriteriaBasedIndexWriterLookup,
-            CompositeIndexWriter.DisposableIndexWriter,
-            IOException> supplier = (crit, lookup) -> mock(CompositeIndexWriter.DisposableIndexWriter.class);
-
-        // Compute thread
-        Thread computeThread = new Thread(() -> {
-            while (stopped.get() == false) {
-                try {
-                    CompositeIndexWriter.LiveIndexWriterDeletesMap currentMap = mapRef.get();
-                    currentMap.computeIndexWriterIfAbsentForCriteria("test-criteria", supplier, new ShardId("foo", "_na_", 1));
-                    computeCount.incrementAndGet();
-                    indexedDocs.release();
-                } catch (Exception e) {
-
-                }
-            }
-        });
-
-        Thread rotationThread = new Thread(() -> {
-            while (stopped.get() == false) {
-                CompositeIndexWriter.LiveIndexWriterDeletesMap current = mapRef.get();
-                CompositeIndexWriter.LiveIndexWriterDeletesMap transition = current.buildTransitionMap();
-                CompositeIndexWriter.LiveIndexWriterDeletesMap invalidated = transition.invalidateOldMap();
-                mapRef.set(invalidated);
-                rotationCount.incrementAndGet();
-            }
-        });
-
-        try {
-            rotationThread.start();
-            computeThread.start();
-            indexedDocs.acquire(100);
-        } finally {
-            stopped.set(true);
-            computeThread.join();
-            rotationThread.join();
-        }
-
-        assertTrue("Compute operations completed: " + computeCount.get(), computeCount.get() >= 100);
-        assertTrue("Rotation operations completed: " + rotationCount.get(), rotationCount.get() >= 0);
-    }
-
-    public void testChildDirectoryDeletedPostRefresh() throws IOException, InterruptedException {
-        final EngineConfig engineConfig = config();
-        Path dataPath = engineConfig.getStore().shardPath().resolveIndex();
-        CompositeIndexWriter compositeIndexWriter = null;
-
-        try {
-            compositeIndexWriter = new CompositeIndexWriter(
-                engineConfig,
-                createWriter(),
-                newSoftDeletesPolicy(),
-                softDeletesField,
-                indexWriterFactory
-            );
-
-            Engine.Index operation = indexForDoc(createParsedDoc("id", null, DEFAULT_CRITERIA));
-            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-
-            operation = indexForDoc(createParsedDoc("id2", null, "testingNewCriteria"));
-            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-
-            compositeIndexWriter.beforeRefresh();
-            compositeIndexWriter.afterRefresh(true);
-
-            // Remove known extra files - "extra0" file is added by the ExtrasFS, which is part of Lucene's test framework.
-            long directoryCount = Files.find(
-                dataPath,
-                1,
-                (path, attributes) -> attributes.isDirectory() == true && path.endsWith("extra0") == false
-            ).count() - 1;
-            // Ensure no child directory is pending here.
-            assertEquals(0, directoryCount);
-        } finally {
-            if (compositeIndexWriter != null) {
-                IOUtils.closeWhileHandlingException(compositeIndexWriter);
-            }
-        }
-
-    }
-
-    public void testConcurrentIndexingDuringRefresh() throws IOException, InterruptedException {
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
-            createWriter(),
-            newSoftDeletesPolicy(),
-            softDeletesField,
-            indexWriterFactory
-        );
-
-        try {
-            AtomicBoolean run = new AtomicBoolean(true);
-            Thread indexer = new Thread(() -> {
-                while (run.get()) {
-                    String id = Integer.toString(randomIntBetween(1, 100));
-                    try {
-                        Engine.Index operation = indexForDoc(createParsedDoc(id, null, DEFAULT_CRITERIA));
-                        compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-                    } catch (IOException e) {
-                        throw new AssertionError(e);
-                    } catch (AlreadyClosedException e) {
-                        return;
-                    }
-                }
-            });
-
-            Thread refresher = new Thread(() -> {
-                while (run.get()) {
-                    try {
-                        compositeIndexWriter.beforeRefresh();
-                        compositeIndexWriter.afterRefresh(true);
-                    } catch (IOException e) {}
-                }
-            });
-            indexer.start();
-            refresher.start();
-            run.set(false);
-            indexer.join();
-            refresher.join();
-        } finally {
             IOUtils.close(compositeIndexWriter);
-        }
-    }
-
-    public void testConcurrentIndexAndDeleteDuringRefresh() throws IOException, InterruptedException {
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
-            createWriter(),
-            newSoftDeletesPolicy(),
-            softDeletesField,
-            indexWriterFactory
-        );
-
-        int numDocs = scaledRandomIntBetween(100, 1000);
-        CountDownLatch latch = new CountDownLatch(2);
-        AtomicBoolean done = new AtomicBoolean(false);
-        AtomicInteger numDeletes = new AtomicInteger();
-
-        Thread indexer = new Thread(() -> {
-            try {
-                latch.countDown();
-                latch.await();
-                for (int i = 0; i < numDocs; i++) {
-                    String id = Integer.toString(i);
-                    Engine.Index operation = indexForDoc(createParsedDoc(id, null, DEFAULT_CRITERIA));
-                    compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-                    if (rarely()) {
-                        compositeIndexWriter.deleteDocument(
-                            operation.uid(),
-                            false,
-                            newDeleteTombstoneDoc(id),
-                            1,
-                            2,
-                            primaryTerm.get(),
-                            softDeletesField
-                        );
-
-                        numDeletes.incrementAndGet();
-                    }
-                }
-            } catch (Exception e) {
-                throw new AssertionError(e);
-            } finally {
-                done.set(true);
-            }
-        });
-
-        indexer.start();
-        latch.countDown();
-        latch.await();
-        while (done.get() == false) {
-            compositeIndexWriter.beforeRefresh();
-            compositeIndexWriter.afterRefresh(true);
-            Thread.sleep(100);
-        }
-
-        indexer.join();
-        compositeIndexWriter.beforeRefresh();
-        compositeIndexWriter.afterRefresh(true);
-        try (DirectoryReader directoryReader = DirectoryReader.open(compositeIndexWriter.getAccumulatingIndexWriter())) {
-            assertEquals(numDocs - numDeletes.get(), directoryReader.numDocs());
-        } finally {
-            IOUtils.close(compositeIndexWriter);
-        }
-    }
-
-    public void testTreatDocumentFailureAsFatalErrorOnGroupSpecificIndexWriter() throws IOException {
-        AtomicReference<IOException> addDocException = new AtomicReference<>();
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
-            createWriter(),
-            newSoftDeletesPolicy(),
-            softDeletesField,
-            indexWriterFactory
-        ) {
-            @Override
-            DisposableIndexWriter createChildWriterUtil(String associatedCriteria, CriteriaBasedIndexWriterLookup lookup)
-                throws IOException {
-                return new CompositeIndexWriter.DisposableIndexWriter(
-                    new IndexWriter(
-                        store.newTempDirectory(
-                            BucketedCompositeDirectory.CHILD_DIRECTORY_PREFIX + associatedCriteria + "_" + UUID.randomUUID()
-                        ),
-                        newIndexWriterConfig()
-                    ) {
-                        @Override
-                        public long addDocuments(Iterable<? extends Iterable<? extends IndexableField>> docs) throws IOException {
-                            final IOException ex = addDocException.getAndSet(null);
-                            if (ex != null) {
-                                throw ex;
-                            }
-                            return super.addDocuments(docs);
-                        }
-                    },
-                    lookup
-                );
-            }
-        };
-
-        String id = Integer.toString(randomIntBetween(1, 100));
-        Engine.Index operation = indexForDoc(createParsedDoc(id, null, DEFAULT_CRITERIA));
-        try {
-            addDocException.set(new IOException("simulated"));
-            expectThrows(IOException.class, () -> compositeIndexWriter.addDocuments(operation.docs(), operation.uid()));
-        } finally {
-            IOUtils.close(compositeIndexWriter);
-        }
-    }
-
-    public void testGetFlushingBytesAfterSmallDocuments() throws IOException {
-        IndexWriter parentWriter = createWriter();
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
-            parentWriter,
-            newSoftDeletesPolicy(),
-            softDeletesField,
-            indexWriterFactory
-        );
-
-        compositeIndexWriter.getConfig().setRAMBufferSizeMB(128);
-
-        try {
-            // Add a few small documents
-            for (int i = 0; i < 10; i++) {
-                Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf(i), null, DEFAULT_CRITERIA));
-                compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-            }
-
-            // Should still be 0 or small since we haven't triggered a flush
-            long flushingBytes = compositeIndexWriter.getFlushingBytes();
-            assertEquals("Flushing bytes should be non-negative", 0, flushingBytes);
-        } finally {
-            IOUtils.close(compositeIndexWriter);
-        }
-    }
-
-    public void testHasPendingMergesInitiallyFalse() throws IOException {
-        IndexWriter parentWriter = createWriter();
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
-            parentWriter,
-            newSoftDeletesPolicy(),
-            softDeletesField,
-            indexWriterFactory
-        );
-
-        assertFalse("Should have no pending merges initially", compositeIndexWriter.hasPendingMerges());
-    }
-
-    public void testHasPendingMergesDuringForceMerge() throws IOException, InterruptedException {
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
-            createWriter(),
-            newSoftDeletesPolicy(),
-            softDeletesField,
-            indexWriterFactory
-        );
-
-        LogByteSizeMergePolicy mergePolicy = new LogByteSizeMergePolicy();
-        mergePolicy.setMergeFactor(2);
-        compositeIndexWriter.getConfig().setMergePolicy(mergePolicy);
-
-        try {
-            for (int i = 0; i < 4; i++) {
-                Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf(i), null, DEFAULT_CRITERIA));
-                compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-                compositeIndexWriter.beforeRefresh();
-                compositeIndexWriter.afterRefresh(true);
-            }
-
-            final CountDownLatch mergeLatch = new CountDownLatch(1);
-            final AtomicBoolean hadPendingMerges = new AtomicBoolean(false);
-
-            Thread mergeThread = new Thread(() -> {
-                try {
-                    mergeLatch.countDown();
-                    compositeIndexWriter.forceMerge(1, true);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            });
-
-            mergeThread.start();
-            mergeLatch.await();
-
-            // Check for pending merges during merge
-            Thread.sleep(50); // Give merge time to start
-            mergeThread.join();
-            // After merge completes, should have no pending merges
-            assertFalse("Should have no pending merges after force merge completes", compositeIndexWriter.hasPendingMerges());
-        } finally {
-            IOUtils.close(compositeIndexWriter);
-        }
-    }
-
     public void testGetTragicExceptionWithException() throws IOException {
-        IndexWriter parentWriter = createWriter();
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
-            parentWriter,
-            newSoftDeletesPolicy(),
-            softDeletesField,
-            indexWriterFactory
-        );
-
-        compositeIndexWriter.getConfig().setRAMBufferSizeMB(128);
-
-        try {
-            // Add a few small documents
-            for (int i = 0; i < 10; i++) {
-                Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf(i), null, DEFAULT_CRITERIA));
-                compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-            }
-
-            assertNull(compositeIndexWriter.getTragicException());
-        } finally {
-            IOUtils.close(compositeIndexWriter);
-        }
-    }
-
-    public void testGetTragicExceptionWithOutOfMemoryError() throws Exception {
-        AtomicBoolean shouldFail = new AtomicBoolean(false);
-        AtomicReference<Error> thrownError = new AtomicReference<>();
-
-        Directory dir = new FilterDirectory(newDirectory()) {
-            @Override
-            public IndexOutput createOutput(String name, IOContext context) throws IOException {
-                IndexOutput out = super.createOutput(name, context);
-                return new FilterIndexOutput("failing output", "test", out) {
-                    @Override
-                    public void writeBytes(byte[] b, int offset, int length) throws IOException {
-                        if (shouldFail.get() && name.endsWith(".cfe")) {
-                            Error ex = new OutOfMemoryError("Simulated write failure");
-                            thrownError.set(ex);
-                            throw ex;
-                        }
-                        super.writeBytes(b, offset, length);
-                    }
-                };
-            }
-        };
-
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
-            createWriter(dir),
-            newSoftDeletesPolicy(),
-            softDeletesField,
-            indexWriterFactory
-        );
-
-        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
-        // Add a document successfully
-        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
-        compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-
-        // Enable failure
-        shouldFail.set(true);
-
-        boolean hitError = false;
-        try {
-            // This should trigger the failure
-            for (int i = 0; i < 10; i++) {
-                operation = indexForDoc(createParsedDoc(String.valueOf(i), null, DEFAULT_CRITERIA));
-                compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-            }
-
-            compositeIndexWriter.beforeRefresh();
-            compositeIndexWriter.afterRefresh(true);
-            compositeIndexWriter.commit();
-        } catch (Error e) {
-            hitError = true;
-        }
-
-        if (hitError && thrownError.get() != null) {
-            Throwable tragic = compositeIndexWriter.getTragicException();
-            if (tragic != null) {
-                assertFalse("Writer should be closed after tragic exception", compositeIndexWriter.isOpen());
-            }
-        }
-
-        IOUtils.closeWhileHandlingException(compositeIndexWriter, dir);
-    }
-
-    public void testRAMBytesUsedWithOldAndCurrentWriters() throws Exception {
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
             createWriter(),
-            newSoftDeletesPolicy(),
-            softDeletesField,
-            indexWriterFactory
-        );
-
-        try {
-            // Create documents in first criteria group
-            for (int i = 0; i < 10; i++) {
-                Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf(i), null, DEFAULT_CRITERIA));
-                compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-            }
-
-            long ramAfterGroup1 = compositeIndexWriter.ramBytesUsed();
-            for (int i = 0; i < 10; i++) {
-                Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf(i), null, "testGroupingCriteria2"));
-                compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-            }
-
-            long ramAfterGroup2 = compositeIndexWriter.ramBytesUsed();
-            // RAM should account for both groups
-            assertTrue("RAM should account for multiple groups", ramAfterGroup2 >= ramAfterGroup1);
-        } finally {
-            IOUtils.close(compositeIndexWriter);
-        }
-
-    }
-
-    public void testRAMBytesUsedWithTragicExceptionOnCurrent() throws Exception {
-        Supplier<Directory> dirSupplier = () -> new FilterDirectory(newDirectory()) {
-            @Override
-            public IndexOutput createOutput(String name, IOContext context) throws IOException {
-                IndexOutput out = super.createOutput(name, context);
-                return new FilterIndexOutput("failing output", "test", out) {
-                    @Override
-                    public void writeBytes(byte[] b, int offset, int length) throws IOException {
+        };
                         throw new OutOfMemoryError("Simulated write failure");
-                    }
-                };
-            }
-        };
-
-        FlushingIndexWriterFactory indexWriterFactory = new FlushingIndexWriterFactory(dirSupplier, new AtomicBoolean(true));
-
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
-            createWriter(),
-            newSoftDeletesPolicy(),
-            softDeletesField,
-            indexWriterFactory
-        );
-
-        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
-
-        // Add a document successfully
-        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
-        try {
-            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-        } catch (Error ignored) {}
-
-        assertThrows(AlreadyClosedException.class, compositeIndexWriter::ramBytesUsed);
-        IOUtils.closeWhileHandlingException(compositeIndexWriter, indexWriterFactory);
-    }
-
-    public void testRAMBytesUsedWithTragicExceptionOnOld() throws Exception {
-        Supplier<Directory> dirSupplier = () -> new FilterDirectory(newDirectory()) {
-            @Override
-            public IndexOutput createOutput(String name, IOContext context) throws IOException {
-                IndexOutput out = super.createOutput(name, context);
-                return new FilterIndexOutput("failing output", "test", out) {
-                    @Override
-                    public void writeBytes(byte[] b, int offset, int length) throws IOException {
-                        throw new OutOfMemoryError("Simulated write failure");
-                    }
-                };
-            }
-        };
-
-        FlushingIndexWriterFactory indexWriterFactory = new FlushingIndexWriterFactory(dirSupplier, new AtomicBoolean(true));
-
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
-            createWriter(),
-            newSoftDeletesPolicy(),
-            softDeletesField,
-            indexWriterFactory
-        );
-
-        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
-
-        // Add a document successfully
-        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
-        try {
-            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-        } catch (Error ignored) {}
-
-        ReleasableLock lock = compositeIndexWriter.getNewWriteLock().acquire();
-        CountDownLatch latch = new CountDownLatch(1);
-        Thread refresher = new Thread(() -> {
-            latch.countDown();
-            try {
-                compositeIndexWriter.beforeRefresh();
-            } catch (Exception ignored) {}
-        });
-
-        refresher.start();
-        try {
-            latch.await();
-            assertThrows(AlreadyClosedException.class, compositeIndexWriter::ramBytesUsed);
-        } finally {
-            IOUtils.closeWhileHandlingException(compositeIndexWriter, indexWriterFactory, lock);
-            refresher.join();
-        }
-    }
-
-    public void testRAMBytesUsedWithWriterOnOld() throws Exception {
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
-            createWriter(),
-            newSoftDeletesPolicy(),
-            softDeletesField,
-            indexWriterFactory
-        );
-
-        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
-
-        // Add a document successfully
-        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
-        try {
-            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-        } catch (Error ignored) {}
-
-        ReleasableLock lock = compositeIndexWriter.getNewWriteLock().acquire();
-        CountDownLatch latch = new CountDownLatch(1);
-        Thread refresher = new Thread(() -> {
-            latch.countDown();
-            try {
-                compositeIndexWriter.beforeRefresh();
-            } catch (Exception ignored) {}
-        });
-
-        refresher.start();
-        try {
-            latch.await();
-            long ramBytesUsed = compositeIndexWriter.ramBytesUsed();
-            assertTrue("RamBytesUsed bytes should be non-negative ", ramBytesUsed > 0);
-        } finally {
-            IOUtils.closeWhileHandlingException(compositeIndexWriter, lock);
-            refresher.join();
-        }
-    }
-
-    public void testFlushingBytesWithTragicExceptionOnCurrent() throws Exception {
-        Supplier<Directory> dirSupplier = () -> new FilterDirectory(newDirectory()) {
-            @Override
-            public IndexOutput createOutput(String name, IOContext context) throws IOException {
-                IndexOutput out = super.createOutput(name, context);
-                return new FilterIndexOutput("failing output", "test", out) {
-                    @Override
-                    public void writeBytes(byte[] b, int offset, int length) throws IOException {
-                        throw new OutOfMemoryError("Simulated write failure");
-                    }
-                };
-            }
-        };
-
-        FlushingIndexWriterFactory indexWriterFactory = new FlushingIndexWriterFactory(dirSupplier, new AtomicBoolean(true));
-
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
-            createWriter(),
-            newSoftDeletesPolicy(),
-            softDeletesField,
-            indexWriterFactory
-        );
-
-        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
-
-        // Add a document successfully
-        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
-        try {
-            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-        } catch (Error ignored) {}
-
-        assertThrows(AlreadyClosedException.class, compositeIndexWriter::getFlushingBytes);
-        IOUtils.closeWhileHandlingException(compositeIndexWriter, indexWriterFactory);
-    }
-
-    public void testFlushingBytesUsedWithTragicExceptionOnOld() throws Exception {
-        Supplier<Directory> dirSupplier = () -> new FilterDirectory(newDirectory()) {
-            @Override
-            public IndexOutput createOutput(String name, IOContext context) throws IOException {
-                IndexOutput out = super.createOutput(name, context);
-                return new FilterIndexOutput("failing output", "test", out) {
-                    @Override
-                    public void writeBytes(byte[] b, int offset, int length) throws IOException {
-                        throw new OutOfMemoryError("Simulated write failure");
-                    }
-                };
-            }
-        };
-
-        FlushingIndexWriterFactory indexWriterFactory = new FlushingIndexWriterFactory(dirSupplier, new AtomicBoolean(true));
-
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
-            createWriter(),
-            newSoftDeletesPolicy(),
-            softDeletesField,
-            indexWriterFactory
-        );
-
-        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
-
-        // Add a document successfully
-        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
-        try {
-            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-        } catch (Error ignored) {}
-
-        ReleasableLock lock = compositeIndexWriter.getNewWriteLock().acquire();
-        CountDownLatch latch = new CountDownLatch(1);
-        Thread refresher = new Thread(() -> {
-            latch.countDown();
-            try {
-                compositeIndexWriter.beforeRefresh();
-            } catch (Exception ignored) {}
-        });
-
-        refresher.start();
-        try {
-            latch.await();
-            assertThrows(AlreadyClosedException.class, compositeIndexWriter::getFlushingBytes);
-        } finally {
-            IOUtils.closeWhileHandlingException(compositeIndexWriter, indexWriterFactory, lock);
-            refresher.join();
-        }
-    }
-
-    public void testFlushingBytesUsedWithWriterOnOld() throws Exception {
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
-            createWriter(),
-            newSoftDeletesPolicy(),
-            softDeletesField,
-            indexWriterFactory
-        );
-
-        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
-
-        // Add a document successfully
-        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
-        try {
-            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-        } catch (Error ignored) {}
-
-        ReleasableLock lock = compositeIndexWriter.getNewWriteLock().acquire();
-        CountDownLatch latch = new CountDownLatch(1);
-        Thread refresher = new Thread(() -> {
-            latch.countDown();
-            try {
-                compositeIndexWriter.beforeRefresh();
-            } catch (Exception ignored) {}
-        });
-
-        refresher.start();
-        try {
-            latch.await();
-            long flushingBytes = compositeIndexWriter.getFlushingBytes();
-            assertEquals("Flushing bytes should be non-negative", 0, flushingBytes);
-        } finally {
-            IOUtils.closeWhileHandlingException(compositeIndexWriter, lock);
-            refresher.join();
-        }
-    }
-
-    public void testTragicExceptionGetWithTragicExceptionOnCurrent() throws Exception {
-        Supplier<Directory> dirSupplier = () -> new FilterDirectory(newDirectory()) {
-            @Override
-            public IndexOutput createOutput(String name, IOContext context) throws IOException {
-                IndexOutput out = super.createOutput(name, context);
-                return new FilterIndexOutput("failing output", "test", out) {
-                    @Override
-                    public void writeBytes(byte[] b, int offset, int length) throws IOException {
-                        throw new OutOfMemoryError("Simulated write failure");
-                    }
-                };
-            }
-        };
-
-        FlushingIndexWriterFactory indexWriterFactory = new FlushingIndexWriterFactory(dirSupplier, new AtomicBoolean(true));
-
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
-            createWriter(),
-            newSoftDeletesPolicy(),
-            softDeletesField,
-            indexWriterFactory
-        );
-
-        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
-
-        // Add a document successfully
-        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
-        try {
-            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-        } catch (Error ignored) {}
-
-        assertNotNull(compositeIndexWriter.getTragicException());
-        IOUtils.closeWhileHandlingException(compositeIndexWriter, indexWriterFactory);
-    }
-
-    public void testTragicExceptionGetWithTragicExceptionOnOld() throws Exception {
-        Supplier<Directory> dirSupplier = () -> new FilterDirectory(newDirectory()) {
-            @Override
-            public IndexOutput createOutput(String name, IOContext context) throws IOException {
-                IndexOutput out = super.createOutput(name, context);
-                return new FilterIndexOutput("failing output", "test", out) {
-                    @Override
-                    public void writeBytes(byte[] b, int offset, int length) throws IOException {
-                        throw new OutOfMemoryError("Simulated write failure");
-                    }
-                };
-            }
-        };
-
-        FlushingIndexWriterFactory indexWriterFactory = new FlushingIndexWriterFactory(dirSupplier, new AtomicBoolean(true));
-
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
-            createWriter(),
-            newSoftDeletesPolicy(),
-            softDeletesField,
-            indexWriterFactory
-        );
-
-        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
-
-        // Add a document successfully
-        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
-        try {
-            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-        } catch (Error ignored) {}
-
-        ReleasableLock lock = compositeIndexWriter.getNewWriteLock().acquire();
-        CountDownLatch latch = new CountDownLatch(1);
-        Thread refresher = new Thread(() -> {
-            latch.countDown();
-            try {
-                compositeIndexWriter.beforeRefresh();
-            } catch (Exception ignored) {}
-        });
-
-        refresher.start();
-        try {
-            latch.await();
-            assertNotNull(compositeIndexWriter.getTragicException());
-        } finally {
-            IOUtils.closeWhileHandlingException(compositeIndexWriter, indexWriterFactory, lock);
-            refresher.join();
-        }
-    }
-
-    public void testSetLiveCommitDataWithRollback() throws Exception {
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
-            createWriter(),
-            newSoftDeletesPolicy(),
-            softDeletesField,
-            indexWriterFactory
-        );
-
-        try {
-            // Create documents in first criteria group
-            for (int i = 0; i < 10; i++) {
-                Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf(i), null, DEFAULT_CRITERIA));
-                compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-            }
-
-            Map<String, String> data = new HashMap<>();
-            data.put("status", "beforeCommit");
-            compositeIndexWriter.setLiveCommitData(data.entrySet());
-            compositeIndexWriter.commit();
-
-            data = new HashMap<>();
-            data.put("status", "beforeRollback");
-            // Rollback without committing
-            compositeIndexWriter.rollback();
-            Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf(13), null, "testGroupingCriteria1"));
-            expectThrows(AlreadyClosedException.class, () -> compositeIndexWriter.addDocuments(operation.docs(), operation.uid()));
-
-            // Reopen writer
-            try (
-                CompositeIndexWriter compositeIndexWriterForRollback = new CompositeIndexWriter(
-                    config(),
-                    createWriter(),
-                    newSoftDeletesPolicy(),
-                    softDeletesField,
-                    indexWriterFactory
-                )
-            ) {
-                for (Map.Entry<String, String> entry : compositeIndexWriterForRollback.getLiveCommitData()) {
-                    if (entry.getKey().equals("status")) {
-                        assertEquals("beforeCommit", entry.getValue());
-                    }
                 }
-            }
-
-        } finally {
-            IOUtils.close(compositeIndexWriter);
-        }
-    }
-
-    public void testRollbackWithWriterOnOld() throws Exception {
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-            config(),
-            createWriter(),
             newSoftDeletesPolicy(),
+        refresher.start();
+        Thread refresher = new Thread(() -> {
+    public Engine.Index appendOnlyPrimary(ParsedDocument doc, boolean retry, final long autoGeneratedIdTimestamp, boolean create) {
+        Thread refresher = new Thread(() -> {
+                    currentMap.computeIndexWriterIfAbsentForCriteria("test-criteria", supplier, new ShardId("foo", "_na_", 1));
+                done.set(true);
+import java.util.Map;
+                compositeIndexWriter.beforeRefresh();
+        CountDownLatch latch = new CountDownLatch(1);
+        } catch (Error ignored) {}
+        );
+            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+            }
+                        if (shouldFail.get() && name.endsWith(".cfe")) {
+            indexWriterFactory
+    // For refresh
+                Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf(i), null, DEFAULT_CRITERIA));
+    public void testConcurrentComputeIndexWriterWithMapRotation() throws Exception {
+            latch.await();
+        }
+import org.apache.lucene.store.AlreadyClosedException;
+                IndexOutput out = super.createOutput(name, context);
+        // Add a document successfully
+            data.put("status", "beforeRollback");
             softDeletesField,
+                throws IOException {
+            assertThrows(AlreadyClosedException.class, compositeIndexWriter::getFlushingBytes);
+            String,
+                    }
+            int count = 0;
+import org.apache.lucene.store.IOContext;
+        ) {
+            indexWriterFactory
+            try {
+                );
+        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
+        } finally {
+            newSoftDeletesPolicy(),
+            config(),
+            refresher.join();
             indexWriterFactory
         );
-
-        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
-
-        // Add a document successfully
-        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
-        try {
-            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-        } catch (Error ignored) {}
-
+                            2,
+        FlushingIndexWriterFactory indexWriterFactory = new FlushingIndexWriterFactory(dirSupplier, new AtomicBoolean(true));
+        } finally {
+                latch.countDown();
+        mergePolicy.setMergeFactor(2);
         ReleasableLock lock = compositeIndexWriter.getNewWriteLock().acquire();
-        CountDownLatch latch = new CountDownLatch(1);
-        Thread refresher = new Thread(() -> {
-            latch.countDown();
+                try {
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+            softDeletesField,
+            config(),
+                    compositeIndexWriter.forceMerge(1, true);
+                IndexOutput out = super.createOutput(name, context);
+        AtomicBoolean run = new AtomicBoolean(true);
+                dataPath,
+                disposableIndexWriter.getIndexWriter().close();
+        assertThrows(AlreadyClosedException.class, compositeIndexWriter::getFlushingBytes);
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
             try {
-                compositeIndexWriter.beforeRefresh();
+            latch.countDown();
+        }
+            ) {
+                1,
+                        compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+            compositeIndexWriter.softUpdateDocuments(operation.uid(), operation.docs(), 2, 2, primaryTerm.get(), softDeletesField);
+            newSoftDeletesPolicy(),
+        Thread refreshThread = new Thread(() -> {
+    public void testTragicExceptionGetWithTragicExceptionOnOld() throws Exception {
+            compositeIndexWriter.commit();
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+            long ramAfterGroup1 = compositeIndexWriter.ramBytesUsed();
+            @Override
+        };
+            newSoftDeletesPolicy(),
+        refresher.start();
+                    String id = Integer.toString(randomIntBetween(1, 100));
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+        Thread refresher = new Thread(() -> {
+                } catch (Exception e) {
+            // Create documents in first criteria group
+            compositeIndexWriter.afterRefresh(true);
+            );
+    public void testHasBlocksMergeFullyDelSegments() throws Exception {
+ * SPDX-License-Identifier: Apache-2.0
+        };
+                            false,
+        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
+        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
+        IndexWriter parentWriter = createWriter();
+            softDeletesField,
+        refresher.start();
+            indexWriterFactory
+                CompositeIndexWriter.LiveIndexWriterDeletesMap invalidated = transition.invalidateOldMap();
+        );
+import org.apache.lucene.store.IndexOutput;
+            createWriter(),
+            assertTrue("RAM should account for multiple groups", ramAfterGroup2 >= ramAfterGroup1);
+                operation = indexForDoc(createParsedDoc(String.valueOf(i), null, DEFAULT_CRITERIA));
+            refresher.join();
+        );
+            // RAM should account for both groups
+            // Check for pending merges during merge
+            softDeletesField,
+        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
+        refresher.start();
+    public void testFlushingBytesWithTragicExceptionOnCurrent() throws Exception {
+        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
+            long directoryCount = Files.find(
+import org.apache.lucene.index.DirectoryReader;
+            IOUtils.closeWhileHandlingException(compositeIndexWriter, indexWriterFactory, lock);
+    }
+            IOUtils.closeWhileHandlingException(compositeIndexWriter, indexWriterFactory, lock);
+    public void testTragicExceptionGetWithTragicExceptionOnCurrent() throws Exception {
+                    .computeIndexWriterIfAbsentForCriteria("200", this::createChildWriterFactory, new ShardId("foo", "_na_", 1));
+        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
+            while (numOps > 0) {
+        Thread.sleep(100);
+                IOUtils.closeWhileHandlingException(compositeIndexWriter);
+        Supplier<Directory> dirSupplier = () -> new FilterDirectory(newDirectory()) {
+                mapRef.set(invalidated);
+            softDeletesField,
+            refresher.join();
+                assertEquals(1, directoryReader.leaves().size());
+        };
+            mergeThread.join();
+        try {
+        });
+                };
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+    }
+        });
+        CountDownLatch latch = new CountDownLatch(1);
+                        throw new OutOfMemoryError("Simulated write failure");
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+            Map<String, String> data = new HashMap<>();
+ * this file be licensed under the Apache-2.0 license or a
+            } catch (Exception ignored) {}
+                };
+import java.nio.file.Path;
+            });
+            @Override
+                latch.await();
+                            }
             } catch (Exception ignored) {}
         });
-
-        refresher.start();
-        try {
-            latch.await();
-            compositeIndexWriter.rollback();
-        } catch (Exception ex) {
-            fail(ex.getMessage());
-        } finally {
-            IOUtils.closeWhileHandlingException(compositeIndexWriter, lock);
-            refresher.join();
         }
-    }
-
-    public void testObtainLock() throws Exception {
-        try (
-            CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
-                config(),
-                createWriter(),
-                newSoftDeletesPolicy(),
-                softDeletesField,
-                indexWriterFactory
-            )
-        ) {
-            try (Releasable lock = compositeIndexWriter.obtainWriteLockOnAllMap()) {
-                assertTrue(compositeIndexWriter.isWriteLockedByCurrentThread());
+                        super.writeBytes(b, offset, length);
             }
-        }
-    }
-
-    public void testHasBlocksMergeFullyDelSegments() throws Exception {
-        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+        AtomicReference<IOException> addDocException = new AtomicReference<>();
             config(),
+                    try {
+        } finally {
             createWriter(),
+        FlushingIndexWriterFactory indexWriterFactory = new FlushingIndexWriterFactory(dirSupplier, new AtomicBoolean(true));
+            assertTrue("RamBytesUsed bytes should be non-negative ", ramBytesUsed > 0);
+            newSoftDeletesPolicy(),
+        CountDownLatch latch = new CountDownLatch(1);
+                    },
+                            newDeleteTombstoneDoc(id),
+            refresher.join();
+        );
+            @Override
+    }
+            createWriter(),
+            final CountDownLatch mergeLatch = new CountDownLatch(1);
+                };
+        // Add a document successfully
+        AtomicReference<Error> thrownError = new AtomicReference<>();
+        } finally {
+                assertTrue(compositeIndexWriter.isWriteLockedByCurrentThread());
+    }
+                    public void writeBytes(byte[] b, int offset, int length) throws IOException {
+            // Reopen writer
+    }
+                        @Override
+            assertEquals("Flushing bytes should be non-negative", 0, flushingBytes);
+            try (Releasable lock = compositeIndexWriter.obtainWriteLockOnAllMap()) {
+            compositeIndexWriter.forceMergeDeletes(true);
+    public void testHasPendingMergesInitiallyFalse() throws IOException {
+        );
+    public void testTreatDocumentFailureAsFatalErrorOnGroupSpecificIndexWriter() throws IOException {
+        ReleasableLock lock = compositeIndexWriter.getNewWriteLock().acquire();
+            compositeIndexWriter.softUpdateDocuments(operation.uid(), operation.docs(), 2, 2, primaryTerm.get(), softDeletesField);
+import java.io.IOException;
+                engineConfig,
+            latch.await();
+                        );
+                            final IOException ex = addDocException.getAndSet(null);
+import org.apache.lucene.index.IndexableField;
+                        assertEquals("beforeCommit", entry.getValue());
+            IOUtils.closeWhileHandlingException(compositeIndexWriter, indexWriterFactory, lock);
+                    }
+                softDeletesField,
+        LogByteSizeMergePolicy mergePolicy = new LogByteSizeMergePolicy();
+                }
+        try {
+        CountDownLatch latch = new CountDownLatch(1);
+        try {
+        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
+        );
+                rotationCount.incrementAndGet();
+                    computeCount.incrementAndGet();
+    public void testSetLiveCommitDataWithRollback() throws Exception {
+                CompositeIndexWriter.LiveIndexWriterDeletesMap current = mapRef.get();
+        } catch (Error e) {
+            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+                    @Override
+            // Rollback without committing
+        AtomicReference<CompositeIndexWriter.LiveIndexWriterDeletesMap> currentMapRef = new AtomicReference<>(map);
+                liveIndexWriterDeletesMap.set(liveIndexWriterDeletesMap.get().buildTransitionMap());
+            public IndexOutput createOutput(String name, IOContext context) throws IOException {
+                IndexOutput out = super.createOutput(name, context);
+            @Override
+        } catch (Error ignored) {}
+            Thread.sleep(100);
+                }
+            doc,
+        };
+            int numOps = 100;
+                    throw new RuntimeException(e);
+/*
+            softDeletesField,
+        int iterations = 100;
+            compositeIndexWriter.beforeRefresh();
+        AtomicBoolean shouldFail = new AtomicBoolean(false);
+ *
+            createWriter(),
+                return new FilterIndexOutput("failing output", "test", out) {
+            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+                        ),
+        CountDownLatch latch = new CountDownLatch(2);
+import org.opensearch.core.index.shard.ShardId;
+                        newIndexWriterConfig()
+            fail(ex.getMessage());
+        // Enable failure
+        } catch (Error ignored) {}
+                compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+            indexWriterFactory
+            indexWriterFactory
+            newSoftDeletesPolicy(),
+        Thread refresher = new Thread(() -> {
+                    public void writeBytes(byte[] b, int offset, int length) throws IOException {
+            latch.await();
+    public void testHasPendingMergesDuringForceMerge() throws IOException, InterruptedException {
+            refresher.join();
+            expectThrows(AlreadyClosedException.class, () -> compositeIndexWriter.addDocuments(operation.docs(), operation.uid()));
+            parentWriter,
+        while (done.get() == false) {
+    }
+        });
+            while (running.get() && count < iterations) {
+            new CompositeIndexWriter.LiveIndexWriterDeletesMap()
+        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
+    }
+        }
+        });
+            softDeletesField,
+    }
+        CountDownLatch latch = new CountDownLatch(1);
+        // Add a document successfully
+        );
+    public void testRAMBytesUsedWithOldAndCurrentWriters() throws Exception {
+            config(),
+                return new FilterIndexOutput("failing output", "test", out) {
+            indexWriterFactory
+            data.put("status", "beforeCommit");
+public class CompositeIndexWriterForAppendTests extends CriteriaBasedCompositeIndexWriterBaseTests {
+                    public void writeBytes(byte[] b, int offset, int length) throws IOException {
+            indexWriterFactory
+        assertNotNull(compositeIndexWriter.getTragicException());
+            }
+            softDeletesField,
+        Supplier<Directory> dirSupplier = () -> new FilterDirectory(newDirectory()) {
+            IOUtils.close(compositeIndexWriter);
+                            primaryTerm.get(),
+                compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+        try {
+            newSoftDeletesPolicy(),
+            config(),
+                return new FilterIndexOutput("failing output", "test", out) {
+                return new CompositeIndexWriter.DisposableIndexWriter(
+                    indexWriterFactory
+                compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+        FlushingIndexWriterFactory indexWriterFactory = new FlushingIndexWriterFactory(dirSupplier, new AtomicBoolean(true));
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+            }
+        } finally {
+        AtomicReference<CompositeIndexWriter.LiveIndexWriterDeletesMap> liveIndexWriterDeletesMap = new AtomicReference<>(
+            compositeIndexWriter.afterRefresh(true);
+                compositeIndexWriter.beforeRefresh();
+            indexedDocs.acquire(100);
+        } catch (Error ignored) {}
+            compositeIndexWriter.rollback();
+        );
+            indexWriterFactory
+                compositeIndexWriter.beforeRefresh();
+                createWriter(),
+            0
+            Engine.Index operation = indexForDoc(createParsedDoc("id", null, DEFAULT_CRITERIA));
+import java.util.concurrent.Semaphore;
+                            if (ex != null) {
+        Thread computeThread = new Thread(() -> {
+            config(),
+                )
+        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
+    }
+                numOps--;
+    }
+            stopped.set(true);
+            indexer.start();
+        } finally {
+        } catch (Error ignored) {}
+            IOUtils.closeWhileHandlingException(compositeIndexWriter, lock);
+        try {
+        refresher.start();
+        AtomicBoolean stopped = new AtomicBoolean();
+            config(),
+            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+        } catch (Exception ex) {
+        // Add a document successfully
+import org.opensearch.index.BucketedCompositeDirectory;
+    }
+                compositeIndexWriter.afterRefresh(true);
+            long flushingBytes = compositeIndexWriter.getFlushingBytes();
+        }
+            config(),
+            compositeIndexWriter.setLiveCommitData(data.entrySet());
+            newUid(doc),
+            config(),
+            operation = indexForDoc(createParsedDoc("id2", null, "testingNewCriteria"));
+import org.opensearch.common.lucene.uid.Versions;
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+                    mergeLatch.countDown();
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+            @Override
+                }
+                compositeIndexWriter.beforeRefresh();
+                for (int i = 0; i < numDocs; i++) {
+            Engine.Operation.Origin.PRIMARY,
+        indexer.start();
+            expectThrows(IOException.class, () -> compositeIndexWriter.addDocuments(operation.docs(), operation.uid()));
+            latch.countDown();
+        }
+        );
+@LuceneTestCase.AwaitsFix(bugUrl = "https://github.com/opensearch-project/OpenSearch/issues/20005")
+            IOUtils.close(compositeIndexWriter);
+ * compatible open source license.
+            config(),
+            }
+            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+                    Engine.Index operation = indexForDoc(createParsedDoc(id, null, DEFAULT_CRITERIA));
+                            BucketedCompositeDirectory.CHILD_DIRECTORY_PREFIX + associatedCriteria + "_" + UUID.randomUUID()
+import org.opensearch.index.mapper.ParsedDocument;
+        final EngineConfig engineConfig = config();
+            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+        assertNotNull(finalMap.old);
+        } catch (Error ignored) {}
+        }
+            compositeIndexWriter.beforeRefresh();
+            } finally {
+            softDeletesField,
+        Directory dir = new FilterDirectory(newDirectory()) {
+                    if (rarely()) {
+import org.apache.lucene.store.FilterIndexOutput;
+                indexWriterFactory
+            latch.await();
+                Thread.yield();
+            IOUtils.close(compositeIndexWriter);
+            }
+            compositeIndexWriter.commit();
+        } finally {
+import org.opensearch.common.util.concurrent.ReleasableLock;
+            });
+            assertNull(compositeIndexWriter.getTragicException());
+        );
+            config(),
+            mergeThread.start();
+        CompositeIndexWriter compositeIndexWriter = null;
+    }
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+        try {
+            }
+        AtomicInteger computeCount = new AtomicInteger(0);
+        }
+            newSoftDeletesPolicy(),
+            }
+                for (Map.Entry<String, String> entry : compositeIndexWriterForRollback.getLiveCommitData()) {
+import org.opensearch.common.lease.Releasable;
+    public void testRAMBytesUsedWithWriterOnOld() throws Exception {
+        Thread refresher = new Thread(() -> {
+            }
+        try {
+        compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+        });
+            newSoftDeletesPolicy(),
+import java.util.function.Supplier;
+        assertThrows(AlreadyClosedException.class, compositeIndexWriter::ramBytesUsed);
+            config(),
+            } catch (Exception ignored) {}
+            softDeletesField,
+                    @Override
+    public void testConcurrentIndexingDuringRefresh() throws IOException, InterruptedException {
+    }
+            // Ensure no child directory is pending here.
+            indexWriterFactory
+        latch.countDown();
             newSoftDeletesPolicy(),
             softDeletesField,
+                            throw ex;
+                        return;
+        Supplier<Directory> dirSupplier = () -> new FilterDirectory(newDirectory()) {
+                    @Override
+                count++;
+        }
+            rotationThread.start();
+        );
+    public void testConcurrentBuildTransitionAndInvalidateForIndexWriterDeleteMap() throws InterruptedException {
+        } finally {
+            for (int i = 0; i < 4; i++) {
+                    }
+            AtomicBoolean run = new AtomicBoolean(true);
+        try {
+        );
+            public IndexOutput createOutput(String name, IOContext context) throws IOException {
+            data = new HashMap<>();
+            computeThread.join();
+        refreshThread.join(1000);
+            compositeIndexWriter.rollback();
+            config(),
+            public IndexOutput createOutput(String name, IOContext context) throws IOException {
+        try {
+        } finally {
+                        throw new OutOfMemoryError("Simulated write failure");
+                compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+import java.nio.file.Files;
+            latch.await();
+        }
+            }
+            Thread indexer = new Thread(() -> {
+        try {
+                currentMapRef.set(invalidated);
+    }
+            }
+            createWriter(),
+        Semaphore indexedDocs = new Semaphore(0);
+                    ) {
+        }
+        }
+                disposableIndexWriter.getIndexWriter().getDirectory().close();
+            CompositeIndexWriter.CriteriaBasedIndexWriterLookup,
+        }
+        } finally {
+        } finally {
+        try {
+                    public void writeBytes(byte[] b, int offset, int length) throws IOException {
+                        }
+            createWriter(),
+            compositeIndexWriter.afterRefresh(true);
+        try {
+            indexer.join();
+                    }
+            computeThread.start();
+        IOUtils.closeWhileHandlingException(compositeIndexWriter, indexWriterFactory);
+        } finally {
+                    @Override
+                            return super.addDocuments(docs);
+                        throw new AssertionError(e);
+            refresher.join();
+            createWriter(dir),
+        );
+            compositeIndexWriter.commit();
+        try {
+        return new Engine.Index(
+                createWriter(),
+                compositeIndexWriter.beforeRefresh();
+        AtomicBoolean running = new AtomicBoolean(true);
+            IOUtils.close(compositeIndexWriter);
+            }
+        refreshThread.start();
+        }
+            new CompositeIndexWriter.LiveIndexWriterDeletesMap()
+                        compositeIndexWriter.afterRefresh(true);
+    public void testRollbackWithWriterOnOld() throws Exception {
+            } catch (Exception ignored) {}
+        // Verify the final map is in a valid state
+        // Add a document successfully
+        }
+                };
+                    softDeletesField,
+            softDeletesField,
+        // Add a document successfully
+            UNASSIGNED_SEQ_NO,
+        } catch (Error ignored) {}
+        try {
+        // Thread that continuously builds transition maps and invalidates old ones
+    public void testRAMBytesUsedWithTragicExceptionOnCurrent() throws Exception {
+                    if (entry.getKey().equals("status")) {
+                            softDeletesField
+        IOUtils.closeWhileHandlingException(compositeIndexWriter, dir);
+            Thread.sleep(50); // Give merge time to start
+                config(),
+            // Should still be 0 or small since we haven't triggered a flush
+            latch.await();
+            // Remove known extra files - "extra0" file is added by the ExtrasFS, which is part of Lucene's test framework.
+        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
+        } finally {
+        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
+                    } catch (IOException e) {
+    }
+            CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+        };
+            IOUtils.close(compositeIndexWriter);
+            try (
+            softDeletesField,
+        try {
+            indexWriterFactory
+            VersionType.INTERNAL,
+            compositeIndexWriter.beforeRefresh();
+    }
+                    newSoftDeletesPolicy(),
+            IOUtils.close(compositeIndexWriter);
+            }
+            createWriter(),
+            config(),
+        indexer.join();
+        } finally {
+        compositeIndexWriter.getConfig().setMergePolicy(mergePolicy);
+            public IndexOutput createOutput(String name, IOContext context) throws IOException {
+        try {
+        // Add a document successfully
+            run.set(false);
+            )
+        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
+            // This should trigger the failure
+            long ramBytesUsed = compositeIndexWriter.ramBytesUsed();
+            indexWriterFactory
+                Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf(i), null, DEFAULT_CRITERIA));
+            for (int i = 0; i < 10; i++) {
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+            }
+            newSoftDeletesPolicy(),
+        CountDownLatch latch = new CountDownLatch(1);
+        // Add a document successfully
+                        }
+        IOUtils.closeWhileHandlingException(compositeIndexWriter, indexWriterFactory);
+        Thread rotationThread = new Thread(() -> {
+                } catch (IOException e) {
+            }
+            assertNotNull(compositeIndexWriter.getTragicException());
+                    lookup
+                        numDeletes.incrementAndGet();
+                                throw ex;
+            Throwable tragic = compositeIndexWriter.getTragicException();
+                        compositeIndexWriter.deleteDocument(
+                    }
+        compositeIndexWriter.afterRefresh(true);
+            softDeletesField,
+            for (int i = 0; i < 10; i++) {
+            indexWriterFactory
             indexWriterFactory
         );
-
+    }
+            rotationThread.join();
+        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
+            mergeLatch.await();
+                compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
+            @Override
+                liveIndexWriterDeletesMap.set(liveIndexWriterDeletesMap.get().invalidateOldMap());
+            newSoftDeletesPolicy(),
+            indexWriterFactory
+                return new FilterIndexOutput("failing output", "test", out) {
+        AtomicInteger numDeletes = new AtomicInteger();
+    }
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+ */
+            try {
+                    public void writeBytes(byte[] b, int offset, int length) throws IOException {
         try {
-            Engine.Index operation = indexForDoc(createParsedDoc("foo", null, DEFAULT_CRITERIA));
-            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
-            compositeIndexWriter.softUpdateDocuments(operation.uid(), operation.docs(), 2, 2, primaryTerm.get(), softDeletesField);
-            compositeIndexWriter.beforeRefresh();
-            compositeIndexWriter.afterRefresh(true);
-            compositeIndexWriter.commit();
-            compositeIndexWriter.softUpdateDocuments(operation.uid(), operation.docs(), 2, 2, primaryTerm.get(), softDeletesField);
-            compositeIndexWriter.beforeRefresh();
-            compositeIndexWriter.afterRefresh(true);
-            compositeIndexWriter.forceMergeDeletes(true);
-            compositeIndexWriter.commit();
-            try (DirectoryReader directoryReader = DirectoryReader.open(compositeIndexWriter.getAccumulatingIndexWriter())) {
-                assertEquals(1, directoryReader.leaves().size());
-                assertFalse("hasBlocks should be cleared", directoryReader.leaves().get(0).reader().getMetaData().hasBlocks());
+        // Add a document successfully
+    public void testConcurrentIndexAndDeleteDuringRefresh() throws IOException, InterruptedException {
+                    }
+            config(),
+import java.util.concurrent.atomic.AtomicReference;
+                    config(),
+ * The OpenSearch Contributors require contributions made to
+        latch.await();
+    public void testGetTragicExceptionWithOutOfMemoryError() throws Exception {
+            parentWriter,
+                softDeletesField,
+            autoGeneratedIdTimestamp,
+import java.util.concurrent.atomic.AtomicBoolean;
+            softDeletesField,
+        compositeIndexWriter.beforeRefresh();
+        AtomicInteger rotationCount = new AtomicInteger(0);
+            create ? Versions.MATCH_DELETED : Versions.MATCH_ANY,
+        });
+            indexWriterFactory
+                newSoftDeletesPolicy(),
+    }
+            newSoftDeletesPolicy(),
+            } catch (Exception ignored) {}
+            indexWriterFactory
+        FlushingIndexWriterFactory indexWriterFactory = new FlushingIndexWriterFactory(dirSupplier, new AtomicBoolean(true));
             }
-        } finally {
-            IOUtils.close(compositeIndexWriter);
+        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
+        refresher.start();
+        try {
+            softDeletesField,
+}
+            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+    }
+            refresher.join();
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+                        public long addDocuments(Iterable<? extends Iterable<? extends IndexableField>> docs) throws IOException {
+        AtomicReference<CompositeIndexWriter.LiveIndexWriterDeletesMap> mapRef = new AtomicReference<>(
+                    createWriter(),
+        ReleasableLock lock = compositeIndexWriter.getNewWriteLock().acquire();
+        ReleasableLock lock = compositeIndexWriter.getNewWriteLock().acquire();
+        ReleasableLock lock = compositeIndexWriter.getNewWriteLock().acquire();
+            assertEquals(numDocs - numDeletes.get(), directoryReader.numDocs());
+        Path dataPath = engineConfig.getStore().shardPath().resolveIndex();
+                };
+                return new FilterIndexOutput("failing output", "test", out) {
+            latch.countDown();
+    }
+            newSoftDeletesPolicy(),
+        Engine.Index operation = indexForDoc(createParsedDoc(id, null, DEFAULT_CRITERIA));
+        }
+            1,
+            createWriter(),
+        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
+                    public void writeBytes(byte[] b, int offset, int length) throws IOException {
+    public void testObtainLock() throws Exception {
+                    public void writeBytes(byte[] b, int offset, int length) throws IOException {
+            final AtomicBoolean hadPendingMerges = new AtomicBoolean(false);
+            indexWriterFactory
+            public IndexOutput createOutput(String name, IOContext context) throws IOException {
+                while (run.get()) {
+            @Override
+        try {
+import java.util.concurrent.CountDownLatch;
+                    } catch (IOException e) {}
+                Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf(i), null, DEFAULT_CRITERIA));
+                        throw new OutOfMemoryError("Simulated write failure");
+                compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+            latch.countDown();
+            Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf(13), null, "testGroupingCriteria1"));
+        } catch (Error ignored) {}
+            createWriter(),
+            Thread refresher = new Thread(() -> {
+            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+            compositeIndexWriter.beforeRefresh();
+                    indexedDocs.release();
+import org.opensearch.index.VersionType;
+            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+                            thrownError.set(ex);
+        );
+                IndexOutput out = super.createOutput(name, context);
+        );
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+                IndexOutput out = super.createOutput(name, context);
+        try {
+            public IndexOutput createOutput(String name, IOContext context) throws IOException {
+        Thread indexer = new Thread(() -> {
+        boolean hitError = false;
+        assertTrue("Compute operations completed: " + computeCount.get(), computeCount.get() >= 100);
+            ).count() - 1;
+                throw new AssertionError(e);
+            newSoftDeletesPolicy(),
+            IOUtils.closeWhileHandlingException(compositeIndexWriter, lock);
+                Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf(i), null, DEFAULT_CRITERIA));
+                IndexOutput out = super.createOutput(name, context);
+        try {
+        Supplier<Directory> dirSupplier = () -> new FilterDirectory(newDirectory()) {
+        String id = Integer.toString(randomIntBetween(1, 100));
+            retry,
         }
     }
-
-    public Engine.Index appendOnlyPrimary(ParsedDocument doc, boolean retry, final long autoGeneratedIdTimestamp, boolean create) {
-        return new Engine.Index(
-            newUid(doc),
-            doc,
-            UNASSIGNED_SEQ_NO,
-            1,
-            create ? Versions.MATCH_DELETED : Versions.MATCH_ANY,
-            VersionType.INTERNAL,
-            Engine.Operation.Origin.PRIMARY,
-            System.nanoTime(),
-            autoGeneratedIdTimestamp,
-            retry,
-            UNASSIGNED_SEQ_NO,
-            0
+            assertEquals(0, directoryCount);
+            }
+            }
+        } finally {
+            config(),
+        }
+                    String id = Integer.toString(i);
         );
+        assertNotNull(finalMap.current);
+                compositeIndexWriter.beforeRefresh();
+                compositeIndexWriter.beforeRefresh();
+                return new FilterIndexOutput("failing output", "test", out) {
+                while (run.get()) {
+        assertTrue("Rotation operations completed: " + rotationCount.get(), rotationCount.get() >= 0);
+                Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf(i), null, DEFAULT_CRITERIA));
+    public void testChildDirectoryDeletedPostRefresh() throws IOException, InterruptedException {
+        );
+        try {
+            latch.countDown();
+                CompositeIndexWriter.LiveIndexWriterDeletesMap transition = current.buildTransitionMap();
+            while (stopped.get() == false) {
+            Thread mergeThread = new Thread(() -> {
+            indexWriterFactory
+            IOException> supplier = (crit, lookup) -> mock(CompositeIndexWriter.DisposableIndexWriter.class);
+            if (compositeIndexWriter != null) {
+            public IndexOutput createOutput(String name, IOContext context) throws IOException {
+            for (int i = 0; i < 10; i++) {
+            try {
+        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
+package org.opensearch.index.engine;
+                CompositeIndexWriter.LiveIndexWriterDeletesMap invalidated = transition.invalidateOldMap();
+        CompositeIndexWriter.LiveIndexWriterDeletesMap finalMap = currentMapRef.get();
+            }
+            @Override
+            newSoftDeletesPolicy(),
+        shouldFail.set(true);
+            IOUtils.close(compositeIndexWriter);
+            run.set(false);
+            refresher.start();
+            softDeletesField,
+            });
+import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
+                    @Override
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+                assertNotNull(disposableIndexWriter);
+                            1,
     }
-}
+        try {
+            config(),
+            CompositeIndexWriter.DisposableIndexWriter disposableIndexWriter;
+        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
+            config(),
+        compositeIndexWriter.getConfig().setMaxBufferedDocs(2);
+        try (DirectoryReader directoryReader = DirectoryReader.open(compositeIndexWriter.getAccumulatingIndexWriter())) {
+            newSoftDeletesPolicy(),
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+            for (int i = 0; i < 10; i++) {
+            try {
+        );
+            createWriter(),
+            // Add a few small documents
+            // After merge completes, should have no pending merges
+            }
+                assertFalse(disposableIndexWriter.getLookupMap().isClosed());
+            // Add a few small documents
+    public void testFlushingBytesUsedWithWriterOnOld() throws Exception {
+                    try {
+import org.opensearch.common.util.io.IOUtils;
+                (path, attributes) -> attributes.isDirectory() == true && path.endsWith("extra0") == false
+            CompositeIndexWriter.DisposableIndexWriter,
+                }
+            if (tragic != null) {
+            long ramAfterGroup2 = compositeIndexWriter.ramBytesUsed();
+import org.apache.lucene.store.FilterDirectory;
+            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+        FlushingIndexWriterFactory indexWriterFactory = new FlushingIndexWriterFactory(dirSupplier, new AtomicBoolean(true));
+                    } catch (AlreadyClosedException e) {
+                        compositeIndexWriter.beforeRefresh();
+            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+        });
+import org.apache.lucene.index.IndexWriter;
+            for (int i = 0; i < 10; i++) {
+            createWriter(),
+                    CompositeIndexWriter.LiveIndexWriterDeletesMap currentMap = mapRef.get();
+        running.set(false);
+        FlushingIndexWriterFactory indexWriterFactory = new FlushingIndexWriterFactory(dirSupplier, new AtomicBoolean(true));
+        Supplier<Directory> dirSupplier = () -> new FilterDirectory(newDirectory()) {
+            createWriter(),
+            } catch (Exception e) {
+                    }
+                    @Override
+            assertThrows(AlreadyClosedException.class, compositeIndexWriter::ramBytesUsed);
+        };
+                    }
+        Supplier<Directory> dirSupplier = () -> new FilterDirectory(newDirectory()) {
+    public void testGetFlushingBytesAfterSmallDocuments() throws IOException {
+                    @Override
+                CompositeIndexWriter compositeIndexWriterForRollback = new CompositeIndexWriter(
+            assertFalse("Should have no pending merges after force merge completes", compositeIndexWriter.hasPendingMerges());
+            try {
+                };
+                            Error ex = new OutOfMemoryError("Simulated write failure");
+            createWriter(),
+        });
+                assertFalse("hasBlocks should be cleared", directoryReader.leaves().get(0).reader().getMetaData().hasBlocks());
+        });
+            compositeIndexWriter.commit();
+        }
+        AtomicBoolean done = new AtomicBoolean(false);
+                Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf(i), null, "testGroupingCriteria2"));
+import static org.mockito.Mockito.mock;
+                            operation.uid(),
+import java.util.HashMap;
+        CountDownLatch latch = new CountDownLatch(1);
+        );
+            }
+        };
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+            long flushingBytes = compositeIndexWriter.getFlushingBytes();
+            newSoftDeletesPolicy(),
+            softDeletesField,
+        );
+        // Let it run for a bit
+            indexWriterFactory
+                    }
+            IOUtils.closeWhileHandlingException(compositeIndexWriter, lock);
+        });
+        try {
+                        store.newTempDirectory(
+            assertEquals("Flushing bytes should be non-negative", 0, flushingBytes);
+    }
+        if (hitError && thrownError.get() != null) {
+import java.util.concurrent.atomic.AtomicInteger;
+                try {
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+            createWriter(),
+            for (int i = 0; i < 10; i++) {
+            }
+            }
+        } finally {
+            softDeletesField,
+            newSoftDeletesPolicy(),
+            softDeletesField,
+            try {
+        try {
+import java.util.UUID;
+                    new IndexWriter(
+        IndexWriter parentWriter = createWriter();
+            // Create documents in first criteria group
+                latch.countDown();
+        IOUtils.closeWhileHandlingException(compositeIndexWriter, indexWriterFactory);
+            refresher.join();
+            newSoftDeletesPolicy(),
+            config(),
+                        throw new OutOfMemoryError("Simulated write failure");
+        compositeIndexWriter.getConfig().setRAMBufferSizeMB(128);
+        CompositeIndexWriter.LiveIndexWriterDeletesMap map = new CompositeIndexWriter.LiveIndexWriterDeletesMap();
+            hitError = true;
+    public void testFlushingBytesUsedWithTragicExceptionOnOld() throws Exception {
+        IndexWriter parentWriter = createWriter();
+        }
+            UNASSIGNED_SEQ_NO,
+            compositeIndexWriter.afterRefresh(true);
+        } finally {
+            compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+            IOUtils.close(compositeIndexWriter);
+                compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+        Thread refresher = new Thread(() -> {
+        CompositeIndexWriter compositeIndexWriter = new CompositeIndexWriter(
+        // Add a document successfully
+            compositeIndexWriter.beforeRefresh();
+                newSoftDeletesPolicy(),
+                disposableIndexWriter = liveIndexWriterDeletesMap.get()
+                return new FilterIndexOutput("failing output", "test", out) {
+        compositeIndexWriter.getConfig().setRAMBufferSizeMB(128);
+            latch.countDown();
+            while (run.get()) {
+            }
+        }
+            } catch (Exception ignored) {}
+import org.apache.lucene.index.LogByteSizeMergePolicy;
+        ) {
+        }
+        try (
+                indexWriterFactory
+                    }
+            config(),
+        } catch (Error ignored) {}
+        // Compute thread
+        ReleasableLock lock = compositeIndexWriter.getNewWriteLock().acquire();
+        refresher.start();
+            System.nanoTime(),
+            Engine.Index operation = indexForDoc(createParsedDoc("foo", null, DEFAULT_CRITERIA));
+                };
+                CompositeIndexWriter.LiveIndexWriterDeletesMap transition = current.buildTransitionMap();
+        try {
+                }
+    public void testRAMBytesUsedWithTragicExceptionOnOld() throws Exception {
+        int numDocs = scaledRandomIntBetween(100, 1000);
+            compositeIndexWriter = new CompositeIndexWriter(
+        Engine.Index operation = indexForDoc(createParsedDoc(String.valueOf("-1"), null, DEFAULT_CRITERIA));
+            createWriter(),
+                        Engine.Index operation = indexForDoc(createParsedDoc(id, null, DEFAULT_CRITERIA));
+        try {
+    public void testGetIndexWriterWithRotatingMapAlwaysPutWriterInCurrentMap() throws IOException, InterruptedException {
+            while (stopped.get() == false) {
+import org.apache.lucene.tests.util.LuceneTestCase;
+import org.apache.lucene.store.Directory;
+                IndexOutput out = super.createOutput(name, context);
+import org.opensearch.common.CheckedBiFunction;
+            }
+                    compositeIndexWriter.addDocuments(operation.docs(), operation.uid());
+        } finally {
+                CompositeIndexWriter.LiveIndexWriterDeletesMap current = currentMapRef.get();
+            DisposableIndexWriter createChildWriterUtil(String associatedCriteria, CriteriaBasedIndexWriterLookup lookup)
+    }
+        CheckedBiFunction<
+            try (DirectoryReader directoryReader = DirectoryReader.open(compositeIndexWriter.getAccumulatingIndexWriter())) {
+            addDocException.set(new IOException("simulated"));
+    }
+            latch.await();
+            }
+        assertFalse("Should have no pending merges initially", compositeIndexWriter.hasPendingMerges());
+                assertFalse("Writer should be closed after tragic exception", compositeIndexWriter.isOpen());

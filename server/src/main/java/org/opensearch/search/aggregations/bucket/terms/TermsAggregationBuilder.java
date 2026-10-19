@@ -1,469 +1,415 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     * the response.
+    public TermsAggregationBuilder showTermDocCountError(boolean showTermDocCountError) {
+        return executionHint;
+            && Objects.equals(executionHint, other.executionHint)
+        }
+    }
+    /**
+            ObjectParser.ValueType.STRING_ARRAY
+     */
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+        }
+     * Returns the minimum document count required per term, per shard
+     * Set whether doc count error will be return for individual terms
+ *
+            (b, v) -> b.includeExclude(IncludeExclude.merge(b.includeExclude(), v)),
  * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.terms;
-
-import org.opensearch.Version;
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+     */
+        return CoreValuesSourceType.BYTES;
+        showTermDocCountError = in.readBoolean();
+        );
+        out.writeBoolean(showTermDocCountError);
+        this.executionHint = clone.executionHint;
+            builder.field(SubAggCollectionMode.KEY.getPreferredName(), collectMode.parseField().getPreferredName());
+        this.includeExclude = clone.includeExclude;
+        return bucketCountThresholds.getMinDocCount();
+        collectMode = in.readOptionalWriteable(SubAggCollectionMode::readFromStream);
+    public static final ValuesSourceRegistry.RegistryKey<TermsAggregatorSupplier> REGISTRY_KEY = new ValuesSourceRegistry.RegistryKey<>(
+    }
+        this.executionHint = executionHint;
+            (p, c) -> InternalOrder.Parser.parseOrderParam(p),
+    @Override
+     * Gets the order in which the buckets will be returned.
+        builder.field(ORDER_FIELD.getPreferredName());
+    }
+    }
+    protected boolean serializeTargetValueType(Version version) {
+    @Override
+    @Override
 import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.query.QueryRewriteContext;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.aggregations.AggregationBuilder;
-import org.opensearch.search.aggregations.Aggregator.SubAggCollectionMode;
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.AggregatorFactory;
-import org.opensearch.search.aggregations.BucketOrder;
-import org.opensearch.search.aggregations.InternalOrder;
-import org.opensearch.search.aggregations.InternalOrder.CompoundOrder;
-import org.opensearch.search.aggregations.bucket.terms.TermsAggregator.BucketCountThresholds;
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;
-import org.opensearch.search.aggregations.support.ValuesSourceAggregationBuilder;
+     * results are.
+        return REGISTRY_KEY;
+            SubAggCollectionMode.KEY,
+    }
+    /**
+    public static final ParseField SHOW_TERM_DOC_COUNT_ERROR = new ParseField("show_term_doc_count_error");
+    public static final ObjectParser<TermsAggregationBuilder, String> PARSER = ObjectParser.fromBuilder(NAME, TermsAggregationBuilder::new);
+    @Override
+ * You may obtain a copy of the License at
+        NAME,
+        order = InternalOrder.Streams.readOrder(in);
 import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
 import org.opensearch.search.aggregations.support.ValuesSourceConfig;
-import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
-import org.opensearch.search.aggregations.support.ValuesSourceType;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-/**
- * Aggregation Builder for terms agg
- *
- * @opensearch.internal
- */
-public class TermsAggregationBuilder extends ValuesSourceAggregationBuilder<TermsAggregationBuilder> {
-    public static final String NAME = "terms";
-    public static final ValuesSourceRegistry.RegistryKey<TermsAggregatorSupplier> REGISTRY_KEY = new ValuesSourceRegistry.RegistryKey<>(
-        NAME,
-        TermsAggregatorSupplier.class
-    );
-
-    public static final ParseField EXECUTION_HINT_FIELD_NAME = new ParseField("execution_hint");
-    public static final ParseField SHARD_SIZE_FIELD_NAME = new ParseField("shard_size");
-    public static final ParseField MIN_DOC_COUNT_FIELD_NAME = new ParseField("min_doc_count");
-    public static final ParseField SHARD_MIN_DOC_COUNT_FIELD_NAME = new ParseField("shard_min_doc_count");
-    public static final ParseField REQUIRED_SIZE_FIELD_NAME = new ParseField("size");
-
-    static final TermsAggregator.BucketCountThresholds DEFAULT_BUCKET_COUNT_THRESHOLDS = new TermsAggregator.BucketCountThresholds(
-        1,
-        0,
-        10,
-        -1
-    );
-    public static final ParseField SHOW_TERM_DOC_COUNT_ERROR = new ParseField("show_term_doc_count_error");
-    public static final ParseField ORDER_FIELD = new ParseField("order");
-
-    public static final ObjectParser<TermsAggregationBuilder, String> PARSER = ObjectParser.fromBuilder(NAME, TermsAggregationBuilder::new);
-    static {
-        ValuesSourceAggregationBuilder.declareFields(PARSER, true, true, false);
-
-        PARSER.declareBoolean(TermsAggregationBuilder::showTermDocCountError, TermsAggregationBuilder.SHOW_TERM_DOC_COUNT_ERROR);
-
-        PARSER.declareInt(TermsAggregationBuilder::shardSize, SHARD_SIZE_FIELD_NAME);
-
-        PARSER.declareLong(TermsAggregationBuilder::minDocCount, MIN_DOC_COUNT_FIELD_NAME);
-
-        PARSER.declareLong(TermsAggregationBuilder::shardMinDocCount, SHARD_MIN_DOC_COUNT_FIELD_NAME);
-
-        PARSER.declareInt(TermsAggregationBuilder::size, REQUIRED_SIZE_FIELD_NAME);
-
-        PARSER.declareString(TermsAggregationBuilder::executionHint, EXECUTION_HINT_FIELD_NAME);
-
-        PARSER.declareField(
-            TermsAggregationBuilder::collectMode,
-            (p, c) -> SubAggCollectionMode.parse(p.text(), LoggingDeprecationHandler.INSTANCE),
-            SubAggCollectionMode.KEY,
-            ObjectParser.ValueType.STRING
-        );
-
-        PARSER.declareObjectArray(
-            TermsAggregationBuilder::order,
-            (p, c) -> InternalOrder.Parser.parseOrderParam(p),
-            TermsAggregationBuilder.ORDER_FIELD
-        );
-
-        PARSER.declareField(
-            (b, v) -> b.includeExclude(IncludeExclude.merge(v, b.includeExclude())),
-            IncludeExclude::parseInclude,
-            IncludeExclude.INCLUDE_FIELD,
-            ObjectParser.ValueType.OBJECT_ARRAY_OR_STRING
-        );
-
-        PARSER.declareField(
-            (b, v) -> b.includeExclude(IncludeExclude.merge(b.includeExclude(), v)),
-            IncludeExclude::parseExclude,
-            IncludeExclude.EXCLUDE_FIELD,
-            ObjectParser.ValueType.STRING_ARRAY
-        );
-    }
-
-    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {
-        TermsAggregatorFactory.registerAggregators(builder);
-    }
-
-    private BucketOrder order = BucketOrder.compound(BucketOrder.count(false)); // automatically adds tie-breaker key asc order
-    private IncludeExclude includeExclude = null;
-    private String executionHint = null;
-    private SubAggCollectionMode collectMode = null;
-    private TermsAggregator.BucketCountThresholds bucketCountThresholds = new TermsAggregator.BucketCountThresholds(
-        DEFAULT_BUCKET_COUNT_THRESHOLDS
-    );
-    private boolean showTermDocCountError = false;
-
-    public TermsAggregationBuilder(String name) {
-        super(name);
-    }
-
-    protected TermsAggregationBuilder(
-        TermsAggregationBuilder clone,
-        AggregatorFactories.Builder factoriesBuilder,
-        Map<String, Object> metadata
-    ) {
-        super(clone, factoriesBuilder, metadata);
-        this.order = clone.order;
-        this.executionHint = clone.executionHint;
-        this.includeExclude = clone.includeExclude;
-        this.collectMode = clone.collectMode;
-        this.bucketCountThresholds = new BucketCountThresholds(clone.bucketCountThresholds);
-        this.showTermDocCountError = clone.showTermDocCountError;
-    }
-
-    @Override
-    protected ValuesSourceType defaultValueSourceType() {
-        return CoreValuesSourceType.BYTES;
-    }
-
-    @Override
-    protected AggregationBuilder shallowCopy(AggregatorFactories.Builder factoriesBuilder, Map<String, Object> metadata) {
-        return new TermsAggregationBuilder(this, factoriesBuilder, metadata);
-    }
-
-    /**
-     * Read from a stream.
-     */
-    public TermsAggregationBuilder(StreamInput in) throws IOException {
-        super(in);
-        bucketCountThresholds = new BucketCountThresholds(in);
-        collectMode = in.readOptionalWriteable(SubAggCollectionMode::readFromStream);
-        executionHint = in.readOptionalString();
-        includeExclude = in.readOptionalWriteable(IncludeExclude::new);
-        order = InternalOrder.Streams.readOrder(in);
-        showTermDocCountError = in.readBoolean();
-    }
-
-    @Override
-    protected boolean serializeTargetValueType(Version version) {
-        return true;
-    }
-
-    @Override
-    protected void innerWriteTo(StreamOutput out) throws IOException {
-        bucketCountThresholds.writeTo(out);
-        out.writeOptionalWriteable(collectMode);
-        out.writeOptionalString(executionHint);
-        out.writeOptionalWriteable(includeExclude);
-        order.writeTo(out);
-        out.writeBoolean(showTermDocCountError);
-    }
-
-    /**
-     * Sets the size - indicating how many term buckets should be returned
-     * (defaults to 10)
-     */
-    public TermsAggregationBuilder size(int size) {
-        if (size <= 0) {
-            throw new IllegalArgumentException("[size] must be greater than 0. Found [" + size + "] in [" + name + "]");
-        }
-        bucketCountThresholds.setRequiredSize(size);
-        return this;
-    }
-
-    /**
-     * Returns the number of term buckets currently configured
-     */
-    public int size() {
-        return bucketCountThresholds.getRequiredSize();
-    }
-
-    /**
-     * Sets the shard_size - indicating the number of term buckets each shard
-     * will return to the coordinating node (the node that coordinates the
-     * search execution). The higher the shard size is, the more accurate the
-     * results are.
-     */
-    public TermsAggregationBuilder shardSize(int shardSize) {
-        if (shardSize <= 0) {
-            throw new IllegalArgumentException("[shardSize] must be greater than 0. Found [" + shardSize + "] in [" + name + "]");
-        }
-        bucketCountThresholds.setShardSize(shardSize);
-        return this;
-    }
-
-    /**
-     * Returns the number of term buckets per shard that are currently configured
-     */
-    public int shardSize() {
-        return bucketCountThresholds.getShardSize();
-    }
-
-    /**
-     * Set the minimum document count terms should have in order to appear in
-     * the response.
-     */
-    public TermsAggregationBuilder minDocCount(long minDocCount) {
-        if (minDocCount < 0) {
-            throw new IllegalArgumentException(
-                "[minDocCount] must be greater than or equal to 0. Found [" + minDocCount + "] in [" + name + "]"
-            );
-        }
-        bucketCountThresholds.setMinDocCount(minDocCount);
-        return this;
-    }
-
-    /**
-     * Returns the minimum document count required per term
-     */
-    public long minDocCount() {
-        return bucketCountThresholds.getMinDocCount();
-    }
-
-    /**
-     * Set the minimum document count terms should have on the shard in order to
-     * appear in the response.
-     */
-    public TermsAggregationBuilder shardMinDocCount(long shardMinDocCount) {
-        if (shardMinDocCount < 0) {
-            throw new IllegalArgumentException(
-                "[shardMinDocCount] must be greater than or equal to 0. Found [" + shardMinDocCount + "] in [" + name + "]"
-            );
-        }
-        bucketCountThresholds.setShardMinDocCount(shardMinDocCount);
-        return this;
-    }
-
-    /**
-     * Returns the minimum document count required per term, per shard
-     */
-    public long shardMinDocCount() {
-        return bucketCountThresholds.getShardMinDocCount();
-    }
-
-    /** Set a new order on this builder and return the builder so that calls
-     *  can be chained. A tie-breaker may be added to avoid non-deterministic ordering. */
-    public TermsAggregationBuilder order(BucketOrder order) {
-        if (order == null) {
-            throw new IllegalArgumentException("[order] must not be null: [" + name + "]");
-        }
-        if (order instanceof CompoundOrder || InternalOrder.isKeyOrder(order)) {
-            this.order = order; // if order already contains a tie-breaker we are good to go
-        } else { // otherwise add a tie-breaker by using a compound order
-            this.order = BucketOrder.compound(order);
-        }
-        return this;
-    }
-
-    /**
-     * Sets the order in which the buckets will be returned. A tie-breaker may be added to avoid non-deterministic
-     * ordering.
-     */
-    public TermsAggregationBuilder order(List<BucketOrder> orders) {
-        if (orders == null) {
-            throw new IllegalArgumentException("[orders] must not be null: [" + name + "]");
-        }
-        // if the list only contains one order use that to avoid inconsistent xcontent
-        order(orders.size() > 1 ? BucketOrder.compound(orders) : orders.get(0));
-        return this;
-    }
-
-    /**
-     * Gets the order in which the buckets will be returned.
-     */
-    public BucketOrder order() {
-        return order;
-    }
-
-    /**
-     * Expert: sets an execution hint to the aggregation.
-     */
-    public TermsAggregationBuilder executionHint(String executionHint) {
-        this.executionHint = executionHint;
-        return this;
-    }
-
-    /**
-     * Expert: gets an execution hint to the aggregation.
-     */
-    public String executionHint() {
-        return executionHint;
-    }
-
-    /**
-     * Expert: set the collection mode.
-     */
-    public TermsAggregationBuilder collectMode(SubAggCollectionMode collectMode) {
-        if (collectMode == null) {
-            throw new IllegalArgumentException("[collectMode] must not be null: [" + name + "]");
-        }
-        this.collectMode = collectMode;
-        return this;
-    }
-
-    /**
-     * Expert: get the collection mode.
-     */
-    public SubAggCollectionMode collectMode() {
-        return collectMode;
-    }
-
-    /**
-     * Set terms to include and exclude from the aggregation results
-     */
-    public TermsAggregationBuilder includeExclude(IncludeExclude includeExclude) {
-        this.includeExclude = includeExclude;
-        return this;
-    }
-
-    /**
-     * Get terms to include and exclude from the aggregation results
-     */
-    public IncludeExclude includeExclude() {
         return includeExclude;
     }
-
-    /**
-     * Get whether doc count error will be return for individual terms
-     */
-    public boolean showTermDocCountError() {
-        return showTermDocCountError;
-    }
-
-    /**
-     * Set whether doc count error will be return for individual terms
-     */
-    public TermsAggregationBuilder showTermDocCountError(boolean showTermDocCountError) {
         this.showTermDocCountError = showTermDocCountError;
-        return this;
+    private String executionHint = null;
     }
-
-    @Override
-    public BucketCardinality bucketCardinality() {
-        return BucketCardinality.MANY;
+    /**
+    public IncludeExclude includeExclude() {
     }
-
-    @Override
-    protected ValuesSourceAggregatorFactory innerBuild(
-        QueryShardContext queryShardContext,
-        ValuesSourceConfig config,
-        AggregatorFactory parent,
-        AggregatorFactories.Builder subFactoriesBuilder
-    ) throws IOException {
-        return new TermsAggregatorFactory(
-            name,
-            config,
-            order,
-            includeExclude,
-            executionHint,
-            collectMode,
-            bucketCountThresholds,
-            showTermDocCountError,
-            queryShardContext,
-            parent,
-            subFactoriesBuilder,
-            metadata
-        );
-    }
-
-    @Override
-    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        bucketCountThresholds.toXContent(builder, params);
-        builder.field(SHOW_TERM_DOC_COUNT_ERROR.getPreferredName(), showTermDocCountError);
-        if (executionHint != null) {
-            builder.field(TermsAggregationBuilder.EXECUTION_HINT_FIELD_NAME.getPreferredName(), executionHint);
-        }
-        builder.field(ORDER_FIELD.getPreferredName());
-        order.toXContent(builder, params);
-        if (collectMode != null) {
-            builder.field(SubAggCollectionMode.KEY.getPreferredName(), collectMode.parseField().getPreferredName());
-        }
-        if (includeExclude != null) {
-            includeExclude.toXContent(builder, params);
-        }
-        return builder;
-    }
-
-    @Override
-    public int hashCode() {
+        bucketCountThresholds.setMinDocCount(minDocCount);
+ */
+        super(clone, factoriesBuilder, metadata);
+    ) {
+        super(name);
+        includeExclude = in.readOptionalWriteable(IncludeExclude::new);
+import java.util.Map;
+        PARSER.declareInt(TermsAggregationBuilder::shardSize, SHARD_SIZE_FIELD_NAME);
+            IncludeExclude.INCLUDE_FIELD,
+     * Set terms to include and exclude from the aggregation results
         return Objects.hash(
-            super.hashCode(),
-            bucketCountThresholds,
-            collectMode,
-            executionHint,
-            includeExclude,
+    }
+     * search execution). The higher the shard size is, the more accurate the
+        this.includeExclude = includeExclude;
+import org.opensearch.search.aggregations.AggregatorFactories;
+        }
             order,
-            showTermDocCountError
-        );
+import org.opensearch.search.aggregations.AggregationBuilder;
+            includeExclude.toXContent(builder, params);
+            throw new IllegalArgumentException("[shardSize] must be greater than 0. Found [" + shardSize + "] in [" + name + "]");
+        AggregatorFactory parent,
+/*
+     * Get terms to include and exclude from the aggregation results
+import org.opensearch.Version;
     }
-
+import org.opensearch.search.aggregations.InternalOrder;
     @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;
-        TermsAggregationBuilder other = (TermsAggregationBuilder) obj;
-        return Objects.equals(bucketCountThresholds, other.bucketCountThresholds)
-            && Objects.equals(collectMode, other.collectMode)
-            && Objects.equals(executionHint, other.executionHint)
-            && Objects.equals(includeExclude, other.includeExclude)
-            && Objects.equals(order, other.order)
-            && Objects.equals(showTermDocCountError, other.showTermDocCountError);
-    }
-
-    @Override
-    public String getType() {
+            );
+ * this work for additional information regarding copyright
+        return this;
+/*
+            executionHint,
         return NAME;
+import org.opensearch.search.aggregations.support.ValuesSourceAggregationBuilder;
     }
-
-    @Override
-    protected AggregationBuilder doRewrite(QueryRewriteContext queryShardContext) throws IOException {
-        return super.doRewrite(queryShardContext);
     }
-
+    /**
+ * software distributed under the License is distributed on an
+ *
+    /**
     @Override
+            TermsAggregationBuilder::order,
+     * (defaults to 10)
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+        bucketCountThresholds = new BucketCountThresholds(in);
+ *
+            throw new IllegalArgumentException(
+            this.order = BucketOrder.compound(order);
+     */
+    public TermsAggregationBuilder(String name) {
+    public int hashCode() {
+        return BucketCardinality.MANY;
+    public int shardSize() {
+            queryShardContext,
+     * Set the minimum document count terms should have on the shard in order to
+        out.writeOptionalWriteable(collectMode);
+        );
+            config,
+    private SubAggCollectionMode collectMode = null;
+     */
+    protected ValuesSourceType defaultValueSourceType() {
+        order(orders.size() > 1 ? BucketOrder.compound(orders) : orders.get(0));
+        return order;
+    }
+     */
+    }
+        0,
+import org.opensearch.search.aggregations.InternalOrder.CompoundOrder;
+     * Sets the size - indicating how many term buckets should be returned
     protected ValuesSourceRegistry.RegistryKey<?> getRegistryKey() {
-        return REGISTRY_KEY;
+     * Returns the number of term buckets per shard that are currently configured
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+        return this;
+public class TermsAggregationBuilder extends ValuesSourceAggregationBuilder<TermsAggregationBuilder> {
+     */
+    /**
+        return Objects.equals(bucketCountThresholds, other.bucketCountThresholds)
+    @Override
+    public TermsAggregationBuilder size(int size) {
+    /**
+    public TermsAggregationBuilder(StreamInput in) throws IOException {
     }
+        if (includeExclude != null) {
+    public BucketCardinality bucketCardinality() {
+        return bucketCountThresholds.getShardMinDocCount();
+    }
+     * Returns the number of term buckets currently configured
+ * not use this file except in compliance with the License.
+    public long minDocCount() {
+     * Sets the shard_size - indicating the number of term buckets each shard
+import org.opensearch.core.xcontent.ObjectParser;
+     * Set the minimum document count terms should have in order to appear in
+            && Objects.equals(showTermDocCountError, other.showTermDocCountError);
+        if (shardMinDocCount < 0) {
+    }
+        TermsAggregatorSupplier.class
+    }
+            TermsAggregationBuilder.ORDER_FIELD
+        }
+     */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    public TermsAggregationBuilder order(List<BucketOrder> orders) {
+    public String getType() {
+        if (order instanceof CompoundOrder || InternalOrder.isKeyOrder(order)) {
+        return this;
+    private IncludeExclude includeExclude = null;
+    }
+     * ordering.
+/**
+    public static final String NAME = "terms";
+     */
+import org.opensearch.core.common.io.stream.StreamInput;
+            throw new IllegalArgumentException("[orders] must not be null: [" + name + "]");
+     *  can be chained. A tie-breaker may be added to avoid non-deterministic ordering. */
+    public boolean showTermDocCountError() {
+        // if the list only contains one order use that to avoid inconsistent xcontent
+    }
+        bucketCountThresholds.setRequiredSize(size);
+        builder.field(SHOW_TERM_DOC_COUNT_ERROR.getPreferredName(), showTermDocCountError);
+    protected void innerWriteTo(StreamOutput out) throws IOException {
+    public TermsAggregationBuilder shardMinDocCount(long shardMinDocCount) {
+        return this;
+    protected AggregationBuilder shallowCopy(AggregatorFactories.Builder factoriesBuilder, Map<String, Object> metadata) {
+    public static final ParseField SHARD_SIZE_FIELD_NAME = new ParseField("shard_size");
+            builder.field(TermsAggregationBuilder.EXECUTION_HINT_FIELD_NAME.getPreferredName(), executionHint);
+    ) throws IOException {
+        if (obj == null || getClass() != obj.getClass()) return false;
+    }
+        if (this == obj) return true;
+import java.util.List;
+        ValuesSourceConfig config,
+            includeExclude,
+        executionHint = in.readOptionalString();
+            showTermDocCountError,
+        return this;
+            );
+        TermsAggregationBuilder clone,
+     */
+ * Unless required by applicable law or agreed to in writing,
+ * ownership. Elasticsearch licenses this file to you under
+    }
+            name,
+        }
+    /**
+     */
+    /**
+        TermsAggregatorFactory.registerAggregators(builder);
+        return this;
+    /**
 }
+     */
+        if (executionHint != null) {
+        AggregatorFactories.Builder subFactoriesBuilder
+        1,
+            includeExclude,
+     * Returns the minimum document count required per term
+package org.opensearch.search.aggregations.bucket.terms;
+import org.opensearch.search.aggregations.BucketOrder;
+    public int size() {
+import org.opensearch.search.aggregations.AggregatorFactory;
+    public BucketOrder order() {
+    public TermsAggregationBuilder order(BucketOrder order) {
+    }
+            executionHint,
+     */
+ * The OpenSearch Contributors require contributions made to
+     * will return to the coordinating node (the node that coordinates the
+    public static final ParseField MIN_DOC_COUNT_FIELD_NAME = new ParseField("min_doc_count");
+            throw new IllegalArgumentException("[order] must not be null: [" + name + "]");
+        ValuesSourceAggregationBuilder.declareFields(PARSER, true, true, false);
+        PARSER.declareInt(TermsAggregationBuilder::size, REQUIRED_SIZE_FIELD_NAME);
+            throw new IllegalArgumentException("[size] must be greater than 0. Found [" + size + "] in [" + name + "]");
+ *
+            bucketCountThresholds,
+    public TermsAggregationBuilder minDocCount(long minDocCount) {
+            && Objects.equals(collectMode, other.collectMode)
+    }
+        PARSER.declareLong(TermsAggregationBuilder::minDocCount, MIN_DOC_COUNT_FIELD_NAME);
+     */
+    }
+    /**
+    protected AggregationBuilder doRewrite(QueryRewriteContext queryShardContext) throws IOException {
+ * Modifications Copyright OpenSearch Contributors. See
+    /**
+        bucketCountThresholds.setShardSize(shardSize);
+    );
+    );
+        AggregatorFactories.Builder factoriesBuilder,
+        TermsAggregationBuilder other = (TermsAggregationBuilder) obj;
+import java.util.Objects;
+        return collectMode;
+        );
+ * SPDX-License-Identifier: Apache-2.0
+        return builder;
+        order.writeTo(out);
+        );
+    );
+    }
+    public static final ParseField EXECUTION_HINT_FIELD_NAME = new ParseField("execution_hint");
+     */
+        PARSER.declareObjectArray(
+        );
+        bucketCountThresholds.setShardMinDocCount(shardMinDocCount);
+        this.order = clone.order;
+    protected ValuesSourceAggregatorFactory innerBuild(
+/*
+    @Override
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregator.BucketCountThresholds;
+            (p, c) -> SubAggCollectionMode.parse(p.text(), LoggingDeprecationHandler.INSTANCE),
+    }
+    public TermsAggregationBuilder collectMode(SubAggCollectionMode collectMode) {
+ * GitHub history for details.
+        out.writeOptionalString(executionHint);
+        }
+            showTermDocCountError
+        this.showTermDocCountError = clone.showTermDocCountError;
+    protected TermsAggregationBuilder(
+            && Objects.equals(includeExclude, other.includeExclude)
+        PARSER.declareField(
+            collectMode,
+import org.opensearch.core.common.io.stream.StreamOutput;
+    @Override
+     * Expert: set the collection mode.
+        if (orders == null) {
+    }
+    private TermsAggregator.BucketCountThresholds bucketCountThresholds = new TermsAggregator.BucketCountThresholds(
+            super.hashCode(),
+    private BucketOrder order = BucketOrder.compound(BucketOrder.count(false)); // automatically adds tie-breaker key asc order
+    /**
+    /**
+            order,
+    /**
+    public static final ParseField REQUIRED_SIZE_FIELD_NAME = new ParseField("size");
+        return super.doRewrite(queryShardContext);
+        out.writeOptionalWriteable(includeExclude);
+     * Sets the order in which the buckets will be returned. A tie-breaker may be added to avoid non-deterministic
+            bucketCountThresholds,
+        PARSER.declareField(
+    }
+        order.toXContent(builder, params);
+ */
+                "[shardMinDocCount] must be greater than or equal to 0. Found [" + shardMinDocCount + "] in [" + name + "]"
+    /**
+import org.opensearch.core.xcontent.XContentBuilder;
+    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
+    public static final ParseField ORDER_FIELD = new ParseField("order");
+            subFactoriesBuilder,
+import java.io.IOException;
+    static {
+        this.collectMode = clone.collectMode;
+        Map<String, Object> metadata
+        if (size <= 0) {
+    }
+        }
+        if (collectMode == null) {
+     * Expert: get the collection mode.
+        return true;
+        DEFAULT_BUCKET_COUNT_THRESHOLDS
+    /** Set a new order on this builder and return the builder so that calls
+        if (collectMode != null) {
+    }
+    public TermsAggregationBuilder executionHint(String executionHint) {
+    /**
+    }
+        PARSER.declareLong(TermsAggregationBuilder::shardMinDocCount, SHARD_MIN_DOC_COUNT_FIELD_NAME);
+        return showTermDocCountError;
+        return bucketCountThresholds.getShardSize();
+                "[minDocCount] must be greater than or equal to 0. Found [" + minDocCount + "] in [" + name + "]"
+import org.opensearch.index.query.QueryShardContext;
+            throw new IllegalArgumentException("[collectMode] must not be null: [" + name + "]");
+    }
+        } else { // otherwise add a tie-breaker by using a compound order
+    public String executionHint() {
+import org.opensearch.index.query.QueryRewriteContext;
+        this.bucketCountThresholds = new BucketCountThresholds(clone.bucketCountThresholds);
+    public boolean equals(Object obj) {
+        this.collectMode = collectMode;
+     * Expert: sets an execution hint to the aggregation.
+     * appear in the response.
+import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
+     * Expert: gets an execution hint to the aggregation.
+        PARSER.declareString(TermsAggregationBuilder::executionHint, EXECUTION_HINT_FIELD_NAME);
+ * license agreements. See the NOTICE file distributed with
+     * Read from a stream.
+ */
+        -1
+            (b, v) -> b.includeExclude(IncludeExclude.merge(v, b.includeExclude())),
+            this.order = order; // if order already contains a tie-breaker we are good to go
+        if (super.equals(obj) == false) return false;
+            TermsAggregationBuilder::collectMode,
+        super(in);
+            IncludeExclude.EXCLUDE_FIELD,
+            collectMode,
+        if (order == null) {
+    @Override
+    private boolean showTermDocCountError = false;
+ * this file be licensed under the Apache-2.0 license or a
+    public static final ParseField SHARD_MIN_DOC_COUNT_FIELD_NAME = new ParseField("shard_min_doc_count");
+        if (shardSize <= 0) {
+    }
+ * compatible open source license.
+        PARSER.declareBoolean(TermsAggregationBuilder::showTermDocCountError, TermsAggregationBuilder.SHOW_TERM_DOC_COUNT_ERROR);
+     */
+import org.opensearch.search.aggregations.Aggregator.SubAggCollectionMode;
+        return this;
+    /**
+    @Override
+            metadata
+            IncludeExclude::parseInclude,
+    public SubAggCollectionMode collectMode() {
+            IncludeExclude::parseExclude,
+     * Get whether doc count error will be return for individual terms
+        return this;
+ */
+        }
+ * Aggregation Builder for terms agg
+            throw new IllegalArgumentException(
+ * @opensearch.internal
+        bucketCountThresholds.toXContent(builder, params);
+        }
+ * specific language governing permissions and limitations
+import org.opensearch.search.aggregations.support.ValuesSourceType;
+     */
+ * Licensed to Elasticsearch under one or more contributor
+        return this;
+            ObjectParser.ValueType.OBJECT_ARRAY_OR_STRING
+        );
+     */
+            ObjectParser.ValueType.STRING
+    public TermsAggregationBuilder shardSize(int shardSize) {
+    }
+    @Override
+        if (minDocCount < 0) {
+        }
+        return this;
+     */
+    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {
+        bucketCountThresholds.writeTo(out);
+        return bucketCountThresholds.getRequiredSize();
+    /**
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;
+        return new TermsAggregationBuilder(this, factoriesBuilder, metadata);
+    public long shardMinDocCount() {
+            && Objects.equals(order, other.order)
+        PARSER.declareField(
+    }
+    public TermsAggregationBuilder includeExclude(IncludeExclude includeExclude) {
+            parent,
+     */
+        QueryShardContext queryShardContext,
+        10,
+    static final TermsAggregator.BucketCountThresholds DEFAULT_BUCKET_COUNT_THRESHOLDS = new TermsAggregator.BucketCountThresholds(
+        return new TermsAggregatorFactory(

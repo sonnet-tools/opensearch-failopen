@@ -1,348 +1,325 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.search;
-
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.common.Nullable;
+                        target.getSearchContextId(),
+        String phaseName,
+    private void run(BiFunction<String, String, DiscoveryNode> clusterNodeLookup, final SearchContextIdForNode[] context) {
 import org.opensearch.common.util.concurrent.AtomicArray;
-import org.opensearch.common.util.concurrent.CountDown;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.search.SearchPhaseResult;
-import org.opensearch.search.SearchShardTarget;
-import org.opensearch.search.internal.InternalScrollSearchRequest;
-import org.opensearch.search.internal.InternalSearchResponse;
-import org.opensearch.search.internal.ShardSearchContextId;
-import org.opensearch.transport.RemoteClusterService;
-import org.opensearch.transport.Transport;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BiFunction;
-import java.util.function.Supplier;
-
-/**
- * Abstract base class for scroll execution modes. This class encapsulates the basic logic to
- * fan out to nodes and execute the query part of the scroll request. Subclasses can for instance
- * run separate fetch phases etc.
- *
- * @opensearch.internal
- */
-abstract class SearchScrollAsyncAction<T extends SearchPhaseResult> implements Runnable {
-    protected final Logger logger;
-    protected final ActionListener<SearchResponse> listener;
-    protected final ParsedScrollId scrollId;
-    protected final DiscoveryNodes nodes;
-    protected final SearchPhaseController searchPhaseController;
-    protected final SearchScrollRequest request;
-    protected final SearchTransportService searchTransportService;
-    private final long startTime;
-    private final List<ShardSearchFailure> shardFailures = new ArrayList<>();
-    private final AtomicInteger successfulOps;
-
-    protected SearchScrollAsyncAction(
-        ParsedScrollId scrollId,
-        Logger logger,
-        DiscoveryNodes nodes,
-        ActionListener<SearchResponse> listener,
-        SearchPhaseController searchPhaseController,
+                fetchResults.asList(),
+        if (context.length == 0) {
+        // protect ourselves against time going backwards
+                    onFirstPhaseResult(shardIndex, result);
+                continue;
+        final ShardSearchContextId searchId,
         SearchScrollRequest request,
+import org.opensearch.cluster.node.DiscoveryNode;
+            listener.onFailure(new ReduceSearchPhaseException("fetch", "inner finish failed", e, buildShardFailures()));
+            }
+                    phase.run();
+                    null
+ * Unless required by applicable law or agreed to in writing,
+                                new SearchPhaseExecutionException(phase.getName(), "Phase failed", e, ShardSearchFailure.EMPTY_ARRAY)
+ * ownership. Elasticsearch licenses this file to you under
+                            // don't call onShardFailure or onFailure here since otherwise we'd countDown the counter
+        }
+                            phase.run();
+        if (shardFailures.isEmpty()) {
+        SearchActionListener<T> searchActionListener
+                );
+        Supplier<SearchPhase> nextPhaseSupplier
         SearchTransportService searchTransportService
-    ) {
-        this.startTime = System.currentTimeMillis();
-        this.scrollId = scrollId;
-        this.successfulOps = new AtomicInteger(scrollId.getContext().length);
-        this.logger = logger;
+    }
+                if (node == null) {
+                @Override
+                }
+                    nodeFunction -> (clusterAlias, node) -> clusterAlias == null ? nodes.get(node) : nodeFunction.apply(clusterAlias, node)
+import org.opensearch.search.internal.InternalScrollSearchRequest;
+    );
+                DiscoveryNode node = clusterNodeLookup.apply(target.getClusterAlias(), target.getNode());
+        int successfulOperations = successfulOps.decrementAndGet();
+        Transport.Connection connection,
+            // we can't create a SearchShardTarget here since we don't know the index and shard ID we are talking to
+        shardFailures.add(failure);
+            RemoteClusterService remoteClusterService = searchTransportService.getRemoteClusterService();
+                    // don't do this - it's part of the response...
+    /**
+                                searchShardTarget.getNodeId(),
+        SearchPhaseController.ReducedQueryPhase queryPhase,
+            if (request.scroll() != null) {
+/*
         this.listener = listener;
-        this.nodes = nodes;
+    }
+                        );
+        } catch (Exception e) {
+                }
+import java.util.concurrent.atomic.AtomicInteger;
+                connection = getConnection(target.getClusterAlias(), node);
+import java.io.IOException;
+    protected final void sendResponse(
+            };
+    private final AtomicInteger successfulOps;
+        @Nullable SearchShardTarget searchShardTarget,
+import org.opensearch.transport.Transport;
+ * specific language governing permissions and limitations
+                                searchShardTarget.getShardId(),
+                Arrays.asList(context),
+            remoteClusterService.collectNodes(
+import org.opensearch.core.action.ActionListener;
+    protected SearchScrollAsyncAction(
+                                null
+     */
+            SearchActionListener<T> searchActionListener = new SearchActionListener<T>(null, shardIndex) {
+     */
+                            );
+import java.util.HashSet;
+                protected void innerOnResponse(T result) {
+            final Transport.Connection connection;
+                queryPhase,
+            }
+ *
+ *
+ * run separate fetch phases etc.
+        }
+                            listener.onFailure(
+    // we do our best to return the shard failures, but its ok if its not fully concurrently safe
+    protected final DiscoveryNodes nodes;
+import java.util.function.BiFunction;
+        SearchTransportService searchTransportService,
+        return shardFailures.toArray(new ShardSearchFailure[0]);
+                    throw new IllegalArgumentException(
+                public void onFailure(Exception t) {
+abstract class SearchScrollAsyncAction<T extends SearchPhaseResult> implements Runnable {
+        return new SearchPhase(SearchPhaseName.FETCH.getName()) {
+            collectNodesAndRun(
+/*
+                    assert shardIndex == result.getShardIndex() : "shard index mismatch: "
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                    target.getSearchContextId(),
+        } else {
+        }
+    }
+ * this work for additional information regarding copyright
+import org.apache.logging.log4j.message.ParameterizedMessage;
         this.searchPhaseController = searchPhaseController;
+                            // we need to fail the entire request here - the entire phase just blew up
+                    );
+                    this.scrollId.getContext().length,
+    protected abstract SearchPhase moveToNextPhase(BiFunction<String, String, DiscoveryNode> clusterNodeLookup);
+            }
+                    "query",
+        }
+                        t,
+                }
+                try {
+ * SPDX-License-Identifier: Apache-2.0
+        ActionListener<BiFunction<String, String, DiscoveryNode>> listener
+                @Override
+                    if (counter.countDown()) {
+    ) {
+    protected final SearchScrollRequest request;
+                true,
+    }
+    }
+            return ShardSearchFailure.EMPTY_ARRAY;
+ * fan out to nodes and execute the query part of the scroll request. Subclasses can for instance
+        }
+        }
+            logger.debug(new ParameterizedMessage("[{}] Failed to execute {} phase", searchId, phaseName), failure);
+ * Licensed to Elasticsearch under one or more contributor
+ */
+        final CountDown counter = new CountDown(scrollId.getContext().length);
+                    }
+        this.scrollId = scrollId;
+                    () -> SearchScrollAsyncAction.this.moveToNextPhase(clusterNodeLookup)
+import java.util.List;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * The OpenSearch Contributors require contributions made to
+ *
+        if (logger.isDebugEnabled()) {
+            );
+        };
+                    null,
+                nodes,
+                @Override
+            final InternalSearchResponse internalResponse = searchPhaseController.merge(
+            );
+ * @opensearch.internal
+                            // again which would result in an exception
+            // such that we can talk to them again in the next roundtrip.
+        SearchPhaseController.ReducedQueryPhase queryPhase,
+                        SearchPhase phase = moveToNextPhase(clusterNodeLookup);
         this.request = request;
+                ActionListener.map(
+                request
+            @Override
+                    scrollId,
+ * under the License.
+            final int shardIndex = i;
+            listener.onResponse((cluster, node) -> nodes.get(node));
+                        + result.getShardIndex();
+        SearchPhaseController searchPhaseController,
+        DiscoveryNodes nodes,
+                sendResponse(queryPhase, fetchResults);
+        DiscoveryNodes nodes,
+                    );
+import org.opensearch.cluster.node.DiscoveryNodes;
+                        null,
+}
+    }
+    protected abstract void onFirstPhaseResult(int shardId, T result);
+ */
+        for (int i = 0; i < context.length; i++) {
+            );
+import java.util.ArrayList;
+                listener.onFailure(new SearchPhaseExecutionException(phaseName, "all shards failed", failure, buildShardFailures()));
+                    }
+                    if (target.getClusterAlias() != null) {
+    }
+                    0,
+        this.startTime = System.currentTimeMillis();
+    synchronized ShardSearchFailure[] buildShardFailures() { // pkg private for testing
+                    internalResponse,
+                        } catch (Exception e) {
+        for (SearchContextIdForNode target : scrollIds) {
+ * software distributed under the License is distributed on an
+            try {
+        if (clusters.isEmpty()) { // no remote clusters
+            } catch (Exception ex) {
+        InternalScrollSearchRequest internalRequest,
+                }
+                SearchPhase phase = nextPhaseSupplier.get();
+    protected SearchPhase sendResponsePhase(
+                clusters,
+    // we simply try and return as much as possible
+ * KIND, either express or implied.  See the License for the
+                                target.getClusterAlias(),
+        final AtomicArray<? extends SearchPhaseResult> fetchResults
+                    counter,
+                    buildTookInMillis(),
+ *
+        }
+import java.util.function.Supplier;
+/**
+                        + shardIndex
+                target.getSearchContextId(),
+            } else {
+    ) {
+                    ex,
+            );
+ * not use this file except in compliance with the License.
+    protected final ActionListener<SearchResponse> listener;
+        try {
+                            new SearchShardTarget(
+        assert successfulOperations >= 0 : "successfulOperations must be >= 0 but was: " + successfulOperations;
+import org.opensearch.search.SearchPhaseResult;
+                scrollId = request.scrollId();
+import org.opensearch.search.internal.InternalSearchResponse;
+    }
+import org.opensearch.search.SearchShardTarget;
+            if (target.getClusterAlias() != null) {
+            );
+                        SearchShardTarget searchShardTarget = response.getSearchShardTarget();
+    protected final SearchPhaseController searchPhaseController;
+        ActionListener<SearchResponse> listener,
+ * this file be licensed under the Apache-2.0 license or a
+                }
+                        response.setSearchShardTarget(
+            String scrollId = null;
+        this.nodes = nodes;
+ * You may obtain a copy of the License at
         this.searchTransportService = searchTransportService;
     }
-
-    /**
-     * Builds how long it took to execute the search.
-     */
-    private long buildTookInMillis() {
-        // protect ourselves against time going backwards
-        // negative values don't make sense and we want to be able to serialize that thing as a vLong
-        return Math.max(1, System.currentTimeMillis() - startTime);
-    }
-
-    public final void run() {
-        final SearchContextIdForNode[] context = scrollId.getContext();
-        if (context.length == 0) {
-            listener.onFailure(new SearchPhaseExecutionException("query", "no nodes to search on", ShardSearchFailure.EMPTY_ARRAY));
-        } else {
-            collectNodesAndRun(
-                Arrays.asList(context),
-                nodes,
-                searchTransportService,
-                ActionListener.wrap(lookup -> run(lookup, context), listener::onFailure)
-            );
-        }
-    }
-
-    /**
-     * This method collects nodes from the remote clusters asynchronously if any of the scroll IDs references a remote cluster.
+            if (successfulOps.get() == 0) {
      * Otherwise the action listener will be invoked immediately with a function based on the given discovery nodes.
-     */
-    static void collectNodesAndRun(
-        final Iterable<SearchContextIdForNode> scrollIds,
-        DiscoveryNodes nodes,
-        SearchTransportService searchTransportService,
-        ActionListener<BiFunction<String, String, DiscoveryNode>> listener
-    ) {
-        Set<String> clusters = new HashSet<>();
-        for (SearchContextIdForNode target : scrollIds) {
-            if (target.getClusterAlias() != null) {
-                clusters.add(target.getClusterAlias());
-            }
-        }
-        if (clusters.isEmpty()) { // no remote clusters
-            listener.onResponse((cluster, node) -> nodes.get(node));
-        } else {
-            RemoteClusterService remoteClusterService = searchTransportService.getRemoteClusterService();
-            remoteClusterService.collectNodes(
-                clusters,
-                ActionListener.map(
-                    listener,
-                    nodeFunction -> (clusterAlias, node) -> clusterAlias == null ? nodes.get(node) : nodeFunction.apply(clusterAlias, node)
-                )
-            );
-        }
-    }
-
-    private void run(BiFunction<String, String, DiscoveryNode> clusterNodeLookup, final SearchContextIdForNode[] context) {
-        final CountDown counter = new CountDown(scrollId.getContext().length);
-        for (int i = 0; i < context.length; i++) {
-            SearchContextIdForNode target = context[i];
-            final int shardIndex = i;
-            final Transport.Connection connection;
-            try {
-                DiscoveryNode node = clusterNodeLookup.apply(target.getClusterAlias(), target.getNode());
-                if (node == null) {
-                    throw new IllegalArgumentException(
-                        "scroll_id references node [" + target.getNode() + "] which was not found in the cluster"
-                    );
-                }
-                connection = getConnection(target.getClusterAlias(), node);
-            } catch (Exception ex) {
-                onShardFailure(
-                    "query",
-                    counter,
-                    target.getSearchContextId(),
-                    ex,
-                    null,
-                    () -> SearchScrollAsyncAction.this.moveToNextPhase(clusterNodeLookup)
-                );
-                continue;
-            }
-            final InternalScrollSearchRequest internalRequest = TransportSearchHelper.internalScrollSearchRequest(
-                target.getSearchContextId(),
-                request
-            );
-            // we can't create a SearchShardTarget here since we don't know the index and shard ID we are talking to
-            // we only know the node and the search context ID. Yet, the response will contain the SearchShardTarget
-            // from the target node instead...that's why we pass null here
-            SearchActionListener<T> searchActionListener = new SearchActionListener<T>(null, shardIndex) {
-
-                @Override
-                protected void setSearchShardTarget(T response) {
-                    // don't do this - it's part of the response...
-                    assert response.getSearchShardTarget() != null : "search shard target must not be null";
-                    if (target.getClusterAlias() != null) {
-                        // re-create the search target and add the cluster alias if there is any,
-                        // we need this down the road for subseq. phases
-                        SearchShardTarget searchShardTarget = response.getSearchShardTarget();
-                        response.setSearchShardTarget(
-                            new SearchShardTarget(
-                                searchShardTarget.getNodeId(),
-                                searchShardTarget.getShardId(),
-                                target.getClusterAlias(),
-                                null
-                            )
-                        );
-                    }
-                }
-
-                @Override
-                protected void innerOnResponse(T result) {
-                    assert shardIndex == result.getShardIndex() : "shard index mismatch: "
-                        + shardIndex
-                        + " but got: "
-                        + result.getShardIndex();
-                    onFirstPhaseResult(shardIndex, result);
-                    if (counter.countDown()) {
-                        SearchPhase phase = moveToNextPhase(clusterNodeLookup);
-                        try {
-                            phase.run();
-                        } catch (Exception e) {
-                            // we need to fail the entire request here - the entire phase just blew up
-                            // don't call onShardFailure or onFailure here since otherwise we'd countDown the counter
-                            // again which would result in an exception
-                            listener.onFailure(
-                                new SearchPhaseExecutionException(phase.getName(), "Phase failed", e, ShardSearchFailure.EMPTY_ARRAY)
-                            );
-                        }
-                    }
-                }
-
-                @Override
-                public void onFailure(Exception t) {
-                    onShardFailure(
-                        "query",
-                        counter,
-                        target.getSearchContextId(),
-                        t,
-                        null,
-                        () -> SearchScrollAsyncAction.this.moveToNextPhase(clusterNodeLookup)
-                    );
-                }
-            };
-            executeInitialPhase(connection, internalRequest, searchActionListener);
-        }
-    }
-
-    synchronized ShardSearchFailure[] buildShardFailures() { // pkg private for testing
-        if (shardFailures.isEmpty()) {
-            return ShardSearchFailure.EMPTY_ARRAY;
-        }
-        return shardFailures.toArray(new ShardSearchFailure[0]);
-    }
-
-    // we do our best to return the shard failures, but its ok if its not fully concurrently safe
-    // we simply try and return as much as possible
-    private synchronized void addShardFailure(ShardSearchFailure failure) {
-        shardFailures.add(failure);
-    }
-
     protected abstract void executeInitialPhase(
-        Transport.Connection connection,
-        InternalScrollSearchRequest internalRequest,
-        SearchActionListener<T> searchActionListener
-    );
-
-    protected abstract SearchPhase moveToNextPhase(BiFunction<String, String, DiscoveryNode> clusterNodeLookup);
-
-    protected abstract void onFirstPhaseResult(int shardId, T result);
-
-    protected SearchPhase sendResponsePhase(
-        SearchPhaseController.ReducedQueryPhase queryPhase,
-        final AtomicArray<? extends SearchPhaseResult> fetchResults
+                protected void setSearchShardTarget(T response) {
+    protected Transport.Connection getConnection(String clusterAlias, DiscoveryNode node) {
+        // negative values don't make sense and we want to be able to serialize that thing as a vLong
     ) {
-        return new SearchPhase(SearchPhaseName.FETCH.getName()) {
-            @Override
-            public void run() throws IOException {
-                sendResponse(queryPhase, fetchResults);
-            }
-        };
-    }
-
-    protected final void sendResponse(
-        SearchPhaseController.ReducedQueryPhase queryPhase,
-        final AtomicArray<? extends SearchPhaseResult> fetchResults
-    ) {
-        try {
-            final InternalSearchResponse internalResponse = searchPhaseController.merge(
-                true,
-                queryPhase,
-                fetchResults.asList(),
-                fetchResults::get
-            );
-            // the scroll ID never changes we always return the same ID. This ID contains all the shards and their context ids
-            // such that we can talk to them again in the next roundtrip.
-            String scrollId = null;
-            if (request.scroll() != null) {
-                scrollId = request.scrollId();
-            }
-            listener.onResponse(
-                new SearchResponse(
-                    internalResponse,
-                    scrollId,
-                    this.scrollId.getContext().length,
-                    successfulOps.get(),
-                    0,
-                    buildTookInMillis(),
-                    buildShardFailures(),
-                    SearchResponse.Clusters.EMPTY,
-                    null
-                )
-            );
-        } catch (Exception e) {
-            listener.onFailure(new ReduceSearchPhaseException("fetch", "inner finish failed", e, buildShardFailures()));
-        }
-    }
-
-    protected void onShardFailure(
-        String phaseName,
-        final CountDown counter,
-        final ShardSearchContextId searchId,
-        Exception failure,
-        @Nullable SearchShardTarget searchShardTarget,
-        Supplier<SearchPhase> nextPhaseSupplier
-    ) {
-        if (logger.isDebugEnabled()) {
-            logger.debug(new ParameterizedMessage("[{}] Failed to execute {} phase", searchId, phaseName), failure);
+    protected final Logger logger;
+    protected final SearchTransportService searchTransportService;
+ * Modifications Copyright OpenSearch Contributors. See
+    private final long startTime;
+            SearchContextIdForNode target = context[i];
+                    onShardFailure(
         }
         addShardFailure(new ShardSearchFailure(failure, searchShardTarget));
-        int successfulOperations = successfulOps.decrementAndGet();
-        assert successfulOperations >= 0 : "successfulOperations must be >= 0 but was: " + successfulOperations;
-        if (counter.countDown()) {
-            if (successfulOps.get() == 0) {
-                listener.onFailure(new SearchPhaseExecutionException(phaseName, "all shards failed", failure, buildShardFailures()));
-            } else {
-                SearchPhase phase = nextPhaseSupplier.get();
-                try {
-                    phase.run();
-                } catch (Exception e) {
-                    e.addSuppressed(failure);
+    protected final ParsedScrollId scrollId;
+    private long buildTookInMillis() {
                     listener.onFailure(
+    }
+            public void run() throws IOException {
+    ) {
+                        }
+ */
+     * This method collects nodes from the remote clusters asynchronously if any of the scroll IDs references a remote cluster.
+import org.opensearch.search.internal.ShardSearchContextId;
+ * Abstract base class for scroll execution modes. This class encapsulates the basic logic to
+                        + " but got: "
+                searchTransportService,
                         new SearchPhaseExecutionException(phase.getName(), "Phase failed", e, ShardSearchFailure.EMPTY_ARRAY)
-                    );
-                }
+            // we only know the node and the search context ID. Yet, the response will contain the SearchShardTarget
+import org.opensearch.transport.RemoteClusterService;
             }
-        }
-    }
-
-    protected Transport.Connection getConnection(String clusterAlias, DiscoveryNode node) {
+                        () -> SearchScrollAsyncAction.this.moveToNextPhase(clusterNodeLookup)
+                    assert response.getSearchShardTarget() != null : "search shard target must not be null";
+                onShardFailure(
+import org.opensearch.common.Nullable;
+    protected void onShardFailure(
+                } catch (Exception e) {
+                new SearchResponse(
+/*
+ */
+            // from the target node instead...that's why we pass null here
+ * compatible open source license.
+import java.util.Set;
+        final Iterable<SearchContextIdForNode> scrollIds,
+                clusters.add(target.getClusterAlias());
+                        "query",
+                )
+                        // re-create the search target and add the cluster alias if there is any,
+            listener.onResponse(
+                    e.addSuppressed(failure);
+import org.apache.logging.log4j.Logger;
+                fetchResults::get
+    private synchronized void addShardFailure(ShardSearchFailure failure) {
+        return Math.max(1, System.currentTimeMillis() - startTime);
+        } else {
+import java.util.Arrays;
+                    );
+        Set<String> clusters = new HashSet<>();
+    static void collectNodesAndRun(
+ * GitHub history for details.
         return searchTransportService.getConnection(clusterAlias, node);
+        Exception failure,
+        this.logger = logger;
+                    successfulOps.get(),
+ * license agreements. See the NOTICE file distributed with
+                    buildShardFailures(),
+    private final List<ShardSearchFailure> shardFailures = new ArrayList<>();
+                        // we need this down the road for subseq. phases
+    public final void run() {
+            }
+        final AtomicArray<? extends SearchPhaseResult> fetchResults
+        ParsedScrollId scrollId,
+            executeInitialPhase(connection, internalRequest, searchActionListener);
+                        "scroll_id references node [" + target.getNode() + "] which was not found in the cluster"
+    ) {
+                ActionListener.wrap(lookup -> run(lookup, context), listener::onFailure)
+                    listener,
+        this.successfulOps = new AtomicInteger(scrollId.getContext().length);
+                        counter,
     }
-}
+            final InternalScrollSearchRequest internalRequest = TransportSearchHelper.internalScrollSearchRequest(
+     * Builds how long it took to execute the search.
+                        try {
+        final CountDown counter,
+        if (counter.countDown()) {
+package org.opensearch.action.search;
+                    SearchResponse.Clusters.EMPTY,
+import org.opensearch.common.util.concurrent.CountDown;
+                            )
+        final SearchContextIdForNode[] context = scrollId.getContext();
+            // the scroll ID never changes we always return the same ID. This ID contains all the shards and their context ids
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    /**
+                )
+            listener.onFailure(new SearchPhaseExecutionException("query", "no nodes to search on", ShardSearchFailure.EMPTY_ARRAY));
+        Logger logger,

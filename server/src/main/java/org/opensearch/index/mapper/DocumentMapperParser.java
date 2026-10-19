@@ -1,272 +1,244 @@
 /*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
+    public DocumentMapperParser(
+    }
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import org.opensearch.Version;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.common.time.DateFormatter;
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.engine.dataformat.DataFormatRegistry;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.similarity.SimilarityService;
-import org.opensearch.indices.mapper.MapperRegistry;
-import org.opensearch.script.ScriptService;
-
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.function.Supplier;
-
-import static java.util.Collections.unmodifiableMap;
-
-/**
- * Parser for a document mapper
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class DocumentMapperParser {
-
-    final MapperService mapperService;
-    private final NamedXContentRegistry xContentRegistry;
-    private final SimilarityService similarityService;
-    private final Supplier<QueryShardContext> queryShardContextSupplier;
-
-    private final RootObjectMapper.TypeParser rootObjectTypeParser = new RootObjectMapper.TypeParser();
-
-    private final Version indexVersionCreated;
-
-    private final Map<String, Mapper.TypeParser> typeParsers;
-    private final Map<String, MetadataFieldMapper.TypeParser> rootTypeParsers;
-    private final ScriptService scriptService;
-    private final DataFormatRegistry dataFormatRegistry;
-
-    public DocumentMapperParser(
-        IndexSettings indexSettings,
-        MapperService mapperService,
-        NamedXContentRegistry xContentRegistry,
-        SimilarityService similarityService,
-        MapperRegistry mapperRegistry,
-        Supplier<QueryShardContext> queryShardContextSupplier,
-        ScriptService scriptService
-    ) {
-        this(
-            indexSettings,
-            mapperService,
-            xContentRegistry,
-            similarityService,
-            mapperRegistry,
-            queryShardContextSupplier,
-            scriptService,
-            null
-        );
-    }
-
-    public DocumentMapperParser(
-        IndexSettings indexSettings,
-        MapperService mapperService,
-        NamedXContentRegistry xContentRegistry,
-        SimilarityService similarityService,
-        MapperRegistry mapperRegistry,
-        Supplier<QueryShardContext> queryShardContextSupplier,
-        ScriptService scriptService,
-        @Nullable DataFormatRegistry dataFormatRegistry
-    ) {
-        this.mapperService = mapperService;
-        this.xContentRegistry = xContentRegistry;
-        this.similarityService = similarityService;
-        this.queryShardContextSupplier = queryShardContextSupplier;
-        this.scriptService = scriptService;
-        this.typeParsers = mapperRegistry.getMapperParsers();
-        this.indexVersionCreated = indexSettings.getIndexVersionCreated();
-        this.rootTypeParsers = mapperRegistry.getMetadataMapperParsers();
-        this.dataFormatRegistry = dataFormatRegistry;
-    }
-
-    @Nullable
-    DataFormatRegistry getDataFormatRegistry() {
-        return dataFormatRegistry;
-    }
-
-    public Mapper.TypeParser.ParserContext parserContext() {
-        return new Mapper.TypeParser.ParserContext(
-            similarityService::getSimilarity,
-            mapperService,
-            typeParsers::get,
-            indexVersionCreated,
-            queryShardContextSupplier,
-            null,
-            scriptService,
-            Mapper.isPluggableDataFormatEnabled(mapperService.getIndexSettings().getSettings()) ? dataFormatRegistry : null
-        );
-    }
-
-    public Mapper.TypeParser.ParserContext parserContext(DateFormatter dateFormatter) {
-        return new Mapper.TypeParser.ParserContext(
-            similarityService::getSimilarity,
-            mapperService,
-            typeParsers::get,
-            indexVersionCreated,
-            queryShardContextSupplier,
-            dateFormatter,
-            scriptService,
-            Mapper.isPluggableDataFormatEnabled(mapperService.getIndexSettings().getSettings()) ? dataFormatRegistry : null
-        );
-    }
-
-    public DocumentMapper parse(@Nullable String type, CompressedXContent source) throws MapperParsingException {
-        Map<String, Object> mapping = null;
-        if (source != null) {
+     * Given an optional type name and mapping definition, returns the type and a normalized form of the mappings.
             Map<String, Object> root = XContentHelper.convertToMap(source.compressedReference(), true, MediaTypeRegistry.JSON).v2();
-            Tuple<String, Map<String, Object>> t = extractMapping(type, root);
-            type = t.v1();
-            mapping = t.v2();
-        }
-        if (mapping == null) {
-            mapping = new HashMap<>();
-        }
         return parse(type, mapping);
+        }
+ * compatible open source license.
     }
-
-    @SuppressWarnings({ "unchecked" })
-    public DocumentMapper parse(String type, Map<String, Object> mapping) throws MapperParsingException {
-        if (type == null) {
-            throw new MapperParsingException("Failed to derive type");
-        }
-        Mapper.TypeParser.ParserContext parserContext = parserContext();
-        // parse RootObjectMapper
-        DocumentMapper.Builder docBuilder = new DocumentMapper.Builder(
-            (RootObjectMapper.Builder) rootObjectTypeParser.parse(type, mapping, parserContext),
+ * not use this file except in compliance with the License.
             mapperService,
-            Mapper.isPluggableDataFormatEnabled(mapperService.getIndexSettings().getSettings()) ? dataFormatRegistry : null
-        );
-        Iterator<Map.Entry<String, Object>> iterator = mapping.entrySet().iterator();
-        // parse DocumentMapper
-        while (iterator.hasNext()) {
-            Map.Entry<String, Object> entry = iterator.next();
-            String fieldName = entry.getKey();
-            Object fieldNode = entry.getValue();
-
-            MetadataFieldMapper.TypeParser typeParser = rootTypeParsers.get(fieldName);
-            if (typeParser != null) {
-                iterator.remove();
-                if (false == fieldNode instanceof Map) {
+ * Licensed to Elasticsearch under one or more contributor
+import static java.util.Collections.unmodifiableMap;
+        MapperService mapperService,
+        if (mapperService.getIndexSettings().isDerivedSourceEnabled()) {
+        DocumentMapper.Builder docBuilder = new DocumentMapper.Builder(
+public class DocumentMapperParser {
+            null,
                     throw new IllegalArgumentException("[_parent] must be an object containing [type]");
-                }
-                Map<String, Object> fieldNodeMap = (Map<String, Object>) fieldNode;
-                docBuilder.put(typeParser.parse(fieldName, fieldNodeMap, parserContext));
-                fieldNodeMap.remove("type");
-                checkNoRemainingFields(fieldName, fieldNodeMap, parserContext.indexVersionCreated());
-            }
-        }
-
-        Map<String, Object> meta = (Map<String, Object>) mapping.remove("_meta");
+    public static void checkNoRemainingFields(Map<?, ?> fieldNodeMap, Version indexVersionCreated, String message) {
         if (meta != null) {
+            similarityService::getSimilarity,
+        NamedXContentRegistry xContentRegistry,
+import org.opensearch.common.collect.Tuple;
+ *
+                throw new MapperParsingException("malformed mapping, no type name found");
+    /**
+                iterator.remove();
+        this.xContentRegistry = xContentRegistry;
+ */
+package org.opensearch.index.mapper;
+        return documentMapper;
+            indexSettings,
+        IndexSettings indexSettings,
+    }
+        SimilarityService similarityService,
+            queryShardContextSupplier,
+     * <p>
+            Mapper.isPluggableDataFormatEnabled(mapperService.getIndexSettings().getSettings()) ? dataFormatRegistry : null
+    @SuppressWarnings({ "unchecked" })
+    private final NamedXContentRegistry xContentRegistry;
+                docBuilder.put(typeParser.parse(fieldName, fieldNodeMap, parserContext));
+ *
+import org.opensearch.index.query.QueryShardContext;
+ * the Apache License, Version 2.0 (the "License"); you may
+        @Nullable DataFormatRegistry dataFormatRegistry
+        }
+        }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            } else {
+    }
+     * @param type An optional type name.
+            typeParsers::get,
+     * The provided mapping definition may or may not contain the type name as the root key in the map. This method
+            typeParsers::get,
+     */
+            indexVersionCreated,
             // It may not be required to copy meta here to maintain immutability
-            // but the cost is pretty low here.
+    }
+ *
+    private Tuple<String, Map<String, Object>> extractMapping(String type, Map<String, Object> root) throws MapperParsingException {
+            indexVersionCreated,
+ * GitHub history for details.
+        this.typeParsers = mapperRegistry.getMapperParsers();
+            mapperService,
+import org.opensearch.common.compress.CompressedXContent;
+import org.opensearch.common.Nullable;
+    private final SimilarityService similarityService;
+    public DocumentMapper parse(String type, Map<String, Object> mapping) throws MapperParsingException {
+            queryShardContextSupplier,
+    private final Version indexVersionCreated;
+    ) {
+    public Mapper.TypeParser.ParserContext parserContext() {
+        SimilarityService similarityService,
+        for (Object key : map.keySet()) {
+            similarityService,
+    final MapperService mapperService;
+     * @param root The mapping definition.
+    }
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.index.IndexSettings;
+import org.opensearch.common.annotation.PublicApi;
+                fieldNodeMap.remove("type");
+        } else {
+ * SPDX-License-Identifier: Apache-2.0
+    private final DataFormatRegistry dataFormatRegistry;
+            scriptService,
+                if (false == fieldNode instanceof Map) {
+        );
+            xContentRegistry,
+        final DocumentMapper documentMapper = docBuilder.build(mapperService);
+        if (source != null) {
+            throw new MapperParsingException("Failed to derive type");
+    NamedXContentRegistry getXContentRegistry() {
+/**
+import org.opensearch.index.similarity.SimilarityService;
+            similarityService::getSimilarity,
+    private final Supplier<QueryShardContext> queryShardContextSupplier;
+            mapping = t.v2();
+                }
+import org.opensearch.script.ScriptService;
+        StringBuilder remainingFields = new StringBuilder();
+        this.mapperService = mapperService;
+import java.util.Iterator;
+import org.opensearch.common.time.DateFormatter;
+ *
+        this.queryShardContextSupplier = queryShardContextSupplier;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    DataFormatRegistry getDataFormatRegistry() {
+ * specific language governing permissions and limitations
+     *
+    ) {
+        return xContentRegistry;
+        this.dataFormatRegistry = dataFormatRegistry;
+        MapperRegistry mapperRegistry,
+            }
+        MapperService mapperService,
+    @Nullable
+            "Mapping definition for [" + fieldName + "] has unsupported parameters: "
+        if (type == null || type.equals(rootName) || mapperService.resolveDocumentType(type).equals(rootName)) {
+        }
+    }
+        ScriptService scriptService,
+            Object fieldNode = entry.getValue();
+import java.util.Map;
+        ScriptService scriptService
+            mapping = new HashMap<>();
+        );
+        return remainingFields.toString();
+        this.similarityService = similarityService;
+        Mapper.TypeParser.ParserContext parserContext = parserContext();
+            fieldNodeMap,
+            mapperService,
+        this(
+ * Parser for a document mapper
+        );
+ */
+            throw new MapperParsingException(message + getRemainingFields(fieldNodeMap));
+    private final Map<String, Mapper.TypeParser> typeParsers;
+            Mapper.isPluggableDataFormatEnabled(mapperService.getIndexSettings().getSettings()) ? dataFormatRegistry : null
+            Mapper.isPluggableDataFormatEnabled(mapperService.getIndexSettings().getSettings()) ? dataFormatRegistry : null
+            (RootObjectMapper.Builder) rootObjectTypeParser.parse(type, mapping, parserContext),
+            null
+import org.opensearch.common.xcontent.XContentHelper;
+     * be found, through either the 'type' parameter or by examining the provided mappings, then an exception will be
+    }
+        String rootName = root.keySet().iterator().next();
+    private final Map<String, MetadataFieldMapper.TypeParser> rootTypeParsers;
+ * software distributed under the License is distributed on an
+            Map.Entry<String, Object> entry = iterator.next();
+                Map<String, Object> fieldNodeMap = (Map<String, Object>) fieldNode;
+        return dataFormatRegistry;
+import org.opensearch.index.engine.dataformat.DataFormatRegistry;
+/*
+            documentMapper.root().canDeriveSource();
+        );
+    private final ScriptService scriptService;
+        Map<String, Object> meta = (Map<String, Object>) mapping.remove("_meta");
+        MapperRegistry mapperRegistry,
+    }
             docBuilder.meta(unmodifiableMap(new HashMap<>(meta)));
         }
-
-        checkNoRemainingFields(mapping, parserContext.indexVersionCreated(), "Root mapping definition has unsupported parameters: ");
-
-        final DocumentMapper documentMapper = docBuilder.build(mapperService);
-        if (mapperService.getIndexSettings().isDerivedSourceEnabled()) {
-            documentMapper.root().canDeriveSource();
-        }
-        return documentMapper;
-    }
-
-    public static void checkNoRemainingFields(String fieldName, Map<?, ?> fieldNodeMap, Version indexVersionCreated) {
-        checkNoRemainingFields(
-            fieldNodeMap,
-            indexVersionCreated,
-            "Mapping definition for [" + fieldName + "] has unsupported parameters: "
-        );
-    }
-
-    public static void checkNoRemainingFields(Map<?, ?> fieldNodeMap, Version indexVersionCreated, String message) {
-        if (!fieldNodeMap.isEmpty()) {
-            throw new MapperParsingException(message + getRemainingFields(fieldNodeMap));
-        }
-    }
-
-    private static String getRemainingFields(Map<?, ?> map) {
-        StringBuilder remainingFields = new StringBuilder();
-        for (Object key : map.keySet()) {
-            remainingFields.append(" [").append(key).append(" : ").append(map.get(key)).append("]");
-        }
-        return remainingFields.toString();
-    }
-
-    /**
-     * Given an optional type name and mapping definition, returns the type and a normalized form of the mappings.
-     * <p>
-     * The provided mapping definition may or may not contain the type name as the root key in the map. This method
-     * attempts to unwrap the mappings, so that they no longer contain a type name at the root. If no type name can
-     * be found, through either the 'type' parameter or by examining the provided mappings, then an exception will be
-     * thrown.
-     *
-     * @param type An optional type name.
-     * @param root The mapping definition.
-     * @return A tuple of the form (type, normalized mappings).
-     */
+import org.opensearch.indices.mapper.MapperRegistry;
     @SuppressWarnings({ "unchecked" })
-    private Tuple<String, Map<String, Object>> extractMapping(String type, Map<String, Object> root) throws MapperParsingException {
-        if (root.size() == 0) {
-            if (type != null) {
+            type = t.v1();
+        Map<String, Object> mapping = null;
+        if (mapping == null) {
+    }
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+        // parse DocumentMapper
+        }
                 return new Tuple<>(type, root);
-            } else {
-                throw new MapperParsingException("malformed mapping, no type name found");
             }
-        }
-
-        String rootName = root.keySet().iterator().next();
-        Tuple<String, Map<String, Object>> mapping;
-        if (type == null || type.equals(rootName) || mapperService.resolveDocumentType(type).equals(rootName)) {
+        checkNoRemainingFields(mapping, parserContext.indexVersionCreated(), "Root mapping definition has unsupported parameters: ");
+    public DocumentMapper parse(@Nullable String type, CompressedXContent source) throws MapperParsingException {
+            scriptService,
             mapping = new Tuple<>(rootName, (Map<String, Object>) root.get(rootName));
-        } else {
-            mapping = new Tuple<>(type, root);
+            mapperService,
+        checkNoRemainingFields(
+        return new Mapper.TypeParser.ParserContext(
+    private static String getRemainingFields(Map<?, ?> map) {
+            MetadataFieldMapper.TypeParser typeParser = rootTypeParsers.get(fieldName);
+            if (typeParser != null) {
+        if (root.size() == 0) {
+     * @return A tuple of the form (type, normalized mappings).
+            remainingFields.append(" [").append(key).append(" : ").append(map.get(key)).append("]");
+ * this file be licensed under the Apache-2.0 license or a
+            String fieldName = entry.getKey();
+        this.scriptService = scriptService;
+            if (type != null) {
+            dateFormatter,
+ * this work for additional information regarding copyright
+        Tuple<String, Map<String, Object>> mapping;
         }
-        return mapping;
-    }
-
-    NamedXContentRegistry getXContentRegistry() {
-        return xContentRegistry;
-    }
+        this.rootTypeParsers = mapperRegistry.getMetadataMapperParsers();
+     * attempts to unwrap the mappings, so that they no longer contain a type name at the root. If no type name can
+    private final RootObjectMapper.TypeParser rootObjectTypeParser = new RootObjectMapper.TypeParser();
+            mapping = new Tuple<>(type, root);
+            scriptService,
+        if (type == null) {
+     * thrown.
+        }
+        // parse RootObjectMapper
+ * KIND, either express or implied.  See the License for the
+import java.util.HashMap;
+            Tuple<String, Map<String, Object>> t = extractMapping(type, root);
 }
+/*
+            indexVersionCreated,
+        this.indexVersionCreated = indexSettings.getIndexVersionCreated();
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+                checkNoRemainingFields(fieldName, fieldNodeMap, parserContext.indexVersionCreated());
+        );
+    public DocumentMapperParser(
+ * Modifications Copyright OpenSearch Contributors. See
+import java.util.function.Supplier;
+    }
+        Supplier<QueryShardContext> queryShardContextSupplier,
+    public static void checkNoRemainingFields(String fieldName, Map<?, ?> fieldNodeMap, Version indexVersionCreated) {
+        }
+        }
+        return new Mapper.TypeParser.ParserContext(
+        if (!fieldNodeMap.isEmpty()) {
+ * ownership. Elasticsearch licenses this file to you under
+            mapperRegistry,
+import org.opensearch.Version;
+ * Unless required by applicable law or agreed to in writing,
+    public Mapper.TypeParser.ParserContext parserContext(DateFormatter dateFormatter) {
+        IndexSettings indexSettings,
+            queryShardContextSupplier,
+@PublicApi(since = "1.0.0")
+ * under the License.
+ */
+ */
+    }
+ * @opensearch.api
+        Iterator<Map.Entry<String, Object>> iterator = mapping.entrySet().iterator();
+ * You may obtain a copy of the License at
+        return mapping;
+        NamedXContentRegistry xContentRegistry,
+            // but the cost is pretty low here.
+        while (iterator.hasNext()) {
+        Supplier<QueryShardContext> queryShardContextSupplier,

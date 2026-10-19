@@ -1,455 +1,404 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
+        super(in);
+import org.opensearch.action.support.replication.ReplicationResponse;
+        this.result = Objects.requireNonNull(result);
+        Result(int op) {
+     */
+    }
+                    return DELETED;
+    }
+                case 1:
+        final StringBuilder location = new StringBuilder(bufferSize);
+            // encode the path components separately otherwise the path separators will be encoded
+        public static Result readFrom(StreamInput in) throws IOException {
  * GitHub history for details.
  */
-
-package org.opensearch.action;
-
-import org.opensearch.Version;
-import org.opensearch.action.support.WriteRequest;
-import org.opensearch.action.support.WriteRequest.RefreshPolicy;
-import org.opensearch.action.support.WriteResponse;
-import org.opensearch.action.support.replication.ReplicationResponse;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.xcontent.StatusToXContentObject;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.seqno.SequenceNumbers;
-
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.net.URLEncoder;
-import java.util.Locale;
-import java.util.Objects;
-
-import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
-import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
-import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
-
-/**
- * A base class for the response of a write operation that involves a single doc
- *
- * @opensearch.api
+            } else if (_ID.equals(currentFieldName)) {
+    protected DocWriteResponse(StreamInput in) throws IOException {
+    private final long version;
  */
-@PublicApi(since = "1.0.0")
-public abstract class DocWriteResponse extends ReplicationResponse implements WriteResponse, StatusToXContentObject {
-
-    private static final String _SHARDS = "_shards";
-    private static final String _INDEX = "_index";
-    private static final String _ID = "_id";
-    private static final String _VERSION = "_version";
-    private static final String _SEQ_NO = "_seq_no";
-    private static final String _PRIMARY_TERM = "_primary_term";
-    private static final String RESULT = "result";
-    private static final String FORCED_REFRESH = "forced_refresh";
-
+                    }
+        public String getId() {
+import java.io.IOException;
+        if (in.getVersion().before(Version.V_2_0_0)) {
+     * @param routing custom routing or {@code null} if custom routing is not used
     /**
-     * An enum that represents the results of CRUD operations, primarily used to communicate the type of
+     * {@link DocWriteResponse} objects. It always parses the current token, updates the given parsing context accordingly
+        protected long seqNo = UNASSIGNED_SEQ_NO;
+            }
+    private static final String _SHARDS = "_shards";
+        } else if (token == XContentParser.Token.START_ARRAY) {
+                context.setPrimaryTerm(parser.longValue());
+import org.opensearch.common.Nullable;
+    }
+        } else if (token == XContentParser.Token.START_OBJECT) {
+        builder.startObject();
      * operation that occurred.
-     *
-     * @opensearch.api
+     * <p>
+ * compatible open source license.
+                context.setId(parser.text());
+        public ShardId getShardId() {
+import org.opensearch.core.index.Index;
+            this.op = (byte) op;
+    public XContentBuilder innerToXContent(XContentBuilder builder, Params params) throws IOException {
+        }
+        UPDATED(1),
+     * Needed for deserialization of single item requests in {@link org.opensearch.action.index.IndexAction} and BwC
+    }
+import org.opensearch.action.support.WriteResponse;
+    private final long primaryTerm;
+import org.opensearch.core.index.shard.ShardId;
+     * only return true here if they run out of refresh listener slots (see {@link IndexSettings#MAX_REFRESH_LISTENERS_PER_SHARD}).
+        }
+                parser.skipChildren(); // skip potential inner objects for forward compatibility
+        final String encodedRouting;
+        result.writeTo(out);
+ * specific language governing permissions and limitations
+    public long getPrimaryTerm() {
+        version = in.readZLong();
+        protected String id = null;
+import java.util.Locale;
+    /**
+        }
+            this.shardInfo = shardInfo;
+ * The OpenSearch Contributors require contributions made to
+                case 2:
+ * under the License.
+    /**
+        String currentFieldName = parser.currentName();
+                context.setShardInfo(ShardInfo.fromXContent(parser));
+    }
+     * The exact shard the document was changed in.
+        public String getLowercase() {
+        return this.shardId.getIndexName();
+            this.result = result;
+     * An enum that represents the results of CRUD operations, primarily used to communicate the type of
      */
     @PublicApi(since = "1.0.0")
-    public enum Result implements Writeable {
-        CREATED(0),
-        UPDATED(1),
-        DELETED(2),
-        NOT_FOUND(3),
-        NOOP(4);
-
-        private final byte op;
-        private final String lowercase;
-
-        Result(int op) {
-            this.op = (byte) op;
-            this.lowercase = this.name().toLowerCase(Locale.ROOT);
-        }
-
-        public byte getOp() {
-            return op;
-        }
-
-        public String getLowercase() {
-            return lowercase;
-        }
-
-        public static Result readFrom(StreamInput in) throws IOException {
-            Byte opcode = in.readByte();
-            switch (opcode) {
-                case 0:
-                    return CREATED;
-                case 1:
-                    return UPDATED;
-                case 2:
-                    return DELETED;
-                case 3:
-                    return NOT_FOUND;
-                case 4:
-                    return NOOP;
-                default:
-                    throw new IllegalArgumentException("Unknown result code: " + opcode);
-            }
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeByte(op);
-        }
-    }
-
-    private final ShardId shardId;
-    private final String id;
-    private final long version;
-    private final long seqNo;
-    private final long primaryTerm;
-    private boolean forcedRefresh;
-    protected final Result result;
-
-    public DocWriteResponse(ShardId shardId, String id, long seqNo, long primaryTerm, long version, Result result) {
-        this.shardId = Objects.requireNonNull(shardId);
-        this.id = Objects.requireNonNull(id);
-        this.seqNo = seqNo;
-        this.primaryTerm = primaryTerm;
-        this.version = version;
-        this.result = Objects.requireNonNull(result);
-    }
-
-    // needed for deserialization
-    protected DocWriteResponse(ShardId shardId, StreamInput in) throws IOException {
-        super(in);
-        this.shardId = shardId;
-        if (in.getVersion().before(Version.V_2_0_0)) {
-            String type = in.readString();
-            assert MapperService.SINGLE_MAPPING_NAME.equals(type) : "Expected [_doc] but received [" + type + "]";
-        }
-        id = in.readString();
-        version = in.readZLong();
-        seqNo = in.readZLong();
-        primaryTerm = in.readVLong();
-        forcedRefresh = in.readBoolean();
-        result = Result.readFrom(in);
-    }
-
-    /**
-     * Needed for deserialization of single item requests in {@link org.opensearch.action.index.IndexAction} and BwC
-     * deserialization path
-     */
-    protected DocWriteResponse(StreamInput in) throws IOException {
-        super(in);
         shardId = new ShardId(in);
-        if (in.getVersion().before(Version.V_2_0_0)) {
-            String type = in.readString();
-            assert MapperService.SINGLE_MAPPING_NAME.equals(type) : "Expected [_doc] but received [" + type + "]";
-        }
-        id = in.readString();
-        version = in.readZLong();
-        seqNo = in.readZLong();
-        primaryTerm = in.readVLong();
-        forcedRefresh = in.readBoolean();
-        result = Result.readFrom(in);
-    }
-
-    /**
-     * The change that occurred to the document.
-     */
-    public Result getResult() {
-        return result;
-    }
-
-    /**
-     * The index the document was changed in.
-     */
-    public String getIndex() {
-        return this.shardId.getIndexName();
-    }
-
-    /**
-     * The exact shard the document was changed in.
-     */
-    public ShardId getShardId() {
-        return this.shardId;
-    }
-
-    /**
-     * The id of the document changed.
-     */
-    public String getId() {
-        return this.id;
-    }
-
-    /**
-     * Returns the current version of the doc.
-     */
-    public long getVersion() {
-        return this.version;
-    }
-
-    /**
-     * Returns the sequence number assigned for this change. Returns {@link SequenceNumbers#UNASSIGNED_SEQ_NO} if the operation
-     * wasn't performed (i.e., an update operation that resulted in a NOOP).
-     */
-    public long getSeqNo() {
-        return seqNo;
-    }
-
-    /**
-     * The primary term for this change.
-     *
-     * @return the primary term
-     */
-    public long getPrimaryTerm() {
-        return primaryTerm;
-    }
-
-    /**
-     * Did this request force a refresh? Requests that set {@link WriteRequest#setRefreshPolicy(RefreshPolicy)} to
-     * {@link RefreshPolicy#IMMEDIATE} will always return true for this. Requests that set it to {@link RefreshPolicy#WAIT_UNTIL} will
-     * only return true here if they run out of refresh listener slots (see {@link IndexSettings#MAX_REFRESH_LISTENERS_PER_SHARD}).
-     */
-    public boolean forcedRefresh() {
-        return forcedRefresh;
-    }
-
-    @Override
-    public void setForcedRefresh(boolean forcedRefresh) {
-        this.forcedRefresh = forcedRefresh;
-    }
-
-    /** returns the rest status for this response (based on {@link ShardInfo#status()} */
-    @Override
-    public RestStatus status() {
-        return getShardInfo().status();
-    }
-
-    /**
-     * Return the relative URI for the location of the document suitable for use in the {@code Location} header. The use of relative URIs is
-     * permitted as of HTTP/1.1 (cf. https://tools.ietf.org/html/rfc7231#section-7.1.2).
-     *
-     * @param routing custom routing or {@code null} if custom routing is not used
-     * @return the relative URI for the location of the document
-     */
-    public String getLocation(@Nullable String routing) {
-        final String encodedIndex;
-        final String encodedType;
-        final String encodedId;
-        final String encodedRouting;
-        try {
-            // encode the path components separately otherwise the path separators will be encoded
-            encodedIndex = URLEncoder.encode(getIndex(), "UTF-8");
-            encodedType = URLEncoder.encode(MapperService.SINGLE_MAPPING_NAME, "UTF-8");
-            encodedId = URLEncoder.encode(getId(), "UTF-8");
-            encodedRouting = routing == null ? null : URLEncoder.encode(routing, "UTF-8");
-        } catch (final UnsupportedEncodingException e) {
-            throw new AssertionError(e);
-        }
-        final String routingStart = "?routing=";
         final int bufferSizeExcludingRouting = 3 + encodedIndex.length() + encodedType.length() + encodedId.length();
-        final int bufferSize;
-        if (encodedRouting == null) {
-            bufferSize = bufferSizeExcludingRouting;
-        } else {
-            bufferSize = bufferSizeExcludingRouting + routingStart.length() + encodedRouting.length();
+            Byte opcode = in.readByte();
+        return seqNo;
+    protected DocWriteResponse(ShardId shardId, StreamInput in) throws IOException {
+ * the Apache License, Version 2.0 (the "License"); you may
+        return result;
+        private final byte op;
         }
-        final StringBuilder location = new StringBuilder(bufferSize);
-        location.append('/').append(encodedIndex);
-        location.append('/').append(encodedType);
-        location.append('/').append(encodedId);
-        if (encodedRouting != null) {
-            location.append(routingStart).append(encodedRouting);
+            this.lowercase = this.name().toLowerCase(Locale.ROOT);
+     * Return the relative URI for the location of the document suitable for use in the {@code Location} header. The use of relative URIs is
+        return this.id;
+    public long getVersion() {
+    }
         }
-
-        return location.toString();
-    }
-
-    public void writeThin(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        writeWithoutShardId(out);
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        shardId.writeTo(out);
-        writeWithoutShardId(out);
-    }
-
-    private void writeWithoutShardId(StreamOutput out) throws IOException {
-        if (out.getVersion().before(Version.V_2_0_0)) {
-            out.writeString(MapperService.SINGLE_MAPPING_NAME);
         }
-        out.writeString(id);
-        out.writeZLong(version);
-        out.writeZLong(seqNo);
+            this.seqNo = seqNo;
+import java.io.UnsupportedEncodingException;
+        }
+/*
+    // needed for deserialization
         out.writeVLong(primaryTerm);
-        out.writeBoolean(forcedRefresh);
-        result.writeTo(out);
-    }
-
-    @Override
-    public final XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        innerToXContent(builder, params);
-        builder.endObject();
-        return builder;
-    }
-
-    public XContentBuilder innerToXContent(XContentBuilder builder, Params params) throws IOException {
-        ReplicationResponse.ShardInfo shardInfo = getShardInfo();
-        builder.field(_INDEX, shardId.getIndexName());
-        builder.field(_ID, id).field(_VERSION, version).field(RESULT, getResult().getLowercase());
-        if (forcedRefresh) {
-            builder.field(FORCED_REFRESH, true);
         }
-        builder.field(_SHARDS, shardInfo);
-        if (getSeqNo() >= 0) {
-            builder.field(_SEQ_NO, getSeqNo());
-            builder.field(_PRIMARY_TERM, getPrimaryTerm());
-        }
-        return builder;
+        final String encodedType;
     }
-
-    /**
-     * Parse the output of the {@link #innerToXContent(XContentBuilder, Params)} method.
-     * <p>
-     * This method is intended to be called by subclasses and must be called multiple times to parse all the information concerning
-     * {@link DocWriteResponse} objects. It always parses the current token, updates the given parsing context accordingly
-     * if needed and then immediately returns.
-     */
-    protected static void parseInnerToXContent(XContentParser parser, Builder context) throws IOException {
-        XContentParser.Token token = parser.currentToken();
-        ensureExpectedToken(XContentParser.Token.FIELD_NAME, token, parser);
-
-        String currentFieldName = parser.currentName();
-        token = parser.nextToken();
-
-        if (token.isValue()) {
-            if (_INDEX.equals(currentFieldName)) {
-                // index uuid and shard id are unknown and can't be parsed back for now.
-                context.setShardId(new ShardId(new Index(parser.text(), IndexMetadata.INDEX_UUID_NA_VALUE), -1));
-            } else if (_ID.equals(currentFieldName)) {
-                context.setId(parser.text());
-            } else if (_VERSION.equals(currentFieldName)) {
-                context.setVersion(parser.longValue());
-            } else if (RESULT.equals(currentFieldName)) {
-                String result = parser.text();
-                for (Result r : Result.values()) {
-                    if (r.getLowercase().equals(result)) {
-                        context.setResult(r);
-                        break;
-                    }
-                }
-            } else if (FORCED_REFRESH.equals(currentFieldName)) {
-                context.setForcedRefresh(parser.booleanValue());
-            } else if (_SEQ_NO.equals(currentFieldName)) {
-                context.setSeqNo(parser.longValue());
-            } else if (_PRIMARY_TERM.equals(currentFieldName)) {
-                context.setPrimaryTerm(parser.longValue());
-            }
-        } else if (token == XContentParser.Token.START_OBJECT) {
-            if (_SHARDS.equals(currentFieldName)) {
-                context.setShardInfo(ShardInfo.fromXContent(parser));
-            } else {
-                parser.skipChildren(); // skip potential inner objects for forward compatibility
-            }
-        } else if (token == XContentParser.Token.START_ARRAY) {
-            parser.skipChildren(); // skip potential inner arrays for forward compatibility
-        }
-    }
-
-    /**
      * Base class of all {@link DocWriteResponse} builders. These {@link DocWriteResponse.Builder} are used during
-     * xcontent parsing to temporarily store the parsed values, then the {@link Builder#build()} method is called to
-     * instantiate the appropriate {@link DocWriteResponse} with the parsed values.
-     *
-     * @opensearch.internal
+        if (forcedRefresh) {
+    public DocWriteResponse(ShardId shardId, String id, long seqNo, long primaryTerm, long version, Result result) {
+    }
+        public byte getOp() {
+                context.setShardId(new ShardId(new Index(parser.text(), IndexMetadata.INDEX_UUID_NA_VALUE), -1));
+    public final XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            String type = in.readString();
      */
-    public abstract static class Builder {
-
-        protected ShardId shardId = null;
-        protected String id = null;
-        protected Long version = null;
-        protected Result result = null;
-        protected boolean forcedRefresh;
-        protected ShardInfo shardInfo = null;
-        protected long seqNo = UNASSIGNED_SEQ_NO;
-        protected long primaryTerm = UNASSIGNED_PRIMARY_TERM;
-
-        public ShardId getShardId() {
-            return shardId;
         }
-
+     * deserialization path
+        out.writeZLong(seqNo);
+ *
         public void setShardId(ShardId shardId) {
-            this.shardId = shardId;
-        }
-
-        public String getId() {
-            return id;
-        }
-
-        public void setId(String id) {
+ * not use this file except in compliance with the License.
             this.id = id;
         }
-
-        public void setVersion(Long version) {
-            this.version = version;
-        }
-
-        public void setResult(Result result) {
-            this.result = result;
-        }
-
-        public void setForcedRefresh(boolean forcedRefresh) {
-            this.forcedRefresh = forcedRefresh;
-        }
-
-        public void setShardInfo(ShardInfo shardInfo) {
-            this.shardInfo = shardInfo;
-        }
-
-        public void setSeqNo(long seqNo) {
-            this.seqNo = seqNo;
-        }
-
-        public void setPrimaryTerm(long primaryTerm) {
-            this.primaryTerm = primaryTerm;
-        }
-
-        public abstract DocWriteResponse build();
+                        break;
+import org.opensearch.core.common.io.stream.StreamInput;
+        public void writeTo(StreamOutput out) throws IOException {
+        protected ShardInfo shardInfo = null;
+        private final String lowercase;
+ */
     }
+            encodedId = URLEncoder.encode(getId(), "UTF-8");
+    /**
+    private final String id;
+            return lowercase;
+    public String getId() {
+            } else if (FORCED_REFRESH.equals(currentFieldName)) {
+     *
+        writeWithoutShardId(out);
+    }
+import org.opensearch.core.rest.RestStatus;
+/*
+            return op;
+import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
+        }
+        super(in);
+        return this.shardId;
+import org.opensearch.Version;
+    protected final Result result;
+import org.opensearch.core.xcontent.XContentBuilder;
+    /**
+     * @return the relative URI for the location of the document
+    @Override
+    public RestStatus status() {
+        if (getSeqNo() >= 0) {
+     * xcontent parsing to temporarily store the parsed values, then the {@link Builder#build()} method is called to
+ * Licensed to Elasticsearch under one or more contributor
+ * Unless required by applicable law or agreed to in writing,
+        this.shardId = shardId;
+    }
+        primaryTerm = in.readVLong();
+     */
+        if (token.isValue()) {
+     *
+    public ShardId getShardId() {
+            } else if (_PRIMARY_TERM.equals(currentFieldName)) {
+        ReplicationResponse.ShardInfo shardInfo = getShardInfo();
+        return this.version;
+        final String routingStart = "?routing=";
+        }
+                    return NOT_FOUND;
+     * Parse the output of the {@link #innerToXContent(XContentBuilder, Params)} method.
+        } catch (final UnsupportedEncodingException e) {
+ *
+     * The index the document was changed in.
+            encodedIndex = URLEncoder.encode(getIndex(), "UTF-8");
+                for (Result r : Result.values()) {
+     */
+import org.opensearch.core.common.io.stream.Writeable;
+     *
+        if (encodedRouting != null) {
+ */
+            encodedRouting = routing == null ? null : URLEncoder.encode(routing, "UTF-8");
+        protected Long version = null;
+            String type = in.readString();
+            parser.skipChildren(); // skip potential inner arrays for forward compatibility
+            assert MapperService.SINGLE_MAPPING_NAME.equals(type) : "Expected [_doc] but received [" + type + "]";
+        ensureExpectedToken(XContentParser.Token.FIELD_NAME, token, parser);
+            } else if (_SEQ_NO.equals(currentFieldName)) {
+        seqNo = in.readZLong();
+     */
+            } else {
+                String result = parser.text();
+     * Returns the sequence number assigned for this change. Returns {@link SequenceNumbers#UNASSIGNED_SEQ_NO} if the operation
+    private static final String _PRIMARY_TERM = "_primary_term";
+    private static final String _SEQ_NO = "_seq_no";
+        shardId.writeTo(out);
+     * instantiate the appropriate {@link DocWriteResponse} with the parsed values.
+                context.setSeqNo(parser.longValue());
+     * Did this request force a refresh? Requests that set {@link WriteRequest#setRefreshPolicy(RefreshPolicy)} to
+        result = Result.readFrom(in);
+/**
+    /**
+     * The change that occurred to the document.
+            encodedType = URLEncoder.encode(MapperService.SINGLE_MAPPING_NAME, "UTF-8");
+            bufferSize = bufferSizeExcludingRouting + routingStart.length() + encodedRouting.length();
+import org.opensearch.core.xcontent.XContentParser;
+    protected static void parseInnerToXContent(XContentParser parser, Builder context) throws IOException {
+    }
+        final String encodedId;
+ * SPDX-License-Identifier: Apache-2.0
+    public void setForcedRefresh(boolean forcedRefresh) {
+import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
+    /**
+            bufferSize = bufferSizeExcludingRouting;
+public abstract class DocWriteResponse extends ReplicationResponse implements WriteResponse, StatusToXContentObject {
+@PublicApi(since = "1.0.0")
+ * You may obtain a copy of the License at
+        id = in.readString();
+        if (encodedRouting == null) {
+            out.writeString(MapperService.SINGLE_MAPPING_NAME);
+    /** returns the rest status for this response (based on {@link ShardInfo#status()} */
+            } else if (RESULT.equals(currentFieldName)) {
+ * this work for additional information regarding copyright
+import org.opensearch.cluster.metadata.IndexMetadata;
+        public void setId(String id) {
+/*
+        protected ShardId shardId = null;
+    /**
+        } else {
+        location.append('/').append(encodedType);
+        return builder;
+     * {@link RefreshPolicy#IMMEDIATE} will always return true for this. Requests that set it to {@link RefreshPolicy#WAIT_UNTIL} will
+        DELETED(2),
+        seqNo = in.readZLong();
+        return getShardInfo().status();
+    }
+        }
+            }
+        }
+                // index uuid and shard id are unknown and can't be parsed back for now.
+import org.opensearch.index.seqno.SequenceNumbers;
+        final int bufferSize;
+        }
+    @Override
+        }
+    /**
+    }
+                    throw new IllegalArgumentException("Unknown result code: " + opcode);
+        public void setVersion(Long version) {
+        @Override
+    }
+     */
+     * wasn't performed (i.e., an update operation that resulted in a NOOP).
+            return shardId;
+            out.writeByte(op);
+     * This method is intended to be called by subclasses and must be called multiple times to parse all the information concerning
+        forcedRefresh = in.readBoolean();
+        token = parser.nextToken();
+     * @return the primary term
+    public boolean forcedRefresh() {
+    /**
+            return id;
+import org.opensearch.core.common.io.stream.StreamOutput;
+        }
+        location.append('/').append(encodedId);
+        return primaryTerm;
+                case 3:
+        out.writeZLong(version);
+    private static final String FORCED_REFRESH = "forced_refresh";
+        public void setResult(Result result) {
+    public enum Result implements Writeable {
+    }
+    private boolean forcedRefresh;
+            throw new AssertionError(e);
+            if (_INDEX.equals(currentFieldName)) {
+            switch (opcode) {
+        CREATED(0),
+import java.net.URLEncoder;
+        builder.endObject();
+    }
+            builder.field(_SEQ_NO, getSeqNo());
+        }
+        location.append('/').append(encodedIndex);
+    }
+                    return CREATED;
+        }
+        NOOP(4);
+        version = in.readZLong();
+            this.forcedRefresh = forcedRefresh;
+                    return NOOP;
+    private static final String _ID = "_id";
+import org.opensearch.common.annotation.PublicApi;
+                context.setVersion(parser.longValue());
+        forcedRefresh = in.readBoolean();
+        final String encodedIndex;
+     */
+        protected Result result = null;
+    public void writeTo(StreamOutput out) throws IOException {
+     * if needed and then immediately returns.
+        out.writeString(id);
+     * The primary term for this change.
+        }
+        out.writeBoolean(forcedRefresh);
+    public void writeThin(StreamOutput out) throws IOException {
+                }
+ * ownership. Elasticsearch licenses this file to you under
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        try {
+import org.opensearch.common.xcontent.StatusToXContentObject;
+    /**
+    public Result getResult() {
+        }
+            }
+        public void setSeqNo(long seqNo) {
+            assert MapperService.SINGLE_MAPPING_NAME.equals(type) : "Expected [_doc] but received [" + type + "]";
+        public void setForcedRefresh(boolean forcedRefresh) {
+            } else if (_VERSION.equals(currentFieldName)) {
+                context.setForcedRefresh(parser.booleanValue());
+import org.opensearch.index.IndexSettings;
+     * @opensearch.api
+        return forcedRefresh;
+import org.opensearch.action.support.WriteRequest;
+                case 4:
+        return location.toString();
+     */
+    public String getLocation(@Nullable String routing) {
+                    return UPDATED;
+        super.writeTo(out);
+     */
+        this.version = version;
+    }
+     * The id of the document changed.
+ * Modifications Copyright OpenSearch Contributors. See
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        id = in.readString();
+        this.id = Objects.requireNonNull(id);
+    }
+        this.primaryTerm = primaryTerm;
+        builder.field(_SHARDS, shardInfo);
+        super.writeTo(out);
+     */
+        this.seqNo = seqNo;
+    private final long seqNo;
+        result = Result.readFrom(in);
+            location.append(routingStart).append(encodedRouting);
+    /**
+ * A base class for the response of a write operation that involves a single doc
+        builder.field(_INDEX, shardId.getIndexName());
+            this.primaryTerm = primaryTerm;
+     * permitted as of HTTP/1.1 (cf. https://tools.ietf.org/html/rfc7231#section-7.1.2).
+        innerToXContent(builder, params);
+    @Override
+ * @opensearch.api
+        }
+ *
+        if (in.getVersion().before(Version.V_2_0_0)) {
+package org.opensearch.action;
+import java.util.Objects;
+        public abstract DocWriteResponse build();
+        }
+    @Override
+            if (_SHARDS.equals(currentFieldName)) {
+        if (out.getVersion().before(Version.V_2_0_0)) {
+            this.version = version;
+     */
+import org.opensearch.index.mapper.MapperService;
+     */
+                case 0:
+ * KIND, either express or implied.  See the License for the
+    private static final String RESULT = "result";
+            this.shardId = shardId;
+    }
+                    if (r.getLowercase().equals(result)) {
+    public long getSeqNo() {
+import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
+    private static final String _VERSION = "_version";
+        this.shardId = Objects.requireNonNull(shardId);
+ *
+        }
+import org.opensearch.action.support.WriteRequest.RefreshPolicy;
+    private final ShardId shardId;
+        protected long primaryTerm = UNASSIGNED_PRIMARY_TERM;
 }
+            builder.field(_PRIMARY_TERM, getPrimaryTerm());
+        builder.field(_ID, id).field(_VERSION, version).field(RESULT, getResult().getLowercase());
+            builder.field(FORCED_REFRESH, true);
+        writeWithoutShardId(out);
+        this.forcedRefresh = forcedRefresh;
+     * @opensearch.internal
+        XContentParser.Token token = parser.currentToken();
+        NOT_FOUND(3),
+        protected boolean forcedRefresh;
+                default:
+        return builder;
+        public void setPrimaryTerm(long primaryTerm) {
+ * software distributed under the License is distributed on an
+ * this file be licensed under the Apache-2.0 license or a
+    }
+    /**
+        public void setShardInfo(ShardInfo shardInfo) {
+     *
+    public String getIndex() {
+     * Returns the current version of the doc.
+    public abstract static class Builder {
+        primaryTerm = in.readVLong();
+    private void writeWithoutShardId(StreamOutput out) throws IOException {
+                        context.setResult(r);
+    private static final String _INDEX = "_index";
+ * license agreements. See the NOTICE file distributed with

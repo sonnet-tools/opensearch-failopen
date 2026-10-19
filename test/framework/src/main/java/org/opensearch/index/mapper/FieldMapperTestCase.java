@@ -1,264 +1,236 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.analysis.core.KeywordAnalyzer;
-import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.opensearch.Version;
-import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.IndexService;
-import org.opensearch.index.analysis.AnalyzerScope;
-import org.opensearch.index.analysis.NamedAnalyzer;
-import org.opensearch.test.OpenSearchSingleNodeTestCase;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
-import java.util.function.BiConsumer;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-
-/**
- * Base class for testing {@link FieldMapper}s.
- * @param <T> builder for the mapper to test
- * @deprecated prefer {@link FieldMapperTestCase2}
- */
-@Deprecated
-public abstract class FieldMapperTestCase<T extends FieldMapper.Builder<?>> extends OpenSearchSingleNodeTestCase {
-
-    protected final Settings SETTINGS = Settings.builder().put("index.version.created", Version.CURRENT).build();
-
-    private final class Modifier {
-        final String property;
-        final boolean updateable;
-        final BiConsumer<T, T> modifier;
-
-        Modifier(String property, boolean updateable, BiConsumer<T, T> modifier) {
-            this.property = property;
-            this.updateable = updateable;
-            this.modifier = modifier;
-        }
-
-        void apply(T first, T second) {
-            modifier.accept(first, second);
-        }
-    }
-
-    private Modifier booleanModifier(String name, boolean updateable, BiConsumer<T, Boolean> method) {
-        return new Modifier(name, updateable, (a, b) -> {
-            method.accept(a, true);
-            method.accept(b, false);
-        });
-    }
-
-    protected Set<String> unsupportedProperties() {
-        return Collections.emptySet();
-    }
-
-    private final List<Modifier> modifiers = new ArrayList<>(Arrays.asList(new Modifier("analyzer", false, (a, b) -> {
-        a.indexAnalyzer(new NamedAnalyzer("standard", AnalyzerScope.INDEX, new StandardAnalyzer()));
-        a.indexAnalyzer(new NamedAnalyzer("keyword", AnalyzerScope.INDEX, new KeywordAnalyzer()));
-    }), new Modifier("boost", true, (a, b) -> {
-        a.boost(1.1f);
-        b.boost(1.2f);
-    }), new Modifier("doc_values", false, (a, b) -> {
-        a.docValues(true);
-        b.docValues(false);
-    }),
-        booleanModifier("eager_global_ordinals", true, (a, t) -> a.setEagerGlobalOrdinals(t)),
-        booleanModifier("index", false, (a, t) -> a.index(t)),
-        booleanModifier("norms", false, FieldMapper.Builder::omitNorms),
-        new Modifier("search_analyzer", true, (a, b) -> {
-            a.searchAnalyzer(new NamedAnalyzer("standard", AnalyzerScope.INDEX, new StandardAnalyzer()));
-            a.searchAnalyzer(new NamedAnalyzer("keyword", AnalyzerScope.INDEX, new KeywordAnalyzer()));
-        }),
-        new Modifier("search_quote_analyzer", true, (a, b) -> {
-            a.searchQuoteAnalyzer(new NamedAnalyzer("standard", AnalyzerScope.INDEX, new StandardAnalyzer()));
-            a.searchQuoteAnalyzer(new NamedAnalyzer("whitespace", AnalyzerScope.INDEX, new WhitespaceAnalyzer()));
-        }),
-        new Modifier("store", false, (a, b) -> {
-            a.store(true);
+     * <p>
+                continue;
             b.store(false);
-        }),
-        new Modifier("term_vector", false, (a, b) -> {
-            a.storeTermVectors(true);
-            b.storeTermVectors(false);
-        }),
-        new Modifier("term_vector_positions", false, (a, b) -> {
-            a.storeTermVectors(true);
-            b.storeTermVectors(true);
-            a.storeTermVectorPositions(true);
+ */
+ * this file be licensed under the Apache-2.0 license or a
+ * GitHub history for details.
+    protected Set<String> unsupportedProperties() {
             b.storeTermVectorPositions(false);
-        }),
-        new Modifier("term_vector_payloads", false, (a, b) -> {
-            a.storeTermVectors(true);
-            b.storeTermVectors(true);
-            a.storeTermVectorPositions(true);
-            b.storeTermVectorPositions(true);
-            a.storeTermVectorPayloads(true);
-            b.storeTermVectorPayloads(false);
-        }),
-        new Modifier("term_vector_offsets", false, (a, b) -> {
-            a.storeTermVectors(true);
-            b.storeTermVectors(true);
-            a.storeTermVectorPositions(true);
-            b.storeTermVectorPositions(true);
-            a.storeTermVectorOffsets(true);
-            b.storeTermVectorOffsets(false);
-        })
-    ));
-
-    /**
-     * Add type-specific modifiers for consistency checking.
-     * <p>
-     * This should be called in a {@code @Before} method
-     */
-    protected void addModifier(String property, boolean updateable, BiConsumer<T, T> method) {
+import org.opensearch.Version;
+    private final List<Modifier> modifiers = new ArrayList<>(Arrays.asList(new Modifier("analyzer", false, (a, b) -> {
+    }
+            modifier.accept(first, second);
+import org.opensearch.core.xcontent.XContentBuilder;
         modifiers.add(new Modifier(property, updateable, method));
-    }
-
-    /**
-     * Add type-specific modifiers for consistency checking.
-     * <p>
-     * This should be called in a {@code @Before} method
-     */
-    protected void addBooleanModifier(String property, boolean updateable, BiConsumer<T, Boolean> method) {
-        modifiers.add(new Modifier(property, updateable, (a, b) -> {
-            method.accept(a, true);
-            method.accept(b, false);
-        }));
-    }
-
-    protected abstract T newBuilder();
-
-    public void testMergeConflicts() {
-        Mapper.BuilderContext context = new Mapper.BuilderContext(SETTINGS, new ContentPath(1));
-        T builder1 = newBuilder();
-        T builder2 = newBuilder();
-        {
-            FieldMapper mapper = (FieldMapper) builder1.build(context);
-            FieldMapper toMerge = (FieldMapper) builder2.build(context);
-            mapper.merge(toMerge);  // identical mappers should merge with no issue
-        }
-        {
-            FieldMapper mapper = (FieldMapper) newBuilder().build(context);
-            FieldMapper toMerge = new MockFieldMapper("bogus") {
-                @Override
-                protected String contentType() {
-                    return "bogustype";
-                }
-            };
-            IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> mapper.merge(toMerge));
-            assertThat(e.getMessage(), containsString("cannot be changed from type"));
-            assertThat(e.getMessage(), containsString("bogustype"));
-        }
-        for (Modifier modifier : modifiers) {
-            if (unsupportedProperties().contains(modifier.property)) {
-                continue;
-            }
-            builder1 = newBuilder();
-            builder2 = newBuilder();
-            modifier.apply(builder1, builder2);
-            FieldMapper mapper = (FieldMapper) builder1.build(context);
-            FieldMapper toMerge = (FieldMapper) builder2.build(context);
-            if (modifier.updateable) {
-                mapper.merge(toMerge);
-            } else {
-                IllegalArgumentException e = expectThrows(
-                    IllegalArgumentException.class,
                     "Expected an error when merging property difference " + modifier.property,
-                    () -> mapper.merge(toMerge)
-                );
-                assertThat(e.getMessage(), containsString(modifier.property));
-            }
-        }
+     * <p>
+            b.storeTermVectors(true);
+        booleanModifier("index", false, (a, t) -> a.index(t)),
+            FieldMapper mapper = (FieldMapper) newBuilder().build(context);
     }
-
-    public void testSerialization() throws IOException {
-        for (Modifier modifier : modifiers) {
-            if (unsupportedProperties().contains(modifier.property)) {
-                continue;
-            }
-            T builder1 = newBuilder();
-            T builder2 = newBuilder();
+    protected abstract T newBuilder();
+        }
             modifier.apply(builder1, builder2);
-            assertSerializes(modifier.property + "-a", builder1);
-            assertSerializes(modifier.property + "-b", builder2);
-        }
-    }
-
-    protected Settings getIndexMapperSettings() {
-        return Settings.EMPTY;
-    }
-
-    protected void assertSerializes(String indexname, T builder) throws IOException {
-
-        // TODO can we do this without building an entire index?
         IndexService index = createIndex("serialize-" + indexname, getIndexMapperSettings());
-        MapperService mapperService = index.mapperService();
-
-        Mapper.BuilderContext context = new Mapper.BuilderContext(SETTINGS, new ContentPath(1));
-
+        b.docValues(false);
+ * compatible open source license.
+     */
         String mappings = mappingsToString(builder.build(context), false);
-        String mappingsWithDefault = mappingsToString(builder.build(context), true);
-
-        mapperService.merge("_doc", new CompressedXContent(mappings), MapperService.MergeReason.MAPPING_UPDATE);
-
-        Mapper rebuilt = mapperService.documentMapper().mappers().getMapper(builder.name);
-        String reparsed = mappingsToString(rebuilt, false);
-        String reparsedWithDefault = mappingsToString(rebuilt, true);
-
-        assertThat(reparsed, equalTo(mappings));
-        assertThat(reparsedWithDefault, equalTo(mappingsWithDefault));
+    /**
+ * the Apache License, Version 2.0 (the "License"); you may
+        x.startObject().startObject("properties");
+        new Modifier("search_analyzer", true, (a, b) -> {
+ * @param <T> builder for the mapper to test
+ * license agreements. See the NOTICE file distributed with
+/*
+            }
+ * ownership. Elasticsearch licenses this file to you under
+            FieldMapper mapper = (FieldMapper) builder1.build(context);
+            builder1 = newBuilder();
+     * Add type-specific modifiers for consistency checking.
+            a.searchAnalyzer(new NamedAnalyzer("keyword", AnalyzerScope.INDEX, new KeywordAnalyzer()));
+import org.apache.lucene.analysis.core.KeywordAnalyzer;
+        return Settings.EMPTY;
+ * software distributed under the License is distributed on an
+            } else {
+import java.util.List;
+        void apply(T first, T second) {
+            a.searchQuoteAnalyzer(new NamedAnalyzer("whitespace", AnalyzerScope.INDEX, new WhitespaceAnalyzer()));
     }
-
-    private String mappingsToString(ToXContent builder, boolean includeDefaults) throws IOException {
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+     */
+            method.accept(a, true);
+            }
+    }
+            a.searchAnalyzer(new NamedAnalyzer("standard", AnalyzerScope.INDEX, new StandardAnalyzer()));
+        new Modifier("term_vector", false, (a, b) -> {
+        }),
+    ));
+import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
+import org.opensearch.common.xcontent.json.JsonXContent;
+            b.storeTermVectors(true);
+import java.util.ArrayList;
+        booleanModifier("eager_global_ordinals", true, (a, t) -> a.setEagerGlobalOrdinals(t)),
+            a.searchQuoteAnalyzer(new NamedAnalyzer("standard", AnalyzerScope.INDEX, new StandardAnalyzer()));
+        });
+     * This should be called in a {@code @Before} method
+                    IllegalArgumentException.class,
+        T builder1 = newBuilder();
+            mapper.merge(toMerge);  // identical mappers should merge with no issue
+ * KIND, either express or implied.  See the License for the
+        a.indexAnalyzer(new NamedAnalyzer("keyword", AnalyzerScope.INDEX, new KeywordAnalyzer()));
+ * under the License.
+            assertThat(e.getMessage(), containsString("cannot be changed from type"));
+import java.util.Set;
+            a.storeTermVectorPayloads(true);
+            this.modifier = modifier;
+            assertThat(e.getMessage(), containsString("bogustype"));
+        return new Modifier(name, updateable, (a, b) -> {
+ */
+            T builder1 = newBuilder();
+                    () -> mapper.merge(toMerge)
+            T builder2 = newBuilder();
+        modifiers.add(new Modifier(property, updateable, (a, b) -> {
+        XContentBuilder x = JsonXContent.contentBuilder();
+        }));
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.common.settings.Settings;
+        Mapper.BuilderContext context = new Mapper.BuilderContext(SETTINGS, new ContentPath(1));
+        })
+        String reparsed = mappingsToString(rebuilt, false);
+            a.storeTermVectors(true);
+            if (unsupportedProperties().contains(modifier.property)) {
+            a.storeTermVectorPositions(true);
+    }
+ * specific language governing permissions and limitations
+ * not use this file except in compliance with the License.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.index.analysis.AnalyzerScope;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
+    protected Settings getIndexMapperSettings() {
+        b.boost(1.2f);
+                continue;
+ */
+        String mappingsWithDefault = mappingsToString(builder.build(context), true);
+@Deprecated
+            a.storeTermVectors(true);
+        String reparsedWithDefault = mappingsToString(rebuilt, true);
+    protected void addBooleanModifier(String property, boolean updateable, BiConsumer<T, Boolean> method) {
+        {
+        a.boost(1.1f);
+ */
+            this.property = property;
+import java.util.function.BiConsumer;
+                mapper.merge(toMerge);
+    }
+    protected void assertSerializes(String indexname, T builder) throws IOException {
+            a.storeTermVectors(true);
+        for (Modifier modifier : modifiers) {
+        Mapper rebuilt = mapperService.documentMapper().mappers().getMapper(builder.name);
+        }),
+                    return "bogustype";
+import org.opensearch.index.analysis.NamedAnalyzer;
+                );
         ToXContent.Params params = includeDefaults
             ? new ToXContent.MapParams(Collections.singletonMap("include_defaults", "true"))
-            : ToXContent.EMPTY_PARAMS;
-        XContentBuilder x = JsonXContent.contentBuilder();
-        x.startObject().startObject("properties");
-        builder.toXContent(x, params);
-        x.endObject().endObject();
-        return x.toString();
+            modifier.apply(builder1, builder2);
+        assertThat(reparsedWithDefault, equalTo(mappingsWithDefault));
+        }
+    protected final Settings SETTINGS = Settings.builder().put("index.version.created", Version.CURRENT).build();
+        mapperService.merge("_doc", new CompressedXContent(mappings), MapperService.MergeReason.MAPPING_UPDATE);
+            a.storeTermVectorOffsets(true);
+        final String property;
     }
+        builder.toXContent(x, params);
+                IllegalArgumentException e = expectThrows(
+ * this work for additional information regarding copyright
+            assertSerializes(modifier.property + "-a", builder1);
+ *
+        }),
+    private final class Modifier {
+        new Modifier("search_quote_analyzer", true, (a, b) -> {
+        new Modifier("term_vector_offsets", false, (a, b) -> {
+     * Add type-specific modifiers for consistency checking.
+            if (unsupportedProperties().contains(modifier.property)) {
+ * Base class for testing {@link FieldMapper}s.
+        x.endObject().endObject();
+import static org.hamcrest.Matchers.equalTo;
+            b.storeTermVectorPayloads(false);
+ * Unless required by applicable law or agreed to in writing,
+ * Modifications Copyright OpenSearch Contributors. See
+        final boolean updateable;
+    public void testSerialization() throws IOException {
+            FieldMapper mapper = (FieldMapper) builder1.build(context);
+    protected void addModifier(String property, boolean updateable, BiConsumer<T, T> method) {
+ * You may obtain a copy of the License at
+        }),
+        new Modifier("store", false, (a, b) -> {
 }
+            FieldMapper toMerge = (FieldMapper) builder2.build(context);
+    }), new Modifier("doc_values", false, (a, b) -> {
+        }
+    public void testMergeConflicts() {
+import java.util.Arrays;
+            this.updateable = updateable;
+            builder2 = newBuilder();
+    }
+            a.storeTermVectors(true);
+ * Licensed to Elasticsearch under one or more contributor
+        }
+/**
+            };
+    }
+                protected String contentType() {
+        assertThat(reparsed, equalTo(mappings));
+        }
+package org.opensearch.index.mapper;
+            a.store(true);
+            FieldMapper toMerge = new MockFieldMapper("bogus") {
+            method.accept(b, false);
+import org.opensearch.common.compress.CompressedXContent;
+    private String mappingsToString(ToXContent builder, boolean includeDefaults) throws IOException {
+        }
+import java.io.IOException;
+            b.storeTermVectors(false);
+ * @deprecated prefer {@link FieldMapperTestCase2}
+                assertThat(e.getMessage(), containsString(modifier.property));
+/*
+            method.accept(a, true);
+            a.storeTermVectorPositions(true);
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.index.IndexService;
+        // TODO can we do this without building an entire index?
+        Mapper.BuilderContext context = new Mapper.BuilderContext(SETTINGS, new ContentPath(1));
+ *
+            IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> mapper.merge(toMerge));
+            : ToXContent.EMPTY_PARAMS;
+ *
+                @Override
+            b.storeTermVectorOffsets(false);
+        final BiConsumer<T, T> modifier;
+    }),
+import static org.hamcrest.Matchers.containsString;
+        for (Modifier modifier : modifiers) {
+            method.accept(b, false);
+     * This should be called in a {@code @Before} method
+        a.docValues(true);
+        new Modifier("term_vector_positions", false, (a, b) -> {
+import org.opensearch.core.xcontent.ToXContent;
+    /**
+            b.storeTermVectorPositions(true);
+    }), new Modifier("boost", true, (a, b) -> {
+        {
+            if (modifier.updateable) {
+            a.storeTermVectorPositions(true);
+            b.storeTermVectorPositions(true);
+            b.storeTermVectors(true);
+    }
+        a.indexAnalyzer(new NamedAnalyzer("standard", AnalyzerScope.INDEX, new StandardAnalyzer()));
+/*
+        new Modifier("term_vector_payloads", false, (a, b) -> {
+        Modifier(String property, boolean updateable, BiConsumer<T, T> modifier) {
+        MapperService mapperService = index.mapperService();
+        T builder2 = newBuilder();
+        }),
+        }),
+        return Collections.emptySet();
+public abstract class FieldMapperTestCase<T extends FieldMapper.Builder<?>> extends OpenSearchSingleNodeTestCase {
+    private Modifier booleanModifier(String name, boolean updateable, BiConsumer<T, Boolean> method) {
+            assertSerializes(modifier.property + "-b", builder2);
+import java.util.Collections;
+            FieldMapper toMerge = (FieldMapper) builder2.build(context);
+            }
+        booleanModifier("norms", false, FieldMapper.Builder::omitNorms),
+                }
+        return x.toString();

@@ -1,379 +1,336 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.metadata;
-
-import org.apache.lucene.document.LongPoint;
-import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.PointValues;
-import org.opensearch.OpenSearchException;
-import org.opensearch.cluster.AbstractDiffable;
-import org.opensearch.cluster.Diff;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-
-/**
- * Primary DataStream class
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public final class DataStream extends AbstractDiffable<DataStream> implements ToXContentObject {
-
-    public static final String BACKING_INDEX_PREFIX = ".ds-";
-    public static final String TIMESERIES_FIELDNAME = "@timestamp";
-    public static final Comparator<LeafReader> TIMESERIES_LEAF_SORTER = Comparator.comparingLong((LeafReader r) -> {
-        try {
-            PointValues points = r.getPointValues(TIMESERIES_FIELDNAME);
-            if (points != null) {
-                // could be a multipoint (probably not) but get the maximum time value anyway
-                byte[] sortValue = points.getMaxPackedValue();
-                // decode the first dimension because this should not be a multi dimension field
-                // it's a bug in the date field if it is
-                return LongPoint.decodeDimension(sortValue, 0);
-            } else {
-                // segment does not have a timestamp field, just return the minimum value
-                return Long.MIN_VALUE;
-            }
-        } catch (IOException e) {
-            throw new OpenSearchException("Not a timeseries Index! Field [{}] not found!", TIMESERIES_FIELDNAME);
         }
-    }).reversed();
-
-    private final String name;
-    private final TimestampField timeStampField;
-    private final List<Index> indices;
-    private final long generation;
-
-    public DataStream(String name, TimestampField timeStampField, List<Index> indices, long generation) {
-        this.name = name;
+        }
         this.timeStampField = timeStampField;
-        this.indices = Collections.unmodifiableList(indices);
-        this.generation = generation;
-        assert indices.size() > 0;
+        out.writeString(name);
+    static long backingIndexCounterOrMin(String dataStreamName, String indexName) {
+     * @opensearch.api
+import org.opensearch.core.xcontent.ToXContentObject;
+        PARSER.declareObject(ConstructingObjectParser.constructorArg(), TimestampField.PARSER, TIMESTAMP_FIELD_FIELD);
         assert indices.get(indices.size() - 1).getName().equals(getDefaultBackingIndexName(name, generation));
-    }
-
-    public DataStream(String name, TimestampField timeStampField, List<Index> indices) {
-        this(name, timeStampField, indices, indices.size());
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public TimestampField getTimeStampField() {
-        return timeStampField;
-    }
-
-    public List<Index> getIndices() {
-        return indices;
-    }
-
-    public long getGeneration() {
-        return generation;
-    }
-
-    /**
-     * Performs a rollover on a {@code DataStream} instance and returns a new instance containing
-     * the updated list of backing indices and incremented generation.
-     *
-     * @param newWriteIndex the new write backing index. Must conform to the naming convention for
-     *                      backing indices on data streams. See {@link #getDefaultBackingIndexName}.
-     * @return new {@code DataStream} instance with the rollover operation applied
-     */
-    public DataStream rollover(Index newWriteIndex) {
+        int counterDash = indexName.lastIndexOf('-');
         assert newWriteIndex.getName().equals(getDefaultBackingIndexName(name, generation + 1));
-        List<Index> backingIndices = new ArrayList<>(indices);
-        backingIndices.add(newWriteIndex);
-        return new DataStream(name, timeStampField, backingIndices, generation + 1);
-    }
-
-    /**
-     * Removes the specified backing index and returns a new {@code DataStream} instance with
-     * the remaining backing indices.
-     *
-     * @param index the backing index to remove
-     * @return new {@code DataStream} instance with the remaining backing indices
-     */
-    public DataStream removeBackingIndex(Index index) {
-        List<Index> backingIndices = new ArrayList<>(indices);
         backingIndices.remove(index);
-        assert backingIndices.size() == indices.size() - 1;
-        return new DataStream(name, timeStampField, backingIndices, generation);
+        return String.format(Locale.ROOT, BACKING_INDEX_PREFIX + "%s-%06d", dataStreamName, generation);
+     */
+                )
     }
-
+    @PublicApi(since = "1.0.0")
+            this.name = name;
+        return indexName.substring(BACKING_INDEX_PREFIX.length(), counterDash);
+ * The OpenSearch Contributors require contributions made to
+    static {
+import org.opensearch.core.common.io.stream.Writeable;
+    public DataStream removeBackingIndex(Index index) {
+    public static Diff<DataStream> readDiffFrom(StreamInput in) throws IOException {
+    @Override
+        List<Index> backingIndices = new ArrayList<>(indices);
+     * Performs a rollover on a {@code DataStream} instance and returns a new instance containing
+        return new DataStream(name, timeStampField, backingIndices, generation);
+            throw new IllegalArgumentException(
+ * Modifications Copyright OpenSearch Contributors. See
+        }
+ * specific language governing permissions and limitations
+import org.opensearch.cluster.AbstractDiffable;
+     * Replaces the specified backing index with a new index and returns a new {@code DataStream} instance with
+import org.opensearch.core.common.io.stream.StreamOutput;
+        this(in.readString(), new TimestampField(in), in.readList(Index::new), in.readVLong());
+ */
+            builder.field(NAME_FIELD.getPreferredName(), name);
+        builder.endObject();
+        }
+        }
+                return Long.MIN_VALUE;
+            this.name = in.readString();
+     * A timestamp field.
+ *
+            return null;
+        PARSER.declareLong(ConstructingObjectParser.constructorArg(), GENERATION_FIELD);
+    public static final ParseField GENERATION_FIELD = new ParseField("generation");
+    /**
+            return Objects.hash(name);
+            && indices.equals(that.indices)
+     * the modified backing indices. An {@code IllegalArgumentException} is thrown if the index to be replaced
+    @Override
+        }
+            return Collections.singletonMap(NAME_FIELD.getPreferredName(), name);
+     * Returns the generation counter of a backing index named {@code .ds-<dataStreamName>-NNNNNN}, or
+        try {
+    }
+            );
+ * not use this file except in compliance with the License.
+ * ownership. Elasticsearch licenses this file to you under
+        return PARSER.parse(parser, null);
+        @Override
+                return null;
+            return builder;
+        out.writeVLong(generation);
+    /**
+     * never become the write index.
+     * generation unchanged.
+import java.util.Collections;
+/**
+     * @param generation generation of the data stream
+    public static final ParseField TIMESTAMP_FIELD_FIELD = new ParseField("timestamp_field");
+                // decode the first dimension because this should not be a multi dimension field
+    private final TimestampField timeStampField;
+     */
+            throw new OpenSearchException("Not a timeseries Index! Field [{}] not found!", TIMESERIES_FIELDNAME);
+    }
+        return new DataStream(name, timeStampField, backingIndices, generation);
+ */
+     * @return new {@code DataStream} instance with the remaining backing indices
+    /**
+        return Objects.hash(name, timeStampField, indices, generation);
+            PointValues points = r.getPointValues(TIMESERIES_FIELDNAME);
+import java.util.ArrayList;
+    private static final ConstructingObjectParser<DataStream, Void> PARSER = new ConstructingObjectParser<>(
+            args -> new TimestampField((String) args[0])
+        return builder;
+        @Override
+        }
+     *
+import org.opensearch.common.annotation.PublicApi;
+    }
+        public String getName() {
+        }
+     * @param existingBackingIndex the backing index to be replaced
+    public static String parseDataStreamName(String indexName) {
+    }
+        builder.startObject();
+     *
+        List<Index> backingIndices = new ArrayList<>(indices);
+    private final long generation;
+                    name
+        builder.field(GENERATION_FIELD.getPreferredName(), generation);
+        }
+        backingIndices.add(index);
+    public static String getDefaultBackingIndexName(String dataStreamName, long generation) {
+    }
+     * {@link Long#MIN_VALUE} for any other name so that non-convention indices sort before convention-named ones and
+        if (counterDash <= BACKING_INDEX_PREFIX.length()) {
+    /**
+        @SuppressWarnings("unchecked")
+    }).reversed();
+    public DataStream addBackingIndex(Index index) {
+        this.indices = Collections.unmodifiableList(indices);
+        @Override
+            return null;
+ */
     /**
      * Adds the given index to the data stream's backing indices and returns a new {@code DataStream} instance. Backing
-     * indices are ordered oldest-to-newest so the write index remains last: convention-named indices
-     * ({@code .ds-<name>-NNNNNN}) order by their counter, and non-convention names sort first. The generation is derived
-     * as the highest backing-index counter, so adding an index whose counter exceeds the current generation advances
-     * the generation and makes it the new write index; adding a lower-counter or non-convention index leaves the
-     * generation unchanged.
-     *
-     * @param index the backing index to add
-     * @return new {@code DataStream} instance with the index added
-     */
-    public DataStream addBackingIndex(Index index) {
-        List<Index> backingIndices = new ArrayList<>(indices);
-        backingIndices.add(index);
-        backingIndices.sort(Comparator.comparingLong(i -> backingIndexCounterOrMin(name, i.getName())));
-        long newGeneration = Math.max(generation, backingIndexCounterOrMin(name, index.getName()));
-        return new DataStream(name, timeStampField, backingIndices, newGeneration);
-    }
-
-    /**
-     * Returns the generation counter of a backing index named {@code .ds-<dataStreamName>-NNNNNN}, or
-     * {@link Long#MIN_VALUE} for any other name so that non-convention indices sort before convention-named ones and
-     * never become the write index.
-     */
-    static long backingIndexCounterOrMin(String dataStreamName, String indexName) {
-        if (dataStreamName.equals(parseDataStreamName(indexName)) == false) {
-            return Long.MIN_VALUE;
+            if (o == null || getClass() != o.getClass()) return false;
         }
-        return Long.parseLong(indexName.substring(indexName.lastIndexOf('-') + 1));
-    }
-
-    /**
-     * If {@code indexName} follows the data stream backing-index naming convention {@code .ds-<dataStream>-NNNNNN}
-     * (a numeric counter suffix), returns the {@code <dataStream>} portion; otherwise returns {@code null}.
+    public static final ParseField NAME_FIELD = new ParseField("name");
+    public static DataStream fromXContent(XContentParser parser) throws IOException {
+        public boolean equals(Object o) {
+ * compatible open source license.
+import org.opensearch.core.xcontent.XContentParser;
+        }
+        backingIndices.add(newWriteIndex);
+            } else {
      */
-    public static String parseDataStreamName(String indexName) {
-        if (indexName.startsWith(BACKING_INDEX_PREFIX) == false) {
-            return null;
-        }
-        int counterDash = indexName.lastIndexOf('-');
-        if (counterDash <= BACKING_INDEX_PREFIX.length()) {
-            return null;
-        }
+ * the Apache License, Version 2.0 (the "License"); you may
+    public static final String BACKING_INDEX_PREFIX = ".ds-";
+     */
+            if (points != null) {
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         String counter = indexName.substring(counterDash + 1);
-        if (counter.isEmpty()) {
-            return null;
+import org.opensearch.cluster.Diff;
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+/*
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.core.index.Index;
+     * the generation and makes it the new write index; adding a lower-counter or non-convention index leaves the
+import org.apache.lucene.index.PointValues;
+     * the remaining backing indices.
+        public static final ConstructingObjectParser<TimestampField, Void> PARSER = new ConstructingObjectParser<>(
+        this.generation = generation;
+        DataStream that = (DataStream) o;
+                String.format(
         }
-        for (int i = 0; i < counter.length(); i++) {
+    }
             if (Character.isDigit(counter.charAt(i)) == false) {
-                return null;
+     * Generates the name of the index that conforms to the default naming convention for backing indices
+import org.opensearch.core.ParseField;
+        return generation;
+    }
+     * @param index the backing index to remove
+    }
+/*
+            builder.startObject();
+     * indices are ordered oldest-to-newest so the write index remains last: convention-named indices
+        PARSER.declareObjectArray(ConstructingObjectParser.constructorArg(), (p, c) -> Index.fromXContent(p), INDICES_FIELD);
+        assert backingIndices.size() == indices.size() - 1;
+        List<Index> backingIndices = new ArrayList<>(indices);
+        args -> new DataStream((String) args[0], (TimestampField) args[1], (List<Index>) args[2], (Long) args[3])
+    public void writeTo(StreamOutput out) throws IOException {
+        public TimestampField(String name) {
+     *
+        public void writeTo(StreamOutput out) throws IOException {
+import java.util.Locale;
+    public String getName() {
+     */
+package org.opensearch.cluster.metadata;
+    public DataStream rollover(Index newWriteIndex) {
+    private final String name;
+        }
+     * is not a backing index for this data stream or if it is the {@code DataStream}'s write index.
+            if (this == o) return true;
+        return new DataStream(name, timeStampField, backingIndices, newGeneration);
+                    Locale.ROOT,
+        );
+    }
+        builder.field(INDICES_FIELD.getPreferredName(), indices);
+    }
+    /**
+    public boolean equals(Object o) {
+    public static final class TimestampField implements Writeable, ToXContentObject {
+                    "cannot replace backing index [%s] of data stream [%s] because " + "it is the write index",
+     *                      backing indices on data streams. See {@link #getDefaultBackingIndexName}.
+     *
+                // segment does not have a timestamp field, just return the minimum value
+        return indices;
+    public DataStream(String name, TimestampField timeStampField, List<Index> indices, long generation) {
+import java.util.Map;
+ *
+        public Map<String, Object> toMap() {
+     *
+                // could be a multipoint (probably not) but get the maximum time value anyway
+ *
+        }
+    public static final Comparator<LeafReader> TIMESERIES_LEAF_SORTER = Comparator.comparingLong((LeafReader r) -> {
+        return name;
+        public TimestampField(StreamInput in) throws IOException {
+            builder.endObject();
+     * (a numeric counter suffix), returns the {@code <dataStream>} portion; otherwise returns {@code null}.
+     * If {@code indexName} follows the data stream backing-index naming convention {@code .ds-<dataStream>-NNNNNN}
+        return Long.parseLong(indexName.substring(indexName.lastIndexOf('-') + 1));
+    @Override
+     * @param newWriteIndex the new write backing index. Must conform to the naming convention for
+        return name.equals(that.name)
+    }
+    public DataStream(String name, TimestampField timeStampField, List<Index> indices) {
+            && generation == that.generation;
+     * @param dataStreamName name of the data stream
+    @SuppressWarnings("unchecked")
+        return new DataStream(name, timeStampField, backingIndices, generation + 1);
+        if (indexName.startsWith(BACKING_INDEX_PREFIX) == false) {
+        if (counter.isEmpty()) {
+import org.opensearch.core.xcontent.XContentBuilder;
+        int backingIndexPosition = backingIndices.indexOf(existingBackingIndex);
+import org.apache.lucene.index.LeafReader;
+     * existing index.
+            && timeStampField.equals(that.timeStampField)
+    }
+        for (int i = 0; i < counter.length(); i++) {
+        if (backingIndexPosition == -1) {
+    }
+        assert indices.size() > 0;
+    }
+ */
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.Objects;
+            "timestamp_field",
+                byte[] sortValue = points.getMaxPackedValue();
+        builder.field(NAME_FIELD.getPreferredName(), name);
+            out.writeString(name);
+     */
+        backingIndices.set(backingIndexPosition, newBackingIndex);
+     * on data streams given the specified data stream name and generation.
+    public TimestampField getTimeStampField() {
+        List<Index> backingIndices = new ArrayList<>(indices);
+    }
+            return Long.MIN_VALUE;
+ * this work for additional information regarding copyright
+    /**
             }
         }
-        return indexName.substring(BACKING_INDEX_PREFIX.length(), counterDash);
     }
-
-    /**
-     * Replaces the specified backing index with a new index and returns a new {@code DataStream} instance with
-     * the modified backing indices. An {@code IllegalArgumentException} is thrown if the index to be replaced
-     * is not a backing index for this data stream or if it is the {@code DataStream}'s write index.
-     *
-     * @param existingBackingIndex the backing index to be replaced
-     * @param newBackingIndex      the new index that will be part of the {@code DataStream}
-     * @return new {@code DataStream} instance with backing indices that contain replacement index instead of the specified
-     * existing index.
-     */
-    public DataStream replaceBackingIndex(Index existingBackingIndex, Index newBackingIndex) {
-        List<Index> backingIndices = new ArrayList<>(indices);
-        int backingIndexPosition = backingIndices.indexOf(existingBackingIndex);
-        if (backingIndexPosition == -1) {
-            throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "index [%s] is not part of data stream [%s] ", existingBackingIndex.getName(), name)
-            );
-        }
+        @Override
+ * Licensed to Elasticsearch under one or more contributor
+ * @opensearch.api
+            return null;
+     * as the highest backing-index counter, so adding an index whose counter exceeds the current generation advances
+     * @return new {@code DataStream} instance with the rollover operation applied
         if (generation == (backingIndexPosition + 1)) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "cannot replace backing index [%s] of data stream [%s] because " + "it is the write index",
-                    existingBackingIndex.getName(),
-                    name
-                )
-            );
-        }
-        backingIndices.set(backingIndexPosition, newBackingIndex);
-        return new DataStream(name, timeStampField, backingIndices, generation);
-    }
-
-    /**
-     * Generates the name of the index that conforms to the default naming convention for backing indices
-     * on data streams given the specified data stream name and generation.
-     *
-     * @param dataStreamName name of the data stream
-     * @param generation generation of the data stream
-     * @return backing index name
-     */
-    public static String getDefaultBackingIndexName(String dataStreamName, long generation) {
-        return String.format(Locale.ROOT, BACKING_INDEX_PREFIX + "%s-%06d", dataStreamName, generation);
-    }
-
-    public DataStream(StreamInput in) throws IOException {
-        this(in.readString(), new TimestampField(in), in.readList(Index::new), in.readVLong());
-    }
-
-    public static Diff<DataStream> readDiffFrom(StreamInput in) throws IOException {
-        return readDiffFrom(DataStream::new, in);
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(name);
-        timeStampField.writeTo(out);
-        out.writeList(indices);
-        out.writeVLong(generation);
-    }
-
-    public static final ParseField NAME_FIELD = new ParseField("name");
-    public static final ParseField TIMESTAMP_FIELD_FIELD = new ParseField("timestamp_field");
-    public static final ParseField INDICES_FIELD = new ParseField("indices");
-    public static final ParseField GENERATION_FIELD = new ParseField("generation");
-
-    @SuppressWarnings("unchecked")
-    private static final ConstructingObjectParser<DataStream, Void> PARSER = new ConstructingObjectParser<>(
-        "data_stream",
-        args -> new DataStream((String) args[0], (TimestampField) args[1], (List<Index>) args[2], (Long) args[3])
-    );
-
-    static {
-        PARSER.declareString(ConstructingObjectParser.constructorArg(), NAME_FIELD);
-        PARSER.declareObject(ConstructingObjectParser.constructorArg(), TimestampField.PARSER, TIMESTAMP_FIELD_FIELD);
-        PARSER.declareObjectArray(ConstructingObjectParser.constructorArg(), (p, c) -> Index.fromXContent(p), INDICES_FIELD);
-        PARSER.declareLong(ConstructingObjectParser.constructorArg(), GENERATION_FIELD);
-    }
-
-    public static DataStream fromXContent(XContentParser parser) throws IOException {
-        return PARSER.parse(parser, null);
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.field(NAME_FIELD.getPreferredName(), name);
-        builder.field(TIMESTAMP_FIELD_FIELD.getPreferredName(), timeStampField);
-        builder.field(INDICES_FIELD.getPreferredName(), indices);
-        builder.field(GENERATION_FIELD.getPreferredName(), generation);
-        builder.endObject();
-        return builder;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        DataStream that = (DataStream) o;
-        return name.equals(that.name)
-            && timeStampField.equals(that.timeStampField)
-            && indices.equals(that.indices)
-            && generation == that.generation;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(name, timeStampField, indices, generation);
-    }
-
-    /**
-     * A timestamp field.
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static final class TimestampField implements Writeable, ToXContentObject {
-
-        static ParseField NAME_FIELD = new ParseField("name");
-
-        @SuppressWarnings("unchecked")
-        public static final ConstructingObjectParser<TimestampField, Void> PARSER = new ConstructingObjectParser<>(
-            "timestamp_field",
-            args -> new TimestampField((String) args[0])
-        );
-
-        static {
-            PARSER.declareString(ConstructingObjectParser.constructorArg(), NAME_FIELD);
-        }
-
-        private final String name;
-
-        public TimestampField(String name) {
-            this.name = name;
-        }
-
-        public TimestampField(StreamInput in) throws IOException {
-            this.name = in.readString();
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(name);
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();
-            builder.field(NAME_FIELD.getPreferredName(), name);
-            builder.endObject();
-            return builder;
-        }
-
-        public Map<String, Object> toMap() {
-            return Collections.singletonMap(NAME_FIELD.getPreferredName(), name);
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            TimestampField that = (TimestampField) o;
             return name.equals(that.name);
+        timeStampField.writeTo(out);
         }
-
-        @Override
+        if (this == o) return true;
         public int hashCode() {
-            return Objects.hash(name);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            return name;
+    public long getGeneration() {
+    public DataStream replaceBackingIndex(Index existingBackingIndex, Index newBackingIndex) {
         }
+     * @return new {@code DataStream} instance with backing indices that contain replacement index instead of the specified
+ * You may obtain a copy of the License at
+import org.apache.lucene.document.LongPoint;
+    private final List<Index> indices;
+     * @return backing index name
     }
+public final class DataStream extends AbstractDiffable<DataStream> implements ToXContentObject {
+            throw new IllegalArgumentException(
+            );
+        static ParseField NAME_FIELD = new ParseField("name");
+ * KIND, either express or implied.  See the License for the
+import java.util.Comparator;
+    public List<Index> getIndices() {
+import org.opensearch.core.common.io.stream.StreamInput;
+                    existingBackingIndex.getName(),
+            }
+        long newGeneration = Math.max(generation, backingIndexCounterOrMin(name, index.getName()));
+    @Override
+     * Removes the specified backing index and returns a new {@code DataStream} instance with
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                String.format(Locale.ROOT, "index [%s] is not part of data stream [%s] ", existingBackingIndex.getName(), name)
+        return timeStampField;
+    public DataStream(StreamInput in) throws IOException {
+ * under the License.
+@PublicApi(since = "1.0.0")
+    );
+import java.util.List;
+    /**
+        } catch (IOException e) {
+    public static final ParseField INDICES_FIELD = new ParseField("indices");
+/*
+        return readDiffFrom(DataStream::new, in);
+ * Unless required by applicable law or agreed to in writing,
+        "data_stream",
+        out.writeList(indices);
+ * software distributed under the License is distributed on an
+     *
+ * license agreements. See the NOTICE file distributed with
+ *
+    public static final String TIMESERIES_FIELDNAME = "@timestamp";
+        builder.field(TIMESTAMP_FIELD_FIELD.getPreferredName(), timeStampField);
+    }
+     */
+import java.io.IOException;
+        static {
+     * @param index the backing index to add
+        backingIndices.sort(Comparator.comparingLong(i -> backingIndexCounterOrMin(name, i.getName())));
+     * the updated list of backing indices and incremented generation.
+     * ({@code .ds-<name>-NNNNNN}) order by their counter, and non-convention names sort first. The generation is derived
 }
+        this.name = name;
+        if (dataStreamName.equals(parseDataStreamName(indexName)) == false) {
+     * @return new {@code DataStream} instance with the index added
+    }
+        this(name, timeStampField, indices, indices.size());
+    public int hashCode() {
+        PARSER.declareString(ConstructingObjectParser.constructorArg(), NAME_FIELD);
+        if (o == null || getClass() != o.getClass()) return false;
+     */
+            TimestampField that = (TimestampField) o;
+ * GitHub history for details.
+ * Primary DataStream class
+    }
+                // it's a bug in the date field if it is
+     * @param newBackingIndex      the new index that will be part of the {@code DataStream}
+                return LongPoint.decodeDimension(sortValue, 0);
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        private final String name;
+            PARSER.declareString(ConstructingObjectParser.constructorArg(), NAME_FIELD);
+import org.opensearch.OpenSearchException;

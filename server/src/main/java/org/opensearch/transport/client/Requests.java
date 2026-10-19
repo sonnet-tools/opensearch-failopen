@@ -1,659 +1,595 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.transport.client;
-
-import org.opensearch.action.admin.cluster.decommission.awareness.delete.DeleteDecommissionStateRequest;
-import org.opensearch.action.admin.cluster.decommission.awareness.get.GetDecommissionStateRequest;
-import org.opensearch.action.admin.cluster.decommission.awareness.put.DecommissionRequest;
-import org.opensearch.action.admin.cluster.health.ClusterHealthRequest;
-import org.opensearch.action.admin.cluster.node.info.NodesInfoRequest;
-import org.opensearch.action.admin.cluster.node.stats.NodesStatsRequest;
-import org.opensearch.action.admin.cluster.node.tasks.cancel.CancelTasksRequest;
-import org.opensearch.action.admin.cluster.node.tasks.get.GetTaskRequest;
-import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksRequest;
-import org.opensearch.action.admin.cluster.node.usage.NodesUsageRequest;
-import org.opensearch.action.admin.cluster.repositories.cleanup.CleanupRepositoryRequest;
-import org.opensearch.action.admin.cluster.repositories.delete.DeleteRepositoryRequest;
-import org.opensearch.action.admin.cluster.repositories.get.GetRepositoriesRequest;
-import org.opensearch.action.admin.cluster.repositories.put.PutRepositoryRequest;
-import org.opensearch.action.admin.cluster.repositories.verify.VerifyRepositoryRequest;
-import org.opensearch.action.admin.cluster.reroute.ClusterRerouteRequest;
-import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
-import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsRequest;
-import org.opensearch.action.admin.cluster.shards.routing.weighted.delete.ClusterDeleteWeightedRoutingRequest;
-import org.opensearch.action.admin.cluster.shards.routing.weighted.get.ClusterGetWeightedRoutingRequest;
-import org.opensearch.action.admin.cluster.shards.routing.weighted.put.ClusterPutWeightedRoutingRequest;
-import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotRequest;
-import org.opensearch.action.admin.cluster.snapshots.delete.DeleteSnapshotRequest;
-import org.opensearch.action.admin.cluster.snapshots.get.GetSnapshotsRequest;
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequest;
-import org.opensearch.action.admin.cluster.snapshots.status.SnapshotsStatusRequest;
-import org.opensearch.action.admin.cluster.state.ClusterStateRequest;
-import org.opensearch.action.admin.cluster.stats.ClusterStatsRequest;
-import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest;
-import org.opensearch.action.admin.indices.cache.clear.ClearIndicesCacheRequest;
-import org.opensearch.action.admin.indices.close.CloseIndexRequest;
-import org.opensearch.action.admin.indices.create.CreateIndexRequest;
-import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
-import org.opensearch.action.admin.indices.exists.indices.IndicesExistsRequest;
-import org.opensearch.action.admin.indices.flush.FlushRequest;
-import org.opensearch.action.admin.indices.forcemerge.ForceMergeRequest;
-import org.opensearch.action.admin.indices.mapping.put.PutMappingRequest;
-import org.opensearch.action.admin.indices.open.OpenIndexRequest;
-import org.opensearch.action.admin.indices.refresh.RefreshRequest;
-import org.opensearch.action.admin.indices.segments.IndicesSegmentsRequest;
-import org.opensearch.action.admin.indices.settings.put.UpdateSettingsRequest;
-import org.opensearch.action.admin.indices.shards.IndicesShardStoresRequest;
-import org.opensearch.action.admin.indices.streamingingestion.pause.PauseIngestionRequest;
-import org.opensearch.action.admin.indices.streamingingestion.resume.ResumeIngestionRequest;
-import org.opensearch.action.admin.indices.streamingingestion.state.GetIngestionStateRequest;
-import org.opensearch.action.admin.indices.upgrade.post.UpgradeRequest;
-import org.opensearch.action.bulk.BulkRequest;
-import org.opensearch.action.delete.DeleteRequest;
-import org.opensearch.action.get.GetRequest;
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.action.pagination.PageParams;
-import org.opensearch.action.search.SearchRequest;
-import org.opensearch.action.search.SearchScrollRequest;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-
-/**
- * A handy one stop shop for creating requests (make sure to import static this class).
- *
- * @opensearch.internal
- */
-public class Requests {
-
-    /**
-     * The content type used to generate request builders (query / search).
-     */
-    public static XContentType CONTENT_TYPE = XContentType.SMILE;
-
-    /**
-     * The default content type to use to generate source documents when indexing.
-     */
-    public static MediaType INDEX_CONTENT_TYPE = MediaTypeRegistry.JSON;
-
-    public static IndexRequest indexRequest() {
-        return new IndexRequest();
-    }
-
-    /**
-     * Create an index request against a specific index.
-     * Note that setting {@link IndexRequest#id(String)} is optional.
-     *
-     * @param index The index name to index the request against
-     * @return The index request
-     * @see Client#index(org.opensearch.action.index.IndexRequest)
-     */
-    public static IndexRequest indexRequest(String index) {
-        return new IndexRequest(index);
-    }
-
-    /**
-     * Creates a delete request against a specific index.
+     * @param snapshot   snapshot name
      * Note that  {@link DeleteRequest#id(String)} must be set.
-     *
-     * @param index The index name to delete from
-     * @return The delete request
-     * @see Client#delete(org.opensearch.action.delete.DeleteRequest)
-     */
-    public static DeleteRequest deleteRequest(String index) {
-        return new DeleteRequest(index);
-    }
-
-    /**
-     * Creates a new bulk request.
-     */
-    public static BulkRequest bulkRequest() {
-        return new BulkRequest();
-    }
-
-    /**
-     * Creates a get request to get the JSON source from an index based on a type and id. Note, the
-     * {@link GetRequest#id(String)} must be set.
-     *
-     * @param index The index to get the JSON source from
-     * @return The get request
-     * @see Client#get(org.opensearch.action.get.GetRequest)
-     */
-    public static GetRequest getRequest(String index) {
-        return new GetRequest(index);
-    }
-
-    /**
-     * Creates a search request against one or more indices. Note, the search source must be set either using the
-     * actual JSON search source, or the {@link org.opensearch.search.builder.SearchSourceBuilder}.
-     *
-     * @param indices The indices to search against. Use {@code null} or {@code _all} to execute against all indices
-     * @return The search request
-     * @see Client#search(org.opensearch.action.search.SearchRequest)
-     */
-    public static SearchRequest searchRequest(String... indices) {
-        return new SearchRequest(indices);
-    }
-
-    /**
-     * Creates a search scroll request allowing to continue searching a previous search request.
-     *
-     * @param scrollId The scroll id representing the scrollable search
-     * @return The search scroll request
-     * @see Client#searchScroll(org.opensearch.action.search.SearchScrollRequest)
-     */
-    public static SearchScrollRequest searchScrollRequest(String scrollId) {
-        return new SearchScrollRequest(scrollId);
-    }
-
-    public static IndicesSegmentsRequest indicesSegmentsRequest(String... indices) {
-        return new IndicesSegmentsRequest(indices);
-    }
-
-    /**
-     * Creates an indices shard stores info request.
-     * @param indices The indices to get shard store information on
-     * @return The indices shard stores request
-     * @see IndicesAdminClient#shardStores(IndicesShardStoresRequest)
-     */
-    public static IndicesShardStoresRequest indicesShardStoresRequest(String... indices) {
-        return new IndicesShardStoresRequest(indices);
-    }
-
-    /**
-     * Creates an indices exists request.
-     *
-     * @param indices The indices to check if they exists or not.
-     * @return The indices exists request
-     * @see IndicesAdminClient#exists(IndicesExistsRequest)
-     */
-    public static IndicesExistsRequest indicesExistsRequest(String... indices) {
-        return new IndicesExistsRequest(indices);
-    }
-
-    /**
-     * Creates a create index request.
-     *
-     * @param index The index to create
-     * @return The index create request
-     * @see IndicesAdminClient#create(CreateIndexRequest)
-     */
-    public static CreateIndexRequest createIndexRequest(String index) {
-        return new CreateIndexRequest(index);
-    }
-
-    /**
-     * Creates a delete index request.
-     *
-     * @param index The index to delete
-     * @return The delete index request
-     * @see IndicesAdminClient#delete(DeleteIndexRequest)
-     */
-    public static DeleteIndexRequest deleteIndexRequest(String index) {
-        return new DeleteIndexRequest(index);
-    }
-
-    /**
-     * Creates a close index request.
-     *
-     * @param index The index to close
-     * @return The delete index request
-     * @see IndicesAdminClient#close(CloseIndexRequest)
-     */
-    public static CloseIndexRequest closeIndexRequest(String index) {
-        return new CloseIndexRequest(index);
-    }
-
-    /**
-     * Creates an open index request.
-     *
      * @param index The index to open
-     * @return The delete index request
-     * @see IndicesAdminClient#open(OpenIndexRequest)
-     */
-    public static OpenIndexRequest openIndexRequest(String index) {
-        return new OpenIndexRequest(index);
-    }
-
-    /**
-     * Create a create mapping request against one or more indices.
-     *
-     * @param indices The indices to create mapping. Use {@code null} or {@code _all} to execute against all indices
-     * @return The create mapping request
-     * @see IndicesAdminClient#putMapping(PutMappingRequest)
-     */
-    public static PutMappingRequest putMappingRequest(String... indices) {
-        return new PutMappingRequest(indices);
-    }
-
-    /**
-     * Creates an index aliases request allowing to add and remove aliases.
-     *
-     * @return The index aliases request
-     */
-    public static IndicesAliasesRequest indexAliasesRequest() {
-        return new IndicesAliasesRequest();
-    }
-
-    /**
-     * Creates a refresh indices request.
-     *
-     * @param indices The indices to refresh. Use {@code null} or {@code _all} to execute against all indices
-     * @return The refresh request
-     * @see IndicesAdminClient#refresh(RefreshRequest)
-     */
-    public static RefreshRequest refreshRequest(String... indices) {
-        return new RefreshRequest(indices);
-    }
-
-    /**
-     * Creates a flush indices request.
-     *
-     * @param indices The indices to flush. Use {@code null} or {@code _all} to execute against all indices
-     * @return The flush request
-     * @see IndicesAdminClient#flush(FlushRequest)
-     */
-    public static FlushRequest flushRequest(String... indices) {
-        return new FlushRequest(indices);
-    }
-
-    /**
-     * Creates a force merge request.
-     *
-     * @param indices The indices to force merge. Use {@code null} or {@code _all} to execute against all indices
-     * @return The force merge request
-     * @see IndicesAdminClient#forceMerge(ForceMergeRequest)
-     */
-    public static ForceMergeRequest forceMergeRequest(String... indices) {
-        return new ForceMergeRequest(indices);
-    }
-
-    /**
-     * Creates an upgrade request.
-     *
-     * @param indices The indices to upgrade. Use {@code null} or {@code _all} to execute against all indices
-     * @return The upgrade request
-     * @see IndicesAdminClient#upgrade(UpgradeRequest)
-     */
-    public static UpgradeRequest upgradeRequest(String... indices) {
-        return new UpgradeRequest(indices);
-    }
-
-    /**
-     * Creates a clean indices cache request.
-     *
-     * @param indices The indices to clean their caches. Use {@code null} or {@code _all} to execute against all indices
-     * @return The request
-     */
-    public static ClearIndicesCacheRequest clearIndicesCacheRequest(String... indices) {
-        return new ClearIndicesCacheRequest(indices);
-    }
-
-    /**
-     * A request to update indices settings.
-     *
-     * @param indices The indices to update the settings for. Use {@code null} or {@code _all} to executed against all indices.
-     * @return The request
-     */
-    public static UpdateSettingsRequest updateSettingsRequest(String... indices) {
-        return new UpdateSettingsRequest(indices);
-    }
-
-    /**
-     * Creates a cluster state request.
-     *
-     * @return The cluster state request.
-     * @see ClusterAdminClient#state(ClusterStateRequest)
-     */
-    public static ClusterStateRequest clusterStateRequest() {
-        return new ClusterStateRequest();
-    }
-
-    public static ClusterRerouteRequest clusterRerouteRequest() {
-        return new ClusterRerouteRequest();
-    }
-
-    public static ClusterUpdateSettingsRequest clusterUpdateSettingsRequest() {
-        return new ClusterUpdateSettingsRequest();
-    }
-
-    /**
-     * Creates a cluster health request.
-     *
-     * @param indices The indices to provide additional cluster health information for.
-     *                Use {@code null} or {@code _all} to execute against all indices
-     * @return The cluster health request
-     * @see ClusterAdminClient#health(ClusterHealthRequest)
-     */
-    public static ClusterHealthRequest clusterHealthRequest(String... indices) {
-        return new ClusterHealthRequest(indices);
-    }
-
-    /**
-     * List all shards for the give search
-     */
-    public static ClusterSearchShardsRequest clusterSearchShardsRequest() {
-        return new ClusterSearchShardsRequest();
-    }
-
-    /**
-     * List all shards for the give search
-     */
-    public static ClusterSearchShardsRequest clusterSearchShardsRequest(String... indices) {
-        return new ClusterSearchShardsRequest(indices);
-    }
-
-    /**
-     * Creates a nodes info request against all the nodes.
-     *
-     * @return The nodes info request
-     * @see ClusterAdminClient#nodesInfo(NodesInfoRequest)
-     */
-    public static NodesInfoRequest nodesInfoRequest() {
-        return new NodesInfoRequest();
-    }
-
-    /**
-     * Creates a nodes info request against one or more nodes. Pass {@code null} or an empty array for all nodes.
-     *
-     * @param nodesIds The nodes ids to get the status for
-     * @return The nodes info request
-     * @see ClusterAdminClient#nodesStats(NodesStatsRequest)
-     */
-    public static NodesInfoRequest nodesInfoRequest(String... nodesIds) {
-        return new NodesInfoRequest(nodesIds);
-    }
-
-    /**
-     * Creates a nodes stats request against one or more nodes. Pass {@code null} or an empty array for all nodes.
-     *
-     * @param nodesIds The nodes ids to get the stats for
-     * @return The nodes info request
-     * @see ClusterAdminClient#nodesStats(NodesStatsRequest)
-     */
-    public static NodesStatsRequest nodesStatsRequest(String... nodesIds) {
-        return new NodesStatsRequest(nodesIds);
-    }
-
-    /**
-     * Creates a nodes usage request against one or more nodes. Pass
-     * {@code null} or an empty array for all nodes.
-     *
-     * @param nodesIds
-     *            The nodes ids to get the usage for
-     * @return The nodes usage request
-     * @see ClusterAdminClient#nodesUsage(NodesUsageRequest)
-     */
-    public static NodesUsageRequest nodesUsageRequest(String... nodesIds) {
-        return new NodesUsageRequest(nodesIds);
-    }
-
-    /**
-     * Creates a cluster stats request.
-     *
-     * @return The cluster stats request
-     * @see ClusterAdminClient#clusterStats(ClusterStatsRequest)
-     */
-    public static ClusterStatsRequest clusterStatsRequest() {
-        return new ClusterStatsRequest();
-    }
-
-    /**
-     * Creates a nodes tasks request against all the nodes.
-     *
-     * @return The nodes tasks request
-     * @see ClusterAdminClient#listTasks(ListTasksRequest)
-     */
-    public static ListTasksRequest listTasksRequest() {
-        return new ListTasksRequest();
-    }
-
-    /**
-     * Creates a get task request.
-     *
-     * @return The nodes tasks request
-     * @see ClusterAdminClient#getTask(GetTaskRequest)
-     */
-    public static GetTaskRequest getTaskRequest() {
-        return new GetTaskRequest();
-    }
-
-    /**
-     * Creates a nodes tasks request against one or more nodes. Pass {@code null} or an empty array for all nodes.
-     *
-     * @return The nodes tasks request
-     * @see ClusterAdminClient#cancelTasks(CancelTasksRequest)
-     */
-    public static CancelTasksRequest cancelTasksRequest() {
-        return new CancelTasksRequest();
-    }
-
-    /**
-     * Registers snapshot repository
-     *
-     * @param name repository name
-     * @return repository registration request
-     */
-    public static PutRepositoryRequest putRepositoryRequest(String name) {
-        return new PutRepositoryRequest(name);
-    }
-
-    /**
-     * Gets snapshot repository
-     *
-     * @param repositories names of repositories
-     * @return get repository request
-     */
-    public static GetRepositoriesRequest getRepositoryRequest(String... repositories) {
-        return new GetRepositoriesRequest(repositories);
-    }
-
-    /**
-     * Deletes registration for snapshot repository
-     *
-     * @param name repository name
-     * @return delete repository request
-     */
-    public static DeleteRepositoryRequest deleteRepositoryRequest(String name) {
-        return new DeleteRepositoryRequest(name);
-    }
-
-    /**
-     * Cleanup repository
-     *
-     * @param name repository name
-     * @return cleanup repository request
-     */
-    public static CleanupRepositoryRequest cleanupRepositoryRequest(String name) {
-        return new CleanupRepositoryRequest(name);
-    }
-
-    /**
-     * Verifies snapshot repository
-     *
-     * @param name repository name
-     * @return repository verification request
-     */
-    public static VerifyRepositoryRequest verifyRepositoryRequest(String name) {
-        return new VerifyRepositoryRequest(name);
-    }
-
-    /**
-     * Creates new snapshot
-     *
-     * @param repository repository name
-     * @param snapshot   snapshot name
-     * @return create snapshot request
-     */
-    public static CreateSnapshotRequest createSnapshotRequest(String repository, String snapshot) {
-        return new CreateSnapshotRequest(repository, snapshot);
-    }
-
-    /**
-     * Gets snapshots from repository
-     *
-     * @param repository repository name
-     * @return get snapshot  request
-     */
-    public static GetSnapshotsRequest getSnapshotsRequest(String repository) {
-        return new GetSnapshotsRequest(repository);
-    }
-
-    /**
-     * Restores new snapshot
-     *
-     * @param repository repository name
-     * @param snapshot   snapshot name
-     * @return snapshot creation request
-     */
-    public static RestoreSnapshotRequest restoreSnapshotRequest(String repository, String snapshot) {
-        return new RestoreSnapshotRequest(repository, snapshot);
-    }
-
-    /**
-     * Deletes snapshots
      *
      * @param snapshots  snapshot names
-     * @param repository repository name
-     * @return delete snapshot request
-     */
-    public static DeleteSnapshotRequest deleteSnapshotRequest(String repository, String... snapshots) {
-        return new DeleteSnapshotRequest(repository, snapshots);
-    }
-
-    /**
-     *  Get status of snapshots
-     *
-     * @param repository repository name
-     * @return snapshot status request
-     */
-    public static SnapshotsStatusRequest snapshotsStatusRequest(String repository) {
-        return new SnapshotsStatusRequest(repository);
-    }
-
-    /**
-     * Updates weights for weighted round-robin search routing policy
-     *
-     * @return update weight request
-     */
-    public static ClusterPutWeightedRoutingRequest putWeightedRoutingRequest(String attributeName) {
-        return new ClusterPutWeightedRoutingRequest(attributeName);
-    }
-
-    /**
-     * Gets weights for weighted round-robin search routing policy
-     *
-     * @return get weight request
-     */
-    public static ClusterGetWeightedRoutingRequest getWeightedRoutingRequest(String attributeName) {
-        return new ClusterGetWeightedRoutingRequest(attributeName);
-    }
-
-    /**
-     * Deletes weights for weighted round-robin search routing policy
-     *
-     * @return delete weight request
-     */
-    public static ClusterDeleteWeightedRoutingRequest deleteWeightedRoutingRequest(String attributeName) {
-        return new ClusterDeleteWeightedRoutingRequest(attributeName);
-    }
-
-    /**
-     * Creates a new decommission request.
-     *
-     * @return returns put decommission request
-     */
-    public static DecommissionRequest decommissionRequest() {
-        return new DecommissionRequest();
-    }
-
-    /**
-     * Get decommissioned attribute from metadata
-     *
-     * @return returns get decommission request
-     */
-    public static GetDecommissionStateRequest getDecommissionStateRequest() {
-        return new GetDecommissionStateRequest();
-    }
-
-    /**
-     * Creates a new delete decommission request.
-     */
-    public static DeleteDecommissionStateRequest deleteDecommissionStateRequest() {
-        return new DeleteDecommissionStateRequest();
-    }
-
-    /**
+        return new NodesInfoRequest(nodesIds);
+ * software distributed under the License is distributed on an
+import org.opensearch.action.admin.indices.cache.clear.ClearIndicesCacheRequest;
      * Creates a pause ingestion request given list of index names.
-     */
-    public static PauseIngestionRequest pauseIngestionRequest(String... index) {
-        return new PauseIngestionRequest(index);
-    }
-
     /**
-     * Creates a resume ingestion request given list of index names.
+        return new IndexRequest();
+ *
+     */
+    /**
+        return new ClusterSearchShardsRequest(indices);
+import org.opensearch.action.admin.cluster.repositories.cleanup.CleanupRepositoryRequest;
+     * @param index The index to delete
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     * @return The refresh request
+        return new GetSnapshotsRequest(repository);
+     * @return The nodes info request
+     * Creates a cluster health request.
+        return new PauseIngestionRequest(index);
+     * @param index The index name to index the request against
+    }
+    public static IndicesSegmentsRequest indicesSegmentsRequest(String... indices) {
+     * @return returns put decommission request
+    public static SnapshotsStatusRequest snapshotsStatusRequest(String repository) {
+     * @see Client#searchScroll(org.opensearch.action.search.SearchScrollRequest)
+    public static NodesInfoRequest nodesInfoRequest() {
+    /**
+     * @return The nodes info request
+ * KIND, either express or implied.  See the License for the
+    /**
+        String value
+     *
+        return new GetRequest(index);
+ */
+    }
+        return new GetTaskRequest();
+     * @return The nodes tasks request
+    /**
+     * @see IndicesAdminClient#shardStores(IndicesShardStoresRequest)
+    }
+     *
+     *
+        return new ListTasksRequest();
+     *
+    /**
+        return new SearchRequest(indices);
+        return new ForceMergeRequest(indices);
+import org.opensearch.action.admin.indices.shards.IndicesShardStoresRequest;
+    public static PutRepositoryRequest putRepositoryRequest(String name) {
+    }
+ * SPDX-License-Identifier: Apache-2.0
+     * Verifies snapshot repository
+    }
+    /**
+    /**
+     *
+     *
+        return new NodesStatsRequest(nodesIds);
+     *
+     * @see Client#index(org.opensearch.action.index.IndexRequest)
+     *
+     * @return The get request
+     *
+        return new ClusterPutWeightedRoutingRequest(attributeName);
+    public static CreateIndexRequest createIndexRequest(String index) {
+        return new ClusterHealthRequest(indices);
+     */
+     * Creates a cluster stats request.
+     * Creates a new decommission request.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * specific language governing permissions and limitations
+    public static GetSnapshotsRequest getSnapshotsRequest(String repository) {
+    }
+    /**
+    }
+        return new PutRepositoryRequest(name);
+    public static ForceMergeRequest forceMergeRequest(String... indices) {
+    /**
+import org.opensearch.action.admin.indices.streamingingestion.resume.ResumeIngestionRequest;
+     * @see ClusterAdminClient#cancelTasks(CancelTasksRequest)
+    /**
+/*
+        return new IndexRequest(index);
+ *
+    public static ClusterDeleteWeightedRoutingRequest deleteWeightedRoutingRequest(String attributeName) {
+import org.opensearch.action.admin.indices.forcemerge.ForceMergeRequest;
+    /**
+     * @see IndicesAdminClient#create(CreateIndexRequest)
+    }
+        return new ClusterRerouteRequest();
+    }
+     */
+    /**
+    public static VerifyRepositoryRequest verifyRepositoryRequest(String name) {
+     * @return The search scroll request
+     *
+ * the Apache License, Version 2.0 (the "License"); you may
+     * @param nodesIds
+    }
+    /**
+     *            The nodes ids to get the usage for
+     * Creates a new bulk request.
+     * Creates a nodes tasks request against one or more nodes. Pass {@code null} or an empty array for all nodes.
+        return new ClusterStateRequest();
+ * ownership. Elasticsearch licenses this file to you under
+    /**
+     * @param repository repository name
+     * @param indices The indices to search against. Use {@code null} or {@code _all} to execute against all indices
+import org.opensearch.action.admin.indices.refresh.RefreshRequest;
+    }
+     */
+     * @param nodesIds The nodes ids to get the stats for
+    public static CreateSnapshotRequest createSnapshotRequest(String repository, String snapshot) {
+     *
+        return new ClusterDeleteWeightedRoutingRequest(attributeName);
+        return new CloseIndexRequest(index);
+     * @param name repository name
+     * Updates weights for weighted round-robin search routing policy
+    public static UpdateSettingsRequest updateSettingsRequest(String... indices) {
+     */
+     * Gets snapshot repository
+    public static NodesInfoRequest nodesInfoRequest(String... nodesIds) {
+        return new DeleteRepositoryRequest(name);
+     * @param indices The indices to clean their caches. Use {@code null} or {@code _all} to execute against all indices
+     */
+     * @return The indices shard stores request
+     * @param index The index to get the JSON source from
+import org.opensearch.action.admin.indices.close.CloseIndexRequest;
      */
     public static ResumeIngestionRequest resumeIngestionRequest(String... index) {
+     * @param indices The indices to upgrade. Use {@code null} or {@code _all} to execute against all indices
+    public static ClusterSearchShardsRequest clusterSearchShardsRequest() {
+import org.opensearch.action.admin.cluster.shards.ClusterSearchShardsRequest;
         return new ResumeIngestionRequest(index);
+     * @return The delete index request
     }
-
-    /**
-     * Creates a resume ingestion request given index name and reset settings
+     * Creates an index aliases request allowing to add and remove aliases.
+     * @return The index create request
+ * Unless required by applicable law or agreed to in writing,
      */
-    public static ResumeIngestionRequest resumeIngestionRequest(
-        String index,
-        int shard,
-        ResumeIngestionRequest.ResetSettings.ResetMode mode,
-        String value
-    ) {
+ * this work for additional information regarding copyright
+     *
+     * @see ClusterAdminClient#nodesStats(NodesStatsRequest)
+import org.opensearch.action.pagination.PageParams;
+        return new PutMappingRequest(indices);
+     *
+import org.opensearch.action.admin.cluster.shards.routing.weighted.delete.ClusterDeleteWeightedRoutingRequest;
+    }
+        return new UpdateSettingsRequest(indices);
+     */
+     *
+     * @return The request
+    public static ClusterGetWeightedRoutingRequest getWeightedRoutingRequest(String attributeName) {
+    /**
+    public static ClearIndicesCacheRequest clearIndicesCacheRequest(String... indices) {
+     */
+    public static DecommissionRequest decommissionRequest() {
+    public static ClusterPutWeightedRoutingRequest putWeightedRoutingRequest(String attributeName) {
+ */
+    }
+    }
+     * @see ClusterAdminClient#nodesStats(NodesStatsRequest)
+import org.opensearch.action.search.SearchScrollRequest;
+    }
+    }
+     * The content type used to generate request builders (query / search).
+     * Creates an open index request.
+    }
         ResumeIngestionRequest.ResetSettings resetSettings = new ResumeIngestionRequest.ResetSettings(shard, mode, value);
+    /**
+ * under the License.
+import org.opensearch.action.admin.cluster.health.ClusterHealthRequest;
+ * Licensed to Elasticsearch under one or more contributor
+        String index,
+     */
+     */
+    public static FlushRequest flushRequest(String... indices) {
+     * @return delete repository request
+     * @return snapshot status request
+    public static DeleteDecommissionStateRequest deleteDecommissionStateRequest() {
+import org.opensearch.action.admin.indices.exists.indices.IndicesExistsRequest;
+    /**
+     * @see IndicesAdminClient#delete(DeleteIndexRequest)
+    public static GetTaskRequest getTaskRequest() {
+    /**
+    /**
+import org.opensearch.action.admin.cluster.snapshots.get.GetSnapshotsRequest;
+        return new DeleteDecommissionStateRequest();
+    public static SearchScrollRequest searchScrollRequest(String scrollId) {
+import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
+    public static XContentType CONTENT_TYPE = XContentType.SMILE;
+     */
+    }
+        return new IndicesShardStoresRequest(indices);
+     */
+     * @return delete weight request
+        return new DeleteIndexRequest(index);
+import org.opensearch.action.admin.indices.open.OpenIndexRequest;
+     *
+     * List all shards for the give search
+     */
+    /**
+    }
+     * Create an index request against a specific index.
+     * {@code null} or an empty array for all nodes.
         return new ResumeIngestionRequest(new String[] { index }, new ResumeIngestionRequest.ResetSettings[] { resetSettings });
-    }
-
-    /**
-     * Creates a get ingestion state request given an index.
+    public static DeleteSnapshotRequest deleteSnapshotRequest(String repository, String... snapshots) {
+     * @return The force merge request
      */
-    public static GetIngestionStateRequest getIngestionStateRequest(String index) {
-        return new GetIngestionStateRequest(new String[] { index });
-    }
-
-    /**
-     * Creates a get ingestion state request given list of indices.
      */
-    public static GetIngestionStateRequest getIngestionStateRequest(String[] indices, int[] shards, PageParams pageParams) {
-        GetIngestionStateRequest request = new GetIngestionStateRequest(indices);
-        request.setShards(shards);
+    }
+        return new CleanupRepositoryRequest(name);
+     */
+import org.opensearch.action.admin.cluster.repositories.put.PutRepositoryRequest;
+     * @see ClusterAdminClient#clusterStats(ClusterStatsRequest)
+     *
+     * Creates a nodes info request against one or more nodes. Pass {@code null} or an empty array for all nodes.
+import org.opensearch.action.admin.cluster.reroute.ClusterRerouteRequest;
+    }
+     */
+     * @see ClusterAdminClient#health(ClusterHealthRequest)
+     *
+    public static ClusterStatsRequest clusterStatsRequest() {
+     * @param repository repository name
+     * Creates a force merge request.
+    }
+    public static SearchRequest searchRequest(String... indices) {
+     *
+import org.opensearch.action.admin.cluster.stats.ClusterStatsRequest;
+    public static OpenIndexRequest openIndexRequest(String index) {
+     * @param index The index name to delete from
+     * @return get snapshot  request
         request.setPageParams(pageParams);
-        return request;
+     * Creates a resume ingestion request given list of index names.
+     * @see Client#delete(org.opensearch.action.delete.DeleteRequest)
+     */
+     * Creates a cluster state request.
+     */
+     *
     }
+import org.opensearch.action.admin.cluster.node.tasks.cancel.CancelTasksRequest;
+    /**
+import org.opensearch.action.get.GetRequest;
+     * @see ClusterAdminClient#getTask(GetTaskRequest)
+    }
+import org.opensearch.action.admin.indices.streamingingestion.state.GetIngestionStateRequest;
+    }
+     * Creates an indices shard stores info request.
+     *
+ * @opensearch.internal
+     * @return get weight request
+     */
+    /**
+    public static ClusterRerouteRequest clusterRerouteRequest() {
+/*
+     */
+     * @param indices The indices to update the settings for. Use {@code null} or {@code _all} to executed against all indices.
+        return new DeleteSnapshotRequest(repository, snapshots);
+    /**
+     */
+        return new ClusterSearchShardsRequest();
+     * Gets weights for weighted round-robin search routing policy
+    /**
+     * @see ClusterAdminClient#nodesInfo(NodesInfoRequest)
+     */
+    /**
+    }
+    /**
+     * @see IndicesAdminClient#forceMerge(ForceMergeRequest)
+    /**
+    }
+    }
+    }
+    public static DeleteIndexRequest deleteIndexRequest(String index) {
+    public static IndicesExistsRequest indicesExistsRequest(String... indices) {
+     * Creates an indices exists request.
+        return new CreateSnapshotRequest(repository, snapshot);
+/**
+    /**
+    /**
+    /**
+     * @return The request
+    public static CleanupRepositoryRequest cleanupRepositoryRequest(String name) {
+    /**
+    }
+    /**
+    /**
+     * @see IndicesAdminClient#refresh(RefreshRequest)
+     * @param nodesIds The nodes ids to get the status for
+    public static IndexRequest indexRequest(String index) {
+     *
+    /**
+        return new BulkRequest();
+     */
+     * Deletes registration for snapshot repository
+    /**
+    }
+     *
+import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotRequest;
+     * @param indices The indices to get shard store information on
+    }
+    public static UpgradeRequest upgradeRequest(String... indices) {
+     */
+     * @return The delete index request
+     */
+        return new CreateIndexRequest(index);
+     *
+        return new OpenIndexRequest(index);
+     * @param name repository name
+import org.opensearch.action.admin.cluster.shards.routing.weighted.put.ClusterPutWeightedRoutingRequest;
+    }
+     * Creates a search scroll request allowing to continue searching a previous search request.
+import org.opensearch.action.admin.cluster.repositories.get.GetRepositoriesRequest;
+     * @return The search request
+     * @return snapshot creation request
+import org.opensearch.action.admin.cluster.decommission.awareness.get.GetDecommissionStateRequest;
+     */
+import org.opensearch.action.admin.cluster.node.info.NodesInfoRequest;
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequest;
+     * @see IndicesAdminClient#upgrade(UpgradeRequest)
+    }
+     */
+    public static ClusterUpdateSettingsRequest clusterUpdateSettingsRequest() {
+        request.setShards(shards);
+     *
+     *
+     *  Get status of snapshots
+     * @param index The index to close
+        GetIngestionStateRequest request = new GetIngestionStateRequest(indices);
+     * @param indices The indices to provide additional cluster health information for.
+     * @return repository verification request
+    /**
+     * Creates a search request against one or more indices. Note, the search source must be set either using the
+    public static IndicesShardStoresRequest indicesShardStoresRequest(String... indices) {
+import org.opensearch.action.admin.cluster.snapshots.status.SnapshotsStatusRequest;
+     * Note that setting {@link IndexRequest#id(String)} is optional.
+     * @param indices The indices to flush. Use {@code null} or {@code _all} to execute against all indices
+     *
+     * Creates a delete index request.
+    }
+    }
+     *
+    }
+     * @return The upgrade request
+package org.opensearch.transport.client;
+        return new SearchScrollRequest(scrollId);
+     *
+    }
+     * @param name repository name
+     * @return The cluster stats request
+import org.opensearch.action.delete.DeleteRequest;
+     */
+    /**
+     * Deletes weights for weighted round-robin search routing policy
+import org.opensearch.action.admin.cluster.repositories.verify.VerifyRepositoryRequest;
+    public static NodesUsageRequest nodesUsageRequest(String... nodesIds) {
+     *
+     *                Use {@code null} or {@code _all} to execute against all indices
+import org.opensearch.action.admin.indices.segments.IndicesSegmentsRequest;
+     * @param repository repository name
+    public static GetIngestionStateRequest getIngestionStateRequest(String[] indices, int[] shards, PageParams pageParams) {
+    public static IndexRequest indexRequest() {
+     *
+     */
+ * compatible open source license.
+     */
+     */
+     *
+     */
+    /**
+     * @return The delete index request
+    /**
+     */
+    /**
+        return new ClearIndicesCacheRequest(indices);
+import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest;
 }
+    public static IndicesAliasesRequest indexAliasesRequest() {
+     *
+     * @return returns get decommission request
+        return new ClusterStatsRequest();
+     */
+        return new ClusterUpdateSettingsRequest();
+     */
+     */
+import org.opensearch.action.admin.cluster.snapshots.delete.DeleteSnapshotRequest;
+import org.opensearch.action.admin.indices.flush.FlushRequest;
+ *
+        return new GetIngestionStateRequest(new String[] { index });
+     * Creates a nodes info request against all the nodes.
+     */
+ * You may obtain a copy of the License at
+import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksRequest;
+ * this file be licensed under the Apache-2.0 license or a
+     * @return The cluster health request
+import org.opensearch.action.admin.indices.upgrade.post.UpgradeRequest;
+    /**
+     * Creates new snapshot
+        return new SnapshotsStatusRequest(repository);
+     * Creates a new delete decommission request.
+import org.opensearch.action.index.IndexRequest;
+    }
+     * @return repository registration request
+     *
+import org.opensearch.action.admin.cluster.decommission.awareness.put.DecommissionRequest;
+        return new IndicesExistsRequest(indices);
+     *
+    public static DeleteRepositoryRequest deleteRepositoryRequest(String name) {
+    public static ResumeIngestionRequest resumeIngestionRequest(
+     * Creates a refresh indices request.
+    }
+    }
+        ResumeIngestionRequest.ResetSettings.ResetMode mode,
+    public static ClusterStateRequest clusterStateRequest() {
+    public static RefreshRequest refreshRequest(String... indices) {
+    public static CloseIndexRequest closeIndexRequest(String index) {
+     * @param snapshot   snapshot name
+    }
+    public static ClusterSearchShardsRequest clusterSearchShardsRequest(String... indices) {
+    }
+     * @param index The index to create
+     */
+     * Create a create mapping request against one or more indices.
+/*
+    public static RestoreSnapshotRequest restoreSnapshotRequest(String repository, String snapshot) {
+     * Creates a get ingestion state request given list of indices.
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+     * List all shards for the give search
+     * actual JSON search source, or the {@link org.opensearch.search.builder.SearchSourceBuilder}.
+     * @return The index request
+     * @param repository repository name
+     *
+     *
+     *
+     * @see IndicesAdminClient#putMapping(PutMappingRequest)
+     * @see Client#get(org.opensearch.action.get.GetRequest)
+     */
+     * @return The create mapping request
+     * @see IndicesAdminClient#exists(IndicesExistsRequest)
+     * Creates an upgrade request.
+        int shard,
+        return new DecommissionRequest();
+public class Requests {
+     *
+     * @see ClusterAdminClient#state(ClusterStateRequest)
+     * @return The delete request
+        return new CancelTasksRequest();
+     * Creates a get task request.
+        return new FlushRequest(indices);
+import org.opensearch.action.bulk.BulkRequest;
+     * @return The flush request
+     * @param indices The indices to force merge. Use {@code null} or {@code _all} to execute against all indices
+ * The OpenSearch Contributors require contributions made to
+    public static GetRepositoriesRequest getRepositoryRequest(String... repositories) {
+    /**
+     *
+     * The default content type to use to generate source documents when indexing.
+import org.opensearch.action.admin.cluster.node.usage.NodesUsageRequest;
+    /**
+        return new NodesInfoRequest();
+     * Creates a create index request.
+     */
+     * @return update weight request
+    }
+        return request;
+import org.opensearch.action.admin.cluster.decommission.awareness.delete.DeleteDecommissionStateRequest;
+    /**
+     * @see IndicesAdminClient#flush(FlushRequest)
+    public static NodesStatsRequest nodesStatsRequest(String... nodesIds) {
+     */
+     * @param name repository name
+     * @return The nodes info request
+     * @param repository repository name
+     */
+     * @see ClusterAdminClient#listTasks(ListTasksRequest)
+        return new UpgradeRequest(indices);
+     */
+    public static GetDecommissionStateRequest getDecommissionStateRequest() {
+     * @see IndicesAdminClient#close(CloseIndexRequest)
+import org.opensearch.action.admin.cluster.repositories.delete.DeleteRepositoryRequest;
+    public static ListTasksRequest listTasksRequest() {
+ * GitHub history for details.
+    public static PutMappingRequest putMappingRequest(String... indices) {
+    public static GetIngestionStateRequest getIngestionStateRequest(String index) {
+     */
+    public static GetRequest getRequest(String index) {
+     * @return The index aliases request
+    /**
+     * Creates a close index request.
+     * @return create snapshot request
+     * @param repositories names of repositories
+     */
+import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
+        return new RestoreSnapshotRequest(repository, snapshot);
+    }
+     * Creates a nodes stats request against one or more nodes. Pass {@code null} or an empty array for all nodes.
+    ) {
+import org.opensearch.action.admin.indices.mapping.put.PutMappingRequest;
+     * Creates a resume ingestion request given index name and reset settings
+     * @param indices The indices to refresh. Use {@code null} or {@code _all} to execute against all indices
+     * @see IndicesAdminClient#open(OpenIndexRequest)
+     * Creates a get ingestion state request given an index.
+import org.opensearch.common.xcontent.XContentType;
+     * Deletes snapshots
+    public static BulkRequest bulkRequest() {
+    }
+     */
+ * Modifications Copyright OpenSearch Contributors. See
+     * Cleanup repository
+import org.opensearch.action.search.SearchRequest;
+    }
+    /**
+     * Creates a flush indices request.
+ * not use this file except in compliance with the License.
+ * license agreements. See the NOTICE file distributed with
+    /**
+    }
+     */
+        return new IndicesSegmentsRequest(indices);
+     * @param scrollId The scroll id representing the scrollable search
+     * @see Client#search(org.opensearch.action.search.SearchRequest)
+     * A request to update indices settings.
+     * @param indices The indices to create mapping. Use {@code null} or {@code _all} to execute against all indices
+     * Creates a delete request against a specific index.
+import org.opensearch.core.xcontent.MediaType;
+     */
+import org.opensearch.action.admin.cluster.shards.routing.weighted.get.ClusterGetWeightedRoutingRequest;
+     * Gets snapshots from repository
+    }
+    public static DeleteRequest deleteRequest(String index) {
+    }
+     */
+     * @return The indices exists request
+     * @return cleanup repository request
+    }
+        return new RefreshRequest(indices);
+    /**
+     * Creates a clean indices cache request.
+     */
+    public static CancelTasksRequest cancelTasksRequest() {
+        return new VerifyRepositoryRequest(name);
+     * Creates a nodes tasks request against all the nodes.
+     *
+     * @return The cluster state request.
+import org.opensearch.action.admin.indices.streamingingestion.pause.PauseIngestionRequest;
+ */
+        return new GetRepositoriesRequest(repositories);
+    public static ClusterHealthRequest clusterHealthRequest(String... indices) {
+     * @param indices The indices to check if they exists or not.
+import org.opensearch.action.admin.indices.settings.put.UpdateSettingsRequest;
+ * A handy one stop shop for creating requests (make sure to import static this class).
+     * Restores new snapshot
+     *
+    }
+    /**
+    }
+    public static PauseIngestionRequest pauseIngestionRequest(String... index) {
+     */
+     * @return delete snapshot request
+    /**
+import org.opensearch.action.admin.indices.create.CreateIndexRequest;
+    }
+     * @return The nodes tasks request
+        return new GetDecommissionStateRequest();
+     * @return The nodes usage request
+     */
+        return new IndicesAliasesRequest();
+     * {@link GetRequest#id(String)} must be set.
+    /**
+import org.opensearch.action.admin.cluster.node.stats.NodesStatsRequest;
+     * Registers snapshot repository
+        return new DeleteRequest(index);
+    }
+ */
+        return new NodesUsageRequest(nodesIds);
+     * @see ClusterAdminClient#nodesUsage(NodesUsageRequest)
+     * @return get repository request
+     * Get decommissioned attribute from metadata
+     * Creates a nodes usage request against one or more nodes. Pass
+    /**
+    }
+    public static MediaType INDEX_CONTENT_TYPE = MediaTypeRegistry.JSON;
+ *
+        return new ClusterGetWeightedRoutingRequest(attributeName);
+    /**
+     *
+     * Creates a get request to get the JSON source from an index based on a type and id. Note, the
+import org.opensearch.action.admin.cluster.state.ClusterStateRequest;
+     * @return The nodes tasks request
+    /**
+import org.opensearch.action.admin.cluster.node.tasks.get.GetTaskRequest;

@@ -1,469 +1,420 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
+        assertEquals(
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.document.InetAddressPoint;
-import org.apache.lucene.document.SortedSetDocValuesField;
-import org.apache.lucene.sandbox.search.DocValuesMultiRangeQuery;
-import org.apache.lucene.search.BooleanClause.Occur;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.IndexOrDocValuesQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.PointRangeQuery;
-import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.network.InetAddresses;
-import org.opensearch.common.settings.Settings;
-
-import java.io.IOException;
-import java.net.InetAddress;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
-
-public class IpFieldTypeTests extends FieldTypeTestCase {
-
-    public void testValueFormat() throws Exception {
-        MappedFieldType ft = new IpFieldMapper.IpFieldType("field");
-        String ip = "2001:db8::2:1";
-        BytesRef asBytes = new BytesRef(InetAddressPoint.encode(InetAddress.getByName(ip)));
-        assertEquals(ip, ft.docValueFormat(null, null).format(asBytes));
-
-        ip = "192.168.1.7";
-        asBytes = new BytesRef(InetAddressPoint.encode(InetAddress.getByName(ip)));
-        assertEquals(ip, ft.docValueFormat(null, null).format(asBytes));
-    }
-
-    public void testValueForSearch() {
-        MappedFieldType ft = new IpFieldMapper.IpFieldType("field");
-        String ip = "2001:db8::2:1";
-        BytesRef asBytes = new BytesRef(InetAddressPoint.encode(InetAddresses.forString(ip)));
-        assertEquals(ip, ft.valueForDisplay(asBytes));
-
-        ip = "192.168.1.7";
-        asBytes = new BytesRef(InetAddressPoint.encode(InetAddresses.forString(ip)));
-        assertEquals(ip, ft.valueForDisplay(asBytes));
-    }
-
-    public void testTermQuery() {
-        MappedFieldType ft = new IpFieldMapper.IpFieldType("field", true, false, true, null, Collections.emptyMap());
-
-        String ip = "2001:db8::2:1";
-
-        Query query = InetAddressPoint.newExactQuery("field", InetAddresses.forString(ip));
-
-        assertEquals(
-            new IndexOrDocValuesQuery(
+ * GitHub history for details.
+ * license agreements. See the NOTICE file distributed with
                 query,
-                SortedSetDocValuesField.newSlowExactQuery("field", new BytesRef(((PointRangeQuery) query).getLowerPoint()))
+        String ip = "2001:db8::2:1";
+                    ((PointRangeQuery) query).getField(),
             ),
-            ft.termQuery(ip, null)
-        );
-
-        ip = "192.168.1.7";
-        query = InetAddressPoint.newExactQuery("field", InetAddresses.forString(ip));
-        assertEquals(
-            new IndexOrDocValuesQuery(
-                query,
-                SortedSetDocValuesField.newSlowExactQuery("field", new BytesRef(((PointRangeQuery) query).getLowerPoint()))
+                "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
             ),
-            ft.termQuery(ip, null)
-        );
-
-        ip = "2001:db8::2:1";
-        String prefix = ip + "/64";
-
-        query = InetAddressPoint.newPrefixQuery("field", InetAddresses.forString(ip), 64);
-        assertEquals(
-            new IndexOrDocValuesQuery(
-                query,
-                SortedSetDocValuesField.newSlowRangeQuery(
-                    "field",
-                    ipToByteRef("2001:db8:0:0:0:0:0:0"),
-                    ipToByteRef("2001:db8:0:0:ffff:ffff:ffff:ffff"),
+ * software distributed under the License is distributed on an
                     true,
-                    true
-                )
-            ),
-            ft.termQuery(prefix, null)
-        );
-
-        ip = "192.168.1.7";
-        prefix = ip + "/16";
+                    true,
+                query,
+            ft.rangeQuery("::", "0.0.0.0", true, false, null, null, null, null)
+                true,
+        assertEquals(
+    }
         query = InetAddressPoint.newPrefixQuery("field", InetAddresses.forString(ip), 16);
-        assertEquals(
+            ),
+                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
+            new IndexOrDocValuesQuery(
+    }
             new IndexOrDocValuesQuery(
                 query,
+            ft.rangeQuery("2001:db8::", "2001:db8::ffff", true, true, null, null, null, null)
+        String ip = "2001:db8::2:1";
+import org.apache.lucene.search.BooleanClause.Occur;
+ *
+                ipToByteRef("::ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
+            ft.rangeQuery("::ffff:c0a8:107", "2001:db8::", true, true, null, null, null, null)
+                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
+        BooleanQuery bq = (BooleanQuery) ((ConstantScoreQuery) actual).getQuery();
+                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
+                    ((PointRangeQuery) query).getField(),
+ * ownership. Elasticsearch licenses this file to you under
+        assertEquals(dvOnly.termQuery("::2/16", null), dvOnly.termsQuery(List.of("::2/16"), null));
                 SortedSetDocValuesField.newSlowRangeQuery(
-                    "field",
-                    ipToByteRef("::ffff:192.168.0.0"),
-                    ipToByteRef("::ffff:192.168.255.255"),
+            ),
+/*
+            // same lo/hi values but inclusive=false so this won't match anything
+        assertEquals("Cannot search on field [field] since it is both not indexed, and does not have doc_values enabled.", e.getMessage());
+                null,
+                query,
+                SortedSetDocValuesField.newSlowRangeQuery(
+        assertEquals(
+        MappedFieldType ft = new IpFieldMapper.IpFieldType("field", true, false, false, null, Collections.emptyMap());
+        assertEquals(ip, ft.docValueFormat(null, null).format(asBytes));
+                query,
+        assertEquals(
+                SortedSetDocValuesField.newSlowRangeQuery(
+        assertEquals(
+        query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("192.168.1.7"), InetAddresses.forString("2001:db8::"));
+        query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("2001:db8::1"), InetAddressPoint.MAX_VALUE);
+            // same lo/hi values but inclusive=false so this won't match anything
+            ),
+                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
+            SortedSetDocValuesField.newSlowSetQuery("field", List.of(ipToByteRef("::2"), ipToByteRef("::5"))),
+import org.apache.lucene.search.BooleanQuery;
+        assertEquals(
+        );
+                query,
+    }
+                )
+        assertEquals(
+ * specific language governing permissions and limitations
+        );
+        Query query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("::"), InetAddressPoint.MAX_VALUE);
+        ip = "2001:db8::2:1";
+        assertEquals(
+    private static BytesRef ipToByteRef(String ipString) {
+            ft.rangeQuery("255.255.255.255", "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", false, true, null, null, null, null)
+        assertEquals(
+            new IndexOrDocValuesQuery(
+                    true,
+        );
+                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
+        assertEquals(ip, ft.valueForDisplay(asBytes));
+            ),
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT.id).build();
+                    true
+    public void testFetchSourceValue() throws IOException {
+                ipToByteRef("::"),
+        );
+        );
+        query = InetAddressPoint.newExactQuery("field", InetAddresses.forString(ip));
+        assertTrue(((ConstantScoreQuery) actual).getQuery() instanceof BooleanQuery);
+        asBytes = new BytesRef(InetAddressPoint.encode(InetAddresses.forString(ip)));
+        assertEquals(
+                true,
+        MappedFieldType unsearchable = new IpFieldMapper.IpFieldType("field", false, false, false, null, Collections.emptyMap());
+ * KIND, either express or implied.  See the License for the
+            ),
+                    true,
+/*
+                ipToByteRef("::ffff:192.168.255.255"),
+        Mapper.BuilderContext context = new Mapper.BuilderContext(settings, new ContentPath());
+            ft.rangeQuery("2001:db8::", null, true, randomBoolean(), null, null, null, null)
+            .fieldType();
+                "field",
+        prefix = ip + "/16";
+    public void testTermQuery() {
+                null,
+        MappedFieldType dvOnly = new IpFieldMapper.IpFieldType("field", false, false, true, null, Collections.emptyMap());
+        String ip = "2001:db8::2:1";
+                query,
+        return new BytesRef(Objects.requireNonNull(InetAddresses.ipStringToBytes(ipString)));
+            SortedSetDocValuesField.newSlowRangeQuery(
+                query,
+            ft.termQuery(prefix, null)
+        assertEquals(
+    }
+ * under the License.
+                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
+                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
+            dvOnly.termsQuery(Arrays.asList("::2", "::5"), null)
+                false,
+        MappedFieldType unsearchable = new IpFieldMapper.IpFieldType("field", false, false, false, null, Collections.emptyMap());
+            ft.rangeQuery(
                     true,
                     true
-                )
-            ),
-            ft.termQuery(prefix, null)
-        );
-
-        MappedFieldType unsearchable = new IpFieldMapper.IpFieldType("field", false, false, false, null, Collections.emptyMap());
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> unsearchable.termQuery("::1", null));
-        assertEquals("Cannot search on field [field] since it is both not indexed, and does not have doc_values enabled.", e.getMessage());
-    }
-
-    public void testDvOnlyTermQuery() {
-        IpFieldMapper.IpFieldType dvOnly = new IpFieldMapper.IpFieldType("field", false, false, true, null, Collections.emptyMap());
-        String ip = "2001:db8::2:1";
-
-        Query query = InetAddressPoint.newExactQuery("field", InetAddresses.forString(ip));
-
-        assertEquals(
-            SortedSetDocValuesField.newSlowExactQuery("field", new BytesRef(((PointRangeQuery) query).getLowerPoint())),
-            dvOnly.termQuery(ip, null)
-        );
-
-        ip = "192.168.1.7";
-        query = InetAddressPoint.newExactQuery("field", InetAddresses.forString(ip));
-        assertEquals(
-            SortedSetDocValuesField.newSlowExactQuery("field", new BytesRef(((PointRangeQuery) query).getLowerPoint())),
-            dvOnly.termQuery(ip, null)
-        );
-
-        ip = "2001:db8::2:1";
+                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
+            SortedSetDocValuesField.newSlowRangeQuery(
+ * this file be licensed under the Apache-2.0 license or a
+                    true,
+                    true
+            new IndexOrDocValuesQuery(
+            // same lo/hi values but inclusive=false so this won't match anything
+import java.util.Objects;
         String prefix = ip + "/64";
-
-        assertEquals(
-            SortedSetDocValuesField.newSlowRangeQuery(
-                "field",
-                ipToByteRef("2001:db8:0:0:0:0:0:0"),
-                ipToByteRef("2001:db8:0:0:ffff:ffff:ffff:ffff"),
+                SortedSetDocValuesField.newSlowRangeQuery(
+                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
                 true,
-                true
-            ),
-            dvOnly.termQuery(prefix, null)
         );
-
-        ip = "192.168.1.7";
-        prefix = ip + "/16";
+            new IndexOrDocValuesQuery(indexOnly.termsQuery(List.of("::2/16"), null), dvOnly.termsQuery(List.of("::2/16"), null)),
+        query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("2001:db8::"), InetAddressPoint.MAX_VALUE);
+import org.apache.lucene.search.PointRangeQuery;
+                )
         assertEquals(
-            SortedSetDocValuesField.newSlowRangeQuery(
-                "field",
-                ipToByteRef("::ffff:192.168.0.0"),
-                ipToByteRef("::ffff:192.168.255.255"),
-                true,
-                true
-            ),
-            dvOnly.termQuery(prefix, null)
-        );
-    }
-
-    private static BytesRef ipToByteRef(String ipString) {
-        return new BytesRef(Objects.requireNonNull(InetAddresses.ipStringToBytes(ipString)));
-    }
-
-    public void testTermsQuery() {
-        MappedFieldType ft = new IpFieldMapper.IpFieldType("field", true, false, false, null, Collections.emptyMap());
-
-        assertEquals(
-            InetAddressPoint.newSetQuery("field", InetAddresses.forString("::2"), InetAddresses.forString("::5")),
-            ft.termsQuery(Arrays.asList(InetAddresses.forString("::2"), InetAddresses.forString("::5")), null)
-        );
-        assertEquals(
-            InetAddressPoint.newSetQuery("field", InetAddresses.forString("::2"), InetAddresses.forString("::5")),
-            ft.termsQuery(Arrays.asList("::2", "::5"), null)
-        );
-
-        // if the list includes a prefix query we fallback to a bool query
-        Query actual = ft.termsQuery(Arrays.asList("::42", "::2/16"), null);
         assertTrue(actual instanceof ConstantScoreQuery);
-        assertTrue(((ConstantScoreQuery) actual).getQuery() instanceof BooleanQuery);
-        BooleanQuery bq = (BooleanQuery) ((ConstantScoreQuery) actual).getQuery();
-        assertEquals(2, bq.clauses().size());
-        assertTrue(bq.clauses().stream().allMatch(c -> c.occur() == Occur.SHOULD));
-    }
-
-    public void testDvOnlyTermsQuery() {
-        MappedFieldType dvOnly = new IpFieldMapper.IpFieldType("field", false, false, true, null, Collections.emptyMap());
-
-        assertEquals(
-            SortedSetDocValuesField.newSlowSetQuery("field", List.of(ipToByteRef("::2"), ipToByteRef("::5"))),
-            dvOnly.termsQuery(Arrays.asList(InetAddresses.forString("::2"), InetAddresses.forString("::5")), null)
-        );
-        assertEquals(
-            SortedSetDocValuesField.newSlowSetQuery("field", List.of(ipToByteRef("::2"), ipToByteRef("::5"))),
-            dvOnly.termsQuery(Arrays.asList("::2", "::5"), null)
-        );
-        assertEquals(SortedSetDocValuesField.newSlowExactQuery("field", ipToByteRef("::2")), dvOnly.termsQuery(List.of("::2"), null));
-        assertEquals(
-            SortedSetDocValuesField.newSlowRangeQuery(
-                "field",
-                ipToByteRef("::"),
-                ipToByteRef("::ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
-                true,
-                true
-            ),
-            dvOnly.termsQuery(List.of("::2/16"), null)
+        assertEquals(Collections.singletonList("2001:db8::2:7"), fetchSourceValue(nullValueMapper, null));
         );
         // multirange handles both
-        DocValuesMultiRangeQuery.SortedSetStabbingBuilder expect = new DocValuesMultiRangeQuery.SortedSetStabbingBuilder("field");
-        expect.add(ipToByteRef("::42"));
-        expect.add(ipToByteRef("::"), ipToByteRef("::ffff:ffff:ffff:ffff:ffff:ffff:ffff"));
-        assertEquals(expect.build(), dvOnly.termsQuery(Arrays.asList("::42", "::2/16"), null));
-    }
-
-    public void testDvVsPoint() {
-        MappedFieldType indexOnly = new IpFieldMapper.IpFieldType("field", true, false, false, null, Collections.emptyMap());
-        MappedFieldType dvOnly = new IpFieldMapper.IpFieldType("field", false, false, true, null, Collections.emptyMap());
-        MappedFieldType indexDv = new IpFieldMapper.IpFieldType("field", true, false, true, null, Collections.emptyMap());
-        assertNotEquals("obey DocValues", indexOnly.termsQuery(List.of("::2/16"), null), indexDv.termsQuery(List.of("::2/16"), null));
-        assertEquals(dvOnly.termQuery("::2/16", null), dvOnly.termsQuery(List.of("::2/16"), null));
+        ip = "192.168.1.7";
+            SortedSetDocValuesField.newSlowRangeQuery(
+                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
+        asBytes = new BytesRef(InetAddressPoint.encode(InetAddress.getByName(ip)));
+    public void testTermsQuery() {
+import java.util.Arrays;
+                )
+                    ((PointRangeQuery) query).getField(),
+    public void testDvOnlyTermQuery() {
+                    true
         assertEquals(
-            new IndexOrDocValuesQuery(indexOnly.termsQuery(List.of("::2/16"), null), dvOnly.termsQuery(List.of("::2/16"), null)),
-            indexDv.termsQuery(List.of("::2/16"), null)
+            SortedSetDocValuesField.newSlowExactQuery("field", new BytesRef(((PointRangeQuery) query).getLowerPoint())),
         );
-    }
-
-    public void testRangeQuery() {
+                query,
+        Query query = InetAddressPoint.newExactQuery("field", InetAddresses.forString(ip));
         MappedFieldType ft = new IpFieldMapper.IpFieldType("field");
-        Query query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("::"), InetAddressPoint.MAX_VALUE);
+        MappedFieldType mapper = new IpFieldMapper.Builder("field", true, Version.CURRENT).build(context).fieldType();
+            ),
+                    true,
+            )
+        query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("::"), InetAddresses.forString("::fffe:ffff:ffff"));
+                )
+        Query query = InetAddressPoint.newExactQuery("field", InetAddresses.forString(ip));
+                    true,
+            ),
+                query,
+            new IndexOrDocValuesQuery(
+            ft.rangeQuery("2001:db8::1", "2001:db8::1", false, false, null, null, null, null)
+                true,
+        assertEquals(Collections.singletonList("2001:db8::2:1"), fetchSourceValue(mapper, "2001:db8:0:0:0:0:2:1"));
+ * this work for additional information regarding copyright
+        assertEquals(
+        MappedFieldType ft = new IpFieldMapper.IpFieldType("field");
+ * SPDX-License-Identifier: Apache-2.0
+            SortedSetDocValuesField.newSlowSetQuery("field", List.of(ipToByteRef("::2"), ipToByteRef("::5"))),
+            dvOnly.termQuery(prefix, null)
+        );
+ * Modifications Copyright OpenSearch Contributors. See
+        query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("2001:db8::2"), InetAddresses.forString("2001:db8::"));
+                query,
+import org.apache.lucene.document.SortedSetDocValuesField;
+        expect.add(ipToByteRef("::42"));
         assertEquals(
             new IndexOrDocValuesQuery(
-                query,
-                SortedSetDocValuesField.newSlowRangeQuery(
-                    ((PointRangeQuery) query).getField(),
-                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
-                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
-                    true,
-                    true
-                )
-            ),
-            ft.rangeQuery(null, null, randomBoolean(), randomBoolean(), null, null, null, null)
-        );
-
-        query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("::"), InetAddresses.forString("192.168.2.0"));
+                    ipToByteRef("::ffff:192.168.255.255"),
+                SortedSetDocValuesField.newSlowExactQuery("field", new BytesRef(((PointRangeQuery) query).getLowerPoint()))
         assertEquals(
-            new IndexOrDocValuesQuery(
-                query,
-                SortedSetDocValuesField.newSlowRangeQuery(
-                    ((PointRangeQuery) query).getField(),
-                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
-                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
-                    true,
-                    true
-                )
             ),
-            ft.rangeQuery(null, "192.168.2.0", randomBoolean(), true, null, null, null, null)
+        expect.add(ipToByteRef("::"), ipToByteRef("::ffff:ffff:ffff:ffff:ffff:ffff:ffff"));
+    }
+        assertEquals(
+        ip = "192.168.1.7";
+    public void testDvOnlyTermsQuery() {
+                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
+ *
+            // lower bound is ipv4, upper bound is ipv6
+        prefix = ip + "/16";
         );
-
+        );
+            ft.termQuery(ip, null)
+                SortedSetDocValuesField.newSlowRangeQuery(
+                    ipToByteRef("2001:db8:0:0:ffff:ffff:ffff:ffff"),
+import java.util.List;
+    public void testValueFormat() throws Exception {
         query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("::"), InetAddresses.forString("192.168.1.255"));
-        assertEquals(
-            new IndexOrDocValuesQuery(
-                query,
-                SortedSetDocValuesField.newSlowRangeQuery(
-                    ((PointRangeQuery) query).getField(),
-                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
                     new BytesRef(((PointRangeQuery) query).getUpperPoint()),
-                    true,
-                    true
                 )
-            ),
-            ft.rangeQuery(null, "192.168.2.0", randomBoolean(), false, null, null, null, null)
+        ip = "2001:db8::2:1";
+        String ip = "2001:db8::2:1";
+        ip = "192.168.1.7";
+                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
+    }
+        assertEquals(
+            ft.termsQuery(Arrays.asList("::2", "::5"), null)
+        String prefix = ip + "/64";
+ */
+            ft.termQuery(ip, null)
         );
-
-        query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("2001:db8::"), InetAddressPoint.MAX_VALUE);
-        assertEquals(
-            new IndexOrDocValuesQuery(
-                query,
-                SortedSetDocValuesField.newSlowRangeQuery(
-                    ((PointRangeQuery) query).getField(),
-                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
-                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
-                    true,
-                    true
-                )
-            ),
-            ft.rangeQuery("2001:db8::", null, true, randomBoolean(), null, null, null, null)
-        );
-
-        query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("2001:db8::1"), InetAddressPoint.MAX_VALUE);
-        assertEquals(
-            new IndexOrDocValuesQuery(
-                query,
-                SortedSetDocValuesField.newSlowRangeQuery(
-                    ((PointRangeQuery) query).getField(),
-                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
-                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
-                    true,
-                    true
-                )
-            ),
             ft.rangeQuery("2001:db8::", null, false, randomBoolean(), null, null, null, null)
-        );
-
-        query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("2001:db8::"), InetAddresses.forString("2001:db8::ffff"));
-        assertEquals(
             new IndexOrDocValuesQuery(
-                query,
-                SortedSetDocValuesField.newSlowRangeQuery(
-                    ((PointRangeQuery) query).getField(),
-                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
-                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
                     true,
+                )
+                    ((PointRangeQuery) query).getField(),
+            IllegalArgumentException.class,
+                SortedSetDocValuesField.newSlowExactQuery("field", new BytesRef(((PointRangeQuery) query).getLowerPoint()))
+        ip = "192.168.1.7";
+                query,
+        assertEquals(
+        );
+                true
+                SortedSetDocValuesField.newSlowRangeQuery(
+ * Licensed to Elasticsearch under one or more contributor
+                )
+        assertEquals(
+                SortedSetDocValuesField.newSlowRangeQuery(
+import java.net.InetAddress;
+                    ipToByteRef("::ffff:192.168.0.0"),
+        BytesRef asBytes = new BytesRef(InetAddressPoint.encode(InetAddresses.forString(ip)));
+        );
+import java.util.Collections;
+                    true
+                true
+                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
+        Query actual = ft.termsQuery(Arrays.asList("::42", "::2/16"), null);
+                )
+                query,
+ * compatible open source license.
+        assertTrue(bq.clauses().stream().allMatch(c -> c.occur() == Occur.SHOULD));
+                SortedSetDocValuesField.newSlowRangeQuery(
+                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
+        );
+                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
+                true
+ * the Apache License, Version 2.0 (the "License"); you may
+                null
+            InetAddressPoint.newSetQuery("field", InetAddresses.forString("::2"), InetAddresses.forString("::5")),
+            () -> unsearchable.rangeQuery("::1", "2001::", true, true, null, null, null, null)
+        MappedFieldType ft = new IpFieldMapper.IpFieldType("field", true, false, true, null, Collections.emptyMap());
+        IllegalArgumentException e = expectThrows(
+            ft.termQuery(prefix, null)
                     true
                 )
-            ),
-            ft.rangeQuery("2001:db8::", "2001:db8::ffff", true, true, null, null, null, null)
         );
-
-        query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("2001:db8::1"), InetAddresses.forString("2001:db8::fffe"));
+        query = InetAddressPoint.newPrefixQuery("field", InetAddresses.forString(ip), 64);
+        ip = "192.168.1.7";
         assertEquals(
-            new IndexOrDocValuesQuery(
-                query,
-                SortedSetDocValuesField.newSlowRangeQuery(
-                    ((PointRangeQuery) query).getField(),
-                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
-                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
-                    true,
-                    true
                 )
-            ),
+                SortedSetDocValuesField.newSlowRangeQuery(
+ * The OpenSearch Contributors require contributions made to
+            ft.termsQuery(Arrays.asList(InetAddresses.forString("::2"), InetAddresses.forString("::5")), null)
+        );
+import java.io.IOException;
+            new IndexOrDocValuesQuery(
+                    ((PointRangeQuery) query).getField(),
+        );
+import org.apache.lucene.search.ConstantScoreQuery;
+        // Lower bound is the max IP and is not inclusive
+                ipToByteRef("::ffff:192.168.0.0"),
+                    "field",
+import org.apache.lucene.document.InetAddressPoint;
+                ipToByteRef("2001:db8:0:0:ffff:ffff:ffff:ffff"),
+                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
+        assertEquals(new MatchNoDocsQuery(), ft.rangeQuery("::", "::", true, false, null, null, null, null));
+                    true,
+        query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("::"), InetAddresses.forString("192.168.2.0"));
+            new IndexOrDocValuesQuery(
+        assertEquals(
+            SortedSetDocValuesField.newSlowExactQuery("field", new BytesRef(((PointRangeQuery) query).getLowerPoint())),
+            new IndexOrDocValuesQuery(
+ * not use this file except in compliance with the License.
+        MappedFieldType ft = new IpFieldMapper.IpFieldType("field");
+                    true,
+import org.opensearch.common.network.InetAddresses;
+                    ipToByteRef("2001:db8:0:0:0:0:0:0"),
+                    true
+        query = InetAddressPoint.newExactQuery("field", InetAddresses.forString(ip));
+                    true
+    }
+                )
+public class IpFieldTypeTests extends FieldTypeTestCase {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ *
+            ft.rangeQuery(null, "192.168.2.0", randomBoolean(), true, null, null, null, null)
+                    "field",
+ */
+            ft.rangeQuery(null, "192.168.2.0", randomBoolean(), false, null, null, null, null)
+                SortedSetDocValuesField.newSlowRangeQuery(
+        assertEquals(expect.build(), dvOnly.termsQuery(Arrays.asList("::42", "::2/16"), null));
+        BytesRef asBytes = new BytesRef(InetAddressPoint.encode(InetAddress.getByName(ip)));
+        assertEquals(
+                    ((PointRangeQuery) query).getField(),
+            ft.rangeQuery(null, null, randomBoolean(), randomBoolean(), null, null, null, null)
+                    ((PointRangeQuery) query).getField(),
+                "field",
+                    true
+ * Unless required by applicable law or agreed to in writing,
+        ip = "192.168.1.7";
             ft.rangeQuery("2001:db8::", "2001:db8::ffff", false, false, null, null, null, null)
         );
-
-        query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("2001:db8::2"), InetAddresses.forString("2001:db8::"));
-        assertEquals(
-            new IndexOrDocValuesQuery(
-                query,
-                SortedSetDocValuesField.newSlowRangeQuery(
-                    ((PointRangeQuery) query).getField(),
-                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
-                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
-                    true,
-                    true
-                )
+    }
             ),
-            // same lo/hi values but inclusive=false so this won't match anything
-            ft.rangeQuery("2001:db8::1", "2001:db8::1", false, false, null, null, null, null)
-        );
-
+            dvOnly.termsQuery(List.of("::2/16"), null)
+                null,
+                SortedSetDocValuesField.newSlowRangeQuery(
+            ),
+                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
+        query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("2001:db8::"), InetAddresses.forString("2001:db8::ffff"));
+import org.apache.lucene.search.MatchNoDocsQuery;
         // Upper bound is the min IP and is not inclusive
-        assertEquals(new MatchNoDocsQuery(), ft.rangeQuery("::", "::", true, false, null, null, null, null));
-
-        // Lower bound is the max IP and is not inclusive
-        assertEquals(
-            new MatchNoDocsQuery(),
-            ft.rangeQuery(
+                    true
                 "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
-                "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
-                false,
-                true,
-                null,
-                null,
-                null,
-                null
-            )
-        );
-
-        query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("::"), InetAddresses.forString("::fffe:ffff:ffff"));
-        assertEquals(
-            new IndexOrDocValuesQuery(
-                query,
-                SortedSetDocValuesField.newSlowRangeQuery(
-                    ((PointRangeQuery) query).getField(),
-                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
-                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
+            dvOnly.termsQuery(Arrays.asList(InetAddresses.forString("::2"), InetAddresses.forString("::5")), null)
                     true,
-                    true
-                )
-            ),
-            // same lo/hi values but inclusive=false so this won't match anything
-            ft.rangeQuery("::", "0.0.0.0", true, false, null, null, null, null)
-        );
-
-        query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("::1:0:0:0"), InetAddressPoint.MAX_VALUE);
-        assertEquals(
-            new IndexOrDocValuesQuery(
-                query,
                 SortedSetDocValuesField.newSlowRangeQuery(
-                    ((PointRangeQuery) query).getField(),
-                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
-                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
-                    true,
-                    true
-                )
-            ),
-            // same lo/hi values but inclusive=false so this won't match anything
-            ft.rangeQuery("255.255.255.255", "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", false, true, null, null, null, null)
-        );
-
-        query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("192.168.1.7"), InetAddresses.forString("2001:db8::"));
-        assertEquals(
-            // lower bound is ipv4, upper bound is ipv6
-            new IndexOrDocValuesQuery(
-                query,
-                SortedSetDocValuesField.newSlowRangeQuery(
-                    ((PointRangeQuery) query).getField(),
-                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
-                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
-                    true,
-                    true
-                )
-            ),
-            ft.rangeQuery("::ffff:c0a8:107", "2001:db8::", true, true, null, null, null, null)
-        );
-
-        MappedFieldType unsearchable = new IpFieldMapper.IpFieldType("field", false, false, false, null, Collections.emptyMap());
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> unsearchable.rangeQuery("::1", "2001::", true, true, null, null, null, null)
-        );
-        assertEquals("Cannot search on field [field] since it is both not indexed, and does not have doc_values enabled.", e.getMessage());
-    }
-
-    public void testFetchSourceValue() throws IOException {
-        Settings settings = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT.id).build();
-        Mapper.BuilderContext context = new Mapper.BuilderContext(settings, new ContentPath());
-
-        MappedFieldType mapper = new IpFieldMapper.Builder("field", true, Version.CURRENT).build(context).fieldType();
-        assertEquals(Collections.singletonList("2001:db8::2:1"), fetchSourceValue(mapper, "2001:db8::2:1"));
-        assertEquals(Collections.singletonList("2001:db8::2:1"), fetchSourceValue(mapper, "2001:db8:0:0:0:0:2:1"));
-        assertEquals(Collections.singletonList("::1"), fetchSourceValue(mapper, "0:0:0:0:0:0:0:1"));
-
-        MappedFieldType nullValueMapper = new IpFieldMapper.Builder("field", true, Version.CURRENT).nullValue("2001:db8:0:0:0:0:2:7")
             .build(context)
-            .fieldType();
-        assertEquals(Collections.singletonList("2001:db8::2:7"), fetchSourceValue(nullValueMapper, null));
+            ),
+        assertEquals(
+        );
+                "field",
+        query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("::1:0:0:0"), InetAddressPoint.MAX_VALUE);
+        assertNotEquals("obey DocValues", indexOnly.termsQuery(List.of("::2/16"), null), indexDv.termsQuery(List.of("::2/16"), null));
+            InetAddressPoint.newSetQuery("field", InetAddresses.forString("::2"), InetAddresses.forString("::5")),
+ */
+            new IndexOrDocValuesQuery(
+            ),
+            ),
+        );
+                SortedSetDocValuesField.newSlowRangeQuery(
+        MappedFieldType indexDv = new IpFieldMapper.IpFieldType("field", true, false, true, null, Collections.emptyMap());
+    public void testDvVsPoint() {
+/*
+        assertEquals(Collections.singletonList("2001:db8::2:1"), fetchSourceValue(mapper, "2001:db8::2:1"));
+                    true,
+                    true
+import org.apache.lucene.search.Query;
+                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
+                    ((PointRangeQuery) query).getField(),
+            ),
+            new IndexOrDocValuesQuery(
+            dvOnly.termQuery(prefix, null)
+        MappedFieldType dvOnly = new IpFieldMapper.IpFieldType("field", false, false, true, null, Collections.emptyMap());
+                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
+            indexDv.termsQuery(List.of("::2/16"), null)
+        assertEquals(
+            new IndexOrDocValuesQuery(
+                )
+            new IndexOrDocValuesQuery(
+package org.opensearch.index.mapper;
+        DocValuesMultiRangeQuery.SortedSetStabbingBuilder expect = new DocValuesMultiRangeQuery.SortedSetStabbingBuilder("field");
+                    ((PointRangeQuery) query).getField(),
+                query,
+            dvOnly.termQuery(ip, null)
+import org.opensearch.cluster.metadata.IndexMetadata;
+                )
+        MappedFieldType indexOnly = new IpFieldMapper.IpFieldType("field", true, false, false, null, Collections.emptyMap());
+                    new BytesRef(((PointRangeQuery) query).getUpperPoint()),
+            ),
+        );
+        );
+        assertEquals(
+        IpFieldMapper.IpFieldType dvOnly = new IpFieldMapper.IpFieldType("field", false, false, true, null, Collections.emptyMap());
+                    ((PointRangeQuery) query).getField(),
+        );
+            new MatchNoDocsQuery(),
+                    new BytesRef(((PointRangeQuery) query).getLowerPoint()),
+        );
+        assertEquals(ip, ft.docValueFormat(null, null).format(asBytes));
+                    ((PointRangeQuery) query).getField(),
+import org.apache.lucene.sandbox.search.DocValuesMultiRangeQuery;
+    public void testValueForSearch() {
+            new IndexOrDocValuesQuery(
+        assertEquals(2, bq.clauses().size());
+                query,
+        assertEquals(ip, ft.valueForDisplay(asBytes));
     }
+        assertEquals("Cannot search on field [field] since it is both not indexed, and does not have doc_values enabled.", e.getMessage());
+        query = InetAddressPoint.newRangeQuery("field", InetAddresses.forString("2001:db8::1"), InetAddresses.forString("2001:db8::fffe"));
+        MappedFieldType nullValueMapper = new IpFieldMapper.Builder("field", true, Version.CURRENT).nullValue("2001:db8:0:0:0:0:2:7")
+    }
+            ),
+import org.apache.lucene.search.IndexOrDocValuesQuery;
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> unsearchable.termQuery("::1", null));
+        );
+        );
+        // if the list includes a prefix query we fallback to a bool query
+import org.opensearch.common.settings.Settings;
+    public void testRangeQuery() {
 }
+import org.opensearch.Version;
+                    true
+                ipToByteRef("2001:db8:0:0:0:0:0:0"),
+            dvOnly.termQuery(ip, null)
+        assertEquals(SortedSetDocValuesField.newSlowExactQuery("field", ipToByteRef("::2")), dvOnly.termsQuery(List.of("::2"), null));
+ * You may obtain a copy of the License at
+        assertEquals(Collections.singletonList("::1"), fetchSourceValue(mapper, "0:0:0:0:0:0:0:1"));
+                    true

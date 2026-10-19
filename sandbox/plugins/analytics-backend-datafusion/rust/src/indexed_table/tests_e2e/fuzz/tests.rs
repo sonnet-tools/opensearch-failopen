@@ -1,297 +1,270 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-//! Top-level randomized fuzz tests. Each test:
-//!
-//! 1. Builds one `Corpus` per test (10k–50k rows; parquet file written once).
-//! 2. Runs N random iterations against that corpus. Per iteration:
-//!    a. Derive a per-iteration seed from the master seed.
-//!    b. Generate a random tree + collector match-set via `generate_tree`.
-//!    c. Run both the oracle and the production pipeline.
-//!    d. Assert the doc-id sets match.
-//!
-//! On failure the panic message includes the outer master seed, the
-//! per-iteration seed, and the tree, so failures reproduce via
-//! `INDEXED_E2E_SEED=<hex> cargo test <test_name>`.
-
-use rand::rngs::StdRng;
-use rand::SeedableRng;
-
-use super::delegation::{
-    generate_delegation_tree, run_delegation_iteration, DelegatedBackendBehavior,
-};
-use super::{
-    build_corpus, derive_seed, generate_tree, load_segment, master_seed, run_iteration,
-    run_iteration_twice, FixtureConfig,
-};
-
-/// Run `iters` random iterations against a corpus built from `cfg_builder`.
-async fn run_fuzz(test_name: &str, iters: u64, cfg_builder: fn(u64) -> FixtureConfig) {
-    run_fuzz_with(test_name, iters, cfg_builder, /*determinism=*/ false).await;
-}
-
-async fn run_fuzz_with(
-    test_name: &str,
-    iters: u64,
-    cfg_builder: fn(u64) -> FixtureConfig,
+    run_fuzz(
     determinism: bool,
-) {
+}
+//!    c. Run both the oracle and the production pipeline.
+    num_delegation: usize,
+    .await;
+}
     let master = master_seed();
-    let corpus_seed = derive_seed(master, &format!("{}_corpus", test_name), 0);
-    let corpus = build_corpus(cfg_builder(corpus_seed));
-    let loaded = load_segment(&corpus);
-
-    for iter in 0..iters {
-        let iter_seed = derive_seed(master, test_name, iter);
-        let mut rng = StdRng::seed_from_u64(iter_seed);
-        let tree = generate_tree(&mut rng, &corpus);
-        let result = if determinism {
-            run_iteration_twice(&corpus, &loaded, &tree).await
-        } else {
-            run_iteration(&corpus, &loaded, &tree).await
-        };
-        if let Err(e) = result {
-            panic!(
-                "fuzz {} iter={} seed={:016x} master={:016x}: {}\n\
-                 reproduce: INDEXED_E2E_SEED={:016x} cargo test {}",
-                test_name, iter, iter_seed, master, e, master, test_name,
-            );
-        }
-    }
-}
-
-/// 10k rows, small trees (depth 3, fanout 3), 100 iterations.
-/// Primary correctness sweep.
-#[tokio::test(flavor = "multi_thread")]
-async fn fuzz_small() {
-    run_fuzz("fuzz_small", 100, FixtureConfig::small).await;
-}
-
-/// Tight RG + page boundaries (16k rows, 1024 per RG, 64 per page,
-/// very sparse Collector matches to produce long skip-runs).
-/// Exercises `min_skip_run` + `PositionMap`.
-#[tokio::test(flavor = "multi_thread")]
-async fn fuzz_block_boundaries() {
-    run_fuzz("fuzz_block_boundaries", 50, FixtureConfig::block_boundaries).await;
-}
-
-/// 50% null across every column. Exercises 3VL combinators under
-/// heavy UNKNOWN propagation.
-#[tokio::test(flavor = "multi_thread")]
-async fn fuzz_null_heavy() {
+/// `(correctness collector ∩ original_exprs)` set.
     run_fuzz("fuzz_null_heavy", 50, FixtureConfig::null_heavy).await;
-}
-
-/// 50k rows, deeper trees (depth 6, fanout 6), more collectors.
-/// Primary mixed-workload sweep; runs fewer iterations because each
-/// iteration is heavier.
 #[tokio::test(flavor = "multi_thread")]
-async fn fuzz_mid() {
-    run_fuzz("fuzz_mid", 20, FixtureConfig::mid).await;
-}
-
-/// Column-cardinality extremes: const Utf8, unique-per-row Utf8, narrow
-/// int, wide int. Stresses page pruning + stats paths at both ends.
+/// Shuffled column order: parquet file columns are in reversed order
+async fn fuzz_shuffled_columns() {
 #[tokio::test(flavor = "multi_thread")]
-async fn fuzz_cardinality_extremes() {
-    run_fuzz(
-        "fuzz_cardinality_extremes",
-        50,
-        FixtureConfig::cardinality_extremes,
-    )
-    .await;
-}
-
-/// Concurrency stress: 4 segments × 8 partitions. Each iteration runs
-/// twice to detect non-determinism.
-#[tokio::test(flavor = "multi_thread")]
-async fn fuzz_concurrency() {
-    run_fuzz_with(
-        "fuzz_concurrency",
-        25,
-        FixtureConfig::concurrency,
-        /*determinism=*/ true,
-    )
-    .await;
-}
-
-/// batch_size=1: every row is its own batch. Stresses coalescer and
-/// mask-slicing at every row boundary — catches off-by-one bugs in
-/// `current_mask` indexing.
-#[tokio::test(flavor = "multi_thread")]
-async fn fuzz_batch_size_one() {
-    run_fuzz("fuzz_batch_size_one", 50, FixtureConfig::batch_size_one).await;
-}
-
-/// All-null columns: `brand` and `qty` are 100% null. Exercises page
-/// stats with absent min/max and `IS NULL` predicates that always
-/// return TRUE on those columns.
-#[tokio::test(flavor = "multi_thread")]
-async fn fuzz_all_null_columns() {
-    run_fuzz("fuzz_all_null_columns", 50, FixtureConfig::all_null_columns).await;
-}
-
-/// Empty-result stress: 0.1% collector density + single collector.
-/// Most trees produce zero matching rows, exercising short-circuit
-/// and empty-batch paths in the streaming pipeline.
-#[tokio::test(flavor = "multi_thread")]
-async fn fuzz_empty_result() {
-    run_fuzz("fuzz_empty_result", 50, FixtureConfig::empty_result).await;
-}
-
-/// Single row group: entire segment is one RG. No RG boundary
-/// transitions in the streaming loop.
-#[tokio::test(flavor = "multi_thread")]
-async fn fuzz_single_row_group() {
-    run_fuzz("fuzz_single_row_group", 50, FixtureConfig::single_row_group).await;
-}
-
-/// Always-parallel collectors: `max_collector_parallelism = 4` so
-/// `PrecomputedLeafCache` concurrent path is always exercised,
 /// regardless of seed.
-#[tokio::test(flavor = "multi_thread")]
-async fn fuzz_parallel_collectors() {
-    run_fuzz(
-        "fuzz_parallel_collectors",
-        50,
-        FixtureConfig::parallel_collectors,
-    )
+        2,
     .await;
+/// over two different columns. Exercises the grid multi-column-OR
+/// Run `iters` random iterations against a corpus built from `cfg_builder`.
+//!    a. Derive a per-iteration seed from the master seed.
+    )
+#[tokio::test(flavor = "multi_thread")]
+    for iter in 0..iters {
+) {
+/// Always-parallel collectors: `max_collector_parallelism = 4` so
+/// int, wide int. Stresses page pruning + stats paths at both ends.
+async fn fuzz_multi_column_or() {
+/// `num_delegation` `DelegationPossible` leaves, wires a mock delegated-backend
 }
-
-/// AND(Predicate, Collector) focused: shallow depth-2 trees with 4
-/// collectors. Predicates evaluate first (sorted by cost), narrow the
-/// AND accumulator, then collectors get a tightened `collector_hint`
 /// range. Exercises the BitmapTree hint propagation path.
 #[tokio::test(flavor = "multi_thread")]
-async fn fuzz_and_predicate_collector() {
-    run_fuzz(
-        "fuzz_and_predicate_collector",
-        100,
-        FixtureConfig::and_predicate_collector,
-    )
-    .await;
-}
-
-/// Misaligned per-column page layouts: dictionary encoding off + tight
-/// page byte budget so Utf8 columns flush far more often than Int32/
-/// Boolean. Exercises `PagePruner`'s common-grid code path where a
-/// single grid cell inherits stats from different pages per column.
-#[tokio::test(flavor = "multi_thread")]
 async fn fuzz_misaligned_pages() {
-    run_fuzz("fuzz_misaligned_pages", 50, FixtureConfig::misaligned_pages).await;
+/// where `original_expr` is TRUE. The AND-intersection is a no-op for correctness;
+async fn run_fuzz(test_name: &str, iters: u64, cfg_builder: fn(u64) -> FixtureConfig) {
+    let corpus_seed = derive_seed(master, &format!("{}_corpus", test_name), 0);
+/// AND accumulator, then collectors get a tightened `collector_hint`
+/// iteration is heavier.
 }
-
-/// Clustered nulls: each column's nulls form 256-row contiguous runs.
+/// Multi-column OR inside a single expression: ~30% of generated
+        if let Err(e) = run_delegation_iteration(&corpus, &loaded, &dt, behavior).await {
+async fn fuzz_all_null_columns() {
+/// `prefetch_mask_buffer` and `PositionMap` in `finalize_batch`.
+) {
+    )
+/// single grid cell inherits stats from different pages per column.
+            run_iteration(&corpus, &loaded, &tree).await
+#[tokio::test(flavor = "multi_thread")]
+        FixtureConfig::parallel_collectors,
+        };
+/// collectors. Predicates evaluate first (sorted by cost), narrow the
+    run_fuzz("fuzz_mid", 20, FixtureConfig::mid).await;
+/// reprojection-by-name fix that fires when schemas have the same
+    let corpus = build_corpus(cfg_builder(corpus_seed));
+ * compatible open source license.
+}
+//! 1. Builds one `Corpus` per test (10k–50k rows; parquet file written once).
+        FixtureConfig::concurrency,
 /// Produces pages that are fully-null, fully-non-null, or mixed-null.
+/// Misaligned per-column page layouts: dictionary encoding off + tight
+};
+        FixtureConfig::and_predicate_collector,
+        let dt = generate_delegation_tree(&mut rng, &corpus, num_delegation);
+/// Clustered nulls: each column's nulls form 256-row contiguous runs.
+}
+}
+/// Delegation-passthrough: the mock delegated-backend returns *exactly* the rows
+        FixtureConfig::concurrency,
+    cfg_builder: fn(u64) -> FixtureConfig,
+/// columns but in different order.
+//!    b. Generate a random tree + collector match-set via `generate_tree`.
+/// Driver for the two delegation tests: generates a SingleCollector tree with
+    build_corpus, derive_seed, generate_tree, load_segment, master_seed, run_iteration,
+    generate_delegation_tree, run_delegation_iteration, DelegatedBackendBehavior,
+/// page byte budget so Utf8 columns flush far more often than Int32/
+    run_fuzz("fuzz_single_row_group", 50, FixtureConfig::single_row_group).await;
+async fn fuzz_block_granular_dense() {
+}
+/// compared to the table schema. Exercises the stream.rs
+            run_iteration_twice(&corpus, &loaded, &tree).await
+    run_delegation_fuzz(
+ *
+/// 50k rows, deeper trees (depth 6, fanout 6), more collectors.
+//!
+/// twice to detect non-determinism.
+ * The OpenSearch Contributors require contributions made to
+        }
+        50,
+        }
+}
+    run_fuzz("fuzz_empty_result", 50, FixtureConfig::empty_result).await;
+/// Column-cardinality extremes: const Utf8, unique-per-row Utf8, narrow
+/// backstop. Same multi-segment fixture as the passthrough variant.
+    run_delegation_fuzz(
+                test_name, iter, iter_seed, master, e, master, test_name,
+/// proves the gate + intersection don't lose rows on the happy path.
+async fn fuzz_clustered_nulls() {
 /// Exercises the `PagePruner` grid null-count splitting rule
+/// density. Auto strategy picks block-granular `min_skip_run` (selectivity
+/// `current_mask` indexing.
+}
+        100,
+        "fuzz_block_granular_dense",
+}
+async fn fuzz_batch_size_one() {
+    run_fuzz(
+//! Top-level randomized fuzz tests. Each test:
+#[tokio::test(flavor = "multi_thread")]
+    run_fuzz("fuzz_small", 100, FixtureConfig::small).await;
+        let iter_seed = derive_seed(master, test_name, iter);
+        50,
+}
+    }
+/// Single row group: entire segment is one RG. No RG boundary
+async fn fuzz_small() {
+///
+        "fuzz_delegation_sloppy",
+/// Block-granular dense: 200k rows in 100k-row RGs with 50% collector
+#[tokio::test(flavor = "multi_thread")]
+#[tokio::test(flavor = "multi_thread")]
+//! per-iteration seed, and the tree, so failures reproduce via
+/// return TRUE on those columns.
+    iters: u64,
+#[tokio::test(flavor = "multi_thread")]
+use rand::SeedableRng;
+}
+/// must filter out the extras. Proves the delegated-backend bitset is *advisory*
+}
+        let result = if determinism {
+    )
+/// Sloppy delegated backend: returns TRUE-rows + ~30% extras. Residual FilterExec
+}
+/// Concurrency stress: 4 segments × 8 partitions. Each iteration runs
+    test_name: &str,
+    )
+/// Boolean. Exercises `PagePruner`'s common-grid code path where a
+//! 2. Runs N random iterations against that corpus. Per iteration:
+                 reproduce: INDEXED_E2E_SEED={:016x} cargo test {}",
+#[tokio::test(flavor = "multi_thread")]
+    }
+            panic!(
+    run_fuzz(
+    run_fuzz("fuzz_multi_column_or", 50, FixtureConfig::multi_column_or).await;
+#[tokio::test(flavor = "multi_thread")]
+    run_fuzz_with(test_name, iters, cfg_builder, /*determinism=*/ false).await;
+}
+        if let Err(e) = result {
+        let mut rng = StdRng::seed_from_u64(iter_seed);
+    let corpus_seed = derive_seed(master, &format!("{}_corpus", test_name), 0);
+#[tokio::test(flavor = "multi_thread")]
+#[tokio::test(flavor = "multi_thread")]
+/// — DataFusion's native predicate evaluation is the authoritative correctness
+/*
+        "fuzz_and_predicate_collector",
+/// wide-selectivity queries and catches mask-alignment bugs between
+/// heavy UNKNOWN propagation.
+async fn run_fuzz_with(
+    let loaded = load_segment(&corpus);
+        FixtureConfig::concurrency,
+/// All-null columns: `brand` and `qty` are 100% null. Exercises page
+        let iter_seed = derive_seed(master, test_name, iter);
+    run_fuzz("fuzz_all_null_columns", 50, FixtureConfig::all_null_columns).await;
+    )
+/// stats with absent min/max and `IS NULL` predicates that always
+async fn fuzz_and_predicate_collector() {
+        DelegatedBackendBehavior::Passthrough,
+    )
+                 reproduce: INDEXED_E2E_SEED={:016x} cargo test {}",
+/// and empty-batch paths in the streaming pipeline.
+        2,
+use super::{
+async fn fuzz_mid() {
+/// collector keyed by annotation_id, and asserts the result equals the canonical
+/// AND(Predicate, Collector) focused: shallow depth-2 trees with 4
+        FixtureConfig::block_granular_dense,
+    run_fuzz("fuzz_clustered_nulls", 50, FixtureConfig::clustered_nulls).await;
+/// Uses `concurrency` (4 segments × 8 partitions) so segments after the first have
+/// mask-slicing at every row boundary — catches off-by-one bugs in
+    let master = master_seed();
+        let tree = generate_tree(&mut rng, &corpus);
+/// pruning path that DataFusion's `split_conjunction` discards.
+//!
+#[tokio::test(flavor = "multi_thread")]
+/// Primary mixed-workload sweep; runs fewer iterations because each
+ * this file be licensed under the Apache-2.0 license or a
+        } else {
+        25,
+/// `rg.first_row != 0` — this is the regime where the peer-bitmap offset math
+use rand::rngs::StdRng;
+async fn fuzz_parallel_collectors() {
+#[tokio::test(flavor = "multi_thread")]
+/// batch_size=1: every row is its own batch. Stresses coalescer and
+async fn fuzz_null_heavy() {
+            panic!(
+#[tokio::test(flavor = "multi_thread")]
+        "fuzz_concurrency",
+            );
+async fn fuzz_delegation_sloppy() {
+    behavior: DelegatedBackendBehavior,
+async fn fuzz_cardinality_extremes() {
+    )
+                test_name, iter, iter_seed, master, e, master, test_name,
+async fn fuzz_delegation_passthrough() {
+    .await;
+    run_fuzz(
+        DelegatedBackendBehavior::Sloppy,
+/// Exercises `min_skip_run` + `PositionMap`.
+}
+//!    d. Assert the doc-id sets match.
+    .await;
+        "fuzz_cardinality_extremes",
 /// (`0 / page_row_count / unknown`) across all three branches.
 #[tokio::test(flavor = "multi_thread")]
-async fn fuzz_clustered_nulls() {
-    run_fuzz("fuzz_clustered_nulls", 50, FixtureConfig::clustered_nulls).await;
-}
-
-/// Multi-column OR inside a single expression: ~30% of generated
-/// binary-op predicate leaves are wrapped as `BinaryExpr(Or, a<5, b>10)`
-/// over two different columns. Exercises the grid multi-column-OR
-/// pruning path that DataFusion's `split_conjunction` discards.
-#[tokio::test(flavor = "multi_thread")]
-async fn fuzz_multi_column_or() {
-    run_fuzz("fuzz_multi_column_or", 50, FixtureConfig::multi_column_or).await;
-}
-
-/// Block-granular dense: 200k rows in 100k-row RGs with 50% collector
-/// density. Auto strategy picks block-granular `min_skip_run` (selectivity
-/// well above 3% threshold), and the large RGs ensure real skip runs
-/// (> 1024 rows) survive coalescing. This is the production regime for
-/// wide-selectivity queries and catches mask-alignment bugs between
-/// `prefetch_mask_buffer` and `PositionMap` in `finalize_batch`.
-#[tokio::test(flavor = "multi_thread")]
-async fn fuzz_block_granular_dense() {
-    run_fuzz(
-        "fuzz_block_granular_dense",
-        50,
-        FixtureConfig::block_granular_dense,
-    )
-    .await;
-}
-
-/// Driver for the two delegation tests: generates a SingleCollector tree with
-/// `num_delegation` `DelegationPossible` leaves, wires a mock delegated-backend
-/// collector keyed by annotation_id, and asserts the result equals the canonical
-/// `(correctness collector ∩ original_exprs)` set.
-async fn run_delegation_fuzz(
-    test_name: &str,
-    iters: u64,
+/// Empty-result stress: 0.1% collector density + single collector.
     cfg_builder: fn(u64) -> FixtureConfig,
-    behavior: DelegatedBackendBehavior,
-    num_delegation: usize,
-) {
-    let master = master_seed();
-    let corpus_seed = derive_seed(master, &format!("{}_corpus", test_name), 0);
-    let corpus = build_corpus(cfg_builder(corpus_seed));
-    let loaded = load_segment(&corpus);
-
-    for iter in 0..iters {
-        let iter_seed = derive_seed(master, test_name, iter);
-        let mut rng = StdRng::seed_from_u64(iter_seed);
-        let dt = generate_delegation_tree(&mut rng, &corpus, num_delegation);
-        if let Err(e) = run_delegation_iteration(&corpus, &loaded, &dt, behavior).await {
-            panic!(
-                "delegation fuzz {} iter={} seed={:016x} master={:016x}: {}\n\
-                 reproduce: INDEXED_E2E_SEED={:016x} cargo test {}",
-                test_name, iter, iter_seed, master, e, master, test_name,
-            );
-        }
-    }
-}
-
-/// Delegation-passthrough: the mock delegated-backend returns *exactly* the rows
-/// where `original_expr` is TRUE. The AND-intersection is a no-op for correctness;
-/// proves the gate + intersection don't lose rows on the happy path.
-///
-/// Uses `concurrency` (4 segments × 8 partitions) so segments after the first have
-/// `rg.first_row != 0` — this is the regime where the peer-bitmap offset math
-/// (`min_doc - rg.first_row`) actually does work. A single-segment fixture would
-/// silently let an off-by-one in that arithmetic pass.
-#[tokio::test(flavor = "multi_thread")]
-async fn fuzz_delegation_passthrough() {
-    run_delegation_fuzz(
         "fuzz_delegation_passthrough",
+/// silently let an off-by-one in that arithmetic pass.
+    run_fuzz("fuzz_misaligned_pages", 50, FixtureConfig::misaligned_pages).await;
+async fn fuzz_single_row_group() {
         25,
-        FixtureConfig::concurrency,
-        DelegatedBackendBehavior::Passthrough,
-        2,
-    )
-    .await;
-}
-
-/// Sloppy delegated backend: returns TRUE-rows + ~30% extras. Residual FilterExec
-/// must filter out the extras. Proves the delegated-backend bitset is *advisory*
-/// — DataFusion's native predicate evaluation is the authoritative correctness
-/// backstop. Same multi-segment fixture as the passthrough variant.
+    let corpus = build_corpus(cfg_builder(corpus_seed));
+async fn run_delegation_fuzz(
+};
+    iters: u64,
 #[tokio::test(flavor = "multi_thread")]
-async fn fuzz_delegation_sloppy() {
-    run_delegation_fuzz(
-        "fuzz_delegation_sloppy",
-        25,
-        FixtureConfig::concurrency,
-        DelegatedBackendBehavior::Sloppy,
-        2,
-    )
-    .await;
+/// (> 1024 rows) survive coalescing. This is the production regime for
+async fn fuzz_empty_result() {
+    run_fuzz("fuzz_batch_size_one", 50, FixtureConfig::batch_size_one).await;
+        /*determinism=*/ true,
+    run_fuzz("fuzz_block_boundaries", 50, FixtureConfig::block_boundaries).await;
+    for iter in 0..iters {
+/// Most trees produce zero matching rows, exercising short-circuit
+        let mut rng = StdRng::seed_from_u64(iter_seed);
+                "delegation fuzz {} iter={} seed={:016x} master={:016x}: {}\n\
 }
-
-/// Shuffled column order: parquet file columns are in reversed order
-/// compared to the table schema. Exercises the stream.rs
-/// reprojection-by-name fix that fires when schemas have the same
-/// columns but in different order.
+}
+    .await;
+                "fuzz {} iter={} seed={:016x} master={:016x}: {}\n\
+ */
+    run_fuzz_with(
+    let loaded = load_segment(&corpus);
 #[tokio::test(flavor = "multi_thread")]
-async fn fuzz_shuffled_columns() {
+    .await;
+/// 50% null across every column. Exercises 3VL combinators under
     run_fuzz("fuzz_shuffled_columns", 50, FixtureConfig::shuffled_columns).await;
+//! `INDEXED_E2E_SEED=<hex> cargo test <test_name>`.
+async fn fuzz_concurrency() {
+ * SPDX-License-Identifier: Apache-2.0
+/// Primary correctness sweep.
+/// Tight RG + page boundaries (16k rows, 1024 per RG, 64 per page,
+/// `PrecomputedLeafCache` concurrent path is always exercised,
+            );
+        50,
+    run_iteration_twice, FixtureConfig,
+        25,
+        "fuzz_parallel_collectors",
 }
+    test_name: &str,
+async fn fuzz_block_boundaries() {
+/// transitions in the streaming loop.
+/// 10k rows, small trees (depth 3, fanout 3), 100 iterations.
+/// (`min_doc - rg.first_row`) actually does work. A single-segment fixture would
+/// very sparse Collector matches to produce long skip-runs).
+        FixtureConfig::cardinality_extremes,
+}
+use super::delegation::{
+}
+    .await;
+/// binary-op predicate leaves are wrapped as `BinaryExpr(Or, a<5, b>10)`
+//! On failure the panic message includes the outer master seed, the
+/// well above 3% threshold), and the large RGs ensure real skip runs

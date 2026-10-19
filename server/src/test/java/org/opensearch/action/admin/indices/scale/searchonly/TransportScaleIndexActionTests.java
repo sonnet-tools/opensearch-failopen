@@ -1,798 +1,666 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.action.admin.indices.scale.searchonly;
-
-import org.opensearch.Version;
-import org.opensearch.action.admin.indices.flush.FlushRequest;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateUpdateTask;
-import org.opensearch.cluster.block.ClusterBlock;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.block.ClusterBlocks;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.IndexRoutingTable;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.RoutingTable;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.cluster.routing.TestShardRouting;
-import org.opensearch.cluster.routing.allocation.AllocationService;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.index.IndexService;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.translog.TranslogStats;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportChannel;
-import org.opensearch.transport.TransportResponseHandler;
-import org.opensearch.transport.TransportService;
-import org.junit.After;
-import org.junit.Before;
-
-import java.util.Collection;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-
-import org.mockito.ArgumentCaptor;
-
-import static org.opensearch.cluster.metadata.IndexMetadata.INDEX_SEARCH_ONLY_BLOCK_ID;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.clearInvocations;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-public class TransportScaleIndexActionTests extends OpenSearchTestCase {
-
-    private TransportService transportService;
-    private ClusterService clusterService;
-    private AllocationService allocationService;
-    private IndicesService indicesService;
-    private ThreadPool threadPool;
-    private TransportScaleIndexAction action;
-
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();
-        threadPool = new TestThreadPool("ScaleIndexActionTests");
-        transportService = mock(TransportService.class);
-        clusterService = mock(ClusterService.class);
-        allocationService = mock(AllocationService.class);
-        indicesService = mock(IndicesService.class);
-
-        action = new TransportScaleIndexAction(
-            transportService,
-            clusterService,
-            threadPool,
-            new ActionFilters(Collections.emptySet()),
-            new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)),
-            allocationService,
-            indicesService
-        );
-
-        // Setup basic cluster state
-        ClusterState.Builder stateBuilder = ClusterState.builder(new ClusterName("test"));
-        stateBuilder.nodes(DiscoveryNodes.builder().build());
-        when(clusterService.state()).thenReturn(stateBuilder.build());
-    }
-
-    @After
-    public void tearDown() throws Exception {
-        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
-        super.tearDown();
-    }
-
-    public void testScaleDownValidation() {
-        String indexName = "test_index";
-        ScaleIndexRequest request = new ScaleIndexRequest(indexName, true);
-
-        // Test validation when index doesn't exist
-        ClusterState state = createClusterStateWithoutIndex(indexName);
-        when(clusterService.state()).thenReturn(state);
-
-        ActionListener<AcknowledgedResponse> listener = new ActionListener<>() {
-            @Override
-            public void onResponse(AcknowledgedResponse response) {
-                fail("Expected validation to fail");
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                assertTrue(e instanceof IllegalArgumentException);
-                assertEquals("Index [" + indexName + "] not found", e.getMessage());
-            }
-        };
-
-        action.clusterManagerOperation(request, state, listener);
-    }
-
-    public void testScaleDownWithSearchOnlyAlreadyEnabled() {
-        String indexName = "test_index";
-        ScaleIndexRequest request = new ScaleIndexRequest(indexName, true);
-
-        // Create cluster state with search-only already enabled
-        ClusterState state = createClusterStateWithSearchOnlyEnabled(indexName);
-        when(clusterService.state()).thenReturn(state);
-
-        ActionListener<AcknowledgedResponse> listener = new ActionListener<>() {
-            @Override
-            public void onResponse(AcknowledgedResponse response) {
-                fail("Expected validation to fail");
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                assertTrue(e instanceof IllegalStateException);
-                assertEquals("Index [" + indexName + "] is already in search-only mode", e.getMessage());
-            }
-        };
-
-        action.clusterManagerOperation(request, state, listener);
-    }
-
-    public void testScaleUpValidation() {
-        String indexName = "test_index";
-        ScaleIndexRequest request = new ScaleIndexRequest(indexName, false);
-
-        // Test validation when index is not in search-only mode
-        ClusterState state = createClusterStateWithoutSearchOnly(indexName);
-        when(clusterService.state()).thenReturn(state);
-
-        ActionListener<AcknowledgedResponse> listener = new ActionListener<AcknowledgedResponse>() {
-            @Override
-            public void onResponse(AcknowledgedResponse response) {
-                fail("Expected validation to fail");
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                assertTrue(e instanceof IllegalStateException);
-                assertEquals("Index [" + indexName + "] is not in search-only mode", e.getMessage());
-            }
-        };
-
-        action.clusterManagerOperation(request, state, listener);
-    }
-
-    private ClusterState createClusterStateWithoutIndex(String indexName) {
-        return ClusterState.builder(new ClusterName("test")).metadata(Metadata.builder().build()).build();
-    }
-
-    private ClusterState createClusterStateWithSearchOnlyEnabled(String indexName) {
-        Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), true)
-            .build();
-
-        IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
-            .settings(indexSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        return ClusterState.builder(new ClusterName("test")).metadata(Metadata.builder().put(indexMetadata, true).build()).build();
-    }
-
-    private ClusterState createClusterStateWithoutSearchOnly(String indexName) {
-        Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), false)
-            .build();
-
-        IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
-            .settings(indexSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        return ClusterState.builder(new ClusterName("test")).metadata(Metadata.builder().put(indexMetadata, true).build()).build();
-    }
-
-    public void testAddBlockClusterStateUpdateTask() {
-        String indexName = "test_index";
-        ScaleIndexRequest request = new ScaleIndexRequest(indexName, true);
-
-        // Create initial cluster state with necessary index metadata
-        Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, true)
-            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)
-            .build();
-
-        IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
-            .settings(indexSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        ClusterState initialState = ClusterState.builder(new ClusterName("test"))
-            .metadata(Metadata.builder().put(indexMetadata, true).build())
-            .build();
-
-        when(clusterService.state()).thenReturn(initialState);
-
-        ActionListener<AcknowledgedResponse> listener = new ActionListener<>() {
-            @Override
-            public void onResponse(AcknowledgedResponse response) {
-                assertTrue("Expected block to be added successfully", response.isAcknowledged());
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                fail("Should not fail: " + e.getMessage());
-            }
-        };
-
-        action.clusterManagerOperation(request, initialState, listener);
-
-        // Verify that the appropriate block was added
-        verify(clusterService).submitStateUpdateTask(eq("add-block-index-to-scale " + indexName), any());
-    }
-
-    public void testFinalizeScaleDownTaskSimple() throws Exception {
-        String indexName = "test_index";
-        ScaleIndexRequest request = new ScaleIndexRequest(indexName, true);
-
-        // Create minimal index metadata that meets scale-down prerequisites.
-        Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, true)
-            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)
-            .build();
-        IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
-            .settings(indexSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        // Build a minimal routing table for the index.
-        Index index = indexMetadata.getIndex();
-        ShardId shardId = new ShardId(index, 0);
-        ShardRouting primaryShardRouting = TestShardRouting.newShardRouting(shardId, "node1", true, ShardRoutingState.STARTED);
-        IndexShardRoutingTable shardRoutingTable = new IndexShardRoutingTable.Builder(shardId).addShard(primaryShardRouting).build();
-        IndexRoutingTable indexRoutingTable = new IndexRoutingTable.Builder(index).addIndexShard(shardRoutingTable).build();
-        RoutingTable routingTable = RoutingTable.builder().add(indexRoutingTable).build();
-
-        // Create a DiscoveryNode and include it in the cluster state's nodes.
-        DiscoveryNode node = new DiscoveryNode("node1", buildNewFakeTransportAddress(), Version.CURRENT);
-        DiscoveryNodes discoveryNodes = DiscoveryNodes.builder().add(node).localNodeId("node1").build();
-
-        // Build the complete cluster state with metadata, routing table, and nodes.
-        ClusterState initialState = ClusterState.builder(new ClusterName("test"))
-            .metadata(Metadata.builder().put(indexMetadata, true).build())
-            .routingTable(routingTable)
-            .nodes(discoveryNodes)
-            .build();
-        when(clusterService.state()).thenReturn(initialState);
-
-        // Stub transportService.sendRequest so that any shard sync request immediately succeeds.
-        doAnswer(invocation -> {
-            TransportResponseHandler<ScaleIndexNodeResponse> handler = invocation.getArgument(3);
-            handler.handleResponse(new ScaleIndexNodeResponse(node, Collections.emptyList()));
-            return null;
-        }).when(transportService)
-            .sendRequest(
-                any(DiscoveryNode.class),
-                eq(TransportScaleIndexAction.NAME),
-                any(ScaleIndexNodeRequest.class),
-                any(TransportResponseHandler.class)
-            );
-
-        // Execute the scale-down operation.
-        action.clusterManagerOperation(request, initialState, new ActionListener<>() {
-            @Override
-            public void onResponse(AcknowledgedResponse response) {}
-
-            @Override
-            public void onFailure(Exception e) {
-                fail("Operation should not fail: " + e.getMessage());
-            }
-        });
-
-        // Capture the add-block task submitted by the action.
-        ArgumentCaptor<ClusterStateUpdateTask> captor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
-        verify(clusterService).submitStateUpdateTask(eq("add-block-index-to-scale " + indexName), captor.capture());
-        ClusterStateUpdateTask addBlockTask = captor.getValue();
-
-        // Create a new cluster state that is different from initialState.
-        // For example, add a dummy block to the index.
-        ClusterBlocks.Builder blocksBuilder = ClusterBlocks.builder().blocks(initialState.blocks());
-        blocksBuilder.addIndexBlock(
-            indexName,
-            new ClusterBlock(123, "dummy", false, false, false, RestStatus.FORBIDDEN, EnumSet.of(ClusterBlockLevel.WRITE))
-        );
-        ClusterState newState = ClusterState.builder(initialState).blocks(blocksBuilder).build();
-
-        // Simulate the add-block task callback (with a changed state) to trigger finalize.
-        addBlockTask.clusterStateProcessed("test-source", initialState, newState);
-
-        // Verify that the finalize-scale-down update task was submitted.
-        verify(clusterService).submitStateUpdateTask(eq("finalize-scale-down"), any(ClusterStateUpdateTask.class));
-    }
-
-    public void testScaleUpClusterStateUpdateTask() throws Exception {
-        String indexName = "test_index";
-        ScaleIndexRequest request = new ScaleIndexRequest(indexName, false);
-
-        // Create index metadata with search-only mode enabled.
-        Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), true)
-            .build();
-        IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
-            .settings(indexSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        // Build a minimal routing table for the index.
-        Index index = indexMetadata.getIndex();
-        ShardId shardId = new ShardId(index, 0);
-        // Create a dummy shard routing in STARTED state.
-        ShardRouting searchOnlyShardRouting = TestShardRouting.newShardRouting(shardId, "node1", true, ShardRoutingState.STARTED);
-        IndexShardRoutingTable shardRoutingTable = new IndexShardRoutingTable.Builder(shardId).addShard(searchOnlyShardRouting).build();
-        IndexRoutingTable indexRoutingTable = new IndexRoutingTable.Builder(index).addIndexShard(shardRoutingTable).build();
-        RoutingTable routingTable = RoutingTable.builder().add(indexRoutingTable).build();
-
-        // Build the complete cluster state with metadata and the routing table.
-        ClusterState initialState = ClusterState.builder(new ClusterName("test"))
-            .metadata(Metadata.builder().put(indexMetadata, true).build())
-            .routingTable(routingTable)
-            .build();
-
-        // Stub allocationService.reroute to return a valid state.
-        ClusterState stateAfterReroute = ClusterState.builder(initialState).build();
-        when(allocationService.reroute(any(ClusterState.class), anyString())).thenReturn(stateAfterReroute);
-        when(clusterService.state()).thenReturn(initialState);
-
-        ActionListener<AcknowledgedResponse> listener = new ActionListener<>() {
-            @Override
-            public void onResponse(AcknowledgedResponse response) {
-                assertTrue("Expected scale up to complete successfully", response.isAcknowledged());
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                fail("Should not fail: " + e.getMessage());
-            }
-        };
-
-        // Trigger the scale-up operation.
-        action.clusterManagerOperation(request, initialState, listener);
-
-        // Capture the update task submitted for scaling up.
-        ArgumentCaptor<ClusterStateUpdateTask> captor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
-        verify(clusterService).submitStateUpdateTask(eq("scale-up-index"), captor.capture());
-        ClusterStateUpdateTask scaleUpTask = captor.getValue();
-
-        // Manually simulate execution of the scale-up task.
-        ClusterState updatedState = scaleUpTask.execute(initialState);
-        scaleUpTask.clusterStateProcessed("test-source", initialState, updatedState);
-
-        // Verify that allocationService.reroute was called with the expected reason.
-        verify(allocationService).reroute(any(ClusterState.class), eq("restore indexing shards"));
-    }
-
-    public void testScaleDownWithMissingIndex() {
-        String indexName = "non_existent_index";
-        ScaleIndexRequest request = new ScaleIndexRequest(indexName, true);
-
-        ClusterState state = ClusterState.builder(new ClusterName("test")).metadata(Metadata.builder().build()).build();
-
-        ActionListener<AcknowledgedResponse> listener = new ActionListener<>() {
-            @Override
-            public void onResponse(AcknowledgedResponse response) {
-                fail("Should fail for missing index");
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                assertTrue(e instanceof IllegalArgumentException);
-                assertEquals("Index [" + indexName + "] not found", e.getMessage());
-            }
-        };
-
-        action.clusterManagerOperation(request, state, listener);
-    }
-
-    public void testScaleUpWithSearchOnlyNotEnabled() {
-        String indexName = "test_index";
-        ScaleIndexRequest request = new ScaleIndexRequest(indexName, false);
-
-        Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), false)
-            .build();
-
-        IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
-            .settings(indexSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        ClusterState state = ClusterState.builder(new ClusterName("test"))
-            .metadata(Metadata.builder().put(indexMetadata, true).build())
-            .build();
-
-        ActionListener<AcknowledgedResponse> listener = new ActionListener<>() {
-            @Override
-            public void onResponse(AcknowledgedResponse response) {
-                fail("Should fail when search-only is not enabled");
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                assertTrue(e instanceof IllegalStateException);
-                assertEquals("Index [" + indexName + "] is not in search-only mode", e.getMessage());
-            }
-        };
-        action.clusterManagerOperation(request, state, listener);
-    }
-
-    public void testHandleShardSyncRequest() throws Exception {
-        // Mock dependencies
-        TransportService transportService = mock(TransportService.class);
-        ClusterService clusterService = mock(ClusterService.class);
-        IndicesService indicesService = mock(IndicesService.class);
-        TransportChannel channel = mock(TransportChannel.class);
-        DiscoveryNode localNode = new DiscoveryNode("local", buildNewFakeTransportAddress(), Version.CURRENT);
-
-        // Use a real ThreadPool but with a controlled executor
-        ThreadPool threadPool = new TestThreadPool("testHandleShardSyncRequest");
-
-        try {
-            // Create test data
-            String indexName = "test_index";
-            Index index = new Index(indexName, "_na_");
-            ShardId shardId = new ShardId(index, 0);
-            List<ShardId> shardIds = Collections.singletonList(shardId);
-            ScaleIndexNodeRequest request = new ScaleIndexNodeRequest(indexName, shardIds);
-
-            // Mock cluster state
-            ClusterState clusterState = mock(ClusterState.class);
-            Metadata metadata = mock(Metadata.class);
-            IndexMetadata indexMetadata = mock(IndexMetadata.class);
-            when(clusterService.state()).thenReturn(clusterState);
-            when(clusterState.metadata()).thenReturn(metadata);
-            when(metadata.index(indexName)).thenReturn(indexMetadata);
-            when(indexMetadata.getIndex()).thenReturn(index);
-            when(clusterService.localNode()).thenReturn(localNode);
-
-            // Mock index service and shard
-            IndexService indexService = mock(IndexService.class);
-            IndexShard indexShard = mock(IndexShard.class);
-            TranslogStats translogStats = mock(TranslogStats.class);
-
-            when(indicesService.indexService(any(Index.class))).thenReturn(indexService);
-            when(indexService.getShardOrNull(anyInt())).thenReturn(indexShard);
-            when(indexShard.shardId()).thenReturn(shardId);
-            when(indexShard.translogStats()).thenReturn(translogStats);
-            when(translogStats.getUncommittedOperations()).thenReturn(0);
-            when(indexShard.isSyncNeeded()).thenReturn(false);
-
-            // Mock shard routing to return a primary routing
-            ShardRouting shardRouting = mock(ShardRouting.class);
-            when(shardRouting.primary()).thenReturn(true);
             when(indexShard.routingEntry()).thenReturn(shardRouting);
-
-            // Mock the acquireAllPrimaryOperationsPermits method to immediately call the listener
-            doAnswer(invocation -> {
-                ActionListener<Releasable> listener = invocation.getArgument(0);
-                Releasable releasable = mock(Releasable.class);
-                listener.onResponse(releasable);
-                return null;
-            }).when(indexShard).acquireAllPrimaryOperationsPermits(any(ActionListener.class), any(TimeValue.class));
-
-            // Create action instance with the real ThreadPool
-            TransportScaleIndexAction action = new TransportScaleIndexAction(
-                transportService,
-                clusterService,
-                threadPool,
-                new ActionFilters(Collections.emptySet()),
-                new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)),
-                allocationService,
-                indicesService
-            );
-
-            // Call handleShardSyncRequest
-            action.handleShardSyncRequest(request, channel);
-
-            // Wait a short time for the async task to execute
-            assertBusy(() -> { verify(channel).sendResponse(any(ScaleIndexNodeResponse.class)); }, 5, TimeUnit.SECONDS);
-        } finally {
-            ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
-        }
-    }
-
-    public void testSyncSingleShard() throws Exception {
-        IndexShard shard = mock(IndexShard.class);
-        ShardId shardId = new ShardId(new Index("test_index", "_na_"), 0);
-        TranslogStats translogStats = mock(TranslogStats.class);
-
-        when(shard.shardId()).thenReturn(shardId);
-        when(shard.translogStats()).thenReturn(translogStats);
-
-        TransportScaleIndexAction action = new TransportScaleIndexAction(
-            transportService,
-            clusterService,
-            threadPool,
-            new ActionFilters(Collections.emptySet()),
-            new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)),
-            allocationService,
-            indicesService
-        );
-
-        when(translogStats.getUncommittedOperations()).thenReturn(0);
-        when(shard.isSyncNeeded()).thenReturn(false);
-
-        final AtomicReference<ScaleIndexShardResponse> successResponseRef = new AtomicReference<>();
-        final AtomicReference<Exception> successExceptionRef = new AtomicReference<>();
-        final CountDownLatch successLatch = new CountDownLatch(1);
-
-        action.syncSingleShard(shard, new ActionListener<>() {
-            @Override
-            public void onResponse(ScaleIndexShardResponse response) {
-                successResponseRef.set(response);
-                successLatch.countDown();
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                successExceptionRef.set(e);
-                successLatch.countDown();
-            }
-        });
-
-        ArgumentCaptor<ActionListener> successPermitCaptor = ArgumentCaptor.forClass(ActionListener.class);
-        verify(shard).acquireAllPrimaryOperationsPermits(successPermitCaptor.capture(), any(TimeValue.class));
-        successPermitCaptor.getValue().onResponse(mock(Releasable.class));
-
-        assertTrue(successLatch.await(1, TimeUnit.SECONDS));
-
-        assertNull("No exception expected", successExceptionRef.get());
-        assertNotNull("Response should not be null", successResponseRef.get());
-        assertFalse("Response should not indicate sync needed", successResponseRef.get().needsSync());
-        assertFalse("Response should not indicate uncommitted operations", successResponseRef.get().hasUncommittedOperations());
-
-        verify(shard, times(1)).sync();
-        verify(shard, times(1)).flush(any(FlushRequest.class));
-        verify(shard, times(1)).waitForRemoteStoreSync();
-
-        clearInvocations(shard);
-
-        when(translogStats.getUncommittedOperations()).thenReturn(5);
-        when(shard.isSyncNeeded()).thenReturn(true);
-
-        final AtomicReference<ScaleIndexShardResponse> responseRef = new AtomicReference<>();
-        final AtomicReference<Exception> exceptionRef = new AtomicReference<>();
-        final CountDownLatch latch = new CountDownLatch(1);
-
-        action.syncSingleShard(shard, new ActionListener<>() {
-            @Override
-            public void onResponse(ScaleIndexShardResponse response) {
-                responseRef.set(response);
-                latch.countDown();
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                exceptionRef.set(e);
-                latch.countDown();
-            }
-        });
-
-        ArgumentCaptor<ActionListener> permitListenerCaptor = ArgumentCaptor.forClass(ActionListener.class);
-        verify(shard).acquireAllPrimaryOperationsPermits(permitListenerCaptor.capture(), any(TimeValue.class));
-        permitListenerCaptor.getValue().onResponse(mock(Releasable.class));
-
-        assertTrue(latch.await(1, TimeUnit.SECONDS));
-
-        assertNull("No exception expected", exceptionRef.get());
-        assertNotNull("Response should not be null", responseRef.get());
-        assertTrue("Response should indicate uncommitted operations", responseRef.get().hasUncommittedOperations());
-        assertTrue("Response should indicate sync needed", responseRef.get().needsSync());
-
-        verify(shard, times(1)).sync();
-        verify(shard, times(1)).flush(any(FlushRequest.class));
-        verify(shard, times(1)).waitForRemoteStoreSync();
-    }
-
-    public void testCheckBlock() {
-        // Mock dependencies
-        TransportScaleIndexAction action = new TransportScaleIndexAction(
-            transportService,
-            clusterService,
-            threadPool,
-            new ActionFilters(Collections.emptySet()),
-            new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)),
-            allocationService,
-            indicesService
-        );
-
-        // Create test data
-        String indexName = "test_index";
-        ScaleIndexRequest request = new ScaleIndexRequest(indexName, true);
-
-        // Create index metadata
-        Settings indexSettings = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT).build();
-        IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
-            .settings(indexSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        // Test with no blocks
-        ClusterState state = ClusterState.builder(new ClusterName("test"))
-            .metadata(Metadata.builder().put(indexMetadata, true))
-            .blocks(ClusterBlocks.builder().build())
-            .build();
-        assertNull(action.checkBlock(request, state));
-
-        // Test with metadata write block
-        ClusterBlocks.Builder blocksBuilder = ClusterBlocks.builder();
-        ClusterBlock metadataBlock = new ClusterBlock(
-            1,
-            "test block",
-            false,
-            false,
-            false,
-            RestStatus.FORBIDDEN,
-            EnumSet.of(ClusterBlockLevel.METADATA_WRITE)
-        );
-        blocksBuilder.addGlobalBlock(metadataBlock);
-        state = ClusterState.builder(new ClusterName("test"))
-            .metadata(Metadata.builder().put(indexMetadata, true))
-            .blocks(blocksBuilder.build())
-            .build();
-
-        ClusterBlockException exception = action.checkBlock(request, state);
-        assertNotNull(exception);
-        assertTrue(exception.blocks().contains(metadataBlock));
-    }
-
-    public void testAddBlockClusterStateUpdateTaskExecute() {
-        // Mock dependencies
-        String indexName = "test_index";
-        ActionListener<AcknowledgedResponse> listener = mock(ActionListener.class);
-        Map<Index, ClusterBlock> blockedIndices = new HashMap<>();
-
-        // Create initial cluster state
-        Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, true)
-            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)
-            .build();
-
-        IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
-            .settings(indexSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        ClusterState initialState = ClusterState.builder(new ClusterName("test"))
-            .metadata(Metadata.builder().put(indexMetadata, true).build())
-            .build();
-
-        // Create action and task
-        TransportScaleIndexAction action = new TransportScaleIndexAction(
-            transportService,
-            clusterService,
-            threadPool,
-            new ActionFilters(Collections.emptySet()),
-            new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)),
-            allocationService,
-            indicesService
-        );
-
-        TransportScaleIndexAction.AddBlockClusterStateUpdateTask task = action.new AddBlockClusterStateUpdateTask(
-            indexName, blockedIndices, listener
-        );
-
-        // Test successful execution
-        ClusterState newState = task.execute(initialState);
-        assertNotEquals(initialState, newState);
-
-        // Verify that a block with the correct ID was added
-        Collection<ClusterBlock> indexBlocks = newState.blocks().indices().get(indexName);
-        assertNotNull("Index blocks should not be null", indexBlocks);
-        assertTrue("Index should have at least one block", !indexBlocks.isEmpty());
-        boolean hasBlockWithCorrectId = indexBlocks.stream().anyMatch(block -> block.id() == INDEX_SEARCH_ONLY_BLOCK_ID);
-        assertTrue("Should find a block with ID " + INDEX_SEARCH_ONLY_BLOCK_ID, hasBlockWithCorrectId);
-
-        // Test execution with missing index
-        initialState = ClusterState.builder(new ClusterName("test")).metadata(Metadata.builder().build()).build();
-
-        ClusterState resultState = task.execute(initialState);
-        assertEquals(initialState, resultState);
-
-        // Test onFailure
-        Exception testException = new Exception("Test failure");
-        task.onFailure("test", testException);
-        verify(listener).onFailure(testException);
-    }
-
-    public void testFinalizeScaleDownTaskFailure() {
-        // Mock dependencies
-        String indexName = "test_index";
-        ActionListener<AcknowledgedResponse> listener = mock(ActionListener.class);
-
-        TransportScaleIndexAction action = new TransportScaleIndexAction(
-            transportService,
-            clusterService,
-            threadPool,
-            new ActionFilters(Collections.emptySet()),
-            new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)),
-            allocationService,
-            indicesService
-        );
-
-        TransportScaleIndexAction.FinalizeScaleDownTask task = action.new FinalizeScaleDownTask(indexName, listener);
-
-        // Test onFailure
-        Exception testException = new Exception("Test failure");
-        task.onFailure("test", testException);
-        verify(listener).onFailure(testException);
-
-        // Test successful processing
-        ClusterState state = mock(ClusterState.class);
-        task.clusterStateProcessed("test", state, state);
-        verify(listener).onResponse(any(AcknowledgedResponse.class));
-    }
-
-    public void testThreadPoolConstantValidity() {
         ThreadPool threadPool = new TestThreadPool("testThreadPoolConstantValidity");
-        try {
-            // Verify that our constant points to a valid thread pool
-            assertNotNull("Thread pool executor should exist", threadPool.executor(TransportScaleIndexAction.SHARD_SYNC_EXECUTOR));
-
-            // Verify SHARD_SYNC_EXECUTOR is using the MANAGEMENT pool as expected
-            assertEquals(
-                "SHARD_SYNC_EXECUTOR should be set to MANAGEMENT",
-                ThreadPool.Names.MANAGEMENT,
-                TransportScaleIndexAction.SHARD_SYNC_EXECUTOR
-            );
-        } finally {
-            ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
-        }
+import static org.mockito.ArgumentMatchers.anyInt;
+        ScaleIndexRequest request = new ScaleIndexRequest(indexName, true);
+            .build();
+        // Stub allocationService.reroute to return a valid state.
+        // Test successful execution
+        assertTrue(successLatch.await(1, TimeUnit.SECONDS));
+            allocationService,
     }
-
+            .build();
+                fail("Expected validation to fail");
+import org.opensearch.cluster.node.DiscoveryNode;
+        ClusterBlocks.Builder blocksBuilder = ClusterBlocks.builder();
+        ClusterStateUpdateTask addBlockTask = captor.getValue();
+            public void onResponse(AcknowledgedResponse response) {
+        Settings indexSettings = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT).build();
+        TransportService transportService = mock(TransportService.class);
+        verify(listener).onFailure(testException);
+        // Create a dummy shard routing in STARTED state.
+        Settings indexSettings = Settings.builder()
+        ArgumentCaptor<ClusterStateUpdateTask> captor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
+        TransportScaleIndexAction action = new TransportScaleIndexAction(
+        task.onFailure("test", testException);
+    public void testSyncSingleShard() throws Exception {
+        // Capture the update task submitted for scaling up.
+                assertEquals("Index [" + indexName + "] is not in search-only mode", e.getMessage());
+            .build();
+            @Override
+import org.opensearch.cluster.block.ClusterBlockException;
+            .settings(indexSettings)
+        ClusterState stateAfterReroute = ClusterState.builder(initialState).build();
+            public void onResponse(AcknowledgedResponse response) {
+import org.opensearch.indices.IndicesService;
+            .numberOfShards(1)
+        verify(shard, times(1)).waitForRemoteStoreSync();
+    public void setUp() throws Exception {
+                clusterService,
+import org.opensearch.cluster.routing.ShardRouting;
+import static org.mockito.ArgumentMatchers.any;
+            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
+import static org.mockito.Mockito.times;
+        super.setUp();
+        Exception testException = new Exception("Test failure");
+        blocksBuilder.addGlobalBlock(metadataBlock);
+        ClusterBlock metadataBlock = new ClusterBlock(
+        final AtomicReference<Exception> exceptionRef = new AtomicReference<>();
+        );
+        // For example, add a dummy block to the index.
+        Index index = indexMetadata.getIndex();
+        ClusterState initialState = ClusterState.builder(new ClusterName("test"))
+            false,
+            // Verify SHARD_SYNC_EXECUTOR is using the MANAGEMENT pool as expected
+        threadPool = new TestThreadPool("ScaleIndexActionTests");
+            .build();
+        ActionListener<AcknowledgedResponse> listener = new ActionListener<>() {
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        assertTrue("Response should indicate uncommitted operations", responseRef.get().hasUncommittedOperations());
+        String indexName = "test_index";
+        );
+import org.opensearch.cluster.routing.ShardRoutingState;
+            new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)),
+        ScaleIndexRequest request = new ScaleIndexRequest(indexName, false);
+        verify(clusterService).submitStateUpdateTask(eq("scale-up-index"), captor.capture());
+        // Verify that a block with the correct ID was added
+            .blocks(ClusterBlocks.builder().build())
+    }
+        verify(allocationService).reroute(any(ClusterState.class), eq("restore indexing shards"));
+            .build();
+            @Override
+            threadPool,
+            .numberOfShards(1)
+        };
+        ShardId shardId = new ShardId(new Index("test_index", "_na_"), 0);
+        ArgumentCaptor<ActionListener> successPermitCaptor = ArgumentCaptor.forClass(ActionListener.class);
+        permitListenerCaptor.getValue().onResponse(mock(Releasable.class));
+            RestStatus.FORBIDDEN,
+        verify(shard, times(1)).flush(any(FlushRequest.class));
+        Settings indexSettings = Settings.builder()
+                exceptionRef.set(e);
+public class TransportScaleIndexActionTests extends OpenSearchTestCase {
+import org.opensearch.core.index.shard.ShardId;
+        IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
+        // Test with no blocks
+        DiscoveryNodes discoveryNodes = DiscoveryNodes.builder().add(node).localNodeId("node1").build();
+        // Create test data
+            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
+            .numberOfReplicas(1)
+            public void onFailure(Exception e) {
+        // Verify that the appropriate block was added
+            indicesService
+            indexName, blockedIndices, listener
+            indicesService
+            .put(IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)
+        final AtomicReference<ScaleIndexShardResponse> successResponseRef = new AtomicReference<>();
+            .numberOfReplicas(1)
+    public void testScaleUpClusterStateUpdateTask() throws Exception {
+import org.opensearch.common.lease.Releasable;
+        successPermitCaptor.getValue().onResponse(mock(Releasable.class));
+            }
+            indexName,
+import org.opensearch.core.action.ActionListener;
+        // Simulate the add-block task callback (with a changed state) to trigger finalize.
+import static org.mockito.Mockito.mock;
+            ShardRouting shardRouting = mock(ShardRouting.class);
+                any(TransportResponseHandler.class)
+        assertNotEquals(initialState, newState);
+        verify(shard).acquireAllPrimaryOperationsPermits(successPermitCaptor.capture(), any(TimeValue.class));
+            }
+        // Use a real ThreadPool but with a controlled executor
+        TransportScaleIndexAction.FinalizeScaleDownTask task = action.new FinalizeScaleDownTask(indexName, listener);
+        when(shard.translogStats()).thenReturn(translogStats);
+            .build();
+        DiscoveryNode localNode = new DiscoveryNode("local", buildNewFakeTransportAddress(), Version.CURRENT);
+        // Test with metadata write block
+import org.opensearch.indices.replication.common.ReplicationType;
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        final AtomicReference<Exception> successExceptionRef = new AtomicReference<>();
+            .metadata(Metadata.builder().put(indexMetadata, true).build())
+import org.opensearch.index.IndexService;
+        action.clusterManagerOperation(request, state, listener);
+        IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
+        action.clusterManagerOperation(request, state, listener);
+        allocationService = mock(AllocationService.class);
+            .numberOfReplicas(1)
+import static org.mockito.ArgumentMatchers.anyString;
+            }).when(indexShard).acquireAllPrimaryOperationsPermits(any(ActionListener.class), any(TimeValue.class));
+                successExceptionRef.set(e);
+import org.opensearch.core.rest.RestStatus;
+        when(clusterService.state()).thenReturn(initialState);
+        String indexName = "test_index";
+import java.util.List;
+    @Before
+        return ClusterState.builder(new ClusterName("test")).metadata(Metadata.builder().put(indexMetadata, true).build()).build();
+            @Override
+        String indexName = "test_index";
+            indicesService
+        ScaleIndexRequest request = new ScaleIndexRequest(indexName, true);
+        // Mock dependencies
+        ClusterState state = ClusterState.builder(new ClusterName("test"))
+            clusterService,
+        clusterService = mock(ClusterService.class);
+            .metadata(Metadata.builder().put(indexMetadata, true))
+        // Execute the scale-down operation.
+        TransportChannel channel = mock(TransportChannel.class);
+ * compatible open source license.
+        addBlockTask.clusterStateProcessed("test-source", initialState, newState);
+            .build();
+                responseRef.set(response);
+            @Override
+                assertTrue(e instanceof IllegalStateException);
+                fail("Should fail when search-only is not enabled");
+            IndexShard indexShard = mock(IndexShard.class);
+            @Override
+            }
+                successLatch.countDown();
+            public void onFailure(Exception e) {
+        IndicesService indicesService = mock(IndicesService.class);
+            .build();
+            .numberOfShards(1)
+ */
+import org.opensearch.cluster.block.ClusterBlock;
+            public void onResponse(ScaleIndexShardResponse response) {
+        // Create index metadata with search-only mode enabled.
+            threadPool,
+            assertEquals(
+        ClusterState newState = ClusterState.builder(initialState).blocks(blocksBuilder).build();
+import org.opensearch.threadpool.TestThreadPool;
+            );
+            .metadata(Metadata.builder().put(indexMetadata, true))
+        RoutingTable routingTable = RoutingTable.builder().add(indexRoutingTable).build();
+import org.opensearch.Version;
+        // Create minimal index metadata that meets scale-down prerequisites.
+            // Mock the acquireAllPrimaryOperationsPermits method to immediately call the listener
+                assertEquals("Index [" + indexName + "] is already in search-only mode", e.getMessage());
+            .build();
+            .build();
+                assertTrue(e instanceof IllegalArgumentException);
+    public void testScaleDownValidation() {
+            String indexName = "test_index";
+            public void onFailure(Exception e) {
+            public void onFailure(Exception e) {
+import org.opensearch.common.util.concurrent.ThreadContext;
+            new ActionFilters(Collections.emptySet()),
+        ClusterState state = mock(ClusterState.class);
+import org.opensearch.transport.TransportService;
+            .put(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, true)
+        // Verify that allocationService.reroute was called with the expected reason.
+            .routingTable(routingTable)
+        };
+    }
+            .put(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), true)
+            Metadata metadata = mock(Metadata.class);
+            .routingTable(routingTable)
+            // Verify that our constant points to a valid thread pool
+        // Create index metadata
+        ScaleIndexRequest request = new ScaleIndexRequest(indexName, true);
+            @Override
+import static org.mockito.Mockito.clearInvocations;
+            }
+                eq(TransportScaleIndexAction.NAME),
+                fail("Expected validation to fail");
+            .metadata(Metadata.builder().put(indexMetadata, true).build())
+        ThreadPool threadPool = new TestThreadPool("testHandleShardSyncRequest");
 }
+        action.clusterManagerOperation(request, state, listener);
+            1,
+            .nodes(discoveryNodes)
+import org.opensearch.cluster.node.DiscoveryNodes;
+            .numberOfShards(1)
+                ActionListener<Releasable> listener = invocation.getArgument(0);
+        // Mock dependencies
+        assertNotNull(exception);
+            allocationService,
+        verify(shard, times(1)).flush(any(FlushRequest.class));
+            when(clusterService.localNode()).thenReturn(localNode);
+        Index index = indexMetadata.getIndex();
+                "SHARD_SYNC_EXECUTOR should be set to MANAGEMENT",
+        ActionListener<AcknowledgedResponse> listener = new ActionListener<>() {
+                threadPool,
+import static org.mockito.Mockito.when;
+import org.opensearch.test.OpenSearchTestCase;
+            public void onResponse(AcknowledgedResponse response) {}
+        initialState = ClusterState.builder(new ClusterName("test")).metadata(Metadata.builder().build()).build();
+            transportService,
+ * SPDX-License-Identifier: Apache-2.0
+        ClusterState state = ClusterState.builder(new ClusterName("test"))
+            }
+        final AtomicReference<ScaleIndexShardResponse> responseRef = new AtomicReference<>();
+        // Mock dependencies
+            // Call handleShardSyncRequest
+            // Create action instance with the real ThreadPool
+            handler.handleResponse(new ScaleIndexNodeResponse(node, Collections.emptyList()));
+            .put(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), false)
+        // Stub transportService.sendRequest so that any shard sync request immediately succeeds.
+            when(indexShard.shardId()).thenReturn(shardId);
+            .numberOfShards(1)
+        // Build a minimal routing table for the index.
+            @Override
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+                fail("Expected validation to fail");
+        IndexRoutingTable indexRoutingTable = new IndexRoutingTable.Builder(index).addIndexShard(shardRoutingTable).build();
+        when(clusterService.state()).thenReturn(initialState);
+    public void testAddBlockClusterStateUpdateTask() {
+        IndexShardRoutingTable shardRoutingTable = new IndexShardRoutingTable.Builder(shardId).addShard(searchOnlyShardRouting).build();
+ *
+                transportService,
+        assertFalse("Response should not indicate sync needed", successResponseRef.get().needsSync());
+        ActionListener<AcknowledgedResponse> listener = new ActionListener<>() {
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+        scaleUpTask.clusterStateProcessed("test-source", initialState, updatedState);
+            allocationService,
+            .settings(indexSettings)
+            when(clusterState.metadata()).thenReturn(metadata);
+        TransportScaleIndexAction.AddBlockClusterStateUpdateTask task = action.new AddBlockClusterStateUpdateTask(
+        IndexShardRoutingTable shardRoutingTable = new IndexShardRoutingTable.Builder(shardId).addShard(primaryShardRouting).build();
+    private ThreadPool threadPool;
+        IndexShard shard = mock(IndexShard.class);
+    public void testScaleDownWithSearchOnlyAlreadyEnabled() {
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
+        ScaleIndexRequest request = new ScaleIndexRequest(indexName, true);
+import org.opensearch.action.admin.indices.flush.FlushRequest;
+        Collection<ClusterBlock> indexBlocks = newState.blocks().indices().get(indexName);
+            public void onResponse(AcknowledgedResponse response) {
+            public void onResponse(AcknowledgedResponse response) {
+                successResponseRef.set(response);
+        // Test validation when index is not in search-only mode
+            allocationService,
+        verify(clusterService).submitStateUpdateTask(eq("add-block-index-to-scale " + indexName), captor.capture());
+        String indexName = "non_existent_index";
+        ClusterState initialState = ClusterState.builder(new ClusterName("test"))
+            .put(IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)
+        assertNull("No exception expected", successExceptionRef.get());
+        verify(listener).onResponse(any(AcknowledgedResponse.class));
+            threadPool,
+        // Manually simulate execution of the scale-up task.
+        ClusterService clusterService = mock(ClusterService.class);
+                any(DiscoveryNode.class),
+            @Override
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.cluster.routing.RoutingTable;
+        Map<Index, ClusterBlock> blockedIndices = new HashMap<>();
+            new ActionFilters(Collections.emptySet()),
+        action.syncSingleShard(shard, new ActionListener<>() {
+            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
+import org.opensearch.cluster.ClusterName;
+            new ActionFilters(Collections.emptySet()),
+            }
+            }
+import java.util.concurrent.atomic.AtomicReference;
+        );
+        // Verify that the finalize-scale-down update task was submitted.
+                assertTrue(e instanceof IllegalStateException);
+            threadPool,
+            .metadata(Metadata.builder().put(indexMetadata, true).build())
+        ClusterState state = createClusterStateWithSearchOnlyEnabled(indexName);
+                new ActionFilters(Collections.emptySet()),
+            public void onFailure(Exception e) {
+    private AllocationService allocationService;
+            @Override
+        // Capture the add-block task submitted by the action.
+    public void tearDown() throws Exception {
+        // Test onFailure
+        RoutingTable routingTable = RoutingTable.builder().add(indexRoutingTable).build();
+            }
+                fail("Operation should not fail: " + e.getMessage());
+            // Create test data
+            public void onResponse(AcknowledgedResponse response) {
+            .build();
+        };
+        when(clusterService.state()).thenReturn(state);
+import org.mockito.ArgumentCaptor;
+            }
+        verify(shard, times(1)).sync();
+import org.opensearch.cluster.ClusterState;
+    public void testAddBlockClusterStateUpdateTaskExecute() {
+import org.junit.Before;
+            .build();
+        ArgumentCaptor<ActionListener> permitListenerCaptor = ArgumentCaptor.forClass(ActionListener.class);
+                any(ScaleIndexNodeRequest.class),
+        TranslogStats translogStats = mock(TranslogStats.class);
+            }
+            return null;
+        try {
+            .put(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, true)
+        action.clusterManagerOperation(request, state, listener);
+            new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)),
+        doAnswer(invocation -> {
+            );
+        IndexRoutingTable indexRoutingTable = new IndexRoutingTable.Builder(index).addIndexShard(shardRoutingTable).build();
+import org.opensearch.cluster.block.ClusterBlockLevel;
+        IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
+    }
+import java.util.concurrent.CountDownLatch;
+        action.clusterManagerOperation(request, state, listener);
+            .settings(indexSettings)
+        // Mock dependencies
+import org.opensearch.cluster.routing.TestShardRouting;
+            @Override
+        });
+        when(allocationService.reroute(any(ClusterState.class), anyString())).thenReturn(stateAfterReroute);
+                assertTrue("Expected block to be added successfully", response.isAcknowledged());
+import java.util.Collections;
+            public void onFailure(Exception e) {
+        };
+import org.junit.After;
+        String indexName = "test_index";
+        String indexName = "test_index";
+        // Test execution with missing index
+        String indexName = "test_index";
+        // Create a new cluster state that is different from initialState.
+            .numberOfShards(1)
+        Settings indexSettings = Settings.builder()
+    }
+        };
+            .sendRequest(
+    }
+    }
+            .numberOfReplicas(1)
+        assertNull(action.checkBlock(request, state));
+            assertBusy(() -> { verify(channel).sendResponse(any(ScaleIndexNodeResponse.class)); }, 5, TimeUnit.SECONDS);
+        state = ClusterState.builder(new ClusterName("test"))
+import org.opensearch.cluster.routing.IndexRoutingTable;
+            @Override
+            );
+            clusterService,
+        ScaleIndexRequest request = new ScaleIndexRequest(indexName, true);
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            .put(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), true)
+        assertFalse("Response should not indicate uncommitted operations", successResponseRef.get().hasUncommittedOperations());
+import org.opensearch.cluster.block.ClusterBlocks;
+        );
+                latch.countDown();
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+    }
+            }
+import java.util.Collection;
+        assertTrue("Index should have at least one block", !indexBlocks.isEmpty());
+            clusterService,
+    }
+            @Override
+            public void onResponse(AcknowledgedResponse response) {
+package org.opensearch.action.admin.indices.scale.searchonly;
+import org.opensearch.threadpool.ThreadPool;
+            }
+                fail("Should not fail: " + e.getMessage());
+                latch.countDown();
+            false,
+        ClusterState state = ClusterState.builder(new ClusterName("test")).metadata(Metadata.builder().build()).build();
+        assertNotNull("Response should not be null", responseRef.get());
+            }
+import org.opensearch.index.translog.TranslogStats;
+        boolean hasBlockWithCorrectId = indexBlocks.stream().anyMatch(block -> block.id() == INDEX_SEARCH_ONLY_BLOCK_ID);
+    public void testFinalizeScaleDownTaskSimple() throws Exception {
+            ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
+        ShardRouting searchOnlyShardRouting = TestShardRouting.newShardRouting(shardId, "node1", true, ShardRoutingState.STARTED);
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        };
+    private TransportScaleIndexAction action;
+            indicesService
+        super.tearDown();
+        // Create initial cluster state with necessary index metadata
+            @Override
+                listener.onResponse(releasable);
+            }
+            when(indexShard.translogStats()).thenReturn(translogStats);
+            ScaleIndexNodeRequest request = new ScaleIndexNodeRequest(indexName, shardIds);
+        ClusterState updatedState = scaleUpTask.execute(initialState);
+            doAnswer(invocation -> {
+        assertNotNull("Index blocks should not be null", indexBlocks);
+    }
+        ShardId shardId = new ShardId(index, 0);
+    }
+import org.opensearch.action.support.ActionFilters;
+        when(shard.isSyncNeeded()).thenReturn(false);
+        };
+            when(indexService.getShardOrNull(anyInt())).thenReturn(indexShard);
+        ScaleIndexRequest request = new ScaleIndexRequest(indexName, false);
+    public void testHandleShardSyncRequest() throws Exception {
+                return null;
+        // Create a DiscoveryNode and include it in the cluster state's nodes.
+            when(indexShard.isSyncNeeded()).thenReturn(false);
+            .build();
+        Settings indexSettings = Settings.builder()
+import org.opensearch.common.unit.TimeValue;
+        Settings indexSettings = Settings.builder()
+            .put(IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS, 1)
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            IndexMetadata indexMetadata = mock(IndexMetadata.class);
+        // Build the complete cluster state with metadata and the routing table.
+            @Override
+            @Override
+        task.onFailure("test", testException);
+        assertNotNull("Response should not be null", successResponseRef.get());
+        ActionListener<AcknowledgedResponse> listener = new ActionListener<>() {
+        ShardRouting primaryShardRouting = TestShardRouting.newShardRouting(shardId, "node1", true, ShardRoutingState.STARTED);
+            EnumSet.of(ClusterBlockLevel.METADATA_WRITE)
+        ClusterBlocks.Builder blocksBuilder = ClusterBlocks.builder().blocks(initialState.blocks());
+        });
+        );
+        when(clusterService.state()).thenReturn(state);
+        // Test onFailure
+            clusterService,
+        Exception testException = new Exception("Test failure");
+        TransportScaleIndexAction action = new TransportScaleIndexAction(
+            when(metadata.index(indexName)).thenReturn(indexMetadata);
+            .build();
+            Index index = new Index(indexName, "_na_");
+        String indexName = "test_index";
+                successLatch.countDown();
+            .build();
+    private ClusterState createClusterStateWithoutSearchOnly(String indexName) {
+        // Create action and task
+        ClusterState state = createClusterStateWithoutSearchOnly(indexName);
+            assertNotNull("Thread pool executor should exist", threadPool.executor(TransportScaleIndexAction.SHARD_SYNC_EXECUTOR));
+            .numberOfReplicas(1)
+import org.opensearch.common.settings.Settings;
+            .numberOfReplicas(1)
+    private IndicesService indicesService;
+    public void testScaleUpValidation() {
+        transportService = mock(TransportService.class);
+        ClusterState initialState = ClusterState.builder(new ClusterName("test"))
+        ArgumentCaptor<ClusterStateUpdateTask> captor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
+        assertTrue(latch.await(1, TimeUnit.SECONDS));
+                allocationService,
+            false,
+        when(clusterService.state()).thenReturn(initialState);
+        assertTrue(exception.blocks().contains(metadataBlock));
+            threadPool,
+import org.opensearch.transport.TransportResponseHandler;
+        String indexName = "test_index";
+            .build();
+            public void onFailure(Exception e) {
+            "test block",
+    private ClusterState createClusterStateWithSearchOnlyEnabled(String indexName) {
+            @Override
+        ActionListener<AcknowledgedResponse> listener = new ActionListener<>() {
+        }
+        ClusterBlockException exception = action.checkBlock(request, state);
+            new ActionFilters(Collections.emptySet()),
+import org.opensearch.cluster.metadata.IndexMetadata;
+        stateBuilder.nodes(DiscoveryNodes.builder().build());
+        action.clusterManagerOperation(request, initialState, new ActionListener<>() {
+                assertEquals("Index [" + indexName + "] not found", e.getMessage());
+        assertTrue("Response should indicate sync needed", responseRef.get().needsSync());
+        assertEquals(initialState, resultState);
+    private ClusterState createClusterStateWithoutIndex(String indexName) {
+                assertEquals("Index [" + indexName + "] not found", e.getMessage());
+            when(clusterService.state()).thenReturn(clusterState);
+    }
+        try {
+    }
+            .metadata(Metadata.builder().put(indexMetadata, true).build())
+        when(shard.isSyncNeeded()).thenReturn(true);
+                ThreadPool.Names.MANAGEMENT,
+import java.util.HashMap;
+        ClusterState resultState = task.execute(initialState);
+    public void testScaleUpWithSearchOnlyNotEnabled() {
+            .build();
+            .settings(indexSettings)
+        verify(clusterService).submitStateUpdateTask(eq("add-block-index-to-scale " + indexName), any());
+import java.util.Map;
+            .build();
+            }
+import static org.mockito.ArgumentMatchers.eq;
+        clearInvocations(shard);
+        // Test successful processing
+        }
+        when(clusterService.state()).thenReturn(stateBuilder.build());
+            when(indicesService.indexService(any(Index.class))).thenReturn(indexService);
+        TransportScaleIndexAction action = new TransportScaleIndexAction(
+        );
+    }
+    public void testScaleDownWithMissingIndex() {
+                assertTrue(e instanceof IllegalStateException);
+            new ClusterBlock(123, "dummy", false, false, false, RestStatus.FORBIDDEN, EnumSet.of(ClusterBlockLevel.WRITE))
+                Releasable releasable = mock(Releasable.class);
+import static org.mockito.Mockito.verify;
+            .build();
+            IndexService indexService = mock(IndexService.class);
+        action.syncSingleShard(shard, new ActionListener<>() {
+        // Setup basic cluster state
+            TranslogStats translogStats = mock(TranslogStats.class);
+import org.opensearch.cluster.metadata.Metadata;
+        when(clusterService.state()).thenReturn(state);
+            public void onFailure(Exception e) {
+    }
+            @Override
+            @Override
+        Settings indexSettings = Settings.builder()
+        TransportScaleIndexAction action = new TransportScaleIndexAction(
+        IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
+                assertTrue(e instanceof IllegalArgumentException);
+            }
+        String indexName = "test_index";
+        ActionListener<AcknowledgedResponse> listener = mock(ActionListener.class);
+        // Test validation when index doesn't exist
+import java.util.EnumSet;
+            @Override
+            new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)),
+/*
+        verify(listener).onFailure(testException);
+            action.handleShardSyncRequest(request, channel);
+        DiscoveryNode node = new DiscoveryNode("node1", buildNewFakeTransportAddress(), Version.CURRENT);
+        when(translogStats.getUncommittedOperations()).thenReturn(5);
+            public void onResponse(AcknowledgedResponse response) {
+import org.opensearch.cluster.routing.allocation.AllocationService;
+            .numberOfReplicas(1)
+                new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)),
+            // Mock cluster state
+        );
+        IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
+        IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
+        verify(shard, times(1)).sync();
+        IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
+            transportService,
+                fail("Should fail for missing index");
+        verify(clusterService).submitStateUpdateTask(eq("finalize-scale-down"), any(ClusterStateUpdateTask.class));
+            public void onResponse(ScaleIndexShardResponse response) {
+            }
+    private TransportService transportService;
+            indicesService
+        final CountDownLatch latch = new CountDownLatch(1);
+        verify(shard).acquireAllPrimaryOperationsPermits(permitListenerCaptor.capture(), any(TimeValue.class));
+    }
+                assertEquals("Index [" + indexName + "] is not in search-only mode", e.getMessage());
+        indicesService = mock(IndicesService.class);
+    public void testFinalizeScaleDownTaskFailure() {
+        ShardId shardId = new ShardId(index, 0);
+        when(shard.shardId()).thenReturn(shardId);
+        ScaleIndexRequest request = new ScaleIndexRequest(indexName, false);
+        return ClusterState.builder(new ClusterName("test")).metadata(Metadata.builder().put(indexMetadata, true).build()).build();
+ * this file be licensed under the Apache-2.0 license or a
+        // Create cluster state with search-only already enabled
+        IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
+            new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)),
+        // Create initial cluster state
+            .settings(indexSettings)
+        } finally {
+        ClusterState newState = task.execute(initialState);
+            List<ShardId> shardIds = Collections.singletonList(shardId);
+            .put(IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.getKey(), false)
+            .numberOfShards(1)
+        verify(shard, times(1)).waitForRemoteStoreSync();
+        task.clusterStateProcessed("test", state, state);
+        blocksBuilder.addIndexBlock(
+        ActionListener<AcknowledgedResponse> listener = new ActionListener<>() {
+        ClusterState initialState = ClusterState.builder(new ClusterName("test"))
+import org.opensearch.transport.TransportChannel;
+            new ActionFilters(Collections.emptySet()),
+    }
+                fail("Should not fail: " + e.getMessage());
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+            .build();
+        assertNull("No exception expected", exceptionRef.get());
+        ActionListener<AcknowledgedResponse> listener = mock(ActionListener.class);
+            clusterService,
+            @Override
+        ClusterState state = createClusterStateWithoutIndex(indexName);
+            transportService,
+        } finally {
+import org.opensearch.index.shard.IndexShard;
+            when(translogStats.getUncommittedOperations()).thenReturn(0);
+ * The OpenSearch Contributors require contributions made to
+            when(shardRouting.primary()).thenReturn(true);
+    }
+                indicesService
+        final CountDownLatch successLatch = new CountDownLatch(1);
+import static org.mockito.Mockito.doAnswer;
+            .build();
+        ActionListener<AcknowledgedResponse> listener = new ActionListener<AcknowledgedResponse>() {
+        assertTrue("Should find a block with ID " + INDEX_SEARCH_ONLY_BLOCK_ID, hasBlockWithCorrectId);
+        ClusterState.Builder stateBuilder = ClusterState.builder(new ClusterName("test"));
+            when(indexMetadata.getIndex()).thenReturn(index);
+        // Trigger the scale-up operation.
+            TransportScaleIndexAction action = new TransportScaleIndexAction(
+        String indexName = "test_index";
+        });
+            new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)),
+        action.clusterManagerOperation(request, initialState, listener);
+                assertTrue("Expected scale up to complete successfully", response.isAcknowledged());
+            TransportResponseHandler<ScaleIndexNodeResponse> handler = invocation.getArgument(3);
+        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
+        // Build a minimal routing table for the index.
+    }
+            // Mock index service and shard
+import static org.opensearch.cluster.metadata.IndexMetadata.INDEX_SEARCH_ONLY_BLOCK_ID;
+    private ClusterService clusterService;
+            .numberOfReplicas(1)
+        );
+        }).when(transportService)
+            .build();
+    public void testCheckBlock() {
+import org.opensearch.core.index.Index;
+            }
+import org.opensearch.cluster.ClusterStateUpdateTask;
+            .settings(indexSettings)
+            transportService,
+            ClusterState clusterState = mock(ClusterState.class);
+        // Build the complete cluster state with metadata, routing table, and nodes.
+            .settings(indexSettings)
+            public void onFailure(Exception e) {
+            transportService,
+        ScaleIndexRequest request = new ScaleIndexRequest(indexName, true);
+            // Mock shard routing to return a primary routing
+        Settings indexSettings = Settings.builder()
+            .blocks(blocksBuilder.build())
+            ShardId shardId = new ShardId(index, 0);
+        when(translogStats.getUncommittedOperations()).thenReturn(0);
+            .numberOfShards(1)
+            // Wait a short time for the async task to execute
+            .settings(indexSettings)
+            .metadata(Metadata.builder().put(indexMetadata, true).build())
+        return ClusterState.builder(new ClusterName("test")).metadata(Metadata.builder().build()).build();
+        ClusterStateUpdateTask scaleUpTask = captor.getValue();
+            public void onFailure(Exception e) {
+import java.util.concurrent.TimeUnit;
+                TransportScaleIndexAction.SHARD_SYNC_EXECUTOR
+            }
+        action.clusterManagerOperation(request, initialState, listener);
+            allocationService,
+    public void testThreadPoolConstantValidity() {
+            .put(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, true)
+    @After
+        action = new TransportScaleIndexAction(

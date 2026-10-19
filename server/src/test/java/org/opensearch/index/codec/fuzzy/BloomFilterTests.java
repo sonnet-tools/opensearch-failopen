@@ -1,286 +1,245 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
+            while (iterator.hasNext()) {
 package org.opensearch.index.codec.fuzzy;
-
-import org.apache.lucene.store.ByteArrayDataOutput;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.lucene.store.ByteArrayIndexInput;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicInteger;
-
-public class BloomFilterTests extends OpenSearchTestCase {
-
-    public void testBloomFilterSerializationDeserialization() throws IOException {
-        int elementCount = randomIntBetween(1, 100);
-        long maxDocs = elementCount * 10L; // Keeping this high so that it ensures some bits are not set.
-        BloomFilter filter = new BloomFilter(maxDocs, getFpp(), () -> idIterator(elementCount));
-        byte[] buffer = new byte[(int) maxDocs * 5];
-        ByteArrayDataOutput out = new ByteArrayDataOutput(buffer);
-        out.writeString(filter.setType().getSetName());
-        filter.writeTo(out);
-        FuzzySet reconstructedFilter = FuzzySetFactory.deserializeFuzzySet(new ByteArrayIndexInput("filter", buffer));
-        assertEquals(FuzzySet.SetType.BLOOM_FILTER_V1, reconstructedFilter.setType());
-        Iterator<BytesRef> idIterator = idIterator(elementCount);
-        while (idIterator.hasNext()) {
-            BytesRef element = idIterator.next();
-            assertEquals(FuzzySet.Result.MAYBE, reconstructedFilter.contains(element));
-            assertEquals(FuzzySet.Result.MAYBE, filter.contains(element));
-        }
-    }
-
-    public void testBloomFilterIsSaturated_returnsTrue() throws IOException {
-        BloomFilter bloomFilter = new BloomFilter(1L, getFpp(), () -> idIterator(1000));
-        assertEquals(FuzzySet.SetType.BLOOM_FILTER_V1, bloomFilter.setType());
-        assertEquals(true, bloomFilter.isSaturated());
-    }
-
-    public void testBloomFilterEnabled() throws IOException {
-        int elementCount = 1000;
-        double fpp = 0.01;
-        List<String> addedElements = new ArrayList<>();
-        for (int i = 0; i < elementCount; i++) {
-            addedElements.add("test" + i);
-        }
-
-        BloomFilter filter = new BloomFilter(elementCount, fpp, () -> addedElements.stream().map(BytesRef::new).iterator());
-
-        assertEquals(FuzzySet.SetType.BLOOM_FILTER_V1, filter.setType());
-        for (String element : addedElements) {
-            assertEquals("Should find added element: " + element, FuzzySet.Result.MAYBE, filter.contains(new BytesRef(element)));
-        }
-
-        logger.info("All {} elements correctly identified in bloom filter", elementCount);
-    }
-
-    public void testBloomFilterEffectiveness() throws IOException {
-        int elementCount = 10000;
-        double targetFpp = 0.01;
-        Set<String> addedElements = new HashSet<>();
-        for (int i = 0; i < elementCount; i++) {
-            addedElements.add("element" + randomAlphaOfLength(10) + i);
-        }
-
-        BloomFilter filter = new BloomFilter(elementCount, targetFpp, () -> addedElements.stream().map(BytesRef::new).iterator());
-        int testCount = 20000;
-        int falsePositives = 0;
-        Set<String> testElements = new HashSet<>();
-        for (int i = 0; i < testCount; i++) {
-            String testElement;
-            do {
-                testElement = "test" + randomAlphaOfLength(10) + i;
-            } while (addedElements.contains(testElement));
-            testElements.add(testElement);
-        }
-        for (String element : testElements) {
-            if (filter.contains(new BytesRef(element)) == FuzzySet.Result.MAYBE) {
-                falsePositives++;
-            }
-        }
-
-        double actualFpp = (double) falsePositives / testCount;
-        logger.info("Bloom filter stats - Target FPP: {}, Actual FPP: {}, Elements: {}", targetFpp, actualFpp, elementCount);
-
-        assertTrue("False positive rate should be reasonable", actualFpp <= targetFpp * 2);
-    }
-
-    public void testBloomFilterDistribution() throws IOException {
-        int elementCount = 5000;
-        double fpp = 0.01;
-        long expectedBits = (long) Math.ceil(-elementCount * Math.log(fpp) / (Math.log(2) * Math.log(2)));
-        List<String> elements = new ArrayList<>();
-        for (int i = 0; i < elementCount; i++) {
-            elements.add("prefix" + randomAlphaOfLength(5) + i);
-        }
-
-        BloomFilter filter = new BloomFilter(elementCount, fpp, () -> elements.stream().map(BytesRef::new).iterator());
-        long setBits = 0;
-        for (long i = 0; i < expectedBits; i++) {
-            if (filter.containsHash(i) == FuzzySet.Result.MAYBE) {
-                setBits++;
-            }
-        }
-
-        double fillRatio = (double) setBits / expectedBits;
-        logger.info("Bloom filter fill ratio: {}", fillRatio);
-        assertTrue("Fill ratio should be reasonable (between 0.1 and 0.9)", fillRatio > 0.1 && fillRatio < 0.9);
-    }
-
-    public void testBloomFilterConcurrency() throws Exception {
-        int elementsPerThread = 1000;
-        int numThreads = 3;
-        double fpp = 0.01;
-
-        Set<String> initialElements = new HashSet<>();
-        for (int i = 0; i < elementsPerThread; i++) {
-            initialElements.add("initial" + i);
-        }
-
-        BloomFilter filter = new BloomFilter(
-            elementsPerThread * (numThreads + 1),
-            fpp,
-            () -> initialElements.stream().map(BytesRef::new).iterator()
-        );
-
-        for (String element : initialElements) {
-            assertEquals(FuzzySet.Result.MAYBE, filter.contains(new BytesRef(element)));
-        }
-
-        CountDownLatch startLatch = new CountDownLatch(1);
-        CountDownLatch endLatch = new CountDownLatch(numThreads);
-        AtomicInteger falsePositives = new AtomicInteger(0);
-
-        for (int t = 0; t < numThreads; t++) {
-            final int threadId = t;
-            Thread thread = new Thread(() -> {
-                try {
-                    startLatch.await();
-                    for (int i = 0; i < elementsPerThread; i++) {
-                        String element = "thread" + threadId + "element" + i;
-                        if (filter.contains(new BytesRef(element)) == FuzzySet.Result.MAYBE && !initialElements.contains(element)) {
-                            falsePositives.incrementAndGet();
-                        }
-                    }
-                } catch (Exception e) {
-                    fail("Thread execution failed: " + e.getMessage());
-                } finally {
-                    endLatch.countDown();
                 }
-            });
-            thread.start();
+                assertEquals(FuzzySet.Result.MAYBE, filter.contains(iterator.next()));
         }
-
-        startLatch.countDown();
-        endLatch.await();
-
-        double fpRate = (double) falsePositives.get() / (elementsPerThread * numThreads);
-        logger.info("Concurrent false positive rate: {}", fpRate);
-        assertTrue("Concurrent false positive rate should be reasonable", fpRate <= fpp * 2);
+        logger.info("All {} elements correctly identified in bloom filter", elementCount);
+            assertEquals(FuzzySet.Result.MAYBE, reconstructedFilter.contains(element));
+                        if (filter.contains(new BytesRef(element)) == FuzzySet.Result.MAYBE && !initialElements.contains(element)) {
+            Thread thread = new Thread(() -> {
+        int testCount = 20000;
+            public BytesRef next() {
     }
-
-    public void testBloomFilterIsSaturated_returnsFalse() throws IOException {
-        int elementCount = randomIntBetween(1, 100);
-        BloomFilter bloomFilter = new BloomFilter(20000, getFpp(), () -> idIterator(elementCount));
+        }
+        assertEquals(originalFilter.setType(), deserializedFilter.setType());
+                falsePositives++;
+            Iterator<BytesRef> iterator = idIterator(elementCount);
+        logger.info("Bloom filter stats - Target FPP: {}, Actual FPP: {}, Elements: {}", targetFpp, actualFpp, elementCount);
+        double targetFpp = 0.01;
+        logger.info("Bloom filter fill ratio: {}", fillRatio);
         assertEquals(FuzzySet.SetType.BLOOM_FILTER_V1, bloomFilter.setType());
+        int falsePositives = 0;
+            assertEquals(FuzzySet.Result.MAYBE, filter.contains(new BytesRef(element)));
+            testElements.add(testElement);
+    private double getFpp() {
+                    startLatch.await();
+import java.io.IOException;
+        double fillRatio = (double) setBits / expectedBits;
+            if (filter.contains(new BytesRef(element)) == FuzzySet.Result.MAYBE) {
+            assertFalse(filter.isSaturated());
+        int elementCount = 100;
+        for (int i = 0; i < elementsPerThread; i++) {
+            fpp,
+        BloomFilter filter = new BloomFilter(
+            addedElements.add("test" + i);
+        int elementCount = 10000;
+    }
+        int testCount = 100;
+            BytesRef element = iterator.next();
+        for (int i = elementCount; i < elementCount + testCount; i++) {
+        BloomFilter filter = new BloomFilter(1000, fpp, () -> idIterator(elementCount));
+            elements.add("prefix" + randomAlphaOfLength(5) + i);
+        int elementCount = 5000;
+        long maxDocs = randomLongBetween(Integer.MAX_VALUE, 5L * Integer.MAX_VALUE);
+        }
+        int falsePositives = 0;
+                setBits++;
+        BloomFilter bloomFilter = new BloomFilter(20000, getFpp(), () -> idIterator(elementCount));
+        ByteArrayDataOutput out = new ByteArrayDataOutput(buffer);
+        }
+        }
+        Set<String> addedElements = new HashSet<>();
+    public void testBloomFilterEnabled() throws IOException {
+import org.apache.lucene.store.ByteArrayDataOutput;
+        out.writeString(filter.setType().getSetName());
+                falsePositives++;
+        logger.info("Concurrent false positive rate: {}", fpRate);
+        AtomicInteger falsePositives = new AtomicInteger(0);
+        BloomFilter filter = new BloomFilter(elementCount, fpp, () -> elements.stream().map(BytesRef::new).iterator());
+        int elementCount = 1000;
+import java.util.ArrayList;
+        List<String> addedElements = new ArrayList<>();
+            assertEquals(originalFilter.contains(element), deserializedFilter.contains(element));
+            thread.start();
+        Set<String> testElements = new HashSet<>();
+                    }
+        int elementCount = randomIntBetween(1, 100);
+        double actualFpp = (double) falsePositives / testCount;
         assertEquals(false, bloomFilter.isSaturated());
     }
-
-    public void testBloomFilterWithLargeCapacity() throws IOException {
-        long maxDocs = randomLongBetween(Integer.MAX_VALUE, 5L * Integer.MAX_VALUE);
-        BloomFilter bloomFilter = new BloomFilter(maxDocs, getFpp(), () -> List.of(new BytesRef("bar")).iterator());
-        assertEquals(FuzzySet.SetType.BLOOM_FILTER_V1, bloomFilter.setType());
-    }
-
-    public void testBloomFilterContainsElement() throws IOException {
-        int elementCount = 100;
+            int cnt = count;
+        CountDownLatch endLatch = new CountDownLatch(numThreads);
         double fpp = 0.01;
-        BloomFilter filter = new BloomFilter(1000, fpp, () -> idIterator(elementCount));
-        for (int i = 0; i < elementCount; i++) {
-            assertEquals(FuzzySet.Result.MAYBE, filter.contains(new BytesRef(Integer.toString(i))));
-        }
-        int falsePositives = 0;
-        int testCount = 100;
-        for (int i = elementCount; i < elementCount + testCount; i++) {
-            if (filter.contains(new BytesRef(Integer.toString(i))) == FuzzySet.Result.MAYBE) {
-                falsePositives++;
-            }
-        }
-        double actualFpp = (double) falsePositives / testCount;
-        logger.info("False positive rate: {}", actualFpp);
-        assertTrue("False positive rate should be reasonable", actualFpp <= fpp * 2);
-    }
-
-    public void testBloomFilterWithDifferentFPP() throws IOException {
-        int elementCount = 1000;
-        double[] fpps = { 0.01, 0.05, 0.1, 0.2 };
-
-        for (double fpp : fpps) {
-            BloomFilter filter = new BloomFilter(elementCount, fpp, () -> idIterator(elementCount));
-            assertFalse(filter.isSaturated());
-            Iterator<BytesRef> iterator = idIterator(elementCount);
-            while (iterator.hasNext()) {
-                assertEquals(FuzzySet.Result.MAYBE, filter.contains(iterator.next()));
-            }
-        }
-    }
-
-    public void testBloomFilterFalsePositiveRate() throws IOException {
-        int elementCount = 10000;
-        double targetFpp = 0.01;
-        BloomFilter filter = new BloomFilter(elementCount, targetFpp, () -> idIterator(elementCount));
-        for (int i = 0; i < elementCount; i++) {
-            assertEquals(FuzzySet.Result.MAYBE, filter.contains(new BytesRef(Integer.toString(i))));
-        }
-        int falsePositives = 0;
-        int testCount = 10000;
-        for (int i = elementCount; i < elementCount + testCount; i++) {
-            if (filter.contains(new BytesRef(Integer.toString(i))) == FuzzySet.Result.MAYBE) {
-                falsePositives++;
-            }
-        }
-
-        double actualFpp = (double) falsePositives / testCount;
-        assertTrue("False positive rate " + actualFpp + " should be close to target " + targetFpp, actualFpp <= targetFpp * 2);
-    }
-
-    public void testBloomFilterSerialization() throws IOException {
-        int elementCount = 500;
-        BloomFilter originalFilter = new BloomFilter(elementCount * 2, 0.05, () -> idIterator(elementCount));
-
-        byte[] serialized = serializeFilter(originalFilter);
-        FuzzySet deserializedFilter = deserializeFilter(serialized);
-
-        assertEquals(originalFilter.setType(), deserializedFilter.setType());
-        Iterator<BytesRef> iterator = idIterator(elementCount);
-        while (iterator.hasNext()) {
-            BytesRef element = iterator.next();
-            assertEquals(originalFilter.contains(element), deserializedFilter.contains(element));
-        }
-    }
-
-    private byte[] serializeFilter(BloomFilter filter) throws IOException {
-        int bufferSize = (int) Math.max(8192, filter.ramBytesUsed() * 2);
-        byte[] buffer = new byte[bufferSize];
-        ByteArrayDataOutput out = new ByteArrayDataOutput(buffer);
-        out.writeString(filter.setType().getSetName());
-        filter.writeTo(out);
         return buffer;
     }
-
+                } finally {
+        for (int i = 0; i < elementCount; i++) {
+    }
+        int elementCount = 500;
+                testElement = "test" + randomAlphaOfLength(10) + i;
+                            falsePositives.incrementAndGet();
+                    for (int i = 0; i < elementsPerThread; i++) {
+        Iterator<BytesRef> iterator = idIterator(elementCount);
+        for (int i = 0; i < elementCount; i++) {
+            assertEquals(FuzzySet.Result.MAYBE, filter.contains(new BytesRef(Integer.toString(i))));
+        for (long i = 0; i < expectedBits; i++) {
+import java.util.concurrent.CountDownLatch;
+            String testElement;
+        int elementCount = randomIntBetween(1, 100);
+        int elementsPerThread = 1000;
+            }
+        for (int i = 0; i < elementCount; i++) {
+                } catch (Exception e) {
+        );
+                        String element = "thread" + threadId + "element" + i;
+            BytesRef element = idIterator.next();
+    public void testBloomFilterEffectiveness() throws IOException {
+import java.util.HashSet;
+    }
+        }
     private FuzzySet deserializeFilter(byte[] serialized) throws IOException {
-        return FuzzySetFactory.deserializeFuzzySet(new ByteArrayIndexInput("filter", serialized));
-    }
-
-    private double getFpp() {
-        return randomDoubleBetween(0.01, 0.50, true);
-    }
-
+    private byte[] serializeFilter(BloomFilter filter) throws IOException {
+ * The OpenSearch Contributors require contributions made to
+            @Override
+        int numThreads = 3;
     private Iterator<BytesRef> idIterator(int count) {
-        return new Iterator<BytesRef>() {
-            int cnt = count;
-
-            @Override
-            public boolean hasNext() {
-                return cnt-- > 0;
+        assertEquals(FuzzySet.SetType.BLOOM_FILTER_V1, bloomFilter.setType());
+        int elementCount = 1000;
+        double fpp = 0.01;
+        assertTrue("Fill ratio should be reasonable (between 0.1 and 0.9)", fillRatio > 0.1 && fillRatio < 0.9);
+            BloomFilter filter = new BloomFilter(elementCount, fpp, () -> idIterator(elementCount));
+ *
+        BloomFilter filter = new BloomFilter(elementCount, targetFpp, () -> idIterator(elementCount));
             }
-
+        }
+        }
+    public void testBloomFilterFalsePositiveRate() throws IOException {
             @Override
-            public BytesRef next() {
-                return new BytesRef(Integer.toString(cnt));
-            }
-        };
+        int falsePositives = 0;
+    public void testBloomFilterIsSaturated_returnsFalse() throws IOException {
     }
+        }
+            }
+        long maxDocs = elementCount * 10L; // Keeping this high so that it ensures some bits are not set.
+        long setBits = 0;
+            elementsPerThread * (numThreads + 1),
+        long expectedBits = (long) Math.ceil(-elementCount * Math.log(fpp) / (Math.log(2) * Math.log(2)));
+        }
+        double fpp = 0.01;
+        Set<String> initialElements = new HashSet<>();
+    public void testBloomFilterSerialization() throws IOException {
+    public void testBloomFilterSerializationDeserialization() throws IOException {
+        assertTrue("Concurrent false positive rate should be reasonable", fpRate <= fpp * 2);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        int elementCount = 10000;
+        byte[] serialized = serializeFilter(originalFilter);
+        endLatch.await();
+    public void testBloomFilterContainsElement() throws IOException {
+    public void testBloomFilterConcurrency() throws Exception {
+        for (int i = 0; i < testCount; i++) {
+            public boolean hasNext() {
+ * this file be licensed under the Apache-2.0 license or a
+        for (int i = elementCount; i < elementCount + testCount; i++) {
+ * SPDX-License-Identifier: Apache-2.0
+        assertEquals(FuzzySet.SetType.BLOOM_FILTER_V1, reconstructedFilter.setType());
+            });
+    }
+        FuzzySet reconstructedFilter = FuzzySetFactory.deserializeFuzzySet(new ByteArrayIndexInput("filter", buffer));
+        for (String element : addedElements) {
+        assertEquals(FuzzySet.SetType.BLOOM_FILTER_V1, filter.setType());
+            addedElements.add("element" + randomAlphaOfLength(10) + i);
+        double[] fpps = { 0.01, 0.05, 0.1, 0.2 };
+    }
+        }
+        for (int i = 0; i < elementCount; i++) {
+        filter.writeTo(out);
+        BloomFilter filter = new BloomFilter(elementCount, fpp, () -> addedElements.stream().map(BytesRef::new).iterator());
+public class BloomFilterTests extends OpenSearchTestCase {
+        BloomFilter bloomFilter = new BloomFilter(maxDocs, getFpp(), () -> List.of(new BytesRef("bar")).iterator());
+            () -> initialElements.stream().map(BytesRef::new).iterator()
+        logger.info("False positive rate: {}", actualFpp);
+import java.util.Set;
+            }
+        }
+        double fpRate = (double) falsePositives.get() / (elementsPerThread * numThreads);
+            }
+    }
+        double actualFpp = (double) falsePositives / testCount;
+        while (idIterator.hasNext()) {
+import java.util.Iterator;
+        assertTrue("False positive rate should be reasonable", actualFpp <= targetFpp * 2);
 }
+                try {
+            if (filter.containsHash(i) == FuzzySet.Result.MAYBE) {
+        for (int t = 0; t < numThreads; t++) {
+                    fail("Thread execution failed: " + e.getMessage());
+    }
+    }
+        for (double fpp : fpps) {
+    public void testBloomFilterWithLargeCapacity() throws IOException {
+        assertTrue("False positive rate should be reasonable", actualFpp <= fpp * 2);
+        }
+        List<String> elements = new ArrayList<>();
+        return new Iterator<BytesRef>() {
+            assertEquals(FuzzySet.Result.MAYBE, filter.contains(element));
+    public void testBloomFilterDistribution() throws IOException {
+        BloomFilter filter = new BloomFilter(maxDocs, getFpp(), () -> idIterator(elementCount));
+            initialElements.add("initial" + i);
+                        }
+        return randomDoubleBetween(0.01, 0.50, true);
+        for (String element : testElements) {
+        ByteArrayDataOutput out = new ByteArrayDataOutput(buffer);
+        }
+ */
+        double actualFpp = (double) falsePositives / testCount;
+import java.util.concurrent.atomic.AtomicInteger;
+        assertTrue("False positive rate " + actualFpp + " should be close to target " + targetFpp, actualFpp <= targetFpp * 2);
+    }
+import org.opensearch.test.OpenSearchTestCase;
+                falsePositives++;
+        int testCount = 10000;
+        BloomFilter filter = new BloomFilter(elementCount, targetFpp, () -> addedElements.stream().map(BytesRef::new).iterator());
+        assertEquals(true, bloomFilter.isSaturated());
+        }
+            if (filter.contains(new BytesRef(Integer.toString(i))) == FuzzySet.Result.MAYBE) {
+        for (String element : initialElements) {
+            assertEquals(FuzzySet.Result.MAYBE, filter.contains(new BytesRef(Integer.toString(i))));
+    public void testBloomFilterWithDifferentFPP() throws IOException {
+    }
+    }
+import org.opensearch.common.lucene.store.ByteArrayIndexInput;
+        double targetFpp = 0.01;
+        startLatch.countDown();
+        BloomFilter bloomFilter = new BloomFilter(1L, getFpp(), () -> idIterator(1000));
+        for (int i = 0; i < elementCount; i++) {
+                return new BytesRef(Integer.toString(cnt));
+            } while (addedElements.contains(testElement));
+            final int threadId = t;
+            do {
+        Iterator<BytesRef> idIterator = idIterator(elementCount);
+    public void testBloomFilterIsSaturated_returnsTrue() throws IOException {
+        return FuzzySetFactory.deserializeFuzzySet(new ByteArrayIndexInput("filter", serialized));
+            assertEquals("Should find added element: " + element, FuzzySet.Result.MAYBE, filter.contains(new BytesRef(element)));
+        double fpp = 0.01;
+        }
+        filter.writeTo(out);
+        while (iterator.hasNext()) {
+        }
+import java.util.List;
+            }
+        byte[] buffer = new byte[bufferSize];
+        int bufferSize = (int) Math.max(8192, filter.ramBytesUsed() * 2);
+        assertEquals(FuzzySet.SetType.BLOOM_FILTER_V1, bloomFilter.setType());
+        out.writeString(filter.setType().getSetName());
+ * compatible open source license.
+/*
+        BloomFilter originalFilter = new BloomFilter(elementCount * 2, 0.05, () -> idIterator(elementCount));
+        byte[] buffer = new byte[(int) maxDocs * 5];
+            if (filter.contains(new BytesRef(Integer.toString(i))) == FuzzySet.Result.MAYBE) {
+import org.apache.lucene.util.BytesRef;
+                    endLatch.countDown();
+        };
+        FuzzySet deserializedFilter = deserializeFilter(serialized);
+    }
+            }
+                return cnt-- > 0;

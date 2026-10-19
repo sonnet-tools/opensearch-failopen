@@ -1,291 +1,263 @@
-setup:
-  - skip:
-      version: " - 2.7.99"
-      reason: unsigned_long is not supported before 2.8.0
-
-  - do:
-      indices.create:
-          index: test_1
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
-              properties:
-                unsigned_field:
-                   type : unsigned_long
-                double_field:
-                   type : double
-                string_field:
-                   type: keyword
-
-  - do:
-       bulk:
-         refresh: true
-         body:
-           - index:
-               _index: test_1
-               _id:    1
-           - unsigned_field: 1
-             double_field: 1.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    2
-           - unsigned_field: 51
-             double_field: 51.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    3
-           - unsigned_field: 1101
-             double_field: 1101.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    4
-           - unsigned_field: 10223372036854778000
-             double_field: 10223372036854778000.0
-             string_field: foo
-
----
-"Basic test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            distinct_unsigned:
-              cardinality:
-                field: unsigned_field
-            distinct_double:
-              cardinality:
-                field: double_field
-            distinct_string:
-              cardinality:
-                field: string_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.distinct_unsigned.value: 4 }
-  - match: { aggregations.distinct_double.value: 4 }
-  - match: { aggregations.distinct_string.value: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            distinct_unsigned:
-              cardinality:
-                field: unsigned_field
-                precision_threshold: 100
-            distinct_double:
-              cardinality:
-                field: double_field
-                precision_threshold: 100
-            distinct_string:
-              cardinality:
-                field: string_field
-                precision_threshold: 100
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.distinct_unsigned.value: 4 }
-  - match: { aggregations.distinct_double.value: 4 }
-  - match: { aggregations.distinct_string.value: 1 }
-
----
-"Only aggs test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          size: 0
-          aggs:
-            distinct_unsigned:
-              cardinality:
-                field: unsigned_field
-            distinct_double:
-              cardinality:
-                field: double_field
-            distinct_string:
-              cardinality:
-                field: string_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 0 }
-  - match: { aggregations.distinct_unsigned.value: 4 }
-  - match: { aggregations.distinct_double.value: 4 }
-  - match: { aggregations.distinct_string.value: 1 }
-
----
-"Filtered test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            constant_score:
-              filter:
-                range:
-                  unsigned_field:
-                    gte: 50
-          aggs:
-            distinct_unsigned:
-              cardinality:
-                field: unsigned_field
-            distinct_double:
-              cardinality:
-                field: double_field
-            distinct_string:
-              cardinality:
-                field: string_field
-
-  - match: { hits.total: 3 }
-  - length: { hits.hits: 3 }
-  - match: { aggregations.distinct_unsigned.value: 3 }
-  - match: { aggregations.distinct_double.value: 3 }
-  - match: { aggregations.distinct_string.value: 1 }
-
-
----
-"Missing field with missing param":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            distinct_missing:
-              cardinality:
-                field: missing_field
-                missing: "foo"
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.distinct_missing.value: 1 }
-
+          profile: true
 ---
 "Missing field without missing param":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            distinct_missing:
-              cardinality:
-                field: missing_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - is_false: aggregations.distinct_missing.value
-
----
-"Metadata test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            distinct_missing:
-              meta:
-                foo: bar
-              cardinality:
-                field: unsigned_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
+              filter:
   - match: { aggregations.distinct_missing.value: 4 }
-  - match: { aggregations.distinct_missing.meta.foo: "bar" }
-
+  - gt: { profile.shards.0.aggregations.0.breakdown.collect: 0 }
 ---
-"Invalid Precision test":
-
-  - do:
-      catch: /\[precisionThreshold\] must be greater than or equal to 0. Found \[-1\] in \[distinct_unsigned\]/
-      search:
-        rest_total_hits_as_int: true
-        body:
+  - match: { profile.shards.0.aggregations.0.debug.ordinals_collectors_overhead_too_high: 0 }
           aggs:
-            distinct_unsigned:
               cardinality:
+  - match: { aggregations.distinct_string.value: 1 }
+      version: " - 3.3.99"
+               _id:    4
+           - index:
+              cardinality:
+           - unsigned_field: 51
+           - index:
+  - do:
+  - match: { hits.total: 4 }
+  - gt: { profile.shards.0.aggregations.0.breakdown.initialize: 0 }
+  - match: { aggregations.distinct_string.value: 1 }
+            distinct_unsigned:
+                range:
+            distinct_double:
+        body:
+  - gt: { profile.shards.0.aggregations.0.breakdown.build_leaf_collector: 0 }
+              cardinality:
+  - length: { hits.hits: 4 }
+         refresh: true
+          body:
+                   type : unsigned_long
+            distinct_string:
+      search:
+           - unsigned_field: 1101
+                field: string_field
+"Missing field with missing param":
+  - match: { aggregations.distinct_double.value: 4 }
+                field: missing_field
+                precision_threshold: 100
+             double_field: 1.0
+          index: test_1
+  - match: { aggregations.distinct_double.value: 4 }
+              cardinality:
+  - gt: { profile.shards.0.aggregations.0.breakdown.collect: 0 }
+  - gt: { profile.shards.0.aggregations.0.breakdown.build_aggregation: 0 }
+          aggs:
+  - match: { profile.shards.0.aggregations.0.debug.string_hashing_collectors_used: 0 }
                 field: unsigned_field
-                precision_threshold: -1
-
+  - match: { aggregations.distinct_string.value: 1 }
+        body:
+             string_field: foo
+          query:
+                    gte: 50
+  - do:
+              cardinality:
+      catch: /\[precisionThreshold\] must be greater than or equal to 0. Found \[-1\] in \[distinct_unsigned\]/
+  - gt: { profile.shards.0.aggregations.0.breakdown.collect: 0 }
+          aggs:
+---
+---
+               _id:    2
+  - do:
+---
+         body:
+  - do:
+  - match: { aggregations.distinct_double.value: 4 }
+                field: double_field
+       bulk:
+      search:
+                string_field:
+  - is_false: aggregations.distinct_missing.value
+                foo: bar
+            distinct_unsigned:
+                field: double_field
+              cardinality:
+  - match: { hits.total: 4 }
+          size: 0
+  - gt: { profile.shards.0.aggregations.0.breakdown.build_leaf_collector: 0 }
+          size: 0
+            distinct_missing:
+  - gt: { profile.shards.0.aggregations.0.debug.numeric_collectors_used: 0 }
+  - do:
+             string_field: foo
+              cardinality:
+      reason: unsigned_long is not supported before 2.8.0
+             string_field: foo
+      search:
+  - match: { hits.total: 3 }
+                field: double_field
+        body:
+  - match: { profile.shards.0.aggregations.0.debug.ordinals_collectors_used: 0 }
+                unsigned_field:
+          size: 0
+        body:
+              cardinality:
+  - match: { aggregations.distinct_unsigned.value: 4 }
+  - match: { profile.shards.0.aggregations.0.debug.ordinals_collectors_overhead_too_high: 0 }
+              number_of_replicas: 0
+  - match: { profile.shards.0.aggregations.0.debug.empty_collectors_used: 0 }
+  - gt: { profile.shards.0.aggregations.0.breakdown.initialize: 0 }
+  - match: { profile.shards.0.aggregations.0.debug.numeric_collectors_used: 0 }
+              cardinality:
+        rest_total_hits_as_int: true
+  - length: { hits.hits: 4 }
+  - match: { hits.total: 4 }
+  - match: { profile.shards.0.aggregations.0.debug.string_hashing_collectors_used: 0 }
+  - match: { profile.shards.0.aggregations.0.debug.ordinals_collectors_overhead_too_high: 0 }
+      search:
+                field: unsigned_field
+  - skip:
+          size: 0
+             double_field: 1101.0
+  - length: { hits.hits: 3 }
+  - do:
+            mappings:
+            constant_score:
+           - unsigned_field: 1
+            distinct_double:
+---
+              cardinality:
+  - match: { aggregations.distinct_unsigned.value: 4 }
+               _id:    1
+  - match: { profile.shards.0.aggregations.0.debug.ordinals_collectors_used: 0 }
+                field: string_field
+        body:
+        rest_total_hits_as_int: true
+  - match: { hits.total: 4 }
+      search:
 ---
 "profiler unsigned_long":
-  - do:
-      search:
+  - match: { aggregations.distinct_double.value: 3 }
+            distinct_string:
+              cardinality:
+      version: " - 2.7.99"
+                   type : double
+---
+                precision_threshold: -1
+            settings:
         body:
-          profile: true
-          size: 0
-          aggs:
-            distinct_unsigned:
+                field: unsigned_field
+setup:
               cardinality:
                 field: unsigned_field
-  - match: { aggregations.distinct_unsigned.value: 4 }
-  - gt: { profile.shards.0.aggregations.0.breakdown.initialize: 0 }
-  - gt: { profile.shards.0.aggregations.0.breakdown.build_leaf_collector: 0 }
-  - gt: { profile.shards.0.aggregations.0.breakdown.collect: 0 }
-  - gt: { profile.shards.0.aggregations.0.breakdown.build_aggregation: 0 }
-  - gt: { profile.shards.0.aggregations.0.breakdown.post_collection: 0 }
-  - match: { profile.shards.0.aggregations.0.debug.empty_collectors_used: 0 }
-  - gt: { profile.shards.0.aggregations.0.debug.numeric_collectors_used: 0 }
-  - match: { profile.shards.0.aggregations.0.debug.ordinals_collectors_used: 0 }
-  - match: { profile.shards.0.aggregations.0.debug.ordinals_collectors_overhead_too_high: 0 }
-  - match: { profile.shards.0.aggregations.0.debug.string_hashing_collectors_used: 0 }
-
----
-"profiler double":
-  - do:
-      search:
-        body:
-          profile: true
-          size: 0
-          aggs:
-            distinct_double:
-              cardinality:
                 field: double_field
-  - match: { aggregations.distinct_double.value: 4 }
-  - gt: { profile.shards.0.aggregations.0.breakdown.initialize: 0 }
-  - gt: { profile.shards.0.aggregations.0.breakdown.build_leaf_collector: 0 }
-  - gt: { profile.shards.0.aggregations.0.breakdown.collect: 0 }
-  - gt: { profile.shards.0.aggregations.0.breakdown.build_aggregation: 0 }
-  - gt: { profile.shards.0.aggregations.0.breakdown.post_collection: 0 }
-  - match: { profile.shards.0.aggregations.0.debug.empty_collectors_used: 0 }
-  - gt: { profile.shards.0.aggregations.0.debug.numeric_collectors_used: 0 }
-  - match: { profile.shards.0.aggregations.0.debug.ordinals_collectors_used: 0 }
-  - match: { profile.shards.0.aggregations.0.debug.ordinals_collectors_overhead_too_high: 0 }
-  - match: { profile.shards.0.aggregations.0.debug.string_hashing_collectors_used: 0 }
-
----
-"profiler string":
-  - skip:
-      version: " - 3.3.99"
-      reason:  hybrid collector added in 3.4.0
-  - do:
-      search:
-        body:
-          profile: true
-          size: 0
+               _id:    3
+               _index: test_1
           aggs:
+  - match: { aggregations.distinct_unsigned.value: 4 }
+        body:
+---
+  - match: { profile.shards.0.aggregations.0.debug.ordinals_collectors_used: 0 }
+                field: string_field
+  - match: { hits.total: 4 }
+        body:
+             string_field: foo
+  - match: { aggregations.distinct_double.value: 4 }
+              cardinality:
+      search:
+  - do:
+           - index:
+  - length: { hits.hits: 4 }
+                missing: "foo"
+  - do:
+  - do:
+            distinct_double:
             distinct_string:
+  - skip:
+  - match: { aggregations.distinct_missing.value: 1 }
+                  unsigned_field:
+"Only aggs test":
+  - gt: { profile.shards.0.aggregations.0.breakdown.post_collection: 0 }
+---
+                field: unsigned_field
+  - gt: { profile.shards.0.aggregations.0.breakdown.build_leaf_collector: 0 }
+            distinct_unsigned:
+  - do:
+  - gt: { profile.shards.0.aggregations.0.breakdown.post_collection: 0 }
+            distinct_double:
+  - length: { hits.hits: 4 }
+            distinct_string:
+  - do:
+        body:
+          aggs:
+        rest_total_hits_as_int: true
+      search:
+           - index:
+            distinct_unsigned:
+            distinct_double:
+  - match: { profile.shards.0.aggregations.0.debug.string_hashing_collectors_used: 0 }
+               _index: test_1
+"profiler double":
+                field: unsigned_field
+"Basic test":
+           - unsigned_field: 10223372036854778000
+             double_field: 10223372036854778000.0
+              cardinality:
+  - length: { hits.hits: 0 }
+                field: missing_field
+  - gt: { profile.shards.0.aggregations.0.breakdown.build_aggregation: 0 }
+            distinct_missing:
+                field: double_field
+              properties:
+"Invalid Precision test":
+  - match: { aggregations.distinct_unsigned.value: 3 }
+               _index: test_1
+  - length: { hits.hits: 4 }
+"Metadata test":
+"Filtered test":
+"profiler string":
+        rest_total_hits_as_int: true
+                field: string_field
+      indices.create:
+            distinct_string:
+            distinct_missing:
+  - match: { aggregations.distinct_unsigned.value: 4 }
+            distinct_unsigned:
+          profile: true
+          aggs:
+  - match: { hits.total: 4 }
+  - match: { profile.shards.0.aggregations.0.debug.empty_collectors_used: 0 }
+        body:
+          aggs:
+              cardinality:
+  - match: { profile.shards.0.aggregations.0.debug.empty_collectors_used: 0 }
+      search:
+  - do:
+              cardinality:
+        body:
+          aggs:
+          profile: true
+             double_field: 51.0
+                precision_threshold: 100
+  - gt: { profile.shards.0.aggregations.0.breakdown.post_collection: 0 }
+          aggs:
+  - gt: { profile.shards.0.aggregations.0.debug.numeric_collectors_used: 0 }
+      reason:  hybrid collector added in 3.4.0
+              cardinality:
+  - do:
+                precision_threshold: 100
+  - match: { aggregations.distinct_missing.meta.foo: "bar" }
+  - gt: { profile.shards.0.aggregations.0.breakdown.initialize: 0 }
+      search:
+      search:
+      search:
+        rest_total_hits_as_int: true
+  - match: { aggregations.distinct_string.value: 1 }
+               _index: test_1
+                field: unsigned_field
+        rest_total_hits_as_int: true
+              cardinality:
+        rest_total_hits_as_int: true
+                   type: keyword
+          aggs:
               cardinality:
                 field: string_field
   - match: { aggregations.distinct_string.value: 1 }
-  - gt: { profile.shards.0.aggregations.0.breakdown.initialize: 0 }
-  - gt: { profile.shards.0.aggregations.0.breakdown.build_leaf_collector: 0 }
-  - gt: { profile.shards.0.aggregations.0.breakdown.collect: 0 }
+              meta:
+            distinct_unsigned:
+        rest_total_hits_as_int: true
   - gt: { profile.shards.0.aggregations.0.breakdown.build_aggregation: 0 }
-  - gt: { profile.shards.0.aggregations.0.breakdown.post_collection: 0 }
-  - match: { profile.shards.0.aggregations.0.debug.empty_collectors_used: 0 }
-  - match: { profile.shards.0.aggregations.0.debug.numeric_collectors_used: 0 }
-  - match: { profile.shards.0.aggregations.0.debug.ordinals_collectors_used: 0 }
-  - match: { profile.shards.0.aggregations.0.debug.ordinals_collectors_overhead_too_high: 0 }
-  - match: { profile.shards.0.aggregations.0.debug.string_hashing_collectors_used: 0 }
   - gt: { profile.shards.0.aggregations.0.debug.hybrid_collectors_used: 0 }
+          aggs:
+                double_field:

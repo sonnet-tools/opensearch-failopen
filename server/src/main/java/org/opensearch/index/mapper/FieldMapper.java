@@ -1,954 +1,838 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.FieldType;
-import org.apache.lucene.index.IndexOptions;
-import org.apache.lucene.index.LeafReader;
-import org.opensearch.common.Explicit;
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Setting.Property;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.xcontent.AbstractXContentParser;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.analysis.NamedAnalyzer;
-import org.opensearch.index.mapper.FieldNamesFieldMapper.FieldNamesFieldType;
-import org.opensearch.index.mapper.extrasource.ExtraFieldValues;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Spliterators;
-import java.util.TreeMap;
-import java.util.stream.StreamSupport;
-
-/**
- * The base OpenSearch Field Mapper
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public abstract class FieldMapper extends Mapper implements Cloneable {
-    public static final Setting<Boolean> IGNORE_MALFORMED_SETTING = Setting.boolSetting(
-        "index.mapping.ignore_malformed",
-        false,
-        Property.IndexScope
-    );
-    public static final Setting<Boolean> COERCE_SETTING = Setting.boolSetting("index.mapping.coerce", false, Property.IndexScope);
-
-    /**
-     * Base builder for all field mappers
-     *
-     * @opensearch.internal
-     */
-    public abstract static class Builder<T extends Builder<T>> extends Mapper.Builder<T> {
-
-        protected final FieldType fieldType;
-        protected boolean omitNormsSet = false;
-        protected boolean indexOptionsSet = false;
-        protected boolean hasDocValues = true;
-        protected boolean indexed = true;
-        protected final MultiFields.Builder multiFieldsBuilder;
-        protected CopyTo copyTo = CopyTo.empty();
-        protected float boost = 1.0f;
-        protected Map<String, String> meta = Collections.emptyMap();
-        // TODO move to KeywordFieldMapper.Builder
-        protected boolean eagerGlobalOrdinals;
-        // TODO move to text-specific builder base class
-        protected NamedAnalyzer indexAnalyzer;
-        protected NamedAnalyzer searchAnalyzer;
-        protected NamedAnalyzer searchQuoteAnalyzer;
-
-        protected Builder(String name, FieldType fieldType) {
-            super(name);
-            this.fieldType = new FieldType(fieldType);
-            multiFieldsBuilder = new MultiFields.Builder();
-        }
-
-        public T index(boolean index) {
-            this.indexed = index;
-            if (index == false) {
-                this.fieldType.setIndexOptions(IndexOptions.NONE);
-            }
-            return builder;
-        }
-
-        public T store(boolean store) {
-            this.fieldType.setStored(store);
-            return builder;
-        }
-
-        public T docValues(boolean docValues) {
-            this.hasDocValues = docValues;
-            return builder;
-        }
-
-        public T storeTermVectors(boolean termVectors) {
-            if (termVectors != this.fieldType.storeTermVectors()) {
-                this.fieldType.setStoreTermVectors(termVectors);
-            } // don't set it to false, it is default and might be flipped by a more specific option
-            return builder;
-        }
-
-        public T storeTermVectorOffsets(boolean termVectorOffsets) {
-            if (termVectorOffsets) {
-                this.fieldType.setStoreTermVectors(termVectorOffsets);
-            }
-            this.fieldType.setStoreTermVectorOffsets(termVectorOffsets);
-            return builder;
-        }
-
-        public T storeTermVectorPositions(boolean termVectorPositions) {
-            if (termVectorPositions) {
-                this.fieldType.setStoreTermVectors(termVectorPositions);
-            }
-            this.fieldType.setStoreTermVectorPositions(termVectorPositions);
-            return builder;
-        }
-
-        public T storeTermVectorPayloads(boolean termVectorPayloads) {
-            if (termVectorPayloads) {
-                this.fieldType.setStoreTermVectors(termVectorPayloads);
-            }
-            this.fieldType.setStoreTermVectorPayloads(termVectorPayloads);
-            return builder;
-        }
-
-        public T boost(float boost) {
-            this.boost = boost;
-            return builder;
-        }
-
-        public T omitNorms(boolean omitNorms) {
-            this.fieldType.setOmitNorms(omitNorms);
-            this.omitNormsSet = true;
-            return builder;
-        }
-
-        public T indexOptions(IndexOptions indexOptions) {
-            this.fieldType.setIndexOptions(indexOptions);
-            this.indexOptionsSet = true;
-            return builder;
-        }
-
-        public T indexAnalyzer(NamedAnalyzer indexAnalyzer) {
-            this.indexAnalyzer = indexAnalyzer;
-            return builder;
-        }
-
-        public T searchAnalyzer(NamedAnalyzer searchAnalyzer) {
-            this.searchAnalyzer = searchAnalyzer;
-            return builder;
-        }
-
-        public T searchQuoteAnalyzer(NamedAnalyzer searchQuoteAnalyzer) {
-            this.searchQuoteAnalyzer = searchQuoteAnalyzer;
-            return builder;
-        }
-
-        public T setEagerGlobalOrdinals(boolean eagerGlobalOrdinals) {
-            this.eagerGlobalOrdinals = eagerGlobalOrdinals;
-            return builder;
-        }
-
-        public T addMultiField(Mapper.Builder<?> mapperBuilder) {
-            multiFieldsBuilder.add(mapperBuilder);
-            return builder;
-        }
-
-        public T copyTo(CopyTo copyTo) {
-            this.copyTo = copyTo;
-            return builder;
-        }
-
-        protected String buildFullName(BuilderContext context) {
-            return context.path().pathAsText(name);
-        }
-
-        /** Set metadata on this field. */
-        public T meta(Map<String, String> meta) {
-            this.meta = meta;
-            return (T) this;
-        }
-    }
-
-    protected FieldType fieldType;
-    protected MappedFieldType mappedFieldType;
-    protected MultiFields multiFields;
-    protected CopyTo copyTo;
-    protected DerivedFieldGenerator derivedFieldGenerator;
-
-    protected FieldMapper(String simpleName, FieldType fieldType, MappedFieldType mappedFieldType, MultiFields multiFields, CopyTo copyTo) {
-        super(simpleName);
-        if (mappedFieldType.name().isEmpty()) {
-            throw new IllegalArgumentException("name cannot be empty string");
-        }
-        fieldType.freeze();
-        this.fieldType = fieldType;
-        this.mappedFieldType = mappedFieldType;
-        this.multiFields = multiFields;
-        this.copyTo = Objects.requireNonNull(copyTo);
-        this.derivedFieldGenerator = derivedFieldGenerator();
-    }
-
-    @Override
-    public String name() {
-        return fieldType().name();
-    }
-
-    @Override
-    public String typeName() {
-        return mappedFieldType.typeName();
-    }
-
-    public MappedFieldType fieldType() {
-        return mappedFieldType;
-    }
-
-    /**
-     * List of fields where this field should be copied to
-     */
-    public CopyTo copyTo() {
-        return copyTo;
-    }
-
-    public MultiFields multiFields() {
-        return multiFields;
-    }
-
-    /**
-     * Whether this mapper can handle an array value during document parsing. If true,
-     * when an array is encountered during parsing, the document parser will pass the
-     * whole array to the mapper. If false, the array is split into individual values
-     * and each value is passed to the mapper for parsing.
-     */
-    public boolean parsesArrayValue() {
-        return false;
-    }
-
-    private boolean shouldIgnoreMalformed(IndexSettings is) {
-        if (ignoreMalformed() != null) {
-            return ignoreMalformed().value();
-        }
-
-        if (is == null) {
-            return false;
-        }
-
-        return IGNORE_MALFORMED_SETTING.get(is.getSettings());
-    }
-
-    /**
-     * Parse the field value using the provided {@link ParseContext}.
-     */
-    public void parse(ParseContext context) throws IOException {
-        try {
-            if (isPluggableDataFormatFeatureEnabled(context)) {
-                parseCreateFieldForPluggableFormat(context);
-            } else {
-                parseCreateField(context);
-            }
-            extractGroupingCriteriaParams(context);
-        } catch (Exception e) {
-
-            boolean ignoreMalformed = shouldIgnoreMalformed(context.indexSettings());
-
-            String valuePreview = "";
-            try {
-                XContentParser parser = context.parser();
-                Object complexValue = AbstractXContentParser.readValue(parser, HashMap::new);
-                if (complexValue == null) {
-                    valuePreview = "null";
-                } else {
-                    valuePreview = complexValue.toString();
-                }
-            } catch (Exception innerException) {
-                if (ignoreMalformed == false) {
-                    throw new MapperParsingException(
-                        "failed to parse field [{}] of type [{}] in document with id '{}'. " + "Could not parse field value preview,",
-                        e,
-                        fieldType().name(),
-                        fieldType().typeName(),
-                        context.sourceToParse().id()
-                    );
-                }
-            }
-
-            if (ignoreMalformed == false) {
-                throw new MapperParsingException(
-                    "failed to parse field [{}] of type [{}] in document with id '{}'. " + "Preview of field's value: '{}'",
-                    e,
-                    fieldType().name(),
-                    fieldType().typeName(),
-                    context.sourceToParse().id(),
-                    valuePreview
-                );
-            }
-        }
-        multiFields.parse(this, context);
-    }
-
-    /**
-     * Parse the field value and populate the fields on {@link ParseContext#doc()}.
-     * <p>
-     * Implementations of this method should ensure that on failing to parse parser.currentToken() must be the
-     * current failing token
-     */
-    protected abstract void parseCreateField(ParseContext context) throws IOException;
-
-    /**
-     * Parse the field value and populate the pluggable data format's {@link ParseContext#documentInput()}.
-     * <p>
-     * Subclasses that support pluggable data formats should override this method to extract the
-     * parsed value and call {@code context.documentInput().addField(fieldType(), value)}.
-     * The default implementation throws {@link UnsupportedOperationException}.
-     *
-     * @param context the parse context carrying the document input
-     * @throws IOException if an I/O error occurs while parsing
-     * @throws UnsupportedOperationException if the mapper does not support pluggable data formats
-     */
-    @ExperimentalApi
-    protected void parseCreateFieldForPluggableFormat(ParseContext context) throws IOException {
-        throw new UnsupportedOperationException("Field mapper [" + typeName() + "] does not support pluggable data formats");
-    };
-
-    /**
-     * Returns true if this mapper accepts values from {@link ExtraFieldValues}.
-     */
-    public boolean supportsExtraFieldValues() {
-        return false;
-    }
-
-    private void extractGroupingCriteriaParams(ParseContext context) throws IOException {
-        if (context.docMapper() != null && context.docMapper().mappers() != null) {
-            final Mapper mapper = context.docMapper().mappers().getMapper(ContextAwareGroupingFieldMapper.CONTENT_TYPE);
-            if (mapper != null) {
-                final ContextAwareGroupingFieldMapper contextAwareMapper = (ContextAwareGroupingFieldMapper) mapper;
-                if (contextAwareMapper.fieldType().fields().contains(name())) {
-                    Object value = getFieldValue(context);
-                    if (value == null) {
-                        throw new IllegalArgumentException(
-                            "field ["
-                                + name()
-                                + "] of type ["
-                                + fieldType().typeName()
-                                + "] cannot be null"
-                                + " when context-aware-grouping is set on that field"
-                        );
-                    }
-                    context.doc().addGroupingCriteriaParams(name(), value);
-                }
-            }
-        }
-    }
-
-    protected Object getFieldValue(ParseContext context) throws IOException {
-        throw new UnsupportedOperationException(
-            "getFieldValue not implemented for the field mapper [" + this.getClass().getSimpleName() + "]"
-        );
-    }
-
-    protected final void createFieldNamesField(ParseContext context) {
-        assert fieldType().hasDocValues() == false : "_field_names should only be used when doc_values are turned off";
-        FieldNamesFieldType fieldNamesFieldType = context.docMapper().metadataMapper(FieldNamesFieldMapper.class).fieldType();
-        if (fieldNamesFieldType != null && fieldNamesFieldType.isEnabled()) {
-            for (String fieldName : FieldNamesFieldMapper.extractFieldNames(fieldType().name())) {
-                if (isPluggableDataFormatFeatureEnabled(context)) {
-                    context.documentInput().addField(fieldNamesFieldType, fieldName);
-                } else {
-                    context.doc().add(new Field(FieldNamesFieldMapper.NAME, fieldName, FieldNamesFieldMapper.Defaults.FIELD_TYPE));
-                }
-            }
-        }
-    }
-
-    protected final boolean isPluggableDataFormatFeatureEnabled(ParseContext parseContext) {
-        return parseContext.indexSettings().isPluggableDataFormatEnabled();
-    }
-
-    @Override
-    public Iterator<Mapper> iterator() {
-        return multiFields.iterator();
-    }
-
-    @Override
-    protected FieldMapper clone() {
-        try {
-            return (FieldMapper) super.clone();
-        } catch (CloneNotSupportedException e) {
-            throw new AssertionError(e);
-        }
-    }
-
-    @Override
-    public final void validate(MappingLookup mappers) {
-        if (this.copyTo() != null && this.copyTo().copyToFields().isEmpty() == false) {
-            if (mappers.isMultiField(this.name())) {
-                throw new IllegalArgumentException("[copy_to] may not be used to copy from a multi-field: [" + this.name() + "]");
-            }
-
-            final String sourceScope = mappers.getNestedScope(this.name());
-            for (String copyTo : this.copyTo().copyToFields()) {
-                if (mappers.isMultiField(copyTo)) {
-                    throw new IllegalArgumentException("[copy_to] may not be used to copy to a multi-field: [" + copyTo + "]");
-                }
-                if (mappers.isObjectField(copyTo)) {
-                    throw new IllegalArgumentException("Cannot copy to field [" + copyTo + "] since it is mapped as an object");
-                }
-
-                final String targetScope = mappers.getNestedScope(copyTo);
-                checkNestedScopeCompatibility(sourceScope, targetScope);
-            }
-        }
-        for (Mapper multiField : multiFields()) {
-            multiField.validate(mappers);
-        }
-        doValidate(mappers);
-    }
-
-    protected void doValidate(MappingLookup mappers) {}
-
-    private static void checkNestedScopeCompatibility(String source, String target) {
-        boolean targetIsParentOfSource;
-        if (source == null || target == null) {
-            targetIsParentOfSource = target == null;
-        } else {
-            targetIsParentOfSource = source.equals(target) || source.startsWith(target + ".");
-        }
-        if (targetIsParentOfSource == false) {
-            throw new IllegalArgumentException(
-                "Illegal combination of [copy_to] and [nested] mappings: [copy_to] may only copy data to the current nested "
-                    + "document or any of its parents, however one [copy_to] directive is trying to copy data from nested object ["
-                    + source
-                    + "] to ["
-                    + target
-                    + "]"
-            );
-        }
-    }
-
-    @Override
-    public FieldMapper merge(Mapper mergeWith) {
-        FieldMapper merged = clone();
-        List<String> conflicts = new ArrayList<>();
-        if (!(mergeWith instanceof FieldMapper toMerge)) {
-            throw new IllegalArgumentException(
-                "mapper ["
-                    + mappedFieldType.name()
-                    + "] cannot be changed from type ["
-                    + contentType()
-                    + "] to ["
-                    + mergeWith.getClass().getSimpleName()
-                    + "]"
-            );
-        }
-        merged.mergeSharedOptions(toMerge, conflicts);
-        merged.mergeOptions(toMerge, conflicts);
-        if (conflicts.isEmpty() == false) {
-            throw new IllegalArgumentException("Mapper for [" + name() + "] conflicts with existing mapping:\n" + conflicts.toString());
-        }
-        merged.multiFields = multiFields.merge(toMerge.multiFields);
-        // apply changeable values
-        merged.mappedFieldType = toMerge.mappedFieldType;
-        merged.fieldType = toMerge.fieldType;
-        merged.copyTo = toMerge.copyTo;
-        return merged;
-    }
-
-    private void mergeSharedOptions(FieldMapper mergeWith, List<String> conflicts) {
-
-        if (Objects.equals(this.contentType(), mergeWith.contentType()) == false) {
-            throw new IllegalArgumentException(
-                "mapper ["
-                    + fieldType().name()
-                    + "] cannot be changed from type ["
-                    + contentType()
-                    + "] to ["
-                    + mergeWith.contentType()
-                    + "]"
-            );
-        }
-
-        FieldType other = mergeWith.fieldType;
-        MappedFieldType otherm = mergeWith.mappedFieldType;
-
-        boolean indexed = fieldType.indexOptions() != IndexOptions.NONE;
-        boolean mergeWithIndexed = other.indexOptions() != IndexOptions.NONE;
-        if (indexed != mergeWithIndexed) {
-            conflicts.add("mapper [" + name() + "] has different [index] values");
-        }
-        // TODO: should be validating if index options go "up" (but "down" is ok)
-        if (fieldType.indexOptions() != other.indexOptions()) {
-            conflicts.add("mapper [" + name() + "] has different [index_options] values");
-        }
-        if (fieldType.stored() != other.stored()) {
-            conflicts.add("mapper [" + name() + "] has different [store] values");
-        }
-        if (this.mappedFieldType.hasDocValues() != otherm.hasDocValues()) {
-            conflicts.add("mapper [" + name() + "] has different [doc_values] values");
-        }
-        if (fieldType.omitNorms() && !other.omitNorms()) {
-            conflicts.add("mapper [" + name() + "] has different [norms] values, cannot change from disable to enabled");
-        }
-        if (fieldType.storeTermVectors() != other.storeTermVectors()) {
-            conflicts.add("mapper [" + name() + "] has different [term_vector] values");
-        }
-        if (fieldType.storeTermVectorOffsets() != other.storeTermVectorOffsets()) {
-            conflicts.add("mapper [" + name() + "] has different [store_term_vector_offsets] values");
-        }
-        if (fieldType.storeTermVectorPositions() != other.storeTermVectorPositions()) {
-            conflicts.add("mapper [" + name() + "] has different [store_term_vector_positions] values");
-        }
-        if (fieldType.storeTermVectorPayloads() != other.storeTermVectorPayloads()) {
-            conflicts.add("mapper [" + name() + "] has different [store_term_vector_payloads] values");
-        }
-
-        // null and "default"-named index analyzers both mean the default is used
-        if (mappedFieldType.indexAnalyzer() == null || "default".equals(mappedFieldType.indexAnalyzer().name())) {
-            if (otherm.indexAnalyzer() != null && "default".equals(otherm.indexAnalyzer().name()) == false) {
-                conflicts.add("mapper [" + name() + "] has different [analyzer]");
-            }
-        } else if (otherm.indexAnalyzer() == null || "default".equals(otherm.indexAnalyzer().name())) {
-            conflicts.add("mapper [" + name() + "] has different [analyzer]");
-        } else if (mappedFieldType.indexAnalyzer().name().equals(otherm.indexAnalyzer().name()) == false) {
-            conflicts.add("mapper [" + name() + "] has different [analyzer]");
-        }
-    }
-
-    /**
-     * Merge type-specific options and check for incompatible settings in mappings to be merged
-     */
-    protected abstract void mergeOptions(FieldMapper other, List<String> conflicts);
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(simpleName());
-        boolean includeDefaults = params.paramAsBoolean("include_defaults", false);
-        doXContentBody(builder, includeDefaults, params);
-        return builder.endObject();
-    }
-
-    protected boolean indexedByDefault() {
-        return true;
-    }
-
-    protected boolean docValuesByDefault() {
-        return true;
-    }
-
-    protected boolean storedByDefault() {
-        return false;
-    }
-
-    protected void doXContentBody(XContentBuilder builder, boolean includeDefaults, Params params) throws IOException {
-
-        builder.field("type", contentType());
-
-        if (includeDefaults || fieldType().boost() != 1.0f) {
-            builder.field("boost", fieldType().boost());
-        }
-
-        if (includeDefaults || mappedFieldType.isSearchable() != indexedByDefault()) {
-            builder.field("index", mappedFieldType.isSearchable());
-        }
-        if (includeDefaults || mappedFieldType.hasDocValues() != docValuesByDefault()) {
-            builder.field("doc_values", mappedFieldType.hasDocValues());
-        }
-        if (includeDefaults || fieldType.stored() != storedByDefault()) {
-            builder.field("store", fieldType.stored());
-        }
-
-        multiFields.toXContent(builder, params);
-        copyTo.toXContent(builder, params);
-
-        if (includeDefaults || fieldType().meta().isEmpty() == false) {
-            builder.field("meta", new TreeMap<>(fieldType().meta())); // ensure consistent order
-        }
-    }
-
-    protected final void doXContentAnalyzers(XContentBuilder builder, boolean includeDefaults) throws IOException {
-        if (fieldType.tokenized() == false) {
-            return;
-        }
-        if (fieldType().indexAnalyzer() == null) {
-            if (includeDefaults) {
-                builder.field("analyzer", "default");
-            }
-        } else {
-            boolean hasDefaultIndexAnalyzer = fieldType().indexAnalyzer().name().equals("default");
-            final String searchAnalyzerName = fieldType().getTextSearchInfo().getSearchAnalyzer() == null
-                ? "default"
-                : fieldType().getTextSearchInfo().getSearchAnalyzer().name();
-            final String searchQuoteAnalyzerName = fieldType().getTextSearchInfo().getSearchQuoteAnalyzer() == null
-                ? searchAnalyzerName
-                : fieldType().getTextSearchInfo().getSearchQuoteAnalyzer().name();
-            boolean hasDifferentSearchAnalyzer = searchAnalyzerName.equals(fieldType().indexAnalyzer().name()) == false;
-            boolean hasDifferentSearchQuoteAnalyzer = Objects.equals(searchAnalyzerName, searchQuoteAnalyzerName) == false;
-            if (includeDefaults || hasDefaultIndexAnalyzer == false || hasDifferentSearchAnalyzer || hasDifferentSearchQuoteAnalyzer) {
-                builder.field("analyzer", fieldType().indexAnalyzer().name());
-                if (includeDefaults || hasDifferentSearchAnalyzer || hasDifferentSearchQuoteAnalyzer) {
-                    builder.field("search_analyzer", searchAnalyzerName);
-                    if (includeDefaults || hasDifferentSearchQuoteAnalyzer) {
-                        builder.field("search_quote_analyzer", searchQuoteAnalyzerName);
-                    }
-                }
-            }
-        }
-    }
-
-    protected static String indexOptionToString(IndexOptions indexOption) {
-        switch (indexOption) {
-            case DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS:
-                return TypeParsers.INDEX_OPTIONS_OFFSETS;
-            case DOCS_AND_FREQS:
-                return TypeParsers.INDEX_OPTIONS_FREQS;
-            case DOCS_AND_FREQS_AND_POSITIONS:
-                return TypeParsers.INDEX_OPTIONS_POSITIONS;
-            case DOCS:
-                return TypeParsers.INDEX_OPTIONS_DOCS;
             default:
-                throw new IllegalArgumentException("Unknown IndexOptions [" + indexOption + "]");
-        }
     }
-
-    protected abstract String contentType();
-
+import java.io.IOException;
+            throw new UnsupportedOperationException("Unable to derive source for [" + name() + "] with store disabled");
+import org.opensearch.core.xcontent.XContentBuilder;
+                } else {
+     */
+import org.opensearch.index.mapper.FieldNamesFieldMapper.FieldNamesFieldType;
+        }
+     * @param docId - docId for which we want to derive the source
+         *
+                : fieldType().getTextSearchInfo().getSearchAnalyzer().name();
+        if (fieldType.tokenized() == false) {
+        builder.field("type", contentType());
+     * current failing token
+            );
+                parseCreateFieldForPluggableFormat(context);
+    @PublicApi(since = "1.0.0")
+                    final Map<String, FieldMapper> mappers = (Map<String, FieldMapper>) mapperBuilders;
+        boolean indexed = fieldType.indexOptions() != IndexOptions.NONE;
+            conflicts.add("mapper [" + name() + "] has different [index_options] values");
+            public Builder add(String field) {
+            targetIsParentOfSource = source.equals(target) || source.startsWith(target + ".");
+            public Builder add(Mapper.Builder builder) {
+            }
+            return StreamSupport.stream(Spliterators.spliterator(mappers.values(), 0), false).map((p) -> (Mapper) p).iterator();
+        boolean includeDefaults = params.paramAsBoolean("include_defaults", false);
+        }
+        public T docValues(boolean docValues) {
+import java.util.Collections;
+     * Method to determine, if it is possible to derive source for this field using field mapping parameters.
+                                + "] cannot be null"
+            this.fieldType.setStoreTermVectorOffsets(termVectorOffsets);
+        merged.mergeOptions(toMerge, conflicts);
+ */
     /**
      * @return null if a mapper doesn't support setting of `ignore_malformed`
-     */
-    protected Explicit<Boolean> ignoreMalformed() {
-        return null;
+            } // don't set it to false, it is default and might be flipped by a more specific option
+        return mappedFieldType;
+                }
     }
-
-    /**
-     * Method to create derived source generator for this field mapper, it is illegal to enable the
-     * derived source feature and not implement this method for a field mapper
-     */
-    protected DerivedFieldGenerator derivedFieldGenerator() {
-        return null;
-    }
-
-    protected void setDerivedFieldGenerator(DerivedFieldGenerator derivedFieldGenerator) {
-        this.derivedFieldGenerator = derivedFieldGenerator;
-    }
-
-    protected DerivedFieldGenerator getDerivedFieldGenerator() {
-        return this.derivedFieldGenerator;
-    }
-
-    /**
-     * Method to determine, if it is possible to derive source for this field using field mapping parameters.
-     * DerivedFieldGenerator should be set for which derived source feature is supported, this behaviour can be
-     * overridden at a Mapper level by implementing this method
-     */
-    @Override
-    public void canDeriveSource() {
-        if (this.copyTo() != null && !this.copyTo().copyToFields().isEmpty()) {
-            throw new UnsupportedOperationException("Unable to derive source for fields with copy_to parameter set");
-        }
+            conflicts.add("mapper [" + name() + "] has different [store_term_vector_payloads] values");
+     *     source will contain "null_value" as a displayed field value instead of null and if "null_value" is not
         canDeriveSourceInternal();
-        if (getDerivedFieldGenerator() == null) {
-            throw new UnsupportedOperationException(
-                "Derive source is not supported for field [" + name() + "] with field " + "type [" + fieldType().typeName() + "]"
-            );
+package org.opensearch.index.mapper;
+        return null;
+                }
+     * @param context the parse context carrying the document input
+                Object complexValue = AbstractXContentParser.readValue(parser, HashMap::new);
+            throw new IllegalArgumentException(
         }
-    }
-
-    /**
-     * Must be overridden for each mapper for which derived source feature is supported
-     */
-    protected void canDeriveSourceInternal() {
-        throw new UnsupportedOperationException(
-            "Derive source is not supported for field [" + name() + "] with field " + "type [" + fieldType().typeName() + "]"
-        );
-    }
-
-    /**
-     * Validates if doc values is enabled for a field or not
-     */
-    protected void checkDocValuesForDerivedSource() {
-        if (!mappedFieldType.hasDocValues()) {
-            throw new UnsupportedOperationException("Unable to derive source for [" + name() + "] with doc values disabled");
         }
-    }
-
-    /**
-     * Validates if stored field is enabled for a field or not
-     */
-    protected void checkStoredForDerivedSource() {
-        if (!mappedFieldType.isStored()) {
-            throw new UnsupportedOperationException("Unable to derive source for [" + name() + "] with store disabled");
+        if (targetIsParentOfSource == false) {
+            builder.field("boost", fieldType().boost());
+                checkNestedScopeCompatibility(sourceScope, targetScope);
+        if (includeDefaults || mappedFieldType.hasDocValues() != docValuesByDefault()) {
+        multiFields.toXContent(builder, params);
         }
-    }
-
-    /**
-     * Validates if doc_values or stored field is enabled for a field or not
-     */
-    protected void checkStoredAndDocValuesForDerivedSource() {
-        if (!mappedFieldType.isStored() && !mappedFieldType.hasDocValues()) {
+            final String searchQuoteAnalyzerName = fieldType().getTextSearchInfo().getSearchQuoteAnalyzer() == null
+ *
+     * Considerations:
+ */
             throw new UnsupportedOperationException("Unable to derive source for [" + name() + "] with stored and " + "docValues disabled");
         }
-    }
-
-    /**
-     * Method used for deriving source and building it to XContentBuilder object
-     * <p>
-     * Considerations:
-     *  1. If "null_value" is defined in field mapping and if ingested doc contains "null" field value then derived
-     *     source will contain "null_value" as a displayed field value instead of null and if "null_value" is not
-     *     defined in mapping then field itself will not be present in derived source
-     *
-     * @param builder - builder to store the derived source filed
-     * @param leafReader - leafReader to read data from
-     * @param docId - docId for which we want to derive the source
-     */
-    @Override
-    public void deriveSource(XContentBuilder builder, LeafReader leafReader, int docId) throws IOException {
-        derivedFieldGenerator.generate(builder, leafReader, docId);
-    }
-
-    /**
-     * Multi field implementation used across field mappers
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static class MultiFields implements Iterable<Mapper> {
-
-        public static MultiFields empty() {
-            return new MultiFields(Map.of());
-        }
-
-        /**
-         * Concrete builder for field mappers
-         *
+                return this;
+            conflicts.add("mapper [" + name() + "] has different [term_vector] values");
+                        fieldType().typeName(),
+        fieldType.freeze();
+        } catch (Exception e) {
+            return context.path().pathAsText(name);
+ * ownership. Elasticsearch licenses this file to you under
          * @opensearch.internal
-         */
-        public static class Builder {
-
-            private final Map<String, Mapper.Builder> mapperBuilders = new HashMap<>();
-
-            public Builder add(Mapper.Builder builder) {
-                mapperBuilders.put(builder.name(), builder);
-                return this;
-            }
-
-            public Builder add(Mapper mapper) {
-                mapperBuilders.put(mapper.simpleName(), new Mapper.Builder(mapper.simpleName()) {
-                    @Override
-                    public Mapper build(BuilderContext context) {
-                        return mapper;
-                    }
-                });
-                return this;
-            }
-
-            public Builder update(Mapper toMerge, ContentPath contentPath) {
-                if (mapperBuilders.containsKey(toMerge.simpleName()) == false) {
-                    add(toMerge);
-                } else {
-                    Mapper.Builder builder = mapperBuilders.get(toMerge.simpleName());
-                    Mapper existing = builder.build(new BuilderContext(Settings.EMPTY, contentPath));
-                    add(existing.merge(toMerge));
-                }
-                return this;
-            }
-
-            @SuppressWarnings("unchecked")
-            public MultiFields build(Mapper.Builder mainFieldBuilder, BuilderContext context) {
-                if (mapperBuilders.isEmpty()) {
-                    return empty();
-                } else {
-                    context.path().add(mainFieldBuilder.name());
-                    // Save and restore the previous value so that nested multi-field builds (deprecated
-                    // but still allowed) do not clear the flag for sibling sub-fields of the outer build.
-                    final boolean prevMultiField = context.isMultiField();
-                    context.setMultiField(true);
-                    Map mapperBuilders = this.mapperBuilders;
-                    for (final Map.Entry<String, Mapper.Builder> cursor : this.mapperBuilders.entrySet()) {
-                        String key = cursor.getKey();
-                        Mapper.Builder value = cursor.getValue();
-                        Mapper mapper = value.build(context);
-                        assert mapper instanceof FieldMapper;
-                        mapperBuilders.put(key, mapper);
-                    }
-                    context.setMultiField(prevMultiField);
-                    context.path().remove();
-                    final Map<String, FieldMapper> mappers = (Map<String, FieldMapper>) mapperBuilders;
-                    return new MultiFields(mappers);
-                }
-            }
-
-            public Map<String, Mapper.Builder> getMapperBuilders() {
-                return mapperBuilders;
-            }
-        }
-
-        private final Map<String, FieldMapper> mappers;
-
-        private MultiFields(final Map<String, FieldMapper> mappers) {
-            this.mappers = Collections.unmodifiableMap(mappers);
-        }
-
-        public void parse(FieldMapper mainField, ParseContext context) throws IOException {
-            // TODO: multi fields are really just copy fields, we just need to expose "sub fields" or something that can be part
-            // of the mappings
-            if (mappers.isEmpty()) {
-                return;
-            }
-
-            context = context.createMultiFieldContext();
-            context.path().add(mainField.simpleName());
-            for (final FieldMapper cursor : mappers.values()) {
-                cursor.parse(context);
-            }
-            context.path().remove();
-        }
-
-        public MultiFields merge(MultiFields mergeWith) {
-            final Map<String, FieldMapper> newMappersBuilder = new HashMap<>(mappers);
-
-            for (final FieldMapper mergeWithMapper : mergeWith.mappers.values()) {
-                FieldMapper mergeIntoMapper = mappers.get(mergeWithMapper.simpleName());
-                if (mergeIntoMapper == null) {
-                    newMappersBuilder.put(mergeWithMapper.simpleName(), mergeWithMapper);
-                } else {
-                    FieldMapper merged = mergeIntoMapper.merge(mergeWithMapper);
-                    newMappersBuilder.put(merged.simpleName(), merged); // override previous definition
-                }
-            }
-
-            final Map<String, FieldMapper> mappers = Collections.unmodifiableMap(newMappersBuilder);
-            return new MultiFields(mappers);
-        }
-
-        @Override
-        public Iterator<Mapper> iterator() {
-            return StreamSupport.stream(Spliterators.spliterator(mappers.values(), 0), false).map((p) -> (Mapper) p).iterator();
-        }
-
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            if (!mappers.isEmpty()) {
-                // sort the mappers so we get consistent serialization format
-                Mapper[] sortedMappers = mappers.values().toArray(new FieldMapper[0]);
-                Arrays.sort(sortedMappers, new Comparator<Mapper>() {
-                    @Override
-                    public int compare(Mapper o1, Mapper o2) {
-                        return o1.name().compareTo(o2.name());
-                    }
-                });
-                builder.startObject("fields");
-                for (Mapper mapper : sortedMappers) {
-                    mapper.toXContent(builder, params);
-                }
-                builder.endObject();
-            }
-            return builder;
-        }
-    }
-
-    /**
-     * Represents a list of fields with optional boost factor where the current field should be copied to
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static class CopyTo {
-
-        private static final CopyTo EMPTY = new CopyTo(Collections.emptyList());
-
         public static CopyTo empty() {
-            return EMPTY;
-        }
-
-        private final List<String> copyToFields;
-
-        private CopyTo(List<String> copyToFields) {
-            this.copyToFields = copyToFields;
-        }
-
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            if (!copyToFields.isEmpty()) {
-                builder.startArray("copy_to");
-                for (String field : copyToFields) {
-                    builder.value(field);
-                }
-                builder.endArray();
+    protected DerivedFieldGenerator getDerivedFieldGenerator() {
+import org.opensearch.common.settings.Settings;
+     */
             }
+            conflicts.add("mapper [" + name() + "] has different [store_term_vector_offsets] values");
+        }
+    /**
+            return (FieldMapper) super.clone();
+            public Map<String, Mapper.Builder> getMapperBuilders() {
+    protected void setDerivedFieldGenerator(DerivedFieldGenerator derivedFieldGenerator) {
+ * Licensed to Elasticsearch under one or more contributor
+     *     defined in mapping then field itself will not be present in derived source
+                }
+    }
+                Arrays.sort(sortedMappers, new Comparator<Mapper>() {
             return builder;
+    protected FieldMapper clone() {
+            }
+            final Map<String, FieldMapper> mappers = Collections.unmodifiableMap(newMappersBuilder);
+        if (ignoreMalformed() != null) {
+                            "field ["
+            "getFieldValue not implemented for the field mapper [" + this.getClass().getSimpleName() + "]"
+     * Parse the field value and populate the fields on {@link ParseContext#doc()}.
+ *
         }
-
-        /**
-         * Builder for the copyTo field
-         *
-         * @opensearch.internal
-         */
-        public static class Builder {
-            private final List<String> copyToBuilders = new ArrayList<>();
-
-            public Builder add(String field) {
-                copyToBuilders.add(field);
-                return this;
-            }
-
-            public CopyTo build() {
-                if (copyToBuilders.isEmpty()) {
-                    return EMPTY;
-                }
-                return new CopyTo(Collections.unmodifiableList(copyToBuilders));
-            }
-
-            public void reset(CopyTo copyTo) {
-                copyToBuilders.clear();
-                copyToBuilders.addAll(copyTo.copyToFields);
-            }
-        }
-
         public List<String> copyToFields() {
-            return copyToFields;
+    protected FieldType fieldType;
+                    if (value == null) {
+        // TODO: should be validating if index options go "up" (but "down" is ok)
+    public void parse(ParseContext context) throws IOException {
+    }
+        }
+        );
+                return new CopyTo(Collections.unmodifiableList(copyToBuilders));
+                "mapper ["
+                        fieldType().name(),
+                    newMappersBuilder.put(merged.simpleName(), merged); // override previous definition
+}
+            boolean hasDifferentSearchAnalyzer = searchAnalyzerName.equals(fieldType().indexAnalyzer().name()) == false;
+                // sort the mappers so we get consistent serialization format
+    public boolean supportsExtraFieldValues() {
+                    }
+    public Iterator<Mapper> iterator() {
+                    public Mapper build(BuilderContext context) {
+        if (mappedFieldType.name().isEmpty()) {
+     *  1. If "null_value" is defined in field mapping and if ingested doc contains "null" field value then derived
+        this.derivedFieldGenerator = derivedFieldGenerator();
+            if (termVectors != this.fieldType.storeTermVectors()) {
+            if (!mappers.isEmpty()) {
+import org.opensearch.common.settings.Setting;
+            }
+    public static final Setting<Boolean> COERCE_SETTING = Setting.boolSetting("index.mapping.coerce", false, Property.IndexScope);
+        @Override
+     */
+ */
+        protected Map<String, String> meta = Collections.emptyMap();
+    }
+        switch (indexOption) {
+     * Merge type-specific options and check for incompatible settings in mappings to be merged
+            multiFieldsBuilder.add(mapperBuilder);
+                parseCreateField(context);
+            final Mapper mapper = context.docMapper().mappers().getMapper(ContextAwareGroupingFieldMapper.CONTENT_TYPE);
+            public Builder update(Mapper toMerge, ContentPath contentPath) {
+        }
+ * @opensearch.api
+    }
+        } else if (mappedFieldType.indexAnalyzer().name().equals(otherm.indexAnalyzer().name()) == false) {
+            );
+            extractGroupingCriteriaParams(context);
+    public void canDeriveSource() {
+        }
+        public T addMultiField(Mapper.Builder<?> mapperBuilder) {
+                if (copyToBuilders.isEmpty()) {
+        }
+        this.fieldType = fieldType;
+        }
+        merged.mergeSharedOptions(toMerge, conflicts);
+                    + "] cannot be changed from type ["
+        if (fieldType.stored() != other.stored()) {
+                    fieldType().typeName(),
+import org.opensearch.index.mapper.extrasource.ExtraFieldValues;
+                        throw new IllegalArgumentException(
+            context.path().remove();
+            throw new IllegalArgumentException("Mapper for [" + name() + "] conflicts with existing mapping:\n" + conflicts.toString());
+                return this;
+        if (indexed != mergeWithIndexed) {
+    }
+     * DerivedFieldGenerator should be set for which derived source feature is supported, this behaviour can be
+            );
+            }
+                return;
+    }
+        // apply changeable values
+                XContentParser parser = context.parser();
+    @ExperimentalApi
+                    + "document or any of its parents, however one [copy_to] directive is trying to copy data from nested object ["
+        return this.derivedFieldGenerator;
+    protected MappedFieldType mappedFieldType;
+                    );
+import org.apache.lucene.document.FieldType;
+                    context.doc().add(new Field(FieldNamesFieldMapper.NAME, fieldName, FieldNamesFieldMapper.Defaults.FIELD_TYPE));
+ * this file be licensed under the Apache-2.0 license or a
+                cursor.parse(context);
+        /**
+            }
+                throw new MapperParsingException(
+                } else {
         }
     }
-
-}
+                for (Mapper mapper : sortedMappers) {
+        }
+                    @Override
+        return fieldType().name();
+    protected final void createFieldNamesField(ParseContext context) {
+import org.opensearch.common.annotation.PublicApi;
+            if (mapper != null) {
+     */
+                        builder.field("search_quote_analyzer", searchQuoteAnalyzerName);
+        }
+ * SPDX-License-Identifier: Apache-2.0
+                if (ignoreMalformed == false) {
+        public T index(boolean index) {
+                return this;
+        }
+                "Derive source is not supported for field [" + name() + "] with field " + "type [" + fieldType().typeName() + "]"
+                "mapper ["
+        assert fieldType().hasDocValues() == false : "_field_names should only be used when doc_values are turned off";
+            conflicts.add("mapper [" + name() + "] has different [index] values");
+        if (includeDefaults || fieldType.stored() != storedByDefault()) {
+        return null;
+     */
+                });
+    @Override
+        }
+                }
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+import java.util.stream.StreamSupport;
+        // TODO move to KeywordFieldMapper.Builder
+import java.util.TreeMap;
+     * Whether this mapper can handle an array value during document parsing. If true,
+    }
+            final String searchAnalyzerName = fieldType().getTextSearchInfo().getSearchAnalyzer() == null
+     * Validates if stored field is enabled for a field or not
+        }
+     * Subclasses that support pluggable data formats should override this method to extract the
+            if (ignoreMalformed == false) {
+    /**
+    }
+        try {
+                FieldMapper mergeIntoMapper = mappers.get(mergeWithMapper.simpleName());
+    protected boolean docValuesByDefault() {
+        public static class Builder {
+    }
+            throw new UnsupportedOperationException("Unable to derive source for [" + name() + "] with doc values disabled");
+                );
+                    + "] to ["
+        }
+            return builder;
+import org.opensearch.common.settings.Setting.Property;
+     */
+        }
+        merged.multiFields = multiFields.merge(toMerge.multiFields);
+    protected boolean indexedByDefault() {
+        } else {
+            boolean hasDifferentSearchQuoteAnalyzer = Objects.equals(searchAnalyzerName, searchQuoteAnalyzerName) == false;
+        public MultiFields merge(MultiFields mergeWith) {
+    }
+    protected void canDeriveSourceInternal() {
+        derivedFieldGenerator.generate(builder, leafReader, docId);
+        public T searchAnalyzer(NamedAnalyzer searchAnalyzer) {
+            this.fieldType.setOmitNorms(omitNorms);
+        public static MultiFields empty() {
+                : fieldType().getTextSearchInfo().getSearchQuoteAnalyzer().name();
+ * compatible open source license.
+                final ContextAwareGroupingFieldMapper contextAwareMapper = (ContextAwareGroupingFieldMapper) mapper;
+            }
+        }
+            }
+    public final void validate(MappingLookup mappers) {
+        }
+            case DOCS:
+                this.fieldType.setStoreTermVectors(termVectorOffsets);
+import org.opensearch.index.analysis.NamedAnalyzer;
+            private final List<String> copyToBuilders = new ArrayList<>();
+     * @opensearch.internal
+            }
+        this.mappedFieldType = mappedFieldType;
+     * Implementations of this method should ensure that on failing to parse parser.currentToken() must be the
+     * @opensearch.api
+                    throw new MapperParsingException(
+        }
+    }
+/**
+import org.apache.lucene.index.IndexOptions;
+    protected final void doXContentAnalyzers(XContentBuilder builder, boolean includeDefaults) throws IOException {
+        }
+        public T setEagerGlobalOrdinals(boolean eagerGlobalOrdinals) {
+ * The base OpenSearch Field Mapper
+            }
+            this.hasDocValues = docValues;
+            boolean hasDefaultIndexAnalyzer = fieldType().indexAnalyzer().name().equals("default");
+        if (!mappedFieldType.hasDocValues()) {
+        }
+     *
+        protected boolean eagerGlobalOrdinals;
+    protected boolean storedByDefault() {
+                    + "]"
+                this.fieldType.setStoreTermVectors(termVectorPositions);
+/*
+        public T storeTermVectorPositions(boolean termVectorPositions) {
+            return builder;
+                copyToBuilders.clear();
+        } catch (CloneNotSupportedException e) {
+        if (fieldType.storeTermVectors() != other.storeTermVectors()) {
+            if (mappers.isEmpty()) {
+                if (complexValue == null) {
+    /**
+        private static final CopyTo EMPTY = new CopyTo(Collections.emptyList());
+                    + "]"
+            if (includeDefaults || hasDefaultIndexAnalyzer == false || hasDifferentSearchAnalyzer || hasDifferentSearchQuoteAnalyzer) {
+                mapperBuilders.put(builder.name(), builder);
+        }
+    @PublicApi(since = "1.0.0")
+        if (!(mergeWith instanceof FieldMapper toMerge)) {
+            this.copyTo = copyTo;
+        FieldNamesFieldType fieldNamesFieldType = context.docMapper().metadataMapper(FieldNamesFieldMapper.class).fieldType();
+        public T meta(Map<String, String> meta) {
+     * The default implementation throws {@link UnsupportedOperationException}.
+    }
+            for (String copyTo : this.copyTo().copyToFields()) {
+                });
+                    // but still allowed) do not clear the flag for sibling sub-fields of the outer build.
+import org.opensearch.core.xcontent.XContentParser;
+    /**
+     */
+        }
+        return builder.endObject();
+            }
+    /**
+        protected float boost = 1.0f;
+            if (index == false) {
+        }
+            }
+        protected final FieldType fieldType;
+        }
+    /**
+        Property.IndexScope
+                }
+        doXContentBody(builder, includeDefaults, params);
+            return builder;
+            targetIsParentOfSource = target == null;
+ * The OpenSearch Contributors require contributions made to
+        }
+     *
+     */
+    }
+            "Derive source is not supported for field [" + name() + "] with field " + "type [" + fieldType().typeName() + "]"
+                ? "default"
+        try {
+            case DOCS_AND_FREQS:
+            this.omitNormsSet = true;
+     * Must be overridden for each mapper for which derived source feature is supported
+        public T storeTermVectors(boolean termVectors) {
+        public void parse(FieldMapper mainField, ParseContext context) throws IOException {
+                        return mapper;
+    /**
+        }
+        }
+            return builder;
+                mapperBuilders.put(mapper.simpleName(), new Mapper.Builder(mapper.simpleName()) {
+import java.util.ArrayList;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                    newMappersBuilder.put(mergeWithMapper.simpleName(), mergeWithMapper);
+        /** Set metadata on this field. */
+                    + "] to ["
+                return TypeParsers.INDEX_OPTIONS_OFFSETS;
+                        assert mapper instanceof FieldMapper;
+        }
+            conflicts.add("mapper [" + name() + "] has different [analyzer]");
+        if (conflicts.isEmpty() == false) {
+    }
+     * @param leafReader - leafReader to read data from
+                if (mappers.isMultiField(copyTo)) {
+            return builder;
+            boolean ignoreMalformed = shouldIgnoreMalformed(context.indexSettings());
+        MappedFieldType otherm = mergeWith.mappedFieldType;
+    /**
+            return new MultiFields(Map.of());
+    }
+        protected CopyTo copyTo = CopyTo.empty();
+                        );
+     * @param builder - builder to store the derived source filed
+                if (mapperBuilders.containsKey(toMerge.simpleName()) == false) {
+    /**
+            for (String fieldName : FieldNamesFieldMapper.extractFieldNames(fieldType().name())) {
+     * <p>
+            final String sourceScope = mappers.getNestedScope(this.name());
+                } else {
+    protected void checkStoredAndDocValuesForDerivedSource() {
+    protected abstract String contentType();
+                if (mergeIntoMapper == null) {
+        protected NamedAnalyzer searchQuoteAnalyzer;
+            throw new UnsupportedOperationException("Unable to derive source for fields with copy_to parameter set");
+                    for (final Map.Entry<String, Mapper.Builder> cursor : this.mapperBuilders.entrySet()) {
+        List<String> conflicts = new ArrayList<>();
+        }
+            return (T) this;
+            return builder;
+        FieldType other = mergeWith.fieldType;
+            return false;
+                                + name()
+                    + target
+import org.opensearch.core.xcontent.AbstractXContentParser;
+                                + "] of type ["
+                        "failed to parse field [{}] of type [{}] in document with id '{}'. " + "Could not parse field value preview,",
+    }
+    /**
+     */
+                    + mergeWith.contentType()
+ * not use this file except in compliance with the License.
+        public T indexOptions(IndexOptions indexOptions) {
+            String valuePreview = "";
+            return;
+    @Override
+        boolean targetIsParentOfSource;
+                    + "]"
+            // of the mappings
+    }
+    @Override
+                } else {
+    public String typeName() {
+            return builder;
+            if (termVectorPayloads) {
+                this.fieldType.setStoreTermVectors(termVectors);
+     * @throws IOException if an I/O error occurs while parsing
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        if (this.mappedFieldType.hasDocValues() != otherm.hasDocValues()) {
+                return TypeParsers.INDEX_OPTIONS_DOCS;
+                    Mapper.Builder builder = mapperBuilders.get(toMerge.simpleName());
+            this.fieldType.setStoreTermVectorPositions(termVectorPositions);
+        protected boolean indexOptionsSet = false;
+                return TypeParsers.INDEX_OPTIONS_POSITIONS;
+        }
+     * Validates if doc values is enabled for a field or not
+                    valuePreview = complexValue.toString();
+         * Builder for the copyTo field
+                    }
+    };
+            if (mappers.isMultiField(this.name())) {
+        protected Builder(String name, FieldType fieldType) {
+            throw new IllegalArgumentException(
+                    e,
+            }
+                    valuePreview
+            throw new IllegalArgumentException("name cannot be empty string");
+            multiFieldsBuilder = new MultiFields.Builder();
+     */
+        if (fieldType.storeTermVectorOffsets() != other.storeTermVectorOffsets()) {
+     */
+        if (fieldType.omitNorms() && !other.omitNorms()) {
+    /**
+        protected NamedAnalyzer searchAnalyzer;
+        public static class Builder {
+        merged.fieldType = toMerge.fieldType;
+     * Represents a list of fields with optional boost factor where the current field should be copied to
+ *
+                        e,
+     * @opensearch.api
+                Mapper[] sortedMappers = mappers.values().toArray(new FieldMapper[0]);
+            if (otherm.indexAnalyzer() != null && "default".equals(otherm.indexAnalyzer().name()) == false) {
+        }
+     * <p>
+    protected void checkDocValuesForDerivedSource() {
+ */
+                        Mapper.Builder value = cursor.getValue();
+    protected DerivedFieldGenerator derivedFieldGenerator() {
+         */
+    protected void doXContentBody(XContentBuilder builder, boolean includeDefaults, Params params) throws IOException {
+            return copyToFields;
+                    public int compare(Mapper o1, Mapper o2) {
+                }
+    protected CopyTo copyTo;
+            this.indexOptionsSet = true;
+            return EMPTY;
+        private CopyTo(List<String> copyToFields) {
+                }
+ * the Apache License, Version 2.0 (the "License"); you may
+        // TODO move to text-specific builder base class
+    public abstract static class Builder<T extends Builder<T>> extends Mapper.Builder<T> {
+            return builder;
+    );
+                builder.field("analyzer", fieldType().indexAnalyzer().name());
+            }
+        return parseContext.indexSettings().isPluggableDataFormatEnabled();
+    }
+    }
+            }
+    }
+        if (mappedFieldType.indexAnalyzer() == null || "default".equals(mappedFieldType.indexAnalyzer().name())) {
+            context = context.createMultiFieldContext();
+     * Multi field implementation used across field mappers
+                if (mappers.isObjectField(copyTo)) {
+                        String key = cursor.getKey();
+        if (this.copyTo() != null && !this.copyTo().copyToFields().isEmpty()) {
+            return builder;
+            return builder;
+                if (includeDefaults || hasDifferentSearchAnalyzer || hasDifferentSearchQuoteAnalyzer) {
+        protected boolean indexed = true;
+         * Concrete builder for field mappers
+            builder.field("doc_values", mappedFieldType.hasDocValues());
+ * software distributed under the License is distributed on an
+         */
+        }
+                    throw new IllegalArgumentException("Cannot copy to field [" + copyTo + "] since it is mapped as an object");
+        return merged;
+import org.apache.lucene.document.Field;
+    /**
+                    context.path().add(mainFieldBuilder.name());
+        }
+        public Iterator<Mapper> iterator() {
+        doValidate(mappers);
+                                + fieldType().typeName()
+        "index.mapping.ignore_malformed",
+    protected abstract void mergeOptions(FieldMapper other, List<String> conflicts);
+        public T indexAnalyzer(NamedAnalyzer indexAnalyzer) {
+        return multiFields;
+            this.fieldType = new FieldType(fieldType);
+        public T omitNorms(boolean omitNorms) {
+import org.opensearch.common.annotation.ExperimentalApi;
+        protected String buildFullName(BuilderContext context) {
+ * license agreements. See the NOTICE file distributed with
+     * overridden at a Mapper level by implementing this method
+            }
+        public T storeTermVectorOffsets(boolean termVectorOffsets) {
+            this.copyToFields = copyToFields;
+        public T boost(float boost) {
+        }
+        }
+    private void extractGroupingCriteriaParams(ParseContext context) throws IOException {
+                throw new IllegalArgumentException("[copy_to] may not be used to copy from a multi-field: [" + this.name() + "]");
+            builder.field("store", fieldType.stored());
+        protected final MultiFields.Builder multiFieldsBuilder;
+     * derived source feature and not implement this method for a field mapper
+    protected void parseCreateFieldForPluggableFormat(ParseContext context) throws IOException {
+                for (String field : copyToFields) {
+        if (Objects.equals(this.contentType(), mergeWith.contentType()) == false) {
+                    if (includeDefaults || hasDifferentSearchQuoteAnalyzer) {
+                    builder.value(field);
+    }
+     */
+                }
+            if (termVectorOffsets) {
+        }
+            private final Map<String, Mapper.Builder> mapperBuilders = new HashMap<>();
+                    context.setMultiField(prevMultiField);
+            conflicts.add("mapper [" + name() + "] has different [analyzer]");
+                return TypeParsers.INDEX_OPTIONS_FREQS;
+            conflicts.add("mapper [" + name() + "] has different [store_term_vector_positions] values");
+            super(name);
+                    return empty();
+            try {
+                    + contentType()
+    private void mergeSharedOptions(FieldMapper mergeWith, List<String> conflicts) {
+            // TODO: multi fields are really just copy fields, we just need to expose "sub fields" or something that can be part
+            public void reset(CopyTo copyTo) {
+                }
+            for (final FieldMapper cursor : mappers.values()) {
+            for (final FieldMapper mergeWithMapper : mergeWith.mappers.values()) {
+            throw new AssertionError(e);
+ * specific language governing permissions and limitations
+                }
+    protected abstract void parseCreateField(ParseContext context) throws IOException;
+     * Returns true if this mapper accepts values from {@link ExtraFieldValues}.
+        }
+            final Map<String, FieldMapper> newMappersBuilder = new HashMap<>(mappers);
+            }
+                    Map mapperBuilders = this.mapperBuilders;
+        }
+        }
+                    + source
+            }
+                    // Save and restore the previous value so that nested multi-field builds (deprecated
+            this.searchQuoteAnalyzer = searchQuoteAnalyzer;
+    }
+                    builder.field("search_analyzer", searchAnalyzerName);
+     * Parse the field value and populate the pluggable data format's {@link ParseContext#documentInput()}.
+            throw new UnsupportedOperationException(
+import java.util.Arrays;
+                builder.startObject("fields");
+/*
+        } else if (otherm.indexAnalyzer() == null || "default".equals(otherm.indexAnalyzer().name())) {
+    private static void checkNestedScopeCompatibility(String source, String target) {
+    @Override
+                    + "] to ["
+        }
+                    Mapper existing = builder.build(new BuilderContext(Settings.EMPTY, contentPath));
+                    context.documentInput().addField(fieldNamesFieldType, fieldName);
+        return copyTo;
+        return true;
+        }
+     * Base builder for all field mappers
+                    + fieldType().name()
+            @SuppressWarnings("unchecked")
+    /**
+            }
+        copyTo.toXContent(builder, params);
+    private boolean shouldIgnoreMalformed(IndexSettings is) {
+            if (termVectorPositions) {
+                } else {
+    }
+        }
+        protected boolean hasDocValues = true;
+            }
+    }
+                        return o1.name().compareTo(o2.name());
+            }
+        FieldMapper merged = clone();
+                builder.endArray();
+public abstract class FieldMapper extends Mapper implements Cloneable {
+        private final Map<String, FieldMapper> mappers;
+                final String targetScope = mappers.getNestedScope(copyTo);
+        builder.startObject(simpleName());
+                copyToBuilders.add(field);
+    }
+            } catch (Exception innerException) {
+        return mappedFieldType.typeName();
+                    Object value = getFieldValue(context);
+                        context.sourceToParse().id()
+                    + mappedFieldType.name()
+                }
+    protected void doValidate(MappingLookup mappers) {}
+        protected NamedAnalyzer indexAnalyzer;
+        }
+     * Method to create derived source generator for this field mapper, it is illegal to enable the
+        public T copyTo(CopyTo copyTo) {
+            return builder;
+ * this work for additional information regarding copyright
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        public T storeTermVectorPayloads(boolean termVectorPayloads) {
+        if (includeDefaults || mappedFieldType.isSearchable() != indexedByDefault()) {
+                    + "] cannot be changed from type ["
+                if (mapperBuilders.isEmpty()) {
+        protected boolean omitNormsSet = false;
+        }
+     */
+            }
+            case DOCS_AND_FREQS_AND_POSITIONS:
+                conflicts.add("mapper [" + name() + "] has different [analyzer]");
+    @Override
+    @Override
+        super(simpleName);
+import org.apache.lucene.index.LeafReader;
+     * and each value is passed to the mapper for parsing.
+    public boolean parsesArrayValue() {
+    }
+     *
+ * GitHub history for details.
+        }
+                    fieldType().name(),
+        return IGNORE_MALFORMED_SETTING.get(is.getSettings());
+            }
+     */
+     *
+            }
+                throw new IllegalArgumentException("Unknown IndexOptions [" + indexOption + "]");
+                    context.path().remove();
+         *
+        // null and "default"-named index analyzers both mean the default is used
+        /**
+        multiFields.parse(this, context);
+        }
+        this.multiFields = multiFields;
+    /**
+        if (fieldType.indexOptions() != other.indexOptions()) {
+                    return EMPTY;
+import org.opensearch.common.Explicit;
+            this.searchAnalyzer = searchAnalyzer;
+            this.eagerGlobalOrdinals = eagerGlobalOrdinals;
+     */
+    public MappedFieldType fieldType() {
+        private MultiFields(final Map<String, FieldMapper> mappers) {
+    public CopyTo copyTo() {
+                builder.field("analyzer", "default");
+    }
+        }
+        if (fieldType().indexAnalyzer() == null) {
+     * Parse the field value using the provided {@link ParseContext}.
+        }
+        if (fieldType.storeTermVectorPositions() != other.storeTermVectorPositions()) {
+        if (context.docMapper() != null && context.docMapper().mappers() != null) {
+                        Mapper mapper = value.build(context);
+        throw new UnsupportedOperationException("Field mapper [" + typeName() + "] does not support pluggable data formats");
+        if (getDerivedFieldGenerator() == null) {
+        }
+                    FieldMapper merged = mergeIntoMapper.merge(mergeWithMapper);
+            );
+    protected final boolean isPluggableDataFormatFeatureEnabled(ParseContext parseContext) {
+            return new MultiFields(mappers);
+                    + contentType()
+        private final List<String> copyToFields;
+     */
+        }
+            case DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS:
+                return mapperBuilders;
+            public CopyTo build() {
+        if (source == null || target == null) {
+            if (includeDefaults) {
+    public static final Setting<Boolean> IGNORE_MALFORMED_SETTING = Setting.boolSetting(
+        );
+ * under the License.
+        return false;
+            return ignoreMalformed().value();
+                    mapper.toXContent(builder, params);
+        } else {
+        return multiFields.iterator();
+        this.copyTo = Objects.requireNonNull(copyTo);
+    }
+        }
+        false,
+import java.util.Comparator;
+                    @Override
+        }
+        if (includeDefaults || fieldType().meta().isEmpty() == false) {
+         * @opensearch.internal
+    }
+                builder.startArray("copy_to");
+        }
+    /**
+        if (is == null) {
+     * when an array is encountered during parsing, the document parser will pass the
+     */
+            return builder;
+        }
+                if (isPluggableDataFormatFeatureEnabled(context)) {
+import org.opensearch.index.IndexSettings;
+    protected void checkStoredForDerivedSource() {
+                    }
+            multiField.validate(mappers);
+                    add(toMerge);
+            if (!copyToFields.isEmpty()) {
+            conflicts.add("mapper [" + name() + "] has different [store] values");
+@PublicApi(since = "1.0.0")
+    protected MultiFields multiFields;
+                    return new MultiFields(mappers);
+            conflicts.add("mapper [" + name() + "] has different [doc_values] values");
+                    valuePreview = "null";
+                return this;
+        public T searchQuoteAnalyzer(NamedAnalyzer searchQuoteAnalyzer) {
+            return builder;
+            this.indexed = index;
+     * List of fields where this field should be copied to
+        }
+        if (fieldType.storeTermVectorPayloads() != other.storeTermVectorPayloads()) {
+                copyToBuilders.addAll(copyTo.copyToFields);
+            } else {
+                "Illegal combination of [copy_to] and [nested] mappings: [copy_to] may only copy data to the current nested "
+        if (fieldNamesFieldType != null && fieldNamesFieldType.isEnabled()) {
+    protected Object getFieldValue(ParseContext context) throws IOException {
+        throw new UnsupportedOperationException(
+                    context.doc().addGroupingCriteriaParams(name(), value);
+            return builder;
+            }
+                    final boolean prevMultiField = context.isMultiField();
+                if (contextAwareMapper.fieldType().fields().contains(name())) {
+        return false;
+     * @throws UnsupportedOperationException if the mapper does not support pluggable data formats
+ * Modifications Copyright OpenSearch Contributors. See
+                }
+        merged.mappedFieldType = toMerge.mappedFieldType;
+    @Override
+     * whole array to the mapper. If false, the array is split into individual values
+                    "failed to parse field [{}] of type [{}] in document with id '{}'. " + "Preview of field's value: '{}'",
+        }
+        merged.copyTo = toMerge.copyTo;
+     */
+    }
+    }
+        public T store(boolean store) {
+            if (isPluggableDataFormatFeatureEnabled(context)) {
+            this.mappers = Collections.unmodifiableMap(mappers);
+    public FieldMapper merge(Mapper mergeWith) {
+                    context.setMultiField(true);
+import java.util.Spliterators;
+    }
+            this.fieldType.setStoreTermVectorPayloads(termVectorPayloads);
+                ? searchAnalyzerName
+    public String name() {
+            return builder;
+    @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            }
+            this.meta = meta;
+    public MultiFields multiFields() {
+    protected static String indexOptionToString(IndexOptions indexOption) {
+                    + mergeWith.getClass().getSimpleName()
+            this.boost = boost;
+        }
+                this.fieldType.setStoreTermVectors(termVectorPayloads);
+            }
+            builder.field("index", mappedFieldType.isSearchable());
+     * <p>
+    }
+    }
+    /**
+        return true;
+                    add(existing.merge(toMerge));
+                                + " when context-aware-grouping is set on that field"
+ * You may obtain a copy of the License at
+        boolean mergeWithIndexed = other.indexOptions() != IndexOptions.NONE;
+            return builder;
+import java.util.Map;
+                this.fieldType.setIndexOptions(IndexOptions.NONE);
+     * Validates if doc_values or stored field is enabled for a field or not
+    public static class CopyTo {
+        this.derivedFieldGenerator = derivedFieldGenerator;
+            context.path().add(mainField.simpleName());
+     *
+                }
+            throw new IllegalArgumentException(
+                    }
+            public MultiFields build(Mapper.Builder mainFieldBuilder, BuilderContext context) {
+    protected FieldMapper(String simpleName, FieldType fieldType, MappedFieldType mappedFieldType, MultiFields multiFields, CopyTo copyTo) {
+    protected DerivedFieldGenerator derivedFieldGenerator;
+                builder.endObject();
+     * parsed value and call {@code context.documentInput().addField(fieldType(), value)}.
+                    }
+/*
+    }
+ * Unless required by applicable law or agreed to in writing,
+        throw new UnsupportedOperationException(
+    protected Explicit<Boolean> ignoreMalformed() {
+            public Builder add(Mapper mapper) {
+            conflicts.add("mapper [" + name() + "] has different [norms] values, cannot change from disable to enabled");
+import java.util.Iterator;
+        if (includeDefaults || fieldType().boost() != 1.0f) {
+import java.util.HashMap;
+    /**
+            this.fieldType.setStored(store);
+            this.indexAnalyzer = indexAnalyzer;
+            this.fieldType.setIndexOptions(indexOptions);
+import java.util.Objects;
+                        mapperBuilders.put(key, mapper);
+        if (this.copyTo() != null && this.copyTo().copyToFields().isEmpty() == false) {
+        }
+    public static class MultiFields implements Iterable<Mapper> {
+        }
+     * Method used for deriving source and building it to XContentBuilder object
+        for (Mapper multiField : multiFields()) {
+        }
+    public void deriveSource(XContentBuilder builder, LeafReader leafReader, int docId) throws IOException {
+    }
+            builder.field("meta", new TreeMap<>(fieldType().meta())); // ensure consistent order
+            return builder;
+        if (!mappedFieldType.isStored()) {
+        }
+    @Override
+ * KIND, either express or implied.  See the License for the
+        return false;
+        if (!mappedFieldType.isStored() && !mappedFieldType.hasDocValues()) {
+                    throw new IllegalArgumentException("[copy_to] may not be used to copy to a multi-field: [" + copyTo + "]");
+import java.util.List;
+        }
+    }
+                    context.sourceToParse().id(),
+ *

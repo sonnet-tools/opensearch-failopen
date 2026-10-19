@@ -1,486 +1,445 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
+            this.arrayAllocator = arrayAllocator;
  * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
+    public void init() {
+            : randomIntBetween(fromIndex, len); // likely multiple pages
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+        );
+        array2.close();
+        }
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
+                Settings.builder()
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.util;
-
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.breaker.CircuitBreaker;
-import org.opensearch.core.common.breaker.CircuitBreakingException;
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.common.util.BigArray;
-import org.opensearch.core.common.util.ByteArray;
+    public void testByteArrayBulkSet() {
+        }
+        long[] ref = new long[totalLen];
+        IntArray array = bigArrays.newIntArray(startLen, randomBoolean());
+        }
+        array2.close();
+        for (int i = 0; i < totalLen; ++i) {
+        );
+            ref[i] = randomFrom(pool);
+        }
+    public void testFloatArrayFill() {
+ * compatible open source license.
+ *
+            ref[i] = randomByte();
+        final double[] array1 = new double[len];
+                    .build(),
 import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
-import org.opensearch.indices.breaker.HierarchyCircuitBreakerService;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.Before;
-
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
+        final ByteArray a4 = byteArrayWithBytes(new byte[] { 1, 1, 3 });
+import org.opensearch.core.common.unit.ByteSizeUnit;
+            array.set(i, ref[i]);
+ * SPDX-License-Identifier: Apache-2.0
+                long newSize = array.size() * 2;
+        assertTrue(bigArrays.equals(empty1, empty2));
+        final long[] array1 = new long[len];
+import static org.opensearch.indices.breaker.HierarchyCircuitBreakerService.REQUEST_CIRCUIT_BREAKER_LIMIT_SETTING;
+            BigArray array = (BigArray) create.invoke(bigArrays, size);
+        if (size >= pageSize) {
+        final BigArrays floatBigArrays = newBigArraysInstance(maxSize, withBreaking);
+    public void testOverSizeUsesMinPageCount() {
+    }
+    }
+        final double rand = randomDouble();
+        // not equal: contents differ
+            assertEquals(bigArraysHelper.ramEstimator.apply(size).longValue(), bigArray.ramBytesUsed());
+        DoubleArray array = bigArrays.newDoubleArray(startLen, randomBoolean());
+        for (int i = 0; i < array1.length;) {
+            final int len = randomInt(Math.min(randomBoolean() ? 10 : Integer.MAX_VALUE, array1.length - offset));
+        ByteArray array = bigArrays.newByteArray(startLen, randomBoolean());
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
-import java.util.function.Function;
-
-import static org.opensearch.indices.breaker.HierarchyCircuitBreakerService.REQUEST_CIRCUIT_BREAKER_LIMIT_SETTING;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.lessThan;
-
-public class BigArraysTests extends OpenSearchTestCase {
-
-    private BigArrays randombigArrays() {
-        return new MockBigArrays(new MockPageCacheRecycler(Settings.EMPTY), new NoneCircuitBreakerService());
-    }
-
-    private BigArrays bigArrays;
-
-    @Before
-    public void init() {
-        bigArrays = randombigArrays();
-    }
-
-    public void testByteArrayGrowth() {
-        final int totalLen = randomIntBetween(1, 4000000);
-        final int startLen = randomIntBetween(1, randomBoolean() ? 1000 : totalLen);
-        ByteArray array = bigArrays.newByteArray(startLen, randomBoolean());
-        byte[] ref = new byte[totalLen];
-        for (int i = 0; i < totalLen; ++i) {
-            ref[i] = randomByte();
-            array = bigArrays.grow(array, i + 1);
-            array.set(i, ref[i]);
-        }
-        for (int i = 0; i < totalLen; ++i) {
-            assertEquals(ref[i], array.get(i));
-        }
-        array.close();
-    }
-
-    public void testIntArrayGrowth() {
-        final int totalLen = randomIntBetween(1, 1000000);
-        final int startLen = randomIntBetween(1, randomBoolean() ? 1000 : totalLen);
-        IntArray array = bigArrays.newIntArray(startLen, randomBoolean());
-        int[] ref = new int[totalLen];
-        for (int i = 0; i < totalLen; ++i) {
-            ref[i] = randomInt();
-            array = bigArrays.grow(array, i + 1);
-            array.set(i, ref[i]);
-        }
-        for (int i = 0; i < totalLen; ++i) {
-            assertEquals(ref[i], array.get(i));
-        }
-        array.close();
-    }
-
-    public void testLongArrayGrowth() {
-        final int totalLen = randomIntBetween(1, 1000000);
-        final int startLen = randomIntBetween(1, randomBoolean() ? 1000 : totalLen);
-        LongArray array = bigArrays.newLongArray(startLen, randomBoolean());
-        long[] ref = new long[totalLen];
-        for (int i = 0; i < totalLen; ++i) {
-            ref[i] = randomLong();
-            array = bigArrays.grow(array, i + 1);
-            array.set(i, ref[i]);
-        }
-        for (int i = 0; i < totalLen; ++i) {
-            assertEquals(ref[i], array.get(i));
-        }
-        array.close();
-    }
-
-    public void testFloatArrayGrowth() {
-        final int totalLen = randomIntBetween(1, 1000000);
-        final int startLen = randomIntBetween(1, randomBoolean() ? 1000 : totalLen);
-        FloatArray array = bigArrays.newFloatArray(startLen, randomBoolean());
-        float[] ref = new float[totalLen];
-        for (int i = 0; i < totalLen; ++i) {
-            ref[i] = randomFloat();
-            array = bigArrays.grow(array, i + 1);
-            array.set(i, ref[i]);
-        }
-        for (int i = 0; i < totalLen; ++i) {
+        final int toIndex = randomBoolean()
+        for (int i = 0; i < len; ++i) {
             assertEquals(ref[i], array.get(i), 0.001d);
         }
-        array.close();
-    }
-
+        // identity = equality
+        final long maxSize = size - 1;
+        final int len = randomIntBetween(1, 100000);
+        BigArraysHelper doubleHelper = new BigArraysHelper(
+        final int emptyHash = Arrays.hashCode(BytesRef.EMPTY_BYTES);
+            } catch (CircuitBreakingException e) {
+        assertEquals(array1Hash, array2Hash);
+        array2.fill(fromIndex, toIndex, rand);
+        }
+import org.opensearch.common.settings.Settings;
+            ? Math.min(fromIndex + randomInt(100), len) // single page
     public void testDoubleArrayGrowth() {
-        final int totalLen = randomIntBetween(1, 1000000);
-        final int startLen = randomIntBetween(1, randomBoolean() ? 1000 : totalLen);
-        DoubleArray array = bigArrays.newDoubleArray(startLen, randomBoolean());
-        double[] ref = new double[totalLen];
-        for (int i = 0; i < totalLen; ++i) {
-            ref[i] = randomDouble();
-            array = bigArrays.grow(array, i + 1);
-            array.set(i, ref[i]);
-        }
-        for (int i = 0; i < totalLen; ++i) {
-            assertEquals(ref[i], array.get(i), 0.001d);
-        }
-        array.close();
-    }
-
-    public void testObjectArrayGrowth() {
-        final int totalLen = randomIntBetween(1, 1000000);
-        final int startLen = randomIntBetween(1, randomBoolean() ? 1000 : totalLen);
-        ObjectArray<Object> array = bigArrays.newObjectArray(startLen);
-        final Object[] pool = new Object[100];
-        for (int i = 0; i < pool.length; ++i) {
-            pool[i] = new Object();
-        }
-        Object[] ref = new Object[totalLen];
-        for (int i = 0; i < totalLen; ++i) {
-            ref[i] = randomFrom(pool);
-            array = bigArrays.grow(array, i + 1);
-            array.set(i, ref[i]);
-        }
-        for (int i = 0; i < totalLen; ++i) {
-            assertSame(ref[i], array.get(i));
-        }
-        array.close();
-    }
-
-    public void testByteArrayFill() {
-        final int len = randomIntBetween(1, 100000);
-        final int fromIndex = randomIntBetween(0, len - 1);
-        final int toIndex = randomBoolean()
-            ? Math.min(fromIndex + randomInt(100), len) // single page
-            : randomIntBetween(fromIndex, len); // likely multiple pages
-        final ByteArray array2 = bigArrays.newByteArray(len, randomBoolean());
-        final byte[] array1 = new byte[len];
-        for (int i = 0; i < len; ++i) {
-            array1[i] = randomByte();
-            array2.set(i, array1[i]);
-        }
-        final byte rand = randomByte();
-        Arrays.fill(array1, fromIndex, toIndex, rand);
-        array2.fill(fromIndex, toIndex, rand);
-        for (int i = 0; i < len; ++i) {
-            assertEquals(array1[i], array2.get(i), 0.001d);
-        }
-        array2.close();
-    }
-
-    public void testFloatArrayFill() {
-        final int len = randomIntBetween(1, 100000);
-        final int fromIndex = randomIntBetween(0, len - 1);
-        final int toIndex = randomBoolean()
-            ? Math.min(fromIndex + randomInt(100), len) // single page
-            : randomIntBetween(fromIndex, len); // likely multiple pages
-        final FloatArray array2 = bigArrays.newFloatArray(len, randomBoolean());
-        final float[] array1 = new float[len];
-        for (int i = 0; i < len; ++i) {
+        for (String type : Arrays.asList("Byte", "Int", "Long", "Float", "Double", "Object")) {
+        FloatArray array = bigArrays.newFloatArray(startLen, randomBoolean());
             array1[i] = randomFloat();
-            array2.set(i, array1[i]);
-        }
-        final float rand = randomFloat();
-        Arrays.fill(array1, fromIndex, toIndex, rand);
-        array2.fill(fromIndex, toIndex, rand);
-        for (int i = 0; i < len; ++i) {
-            assertEquals(array1[i], array2.get(i), 0.001d);
-        }
-        array2.close();
+            (Long size) -> BigDoubleArray.estimateRamBytes(size)
+    public void testMaxSizeExceededOnResize() throws Exception {
+import java.lang.reflect.InvocationTargetException;
+            array.set(i, ref[i]);
+        for (int i = 0; i < totalLen; ++i) {
     }
-
-    public void testDoubleArrayFill() {
-        final int len = randomIntBetween(1, 100000);
+        return (withBreaking ? bigArrays.withCircuitBreaking() : bigArrays);
+        for (int i = 0; i < len; ++i) {
+        array.close();
+    @Before
+        BigArrays bigArrays = new BigArrays(null, hcbs, CircuitBreaker.REQUEST);
         final int fromIndex = randomIntBetween(0, len - 1);
-        final int toIndex = randomBoolean()
-            ? Math.min(fromIndex + randomInt(100), len) // single page
-            : randomIntBetween(fromIndex, len); // likely multiple pages
-        final DoubleArray array2 = bigArrays.newDoubleArray(len, randomBoolean());
-        final double[] array1 = new double[len];
-        for (int i = 0; i < len; ++i) {
-            array1[i] = randomDouble();
-            array2.set(i, array1[i]);
-        }
-        final double rand = randomDouble();
-        Arrays.fill(array1, fromIndex, toIndex, rand);
-        array2.fill(fromIndex, toIndex, rand);
-        for (int i = 0; i < len; ++i) {
+            Method resize = BigArrays.class.getMethod("resize", array.getClass().getInterfaces()[0], long.class);
+        );
+        final int totalLen = randomIntBetween(1, 1000000);
             assertEquals(array1[i], array2.get(i), 0.001d);
-        }
-        array2.close();
-    }
-
-    public void testLongArrayFill() {
-        final int len = randomIntBetween(1, 100000);
-        final int fromIndex = randomIntBetween(0, len - 1);
-        final int toIndex = randomBoolean()
-            ? Math.min(fromIndex + randomInt(100), len) // single page
-            : randomIntBetween(fromIndex, len); // likely multiple pages
-        final LongArray array2 = bigArrays.newLongArray(len, randomBoolean());
-        final long[] array1 = new long[len];
-        for (int i = 0; i < len; ++i) {
-            array1[i] = randomLong();
-            array2.set(i, array1[i]);
-        }
-        final long rand = randomLong();
-        Arrays.fill(array1, fromIndex, toIndex, rand);
+        );
+        Object[] ref = new Object[totalLen];
         array2.fill(fromIndex, toIndex, rand);
-        for (int i = 0; i < len; ++i) {
             assertEquals(array1[i], array2.get(i));
-        }
-        array2.close();
-    }
-
-    public void testByteArrayBulkGet() {
-        final byte[] array1 = new byte[randomIntBetween(1, 4000000)];
-        random().nextBytes(array1);
-        final ByteArray array2 = bigArrays.newByteArray(array1.length, randomBoolean());
-        for (int i = 0; i < array1.length; ++i) {
+            assertEquals(ref[i], array.get(i));
+        final int fromIndex = randomIntBetween(0, len - 1);
+            try {
+        HierarchyCircuitBreakerService hcbs = new HierarchyCircuitBreakerService(
+        emptyByteArray.close();
+                    .put(HierarchyCircuitBreakerService.USE_REAL_MEMORY_USAGE_SETTING.getKey(), false)
             array2.set(i, array1[i]);
-        }
+    }
+        for (int i = 0; i < array1.length; ++i) {
+    }
         final BytesRef ref = new BytesRef();
-        for (int i = 0; i < 1000; ++i) {
-            final int offset = randomInt(array1.length - 1);
-            final int len = randomInt(Math.min(randomBoolean() ? 10 : Integer.MAX_VALUE, array1.length - offset));
-            array2.get(offset, len, ref);
+        final int startLen = randomIntBetween(1, randomBoolean() ? 1000 : totalLen);
+            array2.set(i, array1[i]);
+        for (int i = 0; i < len; ++i) {
+        Arrays.fill(array1, fromIndex, toIndex, rand);
+        ByteArray bytearray = bigArrays.newByteArray(bytes.length);
+        final ByteArray emptyByteArray = byteArrayWithBytes(BytesRef.EMPTY_BYTES);
+    public void testLongArrayGrowth() {
+        final int fromIndex = randomIntBetween(0, len - 1);
+import org.opensearch.indices.breaker.HierarchyCircuitBreakerService;
+    }
+            ? Math.min(fromIndex + randomInt(100), len) // single page
+        random().nextBytes(array1);
+        }
+            array = bigArrays.grow(array, i + 1);
+    }
+        final long size = scaledRandomIntBetween(5, 1 << 22);
+        }
+    public void testEstimatedBytesSameAsActualBytes() throws Exception {
+            (Long size) -> BigLongArray.estimateRamBytes(size)
+        int[] ref = new int[totalLen];
+/*
+ * the Apache License, Version 2.0 (the "License"); you may
+        array.close();
+    public void testObjectArrayGrowth() {
+        BigArraysHelper intHelper = new BigArraysHelper(
+        assertFalse(bigArrays.equals(a5, a6));
+            ? Math.min(fromIndex + randomInt(100), len) // single page
+            array = bigArrays.grow(array, i + 1);
+        return bytearray;
+    public void testMaxSizeExceededOnNew() throws Exception {
+    }
+                fail("circuit breaker should trip");
+            assertEquals(0, bigArraysHelper.bigArrays.breakerService().getBreaker(CircuitBreaker.REQUEST).getUsed());
+    }
+        }
+        final int fromIndex = randomIntBetween(0, len - 1);
+    }
+        array.close();
+        empty1.close();
+        BigArraysHelper byteHelper = new BigArraysHelper(
+        for (int i = 0; i < len; ++i) {
+        Arrays.fill(array1, fromIndex, toIndex, rand);
+        // FUN FACT: Arrays.hashCode() and BytesReference.bytesHashCode() are inconsistent for empty byte[]
+        }
+                assertEquals(maxSize, e.getByteLimit());
+        // final int emptyHash3 = new BytesArray(BytesRef.EMPTY_BYTES).hashCode();
+        final int startLen = randomIntBetween(1, randomBoolean() ? 1000 : totalLen);
+        a3.close();
+            objectBigArrays,
+        final int toIndex = randomBoolean()
+        final int toIndex = randomBoolean()
+        final LongArray array2 = bigArrays.newLongArray(len, randomBoolean());
+        array.close();
+        array2.fill(fromIndex, toIndex, rand);
+        LongArray array = bigArrays.newLongArray(startLen, randomBoolean());
+                .put(REQUEST_CIRCUIT_BREAKER_LIMIT_SETTING.getKey(), maxSize, ByteSizeUnit.BYTES)
+            array = bigArrays.grow(array, i + 1);
+        random().nextBytes(array1);
+        for (int i = 0; i < totalLen; ++i) {
+    }
+import org.apache.lucene.util.BytesRef;
+        for (final BigArraysHelper bigArraysHelper : bigArrayCreators(maxSize, false)) {
+        final BigArrays objectBigArrays = newBigArraysInstance(maxSize, withBreaking);
+        final ByteArray a5 = byteArrayWithBytes(new byte[] { 1, 2, 3 });
+        final int len = randomIntBetween(1, 100000);
+import org.opensearch.common.settings.ClusterSettings;
+        );
+        final int pageSize = 1 << (randomIntBetween(2, 16));
+        BigArraysHelper(BigArrays bigArrays, Function<Long, BigArray> arrayAllocator, Function<Long, Long> ramEstimator) {
+        random().nextBytes(array1);
+                } catch (InvocationTargetException e) {
+        final int startLen = randomIntBetween(1, randomBoolean() ? 1000 : totalLen);
+        bigArrays = randombigArrays();
+        assertThat(size, greaterThanOrEqualTo((long) minSize));
+            intBigArrays,
+        }
+    public void testByteArrayFill() {
+        final ByteArray array2 = bigArrays.newByteArray(len, randomBoolean());
+            array1[i] = randomByte();
+        final BigArrays intBigArrays = newBigArraysInstance(maxSize, withBreaking);
+        for (int i = 0; i < pool.length; ++i) {
+    }
+ * GitHub history for details.
+            }
+ * You may obtain a copy of the License at
+    public void testByteArrayEquals() {
+    private BigArrays newBigArraysInstance(final long maxSize, final boolean withBreaking) {
+        for (int i = 0; i < bytes.length; ++i) {
+        for (int i = 0; i < totalLen; ++i) {
+ * The OpenSearch Contributors require contributions made to
+ * this work for additional information regarding copyright
+            assertEquals(array.ramBytesUsed(), hcbs.getBreaker(CircuitBreaker.REQUEST).getUsed());
+        a6.close();
+                .put(HierarchyCircuitBreakerService.USE_REAL_MEMORY_USAGE_SETTING.getKey(), false)
+        }
+    }
+        final int totalLen = randomIntBetween(1, 1000000);
+        for (int i = 0; i < totalLen; ++i) {
+        final int toIndex = randomBoolean()
+/*
+        final Function<Long, BigArray> arrayAllocator;
+            array = bigArrays.grow(array, i + 1);
+            ref[i] = randomInt();
+                .build(),
+        final BigArrays bigArrays;
+}
+            (Long size) -> BigObjectArray.estimateRamBytes(size)
+        for (int i = 0; i < totalLen; ++i) {
+                bigArraysHelper.arrayAllocator.apply(size);
+    }
+                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
+ *
+        for (int i = 0; i < len; ++i) {
+        float[] ref = new float[totalLen];
+        return Arrays.asList(byteHelper, intHelper, longHelper, floatHelper, doubleHelper, objectHelper);
+    public void testDoubleArrayFill() {
+import static org.hamcrest.Matchers.equalTo;
+    public void testIntArrayGrowth() {
+                assertThat(e.getBytesWanted(), greaterThanOrEqualTo(size));
+        final ByteArray a1 = byteArrayWithBytes(new byte[] { 0 });
+        array2.close();
+        final BigArrays byteBigArrays = newBigArraysInstance(maxSize, withBreaking);
+        assertThat(size - minSize, lessThan((long) pageSize));
+        }
+    }
+package org.opensearch.common.util;
+        final BigArrays longBigArrays = newBigArraysInstance(maxSize, withBreaking);
+        );
+    private BigArrays bigArrays;
+            array.set(i, ref[i]);
+        byte[] ref = new byte[totalLen];
+ * this file be licensed under the Apache-2.0 license or a
+        final long rand = randomLong();
+        final byte[] array1 = new byte[len];
+            : randomIntBetween(fromIndex, len); // likely multiple pages
+        final long size = BigArrays.overSize(minSize, pageSize, 1);
+            i += len;
+        final int maxSize = 1 << scaledRandomIntBetween(15, 22);
+    }
+        // equality: both empty
+import java.util.List;
+        array2.close();
+            array.set(i, ref[i]);
             assertEquals(new BytesRef(array1, offset, len), ref);
         }
-        array2.close();
-    }
-
-    public void testByteArrayBulkSet() {
-        final byte[] array1 = new byte[randomIntBetween(1, 4000000)];
-        random().nextBytes(array1);
-        final ByteArray array2 = bigArrays.newByteArray(array1.length, randomBoolean());
-        for (int i = 0; i < array1.length;) {
-            final int len = Math.min(array1.length - i, randomBoolean() ? randomInt(10) : randomInt(3 * PageCacheRecycler.BYTE_PAGE_SIZE));
-            array2.set(i, array1, i, len);
-            i += len;
-        }
-        for (int i = 0; i < array1.length; ++i) {
-            assertEquals(array1[i], array2.get(i));
-        }
-        array2.close();
-    }
-
-    public void testByteArrayEquals() {
-        final ByteArray empty1 = byteArrayWithBytes(BytesRef.EMPTY_BYTES);
-        final ByteArray empty2 = byteArrayWithBytes(BytesRef.EMPTY_BYTES);
-
-        // identity = equality
-        assertTrue(bigArrays.equals(empty1, empty1));
-        // equality: both empty
-        assertTrue(bigArrays.equals(empty1, empty2));
-        empty1.close();
-        empty2.close();
-
-        // not equal: contents differ
-        final ByteArray a1 = byteArrayWithBytes(new byte[] { 0 });
-        final ByteArray a2 = byteArrayWithBytes(new byte[] { 1 });
-        assertFalse(bigArrays.equals(a1, a2));
-        a1.close();
-        a2.close();
-
-        // not equal: contents differ
-        final ByteArray a3 = byteArrayWithBytes(new byte[] { 1, 2, 3 });
-        final ByteArray a4 = byteArrayWithBytes(new byte[] { 1, 1, 3 });
-        assertFalse(bigArrays.equals(a3, a4));
-        a3.close();
-        a4.close();
-
-        // not equal: contents differ
-        final ByteArray a5 = byteArrayWithBytes(new byte[] { 1, 2, 3 });
-        final ByteArray a6 = byteArrayWithBytes(new byte[] { 1, 2, 4 });
-        assertFalse(bigArrays.equals(a5, a6));
-        a5.close();
-        a6.close();
-    }
-
-    public void testByteArrayHashCode() {
-        // null arg has hashCode 0
-        assertEquals(0, bigArrays.hashCode(null));
-
-        // empty array should have equal hash
-        final int emptyHash = Arrays.hashCode(BytesRef.EMPTY_BYTES);
-        final ByteArray emptyByteArray = byteArrayWithBytes(BytesRef.EMPTY_BYTES);
-        final int emptyByteArrayHash = bigArrays.hashCode(emptyByteArray);
-        assertEquals(emptyHash, emptyByteArrayHash);
-        emptyByteArray.close();
-
-        // FUN FACT: Arrays.hashCode() and BytesReference.bytesHashCode() are inconsistent for empty byte[]
-        // final int emptyHash3 = new BytesArray(BytesRef.EMPTY_BYTES).hashCode();
-        // assertEquals(emptyHash1, emptyHash3); -> fail (1 vs. 0)
-
-        // large arrays should be different
-        final byte[] array1 = new byte[randomIntBetween(1, 4000000)];
-        random().nextBytes(array1);
-        final int array1Hash = Arrays.hashCode(array1);
-        final ByteArray array2 = byteArrayWithBytes(array1);
-        final int array2Hash = bigArrays.hashCode(array2);
-        assertEquals(array1Hash, array2Hash);
-        array2.close();
-    }
-
-    private ByteArray byteArrayWithBytes(byte[] bytes) {
-        ByteArray bytearray = bigArrays.newByteArray(bytes.length);
-        for (int i = 0; i < bytes.length; ++i) {
-            bytearray.set(i, bytes[i]);
-        }
-        return bytearray;
-    }
-
-    public void testMaxSizeExceededOnNew() throws Exception {
-        final long size = scaledRandomIntBetween(5, 1 << 22);
-        final long maxSize = size - 1;
-        for (BigArraysHelper bigArraysHelper : bigArrayCreators(maxSize, true)) {
-            try {
-                bigArraysHelper.arrayAllocator.apply(size);
-                fail("circuit breaker should trip");
-            } catch (CircuitBreakingException e) {
-                assertEquals(maxSize, e.getByteLimit());
-                assertThat(e.getBytesWanted(), greaterThanOrEqualTo(size));
-            }
-            assertEquals(0, bigArraysHelper.bigArrays.breakerService().getBreaker(CircuitBreaker.REQUEST).getUsed());
-        }
-    }
-
-    public void testMaxSizeExceededOnResize() throws Exception {
-        for (String type : Arrays.asList("Byte", "Int", "Long", "Float", "Double", "Object")) {
-            final int maxSize = randomIntBetween(1 << 8, 1 << 14);
-            HierarchyCircuitBreakerService hcbs = new HierarchyCircuitBreakerService(
-                Settings.builder()
-                    .put(REQUEST_CIRCUIT_BREAKER_LIMIT_SETTING.getKey(), maxSize, ByteSizeUnit.BYTES)
-                    .put(HierarchyCircuitBreakerService.USE_REAL_MEMORY_USAGE_SETTING.getKey(), false)
-                    .build(),
-                Collections.emptyList(),
-                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
-            );
-            BigArrays bigArrays = new BigArrays(null, hcbs, CircuitBreaker.REQUEST).withCircuitBreaking();
-            Method create = BigArrays.class.getMethod("new" + type + "Array", long.class);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        final byte rand = randomByte();
+        final int totalLen = randomIntBetween(1, 4000000);
             final int size = scaledRandomIntBetween(10, maxSize / 16);
-            BigArray array = (BigArray) create.invoke(bigArrays, size);
-            Method resize = BigArrays.class.getMethod("resize", array.getClass().getInterfaces()[0], long.class);
-            while (true) {
-                long newSize = array.size() * 2;
-                try {
-                    array = (BigArray) resize.invoke(bigArrays, array, newSize);
-                } catch (InvocationTargetException e) {
-                    assertTrue(e.getCause() instanceof CircuitBreakingException);
-                    break;
-                }
-            }
-            assertEquals(array.ramBytesUsed(), hcbs.getBreaker(CircuitBreaker.REQUEST).getUsed());
-            array.close();
-            assertEquals(0, hcbs.getBreaker(CircuitBreaker.REQUEST).getUsed());
-        }
-    }
-
-    public void testEstimatedBytesSameAsActualBytes() throws Exception {
-        final int maxSize = 1 << scaledRandomIntBetween(15, 22);
-        final long size = randomIntBetween((1 << 14) + 1, maxSize);
-        for (final BigArraysHelper bigArraysHelper : bigArrayCreators(maxSize, false)) {
-            final BigArray bigArray = bigArraysHelper.arrayAllocator.apply(size);
-            assertEquals(bigArraysHelper.ramEstimator.apply(size).longValue(), bigArray.ramBytesUsed());
-        }
-    }
-
-    public void testOverSizeUsesMinPageCount() {
-        final int pageSize = 1 << (randomIntBetween(2, 16));
-        final int minSize = randomIntBetween(1, pageSize) * randomIntBetween(1, 100);
-        final long size = BigArrays.overSize(minSize, pageSize, 1);
-        assertThat(size, greaterThanOrEqualTo((long) minSize));
-        if (size >= pageSize) {
-            assertThat(size + " is a multiple of " + pageSize, size % pageSize, equalTo(0L));
-        }
-        assertThat(size - minSize, lessThan((long) pageSize));
-    }
-
-    private List<BigArraysHelper> bigArrayCreators(final long maxSize, final boolean withBreaking) {
-        final BigArrays byteBigArrays = newBigArraysInstance(maxSize, withBreaking);
-        BigArraysHelper byteHelper = new BigArraysHelper(
-            byteBigArrays,
-            (Long size) -> byteBigArrays.newByteArray(size),
-            (Long size) -> BigByteArray.estimateRamBytes(size)
-        );
-        final BigArrays intBigArrays = newBigArraysInstance(maxSize, withBreaking);
-        BigArraysHelper intHelper = new BigArraysHelper(
-            intBigArrays,
-            (Long size) -> intBigArrays.newIntArray(size),
-            (Long size) -> BigIntArray.estimateRamBytes(size)
-        );
-        final BigArrays longBigArrays = newBigArraysInstance(maxSize, withBreaking);
-        BigArraysHelper longHelper = new BigArraysHelper(
-            longBigArrays,
-            (Long size) -> longBigArrays.newLongArray(size),
-            (Long size) -> BigLongArray.estimateRamBytes(size)
-        );
-        final BigArrays floatBigArrays = newBigArraysInstance(maxSize, withBreaking);
-        BigArraysHelper floatHelper = new BigArraysHelper(
-            floatBigArrays,
-            (Long size) -> floatBigArrays.newFloatArray(size),
-            (Long size) -> BigFloatArray.estimateRamBytes(size)
-        );
+            HierarchyCircuitBreakerService hcbs = new HierarchyCircuitBreakerService(
+            ref[i] = randomFloat();
+        array2.fill(fromIndex, toIndex, rand);
+        final ByteArray empty2 = byteArrayWithBytes(BytesRef.EMPTY_BYTES);
         final BigArrays doubleBigArrays = newBigArraysInstance(maxSize, withBreaking);
-        BigArraysHelper doubleHelper = new BigArraysHelper(
-            doubleBigArrays,
-            (Long size) -> doubleBigArrays.newDoubleArray(size),
-            (Long size) -> BigDoubleArray.estimateRamBytes(size)
-        );
-        final BigArrays objectBigArrays = newBigArraysInstance(maxSize, withBreaking);
-        BigArraysHelper objectHelper = new BigArraysHelper(
-            objectBigArrays,
-            (Long size) -> objectBigArrays.newObjectArray(size),
-            (Long size) -> BigObjectArray.estimateRamBytes(size)
-        );
-        return Arrays.asList(byteHelper, intHelper, longHelper, floatHelper, doubleHelper, objectHelper);
+            array2.set(i, array1, i, len);
+            assertEquals(ref[i], array.get(i));
+ */
+        BigArraysHelper longHelper = new BigArraysHelper(
+            assertEquals(array1[i], array2.get(i), 0.001d);
+        // not equal: contents differ
     }
-
-    private BigArrays newBigArraysInstance(final long maxSize, final boolean withBreaking) {
-        HierarchyCircuitBreakerService hcbs = new HierarchyCircuitBreakerService(
-            Settings.builder()
-                .put(REQUEST_CIRCUIT_BREAKER_LIMIT_SETTING.getKey(), maxSize, ByteSizeUnit.BYTES)
-                .put(HierarchyCircuitBreakerService.USE_REAL_MEMORY_USAGE_SETTING.getKey(), false)
-                .build(),
+        Arrays.fill(array1, fromIndex, toIndex, rand);
             Collections.emptyList(),
-            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
-        );
-        BigArrays bigArrays = new BigArrays(null, hcbs, CircuitBreaker.REQUEST);
-        return (withBreaking ? bigArrays.withCircuitBreaking() : bigArrays);
-    }
-
-    private static class BigArraysHelper {
-        final BigArrays bigArrays;
-        final Function<Long, BigArray> arrayAllocator;
-        final Function<Long, Long> ramEstimator;
-
-        BigArraysHelper(BigArrays bigArrays, Function<Long, BigArray> arrayAllocator, Function<Long, Long> ramEstimator) {
-            this.bigArrays = bigArrays;
-            this.arrayAllocator = arrayAllocator;
-            this.ramEstimator = ramEstimator;
         }
+        final ByteArray array2 = byteArrayWithBytes(array1);
+        a4.close();
+        Arrays.fill(array1, fromIndex, toIndex, rand);
+        final ByteArray a3 = byteArrayWithBytes(new byte[] { 1, 2, 3 });
+            array1[i] = randomDouble();
+        for (int i = 0; i < totalLen; ++i) {
+        // large arrays should be different
+    public void testByteArrayHashCode() {
+            floatBigArrays,
+        }
+    public void testLongArrayFill() {
+ * not use this file except in compliance with the License.
+            final int len = Math.min(array1.length - i, randomBoolean() ? randomInt(10) : randomInt(3 * PageCacheRecycler.BYTE_PAGE_SIZE));
+            (Long size) -> BigByteArray.estimateRamBytes(size)
+        assertFalse(bigArrays.equals(a3, a4));
+        assertEquals(0, bigArrays.hashCode(null));
+        final int emptyByteArrayHash = bigArrays.hashCode(emptyByteArray);
+            }
+    private static class BigArraysHelper {
+                    break;
+            while (true) {
+        }
+        final FloatArray array2 = bigArrays.newFloatArray(len, randomBoolean());
+                    array = (BigArray) resize.invoke(bigArrays, array, newSize);
+        }
+            array2.get(offset, len, ref);
+        final int totalLen = randomIntBetween(1, 1000000);
+ *
+ * Unless required by applicable law or agreed to in writing,
+        }
+        BigArraysHelper floatHelper = new BigArraysHelper(
     }
-
-}
+        assertTrue(bigArrays.equals(empty1, empty1));
+        }
+        }
+        final ByteArray array2 = bigArrays.newByteArray(array1.length, randomBoolean());
+ * license agreements. See the NOTICE file distributed with
+            : randomIntBetween(fromIndex, len); // likely multiple pages
+ */
+        }
+            assertEquals(ref[i], array.get(i), 0.001d);
+        final int totalLen = randomIntBetween(1, 1000000);
+            final BigArray bigArray = bigArraysHelper.arrayAllocator.apply(size);
+            array.close();
+            (Long size) -> BigFloatArray.estimateRamBytes(size)
+        }
+        for (int i = 0; i < len; ++i) {
+        final DoubleArray array2 = bigArrays.newDoubleArray(len, randomBoolean());
+        final ByteArray a6 = byteArrayWithBytes(new byte[] { 1, 2, 4 });
+        final ByteArray array2 = bigArrays.newByteArray(array1.length, randomBoolean());
+        final ByteArray a2 = byteArrayWithBytes(new byte[] { 1 });
+    public void testByteArrayGrowth() {
+        final byte[] array1 = new byte[randomIntBetween(1, 4000000)];
+            ? Math.min(fromIndex + randomInt(100), len) // single page
+        // empty array should have equal hash
+    }
+        for (int i = 0; i < totalLen; ++i) {
+ * ownership. Elasticsearch licenses this file to you under
+        final int minSize = randomIntBetween(1, pageSize) * randomIntBetween(1, 100);
+    public void testByteArrayBulkGet() {
+import org.junit.Before;
+        array.close();
+        }
+    private List<BigArraysHelper> bigArrayCreators(final long maxSize, final boolean withBreaking) {
+        // not equal: contents differ
+            ref[i] = randomLong();
+        final int startLen = randomIntBetween(1, randomBoolean() ? 1000 : totalLen);
+    }
+        array2.close();
+            array1[i] = randomLong();
+        a2.close();
+            Settings.builder()
+    private ByteArray byteArrayWithBytes(byte[] bytes) {
+        for (int i = 0; i < array1.length; ++i) {
+        a1.close();
+            : randomIntBetween(fromIndex, len); // likely multiple pages
+        for (int i = 0; i < totalLen; ++i) {
+        ObjectArray<Object> array = bigArrays.newObjectArray(startLen);
+        array.close();
+            (Long size) -> doubleBigArrays.newDoubleArray(size),
+            assertEquals(array1[i], array2.get(i), 0.001d);
+            (Long size) -> byteBigArrays.newByteArray(size),
+    }
+        // assertEquals(emptyHash1, emptyHash3); -> fail (1 vs. 0)
+import java.util.function.Function;
+            this.ramEstimator = ramEstimator;
+        final int totalLen = randomIntBetween(1, 1000000);
+            array2.set(i, array1[i]);
+            assertEquals(0, hcbs.getBreaker(CircuitBreaker.REQUEST).getUsed());
+        final int startLen = randomIntBetween(1, randomBoolean() ? 1000 : totalLen);
+        final ByteArray empty1 = byteArrayWithBytes(BytesRef.EMPTY_BYTES);
+ * under the License.
+import static org.hamcrest.Matchers.lessThan;
+        for (int i = 0; i < totalLen; ++i) {
+            this.bigArrays = bigArrays;
+            pool[i] = new Object();
+            assertEquals(array1[i], array2.get(i));
+            longBigArrays,
+            assertEquals(ref[i], array.get(i));
+            assertThat(size + " is a multiple of " + pageSize, size % pageSize, equalTo(0L));
+public class BigArraysTests extends OpenSearchTestCase {
+    }
+import org.opensearch.test.OpenSearchTestCase;
+        final float rand = randomFloat();
+            array = bigArrays.grow(array, i + 1);
+            (Long size) -> longBigArrays.newLongArray(size),
+        for (int i = 0; i < totalLen; ++i) {
+    private BigArrays randombigArrays() {
+/*
+        for (int i = 0; i < len; ++i) {
+                    .put(REQUEST_CIRCUIT_BREAKER_LIMIT_SETTING.getKey(), maxSize, ByteSizeUnit.BYTES)
+            Method create = BigArrays.class.getMethod("new" + type + "Array", long.class);
+            array.set(i, ref[i]);
+import org.opensearch.core.common.util.ByteArray;
+            array.set(i, ref[i]);
+                try {
+            doubleBigArrays,
+import org.opensearch.core.common.breaker.CircuitBreaker;
+            final int maxSize = randomIntBetween(1 << 8, 1 << 14);
+        final int startLen = randomIntBetween(1, randomBoolean() ? 1000 : totalLen);
+        );
+        assertFalse(bigArrays.equals(a1, a2));
+        final float[] array1 = new float[len];
+import org.opensearch.core.common.breaker.CircuitBreakingException;
+        }
+        final Function<Long, Long> ramEstimator;
+        return new MockBigArrays(new MockPageCacheRecycler(Settings.EMPTY), new NoneCircuitBreakerService());
+        double[] ref = new double[totalLen];
+            assertSame(ref[i], array.get(i));
+        }
+import java.lang.reflect.Method;
+        final byte[] array1 = new byte[randomIntBetween(1, 4000000)];
+            (Long size) -> objectBigArrays.newObjectArray(size),
+ * specific language governing permissions and limitations
+            bytearray.set(i, bytes[i]);
+        final int len = randomIntBetween(1, 100000);
+        a5.close();
+        }
+            (Long size) -> floatBigArrays.newFloatArray(size),
+        }
+        BigArraysHelper objectHelper = new BigArraysHelper(
+    public void testFloatArrayGrowth() {
+        for (BigArraysHelper bigArraysHelper : bigArrayCreators(maxSize, true)) {
+        final int array1Hash = Arrays.hashCode(array1);
+ * KIND, either express or implied.  See the License for the
+            final int offset = randomInt(array1.length - 1);
+        empty2.close();
+        array2.close();
+            byteBigArrays,
+ */
+        final int len = randomIntBetween(1, 100000);
+            ref[i] = randomDouble();
+        }
+            BigArrays bigArrays = new BigArrays(null, hcbs, CircuitBreaker.REQUEST).withCircuitBreaking();
+import org.opensearch.core.common.util.BigArray;
+        final int array2Hash = bigArrays.hashCode(array2);
+            (Long size) -> BigIntArray.estimateRamBytes(size)
+        final byte[] array1 = new byte[randomIntBetween(1, 4000000)];
+        }
+            (Long size) -> intBigArrays.newIntArray(size),
+        for (int i = 0; i < 1000; ++i) {
+                Collections.emptyList(),
+                    assertTrue(e.getCause() instanceof CircuitBreakingException);
+            array2.set(i, array1[i]);
+        array2.close();
+    }
+            array2.set(i, array1[i]);
+                }
+        final Object[] pool = new Object[100];
+        assertEquals(emptyHash, emptyByteArrayHash);
+        }
+        // null arg has hashCode 0
+        for (int i = 0; i < len; ++i) {
+ * Modifications Copyright OpenSearch Contributors. See
+            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
+        final long size = randomIntBetween((1 << 14) + 1, maxSize);
+    }
+        for (int i = 0; i < totalLen; ++i) {
+            );
+            array = bigArrays.grow(array, i + 1);

@@ -1,344 +1,308 @@
----
-"Index data and search on the mixed cluster":
-
-  - do:
-      indices.create:
-        index: test_index
-        body:
-          settings:
-            index:
-              number_of_shards: 2
-              number_of_replicas: 0
-
-  - do:
-      bulk:
-        refresh: true
-        body:
-            - '{"index": {"_index": "test_index"}}'
-            - '{"f1": "local_cluster", "animal": "dog", "filter_field": 0}'
-            - '{"index": {"_index": "test_index"}}'
-            - '{"f1": "local_cluster", "animal": "dog", "filter_field": 1}'
-            - '{"index": {"_index": "test_index"}}'
-            - '{"f1": "local_cluster", "animal": "dog", "filter_field": 0}'
-            - '{"index": {"_index": "test_index"}}'
-            - '{"f1": "local_cluster", "animal": "dog", "filter_field": 1}'
-            - '{"index": {"_index": "test_index"}}'
-            - '{"f1": "local_cluster", "animal": "pig", "filter_field": 0}'
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test_index,my_remote_cluster:test_index
-        body:
-          seq_no_primary_term: true
-          aggs:
-            cluster:
-              terms:
-                field: f1.keyword
-
-  - match: { num_reduce_phases: 3 }
-  - match: {_clusters.total: 2}
-  - match: {_clusters.successful: 2}
-  - match: {_clusters.skipped: 0}
-  - match: {num}
-  - match: { _shards.total: 5 }
-  - match: { hits.total: 11 }
-  - gte: { hits.hits.0._seq_no: 0 }
-  - gte: { hits.hits.0._primary_term: 1 }
-  - length: { aggregations.cluster.buckets: 2 }
-  - match: { aggregations.cluster.buckets.0.key: "remote_cluster" }
-  - match: { aggregations.cluster.buckets.0.doc_count: 6 }
-  - match: { aggregations.cluster.buckets.1.key: "local_cluster" }
-  - match: { aggregations.cluster.buckets.1.doc_count: 5 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test_index,my_remote_cluster:test_index
-        body:
-          query:
-            term:
-              f1: remote_cluster
-          aggs:
-            cluster:
-              terms:
-                field: f1.keyword
-
-  - match: { num_reduce_phases: 3 }
-  - match: {_clusters.total: 2}
-  - match: {_clusters.successful: 2}
-  - match: {_clusters.skipped: 0}
-  - match: { _shards.total: 5 }
-  - match: { hits.total: 6}
-  - match: { hits.hits.0._index: "my_remote_cluster:test_index"}
-  - length: { aggregations.cluster.buckets: 1 }
-  - match: { aggregations.cluster.buckets.0.key: "remote_cluster" }
-  - match: { aggregations.cluster.buckets.0.doc_count: 6 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: my_remote_cluster:test_index
-        body:
-          aggs:
-            cluster:
-              terms:
-                field: f1.keyword
-
-  - is_false: num_reduce_phases
-  - match: {_clusters.total: 1}
-  - match: {_clusters.successful: 1}
-  - match: {_clusters.skipped: 0}
-  - match: { _shards.total: 3 }
-  - match: { hits.total: 6}
-  - match: { hits.hits.0._index: "my_remote_cluster:test_index"}
-  - length: { aggregations.cluster.buckets: 1 }
-  - match: { aggregations.cluster.buckets.0.key: "remote_cluster" }
-  - match: { aggregations.cluster.buckets.0.doc_count: 6 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test_index
-        body:
-          aggs:
-            cluster:
-              terms:
-                field: f1.keyword
-
-  - is_false: num_reduce_phases
-  - is_false: _clusters
-  - match: { _shards.total: 2 }
-  - match: { hits.total: 5}
-  - match: { hits.hits.0._index: "test_index"}
-  - length: { aggregations.cluster.buckets: 1 }
-  - match: { aggregations.cluster.buckets.0.key: "local_cluster" }
-  - match: { aggregations.cluster.buckets.0.doc_count: 5 }
-
-  # once more, this time with a top level pipeline agg
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test_index,my_remote_cluster:test_index
-        body:
-          seq_no_primary_term: true
-          aggs:
-            cluster:
-              terms:
-                field: f1.keyword
-              aggs:
-                s:
-                  sum:
-                    field: filter_field
-            average_sum:
-              avg_bucket:
-                buckets_path: cluster.s
-
-  - match: { num_reduce_phases: 3 }
-  - match: {_clusters.total: 2}
-  - match: {_clusters.successful: 2}
-  - match: {_clusters.skipped: 0}
-  - match: { _shards.total: 5 }
-  - match: { hits.total: 11 }
-  - length: { aggregations.cluster.buckets: 2 }
-  - match: { aggregations.cluster.buckets.0.key: "remote_cluster" }
-  - match: { aggregations.cluster.buckets.0.doc_count: 6 }
-  - match: { aggregations.cluster.buckets.0.s.value: 2 }
-  - match: { aggregations.cluster.buckets.1.key: "local_cluster" }
-  - match: { aggregations.cluster.buckets.1.s.value: 2 }
-  - match: { aggregations.average_sum.value: 2 }
-
-  # and now a non-top-level pipeline agg!
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test_index,my_remote_cluster:test_index
-        body:
-          seq_no_primary_term: true
-          aggs:
-            cluster:
-              terms:
-                field: f1.keyword
-              aggs:
-                animal:
-                  terms:
-                    field: animal.keyword
-                  aggs:
-                    s:
-                      sum:
-                        field: filter_field
-                average_sum:
-                  avg_bucket:
-                    buckets_path: animal.s
-
-  - match: { num_reduce_phases: 3 }
-  - match: {_clusters.total: 2}
-  - match: {_clusters.successful: 2}
-  - match: {_clusters.skipped: 0}
-  - match: { _shards.total: 5 }
-  - match: { hits.total: 11 }
-  - length: { aggregations.cluster.buckets: 2 }
-  - match: { aggregations.cluster.buckets.0.key: "remote_cluster" }
-  - match: { aggregations.cluster.buckets.0.doc_count: 6 }
-  - match: { aggregations.cluster.buckets.0.animal.buckets.0.key: "chicken" }
-  - match: { aggregations.cluster.buckets.0.animal.buckets.0.doc_count: 4 }
-  - match: { aggregations.cluster.buckets.0.animal.buckets.0.s.value: 1 }
+        include_defaults: true
   - match: { aggregations.cluster.buckets.0.animal.buckets.1.key: "pig" }
-  - match: { aggregations.cluster.buckets.0.animal.buckets.1.doc_count: 2 }
-  - match: { aggregations.cluster.buckets.0.animal.buckets.1.s.value: 1 }
-  - match: { aggregations.cluster.buckets.0.average_sum.value: 1 }
-  - match: { aggregations.cluster.buckets.1.key: "local_cluster" }
-  - match: { aggregations.cluster.buckets.1.animal.buckets.0.key: "dog" }
-  - match: { aggregations.cluster.buckets.1.animal.buckets.0.doc_count: 4 }
-  - match: { aggregations.cluster.buckets.1.animal.buckets.0.s.value: 2 }
-  - match: { aggregations.cluster.buckets.1.animal.buckets.1.key: "pig" }
-  - match: { aggregations.cluster.buckets.1.animal.buckets.1.doc_count: 1 }
-  - match: { aggregations.cluster.buckets.1.animal.buckets.1.s.value: 0 }
-  - match: { aggregations.cluster.buckets.1.average_sum.value: 1 }
-
-  # scripted_metric
+        index: my_remote_cluster:test_index
+  - match: { aggregations.cluster.buckets.0.key: "remote_cluster" }
+      cluster.get_settings:
+  - match: { hits.total: 11 }
+  - match: {_clusters.successful: 2}
+                  sum:
   - do:
+  - match: { hits.total: 11 }
+  - match: { aggregations.cluster.buckets.0.doc_count: 6 }
       search:
-        index: test_index,my_remote_cluster:test_index
-        body:
-          seq_no_primary_term: true
-          aggs:
+  - match: {_clusters.successful: 2}
+                field: f1.keyword
+  - match: {_clusters.skipped: 0}
             cluster:
+  - do:
+                    combine_script: |
+  - match: {_clusters.skipped: 0}
+        body:
+  - match: { num_reduce_phases: 3 }
+      search:
+  - match: { aggregations.cluster.buckets.0.doc_count: 6 }
+      search:
+  - match: {_clusters.skipped: 0}
+  - do:
+        index: "my_remote_cluster:single_doc_index"
+  - match: { _shards.total: 5 }
+            - '{"index": {"_index": "test_index"}}'
+  - match: {_clusters.total: 1}
+  - length: { aggregations.cluster.buckets: 1 }
+          aggs:
+                field: f1.keyword
+        body:
+        rest_total_hits_as_int: true
+              aggs:
+            - '{"f1": "local_cluster", "animal": "dog", "filter_field": 0}'
+                      return sum
+  - match: { _shards.total: 3 }
+  - match: {_clusters.skipped: 0}
+"Test wildcard search":
+              terms:
+              aggs:
+      search:
+  - is_false: num_reduce_phases
+          aggs:
+"Index data and search on the mixed cluster":
+              aggs:
+  - match: {_clusters.total: 1}
+  - match: {_clusters.total: 2}
+"Add transient remote cluster based on the preset cluster":
+        rest_total_hits_as_int: true
+  - match: {_clusters.skipped: 0}
+  - match: { aggregations.average_sum.value: 2 }
+  - match: {_clusters.total: 1}
+  - match: { hits.total: 5}
+  - match: { hits.hits.0._source.filter_field: 1 }
+  - match: {_clusters.successful: 1}
+                        field: filter_field
+          aggs:
+          aggs:
+                  terms:
+                    init_script: |
+      search:
+  - set: { defaults.cluster.remote.my_remote_cluster.seeds.0: remote_ip }
+  - match: { num_reduce_phases: 3 }
+  - match: { aggregations.cluster.buckets.0.key: "remote_cluster" }
+            - '{"f1": "local_cluster", "animal": "dog", "filter_field": 1}'
+  - match: { aggregations.cluster.buckets.1.key: "local_cluster" }
+        rest_total_hits_as_int: true
+  - match: { aggregations.cluster.buckets.1.animal.buckets.1.key: "pig" }
+  - match: { hits.hits.0._index: "test_remote_cluster:test_index" }
+  - do:
+  - match: { aggregations.cluster.buckets.0.key: "remote_cluster" }
+  - match: { aggregations.cluster.buckets.0.animal_length.value: 34 }
+---
+  - do:
+        rest_total_hits_as_int: true
+  - length: { aggregations.cluster.buckets: 2 }
+  - match: { aggregations.cluster.buckets.1.animal.buckets.0.key: "dog" }
+  - match: {_clusters.total: 2}
+  - match: { aggregations.cluster.buckets.0.animal.buckets.0.s.value: 1 }
+          settings:
+  - match: {_clusters.skipped: 0}
+  - match: {_clusters.successful: 2}
+  - match: {_clusters.successful: 2}
+  - set: { defaults.cluster.remote.my_remote_cluster.seeds.0: remote_ip }
+  - match: { _shards.total: 5 }
+  - length: { aggregations.cluster.buckets: 2 }
+        index: test_index,my_remote_cluster:test_index
+"Search a filtered alias and empty index on the remote cluster":
+  - match: { aggregations.cluster.buckets.1.animal.buckets.0.s.value: 2 }
+                      state.sum = 0
+        index: test_index
+  - match: {_clusters.total: 2}
+          seq_no_primary_term: true
+      cluster.get_settings:
+            - '{"f1": "local_cluster", "animal": "pig", "filter_field": 0}'
               terms:
                 field: f1.keyword
-              aggs:
-                animal_length:
-                  scripted_metric:
-                    init_script: |
-                      state.sum = 0
-                    map_script: |
-                      state.sum += doc['animal.keyword'].value.length()
-                    combine_script: |
-                      state.sum
-                    reduce_script: |
-                      long sum = 0;
-                      for (s in states) {
-                        sum += s;
-                      }
-                      return sum
-  - match: { num_reduce_phases: 3 }
-  - match: {_clusters.total: 2}
-  - match: {_clusters.successful: 2}
-  - match: {_clusters.skipped: 0}
-  - match: { _shards.total: 5 }
-  - match: { hits.total.value: 11 }
-  - length: { aggregations.cluster.buckets: 2 }
-  - match: { aggregations.cluster.buckets.0.key: "remote_cluster" }
   - match: { aggregations.cluster.buckets.0.doc_count: 6 }
-  - match: { aggregations.cluster.buckets.0.animal_length.value: 34 }
-  - match: { aggregations.cluster.buckets.1.key: "local_cluster" }
-  - match: { aggregations.cluster.buckets.1.animal_length.value: 15 }
-
----
-"Add transient remote cluster based on the preset cluster":
-  - do:
-      cluster.get_settings:
-        include_defaults: true
-
-  - set: { defaults.cluster.remote.my_remote_cluster.seeds.0: remote_ip }
-
-  - do:
-      cluster.put_settings:
-        flat_settings: true
-        body:
-          transient:
-            cluster.remote.test_remote_cluster.seeds: $remote_ip
-
-  - match: {transient: {cluster.remote.test_remote_cluster.seeds: $remote_ip}}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test_remote_cluster:test_index
-
-  - is_false: num_reduce_phases
-  - match: {_clusters.total: 1}
-  - match: {_clusters.successful: 1}
-  - match: {_clusters.skipped: 0}
-  - match: { _shards.total: 3 }
-  - match: { hits.total: 6 }
-  - match: { hits.hits.0._index: "test_remote_cluster:test_index" }
-
----
-"Test wildcard search":
-  - do:
-      cluster.get_settings:
-        include_defaults: true
-
-  - set: { defaults.cluster.remote.my_remote_cluster.seeds.0: remote_ip }
-
-  - do:
-      cluster.put_settings:
-        flat_settings: true
-        body:
-          transient:
-            cluster.remote.test_remote_cluster.seeds: $remote_ip
-
-  - match: {transient: {cluster.remote.test_remote_cluster.seeds: $remote_ip}}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: "*:test_index"
-
+                  scripted_metric:
   - match: { num_reduce_phases: 3 }
-  - match: {_clusters.total: 2}
-  - match: {_clusters.successful: 2}
-  - match: {_clusters.skipped: 0}
-  - match: { _shards.total: 6 }
-  - match: { hits.total: 12 }
-
----
-"Search a filtered alias on the remote cluster":
-
-  - do:
-      search:
         rest_total_hits_as_int: true
-        index: my_remote_cluster:aliased_test_index
-
-  - is_false: num_reduce_phases
-  - match: {_clusters.total: 1}
-  - match: {_clusters.successful: 1}
-  - match: {_clusters.skipped: 0}
-  - match: { _shards.total: 3 }
-  - match: { hits.total: 2 }
-  - match: { hits.hits.0._source.filter_field: 1 }
-  - match: { hits.hits.0._index: "my_remote_cluster:test_index" }
-
----
-"Search a filtered alias and empty index on the remote cluster":
-
   - do:
-      search:
-        rest_total_hits_as_int: true
-        index: my_remote_cluster:aliased_test_index,my_remote_cluster:field_caps_empty_index
-
+                      }
+  # scripted_metric
+                      for (s in states) {
   - is_false: num_reduce_phases
-  - match: {_clusters.total: 1}
-  - match: {_clusters.successful: 1}
   - match: {_clusters.skipped: 0}
-  - match: { _shards.total: 4 }
-  - match: { hits.total: 2 }
-  - match: { hits.hits.0._source.filter_field: 1 }
-  - match: { hits.hits.0._index: "my_remote_cluster:test_index" }
-
----
-"Single shard search gets properly proxied":
-
+            cluster:
   - do:
-      search:
-        rest_total_hits_as_int: true
-        index: "my_remote_cluster:single_doc_index"
-
-  - is_false: num_reduce_phases
-  - match: {_clusters.total: 1}
-  - match: {_clusters.successful: 1}
-  - match: {_clusters.skipped: 0}
+            - '{"index": {"_index": "test_index"}}'
+            - '{"index": {"_index": "test_index"}}'
+        body:
+          seq_no_primary_term: true
   - match: { _shards.total: 1 }
-  - match: { hits.total: 1 }
+  - match: { hits.hits.0._index: "my_remote_cluster:test_index" }
+        index: test_index,my_remote_cluster:test_index
+  - match: {_clusters.successful: 1}
+  - do:
+  - match: { num_reduce_phases: 3 }
+  - match: { _shards.total: 3 }
+"Search a filtered alias on the remote cluster":
+          aggs:
+  - match: { aggregations.cluster.buckets.1.animal_length.value: 15 }
+  - do:
+  - match: { aggregations.cluster.buckets.0.key: "remote_cluster" }
+        flat_settings: true
+              terms:
+  - match: { aggregations.cluster.buckets.0.animal.buckets.1.doc_count: 2 }
+                field: f1.keyword
+        flat_settings: true
+      search:
+---
+      search:
+        refresh: true
+  - match: { aggregations.cluster.buckets.0.key: "local_cluster" }
+          seq_no_primary_term: true
+  - match: {_clusters.successful: 1}
+                animal_length:
+  - match: { hits.hits.0._source.filter_field: 1 }
+  - match: {_clusters.total: 1}
+  - match: { hits.total: 2 }
+  # and now a non-top-level pipeline agg!
+        rest_total_hits_as_int: true
+  - match: { hits.hits.0._index: "my_remote_cluster:test_index"}
+          query:
+  - length: { aggregations.cluster.buckets: 1 }
+  - match: { hits.hits.0._index: "my_remote_cluster:test_index"}
+      search:
+  - do:
+  - match: { aggregations.cluster.buckets.0.doc_count: 6 }
+        rest_total_hits_as_int: true
+              f1: remote_cluster
+  - do:
+  - match: { _shards.total: 5 }
+  - length: { aggregations.cluster.buckets: 1 }
+  - match: {_clusters.successful: 2}
+---
+  - match: { aggregations.cluster.buckets.0.animal.buckets.1.s.value: 1 }
+      bulk:
+  - match: { aggregations.cluster.buckets.1.animal.buckets.1.doc_count: 1 }
+  - do:
+  - match: { _shards.total: 5 }
+  - match: {_clusters.skipped: 0}
+  - is_false: _clusters
+  - do:
+        rest_total_hits_as_int: true
+  - match: { aggregations.cluster.buckets.0.key: "remote_cluster" }
+      search:
+---
+  # once more, this time with a top level pipeline agg
+          transient:
+  - length: { aggregations.cluster.buckets: 2 }
+  - match: { hits.total: 6 }
+  - do:
+  - match: { hits.total: 12 }
+  - match: {_clusters.successful: 1}
+                buckets_path: cluster.s
+  - match: { num_reduce_phases: 3 }
+                      state.sum
+        body:
+  - match: {transient: {cluster.remote.test_remote_cluster.seeds: $remote_ip}}
+  - match: {_clusters.skipped: 0}
+        body:
+  - match: { aggregations.cluster.buckets.0.doc_count: 6 }
+        index: test_index
+  - is_false: num_reduce_phases
+      search:
+  - match: { hits.total: 6}
+          transient:
   - match: { hits.hits.0._index: "my_remote_cluster:single_doc_index"}
+                    field: filter_field
+              number_of_shards: 2
+  - match: {_clusters.total: 1}
+  - match: { aggregations.cluster.buckets.1.key: "local_cluster" }
+        body:
+            - '{"index": {"_index": "test_index"}}'
+            - '{"f1": "local_cluster", "animal": "dog", "filter_field": 1}'
+        body:
+              terms:
+              number_of_replicas: 0
+  - do:
+      search:
+  - match: { _shards.total: 2 }
+  - match: { _shards.total: 5 }
+  - length: { aggregations.cluster.buckets: 2 }
+                    field: animal.keyword
+  - is_false: num_reduce_phases
+            cluster:
+          seq_no_primary_term: true
+            term:
+  - match: { aggregations.cluster.buckets.0.doc_count: 6 }
+  - match: { aggregations.cluster.buckets.1.animal.buckets.0.doc_count: 4 }
+        body:
+            cluster.remote.test_remote_cluster.seeds: $remote_ip
+            cluster:
+            - '{"f1": "local_cluster", "animal": "dog", "filter_field": 0}'
+  - match: { aggregations.cluster.buckets.1.key: "local_cluster" }
+        index: test_index,my_remote_cluster:test_index
+        rest_total_hits_as_int: true
+  - match: { hits.total: 2 }
+        body:
+  - match: { aggregations.cluster.buckets.0.doc_count: 5 }
+        rest_total_hits_as_int: true
+            - '{"index": {"_index": "test_index"}}'
+  - match: { _shards.total: 4 }
+                field: f1.keyword
+  - do:
+  - match: { hits.total.value: 11 }
+  - match: { aggregations.cluster.buckets.1.average_sum.value: 1 }
+  - gte: { hits.hits.0._seq_no: 0 }
+  - match: { aggregations.cluster.buckets.0.s.value: 2 }
+                      sum:
+  - match: { hits.hits.0._index: "test_index"}
+  - match: {transient: {cluster.remote.test_remote_cluster.seeds: $remote_ip}}
+          aggs:
+        index: test_index,my_remote_cluster:test_index
+                field: f1.keyword
+      cluster.put_settings:
+  - is_false: num_reduce_phases
+                s:
+  - match: { _shards.total: 3 }
+                  avg_bucket:
+---
+  - match: {_clusters.total: 2}
+  - do:
+        index: "*:test_index"
+              avg_bucket:
+              terms:
+  - match: { _shards.total: 6 }
+  - match: { aggregations.cluster.buckets.1.s.value: 2 }
+  - match: {_clusters.total: 2}
+            cluster.remote.test_remote_cluster.seeds: $remote_ip
+  - match: {_clusters.skipped: 0}
+  - match: { aggregations.cluster.buckets.0.average_sum.value: 1 }
+        body:
+                field: f1.keyword
+  - match: { num_reduce_phases: 3 }
+  - match: { aggregations.cluster.buckets.1.animal.buckets.1.s.value: 0 }
+  - match: { hits.total: 1 }
+        index: my_remote_cluster:aliased_test_index
+        index: my_remote_cluster:aliased_test_index,my_remote_cluster:field_caps_empty_index
+  - do:
+  - match: { aggregations.cluster.buckets.0.animal.buckets.0.doc_count: 4 }
+                    s:
+  - is_false: num_reduce_phases
+        include_defaults: true
+            cluster:
+          aggs:
+  - match: {_clusters.skipped: 0}
+                animal:
+  - match: {num}
+  - match: {_clusters.total: 2}
+        index: test_index,my_remote_cluster:test_index
+      cluster.put_settings:
+        body:
+                    map_script: |
+                    reduce_script: |
+  - match: {_clusters.successful: 2}
+                      state.sum += doc['animal.keyword'].value.length()
+  - match: {_clusters.successful: 1}
+            index:
+            cluster:
+                        sum += s;
+  - match: { aggregations.cluster.buckets.0.animal.buckets.0.key: "chicken" }
+"Single shard search gets properly proxied":
+  - match: { hits.total: 6}
+                  aggs:
+            average_sum:
+  - match: { aggregations.cluster.buckets.0.key: "remote_cluster" }
+              terms:
+                      long sum = 0;
+  - match: { hits.total: 11 }
+  - gte: { hits.hits.0._primary_term: 1 }
+  - match: { aggregations.cluster.buckets.1.doc_count: 5 }
+  - match: { aggregations.cluster.buckets.1.key: "local_cluster" }
+        rest_total_hits_as_int: true
+      indices.create:
+                average_sum:
+            cluster:
+      search:
+  - match: { hits.hits.0._index: "my_remote_cluster:test_index" }
+                    buckets_path: animal.s
+        index: test_remote_cluster:test_index
+---
+              terms:

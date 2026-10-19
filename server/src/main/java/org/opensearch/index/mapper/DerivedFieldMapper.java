@@ -1,277 +1,249 @@
 /*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.index.IndexableField;
-import org.opensearch.common.Explicit;
-import org.opensearch.common.time.DateFormatter;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.analysis.IndexAnalyzers;
-import org.opensearch.script.Script;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-
-import static org.opensearch.index.mapper.DateFieldMapper.getDefaultDateTimeFormatter;
-
-/**
- * A field mapper for derived fields
- *
- * @opensearch.internal
- */
-public class DerivedFieldMapper extends ParametrizedFieldMapper {
-
-    public static final String CONTENT_TYPE = "derived";
-
-    protected final IndexAnalyzers indexAnalyzers;
-
-    private static DerivedFieldMapper toType(FieldMapper in) {
-        return (DerivedFieldMapper) in;
     }
-
-    /**
-     * Builder for this field mapper
-     *
-     * @opensearch.internal
-     */
-    public static class Builder extends ParametrizedFieldMapper.Builder {
-        private final Parameter<String> type = Parameter.stringParam("type", true, m -> toType(m).type, "");
-        private final IndexAnalyzers indexAnalyzers;
+import java.util.Collections;
         private final boolean defaultIgnoreMalformed;
-        private final DateFormatter defaultDateFormatter;
-
-        private final Parameter<Script> script = new Parameter<>(
-            "script",
-            true,
-            () -> null,
-            (n, c, o) -> o == null ? null : Script.parse(o),
-            m -> toType(m).script
-        ).setSerializerCheck((id, ic, value) -> value != null);
-
-        private final Parameter<Map<String, Object>> properties = new Parameter<>(
-            "properties",
-            true,
-            Collections::emptyMap,
-            (n, c, o) -> parseProperties(n, o),
-            m -> toType(m).properties
-        );
-        private final Parameter<String> prefilterField = Parameter.stringParam("prefilter_field", true, m -> toType(m).prefilterField, "");
-        private final Parameter<String> format = Parameter.stringParam(
-            "format",
-            true,
-            m -> toType(m).format,
-            getDefaultDateTimeFormatter().pattern()
-        );
-        private final Parameter<Explicit<Boolean>> ignoreMalformed;
-
-        private static Map<String, Object> parseProperties(String name, Object propertiesObject) {
-            if (propertiesObject instanceof Map == false) {
-                throw new MapperParsingException(
-                    "[properties] must be an object, got "
-                        + propertiesObject.getClass().getSimpleName()
-                        + "["
-                        + propertiesObject
                         + "] for field ["
-                        + name
-                        + "]"
-                );
-            }
-            @SuppressWarnings("unchecked")
-            Map<String, ?> properties = (Map<String, ?>) propertiesObject;
-            for (Object value : properties.values()) {
-                if (value == null) {
-                    throw new MapperParsingException("[properties] values can't be null (field [" + name + "])");
-                } else if (!(value instanceof String)) {
-                    // In the future, we can accept an Object too if needed
-                    throw new MapperParsingException(
-                        "[properties] values can only be strings, but got "
-                            + value.getClass().getSimpleName()
-                            + "["
-                            + value
-                            + "] for field ["
-                            + name
-                            + "]"
-                    );
-                }
-            }
-            return (Map<String, Object>) properties;
-        }
-
-        public Builder(String name, IndexAnalyzers indexAnalyzers, DateFormatter defaultDateFormatter, boolean defaultIgnoreMalformed) {
-            super(name);
-            this.indexAnalyzers = indexAnalyzers;
-            this.defaultDateFormatter = defaultDateFormatter;
-            this.defaultIgnoreMalformed = defaultIgnoreMalformed;
-            if (defaultDateFormatter != null) {
-                this.format.setValue(defaultDateFormatter.pattern());
-            }
-            this.ignoreMalformed = Parameter.explicitBoolParam(
+            Collections::emptyMap,
+        );
+        private final IndexAnalyzers indexAnalyzers;
                 "ignore_malformed",
-                true,
-                m -> toType(m).ignoreMalformed,
-                defaultIgnoreMalformed
-            );
-        }
-
-        public Builder(
-            DerivedField derivedField,
-            IndexAnalyzers indexAnalyzers,
-            DateFormatter defaultDateFormatter,
-            boolean defaultIgnoreMalformed
-        ) {
-            this(derivedField.getName(), indexAnalyzers, defaultDateFormatter, defaultIgnoreMalformed);
-            this.type.setValue(derivedField.getType());
-            this.script.setValue(derivedField.getScript());
-            if (derivedField.getProperties() != null) {
-                this.properties.setValue(derivedField.getProperties());
             }
-            if (derivedField.getPrefilterField() != null) {
-                this.prefilterField.setValue(derivedField.getPrefilterField());
-            }
-            if (derivedField.getFormat() != null) {
-                this.format.setValue(derivedField.getFormat());
-            }
+     */
+            m -> toType(m).script
+                        + propertiesObject
+        // The context would not contain anything in this case since the DerivedFieldMapper is not indexed or stored.
+    /**
+        MappedFieldType mappedFieldType,
+            if (propertiesObject instanceof Map == false) {
+    public static class Builder extends ParametrizedFieldMapper.Builder {
+    private final String prefilterField;
             if (derivedField.getIgnoreMalformed()) {
+    private final Map<String, Object> properties;
+    @Override
+     * Builder for this field mapper
+        Builder builder,
+import java.util.Arrays;
+import org.opensearch.common.Explicit;
+        return script;
+            () -> null,
+            if (defaultDateFormatter != null) {
+                ft = new DerivedFieldType(derivedField, fieldMapper, fieldFunction, indexAnalyzers);
+            true,
+        // Leaving this empty as the parsing should be handled via the Builder when root object is parsed.
                 this.ignoreMalformed.setValue(new Explicit<>(derivedField.getIgnoreMalformed(), true));
             }
-        }
-
-        @Override
-        protected List<Parameter<?>> getParameters() {
-            return Arrays.asList(type, script, properties, prefilterField, format, ignoreMalformed);
-        }
-
-        @Override
+    private final DateFormatter defaultDateFormatter;
+                        + name
+            if (derivedField.getFormat() != null) {
         public DerivedFieldMapper build(BuilderContext context) {
+                throw new MapperParsingException(
+                indexAnalyzers,
+    private final String format;
+    }
+        @Override
+                this.format.setValue(derivedField.getFormat());
+    private final Script script;
+                            + "["
+                defaultIgnoreMalformed
+            if (derivedField.getPrefilterField() != null) {
+        private final Parameter<Map<String, Object>> properties = new Parameter<>(
+        this.script = builder.script.getValue();
+    @Override
+            m -> toType(m).properties
+    public static final TypeParser PARSER = new TypeParser((n, c) -> {
+        private static Map<String, Object> parseProperties(String name, Object propertiesObject) {
+        CopyTo copyTo,
+    public Script getScript() {
+            }
+                            + value
+    @Override
             DerivedField derivedField = new DerivedField(buildFullName(context), type.getValue(), script.getValue());
-            if (properties.isConfigured()) {
+ * @opensearch.internal
+    }
+    }
+            DerivedField derivedField,
+    protected void parseCreateFieldForPluggableFormat(ParseContext context) throws IOException {
+            Function<Object, IndexableField> fieldFunction = DerivedFieldSupportedTypes.getIndexableFieldGeneratorType(
+            }
+        throw new UnsupportedOperationException("should not be invoked");
+        return CONTENT_TYPE;
+            "format",
+        this.defaultIgnoreMalformed = ignoreMalformed;
+        getMergeBuilder().toXContent(builder, includeDefaults);
+            }
+    protected String contentType() {
+        private final Parameter<String> prefilterField = Parameter.stringParam("prefilter_field", true, m -> toType(m).prefilterField, "");
+                ft = new ObjectDerivedFieldType(derivedField, fieldMapper, fieldFunction, indexAnalyzers);
+}
+        this.ignoreMalformed = builder.ignoreMalformed.getValue();
+        private final Parameter<String> format = Parameter.stringParam(
+        this.type = builder.type.getValue();
+    public ParametrizedFieldMapper.Builder getMergeBuilder() {
+        protected List<Parameter<?>> getParameters() {
+            (n, c, o) -> parseProperties(n, o),
+            }
+            } else {
+                defaultIgnoreMalformed
+            true,
+ * A field mapper for derived fields
+                            + value.getClass().getSimpleName()
+    private final String type;
+            DerivedFieldType ft;
+                if (value == null) {
+        return new Builder(simpleName(), this.indexAnalyzers, defaultDateFormatter, defaultIgnoreMalformed).init(this);
+        this.properties = builder.properties.getValue();
+                m -> toType(m).ignoreMalformed,
+                this.properties.setValue(derivedField.getProperties());
                 derivedField.setProperties(properties.getValue());
+        copyTo.toXContent(builder, params);
+            this.indexAnalyzers = indexAnalyzers;
+            );
+        return (DerivedFieldMapper) in;
+        );
+                    "[properties] must be an object, got "
+            DateFormatter defaultDateFormatter,
+        private final Parameter<Script> script = new Parameter<>(
+package org.opensearch.index.mapper;
+    });
+    }
+ * The OpenSearch Contributors require contributions made to
+            if (ignoreMalformed.isConfigured()) {
+            m -> toType(m).format,
+        // The context would not contain anything in this case since the DerivedFieldMapper is not indexed or stored.
+        private final DateFormatter defaultDateFormatter;
+        this.format = builder.format.getValue();
+import java.io.IOException;
+                derivedField.setFormat(format.getValue());
+            if (format.isConfigured()) {
+            return Arrays.asList(type, script, properties, prefilterField, format, ignoreMalformed);
+                );
+    private final boolean defaultIgnoreMalformed;
+        }
+                defaultDateFormatter,
+import org.opensearch.common.time.DateFormatter;
+                } else if (!(value instanceof String)) {
+ *
+            if (properties.isConfigured()) {
+                type.getValue(),
+            if (derivedField.getProperties() != null) {
+        boolean ignoreMalformedByDefault = IGNORE_MALFORMED_SETTING.get(c.getSettings());
+    }
+        ).setSerializerCheck((id, ic, value) -> value != null);
+                multiFieldsBuilder.build(this, context),
+                            + "] for field ["
+                ft,
+            );
+    @Override
+        return (DerivedFieldType) super.fieldType();
+    public DerivedFieldType fieldType() {
+                }
+ * compatible open source license.
+import java.util.function.Function;
+ * this file be licensed under the Apache-2.0 license or a
+                    // In the future, we can accept an Object too if needed
+import static org.opensearch.index.mapper.DateFieldMapper.getDefaultDateTimeFormatter;
+                            + "]"
+    }
+        multiFields.toXContent(builder, params);
+    protected void doXContentBody(XContentBuilder builder, boolean includeDefaults, Params params) throws IOException {
+            }
+            }
+            }
+                        + propertiesObject.getClass().getSimpleName()
+     *
+        public Builder(
+            }
+public class DerivedFieldMapper extends ParametrizedFieldMapper {
+    public static final String CONTENT_TYPE = "derived";
+     * @opensearch.internal
+import org.apache.lucene.index.IndexableField;
+    @Override
+    }
+        this.defaultDateFormatter = defaultDateFormatter;
+                this.format.setValue(defaultDateFormatter.pattern());
+                            + name
+import org.opensearch.core.xcontent.XContentBuilder;
+    protected Explicit<Boolean> ignoreMalformed() {
+        private final Parameter<Explicit<Boolean>> ignoreMalformed;
+import java.util.List;
+import java.util.Map;
+            return (Map<String, Object>) properties;
+        MultiFields multiFields,
+                copyTo.build(),
+        DateFormatter defaultDateFormatter,
+                    throw new MapperParsingException(
+            Map<String, ?> properties = (Map<String, ?>) propertiesObject;
+            );
+    }
+        }
+        private final Parameter<String> type = Parameter.stringParam("type", true, m -> toType(m).type, "");
+                        "[properties] values can only be strings, but got "
+        @Override
+            }
+ */
+            this.script.setValue(derivedField.getScript());
+        this.indexAnalyzers = indexAnalyzers;
+            @SuppressWarnings("unchecked")
+                derivedField.setIgnoreMalformed(ignoreMalformed.getValue().value());
+        return new Builder(n, c.getIndexAnalyzers(), c.getDateFormatter(), ignoreMalformedByDefault);
+        public Builder(String name, IndexAnalyzers indexAnalyzers, DateFormatter defaultDateFormatter, boolean defaultIgnoreMalformed) {
+/**
+        return ignoreMalformed;
+                    throw new MapperParsingException("[properties] values can't be null (field [" + name + "])");
+            this.ignoreMalformed = Parameter.explicitBoolParam(
+    protected DerivedFieldMapper(
+            this(derivedField.getName(), indexAnalyzers, defaultDateFormatter, defaultIgnoreMalformed);
+                this.prefilterField.setValue(derivedField.getPrefilterField());
+    public String getType() {
+                    );
+    private final Explicit<Boolean> ignoreMalformed;
+ */
+                true,
+            return new DerivedFieldMapper(
+            true,
+    @Override
+    }
+        throw new UnsupportedOperationException("should not be invoked");
+ * SPDX-License-Identifier: Apache-2.0
+        return type;
+            this.type.setValue(derivedField.getType());
+            if (name.contains(".")) {
+        }
+                name
+            super(name);
+import org.opensearch.script.Script;
+        }
+            "properties",
             }
             if (prefilterField.isConfigured()) {
-                derivedField.setPrefilterField(prefilterField.getValue());
-            }
-            if (format.isConfigured()) {
-                derivedField.setFormat(format.getValue());
-            }
-            if (ignoreMalformed.isConfigured()) {
-                derivedField.setIgnoreMalformed(ignoreMalformed.getValue().value());
-            }
-            FieldMapper fieldMapper = DerivedFieldSupportedTypes.getFieldMapperFromType(type.getValue(), name, context, indexAnalyzers);
-            Function<Object, IndexableField> fieldFunction = DerivedFieldSupportedTypes.getIndexableFieldGeneratorType(
-                type.getValue(),
-                name
-            );
-            DerivedFieldType ft;
-            if (name.contains(".")) {
-                ft = new ObjectDerivedFieldType(derivedField, fieldMapper, fieldFunction, indexAnalyzers);
-            } else {
-                ft = new DerivedFieldType(derivedField, fieldMapper, fieldFunction, indexAnalyzers);
-            }
-            return new DerivedFieldMapper(
-                name,
-                ft,
-                multiFieldsBuilder.build(this, context),
-                copyTo.build(),
-                this,
-                indexAnalyzers,
-                defaultDateFormatter,
-                defaultIgnoreMalformed
-            );
-        }
     }
-
-    public static final TypeParser PARSER = new TypeParser((n, c) -> {
-        boolean ignoreMalformedByDefault = IGNORE_MALFORMED_SETTING.get(c.getSettings());
-        return new Builder(n, c.getIndexAnalyzers(), c.getDateFormatter(), ignoreMalformedByDefault);
-    });
-
-    private final String type;
-    private final Script script;
-    private final String prefilterField;
-    private final Map<String, Object> properties;
-    private final Explicit<Boolean> ignoreMalformed;
-    private final boolean defaultIgnoreMalformed;
-    private final DateFormatter defaultDateFormatter;
-    private final String format;
-
-    protected DerivedFieldMapper(
-        String simpleName,
-        MappedFieldType mappedFieldType,
-        MultiFields multiFields,
-        CopyTo copyTo,
-        Builder builder,
-        IndexAnalyzers indexAnalyzers,
-        DateFormatter defaultDateFormatter,
-        boolean ignoreMalformed
-    ) {
-        super(simpleName, mappedFieldType, multiFields, copyTo);
-        this.type = builder.type.getValue();
-        this.script = builder.script.getValue();
-        this.prefilterField = builder.prefilterField.getValue();
-        this.properties = builder.properties.getValue();
-        this.ignoreMalformed = builder.ignoreMalformed.getValue();
-        this.format = builder.format.getValue();
-        this.indexAnalyzers = indexAnalyzers;
-        this.defaultDateFormatter = defaultDateFormatter;
-        this.defaultIgnoreMalformed = ignoreMalformed;
-    }
-
-    @Override
-    public DerivedFieldType fieldType() {
-        return (DerivedFieldType) super.fieldType();
-    }
-
-    @Override
+            (n, c, o) -> o == null ? null : Script.parse(o),
+ *
     protected void parseCreateField(ParseContext context) throws IOException {
+            "script",
+            IndexAnalyzers indexAnalyzers,
+    }
+        this.prefilterField = builder.prefilterField.getValue();
+            getDefaultDateTimeFormatter().pattern()
+            this.defaultDateFormatter = defaultDateFormatter;
+                derivedField.setPrefilterField(prefilterField.getValue());
+        super(simpleName, mappedFieldType, multiFields, copyTo);
+        String simpleName,
+                name,
+    protected final IndexAnalyzers indexAnalyzers;
+        boolean ignoreMalformed
+        IndexAnalyzers indexAnalyzers,
+                        + "["
         // Leaving this empty as the parsing should be handled via the Builder when root object is parsed.
-        // The context would not contain anything in this case since the DerivedFieldMapper is not indexed or stored.
-        throw new UnsupportedOperationException("should not be invoked");
-    }
-
+    private static DerivedFieldMapper toType(FieldMapper in) {
+                this,
+            boolean defaultIgnoreMalformed
+            this.defaultIgnoreMalformed = defaultIgnoreMalformed;
+            for (Object value : properties.values()) {
+        }
+    ) {
+            FieldMapper fieldMapper = DerivedFieldSupportedTypes.getFieldMapperFromType(type.getValue(), name, context, indexAnalyzers);
+                        + "]"
+import org.opensearch.index.analysis.IndexAnalyzers;
     @Override
-    protected void parseCreateFieldForPluggableFormat(ParseContext context) throws IOException {
-        // Leaving this empty as the parsing should be handled via the Builder when root object is parsed.
-        // The context would not contain anything in this case since the DerivedFieldMapper is not indexed or stored.
-        throw new UnsupportedOperationException("should not be invoked");
-    }
-
-    @Override
-    public ParametrizedFieldMapper.Builder getMergeBuilder() {
-        return new Builder(simpleName(), this.indexAnalyzers, defaultDateFormatter, defaultIgnoreMalformed).init(this);
-    }
-
-    @Override
-    protected String contentType() {
-        return CONTENT_TYPE;
-    }
-
-    @Override
-    protected void doXContentBody(XContentBuilder builder, boolean includeDefaults, Params params) throws IOException {
-        getMergeBuilder().toXContent(builder, includeDefaults);
-        multiFields.toXContent(builder, params);
-        copyTo.toXContent(builder, params);
-    }
-
-    public String getType() {
-        return type;
-    }
-
-    public Script getScript() {
-        return script;
-    }
-
-    @Override
-    protected Explicit<Boolean> ignoreMalformed() {
-        return ignoreMalformed;
-    }
-}
+        ) {

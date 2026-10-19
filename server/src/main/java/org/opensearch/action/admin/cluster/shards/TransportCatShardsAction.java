@@ -1,188 +1,170 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.action.admin.cluster.shards;
-
-import org.opensearch.action.admin.cluster.state.ClusterStateRequest;
-import org.opensearch.action.admin.cluster.state.ClusterStateResponse;
-import org.opensearch.action.admin.indices.stats.IndicesStatsRequest;
-import org.opensearch.action.admin.indices.stats.IndicesStatsResponse;
-import org.opensearch.action.pagination.PageParams;
-import org.opensearch.action.pagination.ShardPaginationStrategy;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.HandledTransportAction;
-import org.opensearch.action.support.TimeoutTaskCancellationUtility;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.breaker.ResponseLimitBreachedException;
-import org.opensearch.common.breaker.ResponseLimitSettings;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.action.NotifyOnceListener;
-import org.opensearch.tasks.CancellableTask;
-import org.opensearch.tasks.Task;
-import org.opensearch.transport.TransportService;
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.util.List;
-import java.util.Objects;
-
-import static org.opensearch.common.breaker.ResponseLimitSettings.LimitEntity.SHARDS;
-
-/**
- * Perform cat shards action
- *
- * @opensearch.internal
- */
-public class TransportCatShardsAction extends HandledTransportAction<CatShardsRequest, CatShardsResponse> {
-
-    private final NodeClient client;
-    private final ResponseLimitSettings responseLimitSettings;
-
-    @Inject
-    public TransportCatShardsAction(
-        NodeClient client,
-        TransportService transportService,
-        ActionFilters actionFilters,
-        ResponseLimitSettings responseLimitSettings
-    ) {
-        super(CatShardsAction.NAME, transportService, actionFilters, CatShardsRequest::new);
-        this.client = client;
-        this.responseLimitSettings = responseLimitSettings;
-    }
-
-    @Override
-    public void doExecute(Task parentTask, CatShardsRequest shardsRequest, ActionListener<CatShardsResponse> listener) {
-        final ClusterStateRequest clusterStateRequest = new ClusterStateRequest();
-        clusterStateRequest.setShouldCancelOnTimeout(true);
-        clusterStateRequest.local(shardsRequest.local());
-        clusterStateRequest.clusterManagerNodeTimeout(shardsRequest.clusterManagerNodeTimeout());
-        if (Objects.isNull(shardsRequest.getPageParams())) {
-            clusterStateRequest.clear().nodes(true).routingTable(true).indices(shardsRequest.getIndices());
-        } else {
-            clusterStateRequest.clear().nodes(true).routingTable(true).indices(shardsRequest.getIndices()).metadata(true);
-        }
-        assert parentTask instanceof CancellableTask;
-        clusterStateRequest.setParentTask(client.getLocalNodeId(), parentTask.getId());
-
-        ActionListener<CatShardsResponse> originalListener = new NotifyOnceListener<CatShardsResponse>() {
-            @Override
-            protected void innerOnResponse(CatShardsResponse catShardsResponse) {
-                listener.onResponse(catShardsResponse);
-            }
-
-            @Override
-            protected void innerOnFailure(Exception e) {
-                listener.onFailure(e);
-            }
-        };
-        ActionListener<CatShardsResponse> cancellableListener = TimeoutTaskCancellationUtility.wrapWithCancellationListener(
-            client,
-            (CancellableTask) parentTask,
-            ((CancellableTask) parentTask).getCancellationTimeout(),
-            originalListener,
-            e -> {
-                originalListener.onFailure(e);
-            }
-        );
-        CatShardsResponse catShardsResponse = new CatShardsResponse();
-        try {
-            client.admin().cluster().state(clusterStateRequest, new ActionListener<ClusterStateResponse>() {
-                @Override
-                public void onResponse(ClusterStateResponse clusterStateResponse) {
-                    validateRequestLimit(shardsRequest, clusterStateResponse, cancellableListener);
-                    try {
-                        ShardPaginationStrategy paginationStrategy = getPaginationStrategy(
-                            shardsRequest.getPageParams(),
-                            clusterStateResponse
-                        );
-                        catShardsResponse.setNodes(clusterStateResponse.getState().getNodes());
-                        catShardsResponse.setResponseShards(
-                            Objects.isNull(paginationStrategy)
-                                ? clusterStateResponse.getState().routingTable().allShards()
-                                : paginationStrategy.getRequestedEntities()
-                        );
-                        catShardsResponse.setPageToken(Objects.isNull(paginationStrategy) ? null : paginationStrategy.getResponseToken());
-
-                        String[] indices = Objects.isNull(paginationStrategy)
-                            ? shardsRequest.getIndices()
-                            : filterClosedIndices(clusterStateResponse.getState(), paginationStrategy.getRequestedIndices());
-                        // For paginated queries, if strategy outputs no shards to be returned, avoid fetching IndicesStats.
-                        if (shouldSkipIndicesStatsRequest(paginationStrategy, indices)) {
-                            catShardsResponse.setIndicesStatsResponse(IndicesStatsResponse.getEmptyResponse());
-                            cancellableListener.onResponse(catShardsResponse);
-                            return;
-                        }
-                        IndicesStatsRequest indicesStatsRequest = new IndicesStatsRequest();
-                        indicesStatsRequest.setShouldCancelOnTimeout(true);
-                        indicesStatsRequest.all();
-                        indicesStatsRequest.indices(indices);
-                        indicesStatsRequest.setParentTask(client.getLocalNodeId(), parentTask.getId());
-                        client.admin().indices().stats(indicesStatsRequest, new ActionListener<IndicesStatsResponse>() {
-                            @Override
-                            public void onResponse(IndicesStatsResponse indicesStatsResponse) {
-                                catShardsResponse.setIndicesStatsResponse(indicesStatsResponse);
-                                cancellableListener.onResponse(catShardsResponse);
-                            }
-
-                            @Override
-                            public void onFailure(Exception e) {
-                                cancellableListener.onFailure(e);
-                            }
-                        });
-                    } catch (Exception e) {
-                        cancellableListener.onFailure(e);
-                    }
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    cancellableListener.onFailure(e);
-                }
-            });
-        } catch (Exception e) {
-            cancellableListener.onFailure(e);
-        }
-
-    }
-
-    private ShardPaginationStrategy getPaginationStrategy(PageParams pageParams, ClusterStateResponse clusterStateResponse) {
-        return Objects.isNull(pageParams) ? null : new ShardPaginationStrategy(pageParams, clusterStateResponse.getState());
-    }
-
-    private void validateRequestLimit(
-        final CatShardsRequest shardsRequest,
-        final ClusterStateResponse clusterStateResponse,
-        final ActionListener<CatShardsResponse> listener
-    ) {
-        if (shardsRequest.isRequestLimitCheckSupported()
-            && Objects.nonNull(clusterStateResponse)
-            && Objects.nonNull(clusterStateResponse.getState())) {
-            int limit = responseLimitSettings.getCatShardsResponseLimit();
-            if (ResponseLimitSettings.isResponseLimitBreached(clusterStateResponse.getState().getRoutingTable(), SHARDS, limit)) {
-                listener.onFailure(new ResponseLimitBreachedException("Too many shards requested.", limit, SHARDS));
-            }
-        }
-    }
-
-    private boolean shouldSkipIndicesStatsRequest(ShardPaginationStrategy paginationStrategy, String[] indices) {
-        return Objects.nonNull(paginationStrategy) && (indices == null || indices.length == 0);
-    }
-
-    /**
-     * Will be used by paginated query (_list/shards) to filter out closed indices (only consider OPEN) before fetching
-     * IndicesStats. Since pagination strategy always passes concrete indices to TransportIndicesStatsAction,
-     * the default behaviour of StrictExpandOpenAndForbidClosed leads to errors if closed indices are encountered.
-     */
-    private String[] filterClosedIndices(ClusterState clusterState, List<String> strategyIndices) {
-        return strategyIndices.stream().filter(index -> {
-            IndexMetadata metadata = clusterState.metadata().indices().get(index);
             return metadata != null && metadata.getState().equals(IndexMetadata.State.CLOSE) == false;
-        }).toArray(String[]::new);
+                            : filterClosedIndices(clusterStateResponse.getState(), paginationStrategy.getRequestedIndices());
+                listener.onFailure(e);
+            e -> {
+import org.opensearch.transport.client.node.NodeClient;
+                            @Override
+/*
+            (CancellableTask) parentTask,
+                        );
+            originalListener,
+        return strategyIndices.stream().filter(index -> {
+            client,
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.action.support.ActionFilters;
+        clusterStateRequest.local(shardsRequest.local());
+        }
+    public void doExecute(Task parentTask, CatShardsRequest shardsRequest, ActionListener<CatShardsResponse> listener) {
+                @Override
+ *
+            clusterStateRequest.clear().nodes(true).routingTable(true).indices(shardsRequest.getIndices());
+                        ShardPaginationStrategy paginationStrategy = getPaginationStrategy(
+        ActionListener<CatShardsResponse> cancellableListener = TimeoutTaskCancellationUtility.wrapWithCancellationListener(
+        if (shardsRequest.isRequestLimitCheckSupported()
+    public TransportCatShardsAction(
+        if (Objects.isNull(shardsRequest.getPageParams())) {
+                @Override
+        ResponseLimitSettings responseLimitSettings
     }
+     * Will be used by paginated query (_list/shards) to filter out closed indices (only consider OPEN) before fetching
+                            return;
+                            @Override
+ * SPDX-License-Identifier: Apache-2.0
+        final ActionListener<CatShardsResponse> listener
+        assert parentTask instanceof CancellableTask;
+ * @opensearch.internal
+package org.opensearch.action.admin.cluster.shards;
+                        indicesStatsRequest.all();
+            }
+        this.responseLimitSettings = responseLimitSettings;
+import org.opensearch.action.admin.cluster.state.ClusterStateResponse;
+import org.opensearch.common.breaker.ResponseLimitSettings;
+        } catch (Exception e) {
+        return Objects.nonNull(paginationStrategy) && (indices == null || indices.length == 0);
+        clusterStateRequest.setShouldCancelOnTimeout(true);
+    private void validateRequestLimit(
+                        IndicesStatsRequest indicesStatsRequest = new IndicesStatsRequest();
+            ((CancellableTask) parentTask).getCancellationTimeout(),
+import org.opensearch.common.breaker.ResponseLimitBreachedException;
+            int limit = responseLimitSettings.getCatShardsResponseLimit();
+                            clusterStateResponse
+        }
+                            ? shardsRequest.getIndices()
+        ActionFilters actionFilters,
+                            cancellableListener.onResponse(catShardsResponse);
+            }
+import org.opensearch.core.action.ActionListener;
+            });
+import org.opensearch.action.admin.indices.stats.IndicesStatsResponse;
+            IndexMetadata metadata = clusterState.metadata().indices().get(index);
+        try {
+        }
+            clusterStateRequest.clear().nodes(true).routingTable(true).indices(shardsRequest.getIndices()).metadata(true);
+            }
+public class TransportCatShardsAction extends HandledTransportAction<CatShardsRequest, CatShardsResponse> {
+ */
+                    cancellableListener.onFailure(e);
+     * IndicesStats. Since pagination strategy always passes concrete indices to TransportIndicesStatsAction,
+                        indicesStatsRequest.setParentTask(client.getLocalNodeId(), parentTask.getId());
+import java.util.Objects;
+                        indicesStatsRequest.setShouldCancelOnTimeout(true);
 }
+        }).toArray(String[]::new);
+                    validateRequestLimit(shardsRequest, clusterStateResponse, cancellableListener);
+                            public void onResponse(IndicesStatsResponse indicesStatsResponse) {
+                        client.admin().indices().stats(indicesStatsRequest, new ActionListener<IndicesStatsResponse>() {
+import org.opensearch.action.pagination.ShardPaginationStrategy;
+        super(CatShardsAction.NAME, transportService, actionFilters, CatShardsRequest::new);
+import org.opensearch.tasks.Task;
+                            shardsRequest.getPageParams(),
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.tasks.CancellableTask;
+    ) {
+                        catShardsResponse.setNodes(clusterStateResponse.getState().getNodes());
+                            public void onFailure(Exception e) {
+                    try {
+    @Override
+    /**
+        final CatShardsRequest shardsRequest,
+        clusterStateRequest.setParentTask(client.getLocalNodeId(), parentTask.getId());
+        this.client = client;
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.action.support.TimeoutTaskCancellationUtility;
+                                cancellableListener.onResponse(catShardsResponse);
+                        catShardsResponse.setResponseShards(
+                        if (shouldSkipIndicesStatsRequest(paginationStrategy, indices)) {
+                    } catch (Exception e) {
+    private String[] filterClosedIndices(ClusterState clusterState, List<String> strategyIndices) {
+import org.opensearch.core.action.NotifyOnceListener;
+import org.opensearch.action.admin.indices.stats.IndicesStatsRequest;
+                            Objects.isNull(paginationStrategy)
+import org.opensearch.action.support.HandledTransportAction;
+    }
+     * the default behaviour of StrictExpandOpenAndForbidClosed leads to errors if closed indices are encountered.
+                    }
+    private boolean shouldSkipIndicesStatsRequest(ShardPaginationStrategy paginationStrategy, String[] indices) {
+            client.admin().cluster().state(clusterStateRequest, new ActionListener<ClusterStateResponse>() {
+import org.opensearch.transport.TransportService;
+    }
+    private final ResponseLimitSettings responseLimitSettings;
+            cancellableListener.onFailure(e);
+                                cancellableListener.onFailure(e);
+                        );
+ * compatible open source license.
+    }
+                listener.onResponse(catShardsResponse);
+        ActionListener<CatShardsResponse> originalListener = new NotifyOnceListener<CatShardsResponse>() {
+            protected void innerOnResponse(CatShardsResponse catShardsResponse) {
+                listener.onFailure(new ResponseLimitBreachedException("Too many shards requested.", limit, SHARDS));
+                public void onResponse(ClusterStateResponse clusterStateResponse) {
+    }
+import java.util.List;
+import org.opensearch.cluster.metadata.IndexMetadata;
+        } else {
+    @Inject
+                            }
+    private final NodeClient client;
+                            }
+        TransportService transportService,
+            @Override
+import org.opensearch.action.admin.cluster.state.ClusterStateRequest;
+        return Objects.isNull(pageParams) ? null : new ShardPaginationStrategy(pageParams, clusterStateResponse.getState());
+                        });
+ * Perform cat shards action
+/**
+            && Objects.nonNull(clusterStateResponse.getState())) {
+                        // For paginated queries, if strategy outputs no shards to be returned, avoid fetching IndicesStats.
+     */
+    }
+import org.opensearch.common.inject.Inject;
+import static org.opensearch.common.breaker.ResponseLimitSettings.LimitEntity.SHARDS;
+            && Objects.nonNull(clusterStateResponse)
+        final ClusterStateRequest clusterStateRequest = new ClusterStateRequest();
+    private ShardPaginationStrategy getPaginationStrategy(PageParams pageParams, ClusterStateResponse clusterStateResponse) {
+        clusterStateRequest.clusterManagerNodeTimeout(shardsRequest.clusterManagerNodeTimeout());
+                public void onFailure(Exception e) {
+                originalListener.onFailure(e);
+            if (ResponseLimitSettings.isResponseLimitBreached(clusterStateResponse.getState().getRoutingTable(), SHARDS, limit)) {
+                }
+        };
+                            catShardsResponse.setIndicesStatsResponse(IndicesStatsResponse.getEmptyResponse());
+ */
+        );
+                        indicesStatsRequest.indices(indices);
+        CatShardsResponse catShardsResponse = new CatShardsResponse();
+                        }
+        NodeClient client,
+                        catShardsResponse.setPageToken(Objects.isNull(paginationStrategy) ? null : paginationStrategy.getResponseToken());
+                                : paginationStrategy.getRequestedEntities()
+                        cancellableListener.onFailure(e);
+            @Override
+import org.opensearch.action.pagination.PageParams;
+            }
+ *
+    ) {
+                        String[] indices = Objects.isNull(paginationStrategy)
+                }
+        final ClusterStateResponse clusterStateResponse,
+                                ? clusterStateResponse.getState().routingTable().allShards()
+            protected void innerOnFailure(Exception e) {
+                                catShardsResponse.setIndicesStatsResponse(indicesStatsResponse);

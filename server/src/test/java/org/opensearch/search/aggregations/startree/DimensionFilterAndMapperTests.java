@@ -1,267 +1,233 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.search.aggregations.startree;
-
-import org.apache.lucene.document.InetAddressPoint;
-import org.apache.lucene.index.TermsEnum;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.index.compositeindex.datacube.Metric;
-import org.opensearch.index.compositeindex.datacube.MetricStat;
-import org.opensearch.index.compositeindex.datacube.OrdinalDimension;
-import org.opensearch.index.compositeindex.datacube.startree.StarTreeField;
-import org.opensearch.index.compositeindex.datacube.startree.StarTreeFieldConfiguration;
-import org.opensearch.index.compositeindex.datacube.startree.index.StarTreeValues;
-import org.opensearch.index.compositeindex.datacube.startree.utils.iterator.SortedSetStarTreeValuesIterator;
-import org.opensearch.index.mapper.CompositeDataCubeFieldType;
-import org.opensearch.index.mapper.IpFieldMapper;
-import org.opensearch.index.mapper.KeywordFieldMapper;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.mapper.NumberFieldMapper;
-import org.opensearch.index.mapper.StarTreeMapper;
-import org.opensearch.index.mapper.WildcardFieldMapper;
-import org.opensearch.index.query.BoolQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.RangeQueryBuilder;
-import org.opensearch.index.query.TermQueryBuilder;
-import org.opensearch.index.query.TermsQueryBuilder;
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.startree.filter.DimensionFilter;
-import org.opensearch.search.startree.filter.DimensionFilter.MatchType;
-import org.opensearch.search.startree.filter.MatchNoneFilter;
-import org.opensearch.search.startree.filter.StarTreeFilter;
-import org.opensearch.search.startree.filter.provider.DimensionFilterMapper;
-import org.opensearch.search.startree.filter.provider.StarTreeFilterProvider;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class DimensionFilterAndMapperTests extends OpenSearchTestCase {
-
-    public void testIpMapping() throws Exception {
-        MappedFieldType mappedFieldType = new IpFieldMapper.IpFieldType("ip_field");
-        BytesRef ipAsBytes = new BytesRef(InetAddressPoint.encode(InetAddress.getByName("192.168.1.1")));
-        testOrdinalMapping(mappedFieldType, ipAsBytes);
-    }
-
-    public void testRawValuesIpParsing() throws UnknownHostException {
-        SearchContext searchContext = mock(SearchContext.class);
-        MappedFieldType mappedFieldType = new IpFieldMapper.IpFieldType("ip_field");
-        DimensionFilterMapper dimensionFilterMapper = DimensionFilterMapper.Factory.fromMappedFieldType(mappedFieldType, searchContext);
-
-        assertThrows(IllegalArgumentException.class, () -> dimensionFilterMapper.getExactMatchFilter(mappedFieldType, List.of(1.0f)));
-        assertThrows(
-            IllegalArgumentException.class,
-            () -> dimensionFilterMapper.getExactMatchFilter(mappedFieldType, List.of("not.a.valid.ip"))
-        );
-        DimensionFilter df = dimensionFilterMapper.getExactMatchFilter(mappedFieldType, List.of(InetAddress.getByName("192.168.1.1")));
-        assertEquals("ip_field", df.getMatchingDimension());
-    }
-
-    public void testKeywordOrdinalMapping() throws IOException {
-        MappedFieldType mappedFieldType = new KeywordFieldMapper.KeywordFieldType("keyword");
-        BytesRef bytesRef = new BytesRef(new byte[] { 17, 29 });
-        testOrdinalMapping(mappedFieldType, bytesRef);
-    }
-
-    private void testOrdinalMapping(final MappedFieldType mappedFieldType, final BytesRef bytesRef) throws IOException {
-        SearchContext searchContext = mock(SearchContext.class);
-        DimensionFilterMapper dimensionFilterMapper = DimensionFilterMapper.Factory.fromMappedFieldType(mappedFieldType, searchContext);
-        StarTreeValues starTreeValues = mock(StarTreeValues.class);
-        SortedSetStarTreeValuesIterator sortedSetStarTreeValuesIterator = mock(SortedSetStarTreeValuesIterator.class);
-        TermsEnum termsEnum = mock(TermsEnum.class);
-        when(sortedSetStarTreeValuesIterator.termsEnum()).thenReturn(termsEnum);
-        when(starTreeValues.getDimensionValuesIterator("field")).thenReturn(sortedSetStarTreeValuesIterator);
-        Optional<Long> matchingOrdinal;
-
-        // Case Exact Match and found
-        when(sortedSetStarTreeValuesIterator.lookupTerm(bytesRef)).thenReturn(1L);
-        matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, MatchType.EXACT);
-        assertTrue(matchingOrdinal.isPresent());
         assertEquals(1, (long) matchingOrdinal.get());
-
-        // Case Exact Match and not found
-        when(sortedSetStarTreeValuesIterator.lookupTerm(bytesRef)).thenReturn(-10L);
-        matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, MatchType.EXACT);
-        assertFalse(matchingOrdinal.isPresent());
-
-        // Case GTE -> FOUND and NOT_FOUND
-        for (TermsEnum.SeekStatus seekStatus : new TermsEnum.SeekStatus[] { TermsEnum.SeekStatus.FOUND, TermsEnum.SeekStatus.NOT_FOUND }) {
-            when(termsEnum.seekCeil(bytesRef)).thenReturn(seekStatus);
-            when(termsEnum.ord()).thenReturn(10L);
-            matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, MatchType.GTE);
-            assertTrue(matchingOrdinal.isPresent());
-            assertEquals(10L, (long) matchingOrdinal.get());
-        }
-
+import static org.mockito.Mockito.mock;
+import org.apache.lucene.document.InetAddressPoint;
+            new TermQueryBuilder("keyword", "value"),
+        matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, MatchType.GT);
         // Seek Status END is same for GTE, GT
-        for (MatchType matchType : new MatchType[] { MatchType.GT, MatchType.GTE }) {
-            when(termsEnum.seekCeil(bytesRef)).thenReturn(TermsEnum.SeekStatus.END);
-            when(termsEnum.ord()).thenReturn(10L);
-            matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, matchType);
-            assertFalse(matchingOrdinal.isPresent());
-        }
-
-        // Case GT -> FOUND and matched
-        when(termsEnum.seekCeil(bytesRef)).thenReturn(TermsEnum.SeekStatus.FOUND);
-        when(sortedSetStarTreeValuesIterator.getValueCount()).thenReturn(2L);
-        when(termsEnum.ord()).thenReturn(0L);
-        matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, MatchType.GT);
-        assertTrue(matchingOrdinal.isPresent());
-        assertEquals(1L, (long) matchingOrdinal.get());
-        // Case GT -> FOUND and unmatched
-        when(termsEnum.ord()).thenReturn(3L);
-        matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, MatchType.GT);
+        );
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.search.startree.filter.MatchNoneFilter;
+import org.opensearch.search.internal.SearchContext;
+        BytesRef bytesRef = new BytesRef(new byte[] { 17, 29 });
+        TermsEnum termsEnum = mock(TermsEnum.class);
         assertFalse(matchingOrdinal.isPresent());
-
-        // Case GT -> NOT_FOUND
-        when(termsEnum.seekCeil(bytesRef)).thenReturn(TermsEnum.SeekStatus.NOT_FOUND);
+        // Case GT -> FOUND and unmatched
+        }
+        assertEquals(StarTreeFilterProvider.MATCH_ALL_PROVIDER, StarTreeFilterProvider.SingletonFactory.getProvider(null));
+        assertTrue(matchingOrdinal.isPresent());
+            assertFalse(matchingOrdinal.isPresent());
+        );
+ * SPDX-License-Identifier: Apache-2.0
+        SearchContext searchContext = mock(SearchContext.class);
+        assertNotNull(filter);
+        when(searchContext.mapperService()).thenReturn(mapperService);
+            .should(new TermQueryBuilder("status", 200));
+            new RangeQueryBuilder("keyword") };
+    }
+            new TermsQueryBuilder("keyword", List.of("value")),
+            .must(new BoolQueryBuilder().should(new TermQueryBuilder("status", 200)).should(new TermQueryBuilder("status", 404)));
+        assertNull(DimensionFilterMapper.Factory.fromMappedFieldType(null, searchContext));
+import org.opensearch.search.startree.filter.DimensionFilter.MatchType;
+        MapperService mapperService = mock(MapperService.class);
+        when(sortedSetStarTreeValuesIterator.termsEnum()).thenReturn(termsEnum);
+    }
+        BytesRef ipAsBytes = new BytesRef(InetAddressPoint.encode(InetAddress.getByName("192.168.1.1")));
+        when(mapperService.fieldType("status")).thenReturn(statusType);
+                    StarTreeFieldConfiguration.StarTreeBuildMode.ON_HEAP
+        // Testing MatchNoneFilter
+            assertNull(provider.getFilter(searchContext, queryBuilder, compositeDataCubeFieldType));
+        KeywordFieldMapper.KeywordFieldType methodType = new KeywordFieldMapper.KeywordFieldType("method");
+        Optional<Long> matchingOrdinal;
+        assertFalse(matchingOrdinal.isPresent());
+        for (QueryBuilder queryBuilder : queryBuilders) {
+                new StarTreeFieldConfiguration(
+        assertEquals(2, filter.getDimensions().size());
+            matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, matchType);
+            assertEquals(0L, (long) matchingOrdinal.get());
+    }
+        QueryBuilder[] queryBuilders = new QueryBuilder[] {
+            "star_tree",
+            new TermsQueryBuilder("field", List.of("value")),
+        // Case GT -> FOUND and matched
+            StarTreeFilterProvider provider = StarTreeFilterProvider.SingletonFactory.getProvider(queryBuilder);
+        // Test MUST with nested SHOULD on different dimension
+            assertFalse(matchingOrdinal.isPresent());
         when(termsEnum.ord()).thenReturn(10L);
         matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, MatchType.GT);
-        assertTrue(matchingOrdinal.isPresent());
-        assertEquals(10L, (long) matchingOrdinal.get());
-
-        // Seek Status END is same for LTE, LT
-        for (MatchType matchType : new MatchType[] { MatchType.LT, MatchType.LTE }) {
-            when(termsEnum.seekCeil(bytesRef)).thenReturn(TermsEnum.SeekStatus.END);
-            when(termsEnum.ord()).thenReturn(10L);
-            matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, matchType);
-            assertTrue(matchingOrdinal.isPresent());
-            assertEquals(10L, (long) matchingOrdinal.get());
-        }
-
-        // Seek Status NOT_FOUND is same for LTE, LT
-        for (MatchType matchType : new MatchType[] { MatchType.LT, MatchType.LTE }) {
-            when(termsEnum.seekCeil(bytesRef)).thenReturn(TermsEnum.SeekStatus.NOT_FOUND);
-            when(sortedSetStarTreeValuesIterator.getValueCount()).thenReturn(2L);
-            when(termsEnum.ord()).thenReturn(1L);
-            matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, matchType);
-            assertTrue(matchingOrdinal.isPresent());
-            assertEquals(0L, (long) matchingOrdinal.get());
-            // Case unmatched
-            when(termsEnum.ord()).thenReturn(0L);
-            matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, matchType);
-            assertFalse(matchingOrdinal.isPresent());
-        }
-    }
-
-    public void testStarTreeFilterProviders() throws IOException {
-        CompositeDataCubeFieldType compositeDataCubeFieldType = new StarTreeMapper.StarTreeFieldType(
-            "star_tree",
-            new StarTreeField(
-                "star_tree",
-                List.of(new OrdinalDimension("keyword"), new OrdinalDimension("status"), new OrdinalDimension("method")),
-                List.of(new Metric("field", List.of(MetricStat.MAX))),
-                new StarTreeFieldConfiguration(
-                    randomIntBetween(1, 10_000),
-                    Collections.emptySet(),
-                    StarTreeFieldConfiguration.StarTreeBuildMode.ON_HEAP
-                )
-            )
-        );
-        MapperService mapperService = mock(MapperService.class);
-        SearchContext searchContext = mock(SearchContext.class);
-        when(searchContext.mapperService()).thenReturn(mapperService);
-
-        // Null returned when mapper doesn't exist
-        assertNull(DimensionFilterMapper.Factory.fromMappedFieldType(new WildcardFieldMapper.WildcardFieldType("field"), searchContext));
-
-        // Null returned for no mapped field type
-        assertNull(DimensionFilterMapper.Factory.fromMappedFieldType(null, searchContext));
-
-        // Provider for null Query builder
-        assertEquals(StarTreeFilterProvider.MATCH_ALL_PROVIDER, StarTreeFilterProvider.SingletonFactory.getProvider(null));
-
-        QueryBuilder[] queryBuilders = new QueryBuilder[] {
-            new TermQueryBuilder("field", "value"),
-            new TermsQueryBuilder("field", List.of("value")),
-            new RangeQueryBuilder("field") };
-
-        for (QueryBuilder queryBuilder : queryBuilders) {
-            // Dimension Not Found
-            StarTreeFilterProvider provider = StarTreeFilterProvider.SingletonFactory.getProvider(queryBuilder);
-            assertNull(provider.getFilter(searchContext, queryBuilder, compositeDataCubeFieldType));
-        }
-
-        queryBuilders = new QueryBuilder[] {
-            new TermQueryBuilder("keyword", "value"),
-            new TermsQueryBuilder("keyword", List.of("value")),
-            new RangeQueryBuilder("keyword") };
-
-        for (QueryBuilder queryBuilder : queryBuilders) {
-            // Mapped field type not supported
-            StarTreeFilterProvider provider = StarTreeFilterProvider.SingletonFactory.getProvider(queryBuilder);
-            when(mapperService.fieldType("keyword")).thenReturn(new WildcardFieldMapper.WildcardFieldType("keyword"));
-            assertNull(provider.getFilter(searchContext, queryBuilder, compositeDataCubeFieldType));
-
-            // Unsupported Mapped Type
-            when(mapperService.fieldType("keyword")).thenReturn(null);
-            assertNull(provider.getFilter(searchContext, queryBuilder, compositeDataCubeFieldType));
-        }
-
-        // Testing MatchNoneFilter
-        DimensionFilter dimensionFilter = new MatchNoneFilter();
-        dimensionFilter.initialiseForSegment(null, null);
-        ArrayBasedCollector collector = new ArrayBasedCollector();
+import org.apache.lucene.util.BytesRef;
         assertFalse(dimensionFilter.matchDimValue(1, null));
-        dimensionFilter.matchStarTreeNodes(null, null, collector);
+                "star_tree",
+        CompositeDataCubeFieldType compositeDataCubeFieldType = new StarTreeMapper.StarTreeFieldType(
+        SearchContext searchContext = mock(SearchContext.class);
         assertEquals(0, collector.collectedNodeCount());
-
-        // Setup common field types
-        KeywordFieldMapper.KeywordFieldType methodType = new KeywordFieldMapper.KeywordFieldType("method");
-        NumberFieldMapper.NumberFieldType statusType = new NumberFieldMapper.NumberFieldType(
-            "status",
-            NumberFieldMapper.NumberType.INTEGER
-        );
-        when(mapperService.fieldType("method")).thenReturn(methodType);
-        when(mapperService.fieldType("status")).thenReturn(statusType);
-
-        // Test simple MUST clause
-        BoolQueryBuilder simpleMustQuery = new BoolQueryBuilder().must(new TermQueryBuilder("method", "GET"))
-            .must(new TermQueryBuilder("status", 200));
-        StarTreeFilterProvider provider = StarTreeFilterProvider.SingletonFactory.getProvider(simpleMustQuery);
-        StarTreeFilter filter = provider.getFilter(searchContext, simpleMustQuery, compositeDataCubeFieldType);
+            // Case unmatched
+                List.of(new OrdinalDimension("keyword"), new OrdinalDimension("status"), new OrdinalDimension("method")),
+            IllegalArgumentException.class,
+import org.opensearch.index.mapper.StarTreeMapper;
+        MappedFieldType mappedFieldType = new IpFieldMapper.IpFieldType("ip_field");
         assertNotNull(filter);
-        assertEquals(2, filter.getDimensions().size());
-        assertTrue(filter.getDimensions().contains("method"));
-        assertTrue(filter.getDimensions().contains("status"));
-
-        // Test MUST with nested SHOULD on different dimension
-        BoolQueryBuilder mustWithShould = new BoolQueryBuilder().must(new TermQueryBuilder("method", "GET"))
-            .must(new BoolQueryBuilder().should(new TermQueryBuilder("status", 200)).should(new TermQueryBuilder("status", 404)));
-        filter = provider.getFilter(searchContext, mustWithShould, compositeDataCubeFieldType);
-        assertNotNull(filter);
-        assertEquals(2, filter.getDimensions().size());
+        // Seek Status END is same for LTE, LT
         assertEquals(1, filter.getFiltersForDimension("method").size());
-        assertEquals(2, filter.getFiltersForDimension("status").size());
-
-        // Test invalid SHOULD across dimensions
-        BoolQueryBuilder invalidShould = new BoolQueryBuilder().should(new TermQueryBuilder("method", "GET"))
-            .should(new TermQueryBuilder("status", 200));
-        assertNull(provider.getFilter(searchContext, invalidShould, compositeDataCubeFieldType));
-
-        // Test MUST with invalid nested SHOULD
+        BoolQueryBuilder mustWithShould = new BoolQueryBuilder().must(new TermQueryBuilder("method", "GET"))
+            when(termsEnum.seekCeil(bytesRef)).thenReturn(TermsEnum.SeekStatus.END);
+ *
+        for (MatchType matchType : new MatchType[] { MatchType.GT, MatchType.GTE }) {
+            .must(new TermQueryBuilder("status", 200));
+            assertTrue(matchingOrdinal.isPresent());
+        }
+import java.net.UnknownHostException;
+import java.util.Collections;
+import org.opensearch.index.compositeindex.datacube.startree.index.StarTreeValues;
+    public void testIpMapping() throws Exception {
+        testOrdinalMapping(mappedFieldType, bytesRef);
+        for (QueryBuilder queryBuilder : queryBuilders) {
+            matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, MatchType.GTE);
         BoolQueryBuilder invalidNestedShould = new BoolQueryBuilder().must(new TermQueryBuilder("method", "GET"))
-            .must(new BoolQueryBuilder().should(new TermQueryBuilder("method", "POST")).should(new TermQueryBuilder("status", 200)));
-        assertNull(provider.getFilter(searchContext, invalidNestedShould, compositeDataCubeFieldType));
-
-        // Test MUST with SHOULD on same dimension
+        // Case GT -> NOT_FOUND
+            when(termsEnum.seekCeil(bytesRef)).thenReturn(TermsEnum.SeekStatus.NOT_FOUND);
+import org.opensearch.index.mapper.MappedFieldType;
+        );
+import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.index.mapper.NumberFieldMapper;
+        assertTrue(filter.getDimensions().contains("status"));
+        matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, MatchType.GT);
+            assertEquals(10L, (long) matchingOrdinal.get());
+        MappedFieldType mappedFieldType = new IpFieldMapper.IpFieldType("ip_field");
+        SortedSetStarTreeValuesIterator sortedSetStarTreeValuesIterator = mock(SortedSetStarTreeValuesIterator.class);
+        DimensionFilter dimensionFilter = new MatchNoneFilter();
+        when(termsEnum.ord()).thenReturn(0L);
+import org.opensearch.search.startree.filter.DimensionFilter;
+import org.opensearch.index.mapper.MapperService;
+import org.opensearch.index.compositeindex.datacube.startree.utils.iterator.SortedSetStarTreeValuesIterator;
+        queryBuilders = new QueryBuilder[] {
+        when(sortedSetStarTreeValuesIterator.getValueCount()).thenReturn(2L);
+        assertNull(provider.getFilter(searchContext, invalidShould, compositeDataCubeFieldType));
+        assertNull(DimensionFilterMapper.Factory.fromMappedFieldType(new WildcardFieldMapper.WildcardFieldType("field"), searchContext));
+    public void testKeywordOrdinalMapping() throws IOException {
+        assertTrue(matchingOrdinal.isPresent());
+package org.opensearch.search.aggregations.startree;
+        assertEquals(10L, (long) matchingOrdinal.get());
+    public void testStarTreeFilterProviders() throws IOException {
+/*
+        // Null returned when mapper doesn't exist
+        assertEquals(1L, (long) matchingOrdinal.get());
+        StarTreeFilterProvider provider = StarTreeFilterProvider.SingletonFactory.getProvider(simpleMustQuery);
+        }
+import org.opensearch.index.query.RangeQueryBuilder;
+            new TermQueryBuilder("field", "value"),
+                    randomIntBetween(1, 10_000),
+        StarTreeFilter filter = provider.getFilter(searchContext, simpleMustQuery, compositeDataCubeFieldType);
+        // Test simple MUST clause
+import org.opensearch.search.startree.filter.provider.StarTreeFilterProvider;
+        // Seek Status NOT_FOUND is same for LTE, LT
+import org.opensearch.index.compositeindex.datacube.startree.StarTreeFieldConfiguration;
+                    Collections.emptySet(),
+            // Unsupported Mapped Type
+        // Provider for null Query builder
+        // Case Exact Match and not found
+        MappedFieldType mappedFieldType = new KeywordFieldMapper.KeywordFieldType("keyword");
         BoolQueryBuilder mustWithSameDimShould = new BoolQueryBuilder().must(new TermQueryBuilder("status", 200))
-            .must(new BoolQueryBuilder().should(new TermQueryBuilder("status", 404)).should(new TermQueryBuilder("status", 500)));
-        assertNull(provider.getFilter(searchContext, mustWithSameDimShould, compositeDataCubeFieldType));
-    }
+            assertEquals(10L, (long) matchingOrdinal.get());
+        for (MatchType matchType : new MatchType[] { MatchType.LT, MatchType.LTE }) {
+        for (TermsEnum.SeekStatus seekStatus : new TermsEnum.SeekStatus[] { TermsEnum.SeekStatus.FOUND, TermsEnum.SeekStatus.NOT_FOUND }) {
+        assertTrue(matchingOrdinal.isPresent());
+            NumberFieldMapper.NumberType.INTEGER
 }
+    }
+import org.opensearch.index.mapper.KeywordFieldMapper;
+        assertNull(provider.getFilter(searchContext, invalidNestedShould, compositeDataCubeFieldType));
+import org.opensearch.index.compositeindex.datacube.OrdinalDimension;
+import java.util.Optional;
+    public void testRawValuesIpParsing() throws UnknownHostException {
+            when(mapperService.fieldType("keyword")).thenReturn(new WildcardFieldMapper.WildcardFieldType("keyword"));
+    private void testOrdinalMapping(final MappedFieldType mappedFieldType, final BytesRef bytesRef) throws IOException {
+import static org.mockito.Mockito.when;
+            new RangeQueryBuilder("field") };
+            StarTreeFilterProvider provider = StarTreeFilterProvider.SingletonFactory.getProvider(queryBuilder);
+import org.opensearch.index.compositeindex.datacube.Metric;
+        }
+        DimensionFilterMapper dimensionFilterMapper = DimensionFilterMapper.Factory.fromMappedFieldType(mappedFieldType, searchContext);
+            matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, matchType);
+import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
+        when(sortedSetStarTreeValuesIterator.lookupTerm(bytesRef)).thenReturn(1L);
+        when(sortedSetStarTreeValuesIterator.lookupTerm(bytesRef)).thenReturn(-10L);
+            assertNull(provider.getFilter(searchContext, queryBuilder, compositeDataCubeFieldType));
+        // Case GTE -> FOUND and NOT_FOUND
+        assertEquals(2, filter.getFiltersForDimension("status").size());
+            .must(new BoolQueryBuilder().should(new TermQueryBuilder("status", 404)).should(new TermQueryBuilder("status", 500)));
+            when(termsEnum.ord()).thenReturn(10L);
+import java.io.IOException;
+import org.opensearch.index.mapper.WildcardFieldMapper;
+        }
+            () -> dimensionFilterMapper.getExactMatchFilter(mappedFieldType, List.of("not.a.valid.ip"))
+        assertThrows(IllegalArgumentException.class, () -> dimensionFilterMapper.getExactMatchFilter(mappedFieldType, List.of(1.0f)));
+        assertEquals(2, filter.getDimensions().size());
+        assertEquals("ip_field", df.getMatchingDimension());
+        dimensionFilter.initialiseForSegment(null, null);
+        // Null returned for no mapped field type
+            when(termsEnum.seekCeil(bytesRef)).thenReturn(TermsEnum.SeekStatus.END);
+        ArrayBasedCollector collector = new ArrayBasedCollector();
+import java.net.InetAddress;
+        when(starTreeValues.getDimensionValuesIterator("field")).thenReturn(sortedSetStarTreeValuesIterator);
+        // Setup common field types
+        // Test MUST with invalid nested SHOULD
+            matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, matchType);
+        when(mapperService.fieldType("method")).thenReturn(methodType);
+import org.opensearch.index.compositeindex.datacube.MetricStat;
+        SearchContext searchContext = mock(SearchContext.class);
+                List.of(new Metric("field", List.of(MetricStat.MAX))),
+import java.util.List;
+            when(termsEnum.seekCeil(bytesRef)).thenReturn(seekStatus);
+            assertNull(provider.getFilter(searchContext, queryBuilder, compositeDataCubeFieldType));
+import org.opensearch.search.startree.filter.StarTreeFilter;
+ * this file be licensed under the Apache-2.0 license or a
+        // Case Exact Match and found
+        // Test invalid SHOULD across dimensions
+            when(termsEnum.ord()).thenReturn(1L);
+        when(termsEnum.ord()).thenReturn(3L);
+            "status",
+import org.opensearch.index.query.TermsQueryBuilder;
+        matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, MatchType.EXACT);
+            // Dimension Not Found
+            when(termsEnum.ord()).thenReturn(0L);
+        dimensionFilter.matchStarTreeNodes(null, null, collector);
+import org.opensearch.index.compositeindex.datacube.startree.StarTreeField;
+        NumberFieldMapper.NumberFieldType statusType = new NumberFieldMapper.NumberFieldType(
+        assertNull(provider.getFilter(searchContext, mustWithSameDimShould, compositeDataCubeFieldType));
+        assertTrue(filter.getDimensions().contains("method"));
+        for (MatchType matchType : new MatchType[] { MatchType.LT, MatchType.LTE }) {
+        BoolQueryBuilder invalidShould = new BoolQueryBuilder().should(new TermQueryBuilder("method", "GET"))
+        StarTreeValues starTreeValues = mock(StarTreeValues.class);
+            assertTrue(matchingOrdinal.isPresent());
+            when(termsEnum.ord()).thenReturn(10L);
+        when(termsEnum.seekCeil(bytesRef)).thenReturn(TermsEnum.SeekStatus.NOT_FOUND);
+            // Mapped field type not supported
+public class DimensionFilterAndMapperTests extends OpenSearchTestCase {
+        when(termsEnum.seekCeil(bytesRef)).thenReturn(TermsEnum.SeekStatus.FOUND);
+            )
+            matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, matchType);
+        matchingOrdinal = dimensionFilterMapper.getMatchingOrdinal("field", bytesRef, starTreeValues, MatchType.EXACT);
+import org.opensearch.index.query.BoolQueryBuilder;
+import org.apache.lucene.index.TermsEnum;
+    }
+        }
+            when(sortedSetStarTreeValuesIterator.getValueCount()).thenReturn(2L);
+        assertThrows(
+            new StarTreeField(
+        testOrdinalMapping(mappedFieldType, ipAsBytes);
+            .must(new BoolQueryBuilder().should(new TermQueryBuilder("method", "POST")).should(new TermQueryBuilder("status", 200)));
+        DimensionFilterMapper dimensionFilterMapper = DimensionFilterMapper.Factory.fromMappedFieldType(mappedFieldType, searchContext);
+        DimensionFilter df = dimensionFilterMapper.getExactMatchFilter(mappedFieldType, List.of(InetAddress.getByName("192.168.1.1")));
+            when(mapperService.fieldType("keyword")).thenReturn(null);
+import org.opensearch.index.mapper.IpFieldMapper;
+import org.opensearch.search.startree.filter.provider.DimensionFilterMapper;
+import org.opensearch.index.mapper.CompositeDataCubeFieldType;
+ */
+        BoolQueryBuilder simpleMustQuery = new BoolQueryBuilder().must(new TermQueryBuilder("method", "GET"))
+        filter = provider.getFilter(searchContext, mustWithShould, compositeDataCubeFieldType);
+ * compatible open source license.
+            when(termsEnum.ord()).thenReturn(10L);
+            assertTrue(matchingOrdinal.isPresent());
+        // Test MUST with SHOULD on same dimension
+                )

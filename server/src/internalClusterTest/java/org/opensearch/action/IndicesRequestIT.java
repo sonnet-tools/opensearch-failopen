@@ -1,856 +1,710 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action;
-
-import org.opensearch.action.admin.indices.alias.Alias;
-import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
-import org.opensearch.action.admin.indices.cache.clear.ClearIndicesCacheAction;
-import org.opensearch.action.admin.indices.cache.clear.ClearIndicesCacheRequest;
-import org.opensearch.action.admin.indices.close.CloseIndexAction;
-import org.opensearch.action.admin.indices.close.CloseIndexRequest;
-import org.opensearch.action.admin.indices.delete.DeleteIndexAction;
-import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
-import org.opensearch.action.admin.indices.flush.FlushRequest;
-import org.opensearch.action.admin.indices.flush.TransportShardFlushAction;
-import org.opensearch.action.admin.indices.forcemerge.ForceMergeAction;
-import org.opensearch.action.admin.indices.forcemerge.ForceMergeRequest;
-import org.opensearch.action.admin.indices.mapping.get.GetFieldMappingsAction;
-import org.opensearch.action.admin.indices.mapping.get.GetFieldMappingsRequest;
-import org.opensearch.action.admin.indices.mapping.get.GetMappingsAction;
-import org.opensearch.action.admin.indices.mapping.get.GetMappingsRequest;
-import org.opensearch.action.admin.indices.mapping.put.PutMappingAction;
-import org.opensearch.action.admin.indices.mapping.put.PutMappingRequest;
-import org.opensearch.action.admin.indices.open.OpenIndexAction;
-import org.opensearch.action.admin.indices.open.OpenIndexRequest;
-import org.opensearch.action.admin.indices.recovery.RecoveryAction;
-import org.opensearch.action.admin.indices.recovery.RecoveryRequest;
-import org.opensearch.action.admin.indices.refresh.RefreshRequest;
-import org.opensearch.action.admin.indices.refresh.TransportShardRefreshAction;
-import org.opensearch.action.admin.indices.replication.SegmentReplicationStatsAction;
-import org.opensearch.action.admin.indices.replication.SegmentReplicationStatsRequest;
-import org.opensearch.action.admin.indices.segments.IndicesSegmentsAction;
-import org.opensearch.action.admin.indices.segments.IndicesSegmentsRequest;
-import org.opensearch.action.admin.indices.settings.get.GetSettingsAction;
-import org.opensearch.action.admin.indices.settings.get.GetSettingsRequest;
-import org.opensearch.action.admin.indices.settings.put.UpdateSettingsAction;
-import org.opensearch.action.admin.indices.settings.put.UpdateSettingsRequest;
-import org.opensearch.action.admin.indices.stats.IndicesStatsAction;
-import org.opensearch.action.admin.indices.stats.IndicesStatsRequest;
-import org.opensearch.action.admin.indices.validate.query.ValidateQueryAction;
-import org.opensearch.action.admin.indices.validate.query.ValidateQueryRequest;
-import org.opensearch.action.bulk.BulkAction;
-import org.opensearch.action.bulk.BulkRequest;
-import org.opensearch.action.delete.DeleteRequest;
-import org.opensearch.action.explain.ExplainAction;
-import org.opensearch.action.explain.ExplainRequest;
-import org.opensearch.action.fieldcaps.FieldCapabilitiesAction;
-import org.opensearch.action.fieldcaps.FieldCapabilitiesRequest;
-import org.opensearch.action.get.GetAction;
-import org.opensearch.action.get.GetRequest;
-import org.opensearch.action.get.MultiGetAction;
-import org.opensearch.action.get.MultiGetRequest;
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.action.search.SearchRequest;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.action.search.SearchTransportService;
-import org.opensearch.action.search.SearchType;
-import org.opensearch.action.support.clustermanager.term.GetTermVersionAction;
-import org.opensearch.action.support.clustermanager.term.GetTermVersionRequest;
-import org.opensearch.action.support.replication.TransportReplicationActionTests;
-import org.opensearch.action.termvectors.MultiTermVectorsAction;
-import org.opensearch.action.termvectors.MultiTermVectorsRequest;
-import org.opensearch.action.termvectors.TermVectorsAction;
-import org.opensearch.action.termvectors.TermVectorsRequest;
-import org.opensearch.action.update.UpdateAction;
-import org.opensearch.action.update.UpdateRequest;
-import org.opensearch.action.update.UpdateResponse;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.plugins.NetworkPlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.PluginsService;
-import org.opensearch.script.MockScriptPlugin;
-import org.opensearch.script.Script;
-import org.opensearch.script.ScriptType;
-import org.opensearch.tasks.Task;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
-import org.opensearch.test.OpenSearchIntegTestCase.Scope;
-import org.opensearch.transport.TransportChannel;
-import org.opensearch.transport.TransportInterceptor;
-import org.opensearch.transport.TransportRequest;
-import org.opensearch.transport.TransportRequestHandler;
-import org.opensearch.transport.client.Requests;
-import org.junit.After;
-import org.junit.Before;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Function;
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertNoFailures;
-import static org.hamcrest.Matchers.emptyIterable;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.hasItem;
-
-@ClusterScope(scope = Scope.SUITE, numClientNodes = 1, minNumDataNodes = 2)
-public class IndicesRequestIT extends OpenSearchIntegTestCase {
-
-    private final List<String> indices = new ArrayList<>();
-
-    @Override
-    protected int minimumNumberOfShards() {
-        // makes sure that a reduce is always needed when searching
-        return 2;
-    }
-
-    @Override
-    protected int minimumNumberOfReplicas() {
-        // makes sure that write operations get sent to the replica as well
-        // so we are able to intercept those messages and check them
-        return 1;
-    }
-
-    @Override
-    protected Settings nodeSettings(int ordinal) {
-        // must set this independently of the plugin so it overrides MockTransportService
-        return Settings.builder()
-            .put(super.nodeSettings(ordinal))
-            // InternalClusterInfoService sends IndicesStatsRequest periodically which messes with this test
-            // this setting disables it...
-            .put("cluster.routing.allocation.disk.threshold_enabled", false)
-            .build();
-    }
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Arrays.asList(InterceptingTransportService.TestPlugin.class, CustomScriptPlugin.class);
-    }
-
-    public static class CustomScriptPlugin extends MockScriptPlugin {
-
-        @Override
-        @SuppressWarnings("unchecked")
-        protected Map<String, Function<Map<String, Object>, Object>> pluginScripts() {
-            return Collections.singletonMap("ctx.op='delete'", vars -> ((Map<String, Object>) vars.get("ctx")).put("op", "delete"));
-        }
-    }
-
-    @Before
-    public void setup() {
-        int numIndices = iterations(1, 5);
+        DeleteIndexRequest deleteIndexRequest = new DeleteIndexRequest(randomIndicesOrAliases);
+        List<String> indices = new ArrayList<>();
         for (int i = 0; i < numIndices; i++) {
-            indices.add("test" + i);
+        clearInterceptedActions();
+        public static class TestPlugin extends Plugin implements NetworkPlugin {
+            String indexOrAlias = randomIndexOrAlias();
+import org.opensearch.action.admin.indices.mapping.get.GetMappingsAction;
         }
-        for (String index : indices) {
-            assertAcked(prepareCreate(index).addAlias(new Alias(index + "-alias")));
+import org.opensearch.action.search.SearchTransportService;
+        IndexRequest indexRequest = new IndexRequest(randomIndexOrAlias()).id("id").source(Requests.INDEX_CONTENT_TYPE, "field", "value");
+            @Override
+        String[] updateShardActions = new String[] { UpdateAction.NAME + "[s]", BulkAction.NAME + "[s][p]", BulkAction.NAME + "[s][r]" };
+        assertIndicesSubset(indices, multiTermVectorsShardAction);
+        internalCluster().coordOnlyNodeClient().admin().indices().open(openIndexRequest).actionGet();
+import org.opensearch.action.admin.indices.replication.SegmentReplicationStatsRequest;
+        assertSameIndicesOptionalRequests(searchRequest, SearchTransportService.FREE_CONTEXT_ACTION_NAME);
+import org.opensearch.action.admin.indices.segments.IndicesSegmentsAction;
+        for (String action : actions) {
+    }
+        SearchRequest searchRequest = new SearchRequest(randomIndicesOrAliases).searchType(SearchType.QUERY_THEN_FETCH);
+import org.opensearch.plugins.Plugin;
         }
-        ensureGreen();
+import org.opensearch.action.fieldcaps.FieldCapabilitiesRequest;
+        ) {
+        assertSameIndices(searchRequest, SearchTransportService.QUERY_ACTION_NAME, SearchTransportService.FETCH_ID_ACTION_NAME);
+            client().admin().cluster().prepareState().get().getState(),
+    public void testUpdateSettings() {
+        String[] indices = new String[uniqueIndices.length];
+        assertAcked(internalCluster().coordOnlyNodeClient().admin().indices().delete(deleteIndexRequest).actionGet());
+        interceptTransportActions(updateShardActions);
+        // indices returned by each bulk shard request need to be a subset of the original indices
+                .clearInterceptedActions();
+        assertSameIndices(
+    private static void assertSameIndicesOptionalRequests(IndicesRequest originalRequest, String... actions) {
+import org.opensearch.action.admin.indices.segments.IndicesSegmentsRequest;
+        String termVectorShardAction = TermVectorsAction.NAME + "[s]";
+            return requests.remove(action);
+import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
     }
-
-    @After
-    public void cleanUp() {
-        assertAllRequestsHaveBeenConsumed();
-        indices.clear();
+import static org.hamcrest.Matchers.emptyIterable;
+        List<TransportRequest> requests = consumeTransportRequests(action);
+import org.opensearch.action.admin.indices.mapping.get.GetMappingsRequest;
+        for (String action : actions) {
+        String[] uniqueIndices = randomUniqueIndices();
+ * GitHub history for details.
+        interceptTransportActions(updateShardActions);
     }
-
-    public void testGetFieldMappings() {
-
-        String getFieldMappingsShardAction = GetFieldMappingsAction.NAME + "[index][s]";
-        interceptTransportActions(getFieldMappingsShardAction);
-
-        GetFieldMappingsRequest getFieldMappingsRequest = new GetFieldMappingsRequest();
-        getFieldMappingsRequest.indices(randomIndicesOrAliases());
-        internalCluster().coordOnlyNodeClient().admin().indices().getFieldMappings(getFieldMappingsRequest).actionGet();
-
+            List<TransportRequest> requests = consumeTransportRequests(action);
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+        clearInterceptedActions();
+        interceptTransportActions(bulkShardActions);
+        for (int i = 0; i < randomIndicesOrAliases.length; i++) {
+    public void testRecovery() {
+        internalCluster().coordOnlyNodeClient().admin().indices().segmentReplicationStats(segmentReplicationStatsRequest).actionGet();
+        String explainShardAction = ExplainAction.NAME + "[s]";
+        int numIndices = iterations(1, 5);
+        }
+import java.util.HashSet;
+    }
+        RecoveryRequest recoveryRequest = new RecoveryRequest(randomIndicesOrAliases());
         clearInterceptedActions();
         assertSameIndices(getFieldMappingsRequest, getFieldMappingsShardAction);
-    }
-
-    public void testFieldCapabilities() {
-        String fieldCapabilitiesShardAction = FieldCapabilitiesAction.NAME + "[index][s]";
-        interceptTransportActions(fieldCapabilitiesShardAction);
-
-        FieldCapabilitiesRequest fieldCapabilitiesRequest = new FieldCapabilitiesRequest();
-        fieldCapabilitiesRequest.indices(randomIndicesOrAliases());
-        fieldCapabilitiesRequest.fields(randomAlphaOfLength(8));
-        internalCluster().coordOnlyNodeClient().fieldCaps(fieldCapabilitiesRequest).actionGet();
-
+        int i = 0;
         clearInterceptedActions();
-        assertSameIndices(fieldCapabilitiesRequest, fieldCapabilitiesShardAction);
-    }
-
-    public void testAnalyze() {
-        String analyzeShardAction = AnalyzeAction.NAME + "[s]";
-        interceptTransportActions(analyzeShardAction);
-
-        AnalyzeAction.Request analyzeRequest = new AnalyzeAction.Request(randomIndexOrAlias());
-        analyzeRequest.text("text");
-        internalCluster().coordOnlyNodeClient().admin().indices().analyze(analyzeRequest).actionGet();
-
-        clearInterceptedActions();
-        assertSameIndices(analyzeRequest, analyzeShardAction);
-    }
-
-    public void testIndex() {
-        String[] indexShardActions = new String[] { BulkAction.NAME + "[s][p]", BulkAction.NAME + "[s][r]" };
-        interceptTransportActions(indexShardActions);
-
-        IndexRequest indexRequest = new IndexRequest(randomIndexOrAlias()).id("id").source(Requests.INDEX_CONTENT_TYPE, "field", "value");
-        internalCluster().coordOnlyNodeClient().index(indexRequest).actionGet();
-
-        clearInterceptedActions();
-        assertSameIndices(indexRequest, indexShardActions);
-    }
-
-    public void testDelete() {
-        String[] deleteShardActions = new String[] { BulkAction.NAME + "[s][p]", BulkAction.NAME + "[s][r]" };
-        interceptTransportActions(deleteShardActions);
-
-        DeleteRequest deleteRequest = new DeleteRequest(randomIndexOrAlias()).id("id");
-        internalCluster().coordOnlyNodeClient().delete(deleteRequest).actionGet();
-
-        clearInterceptedActions();
-        assertSameIndices(deleteRequest, deleteShardActions);
-    }
-
-    public void testUpdate() {
-        // update action goes to the primary, index op gets executed locally, then replicated
-        String[] updateShardActions = new String[] { UpdateAction.NAME + "[s]", BulkAction.NAME + "[s][p]", BulkAction.NAME + "[s][r]" };
-        interceptTransportActions(updateShardActions);
-
-        String indexOrAlias = randomIndexOrAlias();
-        client().prepareIndex(indexOrAlias).setId("id").setSource("field", "value").get();
-        UpdateRequest updateRequest = new UpdateRequest(indexOrAlias, "id").doc(Requests.INDEX_CONTENT_TYPE, "field1", "value1");
-        UpdateResponse updateResponse = internalCluster().coordOnlyNodeClient().update(updateRequest).actionGet();
-        assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
-
-        clearInterceptedActions();
-        assertSameIndices(updateRequest, updateShardActions);
-    }
-
-    public void testUpdateUpsert() {
-        // update action goes to the primary, index op gets executed locally, then replicated
-        String[] updateShardActions = new String[] { UpdateAction.NAME + "[s]", BulkAction.NAME + "[s][p]", BulkAction.NAME + "[s][r]" };
-        interceptTransportActions(updateShardActions);
-
-        String indexOrAlias = randomIndexOrAlias();
-        UpdateRequest updateRequest = new UpdateRequest(indexOrAlias, "id").upsert(Requests.INDEX_CONTENT_TYPE, "field", "value")
-            .doc(Requests.INDEX_CONTENT_TYPE, "field1", "value1");
-        UpdateResponse updateResponse = internalCluster().coordOnlyNodeClient().update(updateRequest).actionGet();
-        assertEquals(DocWriteResponse.Result.CREATED, updateResponse.getResult());
-
-        clearInterceptedActions();
-        assertSameIndices(updateRequest, updateShardActions);
-    }
-
-    public void testUpdateDelete() {
-        // update action goes to the primary, delete op gets executed locally, then replicated
-        String[] updateShardActions = new String[] { UpdateAction.NAME + "[s]", BulkAction.NAME + "[s][p]", BulkAction.NAME + "[s][r]" };
-        interceptTransportActions(updateShardActions);
-
-        String indexOrAlias = randomIndexOrAlias();
-        client().prepareIndex(indexOrAlias).setId("id").setSource("field", "value").get();
-        UpdateRequest updateRequest = new UpdateRequest(indexOrAlias, "id").script(
-            new Script(ScriptType.INLINE, CustomScriptPlugin.NAME, "ctx.op='delete'", Collections.emptyMap())
-        );
-        UpdateResponse updateResponse = internalCluster().coordOnlyNodeClient().update(updateRequest).actionGet();
-        assertEquals(DocWriteResponse.Result.DELETED, updateResponse.getResult());
-
-        clearInterceptedActions();
-        assertSameIndices(updateRequest, updateShardActions);
-    }
-
-    public void testBulk() {
-        String[] bulkShardActions = new String[] { BulkAction.NAME + "[s][p]", BulkAction.NAME + "[s][r]" };
-        interceptTransportActions(bulkShardActions);
-
-        List<String> indices = new ArrayList<>();
-        BulkRequest bulkRequest = new BulkRequest();
-        int numIndexRequests = iterations(1, 10);
-        for (int i = 0; i < numIndexRequests; i++) {
-            String indexOrAlias = randomIndexOrAlias();
-            bulkRequest.add(new IndexRequest(indexOrAlias).id("id").source(Requests.INDEX_CONTENT_TYPE, "field", "value"));
-            indices.add(indexOrAlias);
-        }
-        int numDeleteRequests = iterations(1, 10);
-        for (int i = 0; i < numDeleteRequests; i++) {
-            String indexOrAlias = randomIndexOrAlias();
-            bulkRequest.add(new DeleteRequest(indexOrAlias).id("id"));
-            indices.add(indexOrAlias);
-        }
-        int numUpdateRequests = iterations(1, 10);
-        for (int i = 0; i < numUpdateRequests; i++) {
-            String indexOrAlias = randomIndexOrAlias();
-            bulkRequest.add(new UpdateRequest(indexOrAlias, "id").doc(Requests.INDEX_CONTENT_TYPE, "field1", "value1"));
-            indices.add(indexOrAlias);
-        }
-
-        internalCluster().coordOnlyNodeClient().bulk(bulkRequest).actionGet();
-
-        clearInterceptedActions();
-        assertIndicesSubset(indices, bulkShardActions);
-    }
-
-    public void testGet() {
-        String getShardAction = GetAction.NAME + "[s]";
-        interceptTransportActions(getShardAction);
-
-        GetRequest getRequest = new GetRequest(randomIndexOrAlias(), "id");
-        internalCluster().coordOnlyNodeClient().get(getRequest).actionGet();
-
-        clearInterceptedActions();
-        assertSameIndices(getRequest, getShardAction);
-    }
-
-    public void testExplain() {
-        String explainShardAction = ExplainAction.NAME + "[s]";
-        interceptTransportActions(explainShardAction);
-
-        ExplainRequest explainRequest = new ExplainRequest(randomIndexOrAlias(), "id").query(QueryBuilders.matchAllQuery());
-        internalCluster().coordOnlyNodeClient().explain(explainRequest).actionGet();
-
-        clearInterceptedActions();
-        assertSameIndices(explainRequest, explainShardAction);
-    }
-
-    public void testTermVector() {
-        String termVectorShardAction = TermVectorsAction.NAME + "[s]";
-        interceptTransportActions(termVectorShardAction);
-
-        TermVectorsRequest termVectorsRequest = new TermVectorsRequest(randomIndexOrAlias(), "id");
-        internalCluster().coordOnlyNodeClient().termVectors(termVectorsRequest).actionGet();
-
-        clearInterceptedActions();
-        assertSameIndices(termVectorsRequest, termVectorShardAction);
-    }
-
-    public void testMultiTermVector() {
-        String multiTermVectorsShardAction = MultiTermVectorsAction.NAME + "[shard][s]";
-        interceptTransportActions(multiTermVectorsShardAction);
-
-        List<String> indices = new ArrayList<>();
-        MultiTermVectorsRequest multiTermVectorsRequest = new MultiTermVectorsRequest();
-        int numDocs = iterations(1, 30);
-        for (int i = 0; i < numDocs; i++) {
-            String indexOrAlias = randomIndexOrAlias();
-            multiTermVectorsRequest.add(indexOrAlias, Integer.toString(i));
-            indices.add(indexOrAlias);
-        }
-        internalCluster().coordOnlyNodeClient().multiTermVectors(multiTermVectorsRequest).actionGet();
-
-        clearInterceptedActions();
-        assertIndicesSubset(indices, multiTermVectorsShardAction);
-    }
-
-    public void testMultiGet() {
-        String multiGetShardAction = MultiGetAction.NAME + "[shard][s]";
-        interceptTransportActions(multiGetShardAction);
-
-        List<String> indices = new ArrayList<>();
-        MultiGetRequest multiGetRequest = new MultiGetRequest();
-        int numDocs = iterations(1, 30);
-        for (int i = 0; i < numDocs; i++) {
-            String indexOrAlias = randomIndexOrAlias();
-            multiGetRequest.add(indexOrAlias, Integer.toString(i));
-            indices.add(indexOrAlias);
-        }
-        internalCluster().coordOnlyNodeClient().multiGet(multiGetRequest).actionGet();
-
-        clearInterceptedActions();
-        assertIndicesSubset(indices, multiGetShardAction);
-    }
-
-    public void testFlush() {
-        String[] indexShardActions = new String[] {
-            TransportShardFlushAction.NAME,
-            TransportShardFlushAction.NAME + "[r]",
-            TransportShardFlushAction.NAME + "[p]" };
-        interceptTransportActions(indexShardActions);
-
-        FlushRequest flushRequest = new FlushRequest(randomIndicesOrAliases());
-        internalCluster().coordOnlyNodeClient().admin().indices().flush(flushRequest).actionGet();
-
-        clearInterceptedActions();
-        String[] indices = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)).concreteIndexNames(
-            client().admin().cluster().prepareState().get().getState(),
-            flushRequest
-        );
-        assertIndicesSubset(Arrays.asList(indices), indexShardActions);
-    }
-
-    public void testForceMerge() {
-        String mergeShardAction = ForceMergeAction.NAME + "[n]";
-        interceptTransportActions(mergeShardAction);
-
-        ForceMergeRequest mergeRequest = new ForceMergeRequest(randomIndicesOrAliases());
-        internalCluster().coordOnlyNodeClient().admin().indices().forceMerge(mergeRequest).actionGet();
-
-        clearInterceptedActions();
-        assertSameIndices(mergeRequest, mergeShardAction);
-    }
-
-    public void testRefresh() {
-        String[] indexShardActions = new String[] {
-            TransportShardRefreshAction.NAME,
-            TransportShardRefreshAction.NAME + "[r]",
-            TransportShardRefreshAction.NAME + "[p]" };
-        interceptTransportActions(indexShardActions);
-
-        RefreshRequest refreshRequest = new RefreshRequest(randomIndicesOrAliases());
-        internalCluster().coordOnlyNodeClient().admin().indices().refresh(refreshRequest).actionGet();
-
-        clearInterceptedActions();
-        String[] indices = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)).concreteIndexNames(
-            client().admin().cluster().prepareState().get().getState(),
-            refreshRequest
-        );
-        assertIndicesSubset(Arrays.asList(indices), indexShardActions);
-    }
-
-    public void testClearCache() {
-        String clearCacheAction = ClearIndicesCacheAction.NAME + "[n]";
-        interceptTransportActions(clearCacheAction);
-
-        ClearIndicesCacheRequest clearIndicesCacheRequest = new ClearIndicesCacheRequest(randomIndicesOrAliases());
-        internalCluster().coordOnlyNodeClient().admin().indices().clearCache(clearIndicesCacheRequest).actionGet();
-
-        clearInterceptedActions();
-        assertSameIndices(clearIndicesCacheRequest, clearCacheAction);
-    }
-
-    public void testRecovery() {
-        String recoveryAction = RecoveryAction.NAME + "[n]";
-        interceptTransportActions(recoveryAction);
-
-        RecoveryRequest recoveryRequest = new RecoveryRequest(randomIndicesOrAliases());
-        internalCluster().coordOnlyNodeClient().admin().indices().recoveries(recoveryRequest).actionGet();
-
-        clearInterceptedActions();
-        assertSameIndices(recoveryRequest, recoveryAction);
-    }
-
-    public void testSegmentReplicationStats() {
-        String segmentReplicationAction = SegmentReplicationStatsAction.NAME + "[n]";
-        interceptTransportActions(segmentReplicationAction);
-
-        SegmentReplicationStatsRequest segmentReplicationStatsRequest = new SegmentReplicationStatsRequest(randomIndicesOrAliases());
-        internalCluster().coordOnlyNodeClient().admin().indices().segmentReplicationStats(segmentReplicationStatsRequest).actionGet();
-
-        clearInterceptedActions();
-        assertSameIndices(segmentReplicationStatsRequest, segmentReplicationAction);
-    }
-
-    public void testSegments() {
-        String segmentsAction = IndicesSegmentsAction.NAME + "[n]";
-        interceptTransportActions(segmentsAction);
-
-        IndicesSegmentsRequest segmentsRequest = new IndicesSegmentsRequest(randomIndicesOrAliases());
-        internalCluster().coordOnlyNodeClient().admin().indices().segments(segmentsRequest).actionGet();
-
-        clearInterceptedActions();
-        assertSameIndices(segmentsRequest, segmentsAction);
-    }
-
-    public void testIndicesStats() {
-        String indicesStats = IndicesStatsAction.NAME + "[n]";
-        interceptTransportActions(indicesStats);
-
-        IndicesStatsRequest indicesStatsRequest = new IndicesStatsRequest().indices(randomIndicesOrAliases());
-        internalCluster().coordOnlyNodeClient().admin().indices().stats(indicesStatsRequest).actionGet();
-
-        clearInterceptedActions();
-        assertSameIndices(indicesStatsRequest, indicesStats);
-    }
-
-    public void testValidateQuery() {
-        String validateQueryShardAction = ValidateQueryAction.NAME + "[s]";
-        interceptTransportActions(validateQueryShardAction);
-
-        ValidateQueryRequest validateQueryRequest = new ValidateQueryRequest(randomIndicesOrAliases());
-        internalCluster().coordOnlyNodeClient().admin().indices().validateQuery(validateQueryRequest).actionGet();
-
-        clearInterceptedActions();
-        assertSameIndices(validateQueryRequest, validateQueryShardAction);
-    }
-
-    public void testOpenIndex() {
-        interceptTransportActions(OpenIndexAction.NAME);
-
-        OpenIndexRequest openIndexRequest = new OpenIndexRequest(randomUniqueIndicesOrAliases());
-        internalCluster().coordOnlyNodeClient().admin().indices().open(openIndexRequest).actionGet();
-
-        clearInterceptedActions();
-        assertSameIndices(openIndexRequest, OpenIndexAction.NAME);
-    }
-
-    public void testCloseIndex() {
-        interceptTransportActions(CloseIndexAction.NAME);
-
-        CloseIndexRequest closeIndexRequest = new CloseIndexRequest(randomUniqueIndicesOrAliases());
-        internalCluster().coordOnlyNodeClient().admin().indices().close(closeIndexRequest).actionGet();
-
-        clearInterceptedActions();
-        assertSameIndices(closeIndexRequest, CloseIndexAction.NAME);
-    }
-
-    public void testDeleteIndex() {
-        interceptTransportActions(DeleteIndexAction.NAME);
-
-        String[] randomIndicesOrAliases = randomUniqueIndices();
-        DeleteIndexRequest deleteIndexRequest = new DeleteIndexRequest(randomIndicesOrAliases);
-        assertAcked(internalCluster().coordOnlyNodeClient().admin().indices().delete(deleteIndexRequest).actionGet());
-
-        clearInterceptedActions();
-        assertSameIndices(deleteIndexRequest, DeleteIndexAction.NAME);
-    }
-
-    public void testGetMappings() {
-        interceptTransportActions(GetTermVersionAction.NAME, GetMappingsAction.NAME);
-        GetMappingsRequest getMappingsRequest = new GetMappingsRequest().indices(randomIndicesOrAliases());
-        internalCluster().coordOnlyNodeClient().admin().indices().getMappings(getMappingsRequest).actionGet();
-
-        clearInterceptedActions();
-
-        assertActionInvocation(GetTermVersionAction.NAME, GetTermVersionRequest.class);
-        assertNoActionInvocation(GetMappingsAction.NAME);
-    }
-
-    public void testPutMapping() {
-        interceptTransportActions(PutMappingAction.NAME);
-
-        PutMappingRequest putMappingRequest = new PutMappingRequest(randomUniqueIndicesOrAliases()).source("field", "type=text");
-        internalCluster().coordOnlyNodeClient().admin().indices().putMapping(putMappingRequest).actionGet();
-
-        clearInterceptedActions();
-        assertSameIndices(putMappingRequest, PutMappingAction.NAME);
-    }
-
-    public void testGetSettings() {
-
-        interceptTransportActions(GetSettingsAction.NAME);
-        GetSettingsRequest getSettingsRequest = new GetSettingsRequest().indices(randomIndicesOrAliases());
-        internalCluster().coordOnlyNodeClient().admin().indices().getSettings(getSettingsRequest).actionGet();
-
-        clearInterceptedActions();
-        assertSameIndices(getSettingsRequest, GetSettingsAction.NAME);
-    }
-
-    public void testUpdateSettings() {
-        interceptTransportActions(UpdateSettingsAction.NAME);
-
-        UpdateSettingsRequest updateSettingsRequest = new UpdateSettingsRequest(randomIndicesOrAliases()).settings(
-            Settings.builder().put("refresh_interval", -1)
-        );
-        internalCluster().coordOnlyNodeClient().admin().indices().updateSettings(updateSettingsRequest).actionGet();
-
-        clearInterceptedActions();
-        assertSameIndices(updateSettingsRequest, UpdateSettingsAction.NAME);
-    }
-
-    public void testSearchQueryThenFetch() throws Exception {
-        interceptTransportActions(
-            SearchTransportService.QUERY_ACTION_NAME,
-            SearchTransportService.FETCH_ID_ACTION_NAME,
-            SearchTransportService.FREE_CONTEXT_ACTION_NAME
-        );
-
-        String[] randomIndicesOrAliases = randomIndicesOrAliases();
-        for (int i = 0; i < randomIndicesOrAliases.length; i++) {
-            client().prepareIndex(randomIndicesOrAliases[i]).setId("id-" + i).setSource("field", "value").get();
-        }
-        refresh();
-
-        SearchRequest searchRequest = new SearchRequest(randomIndicesOrAliases).searchType(SearchType.QUERY_THEN_FETCH);
-        SearchResponse searchResponse = internalCluster().coordOnlyNodeClient().search(searchRequest).actionGet();
-        assertNoFailures(searchResponse);
-        assertThat(searchResponse.getHits().getTotalHits().value(), greaterThan(0L));
-
-        clearInterceptedActions();
-        assertSameIndices(searchRequest, SearchTransportService.QUERY_ACTION_NAME, SearchTransportService.FETCH_ID_ACTION_NAME);
-        // free context messages are not necessarily sent, but if they are, check their indices
-        assertSameIndicesOptionalRequests(searchRequest, SearchTransportService.FREE_CONTEXT_ACTION_NAME);
-    }
-
-    public void testSearchDfsQueryThenFetch() throws Exception {
-        interceptTransportActions(
-            SearchTransportService.DFS_ACTION_NAME,
-            SearchTransportService.QUERY_ID_ACTION_NAME,
-            SearchTransportService.FETCH_ID_ACTION_NAME,
-            SearchTransportService.FREE_CONTEXT_ACTION_NAME
-        );
-
-        String[] randomIndicesOrAliases = randomIndicesOrAliases();
-        for (int i = 0; i < randomIndicesOrAliases.length; i++) {
-            client().prepareIndex(randomIndicesOrAliases[i]).setId("id-" + i).setSource("field", "value").get();
-        }
-        refresh();
-
-        SearchRequest searchRequest = new SearchRequest(randomIndicesOrAliases).searchType(SearchType.DFS_QUERY_THEN_FETCH);
-        SearchResponse searchResponse = internalCluster().coordOnlyNodeClient().search(searchRequest).actionGet();
-        assertNoFailures(searchResponse);
-        assertThat(searchResponse.getHits().getTotalHits().value(), greaterThan(0L));
-
-        clearInterceptedActions();
-        assertSameIndices(
-            searchRequest,
-            SearchTransportService.DFS_ACTION_NAME,
-            SearchTransportService.QUERY_ID_ACTION_NAME,
-            SearchTransportService.FETCH_ID_ACTION_NAME
-        );
-        // free context messages are not necessarily sent, but if they are, check their indices
-        assertSameIndicesOptionalRequests(searchRequest, SearchTransportService.FREE_CONTEXT_ACTION_NAME);
-    }
-
-    private static void assertSameIndices(IndicesRequest originalRequest, String... actions) {
-        assertSameIndices(originalRequest, false, actions);
-    }
-
-    private static void assertSameIndicesOptionalRequests(IndicesRequest originalRequest, String... actions) {
         assertSameIndices(originalRequest, true, actions);
+@ClusterScope(scope = Scope.SUITE, numClientNodes = 1, minNumDataNodes = 2)
+        return indicesRequest;
+        SearchResponse searchResponse = internalCluster().coordOnlyNodeClient().search(searchRequest).actionGet();
+import java.util.Collection;
+        ClearIndicesCacheRequest clearIndicesCacheRequest = new ClearIndicesCacheRequest(randomIndicesOrAliases());
+import org.opensearch.script.ScriptType;
+        interceptTransportActions(indexShardActions);
+        internalCluster().coordOnlyNodeClient().admin().indices().recoveries(recoveryRequest).actionGet();
+        int count = randomIntBetween(1, indices.size() * 2); // every index has an alias
+        PutMappingRequest putMappingRequest = new PutMappingRequest(randomUniqueIndicesOrAliases()).source("field", "type=text");
     }
-
-    private static void assertSameIndices(IndicesRequest originalRequest, boolean optional, String... actions) {
-        for (String action : actions) {
-            List<TransportRequest> requests = consumeTransportRequests(action);
-            if (!optional) {
-                assertThat("no internal requests intercepted for action [" + action + "]", requests.size(), greaterThan(0));
-            }
-            for (TransportRequest internalRequest : requests) {
-                IndicesRequest indicesRequest = convertRequest(internalRequest);
-                assertThat(internalRequest.getClass().getName(), indicesRequest.indices(), equalTo(originalRequest.indices()));
-                assertThat(indicesRequest.indicesOptions(), equalTo(originalRequest.indicesOptions()));
-            }
-        }
-    }
-
-    private static void assertActionInvocation(String action, Class<? extends TransportRequest> requestClass) {
-        List<TransportRequest> requests = consumeTransportRequests(action);
-        assertFalse(requests.isEmpty());
-        for (TransportRequest internalRequest : requests) {
-            assertTrue(internalRequest.getClass() == requestClass);
-        }
-    }
-
-    private static void assertNoActionInvocation(String... actions) {
-        for (String action : actions) {
-            List<TransportRequest> requests = consumeTransportRequests(action);
-            assertTrue(requests.isEmpty());
-        }
-    }
-
+            indices.add("test" + i);
+        fieldCapabilitiesRequest.fields(randomAlphaOfLength(8));
+import org.opensearch.action.update.UpdateRequest;
+        UpdateResponse updateResponse = internalCluster().coordOnlyNodeClient().update(updateRequest).actionGet();
+    public void testMultiGet() {
+import org.opensearch.tasks.Task;
+                .get().instance.consumeRequests(action);
+            SearchTransportService.QUERY_ID_ACTION_NAME,
+import org.opensearch.script.MockScriptPlugin;
+    public void cleanUp() {
+                ThreadContext threadContext
+    protected int minimumNumberOfShards() {
+        );
+        clearInterceptedActions();
+import org.opensearch.action.search.SearchType;
+        interceptTransportActions(CloseIndexAction.NAME);
+            SearchTransportService.FETCH_ID_ACTION_NAME
+        if (randomBoolean()) {
+        getFieldMappingsRequest.indices(randomIndicesOrAliases());
+            String indexOrAlias = randomIndexOrAlias();
     private static void assertIndicesSubset(List<String> indices, String... actions) {
-        // indices returned by each bulk shard request need to be a subset of the original indices
-        for (String action : actions) {
-            List<TransportRequest> requests = consumeTransportRequests(action);
-            assertThat("no internal requests intercepted for action [" + action + "]", requests.size(), greaterThan(0));
-            for (TransportRequest internalRequest : requests) {
-                IndicesRequest indicesRequest = convertRequest(internalRequest);
-                for (String index : indicesRequest.indices()) {
-                    assertThat(indices, hasItem(index));
-                }
-            }
+            flushRequest
+        interceptTransportActions(DeleteIndexAction.NAME);
+        interceptTransportActions(indexShardActions);
+                        List<TransportRequest> requestList = requests.get(action);
+    public void testExplain() {
+        private final Map<String, List<TransportRequest>> requests = new HashMap<>();
+ * this file be licensed under the Apache-2.0 license or a
         }
+        int count = randomIntBetween(1, this.indices.size());
+        assertSameIndices(updateRequest, updateShardActions);
+            indices.add(indexOrAlias);
     }
-
-    static IndicesRequest convertRequest(TransportRequest request) {
+        CloseIndexRequest closeIndexRequest = new CloseIndexRequest(randomUniqueIndicesOrAliases());
+        assertAllRequestsHaveBeenConsumed();
+    public void setup() {
+import org.opensearch.action.admin.indices.refresh.RefreshRequest;
+ * license agreements. See the NOTICE file distributed with
+        }
+import org.opensearch.action.admin.indices.stats.IndicesStatsRequest;
+    }
+                            requestList.add(request);
+    public void testOpenIndex() {
+        internalCluster().coordOnlyNodeClient().explain(explainRequest).actionGet();
+        String[] indexShardActions = new String[] {
+        clearInterceptedActions();
+        Set<String> uniqueIndices = new HashSet<>();
+        synchronized List<TransportRequest> consumeRequests(String action) {
+                        if (requestList == null) {
+        indices.clear();
+            if (transportRequests != null) {
+        // so we are able to intercept those messages and check them
+        IndicesSegmentsRequest segmentsRequest = new IndicesSegmentsRequest(randomIndicesOrAliases());
+    }
+                }
+            Set<Map.Entry<String, List<TransportRequest>>> entries = pluginsService.filterPlugins(
+import java.util.List;
+            Collections.addAll(this.actions, actions);
+        int numDeleteRequests = iterations(1, 10);
+    public void testSegmentReplicationStats() {
+        Iterable<PluginsService> pluginsServices = internalCluster().getInstances(PluginsService.class);
+import org.opensearch.common.settings.Settings;
+            assertAcked(prepareCreate(index).addAlias(new Alias(index + "-alias")));
+import org.opensearch.action.admin.indices.settings.get.GetSettingsRequest;
+    public void testUpdateUpsert() {
+import org.junit.Before;
+            bulkRequest.add(new IndexRequest(indexOrAlias).id("id").source(Requests.INDEX_CONTENT_TYPE, "field", "value"));
+    }
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+            SearchTransportService.QUERY_ACTION_NAME,
+        );
+            client().admin().cluster().prepareState().get().getState(),
+            return index + "-alias";
+        interceptTransportActions(recoveryAction);
+            SearchTransportService.FETCH_ID_ACTION_NAME,
+            TransportShardFlushAction.NAME + "[p]" };
+ * compatible open source license.
+        assertNoFailures(searchResponse);
+/*
+        assertSameIndices(deleteIndexRequest, DeleteIndexAction.NAME);
+        internalCluster().coordOnlyNodeClient().index(indexRequest).actionGet();
+import org.opensearch.action.update.UpdateAction;
+        }
+        interceptTransportActions(
+package org.opensearch.action;
+    public void testUpdate() {
+        RefreshRequest refreshRequest = new RefreshRequest(randomIndicesOrAliases());
+                        } else {
+            }
+        interceptTransportActions(getFieldMappingsShardAction);
+import org.opensearch.test.OpenSearchIntegTestCase.Scope;
+        interceptTransportActions(UpdateSettingsAction.NAME);
+            // InternalClusterInfoService sends IndicesStatsRequest periodically which messes with this test
+        }
+            uniqueIndices.add(randomFrom(this.indices));
+        clearInterceptedActions();
+import java.util.function.Function;
+        assertSameIndices(mergeRequest, mergeShardAction);
+import org.opensearch.action.admin.indices.recovery.RecoveryRequest;
+    public void testGetMappings() {
+import org.opensearch.action.support.clustermanager.term.GetTermVersionRequest;
+        clearInterceptedActions();
+            indices[i++] = randomBoolean() ? index + "-alias" : index;
+ * this work for additional information regarding copyright
+    private static void assertAllRequestsHaveBeenConsumed() {
+        );
+            public void messageReceived(T request, TransportChannel channel, Task task) throws Exception {
+        assertSameIndices(recoveryRequest, recoveryAction);
+        assertSameIndices(segmentReplicationStatsRequest, segmentReplicationAction);
+        internalCluster().coordOnlyNodeClient().multiGet(multiGetRequest).actionGet();
+        int numIndexRequests = iterations(1, 10);
+                this.requestHandler = requestHandler;
+import org.opensearch.action.delete.DeleteRequest;
+        );
+import org.opensearch.action.get.MultiGetAction;
+    private String randomIndexOrAlias() {
+        assertSameIndices(analyzeRequest, analyzeShardAction);
+                requests.addAll(transportRequests);
+    }
+                assertThat(indicesRequest.indicesOptions(), equalTo(originalRequest.indicesOptions()));
+    public static class CustomScriptPlugin extends MockScriptPlugin {
+        String[] indices = new String[count];
+        for (String index : indices) {
+import org.opensearch.action.termvectors.MultiTermVectorsAction;
+    }
+        interceptTransportActions(explainShardAction);
+        clearInterceptedActions();
+    public void testCloseIndex() {
+        clearInterceptedActions();
+    @Override
+import org.opensearch.action.admin.indices.flush.TransportShardFlushAction;
+ */
+            client().prepareIndex(randomIndicesOrAliases[i]).setId("id-" + i).setSource("field", "value").get();
         final IndicesRequest indicesRequest;
-        if (request instanceof IndicesRequest) {
             indicesRequest = (IndicesRequest) request;
         } else {
-            indicesRequest = TransportReplicationActionTests.resolveRequest(request);
+import org.opensearch.action.admin.indices.validate.query.ValidateQueryRequest;
+                for (String index : indicesRequest.indices()) {
         }
-        return indicesRequest;
-    }
-
-    private String randomIndexOrAlias() {
-        String index = randomFrom(indices);
-        if (randomBoolean()) {
-            return index + "-alias";
+        }
+            InterceptingRequestHandler(String action, TransportRequestHandler<T> requestHandler) {
+        }
         } else {
-            return index;
-        }
-    }
-
-    private String[] randomIndicesOrAliases() {
-        int count = randomIntBetween(1, indices.size() * 2); // every index has an alias
-        String[] indices = new String[count];
-        for (int i = 0; i < count; i++) {
-            indices[i] = randomIndexOrAlias();
-        }
-        return indices;
-    }
-
-    private String[] randomUniqueIndicesOrAliases() {
-        String[] uniqueIndices = randomUniqueIndices();
-        String[] indices = new String[uniqueIndices.length];
-        int i = 0;
-        for (String index : uniqueIndices) {
-            indices[i++] = randomBoolean() ? index + "-alias" : index;
-        }
-        return indices;
-    }
-
-    private String[] randomUniqueIndices() {
-        Set<String> uniqueIndices = new HashSet<>();
-        int count = randomIntBetween(1, this.indices.size());
+        interceptTransportActions(segmentReplicationAction);
+        assertActionInvocation(GetTermVersionAction.NAME, GetTermVersionRequest.class);
+import org.opensearch.action.admin.indices.settings.put.UpdateSettingsRequest;
+        GetFieldMappingsRequest getFieldMappingsRequest = new GetFieldMappingsRequest();
+            public final InterceptingTransportService instance = new InterceptingTransportService();
         while (uniqueIndices.size() < count) {
-            uniqueIndices.add(randomFrom(this.indices));
+                synchronized (InterceptingTransportService.this) {
+        interceptTransportActions(
+            indices.add(indexOrAlias);
+        String[] deleteShardActions = new String[] { BulkAction.NAME + "[s][p]", BulkAction.NAME + "[s][r]" };
+        synchronized void clearInterceptedActions() {
+        assertThat(searchResponse.getHits().getTotalHits().value(), greaterThan(0L));
+        // update action goes to the primary, index op gets executed locally, then replicated
+        assertSameIndices(updateRequest, updateShardActions);
+        String[] updateShardActions = new String[] { UpdateAction.NAME + "[s]", BulkAction.NAME + "[s][p]", BulkAction.NAME + "[s][r]" };
+                        }
+        assertSameIndices(closeIndexRequest, CloseIndexAction.NAME);
+        String segmentReplicationAction = SegmentReplicationStatsAction.NAME + "[n]";
+        );
+        assertSameIndices(updateSettingsRequest, UpdateSettingsAction.NAME);
+    @After
+    }
+        internalCluster().coordOnlyNodeClient().admin().indices().clearCache(clearIndicesCacheRequest).actionGet();
+    protected int minimumNumberOfReplicas() {
+        assertSameIndices(originalRequest, false, actions);
+import org.opensearch.action.bulk.BulkAction;
+import org.opensearch.action.admin.indices.forcemerge.ForceMergeAction;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertNoFailures;
+    }
+import org.opensearch.action.fieldcaps.FieldCapabilitiesAction;
+        protected Map<String, Function<Map<String, Object>, Object>> pluginScripts() {
+        clearInterceptedActions();
+        clearInterceptedActions();
         }
+            List<TransportRequest> requests = consumeTransportRequests(action);
+        clearInterceptedActions();
+        interceptTransportActions(clearCacheAction);
+            multiGetRequest.add(indexOrAlias, Integer.toString(i));
+    private String[] randomUniqueIndices() {
+    }
+import org.opensearch.action.update.UpdateResponse;
+            bulkRequest.add(new DeleteRequest(indexOrAlias).id("id"));
+    private String[] randomIndicesOrAliases() {
+        assertSameIndices(explainRequest, explainShardAction);
+                .stream()
+        clearInterceptedActions();
+            SearchTransportService.QUERY_ID_ACTION_NAME,
+import org.opensearch.action.support.replication.TransportReplicationActionTests;
+            multiTermVectorsRequest.add(indexOrAlias, Integer.toString(i));
+import org.opensearch.transport.client.Requests;
+ */
+    }
+        @Override
+        interceptTransportActions(OpenIndexAction.NAME);
+        for (PluginsService pluginsService : pluginsServices) {
+import org.opensearch.action.termvectors.TermVectorsRequest;
+        private final Set<String> actions = new HashSet<>();
+        clearInterceptedActions();
+            TransportShardFlushAction.NAME,
+        fieldCapabilitiesRequest.indices(randomIndicesOrAliases());
+        internalCluster().coordOnlyNodeClient().admin().indices().putMapping(putMappingRequest).actionGet();
+        String segmentsAction = IndicesSegmentsAction.NAME + "[n]";
+    }
+        clearInterceptedActions();
+        }
+            SearchTransportService.FETCH_ID_ACTION_NAME,
+        assertSameIndices(getSettingsRequest, GetSettingsAction.NAME);
+            SearchTransportService.DFS_ACTION_NAME,
+        assertNoActionInvocation(GetMappingsAction.NAME);
+        for (int i = 0; i < numUpdateRequests; i++) {
+ * software distributed under the License is distributed on an
+import org.opensearch.index.query.QueryBuilders;
+    }
+import org.opensearch.action.termvectors.MultiTermVectorsRequest;
+ * Modifications Copyright OpenSearch Contributors. See
+        interceptTransportActions(PutMappingAction.NAME);
+        String multiTermVectorsShardAction = MultiTermVectorsAction.NAME + "[shard][s]";
+        assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
+        List<String> indices = new ArrayList<>();
+        List<TransportRequest> requests = new ArrayList<>();
+        internalCluster().coordOnlyNodeClient().admin().indices().getFieldMappings(getFieldMappingsRequest).actionGet();
+        }
+    }
+        clearInterceptedActions();
+        for (int i = 0; i < numDeleteRequests; i++) {
+        int numDocs = iterations(1, 30);
+import org.opensearch.action.support.clustermanager.term.GetTermVersionAction;
+                            requestList.add(request);
+        internalCluster().coordOnlyNodeClient().get(getRequest).actionGet();
+    public void testFieldCapabilities() {
+        }
+    public void testSearchQueryThenFetch() throws Exception {
+    }
+            assertTrue(requests.isEmpty());
+        }
+            TransportShardRefreshAction.NAME + "[p]" };
+            .put("cluster.routing.allocation.disk.threshold_enabled", false)
+                            requestList = new ArrayList<>();
+            String indexOrAlias = randomIndexOrAlias();
+        clearInterceptedActions();
+            return new InterceptingRequestHandler<>(action, actualHandler);
+    public void testBulk() {
+        return requests;
+        }
+    }
+    }
+            String indexOrAlias = randomIndexOrAlias();
+    }
+import org.opensearch.action.admin.indices.forcemerge.ForceMergeRequest;
+        Iterable<PluginsService> pluginsServices = internalCluster().getInstances(PluginsService.class);
+import org.junit.After;
+        TermVectorsRequest termVectorsRequest = new TermVectorsRequest(randomIndexOrAlias(), "id");
+    public void testSearchDfsQueryThenFetch() throws Exception {
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.transport.TransportRequestHandler;
+import static org.hamcrest.Matchers.hasItem;
+        assertEquals(DocWriteResponse.Result.DELETED, updateResponse.getResult());
+        for (int i = 0; i < randomIndicesOrAliases.length; i++) {
+            TransportRequestHandler<T> actualHandler
+    @Override
+    }
+        internalCluster().coordOnlyNodeClient().admin().indices().close(closeIndexRequest).actionGet();
+            boolean forceExecution,
+        interceptTransportActions(multiTermVectorsShardAction);
+    private final List<String> indices = new ArrayList<>();
+    }
+                assertThat(internalRequest.getClass().getName(), indicesRequest.indices(), equalTo(originalRequest.indices()));
+        @Override
+    private static void assertActionInvocation(String action, Class<? extends TransportRequest> requestClass) {
+    @Override
+                this.action = action;
+        clearInterceptedActions();
+        interceptTransportActions(validateQueryShardAction);
+        assertEquals(DocWriteResponse.Result.CREATED, updateResponse.getResult());
+        int numUpdateRequests = iterations(1, 10);
+    public void testAnalyze() {
+        for (String action : actions) {
+import org.opensearch.transport.TransportInterceptor;
+    }
+        interceptTransportActions(indicesStats);
+    }
+    public void testGet() {
+                IndicesRequest indicesRequest = convertRequest(internalRequest);
+        MultiGetRequest multiGetRequest = new MultiGetRequest();
+        interceptTransportActions(GetTermVersionAction.NAME, GetMappingsAction.NAME);
+        String analyzeShardAction = AnalyzeAction.NAME + "[s]";
+        String indexOrAlias = randomIndexOrAlias();
+        for (int i = 0; i < numDocs; i++) {
+import org.opensearch.transport.TransportRequest;
+            ) {
+        return 2;
+/*
+import org.opensearch.action.search.SearchRequest;
+import org.opensearch.action.admin.indices.mapping.get.GetFieldMappingsRequest;
+            indices.add(indexOrAlias);
+    }
+    }
+            for (TransportRequest internalRequest : requests) {
+    }
+ *
+            searchRequest,
+import org.opensearch.action.index.IndexRequest;
+    @Override
+        assertSameIndices(validateQueryRequest, validateQueryShardAction);
+        AnalyzeAction.Request analyzeRequest = new AnalyzeAction.Request(randomIndexOrAlias());
+ * KIND, either express or implied.  See the License for the
+        FlushRequest flushRequest = new FlushRequest(randomIndicesOrAliases());
+import static org.hamcrest.Matchers.greaterThan;
+            return Collections.singletonMap("ctx.op='delete'", vars -> ((Map<String, Object>) vars.get("ctx")).put("op", "delete"));
+                requestHandler.messageReceived(request, channel, task);
+    public static class InterceptingTransportService implements TransportInterceptor {
+        interceptTransportActions(updateShardActions);
+import org.opensearch.test.OpenSearchIntegTestCase;
+        UpdateSettingsRequest updateSettingsRequest = new UpdateSettingsRequest(randomIndicesOrAliases()).settings(
+        int numDocs = iterations(1, 30);
+        SegmentReplicationStatsRequest segmentReplicationStatsRequest = new SegmentReplicationStatsRequest(randomIndicesOrAliases());
+        internalCluster().coordOnlyNodeClient().admin().indices().updateSettings(updateSettingsRequest).actionGet();
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+            private final TransportRequestHandler<T> requestHandler;
+        // makes sure that write operations get sent to the replica as well
+        refresh();
+        internalCluster().coordOnlyNodeClient().admin().indices().refresh(refreshRequest).actionGet();
+        interceptTransportActions(multiGetShardAction);
+ * Unless required by applicable law or agreed to in writing,
+    public void testTermVector() {
+import org.opensearch.action.search.SearchResponse;
+        internalCluster().coordOnlyNodeClient().admin().indices().segments(segmentsRequest).actionGet();
+    }
+import java.util.ArrayList;
+        UpdateRequest updateRequest = new UpdateRequest(indexOrAlias, "id").upsert(Requests.INDEX_CONTENT_TYPE, "field", "value")
+        return Arrays.asList(InterceptingTransportService.TestPlugin.class, CustomScriptPlugin.class);
+import java.util.Collections;
+            new Script(ScriptType.INLINE, CustomScriptPlugin.NAME, "ctx.op='delete'", Collections.emptyMap())
+        UpdateRequest updateRequest = new UpdateRequest(indexOrAlias, "id").doc(Requests.INDEX_CONTENT_TYPE, "field1", "value1");
+            indices.add(indexOrAlias);
+import java.util.Arrays;
+import org.opensearch.action.admin.indices.close.CloseIndexAction;
+import org.opensearch.action.explain.ExplainAction;
+        // must set this independently of the plugin so it overrides MockTransportService
+        assertSameIndices(termVectorsRequest, termVectorShardAction);
+        clearInterceptedActions();
+    public void testUpdateDelete() {
+        String mergeShardAction = ForceMergeAction.NAME + "[n]";
+        analyzeRequest.text("text");
         return uniqueIndices.toArray(new String[0]);
     }
-
-    private static void assertAllRequestsHaveBeenConsumed() {
-        Iterable<PluginsService> pluginsServices = internalCluster().getInstances(PluginsService.class);
-        for (PluginsService pluginsService : pluginsServices) {
-            Set<Map.Entry<String, List<TransportRequest>>> entries = pluginsService.filterPlugins(
-                InterceptingTransportService.TestPlugin.class
-            ).stream().findFirst().get().instance.requests.entrySet();
+        clearInterceptedActions();
+        internalCluster().coordOnlyNodeClient().admin().indices().getMappings(getMappingsRequest).actionGet();
             assertThat(entries, emptyIterable());
-
-        }
+ * You may obtain a copy of the License at
+    public void testSegments() {
     }
-
-    private static void clearInterceptedActions() {
-        Iterable<PluginsService> pluginsServices = internalCluster().getInstances(PluginsService.class);
-        for (PluginsService pluginsService : pluginsServices) {
-            pluginsService.filterPlugins(InterceptingTransportService.TestPlugin.class).stream().findFirst().get().instance
-                .clearInterceptedActions();
-        }
+        clearInterceptedActions();
+            TransportShardFlushAction.NAME + "[r]",
     }
-
-    private static void interceptTransportActions(String... actions) {
-        Iterable<PluginsService> pluginsServices = internalCluster().getInstances(PluginsService.class);
-        for (PluginsService pluginsService : pluginsServices) {
-            pluginsService.filterPlugins(InterceptingTransportService.TestPlugin.class).stream().findFirst().get().instance
-                .interceptTransportActions(actions);
-        }
-    }
-
-    private static List<TransportRequest> consumeTransportRequests(String action) {
-        List<TransportRequest> requests = new ArrayList<>();
-
-        Iterable<PluginsService> pluginsServices = internalCluster().getInstances(PluginsService.class);
-        for (PluginsService pluginsService : pluginsServices) {
-            List<TransportRequest> transportRequests = pluginsService.filterPlugins(InterceptingTransportService.TestPlugin.class)
-                .stream()
-                .findFirst()
-                .get().instance.consumeRequests(action);
-            if (transportRequests != null) {
-                requests.addAll(transportRequests);
-            }
-        }
-        return requests;
-    }
-
-    public static class InterceptingTransportService implements TransportInterceptor {
-
-        public static class TestPlugin extends Plugin implements NetworkPlugin {
-            public final InterceptingTransportService instance = new InterceptingTransportService();
-
-            @Override
-            public List<TransportInterceptor> getTransportInterceptors(
-                NamedWriteableRegistry namedWriteableRegistry,
-                ThreadContext threadContext
-            ) {
-                return Collections.singletonList(instance);
-            }
-        }
-
-        private final Set<String> actions = new HashSet<>();
-        private final Map<String, List<TransportRequest>> requests = new HashMap<>();
-
-        @Override
-        public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(
-            String action,
-            String executor,
-            boolean forceExecution,
-            TransportRequestHandler<T> actualHandler
-        ) {
-            return new InterceptingRequestHandler<>(action, actualHandler);
-        }
-
-        synchronized List<TransportRequest> consumeRequests(String action) {
-            return requests.remove(action);
-        }
-
-        synchronized void interceptTransportActions(String... actions) {
-            Collections.addAll(this.actions, actions);
-        }
-
-        synchronized void clearInterceptedActions() {
-            actions.clear();
-        }
-
-        private class InterceptingRequestHandler<T extends TransportRequest> implements TransportRequestHandler<T> {
-
-            private final TransportRequestHandler<T> requestHandler;
-            private final String action;
-
-            InterceptingRequestHandler(String action, TransportRequestHandler<T> requestHandler) {
-                this.requestHandler = requestHandler;
-                this.action = action;
-            }
-
-            @Override
-            public void messageReceived(T request, TransportChannel channel, Task task) throws Exception {
-                synchronized (InterceptingTransportService.this) {
                     if (actions.contains(action)) {
-                        List<TransportRequest> requestList = requests.get(action);
-                        if (requestList == null) {
-                            requestList = new ArrayList<>();
-                            requestList.add(request);
-                            requests.put(action, requestList);
-                        } else {
-                            requestList.add(request);
-                        }
+            pluginsService.filterPlugins(InterceptingTransportService.TestPlugin.class).stream().findFirst().get().instance
+        interceptTransportActions(getShardAction);
+        clearInterceptedActions();
+            indices.add(indexOrAlias);
+        }
+            .doc(Requests.INDEX_CONTENT_TYPE, "field1", "value1");
+    public void testGetSettings() {
+import org.opensearch.plugins.PluginsService;
+import org.opensearch.action.admin.indices.delete.DeleteIndexAction;
+import org.opensearch.plugins.NetworkPlugin;
+        internalCluster().coordOnlyNodeClient().admin().indices().flush(flushRequest).actionGet();
+            for (TransportRequest internalRequest : requests) {
+        assertIndicesSubset(indices, multiGetShardAction);
+        client().prepareIndex(indexOrAlias).setId("id").setSource("field", "value").get();
+        List<String> indices = new ArrayList<>();
+        String[] randomIndicesOrAliases = randomIndicesOrAliases();
+        @SuppressWarnings("unchecked")
+            .build();
+        MultiTermVectorsRequest multiTermVectorsRequest = new MultiTermVectorsRequest();
+import org.opensearch.common.util.concurrent.ThreadContext;
+ */
+        internalCluster().coordOnlyNodeClient().admin().indices().stats(indicesStatsRequest).actionGet();
+        clearInterceptedActions();
+        refresh();
+        for (TransportRequest internalRequest : requests) {
+        clearInterceptedActions();
+        interceptTransportActions(segmentsAction);
+import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
+ *
+        String[] indexShardActions = new String[] { BulkAction.NAME + "[s][p]", BulkAction.NAME + "[s][r]" };
+                .findFirst()
+import org.opensearch.action.admin.indices.open.OpenIndexAction;
+ * Licensed to Elasticsearch under one or more contributor
                     }
-                }
-                requestHandler.messageReceived(request, channel, task);
-
+            bulkRequest.add(new UpdateRequest(indexOrAlias, "id").doc(Requests.INDEX_CONTENT_TYPE, "field1", "value1"));
+        internalCluster().coordOnlyNodeClient().delete(deleteRequest).actionGet();
+            String indexOrAlias = randomIndexOrAlias();
+        internalCluster().coordOnlyNodeClient().admin().indices().getSettings(getSettingsRequest).actionGet();
+    }
+import org.opensearch.action.admin.indices.alias.Alias;
+        assertSameIndices(fieldCapabilitiesRequest, fieldCapabilitiesShardAction);
+        GetSettingsRequest getSettingsRequest = new GetSettingsRequest().indices(randomIndicesOrAliases());
+import org.opensearch.action.admin.indices.mapping.put.PutMappingAction;
+    private static List<TransportRequest> consumeTransportRequests(String action) {
+ * under the License.
+        String fieldCapabilitiesShardAction = FieldCapabilitiesAction.NAME + "[index][s]";
             }
+import org.opensearch.action.admin.indices.replication.SegmentReplicationStatsAction;
+        interceptTransportActions(deleteShardActions);
+        assertSameIndices(putMappingRequest, PutMappingAction.NAME);
+        public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(
+        assertSameIndices(getRequest, getShardAction);
+        String index = randomFrom(indices);
+    }
+        String[] updateShardActions = new String[] { UpdateAction.NAME + "[s]", BulkAction.NAME + "[s][p]", BulkAction.NAME + "[s][r]" };
+            @Override
+    private static void assertSameIndices(IndicesRequest originalRequest, String... actions) {
+    }
+        for (PluginsService pluginsService : pluginsServices) {
+    }
+        internalCluster().coordOnlyNodeClient().bulk(bulkRequest).actionGet();
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
+        // update action goes to the primary, delete op gets executed locally, then replicated
+    }
+ * not use this file except in compliance with the License.
+        ensureGreen();
+            client().prepareIndex(randomIndicesOrAliases[i]).setId("id-" + i).setSource("field", "value").get();
+    public void testDelete() {
+                .interceptTransportActions(actions);
+    }
+        assertSameIndices(indexRequest, indexShardActions);
+        BulkRequest bulkRequest = new BulkRequest();
+            pluginsService.filterPlugins(InterceptingTransportService.TestPlugin.class).stream().findFirst().get().instance
+                return Collections.singletonList(instance);
+        internalCluster().coordOnlyNodeClient().admin().indices().forceMerge(mergeRequest).actionGet();
+                NamedWriteableRegistry namedWriteableRegistry,
+    }
+    }
+        // update action goes to the primary, index op gets executed locally, then replicated
+    public void testIndicesStats() {
+    private static void clearInterceptedActions() {
+}
+        );
+            // this setting disables it...
+        GetRequest getRequest = new GetRequest(randomIndexOrAlias(), "id");
+            List<TransportRequest> transportRequests = pluginsService.filterPlugins(InterceptingTransportService.TestPlugin.class)
+            indicesRequest = TransportReplicationActionTests.resolveRequest(request);
+                    assertThat(indices, hasItem(index));
+            TransportShardRefreshAction.NAME,
+        String[] indices = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)).concreteIndexNames(
+        String[] indices = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)).concreteIndexNames(
+            List<TransportRequest> requests = consumeTransportRequests(action);
+        String multiGetShardAction = MultiGetAction.NAME + "[shard][s]";
+        clearInterceptedActions();
+            if (!optional) {
+            String action,
+        SearchResponse searchResponse = internalCluster().coordOnlyNodeClient().search(searchRequest).actionGet();
+        assertSameIndices(openIndexRequest, OpenIndexAction.NAME);
+            }
+        return 1;
+        String clearCacheAction = ClearIndicesCacheAction.NAME + "[n]";
+            private final String action;
+        }
+import static org.hamcrest.Matchers.equalTo;
+        assertIndicesSubset(Arrays.asList(indices), indexShardActions);
+        internalCluster().coordOnlyNodeClient().termVectors(termVectorsRequest).actionGet();
+        assertSameIndices(segmentsRequest, segmentsAction);
+        );
+import java.util.Map;
+import org.opensearch.action.admin.indices.settings.put.UpdateSettingsAction;
+        assertSameIndices(clearIndicesCacheRequest, clearCacheAction);
+        FieldCapabilitiesRequest fieldCapabilitiesRequest = new FieldCapabilitiesRequest();
+import org.opensearch.action.get.GetAction;
+        }
+        clearInterceptedActions();
+import org.opensearch.action.admin.indices.flush.FlushRequest;
+        private class InterceptingRequestHandler<T extends TransportRequest> implements TransportRequestHandler<T> {
+        for (int i = 0; i < numIndexRequests; i++) {
+import org.opensearch.action.explain.ExplainRequest;
+        String indexOrAlias = randomIndexOrAlias();
+    private static void assertSameIndices(IndicesRequest originalRequest, boolean optional, String... actions) {
+        for (int i = 0; i < count; i++) {
+        ExplainRequest explainRequest = new ExplainRequest(randomIndexOrAlias(), "id").query(QueryBuilders.matchAllQuery());
+        assertSameIndices(deleteRequest, deleteShardActions);
+            SearchTransportService.FREE_CONTEXT_ACTION_NAME
+        internalCluster().coordOnlyNodeClient().admin().indices().analyze(analyzeRequest).actionGet();
+        UpdateResponse updateResponse = internalCluster().coordOnlyNodeClient().update(updateRequest).actionGet();
+            indices[i] = randomIndexOrAlias();
+public class IndicesRequestIT extends OpenSearchIntegTestCase {
+    public void testIndex() {
+import org.opensearch.action.admin.indices.settings.get.GetSettingsAction;
+        interceptTransportActions(mergeShardAction);
+    public void testRefresh() {
+        OpenIndexRequest openIndexRequest = new OpenIndexRequest(randomUniqueIndicesOrAliases());
+        ForceMergeRequest mergeRequest = new ForceMergeRequest(randomIndicesOrAliases());
+        interceptTransportActions(analyzeShardAction);
+    public void testValidateQuery() {
+        assertFalse(requests.isEmpty());
+        SearchRequest searchRequest = new SearchRequest(randomIndicesOrAliases).searchType(SearchType.DFS_QUERY_THEN_FETCH);
+        assertThat(searchResponse.getHits().getTotalHits().value(), greaterThan(0L));
+        String validateQueryShardAction = ValidateQueryAction.NAME + "[s]";
+        String getFieldMappingsShardAction = GetFieldMappingsAction.NAME + "[index][s]";
+        String[] bulkShardActions = new String[] { BulkAction.NAME + "[s][p]", BulkAction.NAME + "[s][r]" };
+    public void testDeleteIndex() {
+import org.opensearch.script.Script;
+        Iterable<PluginsService> pluginsServices = internalCluster().getInstances(PluginsService.class);
+        return Settings.builder()
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        // free context messages are not necessarily sent, but if they are, check their indices
+ *
+            .put(super.nodeSettings(ordinal))
+            Settings.builder().put("refresh_interval", -1)
+            assertTrue(internalRequest.getClass() == requestClass);
+    protected Settings nodeSettings(int ordinal) {
+        String[] indexShardActions = new String[] {
+import org.opensearch.action.admin.indices.open.OpenIndexRequest;
+    private static void assertNoActionInvocation(String... actions) {
+    }
+        interceptTransportActions(fieldCapabilitiesShardAction);
+        assertIndicesSubset(Arrays.asList(indices), indexShardActions);
+        Iterable<PluginsService> pluginsServices = internalCluster().getInstances(PluginsService.class);
+        }
+ * ownership. Elasticsearch licenses this file to you under
+        return indices;
+import org.opensearch.action.admin.indices.recovery.RecoveryAction;
+        String[] randomIndicesOrAliases = randomUniqueIndices();
+                InterceptingTransportService.TestPlugin.class
+        UpdateRequest updateRequest = new UpdateRequest(indexOrAlias, "id").script(
+            }
+        clearInterceptedActions();
+                            requests.put(action, requestList);
+import org.opensearch.action.admin.indices.close.CloseIndexRequest;
+        assertIndicesSubset(indices, bulkShardActions);
+                assertThat("no internal requests intercepted for action [" + action + "]", requests.size(), greaterThan(0));
+    static IndicesRequest convertRequest(TransportRequest request) {
+        if (request instanceof IndicesRequest) {
+    }
+        interceptTransportActions(termVectorShardAction);
+        clearInterceptedActions();
+        interceptTransportActions(indexShardActions);
+    public void testFlush() {
+        UpdateResponse updateResponse = internalCluster().coordOnlyNodeClient().update(updateRequest).actionGet();
+        String[] randomIndicesOrAliases = randomIndicesOrAliases();
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            TransportShardRefreshAction.NAME + "[r]",
+        interceptTransportActions(GetSettingsAction.NAME);
+            ).stream().findFirst().get().instance.requests.entrySet();
+import org.opensearch.action.admin.indices.cache.clear.ClearIndicesCacheRequest;
+import org.opensearch.action.admin.indices.mapping.put.PutMappingRequest;
+        for (PluginsService pluginsService : pluginsServices) {
+import org.opensearch.action.termvectors.TermVectorsAction;
+            String executor,
+                }
+    public void testMultiTermVector() {
+    public void testForceMerge() {
+    public void testGetFieldMappings() {
+    }
+        assertSameIndices(updateRequest, updateShardActions);
+        String indicesStats = IndicesStatsAction.NAME + "[n]";
+    }
+import org.opensearch.action.get.GetRequest;
         }
     }
-}
+        for (PluginsService pluginsService : pluginsServices) {
+        assertSameIndices(indicesStatsRequest, indicesStats);
+    }
+        synchronized void interceptTransportActions(String... actions) {
+            }
+import org.opensearch.action.admin.indices.validate.query.ValidateQueryAction;
+        for (String index : uniqueIndices) {
+ * SPDX-License-Identifier: Apache-2.0
+            actions.clear();
+ * specific language governing permissions and limitations
+        }
+    }
+            refreshRequest
+        internalCluster().coordOnlyNodeClient().fieldCaps(fieldCapabilitiesRequest).actionGet();
+import org.opensearch.action.admin.indices.stats.IndicesStatsAction;
+        // free context messages are not necessarily sent, but if they are, check their indices
+            SearchTransportService.FREE_CONTEXT_ACTION_NAME
+        DeleteRequest deleteRequest = new DeleteRequest(randomIndexOrAlias()).id("id");
+import java.util.HashMap;
+            }
+        clearInterceptedActions();
+    }
+        internalCluster().coordOnlyNodeClient().multiTermVectors(multiTermVectorsRequest).actionGet();
+        String recoveryAction = RecoveryAction.NAME + "[n]";
+        for (int i = 0; i < numDocs; i++) {
+    }
+        GetMappingsRequest getMappingsRequest = new GetMappingsRequest().indices(randomIndicesOrAliases());
+        IndicesStatsRequest indicesStatsRequest = new IndicesStatsRequest().indices(randomIndicesOrAliases());
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+    @Before
+        }
+        }
+import org.opensearch.action.admin.indices.mapping.get.GetFieldMappingsAction;
+        String indexOrAlias = randomIndexOrAlias();
+            public List<TransportInterceptor> getTransportInterceptors(
+        assertNoFailures(searchResponse);
+    public void testPutMapping() {
+            }
+            SearchTransportService.DFS_ACTION_NAME,
+        // makes sure that a reduce is always needed when searching
+        clearInterceptedActions();
+    }
+        internalCluster().coordOnlyNodeClient().admin().indices().validateQuery(validateQueryRequest).actionGet();
+        clearInterceptedActions();
+        return indices;
+        String getShardAction = GetAction.NAME + "[s]";
+            return index;
+    }
+    }
+        }
+import org.opensearch.action.get.MultiGetRequest;
+            assertThat("no internal requests intercepted for action [" + action + "]", requests.size(), greaterThan(0));
+                IndicesRequest indicesRequest = convertRequest(internalRequest);
+        }
+import org.opensearch.action.admin.indices.refresh.TransportShardRefreshAction;
+        }
+    public void testClearCache() {
+    private String[] randomUniqueIndicesOrAliases() {
+    }
+        client().prepareIndex(indexOrAlias).setId("id").setSource("field", "value").get();
+import org.opensearch.action.admin.indices.cache.clear.ClearIndicesCacheAction;
+        assertSameIndicesOptionalRequests(searchRequest, SearchTransportService.FREE_CONTEXT_ACTION_NAME);
+        }
+import org.opensearch.transport.TransportChannel;
+        ValidateQueryRequest validateQueryRequest = new ValidateQueryRequest(randomIndicesOrAliases());
+import java.util.Set;
+/*
+import org.opensearch.action.bulk.BulkRequest;
+    private static void interceptTransportActions(String... actions) {

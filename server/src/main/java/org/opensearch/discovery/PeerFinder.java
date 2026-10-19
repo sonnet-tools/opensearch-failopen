@@ -1,529 +1,451 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.discovery;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.cluster.coordination.PeersResponse;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.SetOnce;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.AbstractRunnable;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.threadpool.ThreadPool.Names;
-import org.opensearch.transport.TransportException;
-import org.opensearch.transport.TransportRequestOptions;
-import org.opensearch.transport.TransportResponseHandler;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
-
-import static java.util.Collections.emptyList;
-
-/**
- * finds peers
- *
- * @opensearch.internal
- */
-public abstract class PeerFinder {
-
-    private static final Logger logger = LogManager.getLogger(PeerFinder.class);
-
-    public static final String REQUEST_PEERS_ACTION_NAME = "internal:discovery/request_peers";
-
-    // the time between attempts to find all peers
-    public static final Setting<TimeValue> DISCOVERY_FIND_PEERS_INTERVAL_SETTING = Setting.timeSetting(
-        "discovery.find_peers_interval",
-        TimeValue.timeValueMillis(1000),
-        TimeValue.timeValueMillis(1),
-        Setting.Property.NodeScope
-    );
-
-    // the time between attempts to find all peers when node is in decommissioned state, default set to 2 minutes
-    public static final Setting<TimeValue> DISCOVERY_FIND_PEERS_INTERVAL_DURING_DECOMMISSION_SETTING = Setting.timeSetting(
-        "discovery.find_peers_interval_during_decommission",
-        TimeValue.timeValueSeconds(120L),
-        TimeValue.timeValueMillis(1000),
-        Setting.Property.NodeScope
-    );
-
-    public static final Setting<TimeValue> DISCOVERY_REQUEST_PEERS_TIMEOUT_SETTING = Setting.timeSetting(
-        "discovery.request_peers_timeout",
-        TimeValue.timeValueMillis(3000),
-        TimeValue.timeValueMillis(1),
-        Setting.Property.NodeScope
-    );
-
-    private final Settings settings;
-    private TimeValue findPeersInterval;
-    private final TimeValue requestPeersTimeout;
-
-    private final Object mutex = new Object();
-    private final TransportService transportService;
-    private final TransportAddressConnector transportAddressConnector;
-    private final ConfiguredHostsResolver configuredHostsResolver;
-
-    private volatile long currentTerm;
-    private boolean active;
-    private DiscoveryNodes lastAcceptedNodes;
-    private final Map<TransportAddress, Peer> peersByAddress = new LinkedHashMap<>();
-    private Optional<DiscoveryNode> leader = Optional.empty();
-    private volatile List<TransportAddress> lastResolvedAddresses = emptyList();
-
-    public PeerFinder(
-        Settings settings,
-        TransportService transportService,
-        TransportAddressConnector transportAddressConnector,
-        ConfiguredHostsResolver configuredHostsResolver
-    ) {
-        this.settings = settings;
-        findPeersInterval = DISCOVERY_FIND_PEERS_INTERVAL_SETTING.get(settings);
-        requestPeersTimeout = DISCOVERY_REQUEST_PEERS_TIMEOUT_SETTING.get(settings);
-        this.transportService = transportService;
-        this.transportAddressConnector = transportAddressConnector;
-        this.configuredHostsResolver = configuredHostsResolver;
-
-        transportService.registerRequestHandler(
-            REQUEST_PEERS_ACTION_NAME,
-            Names.GENERIC,
-            false,
-            false,
-            PeersRequest::new,
-            (request, channel, task) -> channel.sendResponse(handlePeersRequest(request))
-        );
-    }
-
-    public synchronized void onNodeCommissionStatusChange(boolean localNodeCommissioned) {
-        findPeersInterval = localNodeCommissioned
-            ? DISCOVERY_FIND_PEERS_INTERVAL_SETTING.get(settings)
-            : DISCOVERY_FIND_PEERS_INTERVAL_DURING_DECOMMISSION_SETTING.get(settings);
-        logger.info(
-            "setting findPeersInterval to [{}] as node commission status = [{}] for local node [{}]",
-            findPeersInterval,
-            localNodeCommissioned,
-            transportService.getLocalNode()
-        );
-    }
-
-    // package private for tests
-    TimeValue getFindPeersInterval() {
-        return findPeersInterval;
-    }
-
-    public void activate(final DiscoveryNodes lastAcceptedNodes) {
-        logger.trace("activating with {}", lastAcceptedNodes);
-
-        synchronized (mutex) {
-            assert assertInactiveWithNoKnownPeers();
-            active = true;
-            this.lastAcceptedNodes = lastAcceptedNodes;
-            leader = Optional.empty();
-            handleWakeUp(); // return value discarded: there are no known peers, so none can be disconnected
-        }
-
-        onFoundPeersUpdated(); // trigger a check for a quorum already
-    }
-
-    public void deactivate(DiscoveryNode leader) {
-        final boolean peersRemoved;
-        synchronized (mutex) {
-            logger.trace("deactivating and setting leader to {}", leader);
-            active = false;
-            peersRemoved = handleWakeUp();
-            this.leader = Optional.of(leader);
-            assert assertInactiveWithNoKnownPeers();
-        }
-        if (peersRemoved) {
-            onFoundPeersUpdated();
-        }
-    }
-
-    // exposed to subclasses for testing
-    protected final boolean holdsLock() {
-        return Thread.holdsLock(mutex);
-    }
-
-    private boolean assertInactiveWithNoKnownPeers() {
-        assert holdsLock() : "PeerFinder mutex not held";
-        assert active == false;
-        assert peersByAddress.isEmpty() : peersByAddress.keySet();
-        return true;
-    }
-
-    PeersResponse handlePeersRequest(PeersRequest peersRequest) {
-        synchronized (mutex) {
-            assert peersRequest.getSourceNode().equals(getLocalNode()) == false;
-            final List<DiscoveryNode> knownPeers;
-            if (active) {
-                assert leader.isPresent() == false : leader;
-                if (peersRequest.getSourceNode().isClusterManagerNode()) {
-                    startProbe(peersRequest.getSourceNode().getAddress());
+        return currentTerm;
+                        requestPeers();
+            final DiscoveryNode discoveryNode = getDiscoveryNode();
+                @Override
                 }
-                peersRequest.getKnownPeers().stream().map(DiscoveryNode::getAddress).forEach(this::startProbe);
-                knownPeers = getFoundPeersUnderLock();
-            } else {
-                assert leader.isPresent() || lastAcceptedNodes == null;
-                knownPeers = emptyList();
-            }
-            return new PeersResponse(leader, knownPeers, currentTerm);
+            startProbe(discoveryNodeObjectCursor.getAddress());
+                }
+                public PeersResponse read(StreamInput in) throws IOException {
+    public static final Setting<TimeValue> DISCOVERY_REQUEST_PEERS_TIMEOUT_SETTING = Setting.timeSetting(
+    public interface TransportAddressConnector {
+            final List<DiscoveryNode> knownPeers;
         }
+                    startProbe(peersRequest.getSourceNode().getAddress());
+    /**
+        if (active == false) {
+    /**
+        });
+ * @opensearch.internal
+ *
+    public void deactivate(DiscoveryNode leader) {
+    public synchronized void onNodeCommissionStatusChange(boolean localNodeCommissioned) {
+    private boolean handleWakeUp() {
+                    if (handleWakeUp() == false) {
+    public long getCurrentTerm() {
+                assert false : e;
+        TimeValue.timeValueMillis(3000),
+            assert assertInactiveWithNoKnownPeers();
+                    peersRequestInFlight = false;
+        final boolean peersRemoved = peersByAddress.values().removeIf(Peer::handleWakeUp);
+public abstract class PeerFinder {
+            assert holdsLock() : "PeerFinder mutex not held";
+        TimeValue.timeValueSeconds(120L),
+                public void onResponse(DiscoveryNode remoteNode) {
     }
-
-    // exposed for checking invariant in o.e.c.c.Coordinator (public since this is a different package)
-    public Optional<DiscoveryNode> getLeader() {
+                logger.trace("{} not requesting peers from local node", this);
+    private final ConfiguredHostsResolver configuredHostsResolver;
+import org.opensearch.common.settings.Setting;
+            Names.GENERIC,
+            return discoveryNode.get();
+ */
+                return;
+            logger.trace("deactivating and setting leader to {}", leader);
+        TimeValue.timeValueMillis(1000),
+    public static final Setting<TimeValue> DISCOVERY_FIND_PEERS_INTERVAL_SETTING = Setting.timeSetting(
+                    synchronized (mutex) {
+                }
+        private volatile boolean peersRequestInFlight;
+        private final TransportAddress transportAddress;
+                return true;
+ * ownership. Elasticsearch licenses this file to you under
+import java.util.List;
+        assert active == false;
         synchronized (mutex) {
+ * SPDX-License-Identifier: Apache-2.0
+            localNodeCommissioned,
+    PeersResponse handlePeersRequest(PeersRequest peersRequest) {
+import org.opensearch.cluster.node.DiscoveryNode;
+/*
+        );
+        transportService.registerRequestHandler(
+                logger.debug("unexpected exception in wakeup", e);
+            final List<DiscoveryNode> knownNodes = getFoundPeersUnderLock();
+        Setting.Property.NodeScope
+ *
+    }
+                    synchronized (mutex) {
+ * KIND, either express or implied.  See the License for the
+            logger.trace("{} attempting connection", this);
+        return peersRemoved;
+    TimeValue getFindPeersInterval() {
+            protected void doRun() {
+            findPeersInterval,
+        "discovery.find_peers_interval_during_decommission",
+                peersResponseHandler
+        synchronized (mutex) {
+                public void onFailure(Exception e) {
+            transportService.sendRequest(
+                + ", peersRequestInFlight="
+            logger.trace("startProbe({}) not running", transportAddress);
+                }
+        DiscoveryNode getDiscoveryNode() {
             return leader;
         }
-    }
-
-    // exposed for checking invariant in o.e.c.c.Coordinator (public since this is a different package)
-    public long getCurrentTerm() {
-        return currentTerm;
-    }
-
-    public void setCurrentTerm(long currentTerm) {
-        this.currentTerm = currentTerm;
-    }
-
-    private DiscoveryNode getLocalNode() {
-        final DiscoveryNode localNode = transportService.getLocalNode();
-        assert localNode != null;
-        return localNode;
-    }
-
-    /**
-     * Invoked on receipt of a PeersResponse from a node that believes it's an active leader, which this node should therefore try and join.
-     * Note that invocations of this method are not synchronised. By the time it is called we may have been deactivated.
+            .filter(Objects::nonNull)
      */
-    protected abstract void onActiveClusterManagerFound(DiscoveryNode clusterManagerNode, long term);
-
+        public String toString() {
     /**
-     * Invoked when the set of found peers changes. Note that invocations of this method are not fully synchronised, so we only guarantee
-     * that the change to the set of found peers happens before this method is invoked. If there are multiple concurrent changes then there
-     * will be multiple concurrent invocations of this method, with no guarantee as to their order. For this reason we do not pass the
-     * updated set of peers as an argument to this method, leaving it to the implementation to call getFoundPeers() with appropriate
-     * synchronisation to avoid lost updates. Also, by the time this method is invoked we may have been deactivated.
-     */
-    protected abstract void onFoundPeersUpdated();
-
-    public List<TransportAddress> getLastResolvedAddresses() {
-        return lastResolvedAddresses;
-    }
-
-    /**
-     * Transport address connector interface.
-     *
-     * @opensearch.internal
-     */
-    public interface TransportAddressConnector {
-        /**
-         * Identify the node at the given address and, if it is a cluster-manager node and not the local node then establish a full connection to it.
-         */
-        void connectToRemoteMasterNode(TransportAddress transportAddress, ActionListener<DiscoveryNode> listener);
-    }
-
-    /**
-     * Resolves the configured unicast host.
-     *
-     * @opensearch.internal
-     */
-    public interface ConfiguredHostsResolver {
-        /**
-         * Attempt to resolve the configured unicast hosts list to a list of transport addresses.
-         *
          * @param consumer Consumer for the resolved list. May not be called if an error occurs or if another resolution attempt is in
-         *                 progress.
+        this.currentTerm = currentTerm;
+            }
+    }
+            return getFoundPeersUnderLock();
+                        onActiveClusterManagerFound(discoveryNode, response.getTerm());
+        if (active == false) {
+    }
+ * The OpenSearch Contributors require contributions made to
+                public String executor() {
+import org.opensearch.common.unit.TimeValue;
+ *
+            REQUEST_PEERS_ACTION_NAME,
+            synchronized (mutex) {
+            }
+import org.opensearch.transport.TransportResponseHandler;
+            assert active;
+                    logger.trace("{} received {}", Peer.this, response);
+import java.util.function.Consumer;
+        TimeValue.timeValueMillis(1),
+        }
+                        if (active == false) {
+                }
          */
+ * specific language governing permissions and limitations
+    }
+                + ", discoveryNode="
+/*
+            handleWakeUp(); // return value discarded: there are no known peers, so none can be disconnected
+            assert peersRequestInFlight == false : "PeersRequest already in flight";
+    private boolean assertInactiveWithNoKnownPeers() {
+ * compatible open source license.
+    }
+        @Nullable
+        Setting.Property.NodeScope
+    public static final String REQUEST_PEERS_ACTION_NAME = "internal:discovery/request_peers";
+            return;
+                    }
+import java.util.stream.Collectors;
+        }
+            return new PeersResponse(leader, knownPeers, currentTerm);
+            }
+    public List<TransportAddress> getLastResolvedAddresses() {
+            assert discoveryNode != null : "cannot request peers without first connecting";
+                @Override
+    /**
+    public Iterable<DiscoveryNode> getFoundPeers() {
+            peersRequestInFlight = true;
+                    }
+        if (transportAddress.equals(getLocalNode().getAddress())) {
+                knownPeers = emptyList();
+    private final TransportService transportService;
+                } else {
+import org.apache.logging.log4j.LogManager;
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.transport.TransportService;
+                            return;
+    protected void startProbe(TransportAddress transportAddress) {
+     * @opensearch.internal
+            .distinct()
+                        peersRequestInFlight = false;
+    private final Settings settings;
+                knownPeers = getFoundPeersUnderLock();
+ * Licensed to Elasticsearch under one or more contributor
+    protected final boolean holdsLock() {
+    private Peer createConnectingPeer(TransportAddress transportAddress) {
+    private Optional<DiscoveryNode> leader = Optional.empty();
+                    synchronized (mutex) {
+    // package private for tests
+    public void activate(final DiscoveryNodes lastAcceptedNodes) {
+                public void handleException(TransportException exp) {
+            transportService.getLocalNode()
+            this.leader = Optional.of(leader);
+    );
+        void connectToRemoteMasterNode(TransportAddress transportAddress, ActionListener<DiscoveryNode> listener);
+ * the Apache License, Version 2.0 (the "License"); you may
+        return peer;
+    private volatile long currentTerm;
+     */
+            : DISCOVERY_FIND_PEERS_INTERVAL_DURING_DECOMMISSION_SETTING.get(settings);
+                if (transportService.nodeConnected(discoveryNode)) {
+    public PeerFinder(
+            return "Peer{"
+        this.configuredHostsResolver = configuredHostsResolver;
+         * Attempt to resolve the configured unicast hosts list to a list of transport addresses.
+            // may be null if connection not yet established
+            active = true;
+        configuredHostsResolver.resolveConfiguredHosts(providedAddresses -> {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                        peersByAddress.remove(transportAddress, Peer.this);
+            @Override
+                    }
+        private SetOnce<DiscoveryNode> discoveryNode = new SetOnce<>();
+            }
+ * this work for additional information regarding copyright
+            @Override
+        "discovery.find_peers_interval",
+            assert assertInactiveWithNoKnownPeers();
+            ? DISCOVERY_FIND_PEERS_INTERVAL_SETTING.get(settings)
+        synchronized (mutex) {
+        });
+    );
+                new PeersRequest(getLocalNode(), knownNodes),
+                    }
+        }
+            peersRemoved = handleWakeUp();
+     * updated set of peers as an argument to this method, leaving it to the implementation to call getFoundPeers() with appropriate
+        this.transportAddressConnector = transportAddressConnector;
+        }
+                }
+    private volatile List<TransportAddress> lastResolvedAddresses = emptyList();
+            .stream()
+                    return true;
+        }
+            assert active;
+            assert holdsLock() : "PeerFinder mutex not held";
+                        if (active == false) {
+            final DiscoveryNode discoveryNode = getDiscoveryNode();
+                    logger.debug(() -> new ParameterizedMessage("{} connection failed", Peer.this), e);
+            @Override
+                    return new PeersResponse(in);
+import org.opensearch.threadpool.ThreadPool.Names;
+     */
+                TransportRequestOptions.builder().withTimeout(requestPeersTimeout).build(),
+import org.opensearch.common.util.concurrent.AbstractRunnable;
+        }
+    ) {
+                    logger.trace("{} no longer connected", this);
+            return false;
+     * Transport address connector interface.
+            PeersRequest::new,
+    // exposed for checking invariant in o.e.c.c.Coordinator (public since this is a different package)
+    }
+        peer.establishConnection();
+        "discovery.request_peers_timeout",
+import org.apache.logging.log4j.message.ParameterizedMessage;
+        synchronized (mutex) {
+     *
+            }
+     * @return whether any peers were removed due to disconnection
+            .map(Peer::getDiscoveryNode)
+    public Optional<DiscoveryNode> getLeader() {
+    }
+        for (final DiscoveryNode discoveryNodeObjectCursor : lastAcceptedNodes.getClusterManagerNodes().values()) {
+            false,
+ *
+ * You may obtain a copy of the License at
+        Setting.Property.NodeScope
+    }
+                @Override
+            }
+            public boolean isForceExecution() {
+        return Thread.holdsLock(mutex);
+    );
+            public String toString() {
+    }
+        this.transportService = transportService;
+import java.util.LinkedHashMap;
+     * @opensearch.internal
+    private TimeValue findPeersInterval;
+import org.opensearch.common.Nullable;
+        return peersByAddress.values()
+                    onFoundPeersUpdated();
+                    if (response.getClusterManagerNode().equals(Optional.of(discoveryNode))) {
+    protected abstract void onFoundPeersUpdated();
+            assert getDiscoveryNode() == null : "unexpectedly connected to " + getDiscoveryNode();
+        ConfiguredHostsResolver configuredHostsResolver
+        assert holdsLock() : "PeerFinder mutex not held";
+            } else {
+     * synchronisation to avoid lost updates. Also, by the time this method is invoked we may have been deactivated.
+                    }
+    /**
+                @Override
+                    }
+ * not use this file except in compliance with the License.
+            leader = Optional.empty();
+        );
+        assert peersByAddress.isEmpty() : peersByAddress.keySet();
+            (request, channel, task) -> channel.sendResponse(handlePeersRequest(request))
+        }
+    }
+        findPeersInterval = DISCOVERY_FIND_PEERS_INTERVAL_SETTING.get(settings);
+                    assert remoteNode.equals(getLocalNode()) == false : remoteNode + " is the local node";
+            return;
+            }
+    }
+        }
+        @Override
+                }
+                    return Names.GENERIC;
+                + peersRequestInFlight
+            return peersRemoved;
+import java.util.Optional;
+            onFoundPeersUpdated();
+    }
+ */
+        return localNode;
+ * Modifications Copyright OpenSearch Contributors. See
+            }
+                onFoundPeersUpdated();
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            active = false;
+                assert leader.isPresent() == false : leader;
+                    assert holdsLock() == false : "PeerFinder mutex is held in error";
+        return findPeersInterval;
+                + "transportAddress="
+     * Resolves the configured unicast host.
+    }
+            });
+            @Override
+                }
+        this.settings = settings;
+    public static final Setting<TimeValue> DISCOVERY_FIND_PEERS_INTERVAL_DURING_DECOMMISSION_SETTING = Setting.timeSetting(
+                }
+                synchronized (mutex) {
+    }
+    private final TimeValue requestPeersTimeout;
+import org.opensearch.common.settings.Settings;
+        return lastResolvedAddresses;
+        }
+        return true;
+            assert holdsLock() : "PeerFinder mutex not held";
+        }
+/**
+    // exposed for checking invariant in o.e.c.c.Coordinator (public since this is a different package)
+    protected abstract void onActiveClusterManagerFound(DiscoveryNode clusterManagerNode, long term);
+}
+            final TransportResponseHandler<PeersResponse> peersResponseHandler = new TransportResponseHandler<PeersResponse>() {
+import org.opensearch.core.common.io.stream.StreamInput;
+    private DiscoveryNodes lastAcceptedNodes;
+            if (active) {
+        assert holdsLock() : "PeerFinder mutex not held";
+        final boolean peersRemoved;
+        synchronized (mutex) {
+        }
+            };
+import java.util.Map;
+    // the time between attempts to find all peers
+        void establishConnection() {
+                + transportAddress
+     */
+                        }
+            );
+        final DiscoveryNode localNode = transportService.getLocalNode();
+                    assert remoteNode.isClusterManagerNode() : remoteNode + " is not cluster-manager-eligible";
+        }
+import org.opensearch.cluster.coordination.PeersResponse;
+                            return;
+import org.opensearch.core.action.ActionListener;
+                    logger.debug(new ParameterizedMessage("{} peers request failed", Peer.this), exp);
+            .collect(Collectors.toList());
+        logger.info(
+    private static final Logger logger = LogManager.getLogger(PeerFinder.class);
+                + discoveryNode.get()
+    }
+            assert peersRequest.getSourceNode().equals(getLocalNode()) == false;
+        /**
+    // the time between attempts to find all peers when node is in decommissioned state, default set to 2 minutes
+                return "PeerFinder handling wakeup";
+     * Note that invocations of this method are not synchronised. By the time it is called we may have been deactivated.
+        findPeersInterval = localNodeCommissioned
+            if (active == false) {
+ * software distributed under the License is distributed on an
+            this.transportAddress = transportAddress;
+        logger.trace("activating with {}", lastAcceptedNodes);
+                public void handleResponse(PeersResponse response) {
+import static java.util.Collections.emptyList;
+     * will be multiple concurrent invocations of this method, with no guarantee as to their order. For this reason we do not pass the
+            if (discoveryNode != null) {
+            logger.trace("startProbe({}) not probing local node", transportAddress);
+        TimeValue.timeValueMillis(1),
+        Settings settings,
+        boolean handleWakeUp() {
+     * Invoked when the set of found peers changes. Note that invocations of this method are not fully synchronised, so we only guarantee
+                        // Must not hold lock here to avoid deadlock
+ * license agreements. See the NOTICE file distributed with
+     * Invoked on receipt of a PeersResponse from a node that believes it's an active leader, which this node should therefore try and join.
+            false,
+    private DiscoveryNode getLocalNode() {
+import org.opensearch.cluster.node.DiscoveryNodes;
+        }
+        /**
+        private void requestPeers() {
+        TransportService transportService,
+        TransportAddressConnector transportAddressConnector,
+            logger.trace("{} requesting peers", this);
+    public interface ConfiguredHostsResolver {
+            if (discoveryNode.equals(getLocalNode())) {
+            "setting findPeersInterval to [{}] as node commission status = [{}] for local node [{}]",
+                return true;
+        onFoundPeersUpdated(); // trigger a check for a quorum already
+            public void onFailure(Exception e) {
+    private final TransportAddressConnector transportAddressConnector;
+                        }
+        Peer peer = new Peer(transportAddress);
+            }
+import org.opensearch.core.common.transport.TransportAddress;
+                        requestPeers();
+        peersByAddress.computeIfAbsent(transportAddress, this::createConnectingPeer);
+    private boolean active;
+        assert holdsLock() : "PeerFinder mutex not held";
+        logger.trace("probing cluster-manager nodes from cluster state: {}", lastAcceptedNodes);
+        TimeValue.timeValueMillis(1000),
+        assert localNode != null;
+                assert leader.isPresent() || lastAcceptedNodes == null;
+    private class Peer {
+                        discoveryNode.set(remoteNode);
+                logger.trace("probing resolved transport addresses {}", providedAddresses);
+    }
+         *                 progress.
+import org.opensearch.transport.TransportRequestOptions;
+ * Unless required by applicable law or agreed to in writing,
+                        response.getKnownPeers().stream().map(DiscoveryNode::getAddress).forEach(PeerFinder.this::startProbe);
+                @Override
+        if (peersRemoved) {
+                REQUEST_PEERS_ACTION_NAME,
+    }
+            this.lastAcceptedNodes = lastAcceptedNodes;
+import org.opensearch.transport.TransportException;
+                        assert discoveryNode.get() == null : "discoveryNode unexpectedly already set to " + discoveryNode.get();
+            logger.trace("not active");
+                        return;
+    // exposed to subclasses for testing
         void resolveConfiguredHosts(Consumer<List<TransportAddress>> consumer);
     }
-
-    public Iterable<DiscoveryNode> getFoundPeers() {
-        synchronized (mutex) {
-            return getFoundPeersUnderLock();
-        }
-    }
-
-    private List<DiscoveryNode> getFoundPeersUnderLock() {
-        assert holdsLock() : "PeerFinder mutex not held";
-        return peersByAddress.values()
-            .stream()
-            .map(Peer::getDiscoveryNode)
-            .filter(Objects::nonNull)
-            .distinct()
-            .collect(Collectors.toList());
-    }
-
-    private Peer createConnectingPeer(TransportAddress transportAddress) {
-        Peer peer = new Peer(transportAddress);
-        peer.establishConnection();
-        return peer;
-    }
-
-    /**
-     * @return whether any peers were removed due to disconnection
-     */
-    private boolean handleWakeUp() {
-        assert holdsLock() : "PeerFinder mutex not held";
-
-        final boolean peersRemoved = peersByAddress.values().removeIf(Peer::handleWakeUp);
-
-        if (active == false) {
-            logger.trace("not active");
-            return peersRemoved;
-        }
-
-        logger.trace("probing cluster-manager nodes from cluster state: {}", lastAcceptedNodes);
-        for (final DiscoveryNode discoveryNodeObjectCursor : lastAcceptedNodes.getClusterManagerNodes().values()) {
-            startProbe(discoveryNodeObjectCursor.getAddress());
-        }
-
-        configuredHostsResolver.resolveConfiguredHosts(providedAddresses -> {
-            synchronized (mutex) {
-                lastResolvedAddresses = providedAddresses;
-                logger.trace("probing resolved transport addresses {}", providedAddresses);
-                providedAddresses.forEach(this::startProbe);
-            }
-        });
-
-        transportService.getThreadPool().scheduleUnlessShuttingDown(findPeersInterval, Names.GENERIC, new AbstractRunnable() {
-            @Override
-            public boolean isForceExecution() {
-                return true;
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                assert false : e;
-                logger.debug("unexpected exception in wakeup", e);
-            }
-
-            @Override
-            protected void doRun() {
-                synchronized (mutex) {
-                    if (handleWakeUp() == false) {
-                        return;
-                    }
-                }
-                onFoundPeersUpdated();
-            }
-
-            @Override
-            public String toString() {
-                return "PeerFinder handling wakeup";
-            }
-        });
-
-        return peersRemoved;
-    }
-
-    protected void startProbe(TransportAddress transportAddress) {
-        assert holdsLock() : "PeerFinder mutex not held";
-        if (active == false) {
-            logger.trace("startProbe({}) not running", transportAddress);
-            return;
-        }
-
-        if (transportAddress.equals(getLocalNode().getAddress())) {
-            logger.trace("startProbe({}) not probing local node", transportAddress);
-            return;
-        }
-
-        peersByAddress.computeIfAbsent(transportAddress, this::createConnectingPeer);
-    }
-
-    private class Peer {
-        private final TransportAddress transportAddress;
-        private SetOnce<DiscoveryNode> discoveryNode = new SetOnce<>();
-        private volatile boolean peersRequestInFlight;
-
-        Peer(TransportAddress transportAddress) {
-            this.transportAddress = transportAddress;
-        }
-
-        @Nullable
-        DiscoveryNode getDiscoveryNode() {
-            return discoveryNode.get();
-        }
-
-        boolean handleWakeUp() {
-            assert holdsLock() : "PeerFinder mutex not held";
-
-            if (active == false) {
-                return true;
-            }
-
-            final DiscoveryNode discoveryNode = getDiscoveryNode();
-            // may be null if connection not yet established
-
-            if (discoveryNode != null) {
-                if (transportService.nodeConnected(discoveryNode)) {
-                    if (peersRequestInFlight == false) {
-                        requestPeers();
-                    }
-                } else {
-                    logger.trace("{} no longer connected", this);
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        void establishConnection() {
-            assert holdsLock() : "PeerFinder mutex not held";
-            assert getDiscoveryNode() == null : "unexpectedly connected to " + getDiscoveryNode();
-            assert active;
-
-            logger.trace("{} attempting connection", this);
-            transportAddressConnector.connectToRemoteMasterNode(transportAddress, new ActionListener<DiscoveryNode>() {
-                @Override
-                public void onResponse(DiscoveryNode remoteNode) {
-                    assert remoteNode.isClusterManagerNode() : remoteNode + " is not cluster-manager-eligible";
-                    assert remoteNode.equals(getLocalNode()) == false : remoteNode + " is the local node";
-                    synchronized (mutex) {
-                        if (active == false) {
-                            return;
-                        }
-
-                        assert discoveryNode.get() == null : "discoveryNode unexpectedly already set to " + discoveryNode.get();
-                        discoveryNode.set(remoteNode);
-                        requestPeers();
-                    }
-
-                    assert holdsLock() == false : "PeerFinder mutex is held in error";
-                    onFoundPeersUpdated();
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    logger.debug(() -> new ParameterizedMessage("{} connection failed", Peer.this), e);
-                    synchronized (mutex) {
-                        peersByAddress.remove(transportAddress, Peer.this);
-                    }
-                }
-            });
-        }
-
-        private void requestPeers() {
-            assert holdsLock() : "PeerFinder mutex not held";
-            assert peersRequestInFlight == false : "PeersRequest already in flight";
-            assert active;
-
-            final DiscoveryNode discoveryNode = getDiscoveryNode();
-            assert discoveryNode != null : "cannot request peers without first connecting";
-
-            if (discoveryNode.equals(getLocalNode())) {
-                logger.trace("{} not requesting peers from local node", this);
-                return;
-            }
-
-            logger.trace("{} requesting peers", this);
-            peersRequestInFlight = true;
-
-            final List<DiscoveryNode> knownNodes = getFoundPeersUnderLock();
-
-            final TransportResponseHandler<PeersResponse> peersResponseHandler = new TransportResponseHandler<PeersResponse>() {
-
-                @Override
-                public PeersResponse read(StreamInput in) throws IOException {
-                    return new PeersResponse(in);
-                }
-
-                @Override
-                public void handleResponse(PeersResponse response) {
-                    logger.trace("{} received {}", Peer.this, response);
-                    synchronized (mutex) {
-                        if (active == false) {
-                            return;
-                        }
-
-                        peersRequestInFlight = false;
-
-                        response.getClusterManagerNode().map(DiscoveryNode::getAddress).ifPresent(PeerFinder.this::startProbe);
-                        response.getKnownPeers().stream().map(DiscoveryNode::getAddress).forEach(PeerFinder.this::startProbe);
-                    }
-
-                    if (response.getClusterManagerNode().equals(Optional.of(discoveryNode))) {
-                        // Must not hold lock here to avoid deadlock
                         assert holdsLock() == false : "PeerFinder mutex is held in error";
-                        onActiveClusterManagerFound(discoveryNode, response.getTerm());
-                    }
-                }
-
-                @Override
-                public void handleException(TransportException exp) {
-                    peersRequestInFlight = false;
-                    logger.debug(new ParameterizedMessage("{} peers request failed", Peer.this), exp);
-                }
-
-                @Override
-                public String executor() {
-                    return Names.GENERIC;
-                }
-            };
-            transportService.sendRequest(
+     * that the change to the set of found peers happens before this method is invoked. If there are multiple concurrent changes then there
+/*
+        }
+import java.util.Objects;
+import org.opensearch.common.SetOnce;
+                if (peersRequest.getSourceNode().isClusterManagerNode()) {
+        Peer(TransportAddress transportAddress) {
+        assert holdsLock() : "PeerFinder mutex not held";
+         *
+ */
+                peersRequest.getKnownPeers().stream().map(DiscoveryNode::getAddress).forEach(this::startProbe);
+                        response.getClusterManagerNode().map(DiscoveryNode::getAddress).ifPresent(PeerFinder.this::startProbe);
+            transportAddressConnector.connectToRemoteMasterNode(transportAddress, new ActionListener<DiscoveryNode>() {
                 discoveryNode,
-                REQUEST_PEERS_ACTION_NAME,
-                new PeersRequest(getLocalNode(), knownNodes),
-                TransportRequestOptions.builder().withTimeout(requestPeersTimeout).build(),
-                peersResponseHandler
-            );
-        }
-
-        @Override
-        public String toString() {
-            return "Peer{"
-                + "transportAddress="
-                + transportAddress
-                + ", discoveryNode="
-                + discoveryNode.get()
-                + ", peersRequestInFlight="
-                + peersRequestInFlight
-                + '}';
-        }
+    private final Object mutex = new Object();
+    private List<DiscoveryNode> getFoundPeersUnderLock() {
+         */
+         * Identify the node at the given address and, if it is a cluster-manager node and not the local node then establish a full connection to it.
+                    if (peersRequestInFlight == false) {
     }
-}
+                @Override
+                lastResolvedAddresses = providedAddresses;
+                + '}';
+ * finds peers
+    private final Map<TransportAddress, Peer> peersByAddress = new LinkedHashMap<>();
+     *
+package org.opensearch.discovery;
+    public void setCurrentTerm(long currentTerm) {
+    }
+        transportService.getThreadPool().scheduleUnlessShuttingDown(findPeersInterval, Names.GENERIC, new AbstractRunnable() {
+import org.apache.logging.log4j.Logger;
+     */
+                providedAddresses.forEach(this::startProbe);
+import java.io.IOException;
+ * GitHub history for details.
+        requestPeersTimeout = DISCOVERY_REQUEST_PEERS_TIMEOUT_SETTING.get(settings);
+ * under the License.
+ */

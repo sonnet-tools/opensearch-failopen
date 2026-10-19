@@ -1,271 +1,239 @@
+    public void addMaxIndexSizeCondition(ByteSizeValue size) {
 /*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
+        this.conditions.put(maxSizeCondition.name, maxSizeCondition);
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.indices.rollover;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.IndicesRequest;
-import org.opensearch.action.admin.indices.create.CreateIndexRequest;
-import org.opensearch.action.support.ActiveShardCount;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.mapper.MapperService;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-
-import static org.opensearch.action.ValidateActions.addValidationError;
-
-/**
- * Request class to swap index under an alias or increment data stream generation upon satisfying conditions
- * <p>
- * Note: there is a new class with the same name for the Java HLRC that uses a typeless format.
- * Any changes done to this class should also go to that client class.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class RolloverRequest extends AcknowledgedRequest<RolloverRequest> implements IndicesRequest {
-
-    private static final ObjectParser<RolloverRequest, Void> PARSER = new ObjectParser<>("rollover");
-    private static final ObjectParser<Map<String, Condition<?>>, Void> CONDITION_PARSER = new ObjectParser<>("conditions");
-
-    private static final ParseField CONDITIONS = new ParseField("conditions");
-    private static final ParseField MAX_AGE_CONDITION = new ParseField(MaxAgeCondition.NAME);
-    private static final ParseField MAX_DOCS_CONDITION = new ParseField(MaxDocsCondition.NAME);
-    private static final ParseField MAX_SIZE_CONDITION = new ParseField(MaxSizeCondition.NAME);
-
-    static {
-        CONDITION_PARSER.declareString(
-            (conditions, s) -> conditions.put(MaxAgeCondition.NAME, new MaxAgeCondition(TimeValue.parseTimeValue(s, MaxAgeCondition.NAME))),
-            MAX_AGE_CONDITION
-        );
-        CONDITION_PARSER.declareLong(
-            (conditions, value) -> conditions.put(MaxDocsCondition.NAME, new MaxDocsCondition(value)),
-            MAX_DOCS_CONDITION
-        );
-        CONDITION_PARSER.declareString(
-            (conditions, s) -> conditions.put(
-                MaxSizeCondition.NAME,
-                new MaxSizeCondition(ByteSizeValue.parseBytesSizeValue(s, MaxSizeCondition.NAME))
-            ),
-            MAX_SIZE_CONDITION
-        );
-
-        PARSER.declareField(
-            (parser, request, context) -> CONDITION_PARSER.parse(parser, request.conditions, null),
-            CONDITIONS,
-            ObjectParser.ValueType.OBJECT
-        );
-        PARSER.declareField(
-            (parser, request, context) -> request.createIndexRequest.settings(parser.map()),
-            CreateIndexRequest.SETTINGS,
-            ObjectParser.ValueType.OBJECT
-        );
-        PARSER.declareField((parser, request, context) -> {
-            // a type is not included, add a dummy _doc type
-            Map<String, Object> mappings = parser.map();
-            if (MapperService.isMappingSourceTyped(MapperService.SINGLE_MAPPING_NAME, mappings)) {
-                throw new IllegalArgumentException("The mapping definition cannot be nested under a type");
-            }
-            request.createIndexRequest.mapping(mappings);
-        }, CreateIndexRequest.MAPPINGS, ObjectParser.ValueType.OBJECT);
-        PARSER.declareField(
-            (parser, request, context) -> request.createIndexRequest.aliases(parser.map()),
-            CreateIndexRequest.ALIASES,
-            ObjectParser.ValueType.OBJECT
-        );
-    }
-
-    private String rolloverTarget;
-    private String newIndexName;
-    private boolean dryRun;
-    private final Map<String, Condition<?>> conditions = new HashMap<>(2);
-    // the index name "_na_" is never read back, what matters are settings, mappings and aliases
-    private CreateIndexRequest createIndexRequest = new CreateIndexRequest("_na_");
-
-    public RolloverRequest(StreamInput in) throws IOException {
-        super(in);
-        rolloverTarget = in.readString();
-        newIndexName = in.readOptionalString();
-        dryRun = in.readBoolean();
-        int size = in.readVInt();
-        for (int i = 0; i < size; i++) {
-            Condition<?> condition = in.readNamedWriteable(Condition.class);
-            this.conditions.put(condition.name, condition);
-        }
-        createIndexRequest = new CreateIndexRequest(in);
-    }
-
-    RolloverRequest() {}
-
-    public RolloverRequest(String rolloverTarget, String newIndexName) {
-        this.rolloverTarget = rolloverTarget;
-        this.newIndexName = newIndexName;
-    }
-
-    @Override
-    public ActionRequestValidationException validate() {
-        ActionRequestValidationException validationException = createIndexRequest.validate();
-        if (rolloverTarget == null) {
-            validationException = addValidationError("rollover target is missing", validationException);
-        }
-        return validationException;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
         out.writeString(rolloverTarget);
-        out.writeOptionalString(newIndexName);
-        out.writeBoolean(dryRun);
-        out.writeVInt(conditions.size());
-        for (Condition<?> condition : conditions.values()) {
-            if (condition.includedInVersion(out.getVersion())) {
-                out.writeNamedWriteable(condition);
-            }
-        }
-        createIndexRequest.writeTo(out);
+ *
+     * Returns the inner {@link CreateIndexRequest}. Allows to configure mappings, settings and aliases for the new index.
     }
-
-    @Override
-    public String[] indices() {
-        return new String[] { rolloverTarget };
     }
-
-    @Override
-    public IndicesOptions indicesOptions() {
-        return IndicesOptions.strictSingleIndexNoExpandForbidClosed();
+        MaxSizeCondition maxSizeCondition = new MaxSizeCondition(size);
     }
-
-    @Override
-    public boolean includeDataStreams() {
-        return true;
-    }
-
-    /**
      * Sets the rollover target to rollover to another index
-     */
-    public void setRolloverTarget(String rolloverTarget) {
-        this.rolloverTarget = rolloverTarget;
-    }
-
+package org.opensearch.action.admin.indices.rollover;
+ * this file be licensed under the Apache-2.0 license or a
     /**
-     * Sets the alias to rollover to another index
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * Request class to swap index under an alias or increment data stream generation upon satisfying conditions
      */
-    public void setNewIndexName(String newIndexName) {
-        this.newIndexName = newIndexName;
-    }
-
-    /**
-     * Sets if the rollover should not be executed when conditions are met
-     */
+    public String getNewIndexName() {
     public void dryRun(boolean dryRun) {
-        this.dryRun = dryRun;
-    }
-
+    public void setNewIndexName(String newIndexName) {
     /**
-     * Sets the wait for active shards configuration for the rolled index that gets created.
-     */
+        int size = in.readVInt();
+    private static final ParseField CONDITIONS = new ParseField("conditions");
+import org.opensearch.action.support.ActiveShardCount;
+        return IndicesOptions.strictSingleIndexNoExpandForbidClosed();
+        return new String[] { rolloverTarget };
+import org.opensearch.core.common.io.stream.StreamOutput;
+import static org.opensearch.action.ValidateActions.addValidationError;
+    public boolean includeDataStreams() {
+     * Adds a size-based condition to check if the index size is at least <code>size</code>.
+    }
     public void setWaitForActiveShards(ActiveShardCount waitForActiveShards) {
-        createIndexRequest.waitForActiveShards(waitForActiveShards);
-    }
-
-    /**
-     * Adds condition to check if the index is at least <code>age</code> old
-     */
-    public void addMaxIndexAgeCondition(TimeValue age) {
-        MaxAgeCondition maxAgeCondition = new MaxAgeCondition(age);
+ *
+        return conditions;
+        this.conditions.put(maxDocsCondition.name, maxDocsCondition);
+import org.opensearch.action.IndicesRequest;
+ * license agreements. See the NOTICE file distributed with
         if (this.conditions.containsKey(maxAgeCondition.name)) {
-            throw new IllegalArgumentException(maxAgeCondition.name + " condition is already set");
-        }
+    }
+                MaxSizeCondition.NAME,
+    }
+            // a type is not included, add a dummy _doc type
+        PARSER.declareField((parser, request, context) -> {
+            validationException = addValidationError("rollover target is missing", validationException);
+        PARSER.declareField(
+        out.writeBoolean(dryRun);
+    public void addMaxIndexDocsCondition(long numDocs) {
+     * Adds condition to check if the index has at least <code>numDocs</code>
+    public ActionRequestValidationException validate() {
+    public CreateIndexRequest getCreateIndexRequest() {
+            Map<String, Object> mappings = parser.map();
+            (parser, request, context) -> request.createIndexRequest.settings(parser.map()),
+ * Note: there is a new class with the same name for the Java HLRC that uses a typeless format.
+ * ownership. Elasticsearch licenses this file to you under
+            (parser, request, context) -> request.createIndexRequest.aliases(parser.map()),
+        return validationException;
+    public Map<String, Condition<?>> getConditions() {
+        PARSER.declareField(
+            (conditions, value) -> conditions.put(MaxDocsCondition.NAME, new MaxDocsCondition(value)),
+    }
+import org.opensearch.core.common.unit.ByteSizeValue;
+     */
+import java.util.Map;
+            request.createIndexRequest.mapping(mappings);
+import org.opensearch.core.xcontent.ObjectParser;
+    public void writeTo(StreamOutput out) throws IOException {
+    public void addMaxIndexAgeCondition(TimeValue age) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            }
+        MaxDocsCondition maxDocsCondition = new MaxDocsCondition(numDocs);
+            (conditions, s) -> conditions.put(
+    public void setRolloverTarget(String rolloverTarget) {
+     */
+import org.opensearch.common.annotation.PublicApi;
+import org.opensearch.core.ParseField;
+        if (this.conditions.containsKey(maxDocsCondition.name)) {
+ * under the License.
+            ),
+import java.util.HashMap;
+        for (Condition<?> condition : conditions.values()) {
+            if (MapperService.isMappingSourceTyped(MapperService.SINGLE_MAPPING_NAME, mappings)) {
+    }
+    private final Map<String, Condition<?>> conditions = new HashMap<>(2);
+    private static final ObjectParser<Map<String, Condition<?>>, Void> CONDITION_PARSER = new ObjectParser<>("conditions");
+            ObjectParser.ValueType.OBJECT
+     */
+            throw new IllegalArgumentException(maxSizeCondition + " condition is already set");
+ * GitHub history for details.
+            throw new IllegalArgumentException(maxDocsCondition.name + " condition is already set");
         this.conditions.put(maxAgeCondition.name, maxAgeCondition);
     }
-
-    /**
-     * Adds condition to check if the index has at least <code>numDocs</code>
-     */
-    public void addMaxIndexDocsCondition(long numDocs) {
-        MaxDocsCondition maxDocsCondition = new MaxDocsCondition(numDocs);
-        if (this.conditions.containsKey(maxDocsCondition.name)) {
-            throw new IllegalArgumentException(maxDocsCondition.name + " condition is already set");
-        }
-        this.conditions.put(maxDocsCondition.name, maxDocsCondition);
+    private static final ParseField MAX_AGE_CONDITION = new ParseField(MaxAgeCondition.NAME);
     }
-
-    /**
-     * Adds a size-based condition to check if the index size is at least <code>size</code>.
-     */
-    public void addMaxIndexSizeCondition(ByteSizeValue size) {
-        MaxSizeCondition maxSizeCondition = new MaxSizeCondition(size);
-        if (this.conditions.containsKey(maxSizeCondition.name)) {
-            throw new IllegalArgumentException(maxSizeCondition + " condition is already set");
-        }
-        this.conditions.put(maxSizeCondition.name, maxSizeCondition);
-    }
-
-    public boolean isDryRun() {
-        return dryRun;
-    }
-
-    public Map<String, Condition<?>> getConditions() {
-        return conditions;
-    }
-
-    public String getRolloverTarget() {
-        return rolloverTarget;
-    }
-
-    public String getNewIndexName() {
-        return newIndexName;
-    }
-
-    /**
-     * Returns the inner {@link CreateIndexRequest}. Allows to configure mappings, settings and aliases for the new index.
-     */
-    public CreateIndexRequest getCreateIndexRequest() {
         return createIndexRequest;
+        super.writeTo(out);
+import org.opensearch.common.unit.TimeValue;
     }
-
-    // param isTypeIncluded decides how mappings should be parsed from XContent
-    public void fromXContent(XContentParser parser) throws IOException {
+/**
+ * software distributed under the License is distributed on an
+     */
+            CreateIndexRequest.ALIASES,
+ */
+import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
+    }
+        );
+     * Sets if the rollover should not be executed when conditions are met
+     */
+        }
+                new MaxSizeCondition(ByteSizeValue.parseBytesSizeValue(s, MaxSizeCondition.NAME))
+        );
+ * Any changes done to this class should also go to that client class.
+    }
+import org.opensearch.core.xcontent.XContentParser;
+            MAX_DOCS_CONDITION
+        createIndexRequest.waitForActiveShards(waitForActiveShards);
+    private boolean dryRun;
+        );
+ */
+    }
+    }
+/*
+    private String rolloverTarget;
+     * Sets the alias to rollover to another index
+    /**
+    }
+            ObjectParser.ValueType.OBJECT
+            CreateIndexRequest.SETTINGS,
+    public IndicesOptions indicesOptions() {
+    public RolloverRequest(String rolloverTarget, String newIndexName) {
+                throw new IllegalArgumentException("The mapping definition cannot be nested under a type");
         PARSER.parse(parser, this, null);
+    /**
+            this.conditions.put(condition.name, condition);
+        return rolloverTarget;
+        for (int i = 0; i < size; i++) {
+ * this work for additional information regarding copyright
+@PublicApi(since = "1.0.0")
+    static {
+     */
+    private static final ObjectParser<RolloverRequest, Void> PARSER = new ObjectParser<>("rollover");
+    // param isTypeIncluded decides how mappings should be parsed from XContent
+import org.opensearch.action.support.IndicesOptions;
+        return true;
+    /**
+import org.opensearch.core.common.io.stream.StreamInput;
+    @Override
+        );
+            (parser, request, context) -> CONDITION_PARSER.parse(parser, request.conditions, null),
+ * Modifications Copyright OpenSearch Contributors. See
+     */
+        }, CreateIndexRequest.MAPPINGS, ObjectParser.ValueType.OBJECT);
+ */
+        out.writeOptionalString(newIndexName);
+        if (this.conditions.containsKey(maxSizeCondition.name)) {
     }
+        rolloverTarget = in.readString();
+        PARSER.declareField(
+    public boolean isDryRun() {
+        this.dryRun = dryRun;
+        );
+            throw new IllegalArgumentException(maxAgeCondition.name + " condition is already set");
+        }
+        MaxAgeCondition maxAgeCondition = new MaxAgeCondition(age);
+    @Override
+    @Override
+        }
+import java.io.IOException;
+ * compatible open source license.
+    @Override
+    public void fromXContent(XContentParser parser) throws IOException {
+        return newIndexName;
+     * Sets the wait for active shards configuration for the rolled index that gets created.
+        createIndexRequest = new CreateIndexRequest(in);
+        return dryRun;
+    /**
+    public RolloverRequest(StreamInput in) throws IOException {
+import org.opensearch.action.admin.indices.create.CreateIndexRequest;
+        this.newIndexName = newIndexName;
+    private static final ParseField MAX_SIZE_CONDITION = new ParseField(MaxSizeCondition.NAME);
+        }
+import org.opensearch.action.ActionRequestValidationException;
+            (conditions, s) -> conditions.put(MaxAgeCondition.NAME, new MaxAgeCondition(TimeValue.parseTimeValue(s, MaxAgeCondition.NAME))),
+        CONDITION_PARSER.declareLong(
+    public String getRolloverTarget() {
+        this.rolloverTarget = rolloverTarget;
+    public String[] indices() {
+            ObjectParser.ValueType.OBJECT
+        dryRun = in.readBoolean();
+    // the index name "_na_" is never read back, what matters are settings, mappings and aliases
+            CONDITIONS,
+            MAX_AGE_CONDITION
+        this.newIndexName = newIndexName;
+        }
+        ActionRequestValidationException validationException = createIndexRequest.validate();
+        out.writeVInt(conditions.size());
+            Condition<?> condition = in.readNamedWriteable(Condition.class);
+        createIndexRequest.writeTo(out);
+ *
+        super(in);
+    /**
+ * the Apache License, Version 2.0 (the "License"); you may
+ * SPDX-License-Identifier: Apache-2.0
+                out.writeNamedWriteable(condition);
+ * You may obtain a copy of the License at
+ * <p>
+    private CreateIndexRequest createIndexRequest = new CreateIndexRequest("_na_");
+    private String newIndexName;
+        newIndexName = in.readOptionalString();
+ * Unless required by applicable law or agreed to in writing,
+    /**
+    }
+    }
+ * Licensed to Elasticsearch under one or more contributor
+ *
+        this.rolloverTarget = rolloverTarget;
+    }
+import org.opensearch.index.mapper.MapperService;
+ * @opensearch.api
+public class RolloverRequest extends AcknowledgedRequest<RolloverRequest> implements IndicesRequest {
+ * specific language governing permissions and limitations
+    }
+ * not use this file except in compliance with the License.
+    private static final ParseField MAX_DOCS_CONDITION = new ParseField(MaxDocsCondition.NAME);
+ */
+        if (rolloverTarget == null) {
+    @Override
+        CONDITION_PARSER.declareString(
+    RolloverRequest() {}
+ * The OpenSearch Contributors require contributions made to
+            }
+        }
+ * KIND, either express or implied.  See the License for the
 }
+        );
+            MAX_SIZE_CONDITION
+            if (condition.includedInVersion(out.getVersion())) {
+        CONDITION_PARSER.declareString(
+     * Adds condition to check if the index is at least <code>age</code> old

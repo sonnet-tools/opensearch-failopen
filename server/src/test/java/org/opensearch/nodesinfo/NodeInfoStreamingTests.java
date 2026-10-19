@@ -1,274 +1,255 @@
 /*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.nodesinfo;
-
-import org.opensearch.Build;
-import org.opensearch.action.admin.cluster.node.info.NodeInfo;
-import org.opensearch.action.admin.cluster.node.info.PluginsAndModules;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.transport.BoundTransportAddress;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.http.HttpInfo;
-import org.opensearch.ingest.IngestInfo;
-import org.opensearch.ingest.ProcessorInfo;
-import org.opensearch.monitor.jvm.JvmInfo;
-import org.opensearch.monitor.os.OsInfo;
-import org.opensearch.monitor.process.ProcessInfo;
-import org.opensearch.plugins.PluginInfo;
-import org.opensearch.search.aggregations.support.AggregationInfo;
-import org.opensearch.search.aggregations.support.AggregationUsageService;
-import org.opensearch.search.pipeline.SearchPipelineInfo;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.VersionUtils;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.threadpool.ThreadPoolInfo;
-import org.opensearch.transport.TransportInfo;
-
+            indexingBuffer,
+    }
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.emptySet;
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
-import static org.hamcrest.core.IsEqual.equalTo;
-
-public class NodeInfoStreamingTests extends OpenSearchTestCase {
-
-    public void testNodeInfoStreaming() throws IOException {
-        NodeInfo nodeInfo = createNodeInfo();
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            nodeInfo.writeTo(out);
-            try (StreamInput in = out.bytes().streamInput()) {
-                NodeInfo readNodeInfo = new NodeInfo(in);
-                assertExpectedUnchanged(nodeInfo, readNodeInfo);
-            }
-        }
-    }
-
-    // checks all properties that are expected to be unchanged.
-    // Once we start changing them between versions this method has to be changed as well
-    private void assertExpectedUnchanged(NodeInfo nodeInfo, NodeInfo readNodeInfo) throws IOException {
-        assertThat(nodeInfo.getBuild().toString(), equalTo(readNodeInfo.getBuild().toString()));
-        assertThat(nodeInfo.getHostname(), equalTo(readNodeInfo.getHostname()));
-        assertThat(nodeInfo.getVersion(), equalTo(readNodeInfo.getVersion()));
-        compareJsonOutput(nodeInfo.getInfo(HttpInfo.class), readNodeInfo.getInfo(HttpInfo.class));
-        compareJsonOutput(nodeInfo.getInfo(JvmInfo.class), readNodeInfo.getInfo(JvmInfo.class));
-        compareJsonOutput(nodeInfo.getInfo(ProcessInfo.class), readNodeInfo.getInfo(ProcessInfo.class));
-        compareJsonOutput(nodeInfo.getSettings(), readNodeInfo.getSettings());
-        compareJsonOutput(nodeInfo.getInfo(ThreadPoolInfo.class), readNodeInfo.getInfo(ThreadPoolInfo.class));
-        compareJsonOutput(nodeInfo.getInfo(TransportInfo.class), readNodeInfo.getInfo(TransportInfo.class));
-        compareJsonOutput(nodeInfo.getNode(), readNodeInfo.getNode());
-        compareJsonOutput(nodeInfo.getInfo(OsInfo.class), readNodeInfo.getInfo(OsInfo.class));
-        compareJsonOutput(nodeInfo.getInfo(PluginsAndModules.class), readNodeInfo.getInfo(PluginsAndModules.class));
-        compareJsonOutput(nodeInfo.getInfo(IngestInfo.class), readNodeInfo.getInfo(IngestInfo.class));
-    }
-
-    private void compareJsonOutput(ToXContent param1, ToXContent param2) throws IOException {
-        if (param1 == null) {
-            assertNull(param2);
-            return;
-        }
-        ToXContent.Params params = ToXContent.EMPTY_PARAMS;
-        XContentBuilder param1Builder = jsonBuilder();
-        param1Builder.startObject();
-        param1.toXContent(param1Builder, params);
-        param1Builder.endObject();
-
-        XContentBuilder param2Builder = jsonBuilder();
-        param2Builder.startObject();
-        param2.toXContent(param2Builder, params);
+                        name,
         param2Builder.endObject();
-        assertThat(param1Builder.toString(), equalTo(param2Builder.toString()));
-    }
-
+            ingestInfo = new IngestInfo(processors);
+import java.util.List;
     private static NodeInfo createNodeInfo() {
-        Build build = Build.CURRENT;
-        DiscoveryNode node = new DiscoveryNode(
-            "test_node",
-            buildNewFakeTransportAddress(),
-            emptyMap(),
-            emptySet(),
-            VersionUtils.randomVersion(random())
-        );
-        Settings settings = randomBoolean() ? null : Settings.builder().put("test", "setting").build();
-        OsInfo osInfo = null;
-        if (randomBoolean()) {
-            int availableProcessors = randomIntBetween(1, 64);
-            int allocatedProcessors = randomIntBetween(1, availableProcessors);
-            long refreshInterval = randomBoolean() ? -1 : randomNonNegativeLong();
-            String name = randomAlphaOfLengthBetween(3, 10);
-            String arch = randomAlphaOfLengthBetween(3, 10);
-            String version = randomAlphaOfLengthBetween(3, 10);
-            osInfo = new OsInfo(refreshInterval, availableProcessors, allocatedProcessors, name, name, arch, version);
+        NodeInfo nodeInfo = createNodeInfo();
+import org.opensearch.test.VersionUtils;
         }
-        ProcessInfo process = randomBoolean() ? null : new ProcessInfo(randomInt(), randomBoolean(), randomNonNegativeLong());
-        JvmInfo jvm = randomBoolean() ? null : JvmInfo.jvmInfo();
+ */
+            VersionUtils.randomVersion(random()),
+        if (randomBoolean()) {
+                    new PluginInfo(
+ * not use this file except in compliance with the License.
+import static java.util.Collections.emptyMap;
+                    if (randomBoolean()) {
+    // checks all properties that are expected to be unchanged.
+                NodeInfo readNodeInfo = new NodeInfo(in);
+ *
+/*
+            osInfo = new OsInfo(refreshInterval, availableProcessors, allocatedProcessors, name, name, arch, version);
+            }
+        Build build = Build.CURRENT;
+                        randomAlphaOfLengthBetween(3, 10),
+            return;
+                try {
+                        "1.8",
+            int availableProcessors = randomIntBetween(1, 64);
+import org.opensearch.common.io.stream.BytesStreamOutput;
+import java.util.ArrayList;
+        IngestInfo ingestInfo = null;
+import org.opensearch.monitor.process.ProcessInfo;
+        compareJsonOutput(nodeInfo.getInfo(HttpInfo.class), readNodeInfo.getInfo(HttpInfo.class));
         ThreadPoolInfo threadPoolInfo = null;
         if (randomBoolean()) {
-            int numThreadPools = randomIntBetween(1, 10);
-            List<ThreadPool.Info> threadPoolInfos = new ArrayList<>(numThreadPools);
-            for (int i = 0; i < numThreadPools; i++) {
-                threadPoolInfos.add(
-                    new ThreadPool.Info(randomAlphaOfLengthBetween(3, 10), randomFrom(ThreadPool.ThreadPoolType.values()), randomInt())
-                );
-            }
-            threadPoolInfo = new ThreadPoolInfo(threadPoolInfos);
-        }
-        Map<String, BoundTransportAddress> profileAddresses = new HashMap<>();
-        BoundTransportAddress dummyBoundTransportAddress = new BoundTransportAddress(
-            new TransportAddress[] { buildNewFakeTransportAddress() },
-            buildNewFakeTransportAddress()
-        );
-        profileAddresses.put("test_address", dummyBoundTransportAddress);
-        TransportInfo transport = randomBoolean() ? null : new TransportInfo(dummyBoundTransportAddress, profileAddresses);
-        HttpInfo httpInfo = randomBoolean() ? null : new HttpInfo(dummyBoundTransportAddress, randomNonNegativeLong());
-
-        PluginsAndModules pluginsAndModules = null;
-        if (randomBoolean()) {
-            int numPlugins = randomIntBetween(0, 5);
-            List<PluginInfo> plugins = new ArrayList<>();
-            for (int i = 0; i < numPlugins; i++) {
-                String name = randomAlphaOfLengthBetween(3, 10);
-                plugins.add(
-                    new PluginInfo(
-                        name,
-                        randomAlphaOfLengthBetween(3, 10),
-                        randomAlphaOfLengthBetween(3, 10),
-                        VersionUtils.randomVersion(random()),
-                        "1.8",
-                        randomAlphaOfLengthBetween(3, 10),
-                        name,
-                        Collections.emptyList(),
-                        randomBoolean()
-                    )
-                );
-            }
-            int numModules = randomIntBetween(0, 5);
-            List<PluginInfo> modules = new ArrayList<>();
-            for (int i = 0; i < numModules; i++) {
-                String name = randomAlphaOfLengthBetween(3, 10);
-                modules.add(
-                    new PluginInfo(
-                        name,
-                        randomAlphaOfLengthBetween(3, 10),
-                        randomAlphaOfLengthBetween(3, 10),
-                        VersionUtils.randomVersion(random()),
-                        "1.8",
-                        randomAlphaOfLengthBetween(3, 10),
-                        name,
-                        Collections.emptyList(),
-                        randomBoolean()
-                    )
-                );
-            }
-            pluginsAndModules = new PluginsAndModules(plugins, modules);
-        }
-
-        IngestInfo ingestInfo = null;
-        if (randomBoolean()) {
-            int numProcessors = randomIntBetween(0, 5);
-            List<ProcessorInfo> processors = new ArrayList<>(numProcessors);
-            for (int i = 0; i < numProcessors; i++) {
-                processors.add(new ProcessorInfo(randomAlphaOfLengthBetween(3, 10)));
-            }
-            ingestInfo = new IngestInfo(processors);
-        }
-
-        AggregationInfo aggregationInfo = null;
-        if (randomBoolean()) {
-            AggregationUsageService.Builder builder = new AggregationUsageService.Builder();
-            int numOfAggs = randomIntBetween(0, 10);
-            for (int i = 0; i < numOfAggs; i++) {
-                String aggName = randomAlphaOfLength(10);
-
-                try {
-                    if (randomBoolean()) {
-                        builder.registerAggregationUsage(aggName);
-                    } else {
-                        int numOfTypes = randomIntBetween(1, 10);
-                        for (int j = 0; j < numOfTypes; j++) {
-                            builder.registerAggregationUsage(aggName, randomAlphaOfLength(10));
-                        }
-                    }
-                } catch (IllegalArgumentException ex) {
-                    // Ignore duplicate strings
-                }
-            }
-            aggregationInfo = builder.build().info();
-        }
-
-        ByteSizeValue indexingBuffer = null;
-        if (randomBoolean()) {
-            // pick a random long that sometimes exceeds an int:
-            indexingBuffer = new ByteSizeValue(random().nextLong() & ((1L << 40) - 1));
-        }
-
-        SearchPipelineInfo searchPipelineInfo = null;
-        if (randomBoolean()) {
-            int numProcessors = randomIntBetween(0, 5);
-            List<org.opensearch.search.pipeline.ProcessorInfo> processors = new ArrayList<>(numProcessors);
-            for (int i = 0; i < numProcessors; i++) {
-                processors.add(new org.opensearch.search.pipeline.ProcessorInfo(randomAlphaOfLengthBetween(3, 10)));
-            }
-            searchPipelineInfo = new SearchPipelineInfo(Map.of(randomAlphaOfLengthBetween(3, 10), processors));
-        }
-
+import org.opensearch.search.aggregations.support.AggregationInfo;
+ * ownership. Elasticsearch licenses this file to you under
         return new NodeInfo(
-            VersionUtils.randomVersion(random()),
-            build,
-            node,
-            settings,
-            osInfo,
-            process,
-            jvm,
-            threadPoolInfo,
-            transport,
-            httpInfo,
-            pluginsAndModules,
-            ingestInfo,
+            "test_node",
+/*
+        TransportInfo transport = randomBoolean() ? null : new TransportInfo(dummyBoundTransportAddress, profileAddresses);
+ * license agreements. See the NOTICE file distributed with
+            int numProcessors = randomIntBetween(0, 5);
+import org.opensearch.Build;
             aggregationInfo,
-            indexingBuffer,
-            searchPipelineInfo
+                processors.add(new ProcessorInfo(randomAlphaOfLengthBetween(3, 10)));
+                        int numOfTypes = randomIntBetween(1, 10);
+                    )
+            List<ProcessorInfo> processors = new ArrayList<>(numProcessors);
+import org.opensearch.search.pipeline.SearchPipelineInfo;
+                        builder.registerAggregationUsage(aggName);
+                    }
+                assertExpectedUnchanged(nodeInfo, readNodeInfo);
+                        randomAlphaOfLengthBetween(3, 10),
+        param1Builder.endObject();
+        if (param1 == null) {
+        if (randomBoolean()) {
+            for (int i = 0; i < numPlugins; i++) {
+ *
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+            // pick a random long that sometimes exceeds an int:
+    public void testNodeInfoStreaming() throws IOException {
+        }
+        ByteSizeValue indexingBuffer = null;
+        param2.toXContent(param2Builder, params);
+                        randomAlphaOfLengthBetween(3, 10),
+        compareJsonOutput(nodeInfo.getSettings(), readNodeInfo.getSettings());
+import java.util.HashMap;
+    // Once we start changing them between versions this method has to be changed as well
+            indexingBuffer = new ByteSizeValue(random().nextLong() & ((1L << 40) - 1));
+ * Modifications Copyright OpenSearch Contributors. See
+                String name = randomAlphaOfLengthBetween(3, 10);
+                            builder.registerAggregationUsage(aggName, randomAlphaOfLength(10));
+            jvm,
+            List<ThreadPool.Info> threadPoolInfos = new ArrayList<>(numThreadPools);
+            List<org.opensearch.search.pipeline.ProcessorInfo> processors = new ArrayList<>(numProcessors);
+        if (randomBoolean()) {
+            int numProcessors = randomIntBetween(0, 5);
+        XContentBuilder param2Builder = jsonBuilder();
+ * software distributed under the License is distributed on an
+ *
+ * You may obtain a copy of the License at
+import org.opensearch.http.HttpInfo;
+                );
+                        randomAlphaOfLengthBetween(3, 10),
+        assertThat(param1Builder.toString(), equalTo(param2Builder.toString()));
+        }
+            AggregationUsageService.Builder builder = new AggregationUsageService.Builder();
+import org.opensearch.action.admin.cluster.node.info.PluginsAndModules;
+ *    http://www.apache.org/licenses/LICENSE-2.0
         );
-    }
+import org.opensearch.search.aggregations.support.AggregationUsageService;
+ * under the License.
+        }
+        assertThat(nodeInfo.getBuild().toString(), equalTo(readNodeInfo.getBuild().toString()));
+import org.opensearch.core.common.transport.BoundTransportAddress;
+ * The OpenSearch Contributors require contributions made to
+        profileAddresses.put("test_address", dummyBoundTransportAddress);
+            }
+        if (randomBoolean()) {
+                }
+            String name = randomAlphaOfLengthBetween(3, 10);
+ */
+import org.opensearch.plugins.PluginInfo;
+ * this work for additional information regarding copyright
+        );
+import org.opensearch.common.settings.Settings;
+                        name,
+            threadPoolInfo = new ThreadPoolInfo(threadPoolInfos);
+import org.opensearch.cluster.node.DiscoveryNode;
+        compareJsonOutput(nodeInfo.getInfo(IngestInfo.class), readNodeInfo.getInfo(IngestInfo.class));
+        ProcessInfo process = randomBoolean() ? null : new ProcessInfo(randomInt(), randomBoolean(), randomNonNegativeLong());
+import org.opensearch.threadpool.ThreadPool;
+            for (int i = 0; i < numProcessors; i++) {
+            pluginsAndModules,
+            searchPipelineInfo = new SearchPipelineInfo(Map.of(randomAlphaOfLengthBetween(3, 10), processors));
+            node,
+            for (int i = 0; i < numProcessors; i++) {
+        HttpInfo httpInfo = randomBoolean() ? null : new HttpInfo(dummyBoundTransportAddress, randomNonNegativeLong());
+        compareJsonOutput(nodeInfo.getNode(), readNodeInfo.getNode());
+                } catch (IllegalArgumentException ex) {
+        Map<String, BoundTransportAddress> profileAddresses = new HashMap<>();
+                        Collections.emptyList(),
+ */
+ * GitHub history for details.
+            String version = randomAlphaOfLengthBetween(3, 10);
+            nodeInfo.writeTo(out);
+            }
+            }
+import java.util.Map;
+        BoundTransportAddress dummyBoundTransportAddress = new BoundTransportAddress(
+                        Collections.emptyList(),
+        compareJsonOutput(nodeInfo.getInfo(PluginsAndModules.class), readNodeInfo.getInfo(PluginsAndModules.class));
 }
+                        }
+            httpInfo,
+package org.opensearch.nodesinfo;
+    }
+            ingestInfo,
+ * Unless required by applicable law or agreed to in writing,
+                        name,
+            emptySet(),
+            buildNewFakeTransportAddress(),
+                );
+                plugins.add(
+        assertThat(nodeInfo.getVersion(), equalTo(readNodeInfo.getVersion()));
+import org.opensearch.core.common.unit.ByteSizeValue;
+import org.opensearch.monitor.os.OsInfo;
+import org.opensearch.core.xcontent.ToXContent;
+        }
+                    // Ignore duplicate strings
+            buildNewFakeTransportAddress()
+            osInfo,
+        compareJsonOutput(nodeInfo.getInfo(TransportInfo.class), readNodeInfo.getInfo(TransportInfo.class));
+            String arch = randomAlphaOfLengthBetween(3, 10);
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
+        Settings settings = randomBoolean() ? null : Settings.builder().put("test", "setting").build();
+        }
+    private void compareJsonOutput(ToXContent param1, ToXContent param2) throws IOException {
+ * KIND, either express or implied.  See the License for the
+            long refreshInterval = randomBoolean() ? -1 : randomNonNegativeLong();
+    private void assertExpectedUnchanged(NodeInfo nodeInfo, NodeInfo readNodeInfo) throws IOException {
+        DiscoveryNode node = new DiscoveryNode(
+            settings,
+        ToXContent.Params params = ToXContent.EMPTY_PARAMS;
+            int numPlugins = randomIntBetween(0, 5);
+        SearchPipelineInfo searchPipelineInfo = null;
+ * compatible open source license.
+            process,
+            int numThreadPools = randomIntBetween(1, 10);
+                        for (int j = 0; j < numOfTypes; j++) {
+        }
+            int allocatedProcessors = randomIntBetween(1, availableProcessors);
+                    )
+        AggregationInfo aggregationInfo = null;
+                        randomAlphaOfLengthBetween(3, 10),
+                modules.add(
+            VersionUtils.randomVersion(random())
+            threadPoolInfo,
+            for (int i = 0; i < numOfAggs; i++) {
+        compareJsonOutput(nodeInfo.getInfo(ProcessInfo.class), readNodeInfo.getInfo(ProcessInfo.class));
+        compareJsonOutput(nodeInfo.getInfo(OsInfo.class), readNodeInfo.getInfo(OsInfo.class));
+import org.opensearch.ingest.ProcessorInfo;
+            aggregationInfo = builder.build().info();
+                        VersionUtils.randomVersion(random()),
+                );
+            int numModules = randomIntBetween(0, 5);
+                        name,
+            transport,
+            }
+                threadPoolInfos.add(
+        OsInfo osInfo = null;
+                    } else {
+        }
+        param2Builder.startObject();
+import org.opensearch.transport.TransportInfo;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import org.opensearch.action.admin.cluster.node.info.NodeInfo;
+ * this file be licensed under the Apache-2.0 license or a
+import static java.util.Collections.emptySet;
+            for (int i = 0; i < numModules; i++) {
+    }
+            }
+        XContentBuilder param1Builder = jsonBuilder();
+ * Licensed to Elasticsearch under one or more contributor
+                processors.add(new org.opensearch.search.pipeline.ProcessorInfo(randomAlphaOfLengthBetween(3, 10)));
+    }
+            List<PluginInfo> modules = new ArrayList<>();
+import org.opensearch.core.common.io.stream.StreamInput;
+            pluginsAndModules = new PluginsAndModules(plugins, modules);
+import org.opensearch.ingest.IngestInfo;
+                        randomBoolean()
+                    new PluginInfo(
+        param1Builder.startObject();
+            for (int i = 0; i < numThreadPools; i++) {
+ * SPDX-License-Identifier: Apache-2.0
+                        randomBoolean()
+        );
+ * the Apache License, Version 2.0 (the "License"); you may
+                        VersionUtils.randomVersion(random()),
+import java.util.Collections;
+public class NodeInfoStreamingTests extends OpenSearchTestCase {
+import static org.hamcrest.core.IsEqual.equalTo;
+        compareJsonOutput(nodeInfo.getInfo(JvmInfo.class), readNodeInfo.getInfo(JvmInfo.class));
+            emptyMap(),
+            searchPipelineInfo
+        PluginsAndModules pluginsAndModules = null;
+                String aggName = randomAlphaOfLength(10);
+        param1.toXContent(param1Builder, params);
+            }
+            new TransportAddress[] { buildNewFakeTransportAddress() },
+            int numOfAggs = randomIntBetween(0, 10);
+                String name = randomAlphaOfLengthBetween(3, 10);
+                        randomAlphaOfLengthBetween(3, 10),
+import org.opensearch.core.common.transport.TransportAddress;
+import org.opensearch.threadpool.ThreadPoolInfo;
+            List<PluginInfo> plugins = new ArrayList<>();
+import org.opensearch.core.xcontent.XContentBuilder;
+            try (StreamInput in = out.bytes().streamInput()) {
+        if (randomBoolean()) {
+        JvmInfo jvm = randomBoolean() ? null : JvmInfo.jvmInfo();
+                        "1.8",
+                    new ThreadPool.Info(randomAlphaOfLengthBetween(3, 10), randomFrom(ThreadPool.ThreadPoolType.values()), randomInt())
+        }
+        compareJsonOutput(nodeInfo.getInfo(ThreadPoolInfo.class), readNodeInfo.getInfo(ThreadPoolInfo.class));
+            build,
+        if (randomBoolean()) {
+        assertThat(nodeInfo.getHostname(), equalTo(readNodeInfo.getHostname()));
+import org.opensearch.test.OpenSearchTestCase;
+            assertNull(param2);
+import org.opensearch.monitor.jvm.JvmInfo;

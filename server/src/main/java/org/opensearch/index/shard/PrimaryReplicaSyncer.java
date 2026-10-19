@@ -1,547 +1,488 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.shard;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.resync.ResyncReplicationRequest;
-import org.opensearch.action.resync.ResyncReplicationResponse;
-import org.opensearch.action.resync.TransportResyncReplicationAction;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.util.concurrent.AbstractRunnable;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.translog.Translog;
-import org.opensearch.tasks.Task;
-import org.opensearch.tasks.TaskManager;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static java.util.Objects.requireNonNull;
-
-/**
- * Syncer for Primary replica
- *
- * @opensearch.internal
- */
-public class PrimaryReplicaSyncer {
-
-    private static final Logger logger = LogManager.getLogger(PrimaryReplicaSyncer.class);
-
-    private final TaskManager taskManager;
-    private final SyncAction syncAction;
-
-    public static final ByteSizeValue DEFAULT_CHUNK_SIZE = new ByteSizeValue(512, ByteSizeUnit.KB);
-
-    private volatile ByteSizeValue chunkSize = DEFAULT_CHUNK_SIZE;
-
-    @Inject
-    public PrimaryReplicaSyncer(TransportService transportService, TransportResyncReplicationAction syncAction) {
-        this(transportService.getTaskManager(), syncAction);
-    }
-
-    // for tests
-    public PrimaryReplicaSyncer(TaskManager taskManager, SyncAction syncAction) {
-        this.taskManager = taskManager;
-        this.syncAction = syncAction;
-    }
-
-    void setChunkSize(ByteSizeValue chunkSize) { // only settable for tests
-        if (chunkSize.bytesAsInt() <= 0) {
-            throw new IllegalArgumentException("chunkSize must be > 0");
-        }
-        this.chunkSize = chunkSize;
-    }
-
-    public void resync(final IndexShard indexShard, final ActionListener<ResyncTask> listener) {
-        Translog.Snapshot snapshot = null;
-        try {
-            final long startingSeqNo = indexShard.getLastKnownGlobalCheckpoint() + 1;
-            assert startingSeqNo >= 0 : "startingSeqNo must be non-negative; got [" + startingSeqNo + "]";
-            final long maxSeqNo = indexShard.seqNoStats().getMaxSeqNo();
-            final ShardId shardId = indexShard.shardId();
-            // Wrap translog snapshot to make it synchronized as it is accessed by different threads through SnapshotSender.
-            // Even though those calls are not concurrent, snapshot.next() uses non-synchronized state and is not multi-thread-compatible
-            // Also fail the resync early if the shard is shutting down
-            snapshot = indexShard.newChangesSnapshot("resync", startingSeqNo, Long.MAX_VALUE, false, true);
-            final Translog.Snapshot originalSnapshot = snapshot;
-            final Translog.Snapshot wrappedSnapshot = new Translog.Snapshot() {
-                @Override
-                public synchronized void close() throws IOException {
-                    originalSnapshot.close();
-                }
-
-                @Override
-                public synchronized int totalOperations() {
-                    return originalSnapshot.totalOperations();
-                }
-
-                @Override
-                public synchronized Translog.Operation next() throws IOException {
-                    IndexShardState state = indexShard.state();
-                    if (state == IndexShardState.CLOSED) {
-                        throw new IndexShardClosedException(shardId);
-                    } else {
-                        assert state == IndexShardState.STARTED : "resync should only happen on a started shard, but state was: " + state;
-                    }
-                    return originalSnapshot.next();
-                }
-            };
-            final ActionListener<ResyncTask> resyncListener = new ActionListener<ResyncTask>() {
-                @Override
-                public void onResponse(final ResyncTask resyncTask) {
-                    try {
-                        wrappedSnapshot.close();
-                        listener.onResponse(resyncTask);
-                    } catch (final Exception e) {
-                        onFailure(e);
-                    }
-                }
-
-                @Override
-                public void onFailure(final Exception e) {
-                    try {
-                        wrappedSnapshot.close();
-                    } catch (final Exception inner) {
-                        e.addSuppressed(inner);
-                    } finally {
-                        listener.onFailure(e);
-                    }
-                }
-            };
-            // We must capture the timestamp after snapshotting a snapshot of operations to make sure
-            // that the auto_id_timestamp of every operation in the snapshot is at most this value.
-            final long maxSeenAutoIdTimestamp = indexShard.getMaxSeenAutoIdTimestamp();
-            resync(
-                shardId,
-                indexShard.routingEntry().allocationId().getId(),
-                indexShard.getPendingPrimaryTerm(),
-                wrappedSnapshot,
-                startingSeqNo,
-                maxSeqNo,
-                maxSeenAutoIdTimestamp,
-                resyncListener
-            );
-        } catch (Exception e) {
-            try {
-                IOUtils.close(snapshot);
-            } catch (IOException inner) {
-                e.addSuppressed(inner);
-            } finally {
-                listener.onFailure(e);
-            }
-        }
-    }
-
-    private void resync(
-        final ShardId shardId,
-        final String primaryAllocationId,
-        final long primaryTerm,
-        final Translog.Snapshot snapshot,
-        long startingSeqNo,
-        long maxSeqNo,
-        long maxSeenAutoIdTimestamp,
-        ActionListener<ResyncTask> listener
-    ) {
-        ResyncRequest request = new ResyncRequest(shardId, primaryAllocationId);
-        ResyncTask resyncTask = (ResyncTask) taskManager.register("transport", "resync", request); // it's not transport :-)
-        ActionListener<Void> wrappedListener = new ActionListener<Void>() {
-            @Override
-            public void onResponse(Void ignore) {
-                resyncTask.setPhase("finished");
-                taskManager.unregister(resyncTask);
-                listener.onResponse(resyncTask);
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                resyncTask.setPhase("finished");
-                taskManager.unregister(resyncTask);
-                listener.onFailure(e);
-            }
-        };
-        try {
-            new SnapshotSender(
-                syncAction,
-                resyncTask,
-                shardId,
-                primaryAllocationId,
-                primaryTerm,
-                snapshot,
-                chunkSize.bytesAsInt(),
-                startingSeqNo,
-                maxSeqNo,
-                maxSeenAutoIdTimestamp,
-                wrappedListener
-            ).run();
-        } catch (Exception e) {
-            wrappedListener.onFailure(e);
-        }
-    }
-
-    /**
-     * Synchronous action
-     *
-     * @opensearch.internal
-     */
-    public interface SyncAction {
-        void sync(
-            ResyncReplicationRequest request,
-            Task parentTask,
-            String primaryAllocationId,
-            long primaryTerm,
-            ActionListener<ResyncReplicationResponse> listener
-        );
-    }
-
-    /**
-     * Sends a snapshot
-     *
-     * @opensearch.internal
-     */
-    static class SnapshotSender extends AbstractRunnable implements ActionListener<ResyncReplicationResponse> {
-        private final Logger logger;
-        private final SyncAction syncAction;
-        private final ResyncTask task; // to track progress
-        private final String primaryAllocationId;
-        private final long primaryTerm;
-        private final ShardId shardId;
-        private final Translog.Snapshot snapshot;
-        private final long startingSeqNo;
-        private final long maxSeqNo;
-        private final long maxSeenAutoIdTimestamp;
-        private final int chunkSizeInBytes;
-        private final ActionListener<Void> listener;
-        private final AtomicBoolean firstMessage = new AtomicBoolean(true);
-        private final AtomicInteger totalSentOps = new AtomicInteger();
-        private final AtomicInteger totalSkippedOps = new AtomicInteger();
-        private final AtomicBoolean closed = new AtomicBoolean();
-
-        SnapshotSender(
-            SyncAction syncAction,
-            ResyncTask task,
-            ShardId shardId,
-            String primaryAllocationId,
-            long primaryTerm,
-            Translog.Snapshot snapshot,
-            int chunkSizeInBytes,
-            long startingSeqNo,
-            long maxSeqNo,
-            long maxSeenAutoIdTimestamp,
-            ActionListener<Void> listener
-        ) {
-            this.logger = PrimaryReplicaSyncer.logger;
-            this.syncAction = syncAction;
-            this.task = task;
-            this.shardId = shardId;
             this.primaryAllocationId = primaryAllocationId;
-            this.primaryTerm = primaryTerm;
-            this.snapshot = snapshot;
-            this.chunkSizeInBytes = chunkSizeInBytes;
-            this.startingSeqNo = startingSeqNo;
-            this.maxSeqNo = maxSeqNo;
-            this.maxSeenAutoIdTimestamp = maxSeenAutoIdTimestamp;
-            this.listener = listener;
-            task.setTotalOperations(snapshot.totalOperations());
-        }
-
-        @Override
-        public void onResponse(ResyncReplicationResponse response) {
-            run();
-        }
-
-        @Override
-        public void onFailure(Exception e) {
-            if (closed.compareAndSet(false, true)) {
-                listener.onFailure(e);
-            }
-        }
-
-        private static final Translog.Operation[] EMPTY_ARRAY = new Translog.Operation[0];
-
-        @Override
-        protected void doRun() throws Exception {
-            long size = 0;
-            final List<Translog.Operation> operations = new ArrayList<>();
-
-            task.setPhase("collecting_ops");
-            task.setResyncedOperations(totalSentOps.get());
-            task.setSkippedOperations(totalSkippedOps.get());
-
-            Translog.Operation operation;
-            while ((operation = snapshot.next()) != null) {
-                final long seqNo = operation.seqNo();
-                if (seqNo == SequenceNumbers.UNASSIGNED_SEQ_NO || seqNo < startingSeqNo) {
-                    totalSkippedOps.incrementAndGet();
-                    continue;
-                }
-                assert operation.seqNo() >= 0 : "sending operation with unassigned sequence number [" + operation + "]";
-                operations.add(operation);
-                size += operation.estimateSize();
-                totalSentOps.incrementAndGet();
-
-                // check if this request is past bytes threshold, and if so, send it off
-                if (size >= chunkSizeInBytes) {
-                    break;
-                }
-            }
-            final long trimAboveSeqNo = firstMessage.get() ? startingSeqNo - 1 : SequenceNumbers.UNASSIGNED_SEQ_NO;
-            // have to send sync request even in case of there are no operations to sync - have to sync trimAboveSeqNo at least
-            if (!operations.isEmpty() || trimAboveSeqNo != SequenceNumbers.UNASSIGNED_SEQ_NO) {
-                task.setPhase("sending_ops");
-                ResyncReplicationRequest request = new ResyncReplicationRequest(
-                    shardId,
-                    trimAboveSeqNo,
-                    maxSeenAutoIdTimestamp,
-                    operations.toArray(EMPTY_ARRAY)
-                );
-                logger.trace(
-                    "{} sending batch of [{}][{}] (total sent: [{}], skipped: [{}])",
-                    shardId,
-                    operations.size(),
-                    new ByteSizeValue(size),
-                    totalSentOps.get(),
-                    totalSkippedOps.get()
-                );
-                firstMessage.set(false);
-                syncAction.sync(request, task, primaryAllocationId, primaryTerm, this);
-            } else if (closed.compareAndSet(false, true)) {
-                logger.trace("{} resync completed (total sent: [{}], skipped: [{}])", shardId, totalSentOps.get(), totalSkippedOps.get());
-                listener.onResponse(null);
-            }
-        }
-    }
-
-    /**
-     * Request to resync primary and replica
+            String primaryAllocationId,
+        @PublicApi(since = "1.0.0")
+            public void onResponse(Void ignore) {
      *
-     * @opensearch.internal
-     */
-    public static class ResyncRequest extends ActionRequest {
-
+                );
+            Task parentTask,
+                builder.field("phase", phase);
+                public synchronized Translog.Operation next() throws IOException {
         private final ShardId shardId;
-        private final String allocationId;
-
-        public ResyncRequest(ShardId shardId, String allocationId) {
-            this.shardId = shardId;
-            this.allocationId = allocationId;
-        }
-
-        @Override
-        public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
-            return new ResyncTask(id, type, action, getDescription(), parentTaskId, headers);
-        }
-
-        @Override
-        public String getDescription() {
-            return toString();
-        }
-
-        @Override
-        public String toString() {
-            return "ResyncRequest{ " + shardId + ", " + allocationId + " }";
-        }
-
-        @Override
-        public ActionRequestValidationException validate() {
-            return null;
-        }
-    }
-
-    /**
-     * Task to resync primary and replica
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static class ResyncTask extends Task {
-        private volatile String phase = "starting";
-        private volatile int totalOperations;
-        private volatile int resyncedOperations;
-        private volatile int skippedOperations;
-
-        public ResyncTask(long id, String type, String action, String description, TaskId parentTaskId, Map<String, String> headers) {
-            super(id, type, action, description, parentTaskId, headers);
-        }
-
-        /**
-         * Set the current phase of the task.
-         */
-        public void setPhase(String phase) {
-            this.phase = phase;
-        }
-
-        /**
-         * Get the current phase of the task.
-         */
-        public String getPhase() {
-            return phase;
-        }
-
-        /**
-         * total number of translog operations that were captured by translog snapshot
-         */
-        public int getTotalOperations() {
-            return totalOperations;
-        }
-
+            assert startingSeqNo >= 0 : "startingSeqNo must be non-negative; got [" + startingSeqNo + "]";
+                if (o == null || getClass() != o.getClass()) return false;
+                listener.onFailure(e);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            // Also fail the resync early if the shard is shutting down
         public void setTotalOperations(int totalOperations) {
+        private final long maxSeqNo;
+        void sync(
+        @Override
+import org.opensearch.core.xcontent.XContentBuilder;
+            long size = 0;
+                    } finally {
+                    operations.toArray(EMPTY_ARRAY)
+        @Override
+                    maxSeenAutoIdTimestamp,
+                        throw new IndexShardClosedException(shardId);
+        }
+            this.shardId = shardId;
+                }
+                builder.endObject();
+            long primaryTerm,
+        ResyncTask resyncTask = (ResyncTask) taskManager.register("transport", "resync", request); // it's not transport :-)
+                wrappedListener
+import java.io.IOException;
+         * Get the current phase of the task.
+import org.opensearch.common.util.concurrent.AbstractRunnable;
+    }
+        ActionListener<ResyncTask> listener
+            final long trimAboveSeqNo = firstMessage.get() ? startingSeqNo - 1 : SequenceNumbers.UNASSIGNED_SEQ_NO;
+            ActionListener<Void> listener
+import java.util.Map;
+                totalOperations = in.readVInt();
+        public ActionRequestValidationException validate() {
+         */
+import org.opensearch.transport.TransportService;
+                result = 31 * result + resyncedOperations;
+    static class SnapshotSender extends AbstractRunnable implements ActionListener<ResyncReplicationResponse> {
+        @Override
+                        listener.onFailure(e);
+        public ResyncTask(long id, String type, String action, String description, TaskId parentTaskId, Map<String, String> headers) {
+            public Status(String phase, int totalOperations, int resyncedOperations, int skippedOperations) {
             this.totalOperations = totalOperations;
+            }
+            new SnapshotSender(
+        try {
+            ActionListener<ResyncReplicationResponse> listener
+package org.opensearch.index.shard;
         }
-
-        /**
-         * number of operations that have been successfully replicated
-         */
-        public int getResyncedOperations() {
-            return resyncedOperations;
         }
-
-        public void setResyncedOperations(int resyncedOperations) {
-            this.resyncedOperations = resyncedOperations;
+        private final Logger logger;
         }
-
-        /**
-         * number of translog operations that have been skipped
-         */
-        public int getSkippedOperations() {
+        }
+        } catch (Exception e) {
+            }
+        Translog.Snapshot snapshot = null;
+                ResyncReplicationRequest request = new ResyncReplicationRequest(
+            if (closed.compareAndSet(false, true)) {
+        }
+                IOUtils.close(snapshot);
+                builder.field("skippedOperations", skippedOperations);
+                return result;
+     */
+ * You may obtain a copy of the License at
+        final Translog.Snapshot snapshot,
+            final List<Translog.Operation> operations = new ArrayList<>();
+            throw new IllegalArgumentException("chunkSize must be > 0");
+    private static final Logger logger = LogManager.getLogger(PrimaryReplicaSyncer.class);
+                wrappedSnapshot,
+            }
+            task.setResyncedOperations(totalSentOps.get());
+        private final long startingSeqNo;
+    }
+                    }
+            public String getWriteableName() {
+}
+        }
+            }
             return skippedOperations;
         }
-
-        public void setSkippedOperations(int skippedOperations) {
-            this.skippedOperations = skippedOperations;
-        }
-
-        @Override
-        public ResyncTask.Status getStatus() {
-            return new ResyncTask.Status(phase, totalOperations, resyncedOperations, skippedOperations);
-        }
-
-        /**
-         * Status for primary replica syncer
-         *
-         * @opensearch.api
-         */
-        @PublicApi(since = "1.0.0")
-        public static class Status implements Task.Status {
-            public static final String NAME = "resync";
-
-            private final String phase;
-            private final int totalOperations;
-            private final int resyncedOperations;
-            private final int skippedOperations;
-
-            public Status(StreamInput in) throws IOException {
-                phase = in.readString();
-                totalOperations = in.readVInt();
-                resyncedOperations = in.readVInt();
-                skippedOperations = in.readVInt();
-            }
-
-            public Status(String phase, int totalOperations, int resyncedOperations, int skippedOperations) {
-                this.phase = requireNonNull(phase, "Phase cannot be null");
-                this.totalOperations = totalOperations;
-                this.resyncedOperations = resyncedOperations;
-                this.skippedOperations = skippedOperations;
-            }
-
-            @Override
-            public String getWriteableName() {
-                return NAME;
-            }
-
-            @Override
-            public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-                builder.startObject();
-                builder.field("phase", phase);
-                builder.field("totalOperations", totalOperations);
-                builder.field("resyncedOperations", resyncedOperations);
-                builder.field("skippedOperations", skippedOperations);
-                builder.endObject();
-                return builder;
-            }
-
-            @Override
-            public void writeTo(StreamOutput out) throws IOException {
-                out.writeString(phase);
-                out.writeVLong(totalOperations);
-                out.writeVLong(resyncedOperations);
-                out.writeVLong(skippedOperations);
-            }
-
-            @Override
-            public String toString() {
-                return Strings.toString(MediaTypeRegistry.JSON, this);
-            }
-
-            @Override
-            public boolean equals(Object o) {
-                if (this == o) return true;
-                if (o == null || getClass() != o.getClass()) return false;
-
-                Status status = (Status) o;
-
-                if (totalOperations != status.totalOperations) return false;
-                if (resyncedOperations != status.resyncedOperations) return false;
-                if (skippedOperations != status.skippedOperations) return false;
-                return phase.equals(status.phase);
-            }
-
-            @Override
-            public int hashCode() {
-                int result = phase.hashCode();
-                result = 31 * result + totalOperations;
-                result = 31 * result + resyncedOperations;
+            this.task = task;
                 result = 31 * result + skippedOperations;
-                return result;
+         */
+                public synchronized int totalOperations() {
+                @Override
+        final long primaryTerm,
+                maxSeenAutoIdTimestamp,
+                startingSeqNo,
+                syncAction.sync(request, task, primaryAllocationId, primaryTerm, this);
+            // Even though those calls are not concurrent, snapshot.next() uses non-synchronized state and is not multi-thread-compatible
+        this.taskManager = taskManager;
+                        wrappedSnapshot.close();
+                assert operation.seqNo() >= 0 : "sending operation with unassigned sequence number [" + operation + "]";
+import org.opensearch.tasks.TaskManager;
+         */
+                    continue;
+                maxSeqNo,
+                resyncTask,
+                @Override
+            ShardId shardId,
+         */
+    @Inject
             }
+                snapshot,
+            // have to send sync request even in case of there are no operations to sync - have to sync trimAboveSeqNo at least
+            public boolean equals(Object o) {
+            }
+                this.totalOperations = totalOperations;
         }
+                phase = in.readString();
+         * total number of translog operations that were captured by translog snapshot
+                }
+import org.opensearch.core.common.unit.ByteSizeUnit;
+                primaryTerm,
+            }
+            @Override
+import org.apache.logging.log4j.LogManager;
+                    totalSentOps.get(),
+    private final SyncAction syncAction;
+            // that the auto_id_timestamp of every operation in the snapshot is at most this value.
+ * this file be licensed under the Apache-2.0 license or a
+                @Override
+                resyncTask.setPhase("finished");
+                    } catch (final Exception inner) {
+import java.util.concurrent.atomic.AtomicBoolean;
+     * Synchronous action
+ * @opensearch.internal
+        private final AtomicInteger totalSkippedOps = new AtomicInteger();
+            return null;
+        @Override
     }
-}
+                    return originalSnapshot.totalOperations();
+            Translog.Snapshot snapshot,
+    public interface SyncAction {
+        private volatile int skippedOperations;
+     * @opensearch.internal
+        public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
+public class PrimaryReplicaSyncer {
+            }
+                    trimAboveSeqNo,
+                    "{} sending batch of [{}][{}] (total sent: [{}], skipped: [{}])",
+                public void onResponse(final ResyncTask resyncTask) {
+                }
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+import java.util.List;
+ * this work for additional information regarding copyright
+                task.setPhase("sending_ops");
+            // Wrap translog snapshot to make it synchronized as it is accessed by different threads through SnapshotSender.
+        @Override
+        private volatile int totalOperations;
+            public static final String NAME = "resync";
+        ActionListener<Void> wrappedListener = new ActionListener<Void>() {
+        @Override
+                resyncTask.setPhase("finished");
+         * number of operations that have been successfully replicated
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.tasks.Task;
+            final Translog.Snapshot originalSnapshot = snapshot;
+        long maxSeqNo,
+         */
+                    } catch (final Exception e) {
+                    try {
+     *
+        public void setResyncedOperations(int resyncedOperations) {
+                public void onFailure(final Exception e) {
+            public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+ * Syncer for Primary replica
+                if (seqNo == SequenceNumbers.UNASSIGNED_SEQ_NO || seqNo < startingSeqNo) {
+            private final int totalOperations;
+        }
+            this.allocationId = allocationId;
+    void setChunkSize(ByteSizeValue chunkSize) { // only settable for tests
+ */
+            }
+            @Override
+ * Unless required by applicable law or agreed to in writing,
+        public void setPhase(String phase) {
+        private final AtomicBoolean firstMessage = new AtomicBoolean(true);
+ */
+                if (totalOperations != status.totalOperations) return false;
+     */
+        /**
+        public String toString() {
+import org.opensearch.index.seqno.SequenceNumbers;
+ *
+        }
+ * GitHub history for details.
+            return totalOperations;
+ * Modifications Copyright OpenSearch Contributors. See
+            this.maxSeqNo = maxSeqNo;
+ */
+    /**
+            task.setTotalOperations(snapshot.totalOperations());
+            }
+                    } else {
+    public void resync(final IndexShard indexShard, final ActionListener<ResyncTask> listener) {
+                    if (state == IndexShardState.CLOSED) {
+            };
+                this.phase = requireNonNull(phase, "Phase cannot be null");
+import org.opensearch.action.ActionRequest;
+                        onFailure(e);
+        /**
+            } catch (IOException inner) {
+                if (this == o) return true;
+        public int getSkippedOperations() {
+                firstMessage.set(false);
+                // check if this request is past bytes threshold, and if so, send it off
+            final long maxSeqNo = indexShard.seqNoStats().getMaxSeqNo();
+    /**
+                skippedOperations = in.readVInt();
+        final ShardId shardId,
+                        wrappedSnapshot.close();
+            private final int skippedOperations;
+        }
+            String primaryAllocationId,
+                    totalSkippedOps.incrementAndGet();
+                this.skippedOperations = skippedOperations;
+        ResyncRequest request = new ResyncRequest(shardId, primaryAllocationId);
+                    try {
+        /**
+import org.opensearch.common.util.io.IOUtils;
+    /**
+                shardId,
+        public void setSkippedOperations(int skippedOperations) {
+            try {
+            public int hashCode() {
+    // for tests
+ * compatible open source license.
+                taskManager.unregister(resyncTask);
+import org.apache.logging.log4j.Logger;
+            );
+     * @opensearch.internal
+ * software distributed under the License is distributed on an
+            ResyncTask task,
+                return NAME;
+                return builder;
+        private final int chunkSizeInBytes;
+ * under the License.
+            private final int resyncedOperations;
+ *
+                    operations.size(),
+                out.writeVLong(totalOperations);
+                logger.trace(
+                        assert state == IndexShardState.STARTED : "resync should only happen on a started shard, but state was: " + state;
+        private final Translog.Snapshot snapshot;
+        private final String primaryAllocationId;
+        try {
+ */
+import org.opensearch.core.index.shard.ShardId;
+    public static class ResyncRequest extends ActionRequest {
+        };
+        this.chunkSize = chunkSize;
+        @Override
+                listener.onFailure(e);
+    /**
+        }
+                }
+                builder.field("resyncedOperations", resyncedOperations);
+         *
+        final String primaryAllocationId,
+                int result = phase.hashCode();
+            @Override
+            long primaryTerm,
+            final long maxSeenAutoIdTimestamp = indexShard.getMaxSeenAutoIdTimestamp();
+     * Sends a snapshot
+    private final TaskManager taskManager;
+            this.primaryTerm = primaryTerm;
+                size += operation.estimateSize();
+import org.opensearch.action.resync.ResyncReplicationRequest;
+                Status status = (Status) o;
+    }
+            long maxSeenAutoIdTimestamp,
+import org.opensearch.core.tasks.TaskId;
+            this.shardId = shardId;
+        /**
+import org.opensearch.core.common.unit.ByteSizeValue;
+ * Licensed to Elasticsearch under one or more contributor
+            this.logger = PrimaryReplicaSyncer.logger;
+            return phase;
+            return toString();
+                listener.onResponse(null);
+import java.util.ArrayList;
+                @Override
+                out.writeVLong(resyncedOperations);
+        private final AtomicInteger totalSentOps = new AtomicInteger();
+            if (!operations.isEmpty() || trimAboveSeqNo != SequenceNumbers.UNASSIGNED_SEQ_NO) {
+    public PrimaryReplicaSyncer(TaskManager taskManager, SyncAction syncAction) {
+         * number of translog operations that have been skipped
+    @PublicApi(since = "1.0.0")
+        public void onFailure(Exception e) {
+    }
+        /**
+        }
+     *
+                }
+                chunkSize.bytesAsInt(),
+     * @opensearch.api
+                listener.onFailure(e);
+                public synchronized void close() throws IOException {
+     */
+ *
+        public String getDescription() {
+                out.writeString(phase);
+            return "ResyncRequest{ " + shardId + ", " + allocationId + " }";
+/*
+        }
+    public static class ResyncTask extends Task {
+            return new ResyncTask.Status(phase, totalOperations, resyncedOperations, skippedOperations);
+            @Override
+        if (chunkSize.bytesAsInt() <= 0) {
+ * specific language governing permissions and limitations
+            }
+    }
+            task.setSkippedOperations(totalSkippedOps.get());
+ *
+        public static class Status implements Task.Status {
+        private final ShardId shardId;
+                    shardId,
+            final long startingSeqNo = indexShard.getLastKnownGlobalCheckpoint() + 1;
+import org.opensearch.core.common.Strings;
+        }
+import static java.util.Objects.requireNonNull;
+                taskManager.unregister(resyncTask);
+ * KIND, either express or implied.  See the License for the
+        } catch (Exception e) {
+                    IndexShardState state = indexShard.state();
+                builder.field("totalOperations", totalOperations);
+        }
+            final Translog.Snapshot wrappedSnapshot = new Translog.Snapshot() {
+            this.phase = phase;
+import org.opensearch.core.action.ActionListener;
+                shardId,
+            } else if (closed.compareAndSet(false, true)) {
+            public Status(StreamInput in) throws IOException {
+     * Request to resync primary and replica
+                    shardId,
+        protected void doRun() throws Exception {
+        /**
+            long startingSeqNo,
+import org.opensearch.core.common.io.stream.StreamInput;
+         * Status for primary replica syncer
+ * The OpenSearch Contributors require contributions made to
+        private final String allocationId;
+                return Strings.toString(MediaTypeRegistry.JSON, this);
+                resyncedOperations = in.readVInt();
+        public void onResponse(ResyncReplicationResponse response) {
+ * ownership. Elasticsearch licenses this file to you under
+import org.opensearch.action.resync.ResyncReplicationResponse;
+        SnapshotSender(
+        private final long maxSeenAutoIdTimestamp;
+            Translog.Operation operation;
+                        e.addSuppressed(inner);
+         * @opensearch.api
+            } finally {
+                listener.onResponse(resyncTask);
+        public String getPhase() {
+            // We must capture the timestamp after snapshotting a snapshot of operations to make sure
+        public int getResyncedOperations() {
+         * Set the current phase of the task.
+    private volatile ByteSizeValue chunkSize = DEFAULT_CHUNK_SIZE;
+            resync(
+        public ResyncTask.Status getStatus() {
+            ).run();
+         */
+                resyncListener
+    ) {
+            run();
+                maxSeenAutoIdTimestamp,
+                }
+                this.resyncedOperations = resyncedOperations;
+import org.opensearch.action.ActionRequestValidationException;
+                    return originalSnapshot.next();
+    }
+            }
+                if (size >= chunkSizeInBytes) {
+    private void resync(
+                e.addSuppressed(inner);
+        private final AtomicBoolean closed = new AtomicBoolean();
+    public PrimaryReplicaSyncer(TransportService transportService, TransportResyncReplicationAction syncAction) {
+                    break;
+            wrappedListener.onFailure(e);
+            private final String phase;
+            this.chunkSizeInBytes = chunkSizeInBytes;
+        private final ResyncTask task; // to track progress
+                totalSentOps.incrementAndGet();
+            this.listener = listener;
+                builder.startObject();
+        private final ActionListener<Void> listener;
+            while ((operation = snapshot.next()) != null) {
+            super(id, type, action, description, parentTaskId, headers);
+/*
+import org.opensearch.index.translog.Translog;
+            }
+     * Task to resync primary and replica
+                indexShard.routingEntry().allocationId().getId(),
+                );
+            };
+                    originalSnapshot.close();
+    }
+            final ActionListener<ResyncTask> resyncListener = new ActionListener<ResyncTask>() {
+                    }
+                primaryAllocationId,
+            snapshot = indexShard.newChangesSnapshot("resync", startingSeqNo, Long.MAX_VALUE, false, true);
+        public int getTotalOperations() {
+            this.startingSeqNo = startingSeqNo;
+            long maxSeqNo,
+ * SPDX-License-Identifier: Apache-2.0
+ * not use this file except in compliance with the License.
+            }
+            ResyncReplicationRequest request,
+        }
+                    totalSkippedOps.get()
+     */
+            @Override
+                }
+                logger.trace("{} resync completed (total sent: [{}], skipped: [{}])", shardId, totalSentOps.get(), totalSkippedOps.get());
+import org.opensearch.common.annotation.PublicApi;
+                    new ByteSizeValue(size),
+            @Override
+import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.common.inject.Inject;
+                    }
+        this(transportService.getTaskManager(), syncAction);
+        private volatile int resyncedOperations;
+            this.syncAction = syncAction;
+     * @opensearch.internal
+                syncAction,
+        @Override
+                operations.add(operation);
+        long startingSeqNo,
+            public void writeTo(StreamOutput out) throws IOException {
+        );
+                return phase.equals(status.phase);
+                if (resyncedOperations != status.resyncedOperations) return false;
+     *
+            task.setPhase("collecting_ops");
+                indexShard.getPendingPrimaryTerm(),
+                result = 31 * result + totalOperations;
+import org.opensearch.action.resync.TransportResyncReplicationAction;
+                startingSeqNo,
+    public static final ByteSizeValue DEFAULT_CHUNK_SIZE = new ByteSizeValue(512, ByteSizeUnit.KB);
+            this.skippedOperations = skippedOperations;
+    }
+/*
+                        listener.onResponse(resyncTask);
+        private static final Translog.Operation[] EMPTY_ARRAY = new Translog.Operation[0];
+        private final SyncAction syncAction;
+        }
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+/**
+                if (skippedOperations != status.skippedOperations) return false;
+        }
+                maxSeqNo,
+            SyncAction syncAction,
+        }
+                @Override
+            @Override
+        long maxSeenAutoIdTimestamp,
+            return resyncedOperations;
+            this.resyncedOperations = resyncedOperations;
+            return new ResyncTask(id, type, action, getDescription(), parentTaskId, headers);
+        this.syncAction = syncAction;
+            int chunkSizeInBytes,
+        ) {
+ * the Apache License, Version 2.0 (the "License"); you may
+        private final long primaryTerm;
+            public void onFailure(Exception e) {
+            public String toString() {
+            this.maxSeenAutoIdTimestamp = maxSeenAutoIdTimestamp;
+        private volatile String phase = "starting";
+            final ShardId shardId = indexShard.shardId();
+            @Override
+                out.writeVLong(skippedOperations);
+            this.snapshot = snapshot;
+        }
+        public ResyncRequest(ShardId shardId, String allocationId) {
+import java.util.concurrent.atomic.AtomicInteger;
+                final long seqNo = operation.seqNo();

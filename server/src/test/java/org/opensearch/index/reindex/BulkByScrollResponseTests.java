@@ -1,218 +1,199 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+    protected ToXContent.Params getToXContentParams() {
  * You may obtain a copy of the License at
- *
+            assertEquals(expectedFailure.getIndex(), actualFailure.getIndex());
+import java.util.List;
+    }
+import org.opensearch.Version;
+            nodeId = usually() ? randomAlphaOfLength(5) : null;
+            assertEquals(expectedFailure.getNodeId(), actualFailure.getNodeId());
+            randomIndexingFailures(),
+    @Override
+            assertEquals(expectedFailure.getIndex(), actualFailure.getIndex());
+        assertEquals(expected.getSearchFailures().size(), actual.getSearchFailures().size());
+        return BulkByScrollResponse.fromXContent(parser);
+            Failure expectedFailure = expected.getBulkFailures().get(i);
+ */
+            includeCreated = false;
+            assertEquals(expectedFailure.getShardId(), actualFailure.getShardId());
+        if (testExceptions) {
+        for (int i = 0; i < expected.getSearchFailures().size(); i++) {
+            new ResourceNotFoundException("bar"),
+        if (randomBoolean()) {
+import org.opensearch.core.xcontent.XContentParser;
+        assertEquals(expected.getBulkFailures().size(), actual.getBulkFailures().size());
+    private boolean testExceptions = randomBoolean();
+import org.opensearch.index.reindex.BulkByScrollTask.Status;
+            randomBoolean()
+            return emptyList();
+        String nodeId = null;
+        BulkByScrollTaskStatusTests.assertEqualStatus(expected.getStatus(), actual.getStatus(), includeUpdated, includeCreated);
+import java.util.HashMap;
+            assertEquals(expectedFailure.getNodeId(), actualFailure.getNodeId());
+public class BulkByScrollResponseTests extends AbstractXContentTestCase<BulkByScrollResponse> {
+ * SPDX-License-Identifier: Apache-2.0
+            Failure actualFailure = actual.getBulkFailures().get(i);
+            try (StreamInput in = out.bytes().streamInput()) {
+        assertEquals(expected.getTook(), actual.getTook());
+            assertEquals(expectedFailure.getId(), actualFailure.getId());
+ * specific language governing permissions and limitations
+ * this file be licensed under the Apache-2.0 license or a
+ * GitHub history for details.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    protected void assertEqualInstances(BulkByScrollResponse expected, BulkByScrollResponse actual) {
+    private void assertResponseEquals(BulkByScrollResponse expected, BulkByScrollResponse actual) {
+ * The OpenSearch Contributors require contributions made to
+    @Override
+    private List<ScrollableHitSource.SearchFailure> randomSearchFailures() {
+        return new ToXContent.MapParams(params);
+import org.opensearch.action.bulk.BulkItemResponse.Failure;
+            includeCreated = true;
+        // XContentEquivalence fails in the exception case, due to how exceptions are serialized.
+ * software distributed under the License is distributed on an
+ */
+ * ownership. Elasticsearch licenses this file to you under
+                randomIndexingFailures(),
+ */
+                randomSearchFailures(),
+    }
+    }
+            Failure actualFailure = actual.getBulkFailures().get(i);
+import org.opensearch.ResourceNotFoundException;
+import java.io.IOException;
+    public static void assertEqualBulkResponse(
+    private boolean includeCreated;
+            assertEquals(expectedFailure.getStatus(), actualFailure.getStatus());
+        assertEquals(expected.getTook(), actual.getTook());
+        }
+            assertEquals(expectedFailure.getStatus(), actualFailure.getStatus());
+        assertEquals(expected.getSearchFailures().size(), actual.getSearchFailures().size());
+    }
+/*
+            assertEquals(expectedFailure.getIndex(), actualFailure.getIndex());
+            includeUpdated = true;
+        assertEqualBulkResponse(expected, actual, includeUpdated, includeCreated);
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.reindex;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.ResourceNotFoundException;
-import org.opensearch.Version;
-import org.opensearch.action.bulk.BulkItemResponse.Failure;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.reindex.BulkByScrollTask.Status;
-import org.opensearch.test.AbstractXContentTestCase;
-import org.opensearch.transport.client.transport.NoNodeAvailableException;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static java.util.Collections.emptyList;
-import static java.util.Collections.singletonList;
-import static org.opensearch.common.unit.TimeValue.timeValueMillis;
+            assertEquals(expectedFailure.getStatus(), actualFailure.getStatus());
 import static org.apache.lucene.tests.util.TestUtil.randomSimpleString;
-
-public class BulkByScrollResponseTests extends AbstractXContentTestCase<BulkByScrollResponse> {
-
-    private boolean includeUpdated;
-    private boolean includeCreated;
-    private boolean testExceptions = randomBoolean();
-
-    public void testRountTrip() throws IOException {
-        BulkByScrollResponse response = new BulkByScrollResponse(
+                emptyList(),
             timeValueMillis(randomNonNegativeLong()),
-            BulkByScrollTaskStatusTests.randomStatus(),
-            randomIndexingFailures(),
-            randomSearchFailures(),
-            randomBoolean()
-        );
-        BulkByScrollResponse tripped;
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            response.writeTo(out);
-            try (StreamInput in = out.bytes().streamInput()) {
-                tripped = new BulkByScrollResponse(in);
-            }
-        }
-        assertResponseEquals(response, tripped);
-    }
-
-    private List<Failure> randomIndexingFailures() {
-        return usually()
-            ? emptyList()
-            : singletonList(new Failure(randomSimpleString(random()), randomSimpleString(random()), new IllegalArgumentException("test")));
-    }
-
-    private List<ScrollableHitSource.SearchFailure> randomSearchFailures() {
-        if (randomBoolean()) {
-            return emptyList();
-        }
-        String index = null;
-        Integer shardId = null;
-        String nodeId = null;
-        if (randomBoolean()) {
-            index = randomAlphaOfLength(5);
-            shardId = randomInt();
-            nodeId = usually() ? randomAlphaOfLength(5) : null;
-        }
-        OpenSearchException exception = randomFrom(
-            new ResourceNotFoundException("bar"),
-            new OpenSearchException("foo"),
-            new NoNodeAvailableException("baz")
-        );
-        return singletonList(new ScrollableHitSource.SearchFailure(exception, index, shardId, nodeId));
-    }
-
-    private void assertResponseEquals(BulkByScrollResponse expected, BulkByScrollResponse actual) {
-        assertEquals(expected.getTook(), actual.getTook());
-        BulkByScrollTaskStatusTests.assertTaskStatusEquals(Version.CURRENT, expected.getStatus(), actual.getStatus());
-        assertEquals(expected.getBulkFailures().size(), actual.getBulkFailures().size());
-        for (int i = 0; i < expected.getBulkFailures().size(); i++) {
-            Failure expectedFailure = expected.getBulkFailures().get(i);
-            Failure actualFailure = actual.getBulkFailures().get(i);
-            assertEquals(expectedFailure.getIndex(), actualFailure.getIndex());
-            assertEquals(expectedFailure.getId(), actualFailure.getId());
-            assertEquals(expectedFailure.getMessage(), actualFailure.getMessage());
-            assertEquals(expectedFailure.getStatus(), actualFailure.getStatus());
-        }
-        assertEquals(expected.getSearchFailures().size(), actual.getSearchFailures().size());
-        for (int i = 0; i < expected.getSearchFailures().size(); i++) {
-            ScrollableHitSource.SearchFailure expectedFailure = expected.getSearchFailures().get(i);
-            ScrollableHitSource.SearchFailure actualFailure = actual.getSearchFailures().get(i);
-            assertEquals(expectedFailure.getIndex(), actualFailure.getIndex());
-            assertEquals(expectedFailure.getShardId(), actualFailure.getShardId());
-            assertEquals(expectedFailure.getNodeId(), actualFailure.getNodeId());
-            assertEquals(expectedFailure.getReason().getClass(), actualFailure.getReason().getClass());
-            assertEquals(expectedFailure.getReason().getMessage(), actualFailure.getReason().getMessage());
-            assertEquals(expectedFailure.getStatus(), actualFailure.getStatus());
-        }
-    }
-
-    public static void assertEqualBulkResponse(
-        BulkByScrollResponse expected,
-        BulkByScrollResponse actual,
-        boolean includeUpdated,
-        boolean includeCreated
-    ) {
-        assertEquals(expected.getTook(), actual.getTook());
-        BulkByScrollTaskStatusTests.assertEqualStatus(expected.getStatus(), actual.getStatus(), includeUpdated, includeCreated);
-        assertEquals(expected.getBulkFailures().size(), actual.getBulkFailures().size());
-        for (int i = 0; i < expected.getBulkFailures().size(); i++) {
-            Failure expectedFailure = expected.getBulkFailures().get(i);
-            Failure actualFailure = actual.getBulkFailures().get(i);
-            assertEquals(expectedFailure.getIndex(), actualFailure.getIndex());
-            assertEquals(expectedFailure.getId(), actualFailure.getId());
-            assertEquals(expectedFailure.getStatus(), actualFailure.getStatus());
-        }
-        assertEquals(expected.getSearchFailures().size(), actual.getSearchFailures().size());
-        for (int i = 0; i < expected.getSearchFailures().size(); i++) {
-            ScrollableHitSource.SearchFailure expectedFailure = expected.getSearchFailures().get(i);
-            ScrollableHitSource.SearchFailure actualFailure = actual.getSearchFailures().get(i);
-            assertEquals(expectedFailure.getIndex(), actualFailure.getIndex());
-            assertEquals(expectedFailure.getShardId(), actualFailure.getShardId());
-            assertEquals(expectedFailure.getNodeId(), actualFailure.getNodeId());
-            assertEquals(expectedFailure.getStatus(), actualFailure.getStatus());
-        }
-    }
-
-    @Override
-    protected void assertEqualInstances(BulkByScrollResponse expected, BulkByScrollResponse actual) {
-        assertEqualBulkResponse(expected, actual, includeUpdated, includeCreated);
-    }
-
-    @Override
-    protected BulkByScrollResponse createTestInstance() {
-        if (testExceptions) {
-            return new BulkByScrollResponse(
-                timeValueMillis(randomNonNegativeLong()),
-                BulkByScrollTaskStatusTests.randomStatus(),
-                randomIndexingFailures(),
-                randomSearchFailures(),
-                randomBoolean()
-            );
-        } else {
-            return new BulkByScrollResponse(
-                timeValueMillis(randomNonNegativeLong()),
-                BulkByScrollTaskStatusTests.randomStatusWithoutException(),
-                emptyList(),
-                emptyList(),
-                randomBoolean()
-            );
-        }
-    }
-
-    @Override
+ * under the License.
     protected BulkByScrollResponse doParseInstance(XContentParser parser) throws IOException {
-        return BulkByScrollResponse.fromXContent(parser);
     }
-
-    @Override
-    protected boolean assertToXContentEquivalence() {
-        // XContentEquivalence fails in the exception case, due to how exceptions are serialized.
-        return testExceptions == false;
+import org.opensearch.OpenSearchException;
     }
-
-    @Override
+                randomBoolean()
+import java.util.Map;
+            index = randomAlphaOfLength(5);
+            randomSearchFailures(),
     protected boolean supportsUnknownFields() {
-        return true;
+        Integer shardId = null;
     }
-
-    @Override
-    protected ToXContent.Params getToXContentParams() {
+            new OpenSearchException("foo"),
         Map<String, String> params = new HashMap<>();
-        if (randomBoolean()) {
-            includeUpdated = false;
-            params.put(Status.INCLUDE_UPDATED, "false");
-        } else {
-            includeUpdated = true;
+            shardId = randomInt();
+        );
+ * this work for additional information regarding copyright
+        BulkByScrollResponse response = new BulkByScrollResponse(
+    protected boolean assertToXContentEquivalence() {
+import org.opensearch.transport.client.transport.NoNodeAvailableException;
         }
-        if (randomBoolean()) {
-            includeCreated = false;
-            params.put(Status.INCLUDE_CREATED, "false");
+        boolean includeCreated
         } else {
-            includeCreated = true;
+ * KIND, either express or implied.  See the License for the
+                randomBoolean()
+package org.opensearch.index.reindex;
         }
-        return new ToXContent.MapParams(params);
+                tripped = new BulkByScrollResponse(in);
+        BulkByScrollResponse tripped;
+            );
+/*
     }
+            assertEquals(expectedFailure.getReason().getClass(), actualFailure.getReason().getClass());
+import org.opensearch.test.AbstractXContentTestCase;
+            }
+                BulkByScrollTaskStatusTests.randomStatusWithoutException(),
+            BulkByScrollTaskStatusTests.randomStatus(),
+    }
+        return singletonList(new ScrollableHitSource.SearchFailure(exception, index, shardId, nodeId));
+        }
+            ScrollableHitSource.SearchFailure actualFailure = actual.getSearchFailures().get(i);
+            return new BulkByScrollResponse(
+            : singletonList(new Failure(randomSimpleString(random()), randomSimpleString(random()), new IllegalArgumentException("test")));
+ * compatible open source license.
+        String index = null;
+            assertEquals(expectedFailure.getReason().getMessage(), actualFailure.getReason().getMessage());
+import org.opensearch.common.io.stream.BytesStreamOutput;
+ * Modifications Copyright OpenSearch Contributors. See
+        BulkByScrollTaskStatusTests.assertTaskStatusEquals(Version.CURRENT, expected.getStatus(), actual.getStatus());
+        boolean includeUpdated,
+            params.put(Status.INCLUDE_UPDATED, "false");
+        }
+    }
+        }
+        }
+        return usually()
+    @Override
+    private boolean includeUpdated;
+        for (int i = 0; i < expected.getSearchFailures().size(); i++) {
+        );
+        return true;
+            response.writeTo(out);
+        } else {
+        return testExceptions == false;
+ * Licensed to Elasticsearch under one or more contributor
+        OpenSearchException exception = randomFrom(
+    }
+import org.opensearch.core.common.io.stream.StreamInput;
+ * not use this file except in compliance with the License.
+    public void testRountTrip() throws IOException {
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+        BulkByScrollResponse expected,
+    @Override
+            assertEquals(expectedFailure.getStatus(), actualFailure.getStatus());
+    @Override
+ *
+        if (randomBoolean()) {
+    @Override
+            assertEquals(expectedFailure.getShardId(), actualFailure.getShardId());
+        BulkByScrollResponse actual,
+            assertEquals(expectedFailure.getId(), actualFailure.getId());
+    protected BulkByScrollResponse createTestInstance() {
+ * Unless required by applicable law or agreed to in writing,
+            return new BulkByScrollResponse(
+import org.opensearch.core.xcontent.ToXContent;
+                BulkByScrollTaskStatusTests.randomStatus(),
+import static java.util.Collections.singletonList;
+        if (randomBoolean()) {
+/*
+import static org.opensearch.common.unit.TimeValue.timeValueMillis;
+            assertEquals(expectedFailure.getIndex(), actualFailure.getIndex());
+        assertEquals(expected.getBulkFailures().size(), actual.getBulkFailures().size());
+                timeValueMillis(randomNonNegativeLong()),
+        }
+            ScrollableHitSource.SearchFailure actualFailure = actual.getSearchFailures().get(i);
+            ScrollableHitSource.SearchFailure expectedFailure = expected.getSearchFailures().get(i);
+ * license agreements. See the NOTICE file distributed with
+            assertEquals(expectedFailure.getMessage(), actualFailure.getMessage());
+        for (int i = 0; i < expected.getBulkFailures().size(); i++) {
+            );
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+            ScrollableHitSource.SearchFailure expectedFailure = expected.getSearchFailures().get(i);
+        assertResponseEquals(response, tripped);
+            new NoNodeAvailableException("baz")
+                timeValueMillis(randomNonNegativeLong()),
+                emptyList(),
+import static java.util.Collections.emptyList;
+        }
+            includeUpdated = false;
+            ? emptyList()
+        } else {
+        }
+            params.put(Status.INCLUDE_CREATED, "false");
+            Failure expectedFailure = expected.getBulkFailures().get(i);
+    ) {
+        if (randomBoolean()) {
+        for (int i = 0; i < expected.getBulkFailures().size(); i++) {
+    private List<Failure> randomIndexingFailures() {
 }

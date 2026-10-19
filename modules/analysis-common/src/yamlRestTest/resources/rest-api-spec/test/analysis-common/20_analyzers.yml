@@ -1,1134 +1,1019 @@
-## Smoke tests for analyzers included in the analysis-common module
-
-"whitespace":
     - do:
+    - do:
+            analyzer: galician
+            text:     lidstaten
         indices.analyze:
-          body:
-            text:     Foo Bar!
-            analyzer: whitespace
-    - length: { tokens: 2 }
-    - match:  { tokens.0.token: Foo }
-    - match:  { tokens.1.token: Bar! }
-
-    - do:
-        indices.analyze:
-          body:
-            text:     Foo Bar!
-            explain:  true
-            analyzer: whitespace
-    - match:  { detail.custom_analyzer: false }
-    - match:  { detail.analyzer.name: whitespace }
-    - length: { detail.analyzer.tokens: 2 }
-    - match:  { detail.analyzer.tokens.0.token: Foo }
-    - match:  { detail.analyzer.tokens.0.start_offset: 0 }
-    - match:  { detail.analyzer.tokens.0.end_offset: 3 }
-    - match:  { detail.analyzer.tokens.0.position: 0 }
-    - match:  { detail.analyzer.tokens.1.token: Bar! }
-    - match:  { detail.analyzer.tokens.1.start_offset: 4 }
-    - match:  { detail.analyzer.tokens.1.end_offset: 8 }
-    - match:  { detail.analyzer.tokens.1.position: 1 }
-
----
-"bengali":
-    - do:
-        indices.analyze:
-          body:
-            text:     বাড়ী
-            analyzer: bengali
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: বার }
-
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
+    - match:  { tokens.0.token: teadaole }
                   my_analyzer:
-                    type: bengali
-
+          body:
+          body:
+    - length: { tokens: 1 }
     - do:
-        indices.analyze:
           index: test
-          body:
-            text:     বাড়ী
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: বার }
-
----
-"fingerprint":
+                analyzer:
+            analyzer: thai
+            settings:
+        indices.analyze:
+        indices.create:
+    - do:
+                  my_analyzer:
     - do:
         indices.analyze:
-          body:
-            text:     A1 B2 A1 D4 C3
-            analyzer: fingerprint
+                analyzer:
+            settings:
     - length: { tokens: 1 }
-    - match:  { tokens.0.token: a1 b2 c3 d4 }
-
----
+          body:
+    - match:  { tokens.0.token: edeltäj }
+            analyzer: norwegian
 "pattern":
-    - do:
-        indices.analyze:
-          body:
-            text:     foo bar
-            analyzer: pattern
-    - length: { tokens: 2 }
-    - match:  { tokens.0.token: foo }
-    - match:  { tokens.1.token: bar }
-
----
-"snowball":
-    - do:
-        indices.analyze:
-          body:
-            text:     the brown foxes
-            analyzer: snowball
-    - length: { tokens: 2 }
-    - match:  { tokens.0.token: brown }
-    - match:  { tokens.1.token: fox }
-
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_snowball:
-                    type: snowball
-                    language: "Dutch"
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     de bruine vossen
-            analyzer: my_snowball
-    - length: { tokens: 2 }
-    - match:  { tokens.0.token: bruin }
-    - match:  { tokens.1.token: voss }
-
----
-"arabic":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: arabic
-
-    - do:
-        indices.analyze:
-          body:
-            text:     كبيرة
-            analyzer: arabic
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: كبير }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     كبيرة
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: كبير }
-
----
-"armenian":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: armenian
-
-    - do:
-        indices.analyze:
-          body:
-            text:     արծիվ
-            analyzer: armenian
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: արծ }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     արծիվ
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: արծ }
-
----
-"basque":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: basque
-
-    - do:
-        indices.analyze:
-          body:
-            text:     zaldiak
-            analyzer: basque
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: zaldi }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     zaldiak
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: zaldi }
-
----
-"brazilian":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: brazilian
-
-    - do:
-        indices.analyze:
-          body:
-            text:     boataria
+            text:     پیاوە
             analyzer: brazilian
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: boat }
-
-    - do:
         indices.analyze:
-          index: test
-          body:
-            text:     boataria
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: boat }
-
----
-"bulgarian":
-    - do:
-        indices.create:
-          index: test
-          body:
             settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: bulgarian
-
-    - do:
-        indices.analyze:
-          body:
-            text:     градове
-            analyzer: bulgarian
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: град }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     градове
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: град }
-
----
-"catalan":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: catalan
-
-    - do:
-        indices.analyze:
-          body:
-            text:     llengües
-            analyzer: catalan
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: llengu }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     llengües
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: llengu }
-
----
-"chinese":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
                     type: chinese
-
-    - do:
+"brazilian":
         indices.analyze:
-          body:
-            text:     only for old indices
-            analyzer: chinese
-    - length: { tokens: 3 }
-    - match:  { tokens.0.token: only }
-    - match:  { tokens.1.token: old }
-    - match:  { tokens.2.token: indices }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     only for old indices
-            analyzer: my_analyzer
-    - length: { tokens: 3 }
-    - match:  { tokens.0.token: only }
-    - match:  { tokens.1.token: old }
-    - match:  { tokens.2.token: indices }
-
----
-"cjk":
-    - do:
-        indices.create:
-          index: test
+                    type: persian
           body:
             settings:
-              analysis:
-                analyzer:
+            text:     corresponderá
+    - match:  { tokens.0.token: vaik }
+          body:
+            text:     Foo Bar!
+    - do:
                   my_analyzer:
-                    type: cjk
-
-    - do:
-        indices.analyze:
-          body:
-            text:     多くの
-            analyzer: cjk
-    - length: { tokens: 2 }
-    - match:  { tokens.0.token: 多く }
-    - match:  { tokens.1.token: くの }
-
-    - do:
-        indices.analyze:
           index: test
-          body:
-            text:     多くの
-            analyzer: my_analyzer
-    - length: { tokens: 2 }
-    - match:  { tokens.0.token: 多く }
-    - match:  { tokens.1.token: くの }
-
 ---
-"czech":
-    - do:
-        indices.create:
-          index: test
+            text:     ağacı
+"italian":
+        indices.analyze:
+    - length: { tokens: 1 }
+                    type: english
           body:
-            settings:
+                    type: hindi
+    - do:
+          body:
+        indices.analyze:
+          index: test
+    - do:
+        indices.analyze:
+          index: test
+    - do:
+    - length: { tokens: 1 }
               analysis:
-                analyzer:
+"estonian":
+    - length: { tokens: 1 }
+          index: test
+            analyzer: my_analyzer
+    - do:
+          body:
+        indices.analyze:
+    - match:  { tokens.0.token: babakocs }
+---
+    - length: { tokens: 1 }
+                    type: galician
+            analyzer: portuguese
+            text:     sécuritaires
+    - do:
+    - match:  { tokens.0.token: ağaç }
+            settings:
+        indices.analyze:
+          body:
+          body:
+    - do:
+          index: test
+            text:     undersøgelse
+          index: test
+    - do:
+    - match:  { tokens.0.token: securitair }
+        indices.analyze:
+          index: test
+              analysis:
+            settings:
+    - match:  { tokens.1.token: くの }
+        indices.analyze:
+        indices.create:
+          body:
+    - length: { tokens: 1 }
+    - match:  { tokens.0.token: absenț }
+    - do:
+        indices.analyze:
+            settings:
+    - length: { tokens: 1 }
+            analyzer: my_analyzer
+          body:
                   my_analyzer:
                     type: czech
-
-    - do:
-        indices.analyze:
-          body:
-            text:     Pokud mluvime o volnem
-            analyzer: czech
-    - length: { tokens: 2 }
-    - match:  { tokens.0.token: mluvim }
-    - match:  { tokens.1.token: voln }
-
-    - do:
-        indices.analyze:
           index: test
-          body:
-            text:     Pokud mluvime o volnem
-            analyzer: my_analyzer
-    - length: { tokens: 2 }
-    - match:  { tokens.0.token: mluvim }
-    - match:  { tokens.1.token: voln }
-
----
-"danish":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: danish
-
-    - do:
-        indices.analyze:
-          body:
-            text:     undersøgelse
-            analyzer: danish
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: undersøg }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     undersøgelse
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: undersøg }
-
----
-"dutch":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: dutch
-
-    - do:
-        indices.analyze:
-          body:
-            text:     lidstaten
-            analyzer: dutch
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: lidstat }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     lidstaten
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: lidstat }
-
----
-"english":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: english
-
-    - do:
-        indices.analyze:
-          body:
-            text:     books
-            analyzer: english
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: book }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     books
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: book }
-
----
-"estonian":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: estonian
-
-    - do:
-        indices.analyze:
-          body:
-            text:     teadaolevalt
-            analyzer: estonian
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: teadaole }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     teadaolevalt
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: teadaole }
-
----
-"finnish":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: finnish
-
-    - do:
-        indices.analyze:
-          body:
-            text:     edeltäjiinsä
-            analyzer: finnish
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: edeltäj }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     edeltäjiinsä
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: edeltäj }
-
----
-"french":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: french
-
-    - do:
-        indices.analyze:
-          body:
-            text:     sécuritaires
-            analyzer: french
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: securitair }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     sécuritaires
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: securitair }
-
----
-"galician":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: galician
-
-    - do:
-        indices.analyze:
-          body:
-            text:     corresponderá
-            analyzer: galician
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: correspond }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     corresponderá
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: correspond }
-
----
-"german":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: german
-
-    - do:
-        indices.analyze:
-          body:
-            text:     Tischen
-            analyzer: german
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: tisch }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     Tischen
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: tisch }
-
----
-"greek":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: greek
-
-    - do:
-        indices.analyze:
-          body:
-            text:     Μία
-            analyzer: greek
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: μια }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     Μία
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: μια }
-
----
-"hindi":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: hindi
-
-    - do:
-        indices.analyze:
-          body:
-            text:     हिन्दी
-            analyzer: hindi
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: हिंद }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     हिन्दी
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: हिंद }
-
----
-"hungarian":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: hungarian
-
-    - do:
-        indices.analyze:
-          body:
-            text:     babakocsi
-            analyzer: hungarian
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: babakocs }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     babakocsi
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: babakocs }
-
----
-"indonesian":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: indonesian
-
-    - do:
-        indices.analyze:
-          body:
-            text:     peledakan
+            text:     abbandonata
             analyzer: indonesian
     - length: { tokens: 1 }
-    - match:  { tokens.0.token: ledak }
-
+          index: test
+            analyzer: my_analyzer
+            settings:
+          body:
+          body:
+---
     - do:
+    - length: { tokens: 1 }
+            text:     chicana
+            settings:
+    - length: { tokens: 1 }
+            analyzer: my_analyzer
+            analyzer: danish
+    - do:
+          index: test
+---
+            text:     books
+            analyzer: czech
+          body:
+    - do:
+    - match:  { tokens.0.token: "1234" }
+          body:
+          index: test
+---
+                analyzer:
+    - match:  { tokens.1.token: voln }
+          body:
+                analyzer:
+            text:     llengües
+    - length: { tokens: 1 }
+          body:
+    - do:
+              analysis:
+            settings:
         indices.analyze:
+    - do:
+                  my_analyzer:
+        indices.analyze:
+    - match:  { tokens.0.token: Foo }
+                  my_analyzer:
+            analyzer: my_analyzer
+---
+          index: test
+            text:     lidstaten
+                analyzer:
+        indices.analyze:
+---
+    - match:  { tokens.0.token: quilometric }
+    - length: { tokens: 1 }
+                    type: danish
+                    type: portuguese
+                analyzer:
+    - length: { tokens: 1 }
+            settings:
+              analysis:
+    - match:  { tokens.0.token: tisch }
+                  my_analyzer:
+                    type: catalan
+        indices.analyze:
+    - match:  { tokens.0.token: tisch }
+    - match:  { tokens.0.token: বার }
+    - do:
+          index: test
+        indices.analyze:
+    - length: { tokens: 2 }
+                  my_analyzer:
+          index: test
+    - do:
+          index: test
+    - do:
+                analyzer:
+          body:
+            analyzer: spanish
+          body:
+            text:     বাড়ী
+    - match:  { tokens.0.token: boat }
+            text:     多くの
+              analysis:
+          index: test
+        indices.create:
+                analyzer:
+            analyzer: my_analyzer
           index: test
           body:
+              analysis:
+"czech":
+            analyzer: my_analyzer
+          body:
+    - match:  { tokens.0.token: "1234" }
+    - do:
+"fingerprint":
+                analyzer:
+            analyzer: fingerprint
+          body:
+                  my_analyzer:
+---
+    - match:  { tokens.0.token: llengu }
+          body:
+          index: test
+---
+    - length: { tokens: 2 }
+    - do:
+            analyzer: irish
+          index: test
+    - do:
+            analyzer: my_analyzer
+    - do:
+                analyzer:
+                    type: bulgarian
+---
+    - length: { tokens: 1 }
+    - do:
+    - match:  { tokens.0.token: jaktkarl }
+                  my_analyzer:
+            text:     हिन्दी
+          body:
+        indices.analyze:
+    - length: { tokens: 1 }
+        indices.analyze:
+            text:     llengües
+    - do:
+            text:     Pokud mluvime o volnem
+"sorani":
+            settings:
+"latvian":
+                    type: bengali
+            analyzer: my_analyzer
+          body:
+    - match:  { tokens.1.token: くの }
+        indices.analyze:
+          index: test
+"chinese":
+            analyzer: romanian
+            analyzer: basque
+    - length: { tokens: 1 }
+    - match:  { tokens.0.token: abbandonat }
+    - do:
+            text:     books
+              analysis:
+        indices.analyze:
+          body:
+            text:     می‌خورد
+            analyzer: my_analyzer
+"lithuanian":
+          body:
+          body:
+          body:
+    - length: { tokens: 1 }
+        indices.create:
+          index: test
+              analysis:
+        indices.analyze:
+            text:     de bruine vossen
+    - length: { tokens: 1 }
+          index: test
+            settings:
+    - do:
+        indices.create:
+    - do:
+    - match:  { tokens.1.token: bar }
+    - length: { tokens: 1 }
+                    type: german
+          body:
+            text:     A1 B2 A1 D4 C3
+    - do:
+          body:
+    - do:
+            analyzer: italian
+            analyzer: my_analyzer
+                analyzer:
+## Smoke tests for analyzers included in the analysis-common module
+              analysis:
+          body:
+        indices.create:
+        indices.create:
+            analyzer: pattern
+    - match:  { tokens.0.token: град }
+    - length: { tokens: 1 }
+                  my_analyzer:
+                  my_analyzer:
+            text:     градове
+                analyzer:
+    - match:  { tokens.0.token: हिंद }
+"dutch":
+            analyzer: german
+              analysis:
+                  my_analyzer:
+          body:
+        indices.analyze:
+---
+    - match:  { detail.analyzer.name: whitespace }
+          body:
+    - match:  { detail.analyzer.tokens.1.start_offset: 4 }
+          body:
+                    type: spanish
+                analyzer:
+    - length: { tokens: 1 }
+          body:
+            text:     Tischen
+                  my_analyzer:
+    - match:  { tokens.0.token: μια }
+                  my_analyzer:
+              analysis:
+            text:     absenţa
+            text:     sécuritaires
+    - length: { tokens: 1 }
+    - match:  { tokens.1.token: voln }
+    - do:
+          index: test
+    - length: { tokens: 1 }
+    - do:
             text:     peledakan
+    - length: { tokens: 2 }
+    - do:
+                analyzer:
+    - length: { tokens: 1 }
+              analysis:
+          body:
+            text:     ๑๒๓๔
+          body:
+    - match:  { tokens.0.token: tirg }
+    - match:  { detail.analyzer.tokens.1.end_offset: 8 }
+                  my_analyzer:
+        indices.analyze:
+            text:     বাড়ী
+                    type: basque
+"hungarian":
+    - length: { tokens: 1 }
+            text:     siopadóireacht
+    - do:
+    - match:  { tokens.0.token: securitair }
+    - length: { tokens: 1 }
+        indices.analyze:
+                  my_analyzer:
+          index: test
+            analyzer: my_analyzer
+    - do:
+"bengali":
+            settings:
+    - match:  { tokens.0.token: chican }
+    - match:  { tokens.0.token: tirg }
+        indices.analyze:
+                  my_analyzer:
+            settings:
+            settings:
+          body:
+        indices.create:
+          body:
+          body:
+          index: test
+          index: test
+                  my_snowball:
+    - length: { tokens: 1 }
+        indices.create:
+    - length: { tokens: 1 }
+            text:     teadaolevalt
+            analyzer: my_analyzer
+            analyzer: dutch
+---
+              analysis:
+    - match:  { detail.analyzer.tokens.0.token: Foo }
+    - match:  { tokens.0.token: absenț }
+    - do:
+    - length: { tokens: 1 }
+    - match:  { tokens.0.token: हिंद }
+"galician":
+            text:     the brown foxes
+            text:     Tischen
+---
+        indices.analyze:
+          body:
+    - match:  { tokens.2.token: indices }
+          index: test
+    - do:
+    - length: { tokens: 1 }
+              analysis:
+          body:
+    - length: { tokens: 1 }
+    - length: { tokens: 1 }
+            text:     Pokud mluvime o volnem
+            text:     edeltäjiinsä
+        indices.create:
+    - match:  { tokens.0.token: вмест }
+                  my_analyzer:
+                analyzer:
+                analyzer:
+    - match:  { tokens.0.token: پیاو }
+            text:     foo bar
+          body:
+          body:
+            analyzer: english
+    - do:
+                  my_analyzer:
+                  my_analyzer:
+"whitespace":
+          body:
+              analysis:
+          body:
+    - length: { tokens: 1 }
+          body:
+          body:
+            text:     only for old indices
+            explain:  true
+            text:     كبيرة
+    - do:
+          body:
+            analyzer: my_analyzer
+    - match:  { tokens.0.token: vaik }
+          body:
+                    type: lithuanian
+        indices.analyze:
+    - do:
+          index: test
+        indices.analyze:
+              analysis:
+          body:
+            analyzer: my_analyzer
+          body:
+    - match:  { tokens.0.token: বার }
+                  my_analyzer:
+        indices.create:
+    - do:
+---
+    - do:
+            text:     undersøgelse
+"basque":
+        indices.create:
+          index: test
+            text:     tirgiem
+          index: test
+              analysis:
+    - match:  { tokens.0.token: خورد }
+          index: test
+    - do:
+            text:     多くの
+          body:
+        indices.analyze:
+          index: test
+    - length: { tokens: 1 }
+            text:     jaktkarlarne
+            analyzer: my_analyzer
+            settings:
+          index: test
+          index: test
+          body:
+    - length: { tokens: 1 }
+            analyzer: chinese
+            settings:
+---
+                  my_analyzer:
+    - do:
+            analyzer: my_analyzer
+            text:     градове
+    - length: { tokens: 1 }
+        indices.create:
+        indices.create:
+    - length: { tokens: 1 }
+            text:     only for old indices
+          body:
+        indices.create:
+    - do:
+    - match:  { tokens.1.token: old }
+    - do:
+    - match:  { tokens.0.token: μια }
+"german":
+            settings:
+    - match:  { tokens.0.token: correspond }
+    - do:
+    - do:
+          index: test
+          body:
+            settings:
+    - match:  { tokens.0.token: siopadóir }
+          body:
+    - do:
+    - length: { tokens: 3 }
+            text:     Μία
+---
+    - match:  { tokens.0.token: bruin }
+            text:     babakocsi
+                  my_analyzer:
+            text:     peledakan
+    - do:
+    - match:  { tokens.0.token: havnedistrikt }
+                    language: "Dutch"
+---
+    - length: { tokens: 1 }
+    - match:  { detail.custom_analyzer: false }
+          index: test
+    - do:
+    - do:
+    - length: { tokens: 1 }
+    - do:
+"finnish":
+        indices.analyze:
+            analyzer: my_analyzer
+    - match:  { tokens.0.token: mluvim }
+"bulgarian":
+          body:
+            settings:
+          body:
+          body:
+          body:
+        indices.create:
+          body:
+          body:
+    - match:  { tokens.0.token: արծ }
+            analyzer: latvian
+        indices.create:
+                    type: indonesian
+            analyzer: hungarian
+            settings:
+"catalan":
+              analysis:
+---
+          body:
+    - do:
+    - do:
+                    type: irish
+                analyzer:
+    - do:
+          body:
+    - do:
+---
+            text:     havnedistriktene
+          body:
             analyzer: my_analyzer
     - length: { tokens: 1 }
-    - match:  { tokens.0.token: ledak }
-
+    - do:
+        indices.analyze:
+                analyzer:
+        indices.create:
+        indices.analyze:
+            analyzer: cjk
+    - length: { tokens: 2 }
+        indices.analyze:
+          body:
+    - do:
+    - length: { tokens: 1 }
+                    type: hungarian
+    - match:  { tokens.0.token: zaldi }
 ---
 "irish":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
+    - match:  { detail.analyzer.tokens.1.position: 1 }
                 analyzer:
-                  my_analyzer:
-                    type: irish
-
-    - do:
-        indices.analyze:
-          body:
-            text:     siopadóireacht
-            analyzer: irish
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: siopadóir }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     siopadóireacht
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: siopadóir }
-
----
-"italian":
-    - do:
         indices.create:
-          index: test
           body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: italian
-
-    - do:
-        indices.analyze:
-          body:
-            text:     abbandonata
-            analyzer: italian
     - length: { tokens: 1 }
-    - match:  { tokens.0.token: abbandonat }
-
-    - do:
         indices.analyze:
-          index: test
-          body:
-            text:     abbandonata
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: abbandonat }
-
----
-"latvian":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: latvian
-
-    - do:
-        indices.analyze:
-          body:
-            text:     tirgiem
-            analyzer: latvian
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: tirg }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     tirgiem
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: tirg }
-
----
-"lithuanian":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: lithuanian
-
-    - do:
-        indices.analyze:
-          body:
-            text:     vaikų
-            analyzer: lithuanian
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: vaik }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     vaikų
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: vaik }
-
----
-"norwegian":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: norwegian
-
-    - do:
-        indices.analyze:
-          body:
-            text:     havnedistriktene
-            analyzer: norwegian
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: havnedistrikt }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     havnedistriktene
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: havnedistrikt }
-
----
-"persian":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: persian
-
-    - do:
-        indices.analyze:
-          body:
-            text:     می‌خورد
-            analyzer: persian
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: خورد }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     می‌خورد
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: خورد }
-
----
-"portuguese":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: portuguese
-
-    - do:
-        indices.analyze:
-          body:
             text:     quilométricas
-            analyzer: portuguese
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: quilometric }
-
     - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     quilométricas
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: quilometric }
-
 ---
-"romanian":
-    - do:
         indices.create:
-          index: test
           body:
-            settings:
-              analysis:
                 analyzer:
-                  my_analyzer:
-                    type: romanian
-
     - do:
-        indices.analyze:
-          body:
-            text:     absenţa
-            analyzer: romanian
+            analyzer: snowball
     - length: { tokens: 1 }
-    - match:  { tokens.0.token: absenț }
-
-    - do:
-        indices.analyze:
-          index: test
           body:
-            text:     absenţa
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: absenț }
-
----
-"russian":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: russian
-
-    - do:
-        indices.analyze:
-          body:
-            text:     Вместе с тем о
-            analyzer: russian
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: вмест }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     Вместе с тем о
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: вмест }
-
----
-"sorani":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: sorani
-
-    - do:
-        indices.analyze:
-          body:
-            text:     پیاوە
-            analyzer: sorani
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: پیاو }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     پیاوە
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: پیاو }
-
----
-"spanish":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: spanish
-
-    - do:
-        indices.analyze:
-          body:
-            text:     chicana
-            analyzer: spanish
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: chican }
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     chicana
-            analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: chican }
-
----
-"swedish":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: swedish
-
-    - do:
-        indices.analyze:
-          body:
-            text:     jaktkarlarne
             analyzer: swedish
+          body:
+---
+          body:
     - length: { tokens: 1 }
-    - match:  { tokens.0.token: jaktkarl }
-
+            settings:
     - do:
+          body:
+            text:     vaikų
+                    type: norwegian
+              analysis:
+    - match:  { tokens.0.token: foo }
+            settings:
+          body:
+    - match:  { tokens.0.token: mluvim }
+"french":
+        indices.create:
+"danish":
+          body:
+    - match:  { tokens.0.token: undersøg }
+          body:
+                analyzer:
+    - length: { tokens: 1 }
+    - match:  { tokens.0.token: boat }
+    - do:
+          body:
+        indices.analyze:
+          body:
+        indices.analyze:
+                    type: estonian
+          index: test
+            analyzer: my_analyzer
+          index: test
+    - do:
+    - match:  { tokens.0.token: вмест }
+          body:
+    - length: { tokens: 1 }
+    - do:
+              analysis:
+    - do:
+            analyzer: french
+          index: test
+            analyzer: greek
+    - do:
+                    type: greek
+                analyzer:
+          body:
+            settings:
+        indices.analyze:
         indices.analyze:
           index: test
+            settings:
+                analyzer:
           body:
-            text:     jaktkarlarne
-            analyzer: my_analyzer
+            text:     teadaolevalt
+          body:
+          body:
     - length: { tokens: 1 }
+        indices.analyze:
+---
+            settings:
+        indices.analyze:
+            settings:
+          index: test
+    - do:
+        indices.create:
+    - length: { tokens: 1 }
+            settings:
+    - match:  { tokens.1.token: fox }
+            settings:
+            analyzer: my_analyzer
+    - length: { tokens: 2 }
+          index: test
+            text:     edeltäjiinsä
+            analyzer: sorani
+          index: test
+        indices.create:
+        indices.analyze:
+            settings:
+            settings:
+---
+    - match:  { tokens.1.token: old }
+                    type: romanian
+              analysis:
+---
+                  my_analyzer:
+            analyzer: my_analyzer
+              analysis:
+                  my_analyzer:
+---
+        indices.create:
+            analyzer: persian
+    - match:  { tokens.0.token: ledak }
+              analysis:
+          body:
+          body:
+            analyzer: hindi
+        indices.create:
+          body:
+                  my_analyzer:
+            settings:
+    - do:
+          index: test
+          index: test
+          body:
+    - length: { tokens: 2 }
+                  my_analyzer:
+        indices.analyze:
+    - length: { tokens: 1 }
+            analyzer: my_analyzer
+    - match:  { tokens.0.token: abbandonat }
+        indices.create:
+    - do:
+---
+        indices.analyze:
+        indices.analyze:
+          body:
+    - length: { tokens: 1 }
+    - do:
+        indices.create:
+                analyzer:
+    - length: { tokens: 2 }
+    - do:
+---
+          body:
+          index: test
+                    type: finnish
+          index: test
+"portuguese":
+"indonesian":
+              analysis:
+    - match:  { tokens.0.token: كبير }
+        indices.analyze:
+          index: test
+    - match:  { tokens.0.token: 多く }
+    - match:  { tokens.0.token: book }
+            analyzer: catalan
+        indices.create:
+---
+            analyzer: whitespace
+        indices.analyze:
+    - match:  { tokens.0.token: only }
+---
+                analyzer:
+            text:     Foo Bar!
+          index: test
+    - do:
+"thai":
+    - match:  { detail.analyzer.tokens.1.token: Bar! }
+"norwegian":
+    - length: { tokens: 1 }
+                  my_analyzer:
+    - match:  { tokens.0.token: only }
+                analyzer:
+            text:     abbandonata
+        indices.analyze:
+        indices.analyze:
+    - do:
+    - do:
+                    type: latvian
+    - length: { tokens: 1 }
+            text:     corresponderá
+          index: test
+    - match:  { tokens.0.token: edeltäj }
+        indices.create:
+    - do:
+    - match:  { tokens.0.token: град }
+                    type: french
+                analyzer:
+          body:
+                analyzer:
+    - match:  { tokens.1.token: Bar! }
+    - length: { tokens: 1 }
+    - do:
+        indices.create:
+        indices.create:
+              analysis:
+            text:     quilométricas
+            text:     كبيرة
+            analyzer: finnish
+            text:     ağacı
+    - do:
+            text:     vaikų
+            text:     jaktkarlarne
+    - length: { tokens: 1 }
+        indices.analyze:
+                analyzer:
+            text:     پیاوە
+            text:     Μία
+        indices.analyze:
+    - match:  { tokens.0.token: a1 b2 c3 d4 }
+            analyzer: russian
+        indices.analyze:
+        indices.analyze:
+                    type: dutch
+    - match:  { tokens.0.token: teadaole }
+          body:
+                    type: turkish
+          body:
+    - do:
+            settings:
+"swedish":
+    - match:  { tokens.2.token: indices }
+            analyzer: lithuanian
+              analysis:
+          index: test
+              analysis:
+"romanian":
+        indices.create:
     - match:  { tokens.0.token: jaktkarl }
-
+    - length: { tokens: 1 }
+                analyzer:
+    - match:  { tokens.0.token: babakocs }
+        indices.analyze:
+    - do:
+                  my_analyzer:
+            analyzer: my_analyzer
+            analyzer: my_analyzer
+          index: test
+        indices.analyze:
+            analyzer: bengali
+    - match:  { tokens.0.token: 多く }
+            analyzer: my_analyzer
+---
+          index: test
+            analyzer: armenian
+    - match:  { tokens.0.token: արծ }
+          body:
+    - match:  { tokens.0.token: lidstat }
+        indices.analyze:
+            text:     می‌خورد
+    - do:
+    - do:
+          body:
+          index: test
+                analyzer:
+        indices.create:
+                  my_analyzer:
+"russian":
+        indices.analyze:
+        indices.analyze:
+        indices.analyze:
+    - do:
+    - do:
+    - length: { tokens: 2 }
+              analysis:
+"armenian":
+    - length: { tokens: 1 }
+              analysis:
+          index: test
+                    type: brazilian
+        indices.analyze:
+                    type: swedish
+        indices.analyze:
+            text:     Вместе с тем о
+          body:
+                  my_analyzer:
+    - do:
+    - match:  { tokens.0.token: undersøg }
+    - do:
+          body:
+"persian":
+          index: test
+---
+        indices.analyze:
+    - length: { tokens: 1 }
+          body:
+    - length: { tokens: 1 }
+              analysis:
+          body:
+    - match:  { tokens.0.token: siopadóir }
+          index: test
+            text:     siopadóireacht
+            analyzer: estonian
+          index: test
+"spanish":
+"cjk":
+              analysis:
+        indices.analyze:
+                    type: arabic
+            analyzer: my_analyzer
+    - do:
+    - length: { detail.analyzer.tokens: 2 }
+    - match:  { tokens.0.token: correspond }
+                  my_analyzer:
+---
+            analyzer: my_analyzer
+    - match:  { tokens.1.token: voss }
+---
+            analyzer: my_analyzer
+          index: test
+        indices.analyze:
+"arabic":
+                analyzer:
+"snowball":
+    - do:
+          body:
+              analysis:
+    - do:
+    - match:  { tokens.0.token: ledak }
+    - match:  { tokens.0.token: خورد }
+                  my_analyzer:
+    - do:
+    - do:
+        indices.analyze:
+    - do:
+          body:
+          index: test
+          index: test
+            analyzer: my_snowball
+            analyzer: my_analyzer
+            text:     tirgiem
+        indices.create:
+    - do:
+        indices.create:
+    - length: { tokens: 1 }
+          body:
+        indices.analyze:
+        indices.create:
+              analysis:
+          body:
+"greek":
+          body:
+    - length: { tokens: 1 }
+              analysis:
+            text:     արծիվ
+            text:     ๑๒๓๔
+        indices.analyze:
+            text:     हिन्दी
+        indices.analyze:
+                analyzer:
+                    type: cjk
+            settings:
+    - match:  { detail.analyzer.tokens.0.start_offset: 0 }
+        indices.analyze:
+                    type: russian
+            analyzer: bulgarian
+        indices.create:
+    - do:
+          index: test
+                    type: snowball
+    - do:
+    - do:
+          index: test
+          index: test
+          index: test
+    - length: { tokens: 1 }
+          index: test
+              analysis:
+    - length: { tokens: 1 }
+          index: test
+          index: test
+            analyzer: my_analyzer
+        indices.analyze:
+    - do:
+    - match:  { detail.analyzer.tokens.0.end_offset: 3 }
+"english":
+    - match:  { tokens.0.token: chican }
+          body:
 ---
 "turkish":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
-                    type: turkish
-
-    - do:
         indices.analyze:
-          body:
-            text:     ağacı
-            analyzer: turkish
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: ağaç }
-
+    - match:  { tokens.0.token: havnedistrikt }
+                    type: armenian
     - do:
-        indices.analyze:
-          index: test
-          body:
-            text:     ağacı
             analyzer: my_analyzer
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: ağaç }
-
----
-"thai":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  my_analyzer:
+            text:     արծիվ
+        indices.analyze:
+    - match:  { tokens.0.token: book }
                     type: thai
-
-    - do:
-        indices.analyze:
+            text:     babakocsi
           body:
-            text:     ๑๒๓๔
-            analyzer: thai
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: "1234" }
-
     - do:
-        indices.analyze:
           index: test
           body:
-            text:     ๑๒๓๔
-            analyzer: my_analyzer
+            text:     boataria
+        indices.analyze:
+    - match:  { tokens.0.token: پیاو }
+        indices.analyze:
+    - do:
+          body:
+    - match:  { detail.analyzer.tokens.0.position: 0 }
+    - do:
+                analyzer:
     - length: { tokens: 1 }
-    - match:  { tokens.0.token: "1234" }
+---
+                analyzer:
+          body:
+          body:
+          index: test
+            text:     chicana
+          body:
+            text:     havnedistriktene
+          index: test
+---
+            text:     Вместе с тем о
+    - length: { tokens: 3 }
+                  my_analyzer:
+            analyzer: my_analyzer
+            text:     zaldiak
+    - do:
+                  my_analyzer:
+            analyzer: arabic
+    - do:
+            settings:
+          body:
+          body:
+          index: test
+        indices.analyze:
+    - match:  { tokens.0.token: llengu }
+            analyzer: turkish
+        indices.analyze:
+    - do:
+    - do:
+    - do:
+"hindi":
+            analyzer: whitespace
+            text:     absenţa
+              analysis:
+        indices.analyze:
+              analysis:
+            analyzer: my_analyzer
+            text:     boataria
+            analyzer: my_analyzer
+    - match:  { tokens.0.token: zaldi }
+    - do:
+                    type: sorani
+    - length: { tokens: 1 }
+          index: test
+          body:
+                analyzer:
+    - length: { tokens: 1 }
+    - match:  { tokens.0.token: ağaç }
+    - do:
+            analyzer: my_analyzer
+    - match:  { tokens.0.token: كبير }
+    - do:
+    - match:  { tokens.0.token: quilometric }
+                    type: italian
+---
+            text:     zaldiak
+    - match:  { tokens.0.token: brown }
+    - do:
+---
+                analyzer:
+    - match:  { tokens.0.token: lidstat }
+    - do:
+    - do:
+            settings:
+    - length: { tokens: 1 }

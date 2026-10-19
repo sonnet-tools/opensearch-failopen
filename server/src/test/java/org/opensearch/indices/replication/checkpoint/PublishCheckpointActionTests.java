@@ -1,225 +1,191 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.indices.replication.checkpoint;
-
-import org.apache.lucene.codecs.Codec;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.ActionTestUtils;
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.action.support.replication.ReplicationMode;
-import org.opensearch.action.support.replication.TransportReplicationAction;
-import org.opensearch.cluster.action.shard.ShardStateAction;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexService;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.indices.replication.SegmentReplicationTargetService;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.transport.CapturingTransport;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-
-import java.util.Collections;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.opensearch.index.remote.RemoteStoreTestsHelper.createIndexSettings;
-import static org.opensearch.test.ClusterServiceUtils.createClusterService;
-import static org.hamcrest.Matchers.sameInstance;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-public class PublishCheckpointActionTests extends OpenSearchTestCase {
-
-    private ThreadPool threadPool;
-    private CapturingTransport transport;
-    private ClusterService clusterService;
-    private TransportService transportService;
-    private ShardStateAction shardStateAction;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        threadPool = new TestThreadPool(getClass().getName());
-        transport = new CapturingTransport();
-        clusterService = createClusterService(threadPool);
-        transportService = transport.createTransportService(
-            clusterService.getSettings(),
-            threadPool,
-            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
-            boundAddress -> clusterService.localNode(),
-            null,
-            Collections.emptySet(),
-            NoopTracer.INSTANCE
-        );
-        transportService.start();
-        transportService.acceptIncomingRequests();
-        shardStateAction = new ShardStateAction(clusterService, transportService, null, null, threadPool);
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        try {
-            IOUtils.close(transportService, clusterService, transport);
-        } finally {
-            terminate(threadPool);
-        }
-        super.tearDown();
-    }
-
-    public void testPublishCheckpointActionOnPrimary() {
-        final IndicesService indicesService = mock(IndicesService.class);
-
-        final Index index = new Index("index", "uuid");
-        final IndexService indexService = mock(IndexService.class);
-        when(indicesService.indexServiceSafe(index)).thenReturn(indexService);
-
-        final int id = randomIntBetween(0, 4);
-        final IndexShard indexShard = mock(IndexShard.class);
-        when(indexService.getShard(id)).thenReturn(indexShard);
-
-        final ShardId shardId = new ShardId(index, id);
-        when(indexShard.shardId()).thenReturn(shardId);
-
-        final SegmentReplicationTargetService mockTargetService = mock(SegmentReplicationTargetService.class);
-
-        final PublishCheckpointAction action = new PublishCheckpointAction(
-            Settings.EMPTY,
-            transportService,
-            clusterService,
-            indicesService,
-            threadPool,
-            shardStateAction,
-            new ActionFilters(Collections.emptySet()),
-            mockTargetService
-        );
-
-        final ReplicationCheckpoint checkpoint = new ReplicationCheckpoint(indexShard.shardId(), 1111, 11, 1, Codec.getDefault().getName());
-        final PublishCheckpointRequest request = new PublishCheckpointRequest(checkpoint);
-
-        action.shardOperationOnPrimary(request, indexShard, ActionTestUtils.assertNoFailureListener(result -> {
-            // we should forward the request containing the current publish checkpoint to the replica
-            assertThat(result.replicaRequest(), sameInstance(request));
-        }));
-    }
-
-    public void testPublishCheckpointActionOnReplica() {
-        final IndicesService indicesService = mock(IndicesService.class);
-
-        final Index index = new Index("index", "uuid");
-        final IndexService indexService = mock(IndexService.class);
-        when(indicesService.indexServiceSafe(index)).thenReturn(indexService);
-        final int id = randomIntBetween(0, 4);
-        final IndexShard indexShard = mock(IndexShard.class);
-        when(indexService.getShard(id)).thenReturn(indexShard);
-
-        final ShardId shardId = new ShardId(index, id);
-        when(indexShard.shardId()).thenReturn(shardId);
-        when(indexShard.indexSettings()).thenReturn(
-            createIndexSettings(false, Settings.builder().put(IndexMetadata.INDEX_REPLICATION_TYPE_SETTING.getKey(), "SEGMENT").build())
-        );
-        final SegmentReplicationTargetService mockTargetService = mock(SegmentReplicationTargetService.class);
-
-        final PublishCheckpointAction action = new PublishCheckpointAction(
-            Settings.EMPTY,
-            transportService,
-            clusterService,
-            indicesService,
-            threadPool,
-            shardStateAction,
-            new ActionFilters(Collections.emptySet()),
-            mockTargetService
-        );
-
-        final ReplicationCheckpoint checkpoint = new ReplicationCheckpoint(indexShard.shardId(), 1111, 11, 1, Codec.getDefault().getName());
-
-        final PublishCheckpointRequest request = new PublishCheckpointRequest(checkpoint);
-
-        final PlainActionFuture<TransportReplicationAction.ReplicaResult> listener = PlainActionFuture.newFuture();
-        action.shardOperationOnReplica(request, indexShard, listener);
-        final TransportReplicationAction.ReplicaResult result = listener.actionGet();
-
-        // onNewCheckpoint should be called on shard with checkpoint request
-        verify(mockTargetService, times(1)).onNewCheckpoint(checkpoint, indexShard);
-
-        // the result should indicate success
-        final AtomicBoolean success = new AtomicBoolean();
-        result.runPostReplicaActions(ActionListener.wrap(r -> success.set(true), e -> fail(e.toString())));
-        assertTrue(success.get());
-
-    }
-
-    public void testPublishCheckpointActionOnDocrepReplicaDuringMigration() {
-        final IndicesService indicesService = mock(IndicesService.class);
-
-        final Index index = new Index("index", "uuid");
-        final IndexService indexService = mock(IndexService.class);
-        when(indicesService.indexServiceSafe(index)).thenReturn(indexService);
-        final int id = randomIntBetween(0, 4);
-        final IndexShard indexShard = mock(IndexShard.class);
-        when(indexService.getShard(id)).thenReturn(indexShard);
-
-        final ShardId shardId = new ShardId(index, id);
-        when(indexShard.shardId()).thenReturn(shardId);
-        when(indexShard.indexSettings()).thenReturn(createIndexSettings(false));
-        final SegmentReplicationTargetService mockTargetService = mock(SegmentReplicationTargetService.class);
-
-        final PublishCheckpointAction action = new PublishCheckpointAction(
-            Settings.EMPTY,
-            transportService,
-            clusterService,
-            indicesService,
-            threadPool,
-            shardStateAction,
-            new ActionFilters(Collections.emptySet()),
-            mockTargetService
-        );
-        // no interaction with SegmentReplicationTargetService object
-        verify(mockTargetService, never()).onNewCheckpoint(any(), any());
-    }
-
-    public void testGetReplicationModeWithRemoteTranslog() {
-        final PublishCheckpointAction action = createAction();
-        final IndexShard indexShard = mock(IndexShard.class);
-        when(indexShard.indexSettings()).thenReturn(createIndexSettings(true));
-        assertEquals(ReplicationMode.FULL_REPLICATION, action.getReplicationMode(indexShard));
-    }
-
-    public void testGetReplicationModeWithLocalTranslog() {
-        final PublishCheckpointAction action = createAction();
-        final IndexShard indexShard = mock(IndexShard.class);
-        when(indexShard.indexSettings()).thenReturn(createIndexSettings(false));
-        assertEquals(ReplicationMode.FULL_REPLICATION, action.getReplicationMode(indexShard));
-    }
-
-    private PublishCheckpointAction createAction() {
         return new PublishCheckpointAction(
-            Settings.EMPTY,
-            transportService,
-            clusterService,
-            mock(IndicesService.class),
-            threadPool,
-            shardStateAction,
-            new ActionFilters(Collections.emptySet()),
-            mock(SegmentReplicationTargetService.class)
+        final SegmentReplicationTargetService mockTargetService = mock(SegmentReplicationTargetService.class);
+        }));
         );
+        final IndicesService indicesService = mock(IndicesService.class);
+    @Override
+import org.opensearch.index.IndexService;
+import java.util.Collections;
+        );
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
+        // the result should indicate success
+import static org.mockito.Mockito.verify;
     }
-
+        final PublishCheckpointRequest request = new PublishCheckpointRequest(checkpoint);
+        final SegmentReplicationTargetService mockTargetService = mock(SegmentReplicationTargetService.class);
+        } finally {
+        when(indexShard.indexSettings()).thenReturn(createIndexSettings(false));
+        final int id = randomIntBetween(0, 4);
+        shardStateAction = new ShardStateAction(clusterService, transportService, null, null, threadPool);
+        verify(mockTargetService, never()).onNewCheckpoint(any(), any());
+        transportService.acceptIncomingRequests();
+        }
+        clusterService = createClusterService(threadPool);
+        action.shardOperationOnPrimary(request, indexShard, ActionTestUtils.assertNoFailureListener(result -> {
+    }
+    private ThreadPool threadPool;
+    public void testGetReplicationModeWithRemoteTranslog() {
+    @Override
+        when(indicesService.indexServiceSafe(index)).thenReturn(indexService);
+        action.shardOperationOnReplica(request, indexShard, listener);
+            threadPool,
+import org.opensearch.indices.IndicesService;
+        threadPool = new TestThreadPool(getClass().getName());
+        final PublishCheckpointAction action = new PublishCheckpointAction(
+            shardStateAction,
+ * SPDX-License-Identifier: Apache-2.0
+        transportService = transport.createTransportService(
+            mockTargetService
+            new ActionFilters(Collections.emptySet()),
+            transportService,
+import org.opensearch.threadpool.ThreadPool;
+        when(indicesService.indexServiceSafe(index)).thenReturn(indexService);
+            clusterService.getSettings(),
+        final ReplicationCheckpoint checkpoint = new ReplicationCheckpoint(indexShard.shardId(), 1111, 11, 1, Codec.getDefault().getName());
+        final IndexShard indexShard = mock(IndexShard.class);
+    public void testPublishCheckpointActionOnDocrepReplicaDuringMigration() {
+            transportService,
+            Settings.EMPTY,
+        when(indexShard.indexSettings()).thenReturn(
+        final int id = randomIntBetween(0, 4);
+package org.opensearch.indices.replication.checkpoint;
+import java.util.concurrent.atomic.AtomicBoolean;
+        final IndexService indexService = mock(IndexService.class);
+    }
+        transportService.start();
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+    private ClusterService clusterService;
+/*
+        when(indicesService.indexServiceSafe(index)).thenReturn(indexService);
+import org.opensearch.core.action.ActionListener;
+            indicesService,
+        final SegmentReplicationTargetService mockTargetService = mock(SegmentReplicationTargetService.class);
+            Settings.EMPTY,
+    private CapturingTransport transport;
+            boundAddress -> clusterService.localNode(),
+        final Index index = new Index("index", "uuid");
+ * this file be licensed under the Apache-2.0 license or a
+            shardStateAction,
+        super.tearDown();
+            threadPool,
+        final ShardId shardId = new ShardId(index, id);
+import org.opensearch.common.settings.Settings;
+public class PublishCheckpointActionTests extends OpenSearchTestCase {
+        // onNewCheckpoint should be called on shard with checkpoint request
+        super.setUp();
+        final PublishCheckpointRequest request = new PublishCheckpointRequest(checkpoint);
+import org.opensearch.common.util.io.IOUtils;
+import org.opensearch.action.support.ActionFilters;
+            new ActionFilters(Collections.emptySet()),
+            new ActionFilters(Collections.emptySet()),
+            threadPool,
+import org.opensearch.action.support.ActionTestUtils;
+            transportService,
+        final Index index = new Index("index", "uuid");
+        when(indexShard.shardId()).thenReturn(shardId);
+ *
+        final PublishCheckpointAction action = new PublishCheckpointAction(
+import org.opensearch.threadpool.TestThreadPool;
+            clusterService,
+ */
+        final IndexShard indexShard = mock(IndexShard.class);
+import static org.opensearch.index.remote.RemoteStoreTestsHelper.createIndexSettings;
+            clusterService,
+        );
+            Settings.EMPTY,
+        when(indexShard.indexSettings()).thenReturn(createIndexSettings(false));
+        final ShardId shardId = new ShardId(index, id);
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.index.shard.IndexShard;
+        assertEquals(ReplicationMode.FULL_REPLICATION, action.getReplicationMode(indexShard));
+        when(indexService.getShard(id)).thenReturn(indexShard);
+        final IndexShard indexShard = mock(IndexShard.class);
+            Collections.emptySet(),
+import org.opensearch.test.transport.CapturingTransport;
 }
+        when(indexService.getShard(id)).thenReturn(indexShard);
+    public void testGetReplicationModeWithLocalTranslog() {
+            clusterService,
+    }
+    public void testPublishCheckpointActionOnPrimary() {
+import static org.opensearch.test.ClusterServiceUtils.createClusterService;
+            shardStateAction,
+        final Index index = new Index("index", "uuid");
+        final IndicesService indicesService = mock(IndicesService.class);
+            // we should forward the request containing the current publish checkpoint to the replica
+import static org.mockito.Mockito.any;
+    }
+import org.opensearch.cluster.metadata.IndexMetadata;
+        transport = new CapturingTransport();
+import org.opensearch.cluster.action.shard.ShardStateAction;
+        final PublishCheckpointAction action = createAction();
+import static org.mockito.Mockito.never;
+    private ShardStateAction shardStateAction;
+        final ShardId shardId = new ShardId(index, id);
+            indicesService,
+            NoopTracer.INSTANCE
+        final IndexService indexService = mock(IndexService.class);
+import org.opensearch.transport.TransportService;
+            mockTargetService
+    private PublishCheckpointAction createAction() {
+            terminate(threadPool);
+            mockTargetService
+        final IndexShard indexShard = mock(IndexShard.class);
+import org.opensearch.action.support.replication.ReplicationMode;
+    }
+        assertTrue(success.get());
+        when(indexService.getShard(id)).thenReturn(indexShard);
+        result.runPostReplicaActions(ActionListener.wrap(r -> success.set(true), e -> fail(e.toString())));
+import org.opensearch.action.support.PlainActionFuture;
+        final PublishCheckpointAction action = new PublishCheckpointAction(
+import org.opensearch.indices.replication.SegmentReplicationTargetService;
+            mock(IndicesService.class),
+    private TransportService transportService;
+            Settings.EMPTY,
+        );
+    public void testPublishCheckpointActionOnReplica() {
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.core.index.Index;
+            new ActionFilters(Collections.emptySet()),
+    }
+        try {
+        verify(mockTargetService, times(1)).onNewCheckpoint(checkpoint, indexShard);
+        final PublishCheckpointAction action = createAction();
+        final IndicesService indicesService = mock(IndicesService.class);
+            shardStateAction,
+import static org.mockito.Mockito.when;
+import org.opensearch.core.index.shard.ShardId;
+        when(indexShard.shardId()).thenReturn(shardId);
+    public void setUp() throws Exception {
+        final IndexShard indexShard = mock(IndexShard.class);
+            mock(SegmentReplicationTargetService.class)
+        assertEquals(ReplicationMode.FULL_REPLICATION, action.getReplicationMode(indexShard));
+        final TransportReplicationAction.ReplicaResult result = listener.actionGet();
+    public void tearDown() throws Exception {
+            IOUtils.close(transportService, clusterService, transport);
+        );
+import static org.mockito.Mockito.mock;
+        final AtomicBoolean success = new AtomicBoolean();
+            threadPool,
+import org.apache.lucene.codecs.Codec;
+            createIndexSettings(false, Settings.builder().put(IndexMetadata.INDEX_REPLICATION_TYPE_SETTING.getKey(), "SEGMENT").build())
+    }
+        // no interaction with SegmentReplicationTargetService object
+        final IndexService indexService = mock(IndexService.class);
+ * compatible open source license.
+            assertThat(result.replicaRequest(), sameInstance(request));
+            clusterService,
+        final PlainActionFuture<TransportReplicationAction.ReplicaResult> listener = PlainActionFuture.newFuture();
+            null,
+        final int id = randomIntBetween(0, 4);
+            threadPool,
+import static org.hamcrest.Matchers.sameInstance;
+        when(indexShard.indexSettings()).thenReturn(createIndexSettings(true));
+            indicesService,
+import org.opensearch.action.support.replication.TransportReplicationAction;
+        when(indexShard.shardId()).thenReturn(shardId);
+        final ReplicationCheckpoint checkpoint = new ReplicationCheckpoint(indexShard.shardId(), 1111, 11, 1, Codec.getDefault().getName());
+            transportService,
+        );
+import static org.mockito.Mockito.times;

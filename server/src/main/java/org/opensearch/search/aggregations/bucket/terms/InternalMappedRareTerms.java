@@ -1,206 +1,181 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
  * license agreements. See the NOTICE file distributed with
+import java.util.Objects;
+ * Unless required by applicable law or agreed to in writing,
+        CollectionUtil.introSort(rare, order.comparator());
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+        return maxDocCount;
+            // and save some type casting headaches later.
+     */
+    SetBackedScalingCuckooFilter getFilter() {
+    }
+    @Override
+        this.filter = filter;
+package org.opensearch.search.aggregations.bucket.terms;
+import org.opensearch.search.aggregations.AggregationExecutionException;
+}
+                referenceTerms = terms;
+        this.format = format;
+/**
+        return buckets;
+        }
+    public boolean equals(Object obj) {
+ * software distributed under the License is distributed on an
+        SetBackedScalingCuckooFilter filter = null;
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.logging.log4j.LogManager;
+    }
+        DocValueFormat format,
+                filter.merge(otherFilter);
+        format = in.readNamedWriteable(DocValueFormat.class);
+import org.opensearch.search.aggregations.BucketOrder;
  *
+                        + referenceTerms.getName()
+        BucketOrder order,
+    @Override
+import org.opensearch.core.common.io.stream.StreamInput;
+    final SetBackedScalingCuckooFilter filter;
+import org.opensearch.search.aggregations.InternalAggregation;
+public abstract class InternalMappedRareTerms<A extends InternalRareTerms<A, B>, B extends InternalRareTerms.Bucket<B>> extends
+    }
+    @Override
+            bucketMap = buckets.stream().collect(Collectors.toMap(InternalRareTerms.Bucket::getKeyAsString, Function.identity()));
+    protected final Logger logger = LogManager.getLogger(getClass());
+import org.opensearch.search.DocValueFormat;
+ */
+    public B getBucketByKey(String term) {
+    }
+            if (referenceTerms != null
+ * The OpenSearch Contributors require contributions made to
+        out.writeNamedWriteable(format);
+import java.io.IOException;
+        InternalRareTerms<A, B> referenceTerms = null;
+        return doXContentCommon(builder, params, buckets);
+ * @opensearch.internal
+            } else if (b.getDocCount() > maxDocCount) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    ) {
+import java.util.stream.Collectors;
+        return filter;
+ * Modifications Copyright OpenSearch Contributors. See
+                bucketList.add(bucket);
+ * this file be licensed under the Apache-2.0 license or a
+        if (obj == null || getClass() != obj.getClass()) return false;
+        }
+        super(in);
  *    http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.terms;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.util.CollectionUtil;
-import org.opensearch.common.Randomness;
-import org.opensearch.common.util.SetBackedScalingCuckooFilter;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.AggregationExecutionException;
-import org.opensearch.search.aggregations.BucketOrder;
-import org.opensearch.search.aggregations.InternalAggregation;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
-/**
- * Implementation of mapped rare terms
- *
- * @opensearch.internal
- */
-public abstract class InternalMappedRareTerms<A extends InternalRareTerms<A, B>, B extends InternalRareTerms.Bucket<B>> extends
-    InternalRareTerms<A, B> {
-
-    protected DocValueFormat format;
-    protected List<B> buckets;
-    protected Map<String, B> bucketMap;
-
-    final SetBackedScalingCuckooFilter filter;
-
-    protected final Logger logger = LogManager.getLogger(getClass());
-
-    InternalMappedRareTerms(
-        String name,
-        BucketOrder order,
-        Map<String, Object> metadata,
-        DocValueFormat format,
-        List<B> buckets,
-        long maxDocCount,
-        SetBackedScalingCuckooFilter filter
-    ) {
-        super(name, order, maxDocCount, metadata);
-        this.format = format;
-        this.buckets = buckets;
-        this.filter = filter;
     }
-
-    public long getMaxDocCount() {
-        return maxDocCount;
+        if (super.equals(obj) == false) return false;
     }
-
-    SetBackedScalingCuckooFilter getFilter() {
-        return filter;
-    }
-
-    /**
-     * Read from a stream.
-     */
-    InternalMappedRareTerms(StreamInput in, Bucket.Reader<B> bucketReader) throws IOException {
-        super(in);
-        format = in.readNamedWriteable(DocValueFormat.class);
-        buckets = in.readList(stream -> bucketReader.read(stream, format));
-        filter = new SetBackedScalingCuckooFilter(in, Randomness.get());
-    }
-
-    @Override
-    protected void writeTermTypeInfoTo(StreamOutput out) throws IOException {
-        out.writeNamedWriteable(format);
-        out.writeList(buckets);
-        filter.writeTo(out);
-    }
-
-    @Override
-    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
+                filter = new SetBackedScalingCuckooFilter(otherFilter);
+ * ownership. Elasticsearch licenses this file to you under
+        if (bucketMap == null) {
         Map<Object, List<B>> buckets = new HashMap<>();
-        InternalRareTerms<A, B> referenceTerms = null;
-        SetBackedScalingCuckooFilter filter = null;
-
-        for (InternalAggregation aggregation : aggregations) {
-            // Unmapped rare terms don't have a cuckoo filter so we'll skip all this work
-            // and save some type casting headaches later.
-            if (aggregation.isMapped() == false) {
-                continue;
-            }
-
-            @SuppressWarnings("unchecked")
+    InternalMappedRareTerms(StreamInput in, Bucket.Reader<B> bucketReader) throws IOException {
+    protected void writeTermTypeInfoTo(StreamOutput out) throws IOException {
+import org.apache.lucene.util.CollectionUtil;
+        super(name, order, maxDocCount, metadata);
+    }
+ */
             InternalRareTerms<A, B> terms = (InternalRareTerms<A, B>) aggregation;
-            if (referenceTerms == null && aggregation.getClass().equals(UnmappedRareTerms.class) == false) {
-                referenceTerms = terms;
-            }
-            if (referenceTerms != null
+ */
+        SetBackedScalingCuckooFilter filter
+ * KIND, either express or implied.  See the License for the
                 && referenceTerms.getClass().equals(terms.getClass()) == false
-                && terms.getClass().equals(UnmappedRareTerms.class) == false) {
-                // control gets into this loop when the same field name against which the query is executed
+     * Read from a stream.
+    public int hashCode() {
+/*
+        if (this == obj) return true;
+ * Licensed to Elasticsearch under one or more contributor
+        filter.writeTo(out);
+        buckets = in.readList(stream -> bucketReader.read(stream, format));
+    @Override
+import java.util.function.Function;
+/*
+ * compatible open source license.
+            SetBackedScalingCuckooFilter otherFilter = ((InternalMappedRareTerms) aggregation).getFilter();
+                addToFilter(filter, b);
+ */
+        List<B> buckets,
+        Map<String, Object> metadata,
+ * GitHub history for details.
+            if ((b.getDocCount() <= maxDocCount && containsTerm(filter, b) == false)) {
+import java.util.List;
+    public final XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
                 // is of different types in different indices.
-                throw new AggregationExecutionException(
+        String name,
+    public long getMaxDocCount() {
+ *
+    InternalMappedRareTerms(
+                // Note this may happen during incremental reductions too
+        return bucketMap.get(term);
+ * not use this file except in compliance with the License.
+        final List<B> rare = new ArrayList<>();
+        return createWithFilter(name, rare, filter);
+                // this term has gone over threshold while merging, so add it to the filter.
+    protected DocValueFormat format;
+            if (aggregation.isMapped() == false) {
+    public abstract boolean containsTerm(SetBackedScalingCuckooFilter filter, B bucket);
+            }
+import org.opensearch.common.util.SetBackedScalingCuckooFilter;
+            }
+import java.util.HashMap;
+ * specific language governing permissions and limitations
+ * You may obtain a copy of the License at
+    }
+ * under the License.
                     "Merging/Reducing the aggregations failed when computing the aggregation ["
-                        + referenceTerms.getName()
+            } else {
+ *
+            for (B bucket : terms.getBuckets()) {
+                && terms.getClass().equals(UnmappedRareTerms.class) == false) {
+                reduceContext.consumeBucketsAndMaybeBreak(1);
+        return Objects.equals(buckets, that.buckets) && Objects.equals(format, that.format) && Objects.equals(filter, that.filter);
+    protected Map<String, B> bucketMap;
+    }
+        for (List<B> sameTermBuckets : buckets.values()) {
+        }
+    public abstract void addToFilter(SetBackedScalingCuckooFilter filter, B bucket);
+        return Objects.hash(super.hashCode(), buckets, format, filter);
+import org.apache.logging.log4j.Logger;
+import java.util.ArrayList;
+                List<B> bucketList = buckets.computeIfAbsent(bucket.getKey(), k -> new ArrayList<>());
+    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
+            if (referenceTerms == null && aggregation.getClass().equals(UnmappedRareTerms.class) == false) {
                         + "] because the field you gave in the aggregation query existed as two different "
+            // Unmapped rare terms don't have a cuckoo filter so we'll skip all this work
+ * Implementation of mapped rare terms
+            }
+            if (filter == null) {
+/*
+        long maxDocCount,
+            }
+                rare.add(b);
+        filter = new SetBackedScalingCuckooFilter(in, Randomness.get());
+                // control gets into this loop when the same field name against which the query is executed
+    @Override
+                continue;
+        InternalMappedRareTerms<?, ?> that = (InternalMappedRareTerms<?, ?>) obj;
+    /**
+    public List<B> getBuckets() {
+import org.opensearch.core.common.io.stream.StreamOutput;
+    }
+        this.buckets = buckets;
+        for (InternalAggregation aggregation : aggregations) {
+        out.writeList(buckets);
+            final B b = reduceBucket(sameTermBuckets, reduceContext);
+    protected List<B> buckets;
+    InternalRareTerms<A, B> {
+    @Override
+import java.util.Map;
+                throw new AggregationExecutionException(
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.core.xcontent.XContentBuilder;
+            }
+    }
                         + "types in two different indices"
+            @SuppressWarnings("unchecked")
                 );
             }
-            for (B bucket : terms.getBuckets()) {
-                List<B> bucketList = buckets.computeIfAbsent(bucket.getKey(), k -> new ArrayList<>());
-                bucketList.add(bucket);
-            }
-
-            SetBackedScalingCuckooFilter otherFilter = ((InternalMappedRareTerms) aggregation).getFilter();
-            if (filter == null) {
-                filter = new SetBackedScalingCuckooFilter(otherFilter);
-            } else {
-                filter.merge(otherFilter);
-            }
-        }
-
-        final List<B> rare = new ArrayList<>();
-        for (List<B> sameTermBuckets : buckets.values()) {
-            final B b = reduceBucket(sameTermBuckets, reduceContext);
-            if ((b.getDocCount() <= maxDocCount && containsTerm(filter, b) == false)) {
-                rare.add(b);
-                reduceContext.consumeBucketsAndMaybeBreak(1);
-            } else if (b.getDocCount() > maxDocCount) {
-                // this term has gone over threshold while merging, so add it to the filter.
-                // Note this may happen during incremental reductions too
-                addToFilter(filter, b);
-            }
-        }
-        CollectionUtil.introSort(rare, order.comparator());
-        return createWithFilter(name, rare, filter);
-    }
-
-    public abstract boolean containsTerm(SetBackedScalingCuckooFilter filter, B bucket);
-
-    public abstract void addToFilter(SetBackedScalingCuckooFilter filter, B bucket);
-
-    @Override
-    public List<B> getBuckets() {
-        return buckets;
-    }
-
-    @Override
-    public B getBucketByKey(String term) {
-        if (bucketMap == null) {
-            bucketMap = buckets.stream().collect(Collectors.toMap(InternalRareTerms.Bucket::getKeyAsString, Function.identity()));
-        }
-        return bucketMap.get(term);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;
-        InternalMappedRareTerms<?, ?> that = (InternalMappedRareTerms<?, ?>) obj;
-        return Objects.equals(buckets, that.buckets) && Objects.equals(format, that.format) && Objects.equals(filter, that.filter);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), buckets, format, filter);
-    }
-
-    @Override
-    public final XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        return doXContentCommon(builder, params, buckets);
-    }
-}
+import org.opensearch.common.Randomness;

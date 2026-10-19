@@ -1,440 +1,392 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.snapshots.mockstore;
-
-import org.opensearch.cluster.metadata.RepositoryMetadata;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.blobstore.BlobContainer;
-import org.opensearch.common.blobstore.BlobMetadata;
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.blobstore.BlobStore;
-import org.opensearch.common.blobstore.DeleteResult;
-import org.opensearch.common.blobstore.support.PlainBlobMetadata;
-import org.opensearch.common.io.Streams;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.repositories.blobstore.BlobStoreRepository;
-import org.opensearch.snapshots.SnapshotInfo;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.NoSuchFileException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.equalTo;
-
-/**
- * Mock Repository that allows testing the eventually consistent behaviour of AWS S3 as documented in the
- * <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html#ConsistencyModel">AWS S3 docs</a>.
- * Currently, the repository asserts that no inconsistent reads are made.
- * TODO: Resolve todos on list and overwrite operation consistency to fully cover S3's behavior.
- */
-public class MockEventuallyConsistentRepository extends BlobStoreRepository {
-
-    private final Random random;
-
-    private final Context context;
-
-    private final NamedXContentRegistry namedXContentRegistry;
-
-    public MockEventuallyConsistentRepository(
-        final RepositoryMetadata metadata,
-        final NamedXContentRegistry namedXContentRegistry,
-        final ClusterService clusterService,
-        final RecoverySettings recoverySettings,
-        final Context context,
-        final Random random
-    ) {
-        super(metadata, namedXContentRegistry, clusterService, recoverySettings);
-        this.context = context;
-        this.namedXContentRegistry = namedXContentRegistry;
-        this.random = random;
-    }
-
-    // Filters out all actions that are super-seeded by subsequent actions
-    // TODO: Remove all usages of this method, snapshots should not depend on consistent list operations
-    private static List<BlobStoreAction> consistentView(List<BlobStoreAction> actions) {
-        final Map<String, BlobStoreAction> lastActions = new HashMap<>();
-        for (BlobStoreAction action : actions) {
-            if (action.operation == Operation.PUT) {
-                lastActions.put(action.path, action);
-            } else if (action.operation == Operation.DELETE) {
-                lastActions.remove(action.path);
-            }
-        }
-        return new ArrayList<>(lastActions.values());
-    }
-
-    @Override
-    protected void assertSnapshotOrGenericThread() {
-        // eliminate thread name check as we create repo in the test thread
-    }
-
-    @Override
-    protected BlobStore createBlobStore() {
-        return new MockBlobStore();
-    }
-
-    @Override
-    public BlobPath basePath() {
-        return BlobPath.cleanPath();
-    }
-
-    /**
-     * Context that must be shared between all instances of {@link MockEventuallyConsistentRepository} in a test run.
-     */
-    public static final class Context {
-
-        // Eventual consistency is only simulated as long as this flag is false
-        private boolean consistent;
-
-        private final List<BlobStoreAction> actions = new ArrayList<>();
-
-        /**
+                            )
+                    final Map<String, BlobMetadata> filtered = new HashMap<>(listing);
+                            )
+                                    // Since we are not doing any actual IO we don't expect this to throw ever and an exception would
+                    throw new AssertionError("Inconsistent read on [" + blobPath + ']');
          * Force the repository into a consistent end state so that its eventual state can be examined.
-         */
-        public void forceConsistent() {
-            synchronized (actions) {
-                final List<BlobStoreAction> consistentActions = consistentView(actions);
-                actions.clear();
-                actions.addAll(consistentActions);
-                consistent = true;
-            }
-        }
-    }
-
-    private enum Operation {
-        PUT,
-        GET,
-        DELETE
-    }
-
-    private static final class BlobStoreAction {
-
-        private final Operation operation;
-
-        @Nullable
-        private final byte[] data;
-
-        private final String path;
-
-        private BlobStoreAction(Operation operation, String path, byte[] data) {
-            this.operation = operation;
-            this.path = path;
-            this.data = data;
-        }
-
-        private BlobStoreAction(Operation operation, String path) {
-            this(operation, path, null);
-        }
-    }
-
-    private class MockBlobStore implements BlobStore {
-
-        private final AtomicBoolean closed = new AtomicBoolean(false);
-
-        @Override
-        public BlobContainer blobContainer(BlobPath path) {
-            return new MockBlobContainer(path);
-        }
-
-        @Override
-        public void close() {
-            closed.set(true);
-        }
-
-        private void ensureNotClosed() {
-            if (closed.get()) {
-                throw new AssertionError("Blobstore is closed already");
-            }
-        }
-
-        private class MockBlobContainer implements BlobContainer {
-
-            private final BlobPath path;
-
-            MockBlobContainer(BlobPath path) {
-                this.path = path;
-            }
-
+                                        namedXContentRegistry,
+                    }
+                    });
+                                relevantActions.get(0).data,
+ * this work for additional information regarding copyright
+                final AtomicLong blobsDeleted = new AtomicLong(0L);
+                                && action.path.substring(thisPath.length()).indexOf('/') != -1
+                        context.actions.add(new BlobStoreAction(Operation.DELETE, a.path));
+                                        blobName,
+                );
             @Override
-            public BlobPath path() {
+                                    );
+                                    final SnapshotInfo existingInfo = SNAPSHOT_FORMAT.deserialize(
+            closed.set(true);
+            public InputStream readBlob(String name) throws NoSuchFileException {
+    }
+import org.opensearch.common.blobstore.BlobStore;
+                }
+                            if (basePath().buildAsString().equals(path().buildAsString())) {
+}
+        final Context context,
+                }
+                        relevantActions.remove(i);
+            private Map<String, BlobMetadata> maybeMissLatestIndexN(Map<String, BlobMetadata> listing) {
+        this.namedXContentRegistry = namedXContentRegistry;
+ * license agreements. See the NOTICE file distributed with
+                    context.actions.stream().filter(action -> blobPath.equals(action.path)).collect(Collectors.toList())
+                                } catch (Exception e) {
+                }
+import java.io.IOException;
+                                data
+                        if (hasConsistentContent) {
+            public void deleteBlobsIgnoringIfNotExists(List<String> blobNames) {
+        private BlobStoreAction(Operation operation, String path, byte[] data) {
+                    return true;
+                                }
+                final InputStream inputStream,
+            }
+    private final NamedXContentRegistry namedXContentRegistry;
+ * GitHub history for details.
+                }
+import java.util.HashMap;
+                                    && action.path.substring(thisPath.length()).indexOf('/') == -1
+                } catch (NoSuchFileException ignored) {
+            public InputStream readBlob(String blobName, long position, long length) throws IOException {
+ *
+                                "Tried to overwrite blob [" + blobName + "]",
+            this.path = path;
+        return new MockBlobStore();
+                throw new AssertionError("Blobstore is closed already");
+/*
+        PUT,
+                    return consistentView(context.actions).stream()
+        final Map<String, BlobStoreAction> lastActions = new HashMap<>();
+                String blobName,
+    // TODO: Remove all usages of this method, snapshots should not depend on consistent list operations
+package org.opensearch.snapshots.mockstore;
+                                    action -> new PlainBlobMetadata(action.path.substring(thisPath.length()), action.data.length)
+    }
+import org.opensearch.common.blobstore.DeleteResult;
+import java.util.Random;
+            }
+                                    assertThat(existingInfo.indices(), equalTo(updatedInfo.indices()));
+                final InputStream stream = readBlob(blobName);
+                                    assertThat(existingInfo.state(), equalTo(updatedInfo.state()));
+        }
+                    consistentView(context.actions).stream().filter(action -> action.path.startsWith(thisPath)).forEach(a -> {
+ */
+        super(metadata, namedXContentRegistry, clusterService, recoverySettings);
+                    final List<BlobStoreAction> relevantActions = relevantActions(blobPath);
+                final String thisPath = path.buildAsString();
+        // eliminate thread name check as we create repo in the test thread
+            @Override
+    private class MockBlobStore implements BlobStore {
+                }
+            synchronized (actions) {
+            }
+                                )
+ */
+ * the Apache License, Version 2.0 (the "License"); you may
+                }
+                    }
+import static org.hamcrest.Matchers.containsInAnyOrder;
+        private void ensureNotClosed() {
+        private final Operation operation;
+                if (path.parent() == null && context.consistent == false) {
+                                    assertThat(existingInfo.reason(), equalTo(updatedInfo.reason()));
+ * Currently, the repository asserts that no inconsistent reads are made.
+            // Randomly filter out the index-N blobs from a listing to test that tracking of it in latestKnownRepoGen and the cluster state
+    protected void assertSnapshotOrGenericThread() {
+                    return maybeMissLatestIndexN(
+                        || blobName.startsWith(BlobStoreRepository.METADATA_PREFIX)) {
+                final String thisPath = path.buildAsString();
+                                    );
+        private BlobStoreAction(Operation operation, String path) {
+            public void writeBlob(String blobName, InputStream inputStream, long blobSize, boolean failIfAlreadyExists) throws IOException {
+import org.opensearch.test.OpenSearchTestCase;
+            if (closed.get()) {
+            public Map<String, BlobMetadata> listBlobsByPrefix(String blobNamePrefix) {
+    }
+    @Override
                 return path;
             }
-
-            @Override
-            public boolean blobExists(String blobName) {
-                try {
-                    readBlob(blobName);
-                    return true;
-                } catch (NoSuchFileException ignored) {
-                    return false;
-                }
-            }
-
-            @Override
-            public InputStream readBlob(String name) throws NoSuchFileException {
-                ensureNotClosed();
-                final String blobPath = path.buildAsString() + name;
-                synchronized (context.actions) {
-                    final List<BlobStoreAction> relevantActions = relevantActions(blobPath);
-                    context.actions.add(new BlobStoreAction(Operation.GET, blobPath));
-                    if (relevantActions.stream().noneMatch(a -> a.operation == Operation.PUT)) {
-                        throw new NoSuchFileException(blobPath);
-                    }
-                    if (relevantActions.size() == 1 && relevantActions.get(0).operation == Operation.PUT) {
-                        // Consistent read after write
-                        return new ByteArrayInputStream(relevantActions.get(0).data);
-                    }
-                    throw new AssertionError("Inconsistent read on [" + blobPath + ']');
-                }
-            }
-
-            @Override
-            public InputStream readBlob(String blobName, long position, long length) throws IOException {
-                final InputStream stream = readBlob(blobName);
+    protected BlobStore createBlobStore() {
                 if (position > 0) {
-                    stream.skip(position);
-                }
-                return Streams.limitStream(stream, length);
-            }
-
-            private List<BlobStoreAction> relevantActions(String blobPath) {
-                assert Thread.holdsLock(context.actions);
-                final List<BlobStoreAction> relevantActions = new ArrayList<>(
-                    context.actions.stream().filter(action -> blobPath.equals(action.path)).collect(Collectors.toList())
-                );
-                for (int i = relevantActions.size() - 1; i > 0; i--) {
-                    if (relevantActions.get(i).operation == Operation.GET) {
-                        relevantActions.remove(i);
-                    } else {
-                        break;
-                    }
-                }
-                return relevantActions;
-            }
-
-            @Override
-            public void deleteBlobsIgnoringIfNotExists(List<String> blobNames) {
-                ensureNotClosed();
-                synchronized (context.actions) {
-                    for (String blobName : blobNames) {
-                        context.actions.add(new BlobStoreAction(Operation.DELETE, path.buildAsString() + blobName));
-                    }
-                }
-            }
-
-            @Override
-            public DeleteResult delete() {
-                ensureNotClosed();
-                final String thisPath = path.buildAsString();
-                final AtomicLong bytesDeleted = new AtomicLong(0L);
-                final AtomicLong blobsDeleted = new AtomicLong(0L);
-                synchronized (context.actions) {
-                    consistentView(context.actions).stream().filter(action -> action.path.startsWith(thisPath)).forEach(a -> {
-                        context.actions.add(new BlobStoreAction(Operation.DELETE, a.path));
-                        bytesDeleted.addAndGet(a.data.length);
-                        blobsDeleted.incrementAndGet();
-                    });
-                }
-                return new DeleteResult(blobsDeleted.get(), bytesDeleted.get());
-            }
-
-            @Override
-            public Map<String, BlobMetadata> listBlobs() {
-                ensureNotClosed();
-                final String thisPath = path.buildAsString();
-                synchronized (context.actions) {
-                    return maybeMissLatestIndexN(
-                        consistentView(context.actions).stream()
-                            .filter(
-                                action -> action.path.startsWith(thisPath)
-                                    && action.path.substring(thisPath.length()).indexOf('/') == -1
-                                    && action.operation == Operation.PUT
-                            )
-                            .collect(
-                                Collectors.toMap(
-                                    action -> action.path.substring(thisPath.length()),
-                                    action -> new PlainBlobMetadata(action.path.substring(thisPath.length()), action.data.length)
-                                )
-                            )
-                    );
-                }
-            }
-
-            @Override
-            public Map<String, BlobContainer> children() {
-                ensureNotClosed();
-                final String thisPath = path.buildAsString();
-                synchronized (context.actions) {
-                    return consistentView(context.actions).stream()
-                        .filter(
-                            action -> action.operation == Operation.PUT
-                                && action.path.startsWith(thisPath)
-                                && action.path.substring(thisPath.length()).indexOf('/') != -1
-                        )
-                        .map(action -> action.path.substring(thisPath.length()).split("/")[0])
-                        .distinct()
-                        .collect(Collectors.toMap(Function.identity(), name -> new MockBlobContainer(path.add(name))));
-                }
-            }
-
-            @Override
-            public Map<String, BlobMetadata> listBlobsByPrefix(String blobNamePrefix) {
-                return maybeMissLatestIndexN(
-                    listBlobs().entrySet()
-                        .stream()
-                        .filter(entry -> entry.getKey().startsWith(blobNamePrefix))
-                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
-                );
-            }
-
-            // Randomly filter out the index-N blobs from a listing to test that tracking of it in latestKnownRepoGen and the cluster state
-            // ensures consistent repository operations
-            private Map<String, BlobMetadata> maybeMissLatestIndexN(Map<String, BlobMetadata> listing) {
-                // Randomly filter out index-N blobs at the repo root to proof that we don't need them to be consistently listed
-                if (path.parent() == null && context.consistent == false) {
-                    final Map<String, BlobMetadata> filtered = new HashMap<>(listing);
-                    filtered.keySet().removeIf(b -> b.startsWith(BlobStoreRepository.INDEX_FILE_PREFIX) && random.nextBoolean());
-                    return Collections.unmodifiableMap(filtered);
-                }
-                return listing;
-            }
-
-            @Override
-            public void writeBlob(String blobName, InputStream inputStream, long blobSize, boolean failIfAlreadyExists) throws IOException {
-                ensureNotClosed();
-                assert blobSize < Integer.MAX_VALUE;
-                final byte[] data = new byte[(int) blobSize];
-                final int read = inputStream.read(data);
-                assert read == data.length;
-                final String blobPath = path.buildAsString() + blobName;
-                synchronized (context.actions) {
-                    final List<BlobStoreAction> relevantActions = relevantActions(blobPath);
-                    // We do some checks in case there is a consistent state for a blob to prevent turning it inconsistent.
-                    final boolean hasConsistentContent = relevantActions.size() == 1 && relevantActions.get(0).operation == Operation.PUT;
-                    if (BlobStoreRepository.INDEX_LATEST_BLOB.equals(blobName)
-                        || blobName.startsWith(BlobStoreRepository.METADATA_PREFIX)) {
-                        // TODO: Ensure that it is impossible to ever decrement the generation id stored in index.latest then assert that
-                        // it never decrements here. Same goes for the metadata, ensure that we never overwrite newer with older
-                        // metadata.
-                    } else if (blobName.startsWith(BlobStoreRepository.SNAPSHOT_PREFIX)) {
-                        if (hasConsistentContent) {
-                            if (basePath().buildAsString().equals(path().buildAsString())) {
-                                try {
-                                    final SnapshotInfo updatedInfo = BlobStoreRepository.SNAPSHOT_FORMAT.deserialize(
-                                        blobName,
-                                        namedXContentRegistry,
-                                        new BytesArray(data)
-                                    );
-                                    // If the existing snapshotInfo differs only in the timestamps it stores, then the overwrite is not
-                                    // a problem and could be the result of a correctly handled cluster-manager failover.
-                                    final SnapshotInfo existingInfo = SNAPSHOT_FORMAT.deserialize(
-                                        blobName,
-                                        namedXContentRegistry,
-                                        Streams.readFully(readBlob(blobName))
-                                    );
-                                    assertThat(existingInfo.snapshotId(), equalTo(updatedInfo.snapshotId()));
-                                    assertThat(existingInfo.reason(), equalTo(updatedInfo.reason()));
-                                    assertThat(existingInfo.state(), equalTo(updatedInfo.state()));
-                                    assertThat(existingInfo.totalShards(), equalTo(updatedInfo.totalShards()));
-                                    assertThat(existingInfo.successfulShards(), equalTo(updatedInfo.successfulShards()));
-                                    assertThat(existingInfo.shardFailures(), containsInAnyOrder(updatedInfo.shardFailures().toArray()));
-                                    assertThat(existingInfo.indices(), equalTo(updatedInfo.indices()));
-                                    return; // No need to add a write for this since we didn't change content
-                                } catch (Exception e) {
-                                    // Rethrow as AssertionError here since kind exception might otherwise be swallowed and logged by
-                                    // the blob store repository.
-                                    // Since we are not doing any actual IO we don't expect this to throw ever and an exception would
-                                    // signal broken SnapshotInfo bytes or unexpected behavior of SnapshotInfo otherwise.
-                                    throw new AssertionError("Failed to deserialize SnapshotInfo", e);
-                                }
-                            } else {
-                                // Primaries never retry so any shard level snap- blob retry/overwrite even with the same content is
-                                // not expected.
-                                throw new AssertionError("Shard level snap-{uuid} blobs should never be overwritten");
-                            }
-                        }
-                    } else {
-                        if (hasConsistentContent) {
+        private boolean consistent;
+ * Modifications Copyright OpenSearch Contributors. See
+                final List<BlobStoreAction> consistentActions = consistentView(actions);
                             OpenSearchTestCase.assertArrayEquals(
-                                "Tried to overwrite blob [" + blobName + "]",
-                                relevantActions.get(0).data,
-                                data
-                            );
-                            return; // No need to add a write for this since we didn't change content
-                        }
+                        blobsDeleted.incrementAndGet();
+            @Override
+            public BlobPath path() {
+ * specific language governing permissions and limitations
+                        return new ByteArrayInputStream(relevantActions.get(0).data);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                                    assertThat(existingInfo.successfulShards(), equalTo(updatedInfo.successfulShards()));
+                        context.actions.add(new BlobStoreAction(Operation.DELETE, path.buildAsString() + blobName));
+ */
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+        private class MockBlobContainer implements BlobContainer {
                     }
-                    context.actions.add(new BlobStoreAction(Operation.PUT, blobPath, data));
+        @Override
+ * Mock Repository that allows testing the eventually consistent behaviour of AWS S3 as documented in the
+                // Randomly filter out index-N blobs at the repo root to proof that we don't need them to be consistently listed
+                        bytesDeleted.addAndGet(a.data.length);
+import org.opensearch.repositories.blobstore.BlobStoreRepository;
                 }
+                        // it never decrements here. Same goes for the metadata, ensure that we never overwrite newer with older
+     * Context that must be shared between all instances of {@link MockEventuallyConsistentRepository} in a test run.
+    @Override
+            public Map<String, BlobContainer> children() {
+ * You may obtain a copy of the License at
+                assert Thread.holdsLock(context.actions);
+            private List<BlobStoreAction> relevantActions(String blobPath) {
+                synchronized (context.actions) {
+    private final Context context;
+                            return; // No need to add a write for this since we didn't change content
             }
-
+import static org.hamcrest.Matchers.equalTo;
+                consistent = true;
             @Override
-            public void writeBlobWithMetadata(
-                String blobName,
-                InputStream inputStream,
-                long blobSize,
-                boolean failIfAlreadyExists,
-                @Nullable Map<String, String> metadata,
-                @Nullable org.opensearch.cluster.metadata.CryptoMetadata cryptoMetadata
-            ) throws IOException {
-                writeBlob(blobName, inputStream, blobSize, failIfAlreadyExists);
-            }
-
-            @Override
+                                        namedXContentRegistry,
+                assert blobSize < Integer.MAX_VALUE;
             public void writeBlobAtomic(
-                final String blobName,
-                final InputStream inputStream,
+                    }
+                ensureNotClosed();
+        private final byte[] data;
+        }
+        private final String path;
+                            }
+                                        new BytesArray(data)
+            }
+                        .map(action -> action.path.substring(thisPath.length()).split("/")[0])
+                                    // signal broken SnapshotInfo bytes or unexpected behavior of SnapshotInfo otherwise.
+                        )
+import java.util.concurrent.atomic.AtomicBoolean;
+                @Nullable org.opensearch.cluster.metadata.CryptoMetadata cryptoMetadata
+                final AtomicLong bytesDeleted = new AtomicLong(0L);
+                actions.clear();
+                final String blobPath = path.buildAsString() + name;
+        }
+                synchronized (context.actions) {
+            }
+                                Collectors.toMap(
+            public Map<String, BlobMetadata> listBlobs() {
+                final String thisPath = path.buildAsString();
+    private enum Operation {
+                            action -> action.operation == Operation.PUT
+ * compatible open source license.
+                                    final SnapshotInfo updatedInfo = BlobStoreRepository.SNAPSHOT_FORMAT.deserialize(
+            private final BlobPath path;
+                                    return; // No need to add a write for this since we didn't change content
+        public BlobContainer blobContainer(BlobPath path) {
+                        .filter(entry -> entry.getKey().startsWith(blobNamePrefix))
+                this.path = path;
                 final long blobSize,
-                final boolean failIfAlreadyExists
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            }
+    }
+                return listing;
+        }
+                return relevantActions;
+import java.util.concurrent.atomic.AtomicLong;
+                                    assertThat(existingInfo.totalShards(), equalTo(updatedInfo.totalShards()));
+                        .collect(Collectors.toMap(Function.identity(), name -> new MockBlobContainer(path.add(name))));
+import java.util.Map;
+        private final AtomicBoolean closed = new AtomicBoolean(false);
+            public void writeBlobWithMetadata(
+            @Override
+            }
+            @Override
+                    return false;
+ * software distributed under the License is distributed on an
+import org.opensearch.common.Nullable;
+        /**
+import static org.hamcrest.MatcherAssert.assertThat;
+            }
+                        consistentView(context.actions).stream()
+    public BlobPath basePath() {
+                            } else {
+            }
+                    readBlob(blobName);
+        return BlobPath.cleanPath();
+import org.opensearch.common.blobstore.BlobMetadata;
+import org.opensearch.indices.recovery.RecoverySettings;
+            this.data = data;
+public class MockEventuallyConsistentRepository extends BlobStoreRepository {
+                                        blobName,
+import org.opensearch.cluster.metadata.RepositoryMetadata;
+                    context.actions.add(new BlobStoreAction(Operation.GET, blobPath));
+                                try {
+                        if (hasConsistentContent) {
+                ensureNotClosed();
+                    final List<BlobStoreAction> relevantActions = relevantActions(blobPath);
+                        // metadata.
+                }
+    }
+                    } else {
+                ensureNotClosed();
+            @Override
+                                    throw new AssertionError("Failed to deserialize SnapshotInfo", e);
+            @Override
+                    }
+                ensureNotClosed();
+                return maybeMissLatestIndexN(
+    private static final class BlobStoreAction {
+                @Nullable Map<String, String> metadata,
+ * KIND, either express or implied.  See the License for the
+                final List<BlobStoreAction> relevantActions = new ArrayList<>(
+                                        Streams.readFully(readBlob(blobName))
+                assert read == data.length;
+        }
+        // Eventual consistency is only simulated as long as this flag is false
+                                // not expected.
+                try {
+        final RecoverySettings recoverySettings,
             ) throws IOException {
+                for (int i = relevantActions.size() - 1; i > 0; i--) {
+            // ensures consistent repository operations
+ * this file be licensed under the Apache-2.0 license or a
+                synchronized (context.actions) {
+ * ownership. Elasticsearch licenses this file to you under
+                    if (relevantActions.stream().noneMatch(a -> a.operation == Operation.PUT)) {
+                                && action.path.startsWith(thisPath)
+ *
+            @Override
+    }
+        this.context = context;
+            }
+                                    action -> action.path.substring(thisPath.length()),
+import java.io.ByteArrayInputStream;
+import org.opensearch.cluster.service.ClusterService;
+                                    && action.operation == Operation.PUT
+        DELETE
+        return new ArrayList<>(lastActions.values());
+        }
+                        .distinct()
+ * The OpenSearch Contributors require contributions made to
+                                    assertThat(existingInfo.snapshotId(), equalTo(updatedInfo.snapshotId()));
+                    stream.skip(position);
+                                    // the blob store repository.
+ * Licensed to Elasticsearch under one or more contributor
+                actions.addAll(consistentActions);
+                    if (BlobStoreRepository.INDEX_LATEST_BLOB.equals(blobName)
+                                    // a problem and could be the result of a correctly handled cluster-manager failover.
+                synchronized (context.actions) {
+                synchronized (context.actions) {
+ * TODO: Resolve todos on list and overwrite operation consistency to fully cover S3's behavior.
+    // Filters out all actions that are super-seeded by subsequent actions
+    ) {
+        final NamedXContentRegistry namedXContentRegistry,
+                synchronized (context.actions) {
+import org.opensearch.common.blobstore.BlobContainer;
+                );
+                                throw new AssertionError("Shard level snap-{uuid} blobs should never be overwritten");
+                        .stream()
+        this.random = random;
+            @Override
+                return new DeleteResult(blobsDeleted.get(), bytesDeleted.get());
+            this.operation = operation;
+    }
+                            .filter(
+        private final List<BlobStoreAction> actions = new ArrayList<>();
+                ensureNotClosed();
+                    } else if (blobName.startsWith(BlobStoreRepository.SNAPSHOT_PREFIX)) {
+                lastActions.put(action.path, action);
+ * under the License.
+        }
+                                    // If the existing snapshotInfo differs only in the timestamps it stores, then the overwrite is not
+import org.opensearch.common.io.Streams;
+                final String blobPath = path.buildAsString() + blobName;
+                        // TODO: Ensure that it is impossible to ever decrement the generation id stored in index.latest then assert that
+        for (BlobStoreAction action : actions) {
+                    } else {
+import java.util.ArrayList;
+        final Random random
+import java.util.function.Function;
+import org.opensearch.snapshots.SnapshotInfo;
+    public static final class Context {
+                    if (relevantActions.get(i).operation == Operation.GET) {
+                final byte[] data = new byte[(int) blobSize];
+                    for (String blobName : blobNames) {
+        final RepositoryMetadata metadata,
+ * <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html#ConsistencyModel">AWS S3 docs</a>.
+ */
+                    filtered.keySet().removeIf(b -> b.startsWith(BlobStoreRepository.INDEX_FILE_PREFIX) && random.nextBoolean());
+                                // Primaries never retry so any shard level snap- blob retry/overwrite even with the same content is
+            public DeleteResult delete() {
+                            .collect(
+                        .filter(
+            } else if (action.operation == Operation.DELETE) {
+                InputStream inputStream,
+import java.util.List;
+                        break;
+    }
+                ensureNotClosed();
+ * Unless required by applicable law or agreed to in writing,
+                    return Collections.unmodifiableMap(filtered);
+            }
+            }
+import java.util.stream.Collectors;
+ * SPDX-License-Identifier: Apache-2.0
+    private final Random random;
+                                    // Rethrow as AssertionError here since kind exception might otherwise be swallowed and logged by
                 writeBlob(blobName, inputStream, blobSize, failIfAlreadyExists);
             }
-        }
+                    // We do some checks in case there is a consistent state for a blob to prevent turning it inconsistent.
+                long blobSize,
+import java.io.InputStream;
+        GET,
+/*
+                    final boolean hasConsistentContent = relevantActions.size() == 1 && relevantActions.get(0).operation == Operation.PUT;
+            this(operation, path, null);
+                }
+            MockBlobContainer(BlobPath path) {
+            @Override
+                writeBlob(blobName, inputStream, blobSize, failIfAlreadyExists);
+        public void forceConsistent() {
+        final ClusterService clusterService,
+        @Nullable
+import java.nio.file.NoSuchFileException;
+         */
+                final int read = inputStream.read(data);
+                            );
+    /**
+                    );
+        @Override
     }
-}
+            }
+            if (action.operation == Operation.PUT) {
+                    context.actions.add(new BlobStoreAction(Operation.PUT, blobPath, data));
+                        // Consistent read after write
+                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
+            }
+                        }
+                    if (relevantActions.size() == 1 && relevantActions.get(0).operation == Operation.PUT) {
+                return Streams.limitStream(stream, length);
+ *
+                final boolean failIfAlreadyExists
+        public void close() {
+                                    assertThat(existingInfo.shardFailures(), containsInAnyOrder(updatedInfo.shardFailures().toArray()));
+                        throw new NoSuchFileException(blobPath);
+                    listBlobs().entrySet()
+     */
+ * not use this file except in compliance with the License.
+            public boolean blobExists(String blobName) {
+    private static List<BlobStoreAction> consistentView(List<BlobStoreAction> actions) {
+    @Override
+            }
+            @Override
+import org.opensearch.common.blobstore.BlobPath;
+        }
+                final String blobName,
+                boolean failIfAlreadyExists,
+                        }
+import java.util.Collections;
+                lastActions.remove(action.path);
+                                action -> action.path.startsWith(thisPath)
+            return new MockBlobContainer(path);
+            ) throws IOException {
+import org.opensearch.core.common.bytes.BytesArray;
+/*
+/**
+    public MockEventuallyConsistentRepository(
+import org.opensearch.common.blobstore.support.PlainBlobMetadata;
+                }

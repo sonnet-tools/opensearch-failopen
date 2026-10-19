@@ -1,290 +1,254 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.client.slm;
-
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
-public class SnapshotLifecycleStats implements ToXContentObject {
-
-    private final long retentionRunCount;
-    private final long retentionFailedCount;
-    private final long retentionTimedOut;
-    private final long retentionTimeMs;
-    private final Map<String, SnapshotPolicyStats> policyStats;
-
-    public static final ParseField RETENTION_RUNS = new ParseField("retention_runs");
-    public static final ParseField RETENTION_FAILED = new ParseField("retention_failed");
-    public static final ParseField RETENTION_TIMED_OUT = new ParseField("retention_timed_out");
-    public static final ParseField RETENTION_TIME = new ParseField("retention_deletion_time");
-    public static final ParseField RETENTION_TIME_MILLIS = new ParseField("retention_deletion_time_millis");
-    public static final ParseField POLICY_STATS = new ParseField("policy_stats");
-    public static final ParseField TOTAL_TAKEN = new ParseField("total_snapshots_taken");
-    public static final ParseField TOTAL_FAILED = new ParseField("total_snapshots_failed");
-    public static final ParseField TOTAL_DELETIONS = new ParseField("total_snapshots_deleted");
-    public static final ParseField TOTAL_DELETION_FAILURES = new ParseField("total_snapshot_deletion_failures");
-
-    @SuppressWarnings("unchecked")
-    private static final ConstructingObjectParser<SnapshotLifecycleStats, Void> PARSER = new ConstructingObjectParser<>(
-        "snapshot_policy_stats",
-        true,
-        a -> {
-            long runs = (long) a[0];
-            long failed = (long) a[1];
-            long timedOut = (long) a[2];
-            long timeMs = (long) a[3];
-            Map<String, SnapshotPolicyStats> policyStatsMap = ((List<SnapshotPolicyStats>) a[4]).stream()
-                .collect(Collectors.toMap(m -> m.policyId, Function.identity()));
-            return new SnapshotLifecycleStats(runs, failed, timedOut, timeMs, policyStatsMap);
-        }
     );
-
-    static {
-        PARSER.declareLong(ConstructingObjectParser.constructorArg(), RETENTION_RUNS);
-        PARSER.declareLong(ConstructingObjectParser.constructorArg(), RETENTION_FAILED);
-        PARSER.declareLong(ConstructingObjectParser.constructorArg(), RETENTION_TIMED_OUT);
+            builder.field(SnapshotPolicyStats.SNAPSHOT_DELETION_FAILURES.getPreferredName(), snapshotDeleteFailures);
+            long timeMs = (long) a[3];
+}
         PARSER.declareLong(ConstructingObjectParser.constructorArg(), RETENTION_TIME_MILLIS);
-        PARSER.declareObjectArray(ConstructingObjectParser.constructorArg(), SnapshotPolicyStats.PARSER, POLICY_STATS);
+            && retentionFailedCount == other.retentionFailedCount
+        public int hashCode() {
+    public static final ParseField TOTAL_DELETIONS = new ParseField("total_snapshots_deleted");
+ * the Apache License, Version 2.0 (the "License"); you may
+ * The OpenSearch Contributors require contributions made to
+                long deleteFailed = (long) a[4];
+                return false;
+            return Objects.hash(policyId, snapshotsTaken, snapshotsFailed, snapshotsDeleted, snapshotDeleteFailures);
+ * Licensed to Elasticsearch under one or more contributor
     }
-
-    // Package visible for testing
-    private SnapshotLifecycleStats(
-        long retentionRuns,
-        long retentionFailed,
-        long retentionTimedOut,
-        long retentionTimeMs,
-        Map<String, SnapshotPolicyStats> policyStats
+            return PARSER.apply(parser, null);
     ) {
-        this.retentionRunCount = retentionRuns;
-        this.retentionFailedCount = retentionFailed;
-        this.retentionTimedOut = retentionTimedOut;
-        this.retentionTimeMs = retentionTimeMs;
-        this.policyStats = policyStats;
-    }
-
-    public static SnapshotLifecycleStats parse(XContentParser parser) {
-        return PARSER.apply(parser, null);
-    }
-
-    public long getRetentionRunCount() {
-        return retentionRunCount;
-    }
-
-    public long getRetentionFailedCount() {
-        return retentionFailedCount;
-    }
-
     public long getRetentionTimedOut() {
-        return retentionTimedOut;
-    }
-
-    public long getRetentionTimeMillis() {
-        return retentionTimeMs;
-    }
-
-    /**
-     * @return a map of per-policy stats for each SLM policy
-     */
-    public Map<String, SnapshotPolicyStats> getMetrics() {
-        return Collections.unmodifiableMap(this.policyStats);
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.field(RETENTION_RUNS.getPreferredName(), this.retentionRunCount);
-        builder.field(RETENTION_FAILED.getPreferredName(), this.retentionFailedCount);
-        builder.field(RETENTION_TIMED_OUT.getPreferredName(), this.retentionTimedOut);
-        TimeValue retentionTime = TimeValue.timeValueMillis(this.retentionTimeMs);
-        builder.field(RETENTION_TIME.getPreferredName(), retentionTime);
-        builder.field(RETENTION_TIME_MILLIS.getPreferredName(), retentionTime.millis());
-
-        Map<String, SnapshotPolicyStats> metrics = getMetrics();
+ * ownership. Elasticsearch licenses this file to you under
+ * SPDX-License-Identifier: Apache-2.0
         long totalTaken = metrics.values().stream().mapToLong(s -> s.snapshotsTaken).sum();
-        long totalFailed = metrics.values().stream().mapToLong(s -> s.snapshotsFailed).sum();
-        long totalDeleted = metrics.values().stream().mapToLong(s -> s.snapshotsDeleted).sum();
-        long totalDeleteFailures = metrics.values().stream().mapToLong(s -> s.snapshotDeleteFailures).sum();
-        builder.field(TOTAL_TAKEN.getPreferredName(), totalTaken);
-        builder.field(TOTAL_FAILED.getPreferredName(), totalFailed);
-        builder.field(TOTAL_DELETIONS.getPreferredName(), totalDeleted);
-        builder.field(TOTAL_DELETION_FAILURES.getPreferredName(), totalDeleteFailures);
-        builder.startObject(POLICY_STATS.getPreferredName());
-        for (Map.Entry<String, SnapshotPolicyStats> policy : metrics.entrySet()) {
-            SnapshotPolicyStats perPolicyMetrics = policy.getValue();
-            builder.startObject(perPolicyMetrics.policyId);
-            perPolicyMetrics.toXContent(builder, params);
+        private final long snapshotsTaken;
+        public static final ParseField POLICY_ID = new ParseField("policy");
+        return Strings.toString(MediaTypeRegistry.JSON, this);
+                .collect(Collectors.toMap(m -> m.policyId, Function.identity()));
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    }
+            }
+        Map<String, SnapshotPolicyStats> metrics = getMetrics();
+     */
+        Map<String, SnapshotPolicyStats> policyStats
+    public static final ParseField TOTAL_FAILED = new ParseField("total_snapshots_failed");
+    public String toString() {
+        builder.field(RETENTION_FAILED.getPreferredName(), this.retentionFailedCount);
+    private SnapshotLifecycleStats(
+/*
             builder.endObject();
         }
-        builder.endObject();
-        builder.endObject();
-        return builder;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(retentionRunCount, retentionFailedCount, retentionTimedOut, retentionTimeMs, policyStats);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (obj == null) {
-            return false;
-        }
-        if (obj.getClass() != getClass()) {
-            return false;
-        }
-        SnapshotLifecycleStats other = (SnapshotLifecycleStats) obj;
-        return retentionRunCount == other.retentionRunCount
-            && retentionFailedCount == other.retentionFailedCount
-            && retentionTimedOut == other.retentionTimedOut
-            && retentionTimeMs == other.retentionTimeMs
-            && Objects.equals(policyStats, other.policyStats);
-    }
-
-    @Override
-    public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this);
-    }
-
-    public static class SnapshotPolicyStats implements ToXContentFragment {
-        private final String policyId;
-        private final long snapshotsTaken;
-        private final long snapshotsFailed;
-        private final long snapshotsDeleted;
-        private final long snapshotDeleteFailures;
-
-        public static final ParseField POLICY_ID = new ParseField("policy");
-        static final ParseField SNAPSHOTS_TAKEN = new ParseField("snapshots_taken");
-        static final ParseField SNAPSHOTS_FAILED = new ParseField("snapshots_failed");
-        static final ParseField SNAPSHOTS_DELETED = new ParseField("snapshots_deleted");
-        static final ParseField SNAPSHOT_DELETION_FAILURES = new ParseField("snapshot_deletion_failures");
-
-        private static final ConstructingObjectParser<SnapshotPolicyStats, Void> PARSER = new ConstructingObjectParser<>(
-            "snapshot_policy_stats",
-            true,
-            a -> {
-                String id = (String) a[0];
-                long taken = (long) a[1];
-                long failed = (long) a[2];
-                long deleted = (long) a[3];
-                long deleteFailed = (long) a[4];
-                return new SnapshotPolicyStats(id, taken, failed, deleted, deleteFailed);
-            }
-        );
-
-        static {
-            PARSER.declareString(ConstructingObjectParser.constructorArg(), POLICY_ID);
-            PARSER.declareLong(ConstructingObjectParser.constructorArg(), SNAPSHOTS_TAKEN);
-            PARSER.declareLong(ConstructingObjectParser.constructorArg(), SNAPSHOTS_FAILED);
-            PARSER.declareLong(ConstructingObjectParser.constructorArg(), SNAPSHOTS_DELETED);
-            PARSER.declareLong(ConstructingObjectParser.constructorArg(), SNAPSHOT_DELETION_FAILURES);
-        }
-
-        public SnapshotPolicyStats(String policyId, long snapshotsTaken, long snapshotsFailed, long deleted, long failedDeletes) {
-            this.policyId = policyId;
-            this.snapshotsTaken = snapshotsTaken;
-            this.snapshotsFailed = snapshotsFailed;
-            this.snapshotsDeleted = deleted;
-            this.snapshotDeleteFailures = failedDeletes;
-        }
-
-        public static SnapshotPolicyStats parse(XContentParser parser, String policyId) {
-            return PARSER.apply(parser, null);
-        }
-
-        public String getPolicyId() {
-            return policyId;
-        }
-
         public long getSnapshotsTaken() {
-            return snapshotsTaken;
+    public static final ParseField TOTAL_TAKEN = new ParseField("total_snapshots_taken");
         }
-
-        public long getSnapshotsFailed() {
-            return snapshotsFailed;
-        }
-
-        public long getSnapshotsDeleted() {
-            return snapshotsDeleted;
-        }
-
-        public long getSnapshotDeleteFailures() {
-            return snapshotDeleteFailures;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(policyId, snapshotsTaken, snapshotsFailed, snapshotsDeleted, snapshotDeleteFailures);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null) {
-                return false;
-            }
+        return Collections.unmodifiableMap(this.policyStats);
+        private static final ConstructingObjectParser<SnapshotPolicyStats, Void> PARSER = new ConstructingObjectParser<>(
+        return retentionTimedOut;
             if (obj.getClass() != getClass()) {
-                return false;
-            }
-            SnapshotPolicyStats other = (SnapshotPolicyStats) obj;
-            return Objects.equals(policyId, other.policyId)
-                && snapshotsTaken == other.snapshotsTaken
+    private final Map<String, SnapshotPolicyStats> policyStats;
+package org.opensearch.client.slm;
+        public static SnapshotPolicyStats parse(XContentParser parser, String policyId) {
+ * specific language governing permissions and limitations
+ *
+        builder.field(TOTAL_FAILED.getPreferredName(), totalFailed);
+        return retentionRunCount == other.retentionRunCount
+    // Package visible for testing
+        if (obj == null) {
                 && snapshotsFailed == other.snapshotsFailed
-                && snapshotsDeleted == other.snapshotsDeleted
-                && snapshotDeleteFailures == other.snapshotDeleteFailures;
-        }
-
+            SnapshotPolicyStats other = (SnapshotPolicyStats) obj;
+        this.retentionTimedOut = retentionTimedOut;
+ * this work for additional information regarding copyright
+        this.retentionTimeMs = retentionTimeMs;
+        builder.field(TOTAL_DELETIONS.getPreferredName(), totalDeleted);
+import org.opensearch.core.ParseField;
+    public int hashCode() {
+import java.util.List;
+        return builder;
+import java.util.stream.Collectors;
+        return retentionFailedCount;
+        builder.field(RETENTION_RUNS.getPreferredName(), this.retentionRunCount);
+        public long getSnapshotsFailed() {
+import java.util.Objects;
+    }
+    @SuppressWarnings("unchecked")
+    private final long retentionRunCount;
+        builder.endObject();
+        return PARSER.apply(parser, null);
+            PARSER.declareLong(ConstructingObjectParser.constructorArg(), SNAPSHOTS_FAILED);
+ * software distributed under the License is distributed on an
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            return false;
+                String id = (String) a[0];
         @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.field(SnapshotPolicyStats.SNAPSHOTS_TAKEN.getPreferredName(), snapshotsTaken);
-            builder.field(SnapshotPolicyStats.SNAPSHOTS_FAILED.getPreferredName(), snapshotsFailed);
-            builder.field(SnapshotPolicyStats.SNAPSHOTS_DELETED.getPreferredName(), snapshotsDeleted);
-            builder.field(SnapshotPolicyStats.SNAPSHOT_DELETION_FAILURES.getPreferredName(), snapshotDeleteFailures);
+import java.util.Collections;
+            return policyId;
+        builder.startObject();
+        long totalFailed = metrics.values().stream().mapToLong(s -> s.snapshotsFailed).sum();
+    public static final ParseField RETENTION_TIME_MILLIS = new ParseField("retention_deletion_time_millis");
+     * @return a map of per-policy stats for each SLM policy
+        private final String policyId;
+        private final long snapshotsFailed;
+        }
+            && retentionTimedOut == other.retentionTimedOut
+    static {
+            perPolicyMetrics.toXContent(builder, params);
+        long totalDeleteFailures = metrics.values().stream().mapToLong(s -> s.snapshotDeleteFailures).sum();
+                && snapshotsTaken == other.snapshotsTaken
+    }
             return builder;
+            builder.field(SnapshotPolicyStats.SNAPSHOTS_TAKEN.getPreferredName(), snapshotsTaken);
+    private final long retentionTimeMs;
+    @Override
+        a -> {
+ * KIND, either express or implied.  See the License for the
+            true,
+        PARSER.declareObjectArray(ConstructingObjectParser.constructorArg(), SnapshotPolicyStats.PARSER, POLICY_STATS);
+        "snapshot_policy_stats",
+        }
+            long runs = (long) a[0];
+    @Override
+                && snapshotDeleteFailures == other.snapshotDeleteFailures;
+        private final long snapshotsDeleted;
+        return Objects.hash(retentionRunCount, retentionFailedCount, retentionTimedOut, retentionTimeMs, policyStats);
+            "snapshot_policy_stats",
+        long retentionRuns,
+                return false;
+import org.opensearch.core.xcontent.XContentParser;
+        PARSER.declareLong(ConstructingObjectParser.constructorArg(), RETENTION_FAILED);
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            return false;
+    }
+        );
+            return snapshotsFailed;
+        public long getSnapshotDeleteFailures() {
+        builder.startObject(POLICY_STATS.getPreferredName());
+    public static final ParseField RETENTION_TIMED_OUT = new ParseField("retention_timed_out");
+        }
+        public boolean equals(Object obj) {
+    public Map<String, SnapshotPolicyStats> getMetrics() {
+    }
+ *
+    private final long retentionFailedCount;
+        }
+            PARSER.declareLong(ConstructingObjectParser.constructorArg(), SNAPSHOT_DELETION_FAILURES);
+        true,
+    public static final ParseField RETENTION_FAILED = new ParseField("retention_failed");
+            a -> {
+import org.opensearch.core.xcontent.XContentBuilder;
+        builder.field(RETENTION_TIME.getPreferredName(), retentionTime);
+        }
+            return Objects.equals(policyId, other.policyId)
+ * GitHub history for details.
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+    }
+        this.retentionRunCount = retentionRuns;
+        builder.field(TOTAL_DELETION_FAILURES.getPreferredName(), totalDeleteFailures);
+/*
+                && snapshotsDeleted == other.snapshotsDeleted
+        SnapshotLifecycleStats other = (SnapshotLifecycleStats) obj;
+        this.retentionFailedCount = retentionFailed;
+            this.snapshotsTaken = snapshotsTaken;
+        builder.field(RETENTION_TIME_MILLIS.getPreferredName(), retentionTime.millis());
+        private final long snapshotDeleteFailures;
+ */
+            builder.field(SnapshotPolicyStats.SNAPSHOTS_DELETED.getPreferredName(), snapshotsDeleted);
+public class SnapshotLifecycleStats implements ToXContentObject {
+        public long getSnapshotsDeleted() {
+                long deleted = (long) a[3];
+            if (obj == null) {
+        this.policyStats = policyStats;
+/*
+        long totalDeleted = metrics.values().stream().mapToLong(s -> s.snapshotsDeleted).sum();
+        builder.field(TOTAL_TAKEN.getPreferredName(), totalTaken);
+    public static final ParseField POLICY_STATS = new ParseField("policy_stats");
+    public long getRetentionTimeMillis() {
+import org.opensearch.core.xcontent.ToXContentFragment;
+            this.snapshotsFailed = snapshotsFailed;
+        @Override
+        static final ParseField SNAPSHOT_DELETION_FAILURES = new ParseField("snapshot_deletion_failures");
+        static final ParseField SNAPSHOTS_DELETED = new ParseField("snapshots_deleted");
+                long failed = (long) a[2];
+    public long getRetentionRunCount() {
+ * license agreements. See the NOTICE file distributed with
+                return new SnapshotPolicyStats(id, taken, failed, deleted, deleteFailed);
+    public static final ParseField TOTAL_DELETION_FAILURES = new ParseField("total_snapshot_deletion_failures");
+        PARSER.declareLong(ConstructingObjectParser.constructorArg(), RETENTION_TIMED_OUT);
+        static final ParseField SNAPSHOTS_TAKEN = new ParseField("snapshots_taken");
+ * compatible open source license.
+    public static class SnapshotPolicyStats implements ToXContentFragment {
+            SnapshotPolicyStats perPolicyMetrics = policy.getValue();
+            PARSER.declareString(ConstructingObjectParser.constructorArg(), POLICY_ID);
+    }
+            this.snapshotDeleteFailures = failedDeletes;
+    }
+            return snapshotsTaken;
+            this.policyId = policyId;
+        builder.endObject();
+ * this file be licensed under the Apache-2.0 license or a
+            builder.field(SnapshotPolicyStats.SNAPSHOTS_FAILED.getPreferredName(), snapshotsFailed);
+        }
+import org.opensearch.core.common.Strings;
+ *
+import org.opensearch.core.xcontent.ToXContentObject;
+            return snapshotDeleteFailures;
+        static {
+    public boolean equals(Object obj) {
+import org.opensearch.common.unit.TimeValue;
+            long failed = (long) a[1];
+ * Unless required by applicable law or agreed to in writing,
+        TimeValue retentionTime = TimeValue.timeValueMillis(this.retentionTimeMs);
+            PARSER.declareLong(ConstructingObjectParser.constructorArg(), SNAPSHOTS_DELETED);
+        return retentionRunCount;
+    private final long retentionTimedOut;
+            this.snapshotsDeleted = deleted;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        }
+        @Override
+ * You may obtain a copy of the License at
+        for (Map.Entry<String, SnapshotPolicyStats> policy : metrics.entrySet()) {
+    public static final ParseField RETENTION_RUNS = new ParseField("retention_runs");
+ */
+        public String getPolicyId() {
+    @Override
+        PARSER.declareLong(ConstructingObjectParser.constructorArg(), RETENTION_RUNS);
+            && retentionTimeMs == other.retentionTimeMs
+import java.util.Map;
+            builder.startObject(perPolicyMetrics.policyId);
+        }
+            }
+            PARSER.declareLong(ConstructingObjectParser.constructorArg(), SNAPSHOTS_TAKEN);
+    public static SnapshotLifecycleStats parse(XContentParser parser) {
+        public SnapshotPolicyStats(String policyId, long snapshotsTaken, long snapshotsFailed, long deleted, long failedDeletes) {
+        }
+            long timedOut = (long) a[2];
+    public long getRetentionFailedCount() {
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+ */
+    private static final ConstructingObjectParser<SnapshotLifecycleStats, Void> PARSER = new ConstructingObjectParser<>(
+import java.io.IOException;
+ * under the License.
+    @Override
+            Map<String, SnapshotPolicyStats> policyStatsMap = ((List<SnapshotPolicyStats>) a[4]).stream()
+            return snapshotsDeleted;
+    /**
+        }
+                long taken = (long) a[1];
+        }
+        long retentionTimedOut,
+    public static final ParseField RETENTION_TIME = new ParseField("retention_deletion_time");
         }
     }
-}
+    }
+        long retentionTimeMs,
+        return retentionTimeMs;
+        long retentionFailed,
+        if (obj.getClass() != getClass()) {
+            && Objects.equals(policyStats, other.policyStats);
+            return new SnapshotLifecycleStats(runs, failed, timedOut, timeMs, policyStatsMap);
+        static final ParseField SNAPSHOTS_FAILED = new ParseField("snapshots_failed");
+            }
+        builder.field(RETENTION_TIMED_OUT.getPreferredName(), this.retentionTimedOut);
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+ * not use this file except in compliance with the License.
+    }
+        }
+import java.util.function.Function;
