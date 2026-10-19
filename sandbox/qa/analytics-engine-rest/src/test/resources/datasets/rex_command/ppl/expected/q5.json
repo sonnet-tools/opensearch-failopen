@@ -1,36 +1,36 @@
-{
-  "schema": [
-    {
-      "name": "count()",
+      3,
       "type": "bigint"
-    },
-    {
+    [
       "name": "severity",
+    },
+  "size": 5
+      "CRITICAL"
+    {
+      "INFO"
+{
+  "total": 5,
+      1,
+    [
+    ],
+    ]
+    ],
+  ],
+      3,
+      "name": "count()",
+    [
       "type": "string"
-    }
+      "WARN"
+  "schema": [
+    [
   ],
   "datarows": [
-    [
-      1,
-      "CRITICAL"
     ],
-    [
+      "ERROR"
+    {
       1,
       "DEBUG"
     ],
-    [
-      3,
-      "ERROR"
-    ],
-    [
-      3,
-      "INFO"
-    ],
+}
+    }
     [
       1,
-      "WARN"
-    ]
-  ],
-  "total": 5,
-  "size": 5
-}

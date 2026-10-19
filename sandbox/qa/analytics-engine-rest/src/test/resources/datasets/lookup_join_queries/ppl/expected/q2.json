@@ -1,133 +1,133 @@
-{
-  "schema": [
-    {
-      "name": "user",
+      2700.0,
+      0.0
       "type": "string"
+      4180.3,
+      2700.0,
+      2700.0,
+      null,
     },
-    {
+      null,
+      "Engineering",
+    ]
+    [
+      3300.25,
+      2700.0,
       "name": "department",
-      "type": "string"
-    },
-    {
-      "name": "sales_amount",
+      -80.30000000000018
+      2700.0,
+      "Engineering",
+    [
+{
       "type": "float"
     },
+    ],
+    ],
     {
-      "name": "dept_avg",
+    [
+    ],
+    ],
+    [
       "type": "double"
-    },
-    {
-      "name": "diff_from_avg",
-      "type": "double"
-    }
   ],
-  "datarows": [
-    [
-      "frank",
       null,
-      2700.0,
-      2700.0,
-      0.0
     ],
     [
       "frank",
-      null,
-      2700.0,
-      2700.0,
-      0.0
-    ],
-    [
+    {
       "frank",
-      null,
       2700.0,
-      2700.0,
-      0.0
     ],
-    [
-      "frank",
-      null,
-      2700.0,
-      2700.0,
-      0.0
-    ],
-    [
-      "frank",
-      null,
-      2700.0,
-      2700.0,
-      0.0
-    ],
-    [
-      "frank",
-      null,
-      2700.0,
-      2700.0,
-      0.0
-    ],
-    [
-      "frank",
-      null,
-      2700.0,
-      2700.0,
-      0.0
-    ],
-    [
-      "frank",
-      null,
-      2700.0,
-      2700.0,
-      0.0
-    ],
-    [
-      "frank",
-      null,
-      2700.0,
-      2700.0,
-      0.0
-    ],
-    [
-      "diana",
-      "Engineering",
-      4500.0,
-      4180.3,
       319.6999999999998
+      3800.5,
+      "Engineering",
+      0.0
+      2700.0,
+    {
+      "Engineering",
+      2700.0,
+      "type": "double"
+    {
+    ],
+      2700.0,
+      null,
+      2700.0,
+      "Engineering",
+      2700.0,
+      0.0
+  "total": 15,
+      0.0
+      4100.0,
+      "frank",
+      4500.0,
+      "frank",
+      2700.0,
+      "diana",
+    ],
+  ],
+  "schema": [
+      -379.8000000000002
+      4180.3,
+    [
+      "Engineering",
+      "frank",
+    [
+      0.0
+      "eve",
+      "name": "user",
+      4180.3,
+  "datarows": [
+      4180.3,
+    {
+      "frank",
+    [
+      null,
+      "diana",
+      0.0
+    },
+      0.0
+    }
+      null,
+      null,
+      null,
+    ],
     ],
     [
+  "size": 15
+      "diana",
       "eve",
-      "Engineering",
+      2700.0,
+    ],
       5200.75,
+      "name": "dept_avg",
+    [
+      2700.0,
+    [
+    ],
+      "name": "sales_amount",
       4180.3,
+      "frank",
+      319.6999999999998
+      "name": "diff_from_avg",
+    },
+      null,
+      "diana",
+      2700.0,
+    [
+    [
+    [
+      4180.3,
+      "type": "string"
+      2700.0,
+      2700.0,
       1020.4499999999998
     ],
+      "frank",
+      "frank",
     [
-      "diana",
-      "Engineering",
-      3800.5,
-      4180.3,
-      -379.8000000000002
-    ],
-    [
-      "eve",
-      "Engineering",
-      4100.0,
-      4180.3,
-      -80.30000000000018
-    ],
-    [
-      "diana",
-      "Engineering",
-      3300.25,
-      4180.3,
-      -880.0500000000002
-    ],
-    [
-      "diana",
-      "Engineering",
-      4500.0,
-      4180.3,
-      319.6999999999998
-    ]
-  ],
-  "total": 15,
-  "size": 15
+      0.0
 }
+    ],
+      -880.0500000000002
+      2700.0,
+      0.0
+      4500.0,

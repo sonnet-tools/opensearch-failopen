@@ -1,39 +1,39 @@
-{
-  "schema": [
-    {
+}
       "name": "tags",
-      "type": "string"
-    },
-    {
-      "name": "upper_tags",
+        "TAG5"
+    ]
+      "tag2,tag4",
+        "TAG3",
+      ]
       "type": "array"
-    }
-  ],
-  "datarows": [
+  "total": 3,
+    {
+        "TAG3"
+{
+    ],
+        "TAG4"
     [
+    [
+    {
+  "size": 3
+      "type": "string"
+      ]
       "tag1,tag2,tag3",
       [
-        "TAG1",
-        "TAG2",
-        "TAG3"
-      ]
-    ],
-    [
-      "tag2,tag4",
-      [
-        "TAG2",
-        "TAG4"
-      ]
-    ],
-    [
-      "tag1,tag3,tag5",
-      [
-        "TAG1",
-        "TAG3",
-        "TAG5"
-      ]
-    ]
+  "schema": [
   ],
-  "total": 3,
-  "size": 3
-}
+      [
+        "TAG1",
+    },
+    }
+      "tag1,tag3,tag5",
+        "TAG2",
+      ]
+  "datarows": [
+    ],
+        "TAG1",
+    [
+        "TAG2",
+      "name": "upper_tags",
+  ],
+      [

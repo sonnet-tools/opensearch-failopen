@@ -1,145 +1,126 @@
----
-"Search with response filtering":
-  - do:
-      indices.create:
-          index:  test
-  - do:
-      index:
-          index:  test
-          id:     1
-          body:   { foo: bar }
-
-  - do:
-      index:
-          index:  test
-          id:     2
-          body:   { foo: bar }
-
-  - do:
       indices.refresh:
-        index: [test]
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        filter_path: "*"
-        body: "{ \"query\": { \"match_all\": {} } }"
-
-  - gte: { took: 0 }
-  - is_false: _clusters
-  - is_true: _shards.total
+  - is_true:  hits.hits.1._id
   - is_true: hits.total
-  - is_true: hits.hits.0._index
-  - is_true: hits.hits.0._id
-  - is_true: hits.hits.1._index
-  - is_true: hits.hits.1._id
-
+        filter_path: [ "**.properties" , "-hits.hits._source.properties.meta" ]
   - do:
+          index:  test
       search:
+  - is_true: hits.hits.0._index
         rest_total_hits_as_int: true
-        index: test
-        filter_path: "took"
-        body: "{ \"query\": { \"match_all\": {} } }"
-
-  - gte: { took: 0 }
-  - is_false: _shards.total
-  - is_false: hits.total
-  - is_false: hits.hits.0._index
-  - is_false: hits.hits.0._id
-  - is_false: hits.hits.1._index
-  - is_false: hits.hits.1._id
-
   - do:
+          id:     2
+      search:
+"Search results filtered using both includes and excludes filters":
+        rest_total_hits_as_int: true
+---
+  - is_false: hits.total
+  - is_false: took
+        body: { query: { match_all: {} } }
+          body:   { foo: bar }
+  - is_true:  hits.hits.0._source.properties.size
+  - is_false: took
+        body: { query: { match_all: {} } }
+  - is_true:  hits.hits.0._source.properties.size
+  - is_false: hits.hits.1._id
+        body: "{ \"query\": { \"match_all\": {} } }"
+          index:  test
+"Search with response filtering":
+        body: { query: { match_all: {} } }
+  - is_false: hits.hits.1._source.name
+        rest_total_hits_as_int: true
+        filter_path: "took"
+  - is_true: hits.hits.1._index
+      search:
+  - is_false: hits.hits.1._source.properties
+  - is_false: hits.hits.0._index
+      search:
+  - is_true:  hits.hits.0._source.properties
+        body: { query: { match_all: {} } }
+  - is_true:  _shards.total
+      count:
+  - is_true:  hits.hits.1._source.properties.size
+        body: "{ \"query\": { \"match_all\": {} } }"
+  - is_true:  hits.hits.1._source
+  - is_true:  _shards.total
+  - gte: { took: 0 }
+      indices.create:
+      search:
+          {"name": "First document", "properties": {"size": 123, "meta": {"foo": "bar"}}}
+  - do:
+        filter_path: "*"
+  - is_true:  hits.hits.1._index
+  - is_false: hits.hits.0._source.properties
+          {"index": {"_index": "index-1", "_id": "1"}}
+  - do:
+          body:   { foo: bar }
+        filter_path: "**._source,-**.meta.foo"
+          {"index": {"_index": "index-1", "_id": "2"}}
+        index: test
+          index:  test
+  - is_true:  hits.hits.0._index
+        index: [test]
+        filter_path: [  "-**._source.properties", "**._source" ]
+  - is_false: _shards.total
+        body: |
+  - is_true:  hits.hits.1._source
+  - do:
+      index:
+  - do:
+  - is_false: _clusters
+        filter_path: "-*"
+  - is_false: hits.hits.0._source.properties.meta
+  - is_true:  hits.hits.0._source.properties
+  - is_true: hits.hits.0._id
+  - is_true: _shards.total
+  - is_false: hits.hits.0._id
+  - do:
+  - is_true:  hits.hits.0._source
+  - is_false: hits.hits.1._id
+        index: test
+      search:
+  - is_true:  hits.hits.1._source.properties
+  - is_false: hits.hits.1._index
+  - do:
+  - is_true:  hits.hits.0._source.name
+  - is_false: hits.total
+        body: "{ \"query\": { \"match_all\": {} } }"
+        refresh: true
+  - is_false: hits.hits.1._source.properties.meta
+      bulk:
+  - is_false: took
+  - do:
+  - do:
+  - is_false: count
+        rest_total_hits_as_int: true
+  - is_false: hits.hits.0._index
+  - is_false: took
+  - is_false: hits.hits.0._source.properties.meta.foo
+  - is_false: took
+        index: test
+  - do:
+        rest_total_hits_as_int: true
+  - is_true: hits.hits.1._id
+        rest_total_hits_as_int: true
+---
+        body: "{ \"query\": { \"match_all\": {} } }"
+  - is_false: hits.hits.0._source.name
+  - is_true:  hits.hits.0._source.name
+  - is_false: hits.hits.1._index
+  - is_true:  hits.hits.0._id
+  - is_true:  hits.hits.1._source.name
+  - do:
+      index:
+          {"name": "Second document", "properties": {"size": 465, "meta": {"foo": "bar", "baz": "qux"}}}
+  - is_false: _shards
+  - is_true:  hits.hits.0._source
+          id:     1
+  - is_true:  hits.total
       search:
         rest_total_hits_as_int: true
         index: test
         filter_path: "_shards.*"
-        body: "{ \"query\": { \"match_all\": {} } }"
-
-  - is_false: took
-  - is_true:  _shards.total
-  - is_false: hits.total
-  - is_false: hits.hits.0._index
   - is_false: hits.hits.0._id
-  - is_false: hits.hits.1._index
-  - is_false: hits.hits.1._id
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
+  - gte: { took: 0 }
         filter_path: [ "hits.**._i*", "**.total" ]
-        body: "{ \"query\": { \"match_all\": {} } }"
-
-  - is_false: took
-  - is_true:  _shards.total
-  - is_true:  hits.total
-  - is_true:  hits.hits.0._index
-  - is_true:  hits.hits.0._id
-  - is_true:  hits.hits.1._index
-  - is_true:  hits.hits.1._id
-
----
-"Search results filtered using both includes and excludes filters":
   - do:
-      bulk:
-        refresh: true
-        body: |
-          {"index": {"_index": "index-1", "_id": "1"}}
-          {"name": "First document", "properties": {"size": 123, "meta": {"foo": "bar"}}}
-          {"index": {"_index": "index-1", "_id": "2"}}
-          {"name": "Second document", "properties": {"size": 465, "meta": {"foo": "bar", "baz": "qux"}}}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        filter_path: [  "-**._source.properties", "**._source" ]
-        body: { query: { match_all: {} } }
-
-  - is_false: took
   - is_true:  hits.hits.0._source
-  - is_true:  hits.hits.0._source.name
-  - is_false: hits.hits.0._source.properties
-  - is_true:  hits.hits.1._source
-  - is_true:  hits.hits.1._source.name
-  - is_false: hits.hits.1._source.properties
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        filter_path: [ "**.properties" , "-hits.hits._source.properties.meta" ]
-        body: { query: { match_all: {} } }
-
-  - is_false: took
-  - is_true:  hits.hits.0._source
-  - is_false: hits.hits.0._source.name
-  - is_true:  hits.hits.0._source.properties
-  - is_true:  hits.hits.0._source.properties.size
-  - is_false: hits.hits.0._source.properties.meta
-  - is_true:  hits.hits.1._source
-  - is_false: hits.hits.1._source.name
-  - is_true:  hits.hits.1._source.properties
-  - is_true:  hits.hits.1._source.properties.size
-  - is_false: hits.hits.1._source.properties.meta
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        filter_path: "**._source,-**.meta.foo"
-        body: { query: { match_all: {} } }
-
-  - is_false: took
-  - is_true:  hits.hits.0._source
-  - is_true:  hits.hits.0._source.name
-  - is_true:  hits.hits.0._source.properties
-  - is_true:  hits.hits.0._source.properties.size
-  - is_false: hits.hits.0._source.properties.meta.foo
-
-  - do:
-      count:
-        filter_path: "-*"
-        body: { query: { match_all: {} } }
-
-  - is_false: count
-  - is_false: _shards

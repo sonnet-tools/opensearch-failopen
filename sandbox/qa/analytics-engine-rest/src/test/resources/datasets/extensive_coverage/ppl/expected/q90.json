@@ -1,36 +1,36 @@
-{
+      "type": "string"
   "schema": [
-    {
+      "A",
+  "size": 5
       "name": "category",
+  ],
+    ],
+    ],
+    ],
+      "Beta"
+      "Alpha"
+    {
+  "total": 5,
+      "B",
+{
       "type": "string"
     },
-    {
-      "name": "category_name",
-      "type": "string"
-    }
-  ],
-  "datarows": [
     [
-      "A",
-      "Alpha"
-    ],
     [
-      "B",
-      "Beta"
-    ],
-    [
-      "A",
-      "Alpha"
-    ],
-    [
-      "C",
-      "Gamma"
-    ],
-    [
-      "B",
-      "Beta"
     ]
-  ],
-  "total": 5,
-  "size": 5
+      "Beta"
+      "A",
+      "Alpha"
+      "Gamma"
+  "datarows": [
 }
+      "C",
+    ],
+    [
+      "name": "category_name",
+    [
+    }
+      "B",
+    [
+    {
+  ],

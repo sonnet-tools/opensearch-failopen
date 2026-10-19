@@ -1,14 +1,12 @@
----
-"Default values":
-  - do:
-      index:
-        index: test_1
-        id:    1
-        body:  { "foo": "bar" }
-
-  - do:
       get_source:
+  - do:
         index: test_1
         id:    1
-
+      index:
+        id:    1
+"Default values":
   - match: { '':  { foo: bar } }
+        index: test_1
+---
+  - do:
+        body:  { "foo": "bar" }

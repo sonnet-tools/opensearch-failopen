@@ -1,56 +1,56 @@
-{
   "schema": [
-    {
-      "name": "message",
       "type": "string"
-    },
-    {
-      "name": "trimmed",
-      "type": "string"
+    [
+      "Test Message"
+    [
+      "  Test Message  ",
+{
+      "  Test Message  ",
     }
-  ],
-  "datarows": [
-    [
-      "  Test Message  ",
-      "Test Message"
+      "name": "message",
     ],
+    },
     [
-      "  Test Message  ",
-      "Test Message"
-    ],
-    [
-      "  Test Message  ",
-      "Test Message"
-    ],
-    [
-      "  Test Message  ",
-      "Test Message"
-    ],
-    [
-      "  Test Message  ",
-      "Test Message"
-    ],
-    [
-      "  Test Message  ",
-      "Test Message"
-    ],
-    [
-      "  Test Message  ",
-      "Test Message"
-    ],
-    [
-      "  Test Message  ",
-      "Test Message"
-    ],
-    [
-      "  Test Message  ",
-      "Test Message"
-    ],
-    [
-      "  Test Message  ",
-      "Test Message"
-    ]
-  ],
-  "total": 10,
   "size": 10
+      "  Test Message  ",
+  "total": 10,
+    [
+    [
+      "name": "trimmed",
+    [
+      "type": "string"
+    ],
+    ],
+      "Test Message"
+    ],
+    [
 }
+      "  Test Message  ",
+      "Test Message"
+      "Test Message"
+      "  Test Message  ",
+      "  Test Message  ",
+      "  Test Message  ",
+      "Test Message"
+    [
+      "  Test Message  ",
+  "datarows": [
+      "Test Message"
+    ],
+      "Test Message"
+  ],
+    ],
+    [
+    ],
+    {
+    [
+      "Test Message"
+    {
+    ],
+      "  Test Message  ",
+  ],
+      "Test Message"
+    ],
+      "  Test Message  ",
+    ]
+      "Test Message"

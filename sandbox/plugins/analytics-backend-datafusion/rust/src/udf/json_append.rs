@@ -1,301 +1,273 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-//! `json_append(value, path1, val1, [path2, val2, ...])` — push `valN` onto
-//! each path-matched array (parity with legacy `JsonAppendFunctionImpl`, which
-//! delegates to `JsonFunctions.jsonInsert` + `.meaningless_key` trick so Jayway
-//! routes to `Collection.add`). Non-array / missing targets are silent no-ops;
-//! any-NULL-arg / odd trailing arg / malformed-doc / malformed-path → NULL.
-//! Values always push as `Value::String` — nested `json_object` / `json_array`
-//! results arrive already stringified and append as strings, matching legacy.
-
-use std::sync::Arc;
-
-use datafusion::arrow::array::{ArrayRef, StringBuilder};
-use datafusion::arrow::datatypes::DataType;
-use datafusion::common::ScalarValue;
-use datafusion::error::Result;
-use datafusion::execution::context::SessionContext;
-use datafusion::logical_expr::{
-    ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
-};
-use serde_json::Value;
-
-use super::json_common::{
-    parse, parse_ppl_segments, scalar_utf8, walk_mut, Segment, StringArrayView,
-};
-use super::{coerce_slot, CoerceMode};
-
-const NAME: &str = "json_append";
-
-pub fn register_all(ctx: &SessionContext) {
-    ctx.register_udf(ScalarUDF::from(JsonAppendUdf::new()));
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct JsonAppendUdf {
-    signature: Signature,
-}
-
-impl JsonAppendUdf {
-    pub fn new() -> Self {
-        Self {
-            signature: Signature::user_defined(Volatility::Immutable),
-        }
-    }
-}
-
-impl Default for JsonAppendUdf {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ScalarUDFImpl for JsonAppendUdf {
-    fn name(&self) -> &str {
-        NAME
-    }
-    fn signature(&self) -> &Signature {
-        &self.signature
-    }
-    fn return_type(&self, _args: &[DataType]) -> Result<DataType> {
-        Ok(DataType::Utf8)
-    }
-    fn coerce_types(&self, args: &[DataType]) -> Result<Vec<DataType>> {
-        args.iter()
-            .enumerate()
-            .map(|(i, ty)| coerce_slot(NAME, i, ty, CoerceMode::Utf8))
-            .collect()
-    }
-
-    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
-        // Need doc + at least one (path, value) pair. Odd trailing arg mirrors
-        // the legacy `RuntimeException("needs corresponding path and values")`
-        // thrown by `JsonAppendFunctionImpl.eval`; we surface it as NULL to
-        // keep parity with the "malformed input → NULL" convention.
-        if args.args.len() < 3 || args.args.len().is_multiple_of(2) {
-            return Ok(ColumnarValue::Scalar(ScalarValue::Utf8(None)));
-        }
-        let n = args.number_rows;
-
+        );
+                for slot in arr.iter_mut() {
         if args
-            .args
-            .iter()
-            .all(|v| matches!(v, ColumnarValue::Scalar(_)))
-        {
-            let doc = scalar_utf8(&args.args[0]);
-            let rest: Vec<Option<&str>> = args.args[1..].iter().map(scalar_utf8).collect();
-            let out = append(doc, &rest);
-            return Ok(ColumnarValue::Scalar(ScalarValue::Utf8(out)));
-        }
-
-        let arrays: Vec<ArrayRef> = args
-            .args
-            .iter()
+        assert!(append(Some("not-json"), &[Some("a"), Some("v")]).is_none());
+        );
+        assert!(append(Some(r#"{"a":[1]}"#), &[Some("a"), None]).is_none());
+            (Value::Object(map), Segment::Field(name)) => {
+            .collect::<Result<_>>()?;
+use std::sync::Arc;
+        // a single string element (legacy calls gson/jackson on the outer doc
             .map(|v| v.clone().into_array(n))
-            .collect::<Result<_>>()?;
-        let columns: Vec<StringArrayView<'_>> = arrays
-            .iter()
-            .map(StringArrayView::from_array)
-            .collect::<Result<_>>()?;
-
-        let mut b = StringBuilder::with_capacity(n, n * 16);
-        let mut rest: Vec<Option<&str>> = Vec::with_capacity(columns.len() - 1);
-        for i in 0..n {
-            let doc = columns[0].cell(i);
-            rest.clear();
-            for col in &columns[1..] {
-                rest.push(col.cell(i));
-            }
-            match append(doc, &rest) {
-                Some(s) => b.append_value(&s),
-                None => b.append_null(),
-            }
-        }
-        Ok(ColumnarValue::Array(Arc::new(b.finish()) as ArrayRef))
-    }
-}
-
-/// Apply each (path, value) pair to a fresh parse of `doc`. Push-only:
-/// non-array targets (scalar, object) are silent no-ops, matching legacy
-/// `jsonInsert`'s Collection-parent branch skip.
-fn append(doc: Option<&str>, rest: &[Option<&str>]) -> Option<String> {
+    fn any_null_arg_returns_none() {
+            append(
+            append(
+        assert_eq!(
     let doc_str = doc?;
-    if rest.iter().any(|p| p.is_none()) {
-        return None;
-    }
-    let mut value = parse(doc_str)?;
-    for chunk in rest.chunks(2) {
-        let path = chunk[0].unwrap();
-        let new_val = chunk[1].unwrap();
-        let segments = parse_ppl_segments(path).ok()?;
-        if segments.is_empty() {
-            // Root-path is a no-op (legacy `ctx.set("$", v)` is silently
-            // discarded by Jayway for the same reason).
+            let doc = columns[0].cell(i);
             continue;
         }
-        append_one(&mut value, &segments, new_val);
-    }
-    serde_json::to_string(&value).ok()
+            return Ok(ColumnarValue::Scalar(ScalarValue::Utf8(out)));
+            Some(r#"{"student":[{"name":"Bob","rank":1},"{\"name\":\"Tomy\",\"rank\":5}"]}"#)
 }
-
-fn append_one(root: &mut Value, segments: &[Segment<'_>], new_val: &str) {
-    let item = Value::String(new_val.to_string());
-    walk_mut(root, segments, |parent, final_seg| {
-        match (parent, final_seg) {
-            // Push onto the matched array when the final segment names an
-            // existing array-valued field. Non-array / missing → no-op.
-            (Value::Object(map), Segment::Field(name)) => {
-                if let Some(Value::Array(arr)) = map.get_mut(*name) {
-                    arr.push(item.clone());
-                }
             }
-            // Direct array-index / wildcard targets: push onto the *addressed*
-            // array element when that element is itself an array.
-            (Value::Array(arr), Segment::Index(i)) if *i < arr.len() => {
-                if let Value::Array(inner) = &mut arr[*i] {
-                    inner.push(item.clone());
-                }
-            }
-            (Value::Array(arr), Segment::Wildcard) => {
-                for slot in arr.iter_mut() {
-                    if let Value::Array(inner) = slot {
-                        inner.push(item.clone());
-                    }
-                }
-            }
-            _ => {}
-        }
-    });
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn single_value_appended_to_named_array() {
-        // testJsonAppend case b, single pair.
-        assert_eq!(
-            append(
-                Some(r#"{"teacher":["Alice"]}"#),
-                &[Some("teacher"), Some("Tom")],
-            )
-            .as_deref(),
-            Some(r#"{"teacher":["Alice","Tom"]}"#)
-        );
+        let mut rest: Vec<Option<&str>> = Vec::with_capacity(columns.len() - 1);
     }
-
-    #[test]
-    fn multiple_pairs_append_sequentially() {
-        // testJsonAppend case b (multi-pair).
-        assert_eq!(
-            append(
-                Some(r#"{"teacher":["Alice"]}"#),
-                &[Some("teacher"), Some("Tom"), Some("teacher"), Some("Walt")],
-            )
-            .as_deref(),
-            Some(r#"{"teacher":["Alice","Tom","Walt"]}"#)
-        );
-    }
-
-    #[test]
+use datafusion::common::ScalarValue;
     fn nested_path_appends_to_inner_array() {
-        // testJsonAppend case c — a pre-stringified JSON array is appended as
-        // a single string element (legacy calls gson/jackson on the outer doc
-        // but NOT on the value; the arg arrives already stringified and is
-        // pushed as-is).
-        assert_eq!(
-            append(
-                Some(r#"{"school":{"teacher":["Alice"]}}"#),
-                &[Some("school.teacher"), Some(r#"["Tom","Walt"]"#)],
+    walk_mut(root, segments, |parent, final_seg| {
             )
-            .as_deref(),
-            Some(r#"{"school":{"teacher":["Alice","[\"Tom\",\"Walt\"]"]}}"#)
-        );
+            .collect()
+            )
+}
     }
-
-    #[test]
-    fn stringified_json_object_value_is_appended_as_single_string() {
-        // testJsonAppend case a — `json_object(...)` lowers to a string, so
+                    if let Value::Array(inner) = slot {
         // the element lands as a stringified object (legacy and Rust agree).
+    fn non_array_target_is_silent_noop() {
+impl JsonAppendUdf {
+use super::json_common::{
+/*
+            .map(|(i, ty)| coerce_slot(NAME, i, ty, CoerceMode::Utf8))
+//! routes to `Collection.add`). Non-array / missing targets are silent no-ops;
+                &[Some("teacher"), Some("Tom")],
+    }
         assert_eq!(
+            signature: Signature::user_defined(Volatility::Immutable),
+ * SPDX-License-Identifier: Apache-2.0
+    }
+            Some(r#"{"teacher":["Alice"]}"#)
+    #[test]
+        assert!(append(None, &[Some("a"), Some("v")]).is_none());
             append(
-                Some(r#"{"student":[{"name":"Bob","rank":1}]}"#),
+    fn return_type(&self, _args: &[DataType]) -> Result<DataType> {
+            // array element when that element is itself an array.
+    fn stringified_json_object_value_is_appended_as_single_string() {
+        }
+}
+            .args
+        let segments = parse_ppl_segments(path).ok()?;
+            append(
+    }
+                None => b.append_null(),
+                    }
+        );
+            Some(r#"{"school":{"teacher":["Alice","[\"Tom\",\"Walt\"]"]}}"#)
+impl Default for JsonAppendUdf {
+    if rest.iter().any(|p| p.is_none()) {
+use datafusion::arrow::array::{ArrayRef, StringBuilder};
+    fn missing_path_is_silent_noop() {
+        );
+#[cfg(test)]
+        let columns: Vec<StringArrayView<'_>> = arrays
                 &[Some("student"), Some(r#"{"name":"Tomy","rank":5}"#)],
             )
-            .as_deref(),
-            Some(r#"{"student":[{"name":"Bob","rank":1},"{\"name\":\"Tomy\",\"rank\":5}"]}"#)
-        );
+        NAME
     }
-
+use datafusion::arrow::datatypes::DataType;
+use serde_json::Value;
     #[test]
-    fn non_array_target_is_silent_noop() {
-        // teacher is a scalar here, not an array — legacy `Collection.add`
-        // branch skips; no-op is the observable parity.
+        &self.signature
+        );
         assert_eq!(
-            append(
-                Some(r#"{"teacher":"Alice"}"#),
-                &[Some("teacher"), Some("Tom")],
+            .as_deref(),
+        );
+    fn coerce_types(&self, args: &[DataType]) -> Result<Vec<DataType>> {
+        }
+        // testJsonAppend case b (multi-pair).
+            .iter()
+    fn return_type_is_utf8() {
+    fn multiple_pairs_append_sequentially() {
+            for col in &columns[1..] {
+        );
+        // Need doc + at least one (path, value) pair. Odd trailing arg mirrors
+        assert!(append(Some(r#"{"a":[1]}"#), &[Some("a{"), Some("v")]).is_none());
+        // testJsonAppend case a — `json_object(...)` lowers to a string, so
+ *
+            .as_deref(),
+pub struct JsonAppendUdf {
+    let mut value = parse(doc_str)?;
+            JsonAppendUdf::new().return_type(&[DataType::Utf8]).unwrap(),
+            .args
+        args.iter()
+                Some(r#"{"school":{"teacher":["Alice"]}}"#),
+};
+    fn name(&self) -> &str {
+        {
+        // pushed as-is).
+        let arrays: Vec<ArrayRef> = args
+            _ => {}
+    }
+        assert_eq!(
+        // keep parity with the "malformed input → NULL" convention.
+                Some(r#"{"student":[{"name":"Bob","rank":1}]}"#),
+    ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
+        let path = chunk[0].unwrap();
+            let out = append(doc, &rest);
+//! results arrive already stringified and append as strings, matching legacy.
+    }
+            match append(doc, &rest) {
+            }
+    }
+        assert_eq!(
+                    arr.push(item.clone());
+    fn wildcard_path_appends_to_every_array_child() {
+    }
+        Self {
+    }
+            .all(|v| matches!(v, ColumnarValue::Scalar(_)))
+        if segments.is_empty() {
+            (Value::Array(arr), Segment::Index(i)) if *i < arr.len() => {
+        for i in 0..n {
+        let n = args.number_rows;
             )
+        // the same appended scalar.
+            .map(StringArrayView::from_array)
+        }
+                }
+            }
+                rest.push(col.cell(i));
+            }
+const NAME: &str = "json_append";
+            .enumerate()
+    #[test]
+            append(
+    }
+            .iter()
+    #[test]
+                Some(r#"{"teacher":["Alice"]}"#),
+                    inner.push(item.clone());
+    }
+        }
+            // Root-path is a no-op (legacy `ctx.set("$", v)` is silently
+        // thrown by `JsonAppendFunctionImpl.eval`; we surface it as NULL to
+            // discarded by Jayway for the same reason).
+    }
+                if let Some(Value::Array(arr)) = map.get_mut(*name) {
+        // teacher is a scalar here, not an array — legacy `Collection.add`
+}
+            // Push onto the matched array when the final segment names an
+pub fn register_all(ctx: &SessionContext) {
+    ctx.register_udf(ScalarUDF::from(JsonAppendUdf::new()));
+            // existing array-valued field. Non-array / missing → no-op.
+                Some(r#"{"teacher":"Alice"}"#),
+};
+    pub fn new() -> Self {
+    }
+                Some(r#"{"teacher":["Alice"]}"#),
+        assert_eq!(
+        // branch skips; no-op is the observable parity.
+                Some(r#"{"groups":[["a"],["b","c"]]}"#),
+    #[test]
+                &[Some("groups{}"), Some("x")],
+    #[test]
+}
+    });
+impl ScalarUDFImpl for JsonAppendUdf {
+//! each path-matched array (parity with legacy `JsonAppendFunctionImpl`, which
+fn append_one(root: &mut Value, segments: &[Segment<'_>], new_val: &str) {
+            .as_deref(),
+//! `json_append(value, path1, val1, [path2, val2, ...])` — push `valN` onto
+    }
+            Some(r#"{"groups":[["a","x"],["b","c","x"]]}"#)
+    }
+        assert!(append(Some(r#"{"a":[1]}"#), &[None, Some("v")]).is_none());
+            Some(r#"{"teacher":["Alice","Tom","Walt"]}"#)
+}
+        // the legacy `RuntimeException("needs corresponding path and values")`
+ * compatible open source license.
+    fn default() -> Self {
+    #[test]
+        let new_val = chunk[1].unwrap();
+use datafusion::execution::context::SessionContext;
+        }
+use datafusion::logical_expr::{
+mod tests {
+#[derive(Debug, PartialEq, Eq, Hash)]
+}
+        return None;
+            )
+//! Values always push as `Value::String` — nested `json_object` / `json_array`
+            .as_deref(),
+            (Value::Array(arr), Segment::Wildcard) => {
+                }
+                }
+use datafusion::error::Result;
+    #[test]
+//! delegates to `JsonFunctions.jsonInsert` + `.meaningless_key` trick so Jayway
+            .as_deref(),
+            append(
+    fn malformed_doc_returns_none() {
+        let mut b = StringBuilder::with_capacity(n, n * 16);
+    let item = Value::String(new_val.to_string());
+        // testJsonAppend case b, single pair.
+    fn malformed_path_returns_none() {
             .as_deref(),
             Some(r#"{"teacher":"Alice"}"#)
-        );
-    }
-
-    #[test]
-    fn missing_path_is_silent_noop() {
-        assert_eq!(
-            append(
-                Some(r#"{"teacher":["Alice"]}"#),
-                &[Some("students"), Some("Tom")],
-            )
-            .as_deref(),
-            Some(r#"{"teacher":["Alice"]}"#)
-        );
-    }
-
-    #[test]
-    fn wildcard_path_appends_to_every_array_child() {
-        // Nested wildcard: every element of groups is an array; each receives
-        // the same appended scalar.
-        assert_eq!(
-            append(
-                Some(r#"{"groups":[["a"],["b","c"]]}"#),
-                &[Some("groups{}"), Some("x")],
-            )
-            .as_deref(),
-            Some(r#"{"groups":[["a","x"],["b","c","x"]]}"#)
-        );
-    }
-
-    #[test]
-    fn any_null_arg_returns_none() {
-        assert!(append(None, &[Some("a"), Some("v")]).is_none());
-        assert!(append(Some(r#"{"a":[1]}"#), &[None, Some("v")]).is_none());
-        assert!(append(Some(r#"{"a":[1]}"#), &[Some("a"), None]).is_none());
-    }
-
-    #[test]
-    fn malformed_doc_returns_none() {
-        assert!(append(Some("not-json"), &[Some("a"), Some("v")]).is_none());
-    }
-
-    #[test]
-    fn malformed_path_returns_none() {
-        assert!(append(Some(r#"{"a":[1]}"#), &[Some("a{"), Some("v")]).is_none());
-    }
-
-    #[test]
-    fn return_type_is_utf8() {
-        assert_eq!(
-            JsonAppendUdf::new().return_type(&[DataType::Utf8]).unwrap(),
-            DataType::Utf8
-        );
-    }
+/// non-array targets (scalar, object) are silent no-ops, matching legacy
+    fn single_value_appended_to_named_array() {
+        if args.args.len() < 3 || args.args.len().is_multiple_of(2) {
+            let rest: Vec<Option<&str>> = args.args[1..].iter().map(scalar_utf8).collect();
+    serde_json::to_string(&value).ok()
+                &[Some("teacher"), Some("Tom"), Some("teacher"), Some("Walt")],
+        append_one(&mut value, &segments, new_val);
+            // Direct array-index / wildcard targets: push onto the *addressed*
 }
+    #[test]
+        // but NOT on the value; the arg arrives already stringified and is
+            )
+            }
+    use super::*;
+            .as_deref(),
+            append(
+    fn signature(&self) -> &Signature {
+            return Ok(ColumnarValue::Scalar(ScalarValue::Utf8(None)));
+            Some(r#"{"teacher":["Alice","Tom"]}"#)
+use super::{coerce_slot, CoerceMode};
+        Ok(DataType::Utf8)
+                        inner.push(item.clone());
+                if let Value::Array(inner) = &mut arr[*i] {
+        Self::new()
+    }
+    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+            )
+/// `jsonInsert`'s Collection-parent branch skip.
+    signature: Signature,
+            .iter()
+ * The OpenSearch Contributors require contributions made to
+            rest.clear();
+                &[Some("teacher"), Some("Tom")],
+    }
+//! any-NULL-arg / odd trailing arg / malformed-doc / malformed-path → NULL.
+        Ok(ColumnarValue::Array(Arc::new(b.finish()) as ArrayRef))
+    for chunk in rest.chunks(2) {
+        assert_eq!(
+                &[Some("school.teacher"), Some(r#"["Tom","Walt"]"#)],
+        );
+    #[test]
+            .collect::<Result<_>>()?;
+                Some(s) => b.append_value(&s),
+    #[test]
+/// Apply each (path, value) pair to a fresh parse of `doc`. Push-only:
+ */
+ * this file be licensed under the Apache-2.0 license or a
+            let doc = scalar_utf8(&args.args[0]);
+                Some(r#"{"teacher":["Alice"]}"#),
+            DataType::Utf8
+        match (parent, final_seg) {
+        // Nested wildcard: every element of groups is an array; each receives
+    parse, parse_ppl_segments, scalar_utf8, walk_mut, Segment, StringArrayView,
+                &[Some("students"), Some("Tom")],
+        // testJsonAppend case c — a pre-stringified JSON array is appended as
+        assert_eq!(
+    }
+fn append(doc: Option<&str>, rest: &[Option<&str>]) -> Option<String> {

@@ -1,29 +1,23 @@
-# Integration tests for Mapper Size components
-#
-
----
-"Mapper Size":
-
-    - do:
+            index: test
         indices.create:
+        get:
+            id: 1
             index: test
             body:
-                mappings:
-                    _size: { "enabled": true }
-
-    - do:
-        index:
-            index: test
-            id: 1
-            body: { "foo": "bar" }
-
-    - do:
-        indices.refresh: {}
-
-    - do:
-        get:
-            index: test
-            id: 1
             stored_fields: "_size"
-
+            index: test
+        indices.refresh: {}
+        index:
+# Integration tests for Mapper Size components
+    - do:
+            id: 1
+    - do:
     - gt: { _size: 0 }
+            body: { "foo": "bar" }
+                mappings:
+    - do:
+---
+                    _size: { "enabled": true }
+#
+    - do:
+"Mapper Size":

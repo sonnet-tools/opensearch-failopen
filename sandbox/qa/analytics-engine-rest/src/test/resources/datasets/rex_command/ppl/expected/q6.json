@@ -1,70 +1,70 @@
-{
-  "schema": [
-    {
-      "name": "method",
-      "type": "string"
-    },
-    {
-      "name": "path",
-      "type": "string"
-    },
-    {
-      "name": "status",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      "GET",
-      "/api/v1/users",
-      "500"
-    ],
-    [
       "POST",
-      "/api/v2/checkout",
-      "200"
-    ],
-    [
-      "GET",
-      "/api/v1/login",
-      "429"
-    ],
-    [
-      "DELETE",
-      "/api/v1/users/123",
-      "204"
-    ],
-    [
+      "name": "method",
+    },
       "PUT",
-      "/api/v1/profile",
-      "500"
+      "type": "string"
+      "/api/v1/data",
     ],
-    [
-      "GET",
-      "/health",
-      "503"
+  "datarows": [
     ],
+    },
     [
+    [
+    ],
+    ],
+      "401"
+    [
+      "name": "status",
       "POST",
       "/api/v1/auth",
-      "401"
     ],
+  "total": 10,
+      "/api/v2/checkout",
+  "size": 10
+  ],
+      "/health",
+      "503"
     [
-      "GET",
-      "/api/v1/data",
+      "DELETE",
+{
       "200"
-    ],
     [
-      "PATCH",
-      "/api/v1/settings",
-      "200"
-    ],
     [
-      "POST",
+      "500"
       "/api/v1/query",
       "200"
-    ]
+      "name": "path",
+      "PATCH",
+      "/api/v1/settings",
+      "POST",
+      "/api/v1/login",
+      "/api/v1/users/123",
+      "GET",
   ],
-  "total": 10,
-  "size": 10
+      "200"
+    [
+    }
+    [
+      "200"
+    ],
+    [
+      "204"
+      "/api/v1/profile",
+    ],
+    ]
+    [
 }
+      "GET",
+    ],
+      "500"
+      "/api/v1/users",
+    {
+      "429"
+    ],
+      "GET",
+    {
+    {
+      "type": "string"
+      "type": "string"
+      "GET",
+  "schema": [

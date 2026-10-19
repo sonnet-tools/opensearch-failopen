@@ -1,102 +1,102 @@
+        {
 {
-  "from": 0,
-  "size": 0,
-  "timeout": "1m",
-  "query": {
-    "bool": {
-      "must": [
-        {
-          "bool": {
-            "must": [
-              {
-                "exists": {
-                  "field": "SearchPhrase",
-                  "boost": 1.0
-                }
-              }
-            ],
-            "must_not": [
-              {
-                "term": {
-                  "SearchPhrase": {
-                    "value": "",
-                    "boost": 1.0
-                  }
-                }
-              }
-            ],
-            "adjust_pure_negative": true,
-            "boost": 1.0
-          }
-        },
-        {
-          "exists": {
-            "field": "WatchID",
-            "boost": 1.0
-          }
-        },
-        {
-          "exists": {
-            "field": "ClientIP",
-            "boost": 1.0
-          }
-        }
-      ],
-      "adjust_pure_negative": true,
-      "boost": 1.0
-    }
-  },
-  "_source": {
-    "includes": [
       "WatchID",
-      "SearchPhrase",
-      "IsRefresh",
-      "ClientIP",
-      "ResolutionWidth"
-    ],
-    "excludes": []
-  },
-  "aggregations": {
-    "WatchID|ClientIP": {
-      "multi_terms": {
-        "terms": [
           {
-            "field": "WatchID"
-          },
           {
-            "field": "ClientIP"
-          }
-        ],
         "size": 10,
-        "min_doc_count": 1,
+  "timeout": "1m",
+            "c": "desc"
+                  "SearchPhrase": {
+  "aggregations": {
+          "avg": {
         "shard_min_doc_count": 0,
-        "show_term_doc_count_error": false,
+  "from": 0,
+            "field": "WatchID",
+            "must_not": [
+        "min_doc_count": 1,
+      "ClientIP",
+            ],
+          }
+            "boost": 1.0
+  }
+    }
+        }
+      "IsRefresh",
+          }
+  "_source": {
+              {
+        ],
+      "multi_terms": {
+        },
+          "exists": {
+                  "field": "SearchPhrase",
+          {
+          "bool": {
+      }
+            "field": "WatchID"
+            "field": "ClientIP"
+            "boost": 1.0
+        },
+          }
+            "field": "IsRefresh"
+  "query": {
+    "includes": [
+            "field": "_index"
+                    "boost": 1.0
+      "boost": 1.0
+            "field": "ResolutionWidth"
+            ],
+      ],
+    "WatchID|ClientIP": {
         "order": [
           {
-            "c": "desc"
-          },
-          {
-            "_key": "asc"
-          }
-        ]
-      },
-      "aggregations": {
-        "sum(IsRefresh)": {
+        "terms": [
+  },
+              }
+    "bool": {
           "sum": {
-            "field": "IsRefresh"
-          }
+        ]
+        "show_term_doc_count_error": false,
         },
+      },
+              {
         "avg(ResolutionWidth)": {
-          "avg": {
-            "field": "ResolutionWidth"
-          }
         },
-        "c": {
-          "value_count": {
-            "field": "_index"
+                "term": {
+            "adjust_pure_negative": true,
+        {
           }
-        }
-      }
+            "boost": 1.0
+                "exists": {
+      "adjust_pure_negative": true,
+          }
+  },
+          }
+      "must": [
+      "ResolutionWidth"
+                  }
+      "aggregations": {
     }
-  }
+              }
+                }
+      "SearchPhrase",
+        "sum(IsRefresh)": {
+          },
+  "size": 0,
 }
+            "must": [
+        {
+          "value_count": {
+            "field": "ClientIP",
+        }
+        "c": {
+    "excludes": []
+                  "boost": 1.0
+          }
+          "exists": {
+                    "value": "",
+                }
+          }
+            "_key": "asc"
+          },
+    ],

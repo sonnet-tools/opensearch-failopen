@@ -1,35 +1,35 @@
-{
-  "cat.example": {
-    "documentation": {
-      "url": "https://opensearch.org/docs/opensearch/install/plugins/",
-      "description": "Example"
-    },
-    "stability" : "stable",
-    "url": {
-      "paths": [
-        {
-          "path" : "/_cat/example",
           "methods" : ["GET"]
-        }
-      ]
-    },
-    "params": {
-      "help": {
-        "type": "boolean",
-        "description": "Return help information",
-        "default": false
-      },
+    "url": {
       "v": {
-        "type": "boolean",
-        "description": "Verbose mode. Display column headers",
-        "default": true
-      },
-      "message": {
-        "type": "string",
-        "description": "A simple message that will be printed out in the response",
-        "default": "Hello from Cat Example action"
-      }
+    "stability" : "stable",
+      "paths": [
     },
+        "description": "Verbose mode. Display column headers",
+      "help": {
+  "cat.example": {
+          "path" : "/_cat/example",
+    },
+      "message": {
     "body": null
-  }
+      "description": "Example"
+        {
+{
+        "description": "A simple message that will be printed out in the response",
+        "description": "Return help information",
+        "type": "string",
+        "default": "Hello from Cat Example action"
+        "default": false
+    "documentation": {
+      ]
+        "type": "boolean",
 }
+    "params": {
+        }
+  }
+        "type": "boolean",
+    },
+        "default": true
+      }
+      },
+      },
+      "url": "https://opensearch.org/docs/opensearch/install/plugins/",

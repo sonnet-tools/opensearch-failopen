@@ -1,105 +1,97 @@
----
-teardown:
-  - do:
-      ingest.delete_pipeline:
-        id: "my_pipeline"
+        body: { message: "foo bar baz" }
+      get:
         ignore: 404
-
+        body:  >
+                  "override_target" : true
+            ]
+        id: "my_pipeline"
+                  "target_field" : "bar",
+            "processors": [
+        id: "my_pipeline"
+            "description": "_description",
+          }
+        index: test
+        }
+      index:
+        id: 1
+teardown:
+        pipeline: "my_pipeline"
 ---
 "Test rename processor with non-existing field and without ignore_missing":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "rename" : {
-                  "field" : "{{field_foo}}",
-                  "target_field" : "bar"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      catch: '/field path cannot be null nor empty/'
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: { message: "foo bar baz" }
-
----
-"Test rename processor with non-existing field and ignore_missing":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "rename" : {
-                  "field" : "{{field_foo}}",
-                  "target_field" : "bar",
-                  "ignore_missing" : true
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: { message: "foo bar baz" }
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.message: "foo bar baz" }
-
----
-"Test rename processor with override_target":
-  - skip:
-      version: " - 2.13.99"
-      reason: "introduced in 2.14.0"
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "rename" : {
-                  "field" : "foo",
-                  "target_field" : "bar",
-                  "override_target" : true
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {
-          foo: "foo",
           bar: "bar"
-        }
-
-  - do:
-      get:
         index: test
-        id: 1
+          }
+  - do:
+                "rename" : {
+          foo: "foo",
+      ingest.put_pipeline:
+  - do:
+        body:  >
+              }
+  - do:
+        body: {
+                  "field" : "{{field_foo}}",
+        id: "my_pipeline"
+        index: test
+              {
   - match: { _source: { "bar": "foo" } }
+  - do:
+                }
+          }
+                }
+            "description": "_description",
+        pipeline: "my_pipeline"
+            ]
+          {
+                "rename" : {
+                  "target_field" : "bar",
+      ingest.put_pipeline:
+                  "field" : "foo",
+      ingest.delete_pipeline:
+  - match: { acknowledged: true }
+  - do:
+        id: 1
+            "processors": [
+        index: test
+        index: test
+        id: "my_pipeline"
+      reason: "introduced in 2.14.0"
+          {
+                "rename" : {
+  - do:
+  - match: { _source.message: "foo bar baz" }
+  - do:
+  - skip:
+                  "ignore_missing" : true
+      ingest.put_pipeline:
+        body: { message: "foo bar baz" }
+        pipeline: "my_pipeline"
+              {
+                  "field" : "{{field_foo}}",
+"Test rename processor with override_target":
+      get:
+      version: " - 2.13.99"
+          {
+  - match: { acknowledged: true }
+            "description": "_description",
+  - do:
+        id: 1
+      index:
+            ]
+        id: 1
+              }
+        id: 1
+"Test rename processor with non-existing field and ignore_missing":
+  - match: { acknowledged: true }
+                  "target_field" : "bar"
+        body:  >
+      index:
+              }
+  - do:
+                }
+      catch: '/field path cannot be null nor empty/'
+---
+              {
+            "processors": [
+---
+---

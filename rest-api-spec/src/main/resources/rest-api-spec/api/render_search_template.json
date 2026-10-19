@@ -1,36 +1,36 @@
-{
-  "render_search_template":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/search-template/",
-      "description":"Allows to use the Mustache language to pre-render a search definition."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_render/template",
-          "methods":[
-            "GET",
-            "POST"
-          ]
-        },
-        {
-          "path":"/_render/template/{id}",
-          "methods":[
-            "GET",
-            "POST"
-          ],
           "parts":{
-            "id":{
-              "type":"string",
               "description":"The id of the stored search template"
-            }
           }
-        }
-      ]
-    },
-    "body":{
+        },
+            "POST"
       "description":"The search definition template and its params"
+        {
     }
-  }
 }
+          "path":"/_render/template/{id}",
+      "paths":[
+            "GET",
+          ],
+            "GET",
+          "methods":[
+    "url":{
+      ]
+{
+          ]
+  }
+    },
+    },
+        }
+          "methods":[
+            }
+  "render_search_template":{
+    "body":{
+              "type":"string",
+            "id":{
+        {
+            "POST"
+          "path":"/_render/template",
+    "stability":"stable",
+      "description":"Allows to use the Mustache language to pre-render a search definition."
+      "url":"https://opensearch.org/docs/latest/api-reference/search-template/",
+    "documentation":{

@@ -1,202 +1,177 @@
----
-"Nodes Stats with response filtering":
-  - skip:
-      features: [arbitrary_key]
-  - do:
-      nodes.info: {}
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  # Nodes Stats with no filtering
-  - do:
-      nodes.stats: {}
-
-  - is_true: cluster_name
+  - is_false: nodes.$node_id.name
+  - is_false: cluster_name
   - is_true: nodes
-  - is_true: nodes.$node_id.name
-  - is_true: nodes.$node_id.indices
-  - is_true: nodes.$node_id.indices.docs
-  - gte:     { nodes.$node_id.indices.docs.count: 0 }
-  - is_true: nodes.$node_id.indices.segments
-  - gte:     { nodes.$node_id.indices.segments.count: 0 }
-  - is_true: nodes.$node_id.jvm
-  - is_true: nodes.$node_id.jvm.threads
-  - gte:     { nodes.$node_id.jvm.threads.count: 0 }
-  - is_true: nodes.$node_id.jvm.buffer_pools.direct
-  - gte:     { nodes.$node_id.jvm.buffer_pools.direct.count: 0 }
-  - gte:     { nodes.$node_id.jvm.buffer_pools.direct.used_in_bytes: 0 }
-
-  # Nodes Stats with only "cluster_name" field
-  - do:
-      nodes.stats:
-        filter_path: cluster_name
-
-  - is_true:  cluster_name
-  - is_false: nodes
-  - is_false: nodes.$node_id.name
-  - is_false: nodes.$node_id.indices
-  - is_false: nodes.$node_id.jvm
-
-  # Nodes Stats with "nodes" field and sub-fields
-  - do:
-      nodes.stats:
-        filter_path: nodes.*
-
-  - is_false: cluster_name
-  - is_true:  nodes
-  - is_true:  nodes.$node_id.name
-  - is_true:  nodes.$node_id.indices
-  - is_true:  nodes.$node_id.indices.docs
-  - gte:      { nodes.$node_id.indices.docs.count: 0 }
-  - is_true:  nodes.$node_id.indices.segments
-  - gte:      { nodes.$node_id.indices.segments.count: 0 }
-  - is_true:  nodes.$node_id.jvm
-  - is_true:  nodes.$node_id.jvm.threads
-  - gte:      { nodes.$node_id.jvm.threads.count: 0 }
-  - is_true:  nodes.$node_id.jvm.buffer_pools.direct
-  - gte:      { nodes.$node_id.jvm.buffer_pools.direct.count: 0 }
-  - gte:     { nodes.$node_id.jvm.buffer_pools.direct.used_in_bytes: 0 }
-
-  # Nodes Stats with "nodes.*.indices" field and sub-fields
-  - do:
-      nodes.stats:
-        filter_path: nodes.*.indices
-
-  - is_false: cluster_name
-  - is_true:  nodes
-  - is_false: nodes.$node_id.name
-  - is_true:  nodes.$node_id.indices
-  - is_true:  nodes.$node_id.indices.docs
-  - gte:      { nodes.$node_id.indices.docs.count: 0 }
-  - is_true:  nodes.$node_id.indices.segments
-  - gte:      { nodes.$node_id.indices.segments.count: 0 }
-  - is_false: nodes.$node_id.jvm
-
-  # Nodes Stats with "nodes.*.name" and "nodes.*.indices.docs.count" fields
-  - do:
-      nodes.stats:
-        filter_path: [ "nodes.*.name", "nodes.*.indices.docs.count" ]
-
-  - is_false: cluster_name
-  - is_true:  nodes
-  - is_true:  nodes.$node_id.name
-  - is_true:  nodes.$node_id.indices
-  - is_true:  nodes.$node_id.indices.docs
-  - gte:      { nodes.$node_id.indices.docs.count: 0 }
-  - is_false: nodes.$node_id.indices.segments
-  - is_false: nodes.$node_id.jvm
-
-  # Nodes Stats with all "count" fields
-  - do:
-      nodes.stats:
-        filter_path: "nodes.**.count"
-
-  - is_false: cluster_name
-  - is_true:  nodes
-  - is_false: nodes.$node_id.name
-  - is_true:  nodes.$node_id.indices
-  - is_true:  nodes.$node_id.indices.docs
-  - gte:      { nodes.$node_id.indices.docs.count: 0 }
-  - is_true:  nodes.$node_id.indices.segments
-  - gte:      { nodes.$node_id.indices.segments.count: 0 }
-  - is_true:  nodes.$node_id.jvm
-  - is_true:  nodes.$node_id.jvm.threads
-  - gte:      { nodes.$node_id.jvm.threads.count: 0 }
-  - is_true:  nodes.$node_id.jvm.buffer_pools.direct
-  - gte:      { nodes.$node_id.jvm.buffer_pools.direct.count: 0 }
-  - is_false: nodes.$node_id.jvm.buffer_pools.direct.used_in_bytes
-
-  # Nodes Stats with all "count" fields in sub-fields of "jvm" field
-  - do:
-      nodes.stats:
         filter_path: "nodes.**.jvm.**.count"
-
-  - is_false: cluster_name
-  - is_true:  nodes
-  - is_false: nodes.$node_id.name
-  - is_false: nodes.$node_id.indices
-  - is_false: nodes.$node_id.indices.docs.count
-  - is_false: nodes.$node_id.indices.segments.count
-  - is_true:  nodes.$node_id.jvm
-  - is_true:  nodes.$node_id.jvm.threads
-  - gte:      { nodes.$node_id.jvm.threads.count: 0 }
-  - is_true:  nodes.$node_id.jvm.buffer_pools.direct
-  - gte:      { nodes.$node_id.jvm.buffer_pools.direct.count: 0 }
-  - is_false: nodes.$node_id.jvm.buffer_pools.direct.used_in_bytes
-
-  # Nodes Stats with "nodes.*.fs.data" fields
-  - do:
-      nodes.stats:
-        filter_path: "nodes.*.fs.data"
-
-  - is_false: cluster_name
-  - is_true:  nodes
-  - is_false: nodes.$node_id.name
-  - is_false: nodes.$node_id.indices
-  - is_false: nodes.$node_id.jvm
-  - is_true:  nodes.$node_id.fs.data
-  - is_true:  nodes.$node_id.fs.data.0.path
-  - is_true:  nodes.$node_id.fs.data.0.type
-  - is_true:  nodes.$node_id.fs.data.0.total_in_bytes
-
-  # Nodes Stats with "nodes.*.fs.data.t*" fields
-  - do:
-      nodes.stats:
-        filter_path: "nodes.*.fs.data.t*"
-
-  - is_false: cluster_name
-  - is_true:  nodes
-  - is_false: nodes.$node_id.name
-  - is_false: nodes.$node_id.indices
-  - is_false: nodes.$node_id.jvm
-  - is_true:  nodes.$node_id.fs.data
-  - is_false: nodes.$node_id.fs.data.0.path
-  - is_true:  nodes.$node_id.fs.data.0.type
-  - is_true:  nodes.$node_id.fs.data.0.total_in_bytes
-
 ---
-"Nodes Stats filtered using both includes and excludes filters":
+  - is_true:  nodes
+  - is_false: nodes.$node_id.fs.data.0.path
+  # Nodes Stats with "nodes.*.fs.data.t*" fields but no "type" field
+  - is_true:  nodes.$node_id.name
+  - is_true:  cluster_name
+        filter_path: "nodes.*.fs.data.t*,-**.type"
+      nodes._arbitrary_key_: node_id
+        filter_path: [ "nodes.*.name", "nodes.*.indices.docs.count" ]
+  - gte:     { nodes.$node_id.indices.docs.count: 0 }
+  - is_false: cluster_name
+  - is_true:  nodes
+        filter_path: [ "nodes", "-nodes.*.jvm", "-nodes.*.indices" ]
+  - do:
+  # Nodes Stats with only "cluster_name" field
+  - is_true:  nodes.$node_id.jvm
+      nodes.stats:
+  - is_false: nodes.$node_id.name
+  - is_true:  nodes.$node_id.jvm.buffer_pools.direct
+  - do:
+  - gte:     { nodes.$node_id.jvm.threads.count: 0 }
+  - is_true:  nodes
+  - is_true: nodes.$node_id.name
+  # Nodes Stats with no filtering
+  - is_true:  nodes.$node_id.name
+  - is_false: nodes.$node_id.jvm
+  - is_true:  nodes.$node_id.fs.data.0.total_in_bytes
+  - is_false: nodes.$node_id.name
+  - is_false: nodes.$node_id.name
+  - do:
+  - gte:     { nodes.$node_id.jvm.buffer_pools.direct.used_in_bytes: 0 }
+        filter_path: "nodes.*.fs.data.t*"
+  - is_true: nodes.$node_id.jvm
+  - is_true:  nodes
+  - is_false: nodes.$node_id.indices
+  # Nodes Stats with all "count" fields in sub-fields of "jvm" field
+  - is_false: nodes.$node_id.fs.data.0.type
+  - is_false: cluster_name
+  - is_true:  nodes.$node_id.jvm.threads
+  - gte:     { nodes.$node_id.indices.segments.count: 0 }
+  - is_true:  nodes.$node_id.indices
+  - is_false: nodes.$node_id.jvm.buffer_pools.direct.used_in_bytes
+  - is_true:  nodes.$node_id.jvm.buffer_pools.direct
+  - is_false: nodes.$node_id.indices
   - skip:
+  - is_false: nodes.$node_id.indices.segments
+      nodes.stats:
+  - is_false: nodes
+  - is_true:  nodes.$node_id.indices.segments
+  - is_true:  nodes.$node_id.fs.data.0.type
+      nodes.stats: {}
+  - gte:      { nodes.$node_id.indices.docs.count: 0 }
+  - gte:      { nodes.$node_id.indices.docs.count: 0 }
+  - is_true:  nodes.$node_id.os
+      nodes.info: {}
+  - gte:      { nodes.$node_id.jvm.threads.count: 0 }
+  - do:
+  - gte:      { nodes.$node_id.indices.segments.count: 0 }
+  - is_false: nodes.$node_id.jvm
+  - is_true:  nodes.$node_id.fs.data.0.total_in_bytes
+  - is_true:  nodes
+  - set:
+  - gte:      { nodes.$node_id.jvm.buffer_pools.direct.count: 0 }
+  - is_true:  nodes.$node_id.indices.docs
+  - is_true:  nodes.$node_id.jvm.buffer_pools.direct
+      nodes.stats:
+  - is_true:  nodes.$node_id.jvm
+  - is_true: nodes.$node_id.indices.segments
+  - is_true:  nodes.$node_id.fs.data.0.path
+  - is_false: nodes.$node_id.jvm
+  - is_true:  nodes.$node_id.jvm.threads
+  # Nodes Stats with "nodes.*.fs.data" fields
+  - is_false: cluster_name
+  - gte:      { nodes.$node_id.jvm.threads.count: 0 }
+  - gte:      { nodes.$node_id.indices.segments.count: 0 }
+  - is_false: cluster_name
+  # Nodes Stats with "nodes" field but no JVM stats
+  - gte:      { nodes.$node_id.jvm.buffer_pools.direct.count: 0 }
+  - do:
+  - is_true:  nodes.$node_id.indices
+      nodes._arbitrary_key_: node_id
+  - is_true:  nodes.$node_id.indices.docs
+  - do:
+  - gte:      { nodes.$node_id.indices.docs.count: 0 }
+  - is_true:  nodes.$node_id.indices
+  - do:
+---
+  - is_false: nodes.$node_id.name
+  # Nodes Stats with "nodes.*.fs.data.t*" fields
+  - is_false: cluster_name
+  - is_true:  nodes
+      nodes.stats:
+      nodes.stats:
+  - is_true:  nodes.$node_id.fs.data
+  - is_false: nodes.$node_id.jvm.buffer_pools.direct.used_in_bytes
+  - is_true:  nodes.$node_id.jvm.threads
+"Nodes Stats filtered using both includes and excludes filters":
+  - is_false: nodes.$node_id.jvm
+      features: [arbitrary_key]
+  - is_true: nodes.$node_id.indices
+  - gte:      { nodes.$node_id.indices.segments.count: 0 }
+  - is_true:  nodes.$node_id.indices.docs
+  - gte:     { nodes.$node_id.jvm.buffer_pools.direct.used_in_bytes: 0 }
+  - is_false: cluster_name
+  - is_true:  nodes
+        filter_path: cluster_name
+      nodes.stats:
+  - is_false: cluster_name
+  - is_true:  nodes.$node_id.indices.docs
+  - is_true: cluster_name
+  - is_true: nodes.$node_id.indices.docs
+  - gte:     { nodes.$node_id.jvm.buffer_pools.direct.count: 0 }
+  - do:
+  - is_false: nodes.$node_id.name
+        filter_path: "nodes.*.indices,-nodes.*.indices.segments"
+        filter_path: "nodes.*.fs.data"
+  - is_false: nodes.$node_id.indices
+  - is_true:  nodes.$node_id.indices.segments
+  - is_true:  nodes.$node_id.jvm
+      nodes.stats:
+  - is_false: nodes.$node_id.indices
+  - is_true:  nodes.$node_id.fs.data
+  - do:
+  - is_false: nodes.$node_id.jvm
       features: [arbitrary_key]
   - do:
-      nodes.info: {}
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  # Nodes Stats with "nodes" field but no JVM stats
-  - do:
+  - is_true:  nodes.$node_id.indices.segments
+  # Nodes Stats with "nodes.*.name" and "nodes.*.indices.docs.count" fields
+  - is_false: nodes.$node_id.indices.segments.count
+  # Nodes Stats with all "count" fields
+  - is_true:  nodes.$node_id.fs.data.0.total_in_bytes
+  - gte:      { nodes.$node_id.jvm.buffer_pools.direct.count: 0 }
+  - is_true:  nodes.$node_id.fs.data
       nodes.stats:
-        filter_path: [ "nodes", "-nodes.*.jvm", "-nodes.*.indices" ]
-
+  - skip:
+  - do:
+      nodes.info: {}
+  - is_true:  nodes.$node_id.indices
+  - is_true: nodes.$node_id.jvm.threads
+  - gte:      { nodes.$node_id.indices.docs.count: 0 }
+        filter_path: nodes.*
+  - is_true:  nodes
+  - is_false: nodes.$node_id.jvm
+      nodes.stats:
+  - is_true:  nodes
+  - gte:      { nodes.$node_id.jvm.threads.count: 0 }
+  - is_false: nodes.$node_id.jvm
+  - is_true:  nodes.$node_id.indices.docs
+        filter_path: nodes.*.indices
+      nodes.stats:
+  # Nodes Stats with "nodes" field and sub-fields
+  - is_false: nodes.$node_id.indices
+      nodes.stats:
+  - is_false: nodes.$node_id.indices.docs.count
+  - is_true: nodes.$node_id.jvm.buffer_pools.direct
+  - do:
+"Nodes Stats with response filtering":
   - is_false: cluster_name
+        filter_path: "nodes.**.count"
+  - do:
+  - is_false: nodes.$node_id.indices.segments
+  - is_true:  nodes.$node_id.indices
+  # Nodes Stats with "nodes.*.indices" field and sub-fields
+  # Nodes Stats with "nodes.*.indices" field and sub-fields but no indices segments
+  - is_false: cluster_name
+  - is_false: nodes.$node_id.indices
+  - is_true:  nodes.$node_id.fs.data.0.type
+  - do:
+  - set:
+  - is_false: nodes.$node_id.name
+  - is_false: nodes.$node_id.name
   - is_true:  nodes
   - is_true:  nodes.$node_id.name
-  - is_true:  nodes.$node_id.os
-  - is_false: nodes.$node_id.indices
-  - is_false: nodes.$node_id.jvm
-
-  # Nodes Stats with "nodes.*.indices" field and sub-fields but no indices segments
-  - do:
-      nodes.stats:
-        filter_path: "nodes.*.indices,-nodes.*.indices.segments"
-
-  - is_false: cluster_name
-  - is_true:  nodes
-  - is_false: nodes.$node_id.name
-  - is_true:  nodes.$node_id.indices
-  - is_true:  nodes.$node_id.indices.docs
-  - is_false: nodes.$node_id.indices.segments
-
-  # Nodes Stats with "nodes.*.fs.data.t*" fields but no "type" field
-  - do:
-      nodes.stats:
-        filter_path: "nodes.*.fs.data.t*,-**.type"
-
-  - is_false: cluster_name
-  - is_true:  nodes
-  - is_false: nodes.$node_id.name
-  - is_false: nodes.$node_id.indices
-  - is_false: nodes.$node_id.jvm
-  - is_true:  nodes.$node_id.fs.data
-  - is_false: nodes.$node_id.fs.data.0.type
-  - is_true:  nodes.$node_id.fs.data.0.total_in_bytes

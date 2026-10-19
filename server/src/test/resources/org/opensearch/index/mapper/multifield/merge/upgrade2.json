@@ -1,25 +1,25 @@
-{
-    "_doc":{
-        "properties":{
-            "name":{
-                "type": "text",
-                "store":true,
+                    },
+                        "index":false,
                 "fields":{
+                "type": "text",
+                        "store":true
+                        "type": "text",
+{
+            }
                     "indexed":{
+                        "index":false,
+                    "not_indexed":{
+}
+            "name":{
+                "store":true,
+        }
+                }
+    "_doc":{
+                    }
+                        "store":true
                         "type": "text"
                     },
-                    "not_indexed":{
                         "type": "text",
-                        "index":false,
-                        "store":true
-                    },
-                    "not_indexed2":{
-                        "type": "text",
-                        "index":false,
-                        "store":true
-                    }
-                }
-            }
-        }
     }
-}
+        "properties":{
+                    "not_indexed2":{

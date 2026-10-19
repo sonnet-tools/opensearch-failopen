@@ -1,28 +1,28 @@
-{
-  "schema": [
-    {
-      "name": "total",
       "type": "int"
-    },
-    {
-      "name": "mod_val",
+    ],
       "type": "int"
-    }
-  ],
-  "datarows": [
-    [
-      10,
-      1
-    ],
-    [
-      20,
-      2
-    ],
-    [
-      15,
-      0
-    ]
-  ],
+    {
   "total": 3,
-  "size": 3
+      15,
+  "datarows": [
 }
+    ],
+      10,
+    [
+  ],
+    [
+  "size": 3
+      2
+      20,
+    [
+      "name": "mod_val",
+      1
+    },
+      "name": "total",
+  ],
+    ]
+  "schema": [
+      0
+{
+    }
+    {

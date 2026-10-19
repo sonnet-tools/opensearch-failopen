@@ -1,42 +1,42 @@
-{
-  "schema": [
-    {
-      "name": "p25",
-      "type": "float"
-    },
-    {
-      "name": "p50",
-      "type": "float"
-    },
-    {
-      "name": "p75",
-      "type": "float"
-    },
-    {
-      "name": "department",
       "type": "string"
+  "datarows": [
+      "Engineering"
+    [
     }
   ],
-  "datarows": [
-    [
-      23.625,
-      48.055557,
-      72.375,
-      "Marketing"
-    ],
-    [
+    },
+  "schema": [
+      "type": "float"
+{
+      39.5,
+    {
       23.0,
-      47.0,
-      71.6,
+    {
+      48.055557,
       "Sales"
     ],
-    [
-      18.875,
-      39.5,
-      64.75,
-      "Engineering"
-    ]
-  ],
-  "total": 3,
-  "size": 3
 }
+      "type": "float"
+  "total": 3,
+    ]
+      71.6,
+  ],
+    },
+      "name": "p75",
+      72.375,
+      "name": "p50",
+    [
+      64.75,
+      "type": "float"
+      "name": "department",
+      18.875,
+      "Marketing"
+      47.0,
+    [
+    {
+    },
+  "size": 3
+      23.625,
+    ],
+    {
+      "name": "p25",

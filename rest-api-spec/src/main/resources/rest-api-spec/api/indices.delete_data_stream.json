@@ -1,26 +1,26 @@
-{
-  "indices.delete_data_stream":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/im-plugin/data-streams/",
-      "description":"Deletes a data stream."
-    },
-    "stability":"experimental",
-    "url":{
-      "paths":[
-        {
           "path":"/_data_stream/{name}",
-          "methods":[
-            "DELETE"
           ],
-          "parts":{
-            "name":{
-              "type":"list",
-              "description":"A comma-separated list of data streams to delete; use `*` to delete all data streams"
-            }
-          }
-        }
-      ]
     },
-    "params":{}
+    "url":{
+        {
+      ]
+            "name":{
+      "description":"Deletes a data stream."
+    "documentation":{
+            }
   }
+            "DELETE"
+        }
+              "description":"A comma-separated list of data streams to delete; use `*` to delete all data streams"
+    "params":{}
+    "stability":"experimental",
 }
+          }
+    },
+          "methods":[
+              "type":"list",
+  "indices.delete_data_stream":{
+          "parts":{
+      "paths":[
+      "url":"https://opensearch.org/docs/latest/im-plugin/data-streams/",
+{

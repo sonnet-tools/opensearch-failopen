@@ -1,42 +1,42 @@
-{
-  "schema": [
-    {
-      "name": "category",
-      "type": "string"
-    },
-    {
-      "name": "id",
-      "type": "string"
-    },
+      "2",
+      "[\"A\",\"1\",100.5]"
+  "datarows": [
     {
       "name": "value",
-      "type": "double"
-    },
     {
-      "name": "json_arr",
-      "type": "string"
+    [
+      200.75,
+      "A",
     }
   ],
-  "datarows": [
-    [
+    {
+    },
+      "type": "string"
+      "type": "string"
       "A",
-      "1",
-      100.5,
-      "[\"A\",\"1\",100.5]"
-    ],
-    [
-      "B",
-      "2",
-      200.75,
-      "[\"B\",\"2\",200.75]"
-    ],
-    [
-      "A",
-      "3",
-      150.25,
-      "[\"A\",\"3\",150.25]"
-    ]
-  ],
+      "type": "double"
+    },
   "total": 3,
+  ],
+      "3",
+      "name": "id",
+      "[\"B\",\"2\",200.75]"
+      "name": "category",
+    {
+      "type": "string"
+    },
+    ],
+      100.5,
+      "1",
   "size": 3
+    ],
+      "name": "json_arr",
+  "schema": [
+    [
+    ]
+{
+      "[\"A\",\"3\",150.25]"
 }
+      "B",
+    [
+      150.25,

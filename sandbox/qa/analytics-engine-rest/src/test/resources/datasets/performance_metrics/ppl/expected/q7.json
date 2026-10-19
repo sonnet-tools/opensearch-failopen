@@ -1,32 +1,32 @@
-{
-  "schema": [
-    {
-      "name": "violations",
-      "type": "bigint"
-    },
-    {
-      "name": "host",
+    ]
       "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      8,
-      "host1"
-    ],
     [
       8,
       "host2"
-    ],
-    [
+    {
       8,
-      "host3"
     ],
-    [
-      8,
-      "host4"
-    ]
-  ],
   "total": 4,
-  "size": 4
+  "schema": [
+  ],
+  "datarows": [
+      "name": "violations",
+  ],
+    },
+      "host1"
+      "host3"
+    [
+    {
+      "type": "bigint"
+    }
+      "name": "host",
+    ],
+      8,
+{
+      8,
 }
+      "host4"
+    [
+  "size": 4
+    [
+    ],

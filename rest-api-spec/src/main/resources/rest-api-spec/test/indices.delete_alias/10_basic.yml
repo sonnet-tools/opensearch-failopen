@@ -1,33 +1,27 @@
----
-"Basic test for delete alias":
-  - do:
-      indices.create:
-        index: testind
-
-  - do:
-      indices.put_alias:
-        index: testind
-        name:  testali
-        body:
           routing: "routing value"
-
-  - do:
-      indices.get_alias:
-        name: testali
-
+        index: testind
   - match: {testind.aliases.testali.search_routing: "routing value"}
-  - match: {testind.aliases.testali.index_routing: "routing value"}
-
-  - do:
+      indices.create:
       indices.delete_alias:
-        index: testind
         name: testali
-
-  - do:
-      catch: missing
+"Basic test for delete alias":
       indices.get_alias:
-        index: testind
-        name:  testali
-
+  - do:
+        name: testali
   - match: { 'status': 404 }
   - match: { 'error': 'alias [testali] missing' }
+  - do:
+        index: testind
+        index: testind
+        body:
+  - match: {testind.aliases.testali.index_routing: "routing value"}
+  - do:
+      indices.get_alias:
+        index: testind
+  - do:
+      indices.put_alias:
+        name:  testali
+  - do:
+      catch: missing
+---
+        name:  testali

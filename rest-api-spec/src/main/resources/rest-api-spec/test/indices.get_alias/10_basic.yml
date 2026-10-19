@@ -1,324 +1,250 @@
+  - is_true: test_index_2
+"Get aliases via /_alias/_all":
+  - is_false: test_index_2.aliases.test_blias
+  - is_true: test_index
+"Get and index with no aliases via /{index}/_alias/":
 ---
-setup:
-
-  - do:
+        name: test_alias,non-existent
+        index: _all
+  - match: { 'error': 'alias [non-existent] missing' }
+  - is_false: test_index_2
+  - match: { test_index.aliases.test_alias: { } }
+---
+---
+---
       indices.create:
-        index: test_index
-        body:
-          aliases:
-            test_alias: {}
-            test_blias: {}
-
   - do:
+        index: test_index_3
+  - match: {test_index.aliases.test_alias: {}}
       indices.create:
-        index: test_index_2
-        body:
+---
+---
+  - match: {test_index.aliases.test_alias: {}}
+      indices.get_alias:
+"Get aliases via /*/_alias/":
+  - is_false: test_index_3
+  - is_true: test_index_2
+        name:  test_alias
+        name: test_alias
+  - match: { 'error': 'alias [non-existent] missing' }
+  - is_false: test_index_2
+  - match: {test_index_2.aliases.test_alias: {}}
+      indices.get_alias:
+  - match: {test_index.aliases.test_alias: {}}
+      indices.get_alias:
+      indices.create:
+        index: test_index_3
+  - match: {test_index_2.aliases.test_alias: {}}
+  - match: {test_index_2.aliases.test_alias: {}}
+  - do:
+        index: '*'
+  - match: {test_index.aliases.test_blias: {}}
           aliases:
-            test_alias: {}
-            test_blias: {}
-
+  - match: {test_index_2.aliases.test_alias: {}}
+  - match: {test_index_2.aliases.test_blias: {}}
+  - match: {test_index_2.aliases.test_alias: {}}
+  - do:
 ---
 "Get all aliases via /_alias":
-
-  - do:
-      indices.create:
-        index: test_index_3
-
-  - do:
-      indices.get_alias: {}
-
-  - match: {test_index.aliases.test_alias: {}}
-  - match: {test_index.aliases.test_blias: {}}
+        index: test_index
+            test_blias: {}
   - match: {test_index_2.aliases.test_alias: {}}
-  - match: {test_index_2.aliases.test_blias: {}}
-  - match: {test_index_3.aliases: {}}
-
----
-"Get aliases via /_alias/_all":
-
-  - do:
-      indices.create:
-        index: test_index_3
-
-  - do:
-      indices.get_alias:
-        name: _all
-
-  - match: {test_index.aliases.test_alias: {}}
-  - match: {test_index.aliases.test_blias: {}}
-  - match: {test_index_2.aliases.test_alias: {}}
-  - match: {test_index_2.aliases.test_blias: {}}
-  - is_false: test_index_3
-
----
-"Get aliases via /_alias/*":
-
-  - do:
-      indices.create:
-        index: test_index_3
-
-  - do:
-      indices.get_alias:
-        name: '*'
-
-  - match: {test_index.aliases.test_alias: {}}
-  - match: {test_index.aliases.test_blias: {}}
-  - match: {test_index_2.aliases.test_alias: {}}
-  - match: {test_index_2.aliases.test_blias: {}}
-  - is_false: test_index_3
-
----
-"Get all aliases via /{index}/_alias/":
-
-  - do:
-      indices.get_alias:
-        index: test_index
-
-  - match: {test_index.aliases.test_alias: {}}
-  - match: {test_index.aliases.test_blias: {}}
-  - is_false: test_index_2
-
----
-"Get aliases via /_all/_alias/":
-  - do:
-      indices.create:
-        index: myindex
-
-  - do:
-      indices.get_alias:
-        index: _all
-
-  - match: {test_index.aliases.test_alias: {}}
-  - match: {test_index.aliases.test_blias: {}}
-  - match: {test_index_2.aliases.test_alias: {}}
-  - match: {test_index_2.aliases.test_blias: {}}
-  - match: {myindex.aliases: {}}
-
----
-"Get aliases via /*/_alias/":
-  - do:
-      indices.create:
-        index: myindex
-
-  - do:
-      indices.get_alias:
-        index: "*"
-
-  - match: {test_index.aliases.test_alias: {}}
-  - match: {test_index.aliases.test_blias: {}}
-  - match: {test_index_2.aliases.test_alias: {}}
-  - match: {test_index_2.aliases.test_blias: {}}
-  - match: {myindex.aliases: {}}
-
----
-"Get and index with no aliases via /{index}/_alias/":
-  - do:
-      indices.create:
-        index: myindex
-
-  - do:
-      indices.get_alias:
-        index: myindex
-
-  - match: {myindex.aliases: {}}
-
----
-"Get specific alias via /{index}/_alias/{name}":
-
-  - do:
-      indices.get_alias:
-        index: test_index
-        name:  test_alias
-
-  - match: {test_index.aliases.test_alias: {}}
-  - is_false: test_index.aliases.test_blias
-  - is_false: test_index_2
-
----
-"Get aliases via /{index}/_alias/_all":
-
-  - do:
-      indices.get_alias:
-        index: test_index
-        name: _all
-
-  - match: {test_index.aliases.test_alias: {}}
-  - match: {test_index.aliases.test_blias: {}}
-  - is_false: test_index_2
-
----
-"Get aliases via /{index}/_alias/*":
-
-  - do:
-      indices.get_alias:
-        index: test_index
-        name: '*'
-
-  - match: {test_index.aliases.test_alias: {}}
-  - match: {test_index.aliases.test_blias: {}}
-  - is_false: test_index_2
-
----
-"Get aliases via /{index}/_alias/prefix*":
-  - do:
-      indices.get_alias:
-        index: test_index
-        name: 'test_a*'
-
-  - match: {test_index.aliases.test_alias: {}}
-  - is_false: test_index.aliases.test_blias
-  - is_false: test_index_2
-
----
-"Get aliases via /{index}/_alias/name,name":
-
-  - do:
-      indices.get_alias:
-        index: test_index
-        name: 'test_alias,test_blias'
-
-  - match: {test_index.aliases.test_alias: {}}
-  - match: {test_index.aliases.test_blias: {}}
-  - is_false: test_index_2
-
----
-"Get aliases via /_alias/{name}":
-
-  - do:
-      indices.get_alias:
         name: test_alias
-
   - match: {test_index.aliases.test_alias: {}}
-  - match: {test_index_2.aliases.test_alias: {}}
-  - is_false: test_index.aliases.test_blias
-  - is_false: test_index_2.aliases.test_blias
-
----
-"Get aliases via /_all/_alias/{name}":
-
-  - do:
-      indices.get_alias:
-        index: _all
+        name: foo
         name: test_alias
-
-  - match: {test_index.aliases.test_alias: {}}
-  - match: {test_index_2.aliases.test_alias: {}}
-  - is_false: test_index.aliases.test_blias
-  - is_false: test_index_2.aliases.test_blias
-
----
-"Get aliases via /*/_alias/{name}":
-
-  - do:
-      indices.get_alias:
-        index: '*'
-        name: test_alias
-
-  - match: {test_index.aliases.test_alias: {}}
-  - match: {test_index_2.aliases.test_alias: {}}
-  - is_false: test_index.aliases.test_blias
-  - is_false: test_index_2.aliases.test_blias
-
----
-"Get aliases via /*suf/_alias/{name}":
-
-  - do:
-      indices.get_alias:
-        index: '*2'
-        name: test_alias
-
-  - match: {test_index_2.aliases.test_alias: {}}
-  - is_false: test_index.aliases.test_alias
-  - is_false: test_index.aliases.test_blias
-  - is_false: test_index_2.aliases.test_blias
-
----
-"Get aliases via /name,name/_alias/{name}":
-
-  - do:
-      indices.get_alias:
-        index: test_index,test_index_2
-        name: test_alias
-
-  - match: {test_index.aliases.test_alias: {}}
-  - match: {test_index_2.aliases.test_alias: {}}
-  - is_false: test_index.aliases.test_blias
-  - is_false: test_index_2.aliases.test_blias
-
-
----
-"Non-existent alias on an existing index returns 404":
-  - do:
-      catch: missing
-      indices.get_alias:
-        index: test_index
-        name: non-existent
-
-  - match: { 'status': 404}
-  - match: { 'error': 'alias [non-existent] missing' }
-
----
 "Existent and non-existent alias returns 404 and the existing alias":
   - do:
-      catch: missing
+  - is_false: test_index_2
       indices.get_alias:
-        index: test_index
-        name: test_alias,non-existent
-
-  - match: { 'status': 404 }
-  - match: { 'error': 'alias [non-existent] missing' }
-  - match: { test_index.aliases.test_alias: { } }
-
----
-"Existent and non-existent aliases returns 404 and the existing alias":
-  - do:
-      catch: missing
-      indices.get_alias:
-        index: test_index
-        name: test_alias,non-existent,another-non-existent
-
-  - match: { 'status': 404 }
-  - match: { 'error': 'aliases [another-non-existent,non-existent] missing' }
-  - match: { test_index.aliases.test_alias: { } }
-
----
-"Getting alias on an non-existent index should return 404":
-
-  - do:
-      catch: missing
       indices.get_alias:
         index: non-existent
-        name: foo
-
+  - match: {test_index_2.aliases.test_alias: {}}
+  - do:
+---
+        index: myindex
+        index: test_index
+---
+        local: true
+      indices.create:
+"Get specific alias via /{index}/_alias/{name}":
+        index: myindex
+  - is_false: test_index_2
+---
+"Get aliases via /{index}/_alias/_all":
+        index: myindex
+  - is_false: test_index.aliases.test_blias
+        body:
+      indices.get_alias:
+  - do:
+  - do:
+      indices.get_alias:
+  - is_true: test_index
+      indices.get_alias:
+---
+  - match: { 'status': 404 }
+  - is_false: test_index_2
+  - is_false: test_index_2.aliases.test_blias
+      catch: missing
+"Get aliases via /{index}/_alias/*":
+  - do:
+  - do:
+  - is_false: test_index.aliases.test_blias
+      indices.get_alias:
+      indices.close:
+  - match: {test_index.aliases.test_alias: {}}
+---
+---
+  - match: {test_index.aliases.test_blias: {}}
+  - match: {test_index_2.aliases.test_blias: {}}
+        index: test_index_2
+        name: 'test_a*'
+      indices.get_alias: {}
+  - match: {test_index_2.aliases.test_alias: {}}
+---
+        index: test_index_3
+        index: test_index
+        index: '*2'
+"Get aliases via /{index}/_alias/name,name":
+---
+        index: test_index
+  - do:
+  - do:
+        name: _all
+  - do:
+        index: test_index
+  - match: {test_index.aliases.test_alias: {}}
+        name: test_alias,non-existent,another-non-existent
+setup:
+      catch: missing
+  - match: {test_index_2.aliases.test_blias: {}}
 ---
 "Get alias with local flag":
-
-  - do:
+        index: test_index,test_index_2
+  - match: {test_index_2.aliases.test_alias: {}}
+  - is_false: test_index.aliases.test_blias
+"Existent and non-existent aliases returns 404 and the existing alias":
       indices.get_alias:
-        local: true
-
-  - is_true: test_index
-
-  - is_true: test_index_2
-
+            test_alias: {}
+  - match: {test_index.aliases.test_alias: {}}
+"Get aliases via /_alias/*":
+        index: _all
+  - do:
+  - is_false: test_index.aliases.test_alias
+  - match: {myindex.aliases: {}}
+  - do:
+  - match: {test_index_2.aliases.test_blias: {}}
 ---
-"Get alias against closed indices":
-
+  - match: {test_index.aliases.test_alias: {}}
+"Get aliases via /*suf/_alias/{name}":
+        index: test_index
+---
   - do:
-      indices.close:
-        index: test_index_2
-
-  - do:
-      indices.get_alias:
-        name: test_alias
-
-  - is_true: test_index
-  - is_true: test_index_2
-
-  - do:
-      indices.get_alias:
-        name: test_alias
-        expand_wildcards: open
-
-  - is_true: test_index
   - is_false: test_index_2
+  - do:
+  - match: {test_index.aliases.test_alias: {}}
+  - is_true: test_index
+        index: test_index_2
+      indices.get_alias:
+  - match: {test_index.aliases.test_alias: {}}
+---
+        name: test_alias
+---
+"Get aliases via /{index}/_alias/prefix*":
+  - is_false: test_index_2.aliases.test_blias
+  - match: {test_index.aliases.test_blias: {}}
+        name: 'test_alias,test_blias'
+  - match: {test_index.aliases.test_blias: {}}
+  - do:
+  - match: {myindex.aliases: {}}
+  - do:
+  - match: {test_index.aliases.test_alias: {}}
+        name: '*'
+        name: '*'
+      indices.get_alias:
+        index: test_index
+"Get all aliases via /{index}/_alias/":
+      indices.get_alias:
+  - match: {test_index.aliases.test_blias: {}}
+      catch: missing
+  - do:
+      indices.get_alias:
+---
+      indices.get_alias:
+      indices.get_alias:
+  - do:
+  - do:
+      indices.get_alias:
+  - match: {test_index_2.aliases.test_blias: {}}
+  - match: { 'error': 'aliases [another-non-existent,non-existent] missing' }
+      indices.create:
+  - do:
+  - match: {test_index.aliases.test_alias: {}}
+        index: test_index
+"Get aliases via /_alias/{name}":
+"Get aliases via /_all/_alias/{name}":
+---
+---
+  - do:
+  - is_false: test_index.aliases.test_blias
+        index: myindex
+      indices.create:
+  - match: {test_index_2.aliases.test_alias: {}}
+            test_blias: {}
+      indices.get_alias:
+      indices.get_alias:
+  - is_false: test_index.aliases.test_blias
+  - match: {test_index.aliases.test_blias: {}}
+  - match: {myindex.aliases: {}}
+"Get aliases via /*/_alias/{name}":
+  - match: {test_index.aliases.test_alias: {}}
+  - match: {test_index.aliases.test_blias: {}}
+        name: test_alias
+            test_alias: {}
+          aliases:
+"Get alias against closed indices":
+  - match: {test_index.aliases.test_alias: {}}
+  - is_false: test_index_2.aliases.test_blias
+        index: "*"
+      indices.get_alias:
+"Get aliases via /name,name/_alias/{name}":
+        index: test_index
+        body:
+  - match: { test_index.aliases.test_alias: { } }
+  - match: { 'status': 404}
+  - match: { 'status': 404 }
+      catch: missing
+  - match: {test_index.aliases.test_blias: {}}
+  - do:
+        name: test_alias
+      indices.create:
+"Getting alias on an non-existent index should return 404":
+  - match: {test_index.aliases.test_alias: {}}
+      indices.create:
+  - is_false: test_index.aliases.test_blias
+  - do:
+        name: test_alias
+  - is_false: test_index_3
+      indices.get_alias:
+        index: test_index
+  - is_false: test_index_2
+        name: non-existent
+  - do:
+      indices.get_alias:
+  - do:
+  - is_false: test_index.aliases.test_blias
+  - do:
+"Get aliases via /_all/_alias/":
+  - do:
+  - do:
+  - do:
+        expand_wildcards: open
+      indices.get_alias:
+"Non-existent alias on an existing index returns 404":
+---
+  - do:
+  - do:
+        name: _all
+  - match: {test_index.aliases.test_blias: {}}
+  - match: {test_index_3.aliases: {}}
+  - is_false: test_index_2.aliases.test_blias

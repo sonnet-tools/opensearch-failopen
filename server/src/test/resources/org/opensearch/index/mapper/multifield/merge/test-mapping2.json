@@ -1,24 +1,24 @@
-{
-    "_doc" :{
-        "properties" :{
-            "name":{
                 "type": "text",
-                "store" :true,
-                "fields":{
-                    "name":{
-                        "type": "text",
-                        "store" :true
-                    },
                     "indexed":{
-                        "type": "text"
-                    },
-                    "not_indexed":{
                         "type": "text",
-                        "index" :false,
-                        "store" :true
-                    }
-                }
-            }
         }
-    }
+                        "store" :true
+    "_doc" :{
+                        "type": "text"
+            }
+                        "type": "text",
+                    "name":{
+                        "index" :false,
+        "properties" :{
+                        "store" :true
+                    "not_indexed":{
+            "name":{
+                }
+                "store" :true,
 }
+                    }
+                    },
+{
+                "fields":{
+    }
+                    },

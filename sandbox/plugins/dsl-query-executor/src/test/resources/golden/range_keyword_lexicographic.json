@@ -1,61 +1,61 @@
+        }
+          "_score": null,
+  }
+      4.5
+            "rating": 4.5
+  "inputDsl": {
+          "lte": "dell"
+            "price": 999,
+    "  LogicalFilter(condition=[AND(>=($2, CAST('apple':VARCHAR):VARCHAR), <=($2, CAST('dell':VARCHAR):VARCHAR))])",
+      "hits": [
+  "expectedRelNodePlan": [
+    "query": {
+          }
+        {
+  ],
+    "price",
+    "LogicalSort(fetch=[10])",
 {
-  "testName": "range_keyword_lexicographic",
+  "expectedOutputDsl": {
+      },
+      }
   "indexName": "test-index",
   "indexMapping": {
     "name": "VARCHAR",
-    "price": "INTEGER",
+      ]
     "brand": "VARCHAR",
+}
+    [
+      "total": {
+  "mockResultFieldNames": [
+  "mockResultRows": [
+  "planType": "HITS",
+          "_source": {
+    }
     "rating": "DOUBLE"
   },
-  "planType": "HITS",
-  "inputDsl": {
-    "query": {
-      "range": {
-        "brand": {
-          "gte": "apple",
-          "lte": "dell"
-        }
-      }
-    }
-  },
-  "expectedRelNodePlan": [
-    "LogicalSort(fetch=[10])",
-    "  LogicalFilter(condition=[AND(>=($2, CAST('apple':VARCHAR):VARCHAR), <=($2, CAST('dell':VARCHAR):VARCHAR))])",
-    "    LogicalTableScan(table=[[test-index]])"
-  ],
-  "mockResultFieldNames": [
-    "name",
-    "price",
-    "brand",
-    "rating"
-  ],
-  "mockResultRows": [
-    [
-      "laptop",
-      999,
-      "BrandA",
-      4.5
     ]
-  ],
-  "expectedOutputDsl": {
-    "num_reduce_phases": 0,
-    "hits": {
-      "total": {
-        "value": 1,
+        "brand": {
         "relation": "eq"
-      },
+  ],
+    "num_reduce_phases": 0,
+      "laptop",
+    "    LogicalTableScan(table=[[test-index]])"
+    "brand",
       "max_score": null,
-      "hits": [
-        {
-          "_score": null,
-          "_source": {
+        "value": 1,
+    "price": "INTEGER",
+  "testName": "range_keyword_lexicographic",
             "name": "laptop",
-            "price": 999,
-            "brand": "BrandA",
-            "rating": 4.5
-          }
-        }
-      ]
+  ],
+  },
+      "BrandA",
+    "hits": {
+    "rating"
     }
-  }
-}
+    "name",
+      999,
+      "range": {
+          "gte": "apple",
+        }
+            "brand": "BrandA",

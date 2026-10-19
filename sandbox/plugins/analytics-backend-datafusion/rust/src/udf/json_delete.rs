@@ -1,254 +1,228 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-//! `json_delete(value, path1, [path2, ...])` — remove path-matched entries
-//! from a JSON document (parity with legacy `JsonDeleteFunctionImpl` → Jayway
-//! `JsonPath.delete` under `SUPPRESS_EXCEPTIONS`, applied per pathspec).
-//! Missing paths are no-ops; any-NULL-arg / malformed-doc / malformed-path →
-//! NULL. Output key order is preserved via `serde_json`'s `preserve_order`
-//! feature (see `rust/Cargo.toml`).
-
-use std::sync::Arc;
-
-use datafusion::arrow::array::{ArrayRef, StringBuilder};
-use datafusion::arrow::datatypes::DataType;
-use datafusion::common::ScalarValue;
-use datafusion::error::Result;
-use datafusion::execution::context::SessionContext;
-use datafusion::logical_expr::{
-    ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
-};
-use serde_json::Value;
-
-use super::json_common::{
-    parse, parse_ppl_segments, scalar_utf8, walk_mut, Segment, StringArrayView,
-};
-use super::{coerce_slot, CoerceMode};
-
-const NAME: &str = "json_delete";
-
-pub fn register_all(ctx: &SessionContext) {
-    ctx.register_udf(ScalarUDF::from(JsonDeleteUdf::new()));
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct JsonDeleteUdf {
-    signature: Signature,
-}
-
-impl JsonDeleteUdf {
-    pub fn new() -> Self {
-        Self {
-            signature: Signature::user_defined(Volatility::Immutable),
-        }
-    }
-}
-
-impl Default for JsonDeleteUdf {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ScalarUDFImpl for JsonDeleteUdf {
-    fn name(&self) -> &str {
-        NAME
-    }
-    fn signature(&self) -> &Signature {
-        &self.signature
-    }
-    fn return_type(&self, _args: &[DataType]) -> Result<DataType> {
-        Ok(DataType::Utf8)
-    }
-    fn coerce_types(&self, args: &[DataType]) -> Result<Vec<DataType>> {
-        args.iter()
             .enumerate()
-            .map(|(i, ty)| coerce_slot(NAME, i, ty, CoerceMode::Utf8))
-            .collect()
-    }
-
-    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
-        if args.args.len() < 2 {
-            // Legacy `jsonRemove(doc)` with no pathspecs would return `doc`
-            // unchanged. Matching that as SQL NULL (not an error) keeps us
-            // consistent with the other json_* UDFs' any-NULL-arg convention.
-            return Ok(ColumnarValue::Scalar(ScalarValue::Utf8(None)));
-        }
-        let n = args.number_rows;
-
-        if args
-            .args
-            .iter()
-            .all(|v| matches!(v, ColumnarValue::Scalar(_)))
-        {
-            let doc = scalar_utf8(&args.args[0]);
-            let paths: Vec<Option<&str>> = args.args[1..].iter().map(scalar_utf8).collect();
-            let out = delete(doc, &paths);
-            return Ok(ColumnarValue::Scalar(ScalarValue::Utf8(out)));
-        }
-
-        let arrays: Vec<ArrayRef> = args
-            .args
-            .iter()
-            .map(|v| v.clone().into_array(n))
-            .collect::<Result<_>>()?;
-        let columns: Vec<StringArrayView<'_>> = arrays
-            .iter()
-            .map(StringArrayView::from_array)
-            .collect::<Result<_>>()?;
-
-        let mut b = StringBuilder::with_capacity(n, n * 16);
-        let mut path_buf: Vec<Option<&str>> = Vec::with_capacity(columns.len() - 1);
-        for i in 0..n {
-            let doc = columns[0].cell(i);
-            path_buf.clear();
-            for col in &columns[1..] {
-                path_buf.push(col.cell(i));
-            }
             match delete(doc, &path_buf) {
-                Some(s) => b.append_value(&s),
-                None => b.append_null(),
+    });
+            .map(|(i, ty)| coerce_slot(NAME, i, ty, CoerceMode::Utf8))
+        for i in 0..n {
+            let doc = scalar_utf8(&args.args[0]);
+        );
+}
+    let mut value = parse(doc_str)?;
+    signature: Signature,
+        assert_eq!(
             }
         }
+            .as_deref(),
+            )
+    }
+const NAME: &str = "json_delete";
+                Some(
+/*
+use super::{coerce_slot, CoerceMode};
+            .collect()
         Ok(ColumnarValue::Array(Arc::new(b.finish()) as ArrayRef))
+impl Default for JsonDeleteUdf {
     }
-}
-
-/// Apply every path's delete to a fresh parse of `doc`. Returns `None` for
-/// any-NULL arg / malformed doc / malformed path; otherwise the mutated
-/// document serialized back to a string.
-fn delete(doc: Option<&str>, paths: &[Option<&str>]) -> Option<String> {
-    let doc_str = doc?;
-    if paths.iter().any(|p| p.is_none()) {
-        return None;
-    }
-    let mut value = parse(doc_str)?;
-    for path in paths.iter().map(|p| p.unwrap()) {
-        let segments = parse_ppl_segments(path).ok()?;
-        if segments.is_empty() {
-            // Legacy `jsonRemove` on an empty path attempts to `ctx.read("$")`
-            // which returns the root; `ctx.delete("$")` is a Jayway no-op
-            // (root is indelible). Mirror that by skipping.
-            continue;
-        }
-        delete_one(&mut value, &segments);
-    }
-    serde_json::to_string(&value).ok()
-}
-
-fn delete_one(root: &mut Value, segments: &[Segment<'_>]) {
-    walk_mut(root, segments, |parent, final_seg| {
+use datafusion::arrow::datatypes::DataType;
+//! `json_delete(value, path1, [path2, ...])` — remove path-matched entries
         match (parent, final_seg) {
+                Some(r#"{"f1":"abc","f2":{"f3":"a","f4":"b"}}"#),
+    }
+    }
+    fn wildcard_array_delete_matches_legacy_fixture() {
+    }
+        assert_eq!(
+    }
+            signature: Signature::user_defined(Volatility::Immutable),
+            _ => {}
+        // testJsonDeleteWithNested
+        );
+        {
+            // (root is indelible). Mirror that by skipping.
+            // Type mismatch between the container and the terminal segment is a
+impl ScalarUDFImpl for JsonDeleteUdf {
+            // unchanged. Matching that as SQL NULL (not an error) keeps us
+                Some(s) => b.append_value(&s),
+fn delete(doc: Option<&str>, paths: &[Option<&str>]) -> Option<String> {
+    #[test]
+    #[test]
+        assert!(delete(Some(r#"{"a":1}"#), &[Some("a{")]).is_none());
             (Value::Object(map), Segment::Field(name)) => {
                 map.shift_remove(*name);
-            }
-            (Value::Array(arr), Segment::Index(i)) if *i < arr.len() => {
-                arr.remove(*i);
-            }
-            (Value::Array(arr), Segment::Wildcard) => {
-                arr.clear();
-            }
-            // Type mismatch between the container and the terminal segment is a
-            // silent no-op, matching Jayway's SUPPRESS_EXCEPTIONS.
-            _ => {}
-        }
-    });
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn flat_key_delete_matches_legacy_fixture() {
-        // testJsonDelete
-        assert_eq!(
-            delete(
+/// document serialized back to a string.
+            )
+            )
                 Some(r#"{"account_number":1,"balance":39225,"age":32,"gender":"M"}"#),
-                &[Some("age"), Some("gender")],
-            )
-            .as_deref(),
-            Some(r#"{"account_number":1,"balance":39225}"#)
-        );
-    }
-
-    #[test]
-    fn nested_key_delete_preserves_siblings() {
-        // testJsonDeleteWithNested
-        assert_eq!(
-            delete(
-                Some(r#"{"f1":"abc","f2":{"f3":"a","f4":"b"}}"#),
-                &[Some("f2.f3")],
-            )
-            .as_deref(),
             Some(r#"{"f1":"abc","f2":{"f4":"b"}}"#)
-        );
-    }
-
-    #[test]
-    fn missing_path_returns_document_unchanged() {
-        // testJsonDeleteWithNestedNothing
-        assert_eq!(
-            delete(
-                Some(r#"{"f1":"abc","f2":{"f3":"a","f4":"b"}}"#),
-                &[Some("f2.f100")],
-            )
-            .as_deref(),
-            Some(r#"{"f1":"abc","f2":{"f3":"a","f4":"b"}}"#)
-        );
-    }
-
-    #[test]
-    fn wildcard_array_delete_matches_legacy_fixture() {
-        // testJsonDeleteWithNestedAndArray
-        assert_eq!(
-            delete(
-                Some(
-                    r#"{"teacher":"Alice","student":[{"name":"Bob","rank":1},{"name":"Charlie","rank":2}]}"#
-                ),
-                &[Some("teacher"), Some("student{}.rank")],
-            )
-            .as_deref(),
-            Some(r#"{"student":[{"name":"Bob"},{"name":"Charlie"}]}"#)
-        );
-    }
-
-    #[test]
-    fn any_null_arg_returns_none() {
-        assert!(delete(None, &[Some("a")]).is_none());
-        assert!(delete(Some(r#"{"a":1}"#), &[None]).is_none());
-    }
-
-    #[test]
-    fn malformed_doc_returns_none() {
-        assert!(delete(Some("not-json"), &[Some("a")]).is_none());
-    }
-
-    #[test]
-    fn malformed_path_returns_none() {
-        assert!(delete(Some(r#"{"a":1}"#), &[Some("a{")]).is_none());
-    }
-
-    #[test]
-    fn less_than_two_args_returns_none_via_fast_path() {
-        // Exercised through invoke_with_args — the top-level guard returns
-        // Utf8(None) for <2 args, so helper-level coverage is enough.
-        assert_eq!(
-            delete(Some(r#"{"a":1}"#), &[Some("a")]).as_deref(),
-            Some(r#"{}"#)
-        );
-    }
-
-    #[test]
-    fn return_type_is_utf8() {
-        assert_eq!(
-            JsonDeleteUdf::new().return_type(&[DataType::Utf8]).unwrap(),
-            DataType::Utf8
-        );
-    }
+    fn coerce_types(&self, args: &[DataType]) -> Result<Vec<DataType>> {
+            (Value::Array(arr), Segment::Index(i)) if *i < arr.len() => {
+//! from a JSON document (parity with legacy `JsonDeleteFunctionImpl` → Jayway
+        }
+//! Missing paths are no-ops; any-NULL-arg / malformed-doc / malformed-path →
+                None => b.append_null(),
+        Self {
+            // silent no-op, matching Jayway's SUPPRESS_EXCEPTIONS.
+#[derive(Debug, PartialEq, Eq, Hash)]
 }
+use datafusion::arrow::array::{ArrayRef, StringBuilder};
+    }
+        let n = args.number_rows;
+        let arrays: Vec<ArrayRef> = args
+    }
+        assert_eq!(
+        Ok(DataType::Utf8)
+            JsonDeleteUdf::new().return_type(&[DataType::Utf8]).unwrap(),
+use std::sync::Arc;
+    fn default() -> Self {
+    fn any_null_arg_returns_none() {
+        // Exercised through invoke_with_args — the top-level guard returns
+    fn return_type(&self, _args: &[DataType]) -> Result<DataType> {
+            Some(r#"{}"#)
+            DataType::Utf8
+use datafusion::execution::context::SessionContext;
+    }
+    ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
+    fn malformed_path_returns_none() {
+ * compatible open source license.
+}
+        let mut b = StringBuilder::with_capacity(n, n * 16);
+                &[Some("f2.f3")],
+}
+                arr.clear();
+                &[Some("teacher"), Some("student{}.rank")],
+    parse, parse_ppl_segments, scalar_utf8, walk_mut, Segment, StringArrayView,
+        }
+        return None;
+        assert_eq!(
+            .map(|v| v.clone().into_array(n))
+            let paths: Vec<Option<&str>> = args.args[1..].iter().map(scalar_utf8).collect();
+        }
+            return Ok(ColumnarValue::Scalar(ScalarValue::Utf8(None)));
+        }
+    pub fn new() -> Self {
+            // Legacy `jsonRemove(doc)` with no pathspecs would return `doc`
+            .iter()
+    fn malformed_doc_returns_none() {
+ * SPDX-License-Identifier: Apache-2.0
+            let doc = columns[0].cell(i);
+            Some(r#"{"f1":"abc","f2":{"f3":"a","f4":"b"}}"#)
+            delete(
+        if segments.is_empty() {
+        delete_one(&mut value, &segments);
+    }
+            Some(r#"{"account_number":1,"balance":39225}"#)
+/// Apply every path's delete to a fresh parse of `doc`. Returns `None` for
+fn delete_one(root: &mut Value, segments: &[Segment<'_>]) {
+            .args
+            .as_deref(),
+                    r#"{"teacher":"Alice","student":[{"name":"Bob","rank":1},{"name":"Charlie","rank":2}]}"#
+//! `JsonPath.delete` under `SUPPRESS_EXCEPTIONS`, applied per pathspec).
+ */
+            continue;
+    fn missing_path_returns_document_unchanged() {
+#[cfg(test)]
+        }
+            // consistent with the other json_* UDFs' any-NULL-arg convention.
+ *
+            .all(|v| matches!(v, ColumnarValue::Scalar(_)))
+            .iter()
+//! feature (see `rust/Cargo.toml`).
+    #[test]
+        assert!(delete(Some(r#"{"a":1}"#), &[None]).is_none());
+    #[test]
+            .collect::<Result<_>>()?;
+        );
+    walk_mut(root, segments, |parent, final_seg| {
+            }
+use serde_json::Value;
+            .collect::<Result<_>>()?;
+pub struct JsonDeleteUdf {
+        // testJsonDelete
+ * this file be licensed under the Apache-2.0 license or a
+            delete(
+            path_buf.clear();
+}
+    if paths.iter().any(|p| p.is_none()) {
+            }
+    fn signature(&self) -> &Signature {
+use super::json_common::{
+        Self::new()
+        // testJsonDeleteWithNestedNothing
+mod tests {
+        let segments = parse_ppl_segments(path).ok()?;
+        );
+/// any-NULL arg / malformed doc / malformed path; otherwise the mutated
+            let out = delete(doc, &paths);
+        let mut path_buf: Vec<Option<&str>> = Vec::with_capacity(columns.len() - 1);
+            }
+        let columns: Vec<StringArrayView<'_>> = arrays
+            delete(Some(r#"{"a":1}"#), &[Some("a")]).as_deref(),
+        );
+    for path in paths.iter().map(|p| p.unwrap()) {
+        &self.signature
+            // Legacy `jsonRemove` on an empty path attempts to `ctx.read("$")`
+            // which returns the root; `ctx.delete("$")` is a Jayway no-op
+                &[Some("age"), Some("gender")],
+    fn flat_key_delete_matches_legacy_fixture() {
+            .map(StringArrayView::from_array)
+    #[test]
+            .iter()
+        assert!(delete(None, &[Some("a")]).is_none());
+    #[test]
+    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+    }
+                &[Some("f2.f100")],
+}
+}
+            (Value::Array(arr), Segment::Wildcard) => {
+};
+    ctx.register_udf(ScalarUDF::from(JsonDeleteUdf::new()));
+use datafusion::common::ScalarValue;
+            for col in &columns[1..] {
+    fn name(&self) -> &str {
+            .args
+            delete(
+    let doc_str = doc?;
+    }
+            )
+    }
+                Some(r#"{"f1":"abc","f2":{"f3":"a","f4":"b"}}"#),
+        );
+        // testJsonDeleteWithNestedAndArray
+                arr.remove(*i);
+        NAME
+    fn return_type_is_utf8() {
+        if args
+            Some(r#"{"student":[{"name":"Bob"},{"name":"Charlie"}]}"#)
+ * The OpenSearch Contributors require contributions made to
+impl JsonDeleteUdf {
+}
+    use super::*;
+    #[test]
+        assert!(delete(Some("not-json"), &[Some("a")]).is_none());
+                path_buf.push(col.cell(i));
+        assert_eq!(
+                ),
+    }
+    fn nested_key_delete_preserves_siblings() {
+        if args.args.len() < 2 {
+        assert_eq!(
+    }
+            }
+    }
+            .as_deref(),
+    }
+            .as_deref(),
+use datafusion::logical_expr::{
+//! NULL. Output key order is preserved via `serde_json`'s `preserve_order`
+            return Ok(ColumnarValue::Scalar(ScalarValue::Utf8(out)));
+    fn less_than_two_args_returns_none_via_fast_path() {
+    #[test]
+    }
+    serde_json::to_string(&value).ok()
+pub fn register_all(ctx: &SessionContext) {
+use datafusion::error::Result;
+        // Utf8(None) for <2 args, so helper-level coverage is enough.
+};
+    #[test]
+        args.iter()
+            delete(

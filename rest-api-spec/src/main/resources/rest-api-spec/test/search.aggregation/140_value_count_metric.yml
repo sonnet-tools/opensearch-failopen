@@ -1,176 +1,156 @@
-setup:
+  - match: { hits.total: 4 }
+           - int_field: 101
+                field: foo
+        body:
+                field: string_field
+"Filtered test":
+  - match: { hits.total: 3 }
+  - match: { aggregations.the_missing_value_count.value: 4 }
+           - index:
+          aggs:
+              value_count:
+                field: int_field
+  - do:
+             string_field: foo
+               _id:    1
+                field: double_field
+  - do:
+                   type : integer
+        body:
+  - match: { aggregations.the_string_value_count.value: 3 }
+                double_field:
+  - match: { aggregations.the_int_value_count.value: 4 }
+  - match: { aggregations.the_double_value_count.value: 4 }
+                field: double_field
+                field: int_field
+          aggs:
+  - do:
+                   type : double
+          aggs:
+                field: string_field
+            the_double_value_count:
+            the_string_value_count:
+            settings:
+            the_int_value_count:
+  - match: { aggregations.the_string_value_count.value: 4 }
+  - match: { aggregations.the_double_value_count.value: 4 }
+                field: double_field
+            constant_score:
+      search:
+  - length: { hits.hits: 4 }
+       bulk:
+---
+  - length: { hits.hits: 4 }
+        rest_total_hits_as_int: true
+            the_string_value_count:
+             string_field: foo
+            mappings:
+        rest_total_hits_as_int: true
+        rest_total_hits_as_int: true
+                int_field:
+          aggs:
+            the_string_value_count:
+              value_count:
+         body:
+  - do:
+              filter:
+              value_count:
+  - length: { hits.hits: 3 }
+            the_int_value_count:
+  - length: { hits.hits: 0 }
+      search:
+  - length: { hits.hits: 4 }
+                foo: bar
+               _index: test_1
+                range:
+              value_count:
+                    gte: 50
+              meta:
   - do:
       indices.create:
-          index: test_1
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
-              properties:
-                int_field:
-                   type : integer
-                double_field:
-                   type : double
-                string_field:
-                   type: keyword
-
-  - do:
-       bulk:
-         refresh: true
-         body:
-           - index:
-               _index: test_1
-               _id:    1
-           - int_field: 1
-             double_field: 1.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    2
-           - int_field: 51
-             double_field: 51.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    3
-           - int_field: 101
              double_field: 101.0
-             string_field: foo
-           - index:
                _index: test_1
-               _id:    4
-           - int_field: 151
-             double_field: 151.0
-             string_field: foo
-
 ---
+              value_count:
 "Basic test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_int_value_count:
-              value_count:
-                field: int_field
-            the_double_value_count:
-              value_count:
-                field: double_field
-            the_string_value_count:
-              value_count:
-                field: string_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_int_value_count.value: 4 }
-  - match: { aggregations.the_double_value_count.value: 4 }
-  - match: { aggregations.the_string_value_count.value: 4 }
-
 ---
-"Only aggs test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          size: 0
-          aggs:
-            the_int_value_count:
-              value_count:
-                field: int_field
-            the_double_value_count:
-              value_count:
-                field: double_field
-            the_string_value_count:
-              value_count:
-                field: string_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 0 }
-  - match: { aggregations.the_int_value_count.value: 4 }
-  - match: { aggregations.the_double_value_count.value: 4 }
-  - match: { aggregations.the_string_value_count.value: 4 }
-
----
-"Filtered test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            constant_score:
-              filter:
-                range:
                   int_field:
-                    gte: 50
-          aggs:
-            the_int_value_count:
-              value_count:
+           - index:
                 field: int_field
+  - match: { hits.total: 4 }
+      search:
+                field: foo
+            the_int_value_count:
+          aggs:
+  - do:
+          index: test_1
+---
+              value_count:
+           - int_field: 51
+        rest_total_hits_as_int: true
+"Metadata test":
+               _id:    4
+      search:
+                string_field:
+                missing: 1
+  - match: { aggregations.the_double_value_count.value: 3 }
+---
+              value_count:
+        rest_total_hits_as_int: true
+  - match: { hits.total: 4 }
+        rest_total_hits_as_int: true
+  - match: { aggregations.the_int_value_count.value: 3 }
+---
+             double_field: 51.0
+        body:
+               _index: test_1
+"Only aggs test":
+             double_field: 1.0
+              value_count:
+              value_count:
+  - do:
+            the_double_value_count:
+            the_missing_value_count:
+              number_of_replicas: 0
+           - index:
+          size: 0
             the_double_value_count:
               value_count:
-                field: double_field
-            the_string_value_count:
-              value_count:
-                field: string_field
-
-  - match: { hits.total: 3 }
-  - length: { hits.hits: 3 }
-  - match: { aggregations.the_int_value_count.value: 3 }
-  - match: { aggregations.the_double_value_count.value: 3 }
-  - match: { aggregations.the_string_value_count.value: 3 }
-
-
----
-"Missing field with missing param":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_missing_value_count:
-              value_count:
-                field: foo
-                missing: 1
-
   - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_missing_value_count.value: 4 }
-
----
 "Missing field without missing param":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_missing_value_count:
               value_count:
-                field: foo
-
-  - match: { hits.total: 4 }
+         refresh: true
+          query:
+           - int_field: 151
+           - index:
+setup:
+  - do:
+              properties:
+      search:
+      search:
+                field: int_field
+          body:
+            the_int_value_count:
+           - int_field: 1
+            the_missing_value_count:
   - length: { hits.hits: 4 }
   - is_false: aggregations.the_missing_value_count.value
-
----
-"Metadata test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
           aggs:
-            the_int_value_count:
-              meta:
-                foo: bar
-              value_count:
-                field: int_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_int_value_count.value: 4 }
+             string_field: foo
+               _index: test_1
+               _id:    3
+  - match: { aggregations.the_string_value_count.value: 4 }
+             string_field: foo
+        body:
   - match: { aggregations.the_int_value_count.meta.foo: "bar" }
+              value_count:
+  - match: { aggregations.the_int_value_count.value: 4 }
+        body:
+  - match: { hits.total: 4 }
+        body:
+  - match: { aggregations.the_int_value_count.value: 4 }
+               _id:    2
+"Missing field with missing param":
+                   type: keyword
+                field: string_field
+             double_field: 151.0

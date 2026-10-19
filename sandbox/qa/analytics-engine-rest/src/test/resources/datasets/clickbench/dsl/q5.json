@@ -1,18 +1,18 @@
-{
-  "from": 0,
-  "size": 0,
-  "timeout": "1m",
-  "query": {
-    "exists": {
-      "field": "UserID",
+  }
       "boost": 1.0
+      }
+  "timeout": "1m",
+      "cardinality": {
+  "size": 0,
+    }
+{
+}
+    "exists": {
+    "dc(UserID)": {
+        "field": "UserID"
+  "aggregations": {
     }
   },
-  "aggregations": {
-    "dc(UserID)": {
-      "cardinality": {
-        "field": "UserID"
-      }
-    }
-  }
-}
+      "field": "UserID",
+  "from": 0,
+  "query": {

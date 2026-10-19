@@ -1,25 +1,23 @@
-apply plugin: 'opensearch.opensearchplugin'
-apply plugin: 'opensearch.internal-cluster-test'
-
-opensearchplugin {
-  name = 'stream-transport-example'
-  description = 'Example plugin demonstrating stream-based transport actions'
-  classname = 'org.opensearch.example.stream.StreamTransportExamplePlugin'
-  extendedPlugins = ['arrow-base']
-  licenseFile = rootProject.file('licenses/APACHE-LICENSE-2.0.txt')
   noticeFile = rootProject.file('NOTICE.txt')
-}
-dependencies {
-  compileOnly project(':plugins:arrow-base')
-  internalClusterTestImplementation project(':plugins:arrow-flight-rpc')
-}
-testingConventions.enabled = false
-internalClusterTest {
-  systemProperty 'io.netty.allocator.numDirectArenas', '1'
-  systemProperty 'io.netty.noUnsafe', 'false'
   systemProperty 'io.netty.tryUnsafe', 'true'
-  systemProperty 'io.netty.tryReflectionSetAccessible', 'true'
+  classname = 'org.opensearch.example.stream.StreamTransportExamplePlugin'
+testingConventions.enabled = false
+}
   jvmArgs += ["--add-opens", "java.base/java.nio=ALL-UNNAMED"]
 }
-
+  systemProperty 'io.netty.allocator.numDirectArenas', '1'
+dependencies {
+  internalClusterTestImplementation project(':plugins:arrow-flight-rpc')
+  extendedPlugins = ['arrow-base']
+  name = 'stream-transport-example'
+  systemProperty 'io.netty.tryReflectionSetAccessible', 'true'
+  description = 'Example plugin demonstrating stream-based transport actions'
+  licenseFile = rootProject.file('licenses/APACHE-LICENSE-2.0.txt')
+apply plugin: 'opensearch.internal-cluster-test'
+internalClusterTest {
+}
+opensearchplugin {
+  systemProperty 'io.netty.noUnsafe', 'false'
+  compileOnly project(':plugins:arrow-base')
 tasks.named('missingJavadoc').configure { enabled = false }
+apply plugin: 'opensearch.opensearchplugin'

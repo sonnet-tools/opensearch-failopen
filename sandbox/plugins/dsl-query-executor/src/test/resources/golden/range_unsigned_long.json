@@ -1,53 +1,53 @@
-{
+        {
   "testName": "range_unsigned_long",
-  "indexName": "test-index",
-  "indexMapping": {
-    "name": "VARCHAR",
-    "counter": "UNSIGNED_LONG"
-  },
-  "planType": "HITS",
   "inputDsl": {
-    "query": {
-      "range": {
-        "counter": {
-          "gte": 100,
-          "lte": 9000
         }
-      }
-    }
-  },
-  "expectedRelNodePlan": [
-    "LogicalSort(fetch=[10])",
-    "  LogicalFilter(condition=[AND(>=($1, CAST(100:UNSIGNED_LONG):UNSIGNED_LONG), <=($1, CAST(9000:UNSIGNED_LONG):UNSIGNED_LONG))])",
-    "    LogicalTableScan(table=[[test-index]])"
-  ],
-  "mockResultFieldNames": [
-    "name",
-    "counter"
-  ],
   "mockResultRows": [
-    [
-      "item1",
+  }
+      "total": {
+      "max_score": null,
+    }
       500
     ]
+      }
+  "planType": "HITS",
+          }
+    [
+    "    LogicalTableScan(table=[[test-index]])"
   ],
-  "expectedOutputDsl": {
+        }
+    "  LogicalFilter(condition=[AND(>=($1, CAST(100:UNSIGNED_LONG):UNSIGNED_LONG), <=($1, CAST(9000:UNSIGNED_LONG):UNSIGNED_LONG))])",
+}
+  ],
+      },
+    "name",
     "num_reduce_phases": 0,
-    "hits": {
-      "total": {
+      ]
+      "hits": [
+    "LogicalSort(fetch=[10])",
+            "counter": 500
+    "name": "VARCHAR",
+  "indexMapping": {
+  "expectedOutputDsl": {
+          "_score": null,
+    "counter"
+    "counter": "UNSIGNED_LONG"
+  },
+    "query": {
         "value": 1,
         "relation": "eq"
-      },
-      "max_score": null,
-      "hits": [
-        {
-          "_score": null,
+      "range": {
+    "hits": {
           "_source": {
+  "expectedRelNodePlan": [
+      "item1",
+{
+  "indexName": "test-index",
+        "counter": {
+  "mockResultFieldNames": [
+          "lte": 9000
+          "gte": 100,
+  ],
+  },
             "name": "item1",
-            "counter": 500
-          }
-        }
-      ]
     }
-  }
-}

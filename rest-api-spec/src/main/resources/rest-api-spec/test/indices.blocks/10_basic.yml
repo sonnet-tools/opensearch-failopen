@@ -1,31 +1,26 @@
----
-"Basic test for index blocks":
-
-  - do:
-      indices.create:
-        index: test_index
-        body:
-          settings:
-            number_of_replicas: 0
-
-  - do:
-      indices.add_block:
-        index: test_index
-        block: write
-  - is_true: acknowledged
-
-  - do:
-      catch: /cluster_block_exception/
+          index.blocks.write: false
       index:
         index:  test_index
         body:   { foo: bar }
-
   - do:
-      search:
+        block: write
         index: test_index
-
+  - is_true: acknowledged
   - do:
+  - do:
+      catch: /cluster_block_exception/
+"Basic test for index blocks":
+        index: test_index
+      indices.create:
+      search:
+  - do:
+  - do:
+        index: test_index
+---
       indices.put_settings:
         index: test_index
         body:
-          index.blocks.write: false
+            number_of_replicas: 0
+      indices.add_block:
+          settings:
+        body:

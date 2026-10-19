@@ -1,31 +1,29 @@
-# Integration tests for Stempel analysis component
-#
----
-"Index Stempel content":
     - do:
-        indices.create:
-            index:  test
             body:
-                mappings:
-                    properties:
-                        text:
-                            type:     text
-                            analyzer: polish
-
-    - do:
-        index:
             index:  test
-            id:     1
-            body:   { "text": "studenta był" }
+            index: test
+                            analyzer: polish
     - do:
+#
+                query:
+                    properties:
+    - do:
+# Integration tests for Stempel analysis component
+"Index Stempel content":
+        index:
+                    match:
+---
         indices.refresh: {}
-
+                            type:     text
+                mappings:
+            rest_total_hits_as_int: true
+            body:
+            index:  test
+            body:   { "text": "studenta był" }
+            id:     1
     - do:
         search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    match:
-                        text: student
+                        text:
     - match: { hits.total: 1 }
+        indices.create:
+                        text: student

@@ -1,33 +1,33 @@
-{
-  "cluster.allocation_explain":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/cluster-api/cluster-allocation/",
-      "description":"Provides explanations for shard allocations in the cluster."
-    },
     "stability":"stable",
     "url":{
-      "paths":[
-        {
-          "path":"/_cluster/allocation/explain",
-          "methods":[
-            "GET",
-            "POST"
-          ]
-        }
-      ]
-    },
     "params":{
-      "include_yes_decisions":{
-        "type":"boolean",
-        "description":"Return 'YES' decisions in explanation (default: false)"
-      },
       "include_disk_info":{
+    },
+          ]
+  "cluster.allocation_explain":{
+        "description":"Return 'YES' decisions in explanation (default: false)"
+      "paths":[
+          "methods":[
+        "type":"boolean",
+  }
+      "url":"https://opensearch.org/docs/latest/api-reference/cluster-api/cluster-allocation/",
+    }
+    },
+    "documentation":{
+{
+}
+      "description":"The index, shard, and primary flag to explain. Empty means 'explain the first unassigned shard'"
+      "include_yes_decisions":{
+    },
+      "description":"Provides explanations for shard allocations in the cluster."
+      ]
+            "POST"
+        }
+      },
+    "body":{
+      }
+            "GET",
+        {
         "type":"boolean",
         "description":"Return information about disk usage and shard sizes (default: false)"
-      }
-    },
-    "body":{
-      "description":"The index, shard, and primary flag to explain. Empty means 'explain the first unassigned shard'"
-    }
-  }
-}
+          "path":"/_cluster/allocation/explain",

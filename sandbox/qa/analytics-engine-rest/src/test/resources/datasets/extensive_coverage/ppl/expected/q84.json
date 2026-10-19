@@ -1,36 +1,36 @@
-{
-  "schema": [
-    {
-      "name": "id",
-      "type": "string"
-    },
-    {
-      "name": "tags",
-      "type": "string"
-    }
-  ],
+  "size": 5
+    ]
+      "3",
+      "tag2,tag4"
+      "2",
   "datarows": [
     [
-      "1",
-      "tag1,tag2,tag3"
-    ],
-    [
-      "2",
-      "tag2,tag4"
-    ],
-    [
-      "3",
-      "tag1,tag3,tag5"
-    ],
-    [
-      "4",
+  ],
+  ],
       "tag4,tag6"
+    }
     ],
+      "tag1,tag2,tag3"
+    {
+{
+}
+    [
+      "tag2,tag5,tag7"
+      "type": "string"
+      "tag1,tag3,tag5"
+    [
+    },
+  "schema": [
+    ],
+      "1",
+      "type": "string"
+    ],
+  "total": 5,
+    [
+    {
+      "name": "id",
+    ],
+      "4",
+      "name": "tags",
     [
       "5",
-      "tag2,tag5,tag7"
-    ]
-  ],
-  "total": 5,
-  "size": 5
-}

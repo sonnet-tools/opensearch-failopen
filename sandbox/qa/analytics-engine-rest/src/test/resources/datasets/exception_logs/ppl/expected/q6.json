@@ -1,35 +1,35 @@
-{
-  "schema": [
-    {
+    [
       "name": "error_count",
-      "type": "bigint"
-    },
-    {
       "name": "service_name",
-      "type": "string"
-    },
-    {
-      "name": "application_id",
-      "type": "bigint"
-    }
   ],
-  "datarows": [
-    [
-      15,
-      "db-service",
-      107148
     ],
-    [
-      12,
-      "api-service",
-      107148
-    ],
-    [
-      7,
-      "web-service",
-      107148
-    ]
-  ],
   "total": 3,
+    ]
+      "type": "string"
+  "datarows": [
+    },
+      107148
   "size": 3
 }
+      "db-service",
+    {
+      107148
+    }
+    {
+    [
+  "schema": [
+  ],
+    {
+      15,
+      "web-service",
+{
+      "name": "application_id",
+    ],
+    [
+      "type": "bigint"
+      107148
+      "api-service",
+      12,
+      "type": "bigint"
+      7,
+    },

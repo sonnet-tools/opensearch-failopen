@@ -1,162 +1,138 @@
-setup:
-  - do:
-      indices.create:
-          index: test
-          body:
-            settings:
-              number_of_shards: 1
-              number_of_replicas: 0
-            mappings:
-              properties:
-                num:
-                  type: integer
-
-  - do:
-      bulk:
-        index: test
-        refresh: true
-        body: |
-          { "index": {"_id": "1"}}
-          { "num": [1, 2] }
-          { "index": {"_id": "2"}}
-          { "num": [2, 3] }
-          { "index": {"_id": "3"}}
           { "num": [3, 4] }
-
+        refresh: true
+                        path: num
+  - match: { aggregations.conns.buckets.0.key: "1" }
+  - do:
+                        id: "2"
+                    terms:
+        body: |
+          { "index": {"_id": 2} }
+          { "index": {"_id": 4} }
+---
+                  2:
+  - match: { aggregations.conns.buckets.2.doc_count: 2 }
+        rest_total_hits_as_int: true
+  - match: { aggregations.conns.buckets.1.key: "1&2" }
+---
+        body: |
+              number_of_replicas: 0
+                  1:
+                    term:
+                      num:
+  - match: { aggregations.conns.buckets.2.key: "2" }
+  - match: { hits.total: 3 }
+  - match: { aggregations.conns.buckets.2.key: "2" }
+        body:
+                  type: integer
+          { "num": [2, 3] }
+  - match: { aggregations.conns.buckets.0.key: "1&2" }
+  - match: { aggregations.conns.buckets.0.key: "1" }
+          { "index": {"_id": "1"}}
+              properties:
+          aggs:
+        index: test
+---
+          aggs:
+"Filters intersections":
+        rest_total_hits_as_int: true
+      search:
+                    term:
+          { "num": [1] }
+            conns:
+  - do:
+              adjacency_matrix:
+          { "index": {"_id": "2"}}
+                filters:
+  - match: { aggregations.conns.buckets.0.doc_count: 1 }
+              adjacency_matrix:
+            conns:
+                        index: lookup
+                    terms:
+                filters:
+  - do:
+                        index: lookup
+  - match: { aggregations.conns.buckets.3.doc_count: 1 }
+                  2:
+      bulk:
+                num:
+                        index: lookup
+        version: "2.19.0 - "
+  - do:
+                        path: num
   - do:
       indices.refresh: {}
----
-"Filters intersections":
-
-  - do:
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          size: 0
-          aggs:
-            conns:
-              adjacency_matrix:
-                filters:
-                  1:
                     term:
-                      num: 1
-                  2:
-                    term:
-                      num: 2
-                  4:
-                    term:
-                      num: 4
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.conns.buckets: 4 }
-
-  - match: { aggregations.conns.buckets.0.doc_count: 1 }
-  - match: { aggregations.conns.buckets.0.key: "1" }
-
-  - match: { aggregations.conns.buckets.1.doc_count: 1 }
-  - match: { aggregations.conns.buckets.1.key: "1&2" }
-
-  - match: { aggregations.conns.buckets.2.doc_count: 2 }
-  - match: { aggregations.conns.buckets.2.key: "2" }
-
-  - match: { aggregations.conns.buckets.3.doc_count: 1 }
+              number_of_shards: 1
+                      num:
   - match: { aggregations.conns.buckets.3.key: "4" }
-
-
----
-"Terms lookup":
-
-
+                    term:
+                    terms:
+                  4:
+  - match: { aggregations.conns.buckets.3.doc_count: 1 }
+                  4:
   - do:
-      bulk:
-        index: lookup
-        refresh: true
-        body: |
-          { "index": {"_id": 1} }
-          { "num": [1] }
-          { "index": {"_id": 2} }
-          { "num": [2] }
-          { "index": {"_id": 4} }
+        body:
           { "num": [4] }
-  - do:
-      search:
-        index: test
-        body:
-          size: 0
           aggs:
-            conns:
-              adjacency_matrix:
-                filters:
-                  1:
-                    terms:
-                      num:
-                        index: lookup
-                        id: "1"
-                        path: num
-                  2:
-                    terms:
-                      num:
-                        index: lookup
-                        id: "2"
-                        path: num
-                  4:
-                    terms:
-                      num:
-                        index: lookup
-                        id: "4"
-                        path: num
-
-  - match: { hits.total.value: 3 }
-
-  - length: { aggregations.conns.buckets: 4 }
-
-  - match: { aggregations.conns.buckets.0.doc_count: 1 }
-  - match: { aggregations.conns.buckets.0.key: "1" }
-
-  - match: { aggregations.conns.buckets.1.doc_count: 1 }
   - match: { aggregations.conns.buckets.1.key: "1&2" }
-
-  - match: { aggregations.conns.buckets.2.doc_count: 2 }
-  - match: { aggregations.conns.buckets.2.key: "2" }
-
-  - match: { aggregations.conns.buckets.3.doc_count: 1 }
-  - match: { aggregations.conns.buckets.3.key: "4" }
-
-
----
-"Show only intersections":
-  - skip:
-      version: " - 2.19.0"
-      reason: "show_only_intersecting was added in 2.19.0"
-      features: node_selector
-  - do:
+          body:
       node_selector:
-        version: "2.19.0 - "
-      search:
-        index: test
-        rest_total_hits_as_int: true
-        body:
-          size: 0
-          aggs:
+          { "num": [1, 2] }
+  - match: { aggregations.conns.buckets.0.doc_count: 1 }
             conns:
-              adjacency_matrix:
-                show_only_intersecting: true
+  - length: { aggregations.conns.buckets: 1 }
+setup:
+                      num: 4
+                      num: 2
+                  2:
+      version: " - 2.19.0"
+            mappings:
+                        id: "4"
+        refresh: true
+        index: lookup
+                    term:
                 filters:
-                  1:
+                        path: num
+                        id: "1"
+              adjacency_matrix:
+      search:
+                      num:
                     term:
                       num: 1
-                  2:
-                    term:
-                      num: 2
-                  4:
-                    term:
-                      num: 4
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.conns.buckets: 1 }
-
+  - match: { aggregations.conns.buckets.2.doc_count: 2 }
   - match: { aggregations.conns.buckets.0.doc_count: 1 }
-  - match: { aggregations.conns.buckets.0.key: "1&2" }
+      search:
+                      num: 2
+          size: 0
+            settings:
+  - length: { aggregations.conns.buckets: 4 }
+          size: 0
+                      num: 4
+      features: node_selector
+        body:
+  - do:
+                  1:
+                show_only_intersecting: true
+  - match: { hits.total.value: 3 }
+"Show only intersections":
+          { "index": {"_id": "3"}}
+      indices.create:
+  - length: { aggregations.conns.buckets: 4 }
+          size: 0
+        index: test
+  - match: { aggregations.conns.buckets.3.key: "4" }
+                  1:
+          index: test
+  - skip:
+  - match: { aggregations.conns.buckets.1.doc_count: 1 }
+                  4:
+        index: test
+"Terms lookup":
+      reason: "show_only_intersecting was added in 2.19.0"
+                      num: 1
+  - match: { aggregations.conns.buckets.1.doc_count: 1 }
+          { "num": [2] }
+        index: test
+  - match: { hits.total: 3 }
+          { "index": {"_id": 1} }
+      bulk:

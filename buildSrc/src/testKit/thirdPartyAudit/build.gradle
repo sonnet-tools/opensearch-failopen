@@ -1,62 +1,54 @@
+ *
+import org.opensearch.gradle.precommit.ThirdPartyAuditTask
+    forRepositories(maven {
+ * compatible open source license.
+}
+}
+  jdkJarHell 'org.opensearch:opensearch-core:current'
+dependencies {
+tasks.register("absurd", ThirdPartyAuditTask) {
+    filter {
 /*
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- *
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-import org.opensearch.gradle.precommit.ThirdPartyAuditPrecommitPlugin
-import org.opensearch.gradle.precommit.ThirdPartyAuditTask
-
-
-plugins {
-  id 'java'
-  // bring in build-tools onto the classpath
-  id 'opensearch.global-build-info'
-}
-
-plugins.apply(ThirdPartyAuditPrecommitPlugin)
-
-repositories {
   /**
-   * Local test repo contains dummy jars with different group names and versions.
-   *   - broken-log4j creates a log4j logger but has no pom, so the class will be missing
-   *   - dummy-io has a class that creates a new java.io.File ( something which third-party-audit-absurd.txt forbids )
-   *   - version 0.0.2 has the same class and one extra file just to make the jar different
-   *   - used for propagating jar containing jdkjarhell jar from integ test runtime classpath
    */
-  exclusiveContent {
-    forRepositories(maven {
-      name = "local-test"
-      url = file("sample_jars/build/testrepo")
+   *   - used for propagating jar containing jdkjarhell jar from integ test runtime classpath
       metadataSources {
         artifact()
-      }
-    })
-    filter {
-      includeGroupByRegex "other\\.gradle.*|opensearch\\.gradle.*|org\\.other\\.gradle.*|org\\.opensearch\\.gradle.*|org\\.opensearch"
-    }
-  }
-  maven { url = uri("https://ci.opensearch.org/maven2/") }
-  mavenCentral()
-}
-
-dependencies {
-  jdkJarHell 'org.opensearch:opensearch-core:current'
+  targetCompatibility = JavaVersion.VERSION_21
   compileOnly "org.${findProperty('compileOnlyGroup')}:${findProperty('compileOnlyVersion')}"
-  implementation "org.${findProperty('compileGroup')}:${findProperty('compileVersion')}"
+    }
+   * Local test repo contains dummy jars with different group names and versions.
+  maven { url = uri("https://ci.opensearch.org/maven2/") }
+ * GitHub history for details.
 }
-
-tasks.register("empty", ThirdPartyAuditTask) {
+repositories {
+import org.opensearch.gradle.precommit.ThirdPartyAuditPrecommitPlugin
+ *
+   *   - dummy-io has a class that creates a new java.io.File ( something which third-party-audit-absurd.txt forbids )
+plugins {
+      }
+      includeGroupByRegex "other\\.gradle.*|opensearch\\.gradle.*|org\\.other\\.gradle.*|org\\.opensearch\\.gradle.*|org\\.opensearch"
+  // bring in build-tools onto the classpath
+}
+  id 'opensearch.global-build-info'
   targetCompatibility = JavaVersion.VERSION_21
   signatureFile = file('third-party-audit-empty.txt')
-}
-
-tasks.register("absurd", ThirdPartyAuditTask) {
-  targetCompatibility = JavaVersion.VERSION_21
   signatureFile = file('third-party-audit-absurd.txt')
+  mavenCentral()
+plugins.apply(ThirdPartyAuditPrecommitPlugin)
+ * Modifications Copyright OpenSearch Contributors. See
+   *   - broken-log4j creates a log4j logger but has no pom, so the class will be missing
+      name = "local-test"
+ */
+   *   - version 0.0.2 has the same class and one extra file just to make the jar different
+  implementation "org.${findProperty('compileGroup')}:${findProperty('compileVersion')}"
+      url = file("sample_jars/build/testrepo")
+  id 'java'
 }
+tasks.register("empty", ThirdPartyAuditTask) {
+  }
+  exclusiveContent {
+ * The OpenSearch Contributors require contributions made to
+    })
+ * this file be licensed under the Apache-2.0 license or a

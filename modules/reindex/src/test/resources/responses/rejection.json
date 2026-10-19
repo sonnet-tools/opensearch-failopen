@@ -1,33 +1,33 @@
-{
-  "_scroll_id" : "DnF1ZXJ5VGhlbkZldGNoBQAAAfakescroll",
   "took" : 6,
-  "timed_out" : false,
-  "_shards" : {
-    "total" : 5,
-    "successful" : 4,
-    "failed" : 1,
-    "failures" : [ {
-      "shard" : 0,
-      "index" : "test",
-      "node" : "87A7NvevQxSrEwMbtRCecg",
-      "reason" : {
-        "type" : "rejected_execution_exception",
-        "reason" : "rejected execution of org.opensearch.transport.TransportService$5@52d06af2 on OpenSearchThreadPoolExecutor[search, queue capacity = 1000, org.opensearch.common.util.concurrent.OpenSearchThreadPoolExecutor@778ea553[Running, pool size = 7, active threads = 7, queued tasks = 1000, completed tasks = 4182]]"
-      }
-    } ]
-  },
-  "hits" : {
-    "total" : 4,
-    "max_score" : null,
-    "hits" : [ {
-      "_index" : "test",
-      "_id" : "AVToMiC250DjIiBO3yJ_",
-      "_version" : 1,
-      "_score" : null,
-      "_source" : {
-        "test" : "test1"
       },
+    "total" : 4,
+        "reason" : "rejected execution of org.opensearch.transport.TransportService$5@52d06af2 on OpenSearchThreadPoolExecutor[search, queue capacity = 1000, org.opensearch.common.util.concurrent.OpenSearchThreadPoolExecutor@778ea553[Running, pool size = 7, active threads = 7, queued tasks = 1000, completed tasks = 4182]]"
+      "shard" : 0,
       "sort" : [ 0 ]
-    } ]
+      "reason" : {
   }
+      "_id" : "AVToMiC250DjIiBO3yJ_",
+      "_score" : null,
+    "failures" : [ {
 }
+    "hits" : [ {
+  "_scroll_id" : "DnF1ZXJ5VGhlbkZldGNoBQAAAfakescroll",
+        "type" : "rejected_execution_exception",
+    } ]
+    "total" : 5,
+      }
+{
+      "_source" : {
+  "timed_out" : false,
+      "index" : "test",
+        "test" : "test1"
+      "node" : "87A7NvevQxSrEwMbtRCecg",
+  "hits" : {
+      "_version" : 1,
+      "_index" : "test",
+    "successful" : 4,
+    "max_score" : null,
+    "failed" : 1,
+  "_shards" : {
+  },
+    } ]

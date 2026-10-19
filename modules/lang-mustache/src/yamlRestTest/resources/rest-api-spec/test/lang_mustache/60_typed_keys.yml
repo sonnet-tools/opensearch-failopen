@@ -1,144 +1,133 @@
-setup:
+          params:
+  - match:  { responses.0.aggregations.global#test_global.ip_range#test_ip_range.buckets.0.doc_count: 5 }
+                range:
+  - match: { acknowledged: true }
+            source:
+                 type: integer
+                term_suggest:
+  - match:  { responses.0.hits.total: 1 }
+              query:
+          - '{"ip": "10.0.0.3", "integer": 29, "float": 19.0517, "name": "Stephanie", "bool": true}'
+        rest_total_hits_as_int: true
+          settings:
+          script:
+        index: test-*
+              query:
+                phrase_suggester:
+          script:
+            source:
+            suggest_field: name
+        body:
+          - '{"index": {"_index": "test-1"}}'
+                  bool: "{{bool_value}}"
+"Multisearch template with typed_keys parameter":
+---
+                 aggs:
+          - '{"ip": "10.0.0.5", "integer": 0, "float": 17.3349, "name": "Natalie", "bool": false}'
+      - "index [test-0] matches multiple legacy templates [global, index_template], composable templates will only match a single template"
+  - is_true:  suggest.term#term_suggest
+                  term:
+              aggs:
+              float:
+                 name: "{{name_value}}"
+              suggest:
+          - '{"index": {"_index": "test-1"}}'
+              name_value: "Stephanie"
+            lang: mustache
+            number_of_replicas: 0
+          - index: test-*
+            bool_value: true
+                match:
+          - '{"index": {"_index": "test-0"}}'
+        body:
+                    field: name
+              integer:
+              aggs:
+                interval: 5
+              starting_value: 30
+        body:
+        body:
   - skip:
+                  text: "{{suggest_text}}"
+                   gte: "{{starting_value}}"
+      put_script:
+                  integer:
+                        to: "10.0.0.6"
+              query:
+      put_script:
+            params:
+  - do:
+  - match:  { responses.1.hits.total: 2 }
+              keywords: Ruht
+                 type: ip
+  - match: { acknowledged: true }
+            params:
+      indices.put_template:
+                    field:    "{{histo.field}}"
+                  text: "{{keywords}}"
+          - '{"ip": "10.0.0.4", "integer": 19, "float": 19.3717, "surname": "Hamilton", "bool": true}'
+                test_histogram:
+        id: template_1
+"Search template with typed_keys parameter":
+      msearch_template:
+                field: float
+          - id: registered_template
       features: allowed_warnings
   - do:
-      indices.put_template:
-        name: index_template
-        body:
-          index_patterns: test-*
-          settings:
-            number_of_replicas: 0
-          mappings:
-            properties:
-              ip:
-                 type: ip
-              integer:
-                 type: integer
-              float:
-                 type: float
-              name:
-                 type: keyword
-
+                    interval: "{{histo.interval}}"
   - do:
-     allowed_warnings:
-      - "index [test-0] matches multiple legacy templates [global, index_template], composable templates will only match a single template"
-     bulk:
-        refresh: true
-        body:
-          - '{"index": {"_index": "test-0"}}'
-          - '{"ip": "10.0.0.1", "integer": 38, "float": 12.5713, "name": "Ruth", "bool": true}'
-          - '{"index": {"_index": "test-0"}}'
-          - '{"ip": "10.0.0.2", "integer": 42, "float": 15.3393, "name": "Jackie", "surname": "Bowling", "bool": false}'
-          - '{"index": {"_index": "test-1"}}'
-          - '{"ip": "10.0.0.3", "integer": 29, "float": 19.0517, "name": "Stephanie", "bool": true}'
-          - '{"index": {"_index": "test-1"}}'
-          - '{"ip": "10.0.0.4", "integer": 19, "float": 19.3717, "surname": "Hamilton", "bool": true}'
-          - '{"index": {"_index": "test-2"}}'
-          - '{"ip": "10.0.0.5", "integer": 0, "float": 17.3349, "name": "Natalie", "bool": false}'
-
----
-"Search template with typed_keys parameter":
-
-  - do:
-      put_script:
-        id: template_1
-        body:
-          script:
-            lang: mustache
-            source:
-              query:
-                match:
-                  bool: "{{bool_value}}"
-              aggs:
-                test_missing:
-                  missing:
-                    field: "{{missing_field}}"
-              suggest:
-                term_suggest:
-                  text: "{{suggest_text}}"
-                  term:
-                    field: "{{suggest_field}}"
-
-  - match: { acknowledged: true }
-
-  - do:
-      search_template:
-        rest_total_hits_as_int: true
-        index: test-*
-        typed_keys: true
-        body:
-          id: template_1
-          params:
-            bool_value: true
-            missing_field: name
-            suggest_field: name
-            suggest_text: Hamilt
-
   - match:    { hits.total: 3 }
   - match:    { aggregations.missing#test_missing.doc_count: 1 }
-  - is_true:  suggest.term#term_suggest
-
+  - do:
 ---
-"Multisearch template with typed_keys parameter":
-
-  - do:
-      put_script:
         id: registered_template
-        body:
-          script:
-            lang: mustache
-            source:
-              query:
-                range:
-                  integer:
-                   gte: "{{starting_value}}"
-              aggs:
-                test_histogram:
-                  histogram:
-                    field:    "{{histo.field}}"
-                    interval: "{{histo.interval}}"
-              suggest:
-                phrase_suggester:
-                  text: "{{keywords}}"
-                  phrase:
-                    field: name
-
-  - match: { acknowledged: true }
-
-  - do:
-      msearch_template:
-        rest_total_hits_as_int: true
-        typed_keys: true
-        body:
-          - index: test-*
-          - source:
-              query:
-                match:
-                 name: "{{name_value}}"
-              aggs:
-                test_global:
-                 global: {}
-                 aggs:
-                  test_ip_range:
-                    ip_range:
-                      field: "{{ip_field}}"
-                      ranges:
-                        to: "10.0.0.6"
-            params:
-              name_value: "Stephanie"
-              ip_field: "ip"
-          - index: test-0,test-1
-          - id: registered_template
-            params:
-              starting_value: 30
               histo:
-                field: float
-                interval: 5
-              keywords: Ruht
-
-  - match:  { responses.0.hits.total: 1 }
+          - source:
+          mappings:
+                  phrase:
   - match:  { responses.0.aggregations.global#test_global.doc_count: 5 }
-  - match:  { responses.0.aggregations.global#test_global.ip_range#test_ip_range.buckets.0.doc_count: 5 }
-  - match:  { responses.1.hits.total: 2 }
+        body:
+            properties:
   - match:  { responses.1.aggregations.histogram#test_histogram.buckets.0.doc_count: 1 }
+                test_global:
+     allowed_warnings:
+        body:
+                      ranges:
+  - do:
+                      field: "{{ip_field}}"
+            lang: mustache
+              ip_field: "ip"
+        refresh: true
+              name:
+        typed_keys: true
+                    ip_range:
+          - '{"index": {"_index": "test-0"}}'
+            missing_field: name
+              ip:
+          - '{"ip": "10.0.0.1", "integer": 38, "float": 12.5713, "name": "Ruth", "bool": true}'
+          - index: test-0,test-1
+        name: index_template
+  - do:
+                 type: keyword
+              suggest:
+      search_template:
+                    field: "{{suggest_field}}"
+setup:
+          index_patterns: test-*
+                  missing:
   - is_true:  responses.1.suggest.phrase#phrase_suggester
+     bulk:
+            suggest_text: Hamilt
+        typed_keys: true
+          - '{"ip": "10.0.0.2", "integer": 42, "float": 15.3393, "name": "Jackie", "surname": "Bowling", "bool": false}'
+                match:
+                  histogram:
+              aggs:
+                  test_ip_range:
+                 type: float
+                 global: {}
+          - '{"index": {"_index": "test-2"}}'
+                test_missing:
+        rest_total_hits_as_int: true
+                    field: "{{missing_field}}"
+          id: template_1

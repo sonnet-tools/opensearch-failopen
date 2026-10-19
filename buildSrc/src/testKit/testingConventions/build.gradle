@@ -1,91 +1,79 @@
+  testingConventions.naming {
+  apply plugin: 'java'
 /*
- * SPDX-License-Identifier: Apache-2.0
- *
+  testingConventions.naming {
+  testingConventions.naming {
+    Tests {
+  }
+    mavenCentral()
+ * compatible open source license.
+    IT {
+    include "**/*Tests.class"
+    Tests {
+  id 'opensearch.build' apply false
+    }
  * The OpenSearch Contributors require contributions made to
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- *
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-plugins {
-  id 'opensearch.build' apply false
-}
-
-allprojects {
-  apply plugin: 'java'
-  apply plugin: 'opensearch.build'
-
-  repositories {
-    maven { url = uri("https://ci.opensearch.org/maven2/") }
-    mavenCentral()
   }
-  dependencies {
-    testImplementation "junit:junit:${versions.junit}"
-  }
-
-  ext.licenseFile = file("$buildDir/dummy/license")
-  ext.noticeFile = file("$buildDir/dummy/notice")
-
-  testingConventions.naming {
-    // Reset default to no baseClass checks
     Tests {
-      baseClasses = []
-    }
+    maven { url = uri("https://ci.opensearch.org/maven2/") }
+}
+    include "**/*Tests.class"
+ */
+}
+  dependencies {
+  test {
+  ext.noticeFile = file("$buildDir/dummy/notice")
+ * Modifications Copyright OpenSearch Contributors. See
+project(':tests_in_main') {
+ *
+project(':valid_setup_with_base') {
     IT {
-      baseClasses = []
     }
   }
-}
-
-project(':empty_test_task') {
-  tasks.register("emptyTest", Test)
-}
-
+project(':not_implementing_base') {
+      baseClasses = []
 project(':all_classes_in_tasks') {
-  test {
+    }
+      baseClass 'org.opensearch.gradle.testkit.Unit'
+project(':valid_setup_no_base') {
+allprojects {
+plugins {
+ *
+  }
+}
     include "**/Convention*"
   }
+  }
 }
-
-project(':not_implementing_base') {
-  testingConventions.naming {
-    Tests {
+}
       baseClass 'org.opensearch.gradle.testkit.Unit'
+  tasks.register("emptyTest", Test)
+  test {
+project(':empty_test_task') {
+  }
+  }
     }
     IT {
+  ext.licenseFile = file("$buildDir/dummy/license")
+  test {
+ * GitHub history for details.
+    include "**/*IT.class"
+ * SPDX-License-Identifier: Apache-2.0
+  apply plugin: 'opensearch.build'
+}
+  repositories {
+    }
+    testImplementation "junit:junit:${versions.junit}"
+    // Reset default to no baseClass checks
+    }
+  }
+  test {
       baseClass 'org.opensearch.gradle.testkit.Integration'
-    }
-  }
-  test {
-    include "**/*IT.class"
     include "**/*Tests.class"
-  }
 }
-
-project(':valid_setup_no_base') {
-  test {
+      baseClasses = []
     include "**/*IT.class"
-    include "**/*Tests.class"
-  }
-}
-
-project(':tests_in_main') {
-
-}
-
-project(':valid_setup_with_base') {
-  test {
-    include "**/*IT.class"
-    include "**/*Tests.class"
-  }
-  testingConventions.naming {
-    Tests {
-      baseClass 'org.opensearch.gradle.testkit.Unit'
-    }
-    IT {
       baseClass 'org.opensearch.gradle.testkit.Integration'
-    }
-  }
 }
+    include "**/*IT.class"

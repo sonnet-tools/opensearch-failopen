@@ -1,141 +1,122 @@
----
-setup:
-
-
-  - do:
-      indices.create:
-        index: test
         body:
-          mappings:
-            properties:
+        flat_settings: true
+  ### Wildcard
               text:
-                type: text
-                analyzer: standard
-                fields:
-                  raw:
                     type: keyword
-              nested1:
-                type: nested
-
-  - do:
-      bulk:
-        refresh: true
+      search:
+  ### Regexp
         body:
-          - '{"index": {"_index": "test", "_id": "1"}}'
-          - '{"text" : "Some like it hot, some like it cold", "nested1": [{"foo": "bar1"}]}'
-          - '{"index": {"_index": "test", "_id": "2"}}'
-          - '{"text" : "Its cold outside, theres no kind of atmosphere", "nested1": [{"foo": "bar2"}]}'
-          - '{"index": {"_index": "test", "_id": "3"}}'
-          - '{"text" : "Baby its cold there outside", "nested1": [{"foo": "bar3"}]}'
-          - '{"index": {"_index": "test", "_id": "4"}}'
-          - '{"text" : "Outside it is cold and wet", "nested1": [{"foo": "bar4"}]}'
-
----
-teardown:
-
-
-  - do:
-      cluster.put_settings:
-        body:
-          transient:
-            search.allow_expensive_queries: null
-
----
-"Test disallow expensive queries":
-
-
-  ### Check for initial setting = null -> false
-  - do:
       cluster.get_settings:
-        flat_settings: true
-
-  - is_false: search.allow_expensive_queries
-
-  ### Update setting to false
-  - do:
-      cluster.put_settings:
+"Test disallow expensive queries":
+          - '{"text" : "Baby its cold there outside", "nested1": [{"foo": "bar3"}]}'
+          - '{"text" : "Some like it hot, some like it cold", "nested1": [{"foo": "bar1"}]}'
+              text.raw:
+        index: test
+                type: nested
         body:
-          transient:
-            search.allow_expensive_queries: "false"
-        flat_settings: true
-
+            regexp:
+  - do:
+      search:
+                type: text
+          - '{"text" : "Its cold outside, theres no kind of atmosphere", "nested1": [{"foo": "bar2"}]}'
+  ### Range on text
+                  must: [{"match" : {"nested1.foo" : "bar2"}}]
   - match: {transient: {search.allow_expensive_queries: "false"}}
-
+              nested1:
+  ### Check for initial setting = null -> false
+        body:
+        body:
+setup:
+        index: test
+        index: test
+  - do:
+        flat_settings: true
+  - do:
+      search:
+      catch: /\[prefix\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false. For optimised prefix queries on text fields please enable \[index_prefixes\]./
+      bulk:
+      catch: /\[regexp\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false./
+            search.allow_expensive_queries: null
+            fuzzy:
+      search:
+          transient:
+      catch: /\[range\] queries on \[text\] or \[keyword\] fields cannot be executed when \'search.allow_expensive_queries\' is set to false./
+  - do:
+          - '{"text" : "Outside it is cold and wet", "nested1": [{"foo": "bar4"}]}'
+            wildcard:
+        body:
+          - '{"index": {"_index": "test", "_id": "4"}}'
+      indices.create:
+          query:
+          query:
+      search:
+                  raw:
+  ### Nested
+      search:
+        index: test
+            search.allow_expensive_queries: "false"
+teardown:
+          - '{"index": {"_index": "test", "_id": "1"}}'
+                value: .*ou.*id.*
+                bool:
+          - '{"index": {"_index": "test", "_id": "3"}}'
+            properties:
+  - do:
+        body:
+          query:
+  - do:
+  ### Update setting to false
+            range:
+                value: out?ide
   ### Prefix
   - do:
-      catch: /\[prefix\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false. For optimised prefix queries on text fields please enable \[index_prefixes\]./
-      search:
         index: test
-        body:
-          query:
-            prefix:
-              text:
-                value: out
-
-  ### Fuzzy
-  - do:
-      catch: /\[fuzzy\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false./
-      search:
-        index: test
-        body:
-          query:
-            fuzzy:
-              text:
+---
+            nested:
                 value: outwide
-
-  ### Regexp
   - do:
-      catch: /\[regexp\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false./
-      search:
-        index: test
-        body:
-          query:
-            regexp:
-              text:
-                value: .*ou.*id.*
-
-  ### Wildcard
-  - do:
-      catch: /\[wildcard\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false./
-      search:
-        index: test
-        body:
-          query:
-            wildcard:
-              text:
-                value: out?ide
-
-  ### Range on text
-  - do:
-      catch: /\[range\] queries on \[text\] or \[keyword\] fields cannot be executed when \'search.allow_expensive_queries\' is set to false./
-      search:
-        index: test
-        body:
-          query:
-            range:
               text:
                 gte: "theres"
-
-  ### Range on keyword
-  - do:
-      catch: /\[range\] queries on \[text\] or \[keyword\] fields cannot be executed when \'search.allow_expensive_queries\' is set to false./
-      search:
         index: test
         body:
-          query:
-            range:
-              text.raw:
-                gte : "Outside it is cold and wet"
-
-  ### Nested
-  - do:
+              text:
+          mappings:
       catch: /\[joining\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false./
-      search:
+              text:
+          query:
         index: test
+  ### Range on keyword
+          - '{"index": {"_index": "test", "_id": "2"}}'
+---
+                value: out
+                analyzer: standard
+                fields:
+  ### Fuzzy
+  - do:
+---
+  - do:
+  - do:
+                gte : "Outside it is cold and wet"
+          query:
+      cluster.put_settings:
         body:
           query:
-            nested:
-              path: "nested1"
+  - do:
+        body:
+        body:
+      catch: /\[range\] queries on \[text\] or \[keyword\] fields cannot be executed when \'search.allow_expensive_queries\' is set to false./
               query:
-                bool:
-                  must: [{"match" : {"nested1.foo" : "bar2"}}]
+        refresh: true
+      catch: /\[wildcard\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false./
+            prefix:
+              path: "nested1"
+        index: test
+      catch: /\[fuzzy\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false./
+              text:
+            range:
+  - is_false: search.allow_expensive_queries
+          transient:
+      search:
+      cluster.put_settings:
+              text:
+          query:

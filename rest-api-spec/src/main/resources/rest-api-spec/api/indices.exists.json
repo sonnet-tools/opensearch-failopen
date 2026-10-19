@@ -1,60 +1,60 @@
-{
-  "indices.exists":{
-    "documentation":{
+        "description":"Whether wildcard expressions should get expanded to open or closed indices (default: open)"
+        "description":"Ignore if a wildcard expression resolves to no concrete indices (default: false)"
       "url":"https://opensearch.org/docs/latest/api-reference/index-apis/exists/",
+    }
+      "ignore_unavailable":{
+      },
+      ]
+            }
+        "type":"enum",
+          "hidden",
+{
+          "parts":{
+  }
+    "params":{
+      "allow_no_indices":{
+        "default":false
+}
+        "default":"open",
       "description":"Returns information about whether a particular index exists."
     },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/{index}",
-          "methods":[
-            "HEAD"
-          ],
-          "parts":{
-            "index":{
-              "type":"list",
-              "description":"A comma-separated list of index names"
-            }
-          }
-        }
-      ]
-    },
-    "params":{
-      "local":{
-        "type":"boolean",
-        "description":"Return local information, do not retrieve the state from master node (default: false)"
-      },
-      "ignore_unavailable":{
-        "type":"boolean",
-        "description":"Ignore unavailable indexes (default: false)"
-      },
-      "allow_no_indices":{
-        "type":"boolean",
-        "description":"Ignore if a wildcard expression resolves to no concrete indices (default: false)"
+    "documentation":{
       },
       "expand_wildcards":{
-        "type":"enum",
-        "options":[
-          "open",
-          "closed",
-          "hidden",
-          "none",
-          "all"
-        ],
-        "default":"open",
-        "description":"Whether wildcard expressions should get expanded to open or closed indices (default: open)"
+        "type":"boolean",
+        "type":"boolean",
+          ],
+    },
+              "type":"list",
+        "description":"Return settings in flat format (default: false)"
+        "description":"Ignore unavailable indexes (default: false)"
+        "type":"boolean",
+      },
+        "description":"Return local information, do not retrieve the state from master node (default: false)"
       },
       "flat_settings":{
-        "type":"boolean",
-        "description":"Return settings in flat format (default: false)"
-      },
-      "include_defaults":{
-        "type":"boolean",
+          "open",
+      "local":{
+    "stability":"stable",
+        "options":[
         "description":"Whether to return all default setting for each of the indices.",
-        "default":false
+      },
+            "HEAD"
+          "path":"/{index}",
+      "include_defaults":{
+        }
+          "methods":[
+          }
+    "url":{
+      "paths":[
+          "closed",
+          "none",
+        ],
+            "index":{
       }
-    }
-  }
-}
+          "all"
+        "type":"boolean",
+              "description":"A comma-separated list of index names"
+  "indices.exists":{
+        {
+        "type":"boolean",

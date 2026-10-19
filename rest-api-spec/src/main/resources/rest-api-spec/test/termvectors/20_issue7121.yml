@@ -1,38 +1,34 @@
----
-"Term vector API should return 'found: false' for docs between index and refresh":
   - do:
-      indices.create:
-          index: testidx
-          body:
             settings:
-              index:
-                translog.flush_threshold_size: "512MB"
+                   type : "text"
                 number_of_shards: 1
+      indices.create:
+  - is_false: found
+        id:    1
+      index:
+              index:
+                   term_vector : "with_positions_offsets"
+  - do:
+        id:    1
+  - match: { _id: "1" }
+        index: testidx
                 number_of_replicas: 0
                 refresh_interval: -1
-            mappings:
-              properties:
-                text:
-                   type : "text"
-                   term_vector : "with_positions_offsets"
-
-  - do:
-      cluster.health:
         wait_for_status: green
-
-  - do:
-      index:
-        index: testidx
-        id:    1
+      cluster.health:
+                translog.flush_threshold_size: "512MB"
+"Term vector API should return 'found: false' for docs between index and refresh":
+---
         body:
-            text : "foo bar"
-
   - do:
-      termvectors:
         index: testidx
-        id:    1
-        realtime: false
-
+      termvectors:
+            text : "foo bar"
   - match: { _index: "testidx" }
-  - match: { _id: "1" }
-  - is_false: found
+            mappings:
+  - do:
+              properties:
+          body:
+          index: testidx
+        realtime: false
+                text:

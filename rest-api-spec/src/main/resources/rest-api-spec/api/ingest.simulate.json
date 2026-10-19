@@ -1,44 +1,44 @@
-{
-  "ingest.simulate":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/ingest-pipelines/simulate-ingest/",
-      "description":"Allows to simulate a pipeline with example documents."
-    },
-    "stability":"stable",
-    "url":{
+            "GET",
       "paths":[
-        {
-          "path":"/_ingest/pipeline/_simulate",
-          "methods":[
-            "GET",
-            "POST"
-          ]
-        },
-        {
-          "path":"/_ingest/pipeline/{id}/_simulate",
-          "methods":[
-            "GET",
-            "POST"
-          ],
+    "params":{
           "parts":{
             "id":{
-              "type":"string",
-              "description":"Pipeline ID"
-            }
-          }
+      "url":"https://opensearch.org/docs/latest/ingest-pipelines/simulate-ingest/",
+      "required":true
+          "methods":[
+            "POST"
+{
+    }
         }
-      ]
-    },
-    "params":{
-      "verbose":{
-        "type":"boolean",
-        "description":"Verbose mode. Display data output for each processor in executed pipeline",
+    "url":{
+      "description":"Allows to simulate a pipeline with example documents."
+}
         "default":false
+    },
+  }
+          "path":"/_ingest/pipeline/_simulate",
+    },
+      ]
+        {
+          ],
+      "verbose":{
+    "stability":"stable",
+              "type":"string",
+        },
       }
+          }
+      "description":"The simulate definition",
+          ]
+        "type":"boolean",
+        {
+          "methods":[
     },
     "body":{
-      "description":"The simulate definition",
-      "required":true
-    }
-  }
-}
+              "description":"Pipeline ID"
+            "POST"
+            }
+    "documentation":{
+          "path":"/_ingest/pipeline/{id}/_simulate",
+  "ingest.simulate":{
+        "description":"Verbose mode. Display data output for each processor in executed pipeline",
+            "GET",

@@ -1,35 +1,35 @@
-{
-  "schema": [
+      "sample data entry",
     {
-      "name": "text",
-      "type": "string"
-    },
-    {
+    ]
+  ],
+      "test example record"
       "name": "upper_text",
+  "datarows": [
       "type": "string"
+    [
+    {
+      "TEST EXAMPLE RECORD",
+      "hello world test",
     },
+{
+      "SAMPLE DATA ENTRY",
     {
       "name": "lower_text",
+      "sample data entry"
+      "type": "string"
+      "hello world test"
+  "schema": [
+    [
+  "size": 3
+  "total": 3,
       "type": "string"
     }
   ],
-  "datarows": [
-    [
-      "hello world test",
       "HELLO WORLD TEST",
-      "hello world test"
     ],
-    [
-      "sample data entry",
-      "SAMPLE DATA ENTRY",
-      "sample data entry"
-    ],
+    },
+}
     [
       "test example record",
-      "TEST EXAMPLE RECORD",
-      "test example record"
-    ]
-  ],
-  "total": 3,
-  "size": 3
-}
+      "name": "text",
+    ],

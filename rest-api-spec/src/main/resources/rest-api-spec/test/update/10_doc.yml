@@ -1,34 +1,30 @@
----
-"Partial document":
-  - do:
-      index:
           index:  test_1
+            doc:
+          index:  test_1
+  - do:
           id:     1
-          body:
-              foo:    bar
-              count:  1
-              nested: { one: 1, two: 2 }
-
   - do:
       update:
-          index:  test_1
-          id:     1
           body:
-            doc:
-                foo:    baz
-                nested:
-                    one:  3
-
-  - match: { _index:   test_1 }
-  - match: { _id:      "1"    }
-  - match: { _version: 2      }
-
-  - do:
-      get:
-          index:  test_1
           id:     1
-
+      get:
+---
+          index:  test_1
+              foo:    bar
+              nested: { one: 1, two: 2 }
+"Partial document":
   - match: { _source.foo:        baz }
-  - match: { _source.count:      1   }
+  - match: { _id:      "1"    }
+              count:  1
+  - match: { _index:   test_1 }
   - match: { _source.nested.one: 3   }
+  - do:
+      index:
+  - match: { _source.count:      1   }
+                    one:  3
+          id:     1
+                nested:
+  - match: { _version: 2      }
+                foo:    baz
+          body:
   - match: { _source.nested.two: 2   }

@@ -1,54 +1,54 @@
-{
-  "testName": "prefix_query_hits",
-  "indexName": "test-index",
-  "indexMapping": {
-    "name": "VARCHAR",
-    "price": "INTEGER"
-  },
-  "planType": "HITS",
-  "inputDsl": {
-    "query": {
-      "prefix": {
-        "name": {
           "value": "lap"
-        }
-      }
-    }
+        {
   },
-  "expectedRelNodePlan": [
+  "testName": "prefix_query_hits",
+          "_source": {
     "LogicalSort(fetch=[10])",
     "  LogicalFilter(condition=[PREFIX_QUERY(MAP('field', $0), MAP('query', 'lap'))])",
-    "    LogicalTableScan(table=[[test-index]])"
-  ],
-  "mockResultFieldNames": ["name", "price"],
+  "inputDsl": {
+      "total": {
+        }
+            "price": 999
   "mockResultRows": [
-    ["laptop", 999],
-    ["laptop_pro", 1499]
+  "mockResultFieldNames": ["name", "price"],
+    "name": "VARCHAR",
+        "name": {
+          "_source": {
+          "_score": null
+          "_score": null
+    "price": "INTEGER"
+      ]
+            "name": "laptop",
   ],
   "expectedOutputDsl": {
-    "num_reduce_phases": 0,
-    "hits": {
-      "total": {
-        "value": 2,
-        "relation": "eq"
-      },
-      "max_score": null,
-      "hits": [
+    "query": {
         {
-          "_source": {
-            "name": "laptop",
-            "price": 999
-          },
-          "_score": null
-        },
-        {
-          "_source": {
             "name": "laptop_pro",
-            "price": 1499
-          },
-          "_score": null
-        }
-      ]
-    }
   }
+          },
+        "relation": "eq"
+  ],
+    ["laptop_pro", 1499]
 }
+  },
+    "hits": {
+  "planType": "HITS",
+      },
+  "indexName": "test-index",
+        "value": 2,
+        },
+  "expectedRelNodePlan": [
+    ["laptop", 999],
+            "price": 1499
+{
+      }
+        }
+    }
+  "indexMapping": {
+      "hits": [
+      "max_score": null,
+    }
+    "num_reduce_phases": 0,
+      "prefix": {
+    "    LogicalTableScan(table=[[test-index]])"
+          },

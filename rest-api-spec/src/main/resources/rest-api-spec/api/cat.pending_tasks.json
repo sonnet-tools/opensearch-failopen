@@ -1,72 +1,72 @@
+        "description":"Explicit operation timeout for connection to master node",
+    "stability":"stable",
+        "default":false
+      },
+      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-pending-tasks/",
+          "m",
+        "description":"Comma-separated list of column names or column aliases to sort by"
+          "methods":[
+      "local":{
+        "description":"The unit in which to display time values",
+      "help":{
+      "master_timeout":{
+          "version":"2.0.0",
+        "type":"time",
+            "GET"
+        "description":"Return help information",
+        "description":"Verbose mode. Display column headers",
+      "format":{
+      },
+        ]
+    },
+        "type":"time",
+      },
+        "description":"Comma-separated list of column names to display"
+}
+        "description":"Explicit operation timeout for connection to cluster-manager node"
+        "type":"boolean",
 {
   "cat.pending_tasks":{
+          ]
+        "description":"a short version of the Accept header, e.g. json, yaml"
+        "type":"boolean",
     "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-pending-tasks/",
+          "ms",
       "description":"Returns a concise representation of the cluster pending tasks."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
         {
           "path":"/_cat/pending_tasks",
-          "methods":[
-            "GET"
-          ]
-        }
-      ]
+          "d",
+          "nanos"
     },
-    "params":{
-      "format":{
-        "type":"string",
-        "description":"a short version of the Accept header, e.g. json, yaml"
       },
-      "local":{
+        "deprecated":{
+      "h":{
+        "type":"list",
+    "params":{
+      "time":{
+      "v":{
+    }
+      ]
+        "options":[
+  }
         "type":"boolean",
         "description":"Return local information, do not retrieve the state from master node (default: false)"
       },
-      "master_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to master node",
-        "deprecated":{
-          "version":"2.0.0",
-          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
-        }
       },
-      "cluster_manager_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to cluster-manager node"
-      },
-      "h":{
-        "type":"list",
-        "description":"Comma-separated list of column names to display"
-      },
-      "help":{
-        "type":"boolean",
-        "description":"Return help information",
-        "default":false
-      },
-      "s":{
-        "type":"list",
-        "description":"Comma-separated list of column names or column aliases to sort by"
-      },
-      "time":{
         "type":"enum",
-        "description":"The unit in which to display time values",
-        "options":[
-          "d",
+        "type":"list",
+      "paths":[
           "h",
-          "m",
-          "s",
-          "ms",
           "micros",
-          "nanos"
-        ]
-      },
-      "v":{
-        "type":"boolean",
-        "description":"Verbose mode. Display column headers",
+        }
         "default":false
+      "cluster_manager_timeout":{
+          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
+      "s":{
+      },
       }
-    }
-  }
-}
+        }
+          "s",
+      },
+        "type":"string",
+    "url":{

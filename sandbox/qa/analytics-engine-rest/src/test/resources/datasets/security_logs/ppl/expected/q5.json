@@ -1,30 +1,30 @@
-{
-  "schema": [
-    {
-      "name": "success_count",
-      "type": "bigint"
-    },
-    {
       "name": "user",
-      "type": "string"
-    },
-    {
-      "name": "source_ip",
-      "type": "ip"
-    }
+{
+  "total": 2,
   ],
-  "datarows": [
+}
+  "schema": [
+  ],
+    }
     [
+      "name": "success_count",
+      "jdoe",
+      "type": "string"
       12,
+    [
+      "10.0.0.50"
+  "size": 2
+      "type": "bigint"
+      "type": "ip"
+      12,
+    ],
+    },
       "admin",
       "10.0.0.50"
-    ],
-    [
-      12,
-      "jdoe",
-      "10.0.0.50"
+  "datarows": [
+    {
     ]
-  ],
-  "total": 2,
-  "size": 2
-}
+    {
+    {
+    },
+      "name": "source_ip",

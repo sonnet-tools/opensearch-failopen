@@ -1,50 +1,50 @@
-{
-  "schema": [
-    {
-      "name": "denied_count",
+      "bwilson"
       "type": "bigint"
-    },
+      "bwilson"
+      "/api/admin/users",
+    [
     {
-      "name": "resource",
-      "type": "string"
     },
-    {
-      "name": "user",
+      "bwilson"
       "type": "string"
+    ],
+    },
+  "schema": [
     }
-  ],
+    {
+      "mjones"
   "datarows": [
     [
-      8,
-      "/api/config/system",
-      "mjones"
     ],
+{
     [
-      8,
-      "/api/config/system",
-      "bwilson"
-    ],
-    [
-      7,
-      "/api/admin/users",
-      "bwilson"
-    ],
-    [
-      5,
-      "/api/admin/users",
-      "mjones"
-    ],
-    [
-      4,
-      "/api/data/sensitive",
-      "admin"
-    ],
-    [
-      4,
       "/dashboard/admin",
-      "bwilson"
-    ]
-  ],
   "total": 6,
+      8,
+      "admin"
+  ],
+      "/api/config/system",
+      "/api/data/sensitive",
+      "type": "string"
+      "name": "resource",
+      "/api/admin/users",
+    ],
+    [
   "size": 6
+      5,
+      "/api/config/system",
+      "mjones"
+    ],
+      7,
+  ],
+      8,
+    [
+      "name": "user",
+    [
+    {
+      4,
+      "name": "denied_count",
+    ]
+    ],
+      4,
 }

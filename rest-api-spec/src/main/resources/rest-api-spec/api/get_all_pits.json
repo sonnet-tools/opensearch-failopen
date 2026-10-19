@@ -1,19 +1,19 @@
 {
-  "get_all_pits":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/search-plugins/searching-data/point-in-time-api",
-      "description":"Lists all active point in time searches."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_search/point_in_time/_all",
-          "methods":[
-            "GET"
-          ]
-        }
       ]
-    }
-  }
+          ]
 }
+        {
+    "documentation":{
+  "get_all_pits":{
+      "description":"Lists all active point in time searches."
+        }
+      "paths":[
+    "url":{
+      "url":"https://opensearch.org/docs/latest/search-plugins/searching-data/point-in-time-api",
+          "path":"/_search/point_in_time/_all",
+  }
+    "stability":"stable",
+            "GET"
+    }
+    },
+          "methods":[

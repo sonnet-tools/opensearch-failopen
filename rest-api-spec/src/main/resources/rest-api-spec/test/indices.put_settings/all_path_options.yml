@@ -1,112 +1,89 @@
-setup:
-  - do:
-      indices.create:
-        index: test_index1
-  - do:
-      indices.create:
-        index: test_index2
-  - do:
-      indices.create:
-        index: foo
-
-
----
-"put settings per index":
   - do:
       indices.put_settings:
-        index: test_index1
-        body:
-          refresh_interval: 1s
-
-  - do:
-      indices.put_settings:
-        index: test_index2
-        body:
-          refresh_interval: 1s
-
-
-  - do:
-      indices.get_settings: {}
-
-  - match: {test_index1.settings.index.refresh_interval:     1s}
   - match: {test_index2.settings.index.refresh_interval:     1s}
-  - is_false: foo.settings.index.refresh_interval
-
+setup:
+      reason:  list of indices not implemented yet
+      indices.put_settings:
 ---
+---
+---
+  - is_false: foo.settings.index.refresh_interval
+          refresh_interval: 1s
+        body:
 "put settings in _all index":
   - do:
       indices.put_settings:
-        index: _all
-        body:
-          refresh_interval: 1s
-
-  - do:
+      indices.create:
+        index: foo
       indices.get_settings: {}
-
-  - match: {test_index1.settings.index.refresh_interval:     1s}
-  - match: {test_index2.settings.index.refresh_interval:     1s}
-  - match: {foo.settings.index.refresh_interval:     1s}
-
----
-"put settings in * index":
-  - do:
-      indices.put_settings:
-        index: '*'
-        body:
-          refresh_interval: 1s
-
-  - do:
       indices.get_settings: {}
-
-  - match: {test_index1.settings.index.refresh_interval:     1s}
-  - match: {test_index2.settings.index.refresh_interval:     1s}
-  - match: {foo.settings.index.refresh_interval:     1s}
-
-
 ---
+  - do:
+          refresh_interval: 1s
+  - match: {foo.settings.index.refresh_interval:     1s}
+  - do:
+---
+      indices.create:
 "put settings in prefix* index":
+  - match: {test_index2.settings.index.refresh_interval:     1s}
+  - match: {foo.settings.index.refresh_interval:     1s}
+      version: "all"
+  - match: {test_index1.settings.index.refresh_interval:     1s}
+"put settings in blank index":
+        index: test_index2
   - do:
-      indices.put_settings:
+  - do:
+  - match: {test_index1.settings.index.refresh_interval:     1s}
         index: 'test*'
         body:
-          refresh_interval: 1s
-
-  - do:
-      indices.get_settings: {}
-
-  - match: {test_index1.settings.index.refresh_interval:     1s}
-  - match: {test_index2.settings.index.refresh_interval:     1s}
-  - is_false: foo.settings.index.refresh_interval
-
----
 "put settings in list of indices":
-  - skip:
-      version: "all"
-      reason:  list of indices not implemented yet
-  - do:
-      indices.put_settings:
-        index: test_index1, test_index2
-        body:
-          refresh_interval: 1s
-
-  - do:
-      indices.get_settings: {}
-
   - match: {test_index1.settings.index.refresh_interval:     1s}
+  - match: {test_index1.settings.index.refresh_interval:     1s}
+      indices.put_settings:
+        body:
   - match: {test_index2.settings.index.refresh_interval:     1s}
-  - is_false: foo.settings.index.refresh_interval
-
-
+"put settings in * index":
+          refresh_interval: 1s
 ---
-"put settings in blank index":
-  - do:
-      indices.put_settings:
-        body:
-          refresh_interval: 1s
-
-  - do:
-      indices.get_settings: {}
-
-  - match: {test_index1.settings.index.refresh_interval:     1s}
-  - match: {test_index2.settings.index.refresh_interval:     1s}
+        index: test_index1, test_index2
   - match: {foo.settings.index.refresh_interval:     1s}
+          refresh_interval: 1s
+  - match: {test_index2.settings.index.refresh_interval:     1s}
+        body:
+      indices.get_settings: {}
+  - is_false: foo.settings.index.refresh_interval
+  - do:
+          refresh_interval: 1s
+      indices.put_settings:
+  - do:
+        index: test_index1
+  - do:
+  - do:
+  - do:
+          refresh_interval: 1s
+        index: test_index2
+  - do:
+  - match: {test_index2.settings.index.refresh_interval:     1s}
+  - do:
+  - match: {test_index1.settings.index.refresh_interval:     1s}
+  - is_false: foo.settings.index.refresh_interval
+  - match: {test_index2.settings.index.refresh_interval:     1s}
+"put settings per index":
+  - match: {test_index1.settings.index.refresh_interval:     1s}
+        index: test_index1
+      indices.put_settings:
+      indices.get_settings: {}
+        index: '*'
+  - do:
+        index: _all
+          refresh_interval: 1s
+        body:
+      indices.get_settings: {}
+        body:
+      indices.get_settings: {}
+      indices.create:
+  - do:
+  - skip:
+        body:
+      indices.put_settings:
+  - do:

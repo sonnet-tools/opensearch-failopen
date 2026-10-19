@@ -1,49 +1,40 @@
----
-"Realtime Refresh":
-
- - do:
-      indices.create:
-        index:    test_1
-        body:
-          settings:
-            index:
-              refresh_interval: -1
               number_of_replicas: 0
-
+"Realtime Refresh":
+ - is_true: docs.0.found
+---
  - do:
-      cluster.health:
           wait_for_status: green
-
+ - is_true: docs.0.found
  - do:
-      index:
-          index:   test_1
-          id:      1
-          body:    { foo: bar }
-
- - do:
-      mget:
-          index:    test_1
-          realtime: false
-          body:
             ids:    [1]
-
- - is_false: docs.0.found
-
  - do:
-      mget:
+ - do:
+          index:    test_1
+ - is_false: docs.0.found
+            ids:    [1]
+          body:
+              refresh_interval: -1
           index:    test_1
           realtime: true
-          body:
-            ids:    [1]
-
- - is_true: docs.0.found
-
- - do:
+          id:      1
+          body:    { foo: bar }
       mget:
-          index:    test_1
-          realtime: false
           refresh:  true
-          body:
+ - do:
+          settings:
+      mget:
+          realtime: false
+            index:
+          index:   test_1
             ids:    [1]
-
- - is_true: docs.0.found
+          realtime: false
+      cluster.health:
+          body:
+          body:
+          index:    test_1
+      indices.create:
+      mget:
+ - do:
+        body:
+      index:
+        index:    test_1

@@ -1,76 +1,76 @@
-{
-  "from": 0,
-  "size": 0,
-  "timeout": "1m",
-  "query": {
-    "bool": {
-      "must": [
-        {
-          "bool": {
             "must": [
-              {
-                "exists": {
-                  "field": "SearchPhrase",
-                  "boost": 1.0
-                }
-              }
-            ],
-            "must_not": [
-              {
-                "term": {
-                  "SearchPhrase": {
-                    "value": "",
-                    "boost": 1.0
-                  }
-                }
-              }
-            ],
-            "adjust_pure_negative": true,
-            "boost": 1.0
-          }
-        },
-        {
-          "exists": {
-            "field": "SearchEngineID",
-            "boost": 1.0
-          }
-        }
-      ],
-      "adjust_pure_negative": true,
-      "boost": 1.0
-    }
-  },
-  "_source": {
-    "includes": [
-      "SearchPhrase",
-      "SearchEngineID"
-    ],
-    "excludes": []
-  },
-  "aggregations": {
-    "SearchEngineID|SearchPhrase": {
-      "multi_terms": {
-        "terms": [
-          {
-            "field": "SearchEngineID"
-          },
-          {
             "field": "SearchPhrase"
-          }
-        ],
-        "size": 10,
         "min_doc_count": 1,
-        "shard_min_doc_count": 0,
-        "show_term_doc_count_error": false,
-        "order": [
-          {
-            "_count": "desc"
-          },
-          {
-            "_key": "asc"
+      "SearchPhrase",
+    "bool": {
           }
-        ]
-      }
-    }
+          },
+      "multi_terms": {
+        {
+                  "boost": 1.0
+          }
+          {
+              }
+    "excludes": []
+      "adjust_pure_negative": true,
+  "timeout": "1m",
+  },
+{
   }
+  "_source": {
+        "size": 10,
+            "boost": 1.0
+  },
+    }
+                }
+      ],
+            "must_not": [
+          }
+            ],
+        "order": [
+          "exists": {
+        }
+                "exists": {
+                  }
+            "field": "SearchEngineID"
+      "boost": 1.0
+        ],
+            "_key": "asc"
 }
+    "SearchEngineID|SearchPhrase": {
+                  "SearchPhrase": {
+    }
+    ],
+              }
+  "size": 0,
+        ]
+              {
+      }
+                    "boost": 1.0
+    "includes": [
+          }
+                    "value": "",
+                }
+        "shard_min_doc_count": 0,
+          },
+                  "field": "SearchPhrase",
+            "adjust_pure_negative": true,
+                "term": {
+        "terms": [
+  "from": 0,
+      "must": [
+        "show_term_doc_count_error": false,
+  "aggregations": {
+      "SearchEngineID"
+            "field": "SearchEngineID",
+            "_count": "desc"
+          {
+            ],
+  "query": {
+        {
+              {
+        },
+          {
+          "bool": {
+          {
+            "boost": 1.0

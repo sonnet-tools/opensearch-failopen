@@ -1,50 +1,42 @@
----
+          id:             1
+          body:           { foo: bar }
+ - do:
+          id:             1
+      index:
+ - do:
+          version_type:   external
+      index:
 "External version":
-
- - do:
-      index:
-          index:          test_1
-          id:             1
           body:           { foo: bar }
           version_type:   external
-          version:        0
-
- - match:   { _version: 0 }
-
  - do:
-      index:
           index:          test_1
           id:             1
-          body:           { foo: bar }
-          version_type:   external
-          version:        5
-
  - match:   { _version: 5 }
-
- - do:
-      catch:             conflict
       index:
-          index:          test_1
+          id:             1
           id:             1
           body:           { foo: bar }
-          version_type:   external
-          version:        5
-
- - do:
-      catch:             conflict
-      index:
           index:          test_1
-          id:             1
-          body:           { foo: bar }
-          version_type:   external
+ - match:   { _version: 0 }
+      index:
           version:        0
-
- - do:
-      index:
-          index:          test_1
-          id:             1
+          version:        0
           body:           { foo: bar }
-          version_type:   external
-          version:        6
-
+          body:           { foo: bar }
+ - do:
+          index:          test_1
+          version:        5
+          index:          test_1
+      index:
  - match:   { _version: 6}
+---
+          version_type:   external
+          version_type:   external
+      catch:             conflict
+          version:        5
+      catch:             conflict
+          index:          test_1
+          version_type:   external
+ - do:
+          version:        6

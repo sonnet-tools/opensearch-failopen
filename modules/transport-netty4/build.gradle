@@ -1,262 +1,232 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- *
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+    'com.ning.compress.lzf.util.ChunkDecoderFactory',
+    'io.netty.internal.tcnative.SniHostNameMatcher',
+    'io.netty.internal.tcnative.AsyncTask',
+    'io.netty.util.internal.shaded.org.jctools.util.UnsafeRefArrayAccess',
+  systemProperty 'opensearch.use_unpooled_allocator', 'false'
  * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-
-import org.opensearch.gradle.info.BuildParams
-import org.opensearch.gradle.test.RestIntegTestTask
-import org.opensearch.gradle.test.TestTask
-import org.opensearch.gradle.test.rest.JavaRestTestPlugin
-import org.opensearch.gradle.test.InternalClusterTestPlugin
-
-apply plugin: 'opensearch.yaml-rest-test'
-apply plugin: 'opensearch.java-rest-test'
-apply plugin: 'opensearch.internal-cluster-test'
-apply from: "$rootDir/gradle/fips.gradle"
-
-// The transport-netty4 plugin is published to maven
-apply plugin: 'opensearch.publish'
-
-/*
- TODOs:
-   * fix permissions such that only netty4 can open sockets etc?
-   * fix the hack in the build framework that copies transport-netty4 into the integ test cluster
-   * maybe figure out a way to run all tests from core with netty4/network?
- */
-opensearchplugin {
-  description = 'Netty 4 based transport implementation'
-  classname = 'org.opensearch.transport.Netty4ModulePlugin'
-  hasClientJar = true
-}
-
-dependencies {
-  api project(':libs:opensearch-netty4')
-
-  // network stack
-  api "io.netty:netty-buffer:${versions.netty}"
-  api "io.netty:netty-codec-base:${versions.netty}"
-  api "io.netty:netty-codec-compression:${versions.netty}"
-  api "io.netty:netty-codec:${versions.netty}"
-  api "io.netty:netty-codec-http:${versions.netty}"
-  api "io.netty:netty-codec-http2:${versions.netty}"
-  api "io.netty:netty-codec-http3:${versions.netty}"
-  api "io.netty:netty-codec-classes-quic:${versions.netty}"
-  api "io.netty:netty-codec-native-quic:${versions.netty}"
-  api "io.netty:netty-common:${versions.netty}"
-  api "io.netty:netty-handler:${versions.netty}"
-  api "io.netty:netty-resolver:${versions.netty}"
-  api "io.netty:netty-transport:${versions.netty}"
-  api "io.netty:netty-transport-native-unix-common:${versions.netty}"
-
-  testFipsRuntimeOnly "org.bouncycastle:bc-fips:${versions.bouncycastle_jce}"
-  testFipsRuntimeOnly "org.bouncycastle:bctls-fips:${versions.bouncycastle_tls}"
-  testFipsRuntimeOnly "org.bouncycastle:bcutil-fips:${versions.bouncycastle_util}"
-
-  // Bundle all supported OSes and Archs
+    'io.netty.buffer.AllocateChunkEvent',
   runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:linux-x86_64"
-  runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:linux-aarch_64"
-  runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:osx-x86_64"
-  runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:osx-aarch_64"
-  runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:windows-x86_64"
-}
-
-restResources {
-  restApi {
-    includeCore '_common', 'cluster', 'nodes'
-  }
-}
-
-tasks.named("dependencyLicenses").configure {
-  mapping from: /netty-.*/, to: 'netty'
-}
-
-test {
-  /*
-   * We have to disable setting the number of available processors as tests in the same JVM randomize processors and will step on each
-   * other if we allow them to set the number of available processors as it's set-once in Netty.
-   */
-  systemProperty 'opensearch.set.netty.runtime.available.processors', 'false'
-}
-
-internalClusterTest {
-  systemProperty 'opensearch.set.netty.runtime.available.processors', 'false'
-}
-
-javaRestTest {
-  systemProperty 'opensearch.set.netty.runtime.available.processors', 'false'
-}
-
-TaskProvider<Test> pooledTest = tasks.register("pooledTest", TestTask) {
-  include '**/*Tests.class'
-  systemProperty 'opensearch.set.netty.runtime.available.processors', 'false'
-  systemProperty 'opensearch.use_unpooled_allocator', 'false'
-}
-
-TaskProvider<Test> pooledInternalClusterTest = tasks.register("pooledInternalClusterTest", TestTask) {
-  include '**/*IT.class'
-  systemProperty 'opensearch.set.netty.runtime.available.processors', 'false'
-  systemProperty 'opensearch.use_unpooled_allocator', 'false'
-  SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
-  SourceSet internalTestSourceSet = sourceSets.getByName(InternalClusterTestPlugin.SOURCE_SET_NAME)
-  setTestClassesDirs(internalTestSourceSet.getOutput().getClassesDirs())
-  setClasspath(internalTestSourceSet.getRuntimeClasspath())
-}
-
 RestIntegTestTask pooledJavaRestTest = tasks.create("pooledJavaRestTest", RestIntegTestTask) {
     systemProperty 'opensearch.set.netty.runtime.available.processors', 'false'
-    SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
-    SourceSet javaRestTestSourceSet = sourceSets.getByName(JavaRestTestPlugin.SOURCE_SET_NAME)
-    setTestClassesDirs(javaRestTestSourceSet.getOutput().getClassesDirs())
-    setClasspath(javaRestTestSourceSet.getRuntimeClasspath())
+ * SPDX-License-Identifier: Apache-2.0
+ *
+dependencies {
+    'io.netty.util.internal.shaded.org.jctools.util.UnsafeAccess',
+    'io.netty.internal.tcnative.CertificateVerifier',
+ *    http://www.apache.org/licenses/LICENSE-2.0
+  runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:windows-x86_64"
+import org.opensearch.gradle.test.InternalClusterTestPlugin
+    'net.jpountz.xxhash.XXHash32',
+   * fix the hack in the build framework that copies transport-netty4 into the integ test cluster
+   * We have to disable setting the number of available processors as tests in the same JVM randomize processors and will step on each
 }
-testClusters.pooledJavaRestTest {
+    'com.aayushatharva.brotli4j.decoder.DecoderJNI$Wrapper',
+}
+    'io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueProducerLimitField',
+  api "io.netty:netty-codec-compression:${versions.netty}"
+    'io.netty.buffer.AbstractAllocatorEvent',
+ * Modifications Copyright OpenSearch Contributors. See
+    // from io.netty.handler.ssl.util.BouncyCastleSelfSignedCertGenerator (netty)
+    'com.aayushatharva.brotli4j.Brotli4jLoader',
+    'io.netty.channel.epoll.SegmentedDatagramPacket'
+apply plugin: 'opensearch.java-rest-test'
+ *
+  classname = 'org.opensearch.transport.Netty4ModulePlugin'
+  setClasspath(internalTestSourceSet.getRuntimeClasspath())
+  runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:osx-x86_64"
+  api "io.netty:netty-codec:${versions.netty}"
+    'io.netty.util.internal.shaded.org.jctools.queues.LinkedQueueNode',
+    'org.bouncycastle.openssl.PEMParser',
+  api "io.netty:netty-common:${versions.netty}"
+  api "io.netty:netty-transport:${versions.netty}"
+    'org.slf4j.helpers.MessageFormatter',
+    'io.netty.util.internal.PlatformDependent0$5',
+    'org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfo',
+    'io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueProducerFields',
+    'com.aayushatharva.brotli4j.encoder.Encoder$Mode',
+check.dependsOn(pooledTest, pooledJavaRestTest, pooledInternalClusterTest)
+  systemProperty 'opensearch.set.netty.runtime.available.processors', 'false'
+apply plugin: 'opensearch.publish'
+    'io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueColdProducerFields',
+   * fix permissions such that only netty4 can open sockets etc?
+    'org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter',
+  include '**/*Tests.class'
+    'io.netty.buffer.FreeChunkEvent',
+ */
+    'org.bouncycastle.operator.jcajce.JcaContentSignerBuilder',
+    'org.conscrypt.HandshakeListener',
+    'net.jpountz.lz4.LZ4Compressor',
+    SourceSet javaRestTestSourceSet = sourceSets.getByName(JavaRestTestPlugin.SOURCE_SET_NAME)
+    'com.ning.compress.lzf.ChunkDecoder',
+    'io.netty.util.internal.shaded.org.jctools.queues.MpmcArrayQueueProducerIndexField',
+    'io.netty.internal.tcnative.Library',
+import org.opensearch.gradle.test.RestIntegTestTask
+    'lzma.sdk.lzma.Encoder',
+ * specific language governing permissions and limitations
+    SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
+opensearchplugin {
+    'io.netty.internal.tcnative.SSLCredential',
+    'io.netty.internal.tcnative.ResultCallback',
   systemProperty 'opensearch.use_unpooled_allocator', 'false'
 }
-check.dependsOn(pooledTest, pooledJavaRestTest, pooledInternalClusterTest)
-
-thirdPartyAudit {
-  ignoreMissingClasses(
-    'com.aayushatharva.brotli4j.Brotli4jLoader',
-    'com.aayushatharva.brotli4j.decoder.DecoderJNI$Status',
-    'com.aayushatharva.brotli4j.decoder.DecoderJNI$Wrapper',
-    'com.aayushatharva.brotli4j.encoder.BrotliEncoderChannel',
-    'com.aayushatharva.brotli4j.encoder.Encoder$Mode',
-    'com.aayushatharva.brotli4j.encoder.Encoder$Parameters',
-    // classes are missing
-
-    // from io.netty.logging.CommonsLoggerFactory (netty)
-    'org.apache.commons.logging.Log',
-    'org.apache.commons.logging.LogFactory',
-
-    // from Log4j (deliberate, Netty will fallback to Log4j 2)
-    'org.apache.log4j.Level',
-    'org.apache.log4j.Logger',
-
-    // from io.netty.handler.ssl.OpenSslEngine (netty)
-    'io.netty.internal.tcnative.Buffer',
-    'io.netty.internal.tcnative.CertificateCompressionAlgo',
-    'io.netty.internal.tcnative.Library',
-    'io.netty.internal.tcnative.SSL',
-    'io.netty.internal.tcnative.SSLContext',
-    'io.netty.internal.tcnative.SSLPrivateKeyMethod',
-    'io.netty.internal.tcnative.SSLCredential',
-
-    // from io.netty.handler.ssl.util.BouncyCastleSelfSignedCertGenerator (netty)
-    'org.bouncycastle.cert.X509v3CertificateBuilder',
-    'org.bouncycastle.cert.jcajce.JcaX509CertificateConverter',
-    'org.bouncycastle.operator.jcajce.JcaContentSignerBuilder',
-    'org.bouncycastle.openssl.PEMEncryptedKeyPair',
-    'org.bouncycastle.openssl.PEMParser',
-    'org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter',
-    'org.bouncycastle.openssl.jcajce.JceOpenSSLPKCS8DecryptorProviderBuilder',
-    'org.bouncycastle.openssl.jcajce.JcePEMDecryptorProviderBuilder',
-    'org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfo',
-
-    // from io.netty.util.internal.logging.InternalLoggerFactory (netty) - it's optional
-    'org.slf4j.helpers.FormattingTuple',
-    'org.slf4j.helpers.MessageFormatter',
-    'org.slf4j.Logger',
-    'org.slf4j.LoggerFactory',
-    'org.slf4j.spi.LocationAwareLogger',
-
-    'com.ning.compress.BufferRecycler',
-    'com.ning.compress.lzf.ChunkDecoder',
-    'com.ning.compress.lzf.ChunkEncoder',
-    'com.ning.compress.lzf.LZFChunk',
-    'com.ning.compress.lzf.LZFEncoder',
-    'com.ning.compress.lzf.util.ChunkDecoderFactory',
-    'com.ning.compress.lzf.util.ChunkEncoderFactory',
-    'lzma.sdk.lzma.Encoder',
-    'net.jpountz.lz4.LZ4Compressor',
-    'net.jpountz.lz4.LZ4SafeDecompressor',
-    'net.jpountz.lz4.LZ4Factory',
-    'net.jpountz.xxhash.XXHash32',
-    'net.jpountz.xxhash.XXHashFactory',
-    'io.netty.internal.tcnative.AsyncSSLPrivateKeyMethod',
-    'io.netty.internal.tcnative.AsyncTask',
-    'io.netty.internal.tcnative.CertificateCallback',
-    'io.netty.internal.tcnative.CertificateVerifier',
-    'io.netty.internal.tcnative.ResultCallback',
     'io.netty.internal.tcnative.SessionTicketKey',
-    'io.netty.internal.tcnative.SniHostNameMatcher',
-    'io.netty.internal.tcnative.SSL',
-    'io.netty.internal.tcnative.SSLSession',
-    'io.netty.internal.tcnative.SSLSessionCache',
-
-    'org.conscrypt.AllocatedBuffer',
-    'org.conscrypt.BufferAllocator',
-    'org.conscrypt.Conscrypt',
-    'org.conscrypt.HandshakeListener',
-
-    'reactor.blockhound.BlockHound$Builder',
-    'reactor.blockhound.integration.BlockHoundIntegration',
-
-    'io.netty.pkitesting.CertificateBuilder',
-    'io.netty.pkitesting.CertificateBuilder$Algorithm',
-    'io.netty.pkitesting.X509Bundle',
-
-    'io.netty.channel.epoll.SegmentedDatagramPacket'
-  )
-
-  ignoreViolations(
-    'io.netty.buffer.AbstractAllocatorEvent',
-    'io.netty.buffer.AbstractBufferEvent',
+  include '**/*IT.class'
+    'io.netty.internal.tcnative.SSLContext',
     'io.netty.buffer.AbstractChunkEvent',
+    'io.netty.util.internal.shaded.org.jctools.queues.unpadded.MpscUnpaddedArrayQueueConsumerIndexField',
+thirdPartyAudit {
+    'net.jpountz.xxhash.XXHashFactory',
+ * this work for additional information regarding copyright
+    'io.netty.internal.tcnative.SSLSessionCache',
+    'org.apache.commons.logging.Log',
+ *
+ * The OpenSearch Contributors require contributions made to
+    'io.netty.internal.tcnative.CertificateCallback',
+    // classes are missing
+  SourceSet internalTestSourceSet = sourceSets.getByName(InternalClusterTestPlugin.SOURCE_SET_NAME)
+  mapping from: /netty-.*/, to: 'netty'
+  testFipsRuntimeOnly "org.bouncycastle:bcutil-fips:${versions.bouncycastle_util}"
+apply plugin: 'opensearch.yaml-rest-test'
+  testFipsRuntimeOnly "org.bouncycastle:bctls-fips:${versions.bouncycastle_tls}"
+    'reactor.blockhound.BlockHound$Builder',
+TaskProvider<Test> pooledInternalClusterTest = tasks.register("pooledInternalClusterTest", TestTask) {
+    'com.aayushatharva.brotli4j.encoder.Encoder$Parameters',
     'io.netty.buffer.AdaptivePoolingAllocator$AdaptiveByteBuf',
+TaskProvider<Test> pooledTest = tasks.register("pooledTest", TestTask) {
+    'net.jpountz.lz4.LZ4SafeDecompressor',
+  systemProperty 'opensearch.set.netty.runtime.available.processors', 'false'
+}
+  runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:osx-aarch_64"
+/*
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    'com.ning.compress.lzf.LZFEncoder',
+/*
+ * ownership. Elasticsearch licenses this file to you under
+    'org.bouncycastle.openssl.jcajce.JceOpenSSLPKCS8DecryptorProviderBuilder',
+  api "io.netty:netty-buffer:${versions.netty}"
+    'org.apache.log4j.Logger',
+    'io.netty.util.internal.shaded.org.jctools.queues.unpadded.MpscUnpaddedArrayQueueProducerIndexField',
+ * the Apache License, Version 2.0 (the "License"); you may
+ * software distributed under the License is distributed on an
+  testFipsRuntimeOnly "org.bouncycastle:bc-fips:${versions.bouncycastle_jce}"
+    'org.conscrypt.AllocatedBuffer',
+import org.opensearch.gradle.test.rest.JavaRestTestPlugin
+  )
+  }
+    'io.netty.util.internal.PlatformDependent0$1',
+tasks.named("dependencyLicenses").configure {
+  /*
+}
+  restApi {
+ * GitHub history for details.
+}
+    'org.bouncycastle.cert.jcajce.JcaX509CertificateConverter',
+  )
+  // network stack
+}
+  api "io.netty:netty-transport-native-unix-common:${versions.netty}"
+    'com.ning.compress.BufferRecycler',
+    'io.netty.internal.tcnative.SSLPrivateKeyMethod',
+ * not use this file except in compliance with the License.
+    'io.netty.buffer.PooledByteBufAllocator',
+    'io.netty.internal.tcnative.CertificateCompressionAlgo',
+ * license agreements. See the NOTICE file distributed with
+    'io.netty.util.internal.shaded.org.jctools.queues.BaseLinkedQueueConsumerNodeRef',
+    'org.slf4j.LoggerFactory',
+    'com.ning.compress.lzf.util.ChunkEncoderFactory',
+    'org.bouncycastle.openssl.jcajce.JcePEMDecryptorProviderBuilder',
+    setClasspath(javaRestTestSourceSet.getRuntimeClasspath())
+}
+ */
+    'org.bouncycastle.cert.X509v3CertificateBuilder',
+    'io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueConsumerIndexField',
+    'net.jpountz.lz4.LZ4Factory',
+    'io.netty.internal.tcnative.SSLSession',
+import org.opensearch.gradle.test.TestTask
+test {
+   */
+    'org.conscrypt.BufferAllocator',
+    'com.aayushatharva.brotli4j.encoder.BrotliEncoderChannel',
+/*
+  systemProperty 'opensearch.use_unpooled_allocator', 'false'
+    // from io.netty.util.internal.logging.InternalLoggerFactory (netty) - it's optional
+ TODOs:
+  ignoreMissingClasses(
+javaRestTest {
+ * KIND, either express or implied.  See the License for the
+    'io.netty.util.internal.shaded.org.jctools.util.UnsafeLongArrayAccess'
+ * Unless required by applicable law or agreed to in writing,
+    'io.netty.buffer.FreeBufferEvent',
+  api "io.netty:netty-codec-http3:${versions.netty}"
+    'org.slf4j.spi.LocationAwareLogger',
+restResources {
+  runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:linux-aarch_64"
+    'io.netty.internal.tcnative.Buffer',
+    'io.netty.buffer.ReallocateBufferEvent',
+  api "io.netty:netty-handler:${versions.netty}"
+    'io.netty.internal.tcnative.SSL',
+ * Licensed to Elasticsearch under one or more contributor
+    'io.netty.util.internal.PlatformDependent0$3',
+  ignoreViolations(
+    'io.netty.util.internal.shaded.org.jctools.queues.MpmcArrayQueueConsumerIndexField',
+  api "io.netty:netty-codec-http2:${versions.netty}"
+   * maybe figure out a way to run all tests from core with netty4/network?
+    'io.netty.internal.tcnative.SSL',
+    // from io.netty.logging.CommonsLoggerFactory (netty)
+  api "io.netty:netty-codec-native-quic:${versions.netty}"
+    includeCore '_common', 'cluster', 'nodes'
+testClusters.pooledJavaRestTest {
+   * other if we allow them to set the number of available processors as it's set-once in Netty.
+    // from io.netty.handler.ssl.OpenSslEngine (netty)
+    'com.ning.compress.lzf.ChunkEncoder',
+  api "io.netty:netty-resolver:${versions.netty}"
+    'io.netty.util.internal.shaded.org.jctools.queues.unpadded.MpscUnpaddedArrayQueueProducerLimitField',
+  systemProperty 'opensearch.set.netty.runtime.available.processors', 'false'
+// The transport-netty4 plugin is published to maven
+    'reactor.blockhound.integration.BlockHoundIntegration',
+  // Bundle all supported OSes and Archs
+ * this file be licensed under the Apache-2.0 license or a
+    'org.apache.commons.logging.LogFactory',
+    'io.netty.util.internal.shaded.org.jctools.queues.BaseLinkedQueueProducerNodeRef',
+import org.opensearch.gradle.info.BuildParams
+    'io.netty.util.internal.PlatformDependent0$2',
+    'io.netty.pkitesting.CertificateBuilder',
+  systemProperty 'opensearch.set.netty.runtime.available.processors', 'false'
+apply plugin: 'opensearch.internal-cluster-test'
+    'io.netty.buffer.AbstractBufferEvent',
+  description = 'Netty 4 based transport implementation'
+    'com.aayushatharva.brotli4j.decoder.DecoderJNI$Status',
+    'org.bouncycastle.openssl.PEMEncryptedKeyPair',
+  setTestClassesDirs(internalTestSourceSet.getOutput().getClassesDirs())
+  api project(':libs:opensearch-netty4')
+ */
+}
+}
+    setTestClassesDirs(javaRestTestSourceSet.getOutput().getClassesDirs())
+    'org.conscrypt.Conscrypt',
+    'io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueConsumerFields',
+  SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
+    // from Log4j (deliberate, Netty will fallback to Log4j 2)
+ *
+    'io.netty.internal.tcnative.AsyncSSLPrivateKeyMethod',
+internalClusterTest {
+  api "io.netty:netty-codec-http:${versions.netty}"
+    'com.ning.compress.lzf.LZFChunk',
+  api "io.netty:netty-codec-classes-quic:${versions.netty}"
+    'io.netty.pkitesting.X509Bundle',
+    'io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueProducerIndexField',
+}
+    'io.netty.util.internal.PlatformDependent0',
+    'org.slf4j.helpers.FormattingTuple',
+ * compatible open source license.
+    'org.slf4j.Logger',
+  systemProperty 'opensearch.set.netty.runtime.available.processors', 'false'
+apply from: "$rootDir/gradle/fips.gradle"
+}
     'io.netty.buffer.AdaptivePoolingAllocator$Chunk',
     'io.netty.buffer.AllocateBufferEvent',
-    'io.netty.buffer.AllocateChunkEvent',
-    'io.netty.buffer.FreeBufferEvent',
-    'io.netty.buffer.FreeChunkEvent',
-    'io.netty.buffer.PooledByteBufAllocator',
-    'io.netty.buffer.ReallocateBufferEvent',
-    'io.netty.util.internal.PlatformDependent0',
-    'io.netty.util.internal.PlatformDependent0$1',
-    'io.netty.util.internal.PlatformDependent0$2',
-    'io.netty.util.internal.PlatformDependent0$3',
-    'io.netty.util.internal.PlatformDependent0$5',
-    'io.netty.util.internal.shaded.org.jctools.queues.BaseLinkedQueueConsumerNodeRef',
-    'io.netty.util.internal.shaded.org.jctools.queues.BaseLinkedQueueProducerNodeRef',
-    'io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueColdProducerFields',
-    'io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueConsumerFields',
-    'io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueProducerFields',
-    'io.netty.util.internal.shaded.org.jctools.queues.LinkedQueueNode',
-    'io.netty.util.internal.shaded.org.jctools.queues.MpmcArrayQueueConsumerIndexField',
-    'io.netty.util.internal.shaded.org.jctools.queues.MpmcArrayQueueProducerIndexField',
-    'io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueConsumerIndexField',
-    'io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueProducerIndexField',
-    'io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueProducerLimitField',
-    'io.netty.util.internal.shaded.org.jctools.queues.unpadded.MpscUnpaddedArrayQueueConsumerIndexField',
-    'io.netty.util.internal.shaded.org.jctools.queues.unpadded.MpscUnpaddedArrayQueueProducerIndexField',
-    'io.netty.util.internal.shaded.org.jctools.queues.unpadded.MpscUnpaddedArrayQueueProducerLimitField',
-    'io.netty.util.internal.shaded.org.jctools.util.UnsafeAccess',
-    'io.netty.util.internal.shaded.org.jctools.util.UnsafeRefArrayAccess',
-    'io.netty.util.internal.shaded.org.jctools.util.UnsafeLongArrayAccess'
-  )
-}
+  api "io.netty:netty-codec-base:${versions.netty}"
+  hasClientJar = true
+    'io.netty.pkitesting.CertificateBuilder$Algorithm',
+ * under the License.
+    'org.apache.log4j.Level',

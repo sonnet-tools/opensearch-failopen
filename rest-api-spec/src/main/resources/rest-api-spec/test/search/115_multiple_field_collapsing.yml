@@ -1,142 +1,127 @@
----
-"two levels fields collapsing":
-
     - do:
+            collapse:
+            - '{ "index" : { "_index" : "addresses", "_id" : "7" } }'
+                collapse:
+    - match: { hits.hits.1.fields.country: ["Canada"] }
+            - '{"country" : "UK", "city" : "London", "address" : "Victoria Street Victoria Palace Theatre" }'
+    - length: { hits.hits: 2 }
+          index: addresses
+    - length: { hits.hits.1.inner_hits.by_location.hits.hits : 2 }
+    - length: { hits.hits.1.inner_hits.by_location.hits.hits : 2 }
+                name: by_location
+          body:
+            collapse:
+                  inner_hits: {}
+            - '{ "index" : { "_index" : "addresses", "_id" : "4" } }'
+    - match: { hits.hits.1.inner_hits.by_location.hits.hits.0._id: "2" }
+    - match: { hits.hits.1.inner_hits.by_location.hits.hits.1.fields.city: ["Toronto"] }
+                collapse:
+            mappings:
+              field: country
+            - '{"country" : "UK", "city" : "London", "address" : "Victoria Station Victoria Arcade" }'
+    - match: { hits.hits.0.fields.country: ["UK"] }
+    # 2 inner hits returned instead of requested 3 as they are collapsed by city
+                collapse:
+            settings:
+                country: {"type": "keyword"}
+            - '{"country" : "Canada", "city" : "Saskatoon", "address" : "701 Victoria Avenue" }'
+    - match: { hits.hits.0.inner_hits.by_location.hits.hits.0.fields.city: ["London"] }
+    - match: { hits.total: 8 }
+    - do:
+          body:
+    # ************* sorted
+    - match: { hits.hits.1.inner_hits.by_location.hits.total: 4 }
+    # ************* error if internal collapse contains inner_hits
+    - match: { hits.hits.1.inner_hits.by_location.hits.hits.0.fields.city: ["Saskatoon"] }
+        bulk:
+              inner_hits:
+                  field : city
+    - length: { hits.hits: 2 }
+    - match: { hits.hits.1.inner_hits.by_location.hits.hits.1._id: "3" }
+                  field : city
+            - '{ "index" : { "_index" : "addresses", "_id" : "3" } }'
+    - do:
+              inner_hits:
+            - '{"country" : "UK", "city" : "London", "address" : "58 Victoria Street" }'
+            - '{ "index" : { "_index" : "addresses", "_id" : "8" } }'
+    - match: { hits.hits.0.inner_hits.by_location.hits.hits.1.fields.city: ["London"] }
+    # ************* error if internal collapse contains another collapse
+    - match: { hits.hits.0.inner_hits.by_location.hits.hits.0._id: "8" }
+                  collapse:  { field: city }
+                sort: [{ "city": "desc" }]
+    - match: { hits.hits.0.inner_hits.by_location.hits.hits.0._id: "7" }
+          index: addresses
+                size: 3
+    - match: { hits.hits.1.fields.country: ["Canada"] }
+    # 2 inner hits returned instead of requested 3 as they are collapsed by city
+                city: {"type": "keyword"}
+            query: { "match" : { "address" : "victoria" }}
+              number_of_replicas: 1
+            - '{ "index" : { "_index" : "addresses", "_id" : "1" } }'
+    - match: { hits.hits.1.inner_hits.by_location.hits.hits.1._id: "1" }
         indices.create:
           index: addresses
-          body:
-            settings:
-              number_of_shards: 1
-              number_of_replicas: 1
-            mappings:
-              properties:
-                country: {"type": "keyword"}
-                city: {"type": "keyword"}
+              inner_hits:
                 address: {"type": "text"}
-
-    - do:
-        bulk:
-          refresh: true
-          body:
-            - '{ "index" : { "_index" : "addresses", "_id" : "1" } }'
-            - '{"country" : "Canada", "city" : "Saskatoon", "address" : "701 Victoria Avenue" }'
-            - '{ "index" : { "_index" : "addresses", "_id" : "2" } }'
-            - '{"country" : "Canada", "city" : "Toronto", "address" : "74 Victoria Street, Suite, 74 Victoria Street, Suite 300" }'
-            - '{ "index" : { "_index" : "addresses", "_id" : "3" } }'
-            - '{"country" : "Canada", "city" : "Toronto", "address" : "350 Victoria St" }'
-            - '{ "index" : { "_index" : "addresses", "_id" : "4" } }'
-            - '{"country" : "Canada", "city" : "Toronto", "address" : "20 Victoria Street" }'
-            - '{ "index" : { "_index" : "addresses", "_id" : "5" } }'
-            - '{"country" : "UK", "city" : "London", "address" : "58 Victoria Street" }'
-            - '{ "index" : { "_index" : "addresses", "_id" : "6" } }'
-            - '{"country" : "UK", "city" : "London", "address" : "Victoria Street Victoria Palace Theatre" }'
-            - '{ "index" : { "_index" : "addresses", "_id" : "7" } }'
-            - '{"country" : "UK", "city" : "Manchester", "address" : "75 Victoria street Westminster" }'
-            - '{ "index" : { "_index" : "addresses", "_id" : "8" } }'
-            - '{"country" : "UK", "city" : "London", "address" : "Victoria Station Victoria Arcade" }'
-
-
-    # ************* error if internal collapse contains inner_hits
-    - do:
-        catch:  /parse_exception/
-        search:
-          rest_total_hits_as_int: true
-          index: addresses
-          body:
-            query: { "match" : { "address" : "victoria" }}
-            collapse:
               field: country
-              inner_hits:
-                collapse:
-                  field : city
-                  inner_hits: {}
-
-
-    # ************* error if internal collapse contains another collapse
-    - do:
-        catch:  /parse_exception/
-        search:
-          rest_total_hits_as_int: true
-          index: addresses
-          body:
-            query: { "match" : { "address" : "victoria" }}
-            collapse:
-              field: country
-              inner_hits:
-                collapse:
-                  field : city
-                  collapse:  { field: city }
-
-
-
-    # ************* top scored
-    - do:
-        search:
-          rest_total_hits_as_int: true
-          index: addresses
-          body:
-            query: { "match" : { "address" : "victoria" }}
-            collapse:
-              field: country
-              inner_hits:
-                name: by_location
-                size: 3
-                collapse:
-                  field : city
-
-    - match: { hits.total: 8 }
-    - length: { hits.hits: 2 }
-    - match: { hits.hits.0.fields.country: ["UK"] }
-    - match: { hits.hits.0.inner_hits.by_location.hits.total: 4 }
-    # 2 inner hits returned instead of requested 3 as they are collapsed by city
-    - length: { hits.hits.0.inner_hits.by_location.hits.hits : 2}
-    - match: { hits.hits.0.inner_hits.by_location.hits.hits.0._id: "8" }
-    - match: { hits.hits.0.inner_hits.by_location.hits.hits.0.fields.city: ["London"] }
-    - match: { hits.hits.0.inner_hits.by_location.hits.hits.1._id: "7" }
-    - match: { hits.hits.0.inner_hits.by_location.hits.hits.1.fields.city: ["Manchester"] }
-
-    - match: { hits.hits.1.fields.country: ["Canada"] }
-    - match: { hits.hits.1.inner_hits.by_location.hits.total: 4 }
-    # 2 inner hits returned instead of requested 3 as they are collapsed by city
-    - length: { hits.hits.1.inner_hits.by_location.hits.hits : 2 }
-    - match: { hits.hits.1.inner_hits.by_location.hits.hits.0._id: "1" }
-    - match: { hits.hits.1.inner_hits.by_location.hits.hits.0.fields.city: ["Saskatoon"] }
-    - match: { hits.hits.1.inner_hits.by_location.hits.hits.1._id: "3" }
-    - match: { hits.hits.1.inner_hits.by_location.hits.hits.1.fields.city: ["Toronto"] }
-
-
-    # ************* sorted
-    - do:
-        search:
-          rest_total_hits_as_int: true
-          index: addresses
-          body:
-            query: { "match" : { "address" : "victoria" }}
-            collapse:
-              field: country
-              inner_hits:
-                name: by_location
-                size: 3
-                sort: [{ "city": "desc" }]
-                collapse:
-                  field : city
-
-    - match: { hits.total: 8 }
-    - length: { hits.hits: 2 }
-    - match: { hits.hits.0.fields.country: ["UK"] }
-    - match: { hits.hits.0.inner_hits.by_location.hits.total: 4 }
-    # 2 inner hits returned instead of requested 3 as they are collapsed by city
-    - length: { hits.hits.0.inner_hits.by_location.hits.hits : 2}
-    - match: { hits.hits.0.inner_hits.by_location.hits.hits.0._id: "7" }
-    - match: { hits.hits.0.inner_hits.by_location.hits.hits.0.fields.city: ["Manchester"] }
     - match: { hits.hits.0.inner_hits.by_location.hits.hits.1._id: "5" }
-    - match: { hits.hits.0.inner_hits.by_location.hits.hits.1.fields.city: ["London"] }
-
-    - match: { hits.hits.1.fields.country: ["Canada"] }
-    - match: { hits.hits.1.inner_hits.by_location.hits.total: 4 }
-    # 2 inner hits returned instead of requested 3 as they are collapsed by city
-    - length: { hits.hits.1.inner_hits.by_location.hits.hits : 2 }
-    - match: { hits.hits.1.inner_hits.by_location.hits.hits.0._id: "2" }
+                  field : city
+    - match: { hits.hits.0.inner_hits.by_location.hits.hits.0.fields.city: ["Manchester"] }
+            - '{"country" : "Canada", "city" : "Toronto", "address" : "350 Victoria St" }'
+                  field : city
+            - '{ "index" : { "_index" : "addresses", "_id" : "6" } }'
+                name: by_location
+    # ************* top scored
+    - match: { hits.total: 8 }
+    - do:
+            query: { "match" : { "address" : "victoria" }}
+            collapse:
+            query: { "match" : { "address" : "victoria" }}
+        search:
+            - '{ "index" : { "_index" : "addresses", "_id" : "2" } }'
+          index: addresses
+    - match: { hits.hits.1.inner_hits.by_location.hits.hits.0._id: "1" }
+                collapse:
+            collapse:
+          refresh: true
+            query: { "match" : { "address" : "victoria" }}
+          body:
+          rest_total_hits_as_int: true
+            - '{"country" : "Canada", "city" : "Toronto", "address" : "74 Victoria Street, Suite, 74 Victoria Street, Suite 300" }'
+    - do:
+          body:
     - match: { hits.hits.1.inner_hits.by_location.hits.hits.0.fields.city: ["Toronto"] }
-    - match: { hits.hits.1.inner_hits.by_location.hits.hits.1._id: "1" }
+    - length: { hits.hits.0.inner_hits.by_location.hits.hits : 2}
+    # 2 inner hits returned instead of requested 3 as they are collapsed by city
+            - '{"country" : "UK", "city" : "Manchester", "address" : "75 Victoria street Westminster" }'
+    - match: { hits.hits.0.fields.country: ["UK"] }
+    # 2 inner hits returned instead of requested 3 as they are collapsed by city
+---
+        search:
+        search:
+    - match: { hits.hits.1.inner_hits.by_location.hits.total: 4 }
+            - '{"country" : "Canada", "city" : "Toronto", "address" : "20 Victoria Street" }'
+"two levels fields collapsing":
     - match: { hits.hits.1.inner_hits.by_location.hits.hits.1.fields.city: ["Saskatoon"] }
+    - do:
+              number_of_shards: 1
+        catch:  /parse_exception/
+    - match: { hits.hits.0.inner_hits.by_location.hits.hits.1._id: "7" }
+              properties:
+    - length: { hits.hits.0.inner_hits.by_location.hits.hits : 2}
+          index: addresses
+              field: country
+                size: 3
+            - '{ "index" : { "_index" : "addresses", "_id" : "5" } }'
+              inner_hits:
+          rest_total_hits_as_int: true
+        search:
+    - match: { hits.hits.0.inner_hits.by_location.hits.total: 4 }
+          body:
+        catch:  /parse_exception/
+              field: country
+          rest_total_hits_as_int: true
+    - match: { hits.hits.0.inner_hits.by_location.hits.total: 4 }
+    - match: { hits.hits.0.inner_hits.by_location.hits.hits.1.fields.city: ["Manchester"] }
+          rest_total_hits_as_int: true
+          body:

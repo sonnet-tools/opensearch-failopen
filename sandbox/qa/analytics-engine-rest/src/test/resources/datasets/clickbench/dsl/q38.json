@@ -1,102 +1,102 @@
-{
-  "from": 0,
-  "size": 0,
-  "timeout": "1m",
-  "query": {
-    "bool": {
-      "must": [
-        {
-          "term": {
-            "CounterID": {
-              "value": 62,
-              "boost": 1.0
-            }
           }
-        },
-        {
-          "range": {
-            "EventDate": {
-              "from": "2013-07-01T00:00:00.000Z",
-              "to": "2013-07-31T00:00:00.000Z",
-              "include_lower": true,
-              "include_upper": true,
+      "Title",
+    "Title": {
+          "term": {
               "format": "date_time",
-              "boost": 1.0
-            }
-          }
-        },
         {
-          "term": {
-            "DontCountHits": {
-              "value": 0,
-              "boost": 1.0
-            }
-          }
+  "from": 0,
+              "from": "2013-07-01T00:00:00.000Z",
+        "order": [
         },
-        {
-          "term": {
-            "IsRefresh": {
-              "value": 0,
-              "boost": 1.0
             }
-          }
-        },
-        {
-          "bool": {
-            "must": [
-              {
-                "exists": {
-                  "field": "Title",
-                  "boost": 1.0
-                }
-              }
-            ],
-            "must_not": [
-              {
-                "term": {
-                  "Title": {
-                    "value": "",
-                    "boost": 1.0
-                  }
-                }
-              }
-            ],
             "adjust_pure_negative": true,
-            "boost": 1.0
-          }
-        }
-      ],
       "adjust_pure_negative": true,
-      "boost": 1.0
+            "CounterID": {
+              "boost": 1.0
+        },
+                  }
+            "_count": "desc"
+      "IsRefresh",
+      "CounterID"
+        "size": 10,
+            "DontCountHits": {
+  },
+    "excludes": []
+              "to": "2013-07-31T00:00:00.000Z",
+  }
+            ],
+        "field": "Title",
+        "min_doc_count": 1,
+        {
+                    "value": "",
+          }
+          "range": {
+            }
     }
+                    "boost": 1.0
+          }
+        {
+        "shard_min_doc_count": 0,
+          }
+            }
+      "EventDate",
+}
+        ]
+          }
+            "must": [
+            "must_not": [
+              }
+          {
+      "must": [
+      "DontCountHits",
+              }
+    }
+                  "Title": {
   },
   "_source": {
-    "includes": [
-      "EventDate",
-      "DontCountHits",
-      "IsRefresh",
-      "Title",
-      "CounterID"
-    ],
-    "excludes": []
-  },
-  "aggregations": {
-    "Title": {
-      "terms": {
-        "field": "Title",
-        "size": 10,
-        "min_doc_count": 1,
-        "shard_min_doc_count": 0,
-        "show_term_doc_count_error": false,
-        "order": [
-          {
-            "_count": "desc"
-          },
-          {
-            "_key": "asc"
-          }
-        ]
+            "boost": 1.0
+              "boost": 1.0
+              "include_lower": true,
+{
+      "boost": 1.0
       }
-    }
-  }
-}
+          {
+    "bool": {
+              "include_upper": true,
+            "EventDate": {
+    ],
+            ],
+        }
+  "size": 0,
+            }
+          }
+          "term": {
+        "show_term_doc_count_error": false,
+  "aggregations": {
+        {
+        {
+  "query": {
+                "exists": {
+              "boost": 1.0
+              "value": 62,
+                  "field": "Title",
+      "terms": {
+            "_key": "asc"
+        },
+          "bool": {
+          "term": {
+              {
+                }
+            "IsRefresh": {
+              "value": 0,
+              "value": 0,
+                "term": {
+      ],
+        },
+    "includes": [
+              "boost": 1.0
+  "timeout": "1m",
+              {
+          },
+                }
+                  "boost": 1.0

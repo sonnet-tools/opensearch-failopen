@@ -1,35 +1,35 @@
-{
-  "schema": [
+    [
     {
+  "datarows": [
       "name": "value",
-      "type": "double"
+{
+      "200.75",
+  ],
+    ],
     },
+      123.0
+      100.5,
+}
+      150.25,
     {
       "name": "str_val",
-      "type": "string"
-    },
-    {
-      "name": "num_val",
+  "size": 3
       "type": "double"
-    }
-  ],
-  "datarows": [
-    [
-      100.5,
-      "100.5",
-      123.0
+      "type": "double"
     ],
     [
-      200.75,
-      "200.75",
-      123.0
-    ],
-    [
-      150.25,
-      "150.25",
-      123.0
+  "schema": [
     ]
   ],
   "total": 3,
-  "size": 3
-}
+      "150.25",
+    }
+      "type": "string"
+    {
+      123.0
+    },
+      "name": "num_val",
+      "100.5",
+      123.0
+      200.75,
+    [

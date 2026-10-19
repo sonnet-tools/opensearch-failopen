@@ -1,167 +1,159 @@
-setup:
-  - do:
-      indices.create:
-          index: unsigned_long_sort
-          body:
-            settings:
-              number_of_shards: 3
-              number_of_replicas: 0
-            mappings:
-              properties:
-                field:
-                  type: unsigned_long
-
----
-"test sorting against unsigned_long only fields":
-  - skip:
-      version:  " - 2.19.99"
+  - length: { hits.hits: 6 }
       reason:   "this change is added in 3.0.0"
-
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - '{ "index" : { "_index" : "unsigned_long_sort", "_id" : "1" } }'
-          - '{"field" : [ 13835058055282163712, 1 ] }'
-          - '{ "index" : { "_index" : "unsigned_long_sort", "_id" : "2" } }'
-          - '{"field" : [ 13835058055282163713, 13835058055282163714 ] }'
-          - '{ "index" : { "_index" : "unsigned_long_sort", "_id" : "3" } }'
-          - '{"field" : [ 13835058055282163715, 13835058055282163716, 2 ] }'
-          - '{ "index" : { "_index" : "unsigned_long_sort", "_id" : "4" } }'
-          - '{"field" : [ 13835058055282163717, 13835058055282163718, 13835058055282163719 ] }'
-          - '{ "index" : { "_index" : "unsigned_long_sort", "_id" : "5" } }'
-          - '{"field" : [ 13835058055282163720, 13835058055282163721, 3, 4 ] }'
-          - '{ "index" : { "_index" : "unsigned_long_sort", "_id" : "6" } }'
-          - '{"field" : [ 13835058055282163722, 5, 6, 7 ] }'
-
-  - do:
-      search:
-        index: unsigned_long_sort
-        body:
-          size: 10
-          sort: [{ field: { mode: max, order: desc } } ]
-  - match: {hits.total.value: 6 }
-  - length: {hits.hits: 6 }
-  - match: { hits.hits.0._index: unsigned_long_sort }
-  - match: { hits.hits.0._source.field: [ 13835058055282163722, 5, 6, 7 ] }
-  - match: { hits.hits.0.sort.0: 13835058055282163722 }
-  - match: { hits.hits.1._source.field: [ 13835058055282163720, 13835058055282163721, 3, 4 ] }
-  - match: { hits.hits.1.sort.0: 13835058055282163721 }
-  - match: { hits.hits.2._source.field: [ 13835058055282163717, 13835058055282163718, 13835058055282163719 ] }
-  - match: { hits.hits.2.sort.0: 13835058055282163719 }
-  - match: { hits.hits.3._source.field: [ 13835058055282163715, 13835058055282163716, 2 ] }
-  - match: { hits.hits.3.sort.0: 13835058055282163716 }
-  - match: { hits.hits.4._source.field: [ 13835058055282163713, 13835058055282163714 ] }
-  - match: { hits.hits.4.sort.0: 13835058055282163714 }
-  - match: { hits.hits.5._source.field: [ 13835058055282163712, 1 ] }
-  - match: { hits.hits.5.sort.0: 13835058055282163712 }
-
-  - do:
-      search:
-        index: unsigned_long_sort
-        body:
-          size: 10
-          sort: [{ field: { mode: max, order: asc } } ]
-  - match: {hits.total.value: 6 }
-  - length: {hits.hits: 6 }
-  - match: { hits.hits.0._index: unsigned_long_sort }
-  - match: { hits.hits.0._source.field: [ 13835058055282163712, 1 ] }
-  - match: { hits.hits.0.sort.0: 13835058055282163712 }
-  - match: { hits.hits.1._source.field: [ 13835058055282163713, 13835058055282163714 ] }
-  - match: { hits.hits.1.sort.0: 13835058055282163714 }
-  - match: { hits.hits.2._source.field: [ 13835058055282163715, 13835058055282163716, 2 ] }
-  - match: { hits.hits.2.sort.0: 13835058055282163716 }
-  - match: { hits.hits.3._source.field: [ 13835058055282163717, 13835058055282163718, 13835058055282163719 ] }
-  - match: { hits.hits.3.sort.0: 13835058055282163719 }
-  - match: { hits.hits.4._source.field: [ 13835058055282163720, 13835058055282163721, 3, 4 ] }
-  - match: { hits.hits.4.sort.0: 13835058055282163721 }
-  - match: { hits.hits.5._source.field: [ 13835058055282163722, 5, 6, 7 ] }
-  - match: { hits.hits.5.sort.0: 13835058055282163722 }
-
-  - do:
-      search:
-        index: unsigned_long_sort
-        body:
-          size: 10
-          sort: [ { field: { mode: median, order: asc } } ]
-  - match: { hits.total.value: 6 }
-  - length: { hits.hits: 6 }
-  - match: { hits.hits.0._index: unsigned_long_sort }
-  - match: { hits.hits.0._source.field: [ 13835058055282163722, 5, 6, 7 ] }
-  - match: { hits.hits.0.sort.0: 7 }
-  - match: { hits.hits.1._source.field: [ 13835058055282163713, 13835058055282163714 ] }
-  - match: { hits.hits.1.sort.0: 4611686018427387906 }
-  - match: { hits.hits.2._source.field: [ 13835058055282163712, 1 ] }
-  - match: { hits.hits.2.sort.0: 6917529027641081857 }
-  - match: { hits.hits.3._source.field: [ 13835058055282163720, 13835058055282163721, 3, 4 ] }
-  - match: { hits.hits.3.sort.0: 6917529027641081862 }
-  - match: { hits.hits.4._source.field: [ 13835058055282163715, 13835058055282163716, 2 ] }
-  - match: { hits.hits.4.sort.0: 13835058055282163715 }
-  - match: { hits.hits.5._source.field: [ 13835058055282163717, 13835058055282163718, 13835058055282163719 ] }
-  - match: { hits.hits.5.sort.0: 13835058055282163718 }
-
-  - do:
-      search:
-        index: unsigned_long_sort
-        body:
-          size: 10
-          sort: [ { field: { mode: sum, order: desc } } ]
-  - match: { hits.total.value: 6 }
-  - length: { hits.hits: 6 }
-  - match: { hits.hits.0._index: unsigned_long_sort }
-  - match: { hits.hits.0._source.field: [ 13835058055282163722, 5, 6, 7 ] }
-  - match: { hits.hits.0.sort.0: 13835058055282163740 }
-  - match: { hits.hits.1._source.field: [ 13835058055282163712, 1 ] }
-  - match: { hits.hits.1.sort.0: 13835058055282163713 }
-  - match: { hits.hits.2._source.field: [ 13835058055282163720, 13835058055282163721, 3, 4 ] }
   - match: { hits.hits.2.sort.0: 9223372036854775832 }
-  - match: { hits.hits.3._source.field: [ 13835058055282163715, 13835058055282163716, 2 ] }
-  - match: { hits.hits.3.sort.0: 9223372036854775817 }
-  - match: { hits.hits.4._source.field: [ 13835058055282163713, 13835058055282163714 ] }
-  - match: { hits.hits.4.sort.0: 9223372036854775811 }
-  - match: { hits.hits.5._source.field: [ 13835058055282163717, 13835058055282163718, 13835058055282163719 ] }
-  - match: { hits.hits.5.sort.0: 4611686018427387922 }
-
+                  type: unsigned_long
+  - match: { hits.hits.4._source.field: [ 13835058055282163715, 13835058055282163716, 2 ] }
+        body:
+  - match: { hits.hits.1.sort.0: 13835058055282163714 }
+      search:
+  - match: { hits.total.value: 6 }
   - do:
+  - match: { hits.hits.3._source.field: [ 13835058055282163715, 13835058055282163716, 2 ] }
       search:
         index: unsigned_long_sort
-        body:
-          size: 10
-          sort: [ { field: { mode: avg, order: desc } } ]
-  - match: { hits.total.value: 6 }
-  - length: { hits.hits: 6 }
-  - match: { hits.hits.0._index: unsigned_long_sort }
-  - match: { hits.hits.0._source.field: [ 13835058055282163712, 1 ] }
-  - match: { hits.hits.0.sort.0: 6917529027641081857 }
-  - match: { hits.hits.1._source.field: [ 13835058055282163713, 13835058055282163714 ] }
-  - match: { hits.hits.1.sort.0: 4611686018427387906 }
-  - match: { hits.hits.2._source.field: [ 13835058055282163722, 5, 6, 7 ] }
   - match: { hits.hits.2.sort.0: 3458764513820540935 }
-  - match: { hits.hits.3._source.field: [ 13835058055282163715, 13835058055282163716, 2 ] }
-  - match: { hits.hits.3.sort.0: 3074457345618258606 }
-  - match: { hits.hits.4._source.field: [ 13835058055282163720, 13835058055282163721, 3, 4 ] }
-  - match: { hits.hits.4.sort.0: 2305843009213693958 }
-  - match: { hits.hits.5._source.field: [ 13835058055282163717, 13835058055282163718, 13835058055282163719 ] }
-  - match: { hits.hits.5.sort.0: 1537228672809129307 }
-
   - do:
-      search:
-        index: unsigned_long_sort
-        body:
-          size: 10
-          sort: [ { field: { mode: min, order: asc } } ]
+              properties:
+  - match: { hits.hits.5.sort.0: 1537228672809129307 }
   - match: { hits.total.value: 6 }
-  - length: { hits.hits: 6 }
-  - match: { hits.hits.0._index: unsigned_long_sort }
-  - match: { hits.hits.0._source.field: [ 13835058055282163712, 1 ] }
-  - match: { hits.hits.0.sort.0: 1 }
-  - match: { hits.hits.1._source.field: [ 13835058055282163715, 13835058055282163716, 2 ] }
+  - match: { hits.hits.1._source.field: [ 13835058055282163712, 1 ] }
+  - match: { hits.hits.0.sort.0: 6917529027641081857 }
+          sort: [ { field: { mode: median, order: asc } } ]
+  - match: { hits.hits.1._source.field: [ 13835058055282163713, 13835058055282163714 ] }
+  - match: { hits.hits.3._source.field: [ 13835058055282163715, 13835058055282163716, 2 ] }
+  - match: { hits.total.value: 6 }
   - match: { hits.hits.1.sort.0: 2 }
-  - match: { hits.hits.2._source.field: [ 13835058055282163720, 13835058055282163721, 3, 4 ] }
-  - match: { hits.hits.2.sort.0: 3 }
-  - match: { hits.hits.3._source.field: [ 13835058055282163722, 5, 6, 7 ] }
+  - do:
+  - match: { hits.hits.1.sort.0: 13835058055282163721 }
+  - match: { hits.hits.3.sort.0: 13835058055282163719 }
+      search:
+  - match: { hits.hits.0._index: unsigned_long_sort }
+  - skip:
+  - match: { hits.hits.3.sort.0: 3074457345618258606 }
+        refresh: true
+  - length: { hits.hits: 6 }
+  - match: { hits.hits.2.sort.0: 6917529027641081857 }
+          size: 10
+  - match: { hits.hits.4._source.field: [ 13835058055282163720, 13835058055282163721, 3, 4 ] }
+  - match: { hits.hits.0._source.field: [ 13835058055282163722, 5, 6, 7 ] }
+  - match: { hits.hits.2._source.field: [ 13835058055282163722, 5, 6, 7 ] }
+  - match: { hits.hits.5._source.field: [ 13835058055282163717, 13835058055282163718, 13835058055282163719 ] }
+setup:
+  - match: { hits.hits.0._source.field: [ 13835058055282163722, 5, 6, 7 ] }
+          index: unsigned_long_sort
+  - match: { hits.hits.5._source.field: [ 13835058055282163717, 13835058055282163718, 13835058055282163719 ] }
+        index: unsigned_long_sort
+          body:
+          - '{"field" : [ 13835058055282163717, 13835058055282163718, 13835058055282163719 ] }'
+        body:
   - match: { hits.hits.3.sort.0: 5 }
-  - match: { hits.hits.4._source.field: [ 13835058055282163713, 13835058055282163714 ] }
+  - match: { hits.total.value: 6 }
+  - match: { hits.hits.1.sort.0: 13835058055282163713 }
+              number_of_shards: 3
+  - match: { hits.hits.3._source.field: [ 13835058055282163720, 13835058055282163721, 3, 4 ] }
+        body:
   - match: { hits.hits.4.sort.0: 13835058055282163713 }
   - match: { hits.hits.5._source.field: [ 13835058055282163717, 13835058055282163718, 13835058055282163719 ] }
+  - match: { hits.hits.5._source.field: [ 13835058055282163712, 1 ] }
+  - match: { hits.hits.2._source.field: [ 13835058055282163717, 13835058055282163718, 13835058055282163719 ] }
+          - '{ "index" : { "_index" : "unsigned_long_sort", "_id" : "5" } }'
+  - match: { hits.hits.5.sort.0: 13835058055282163722 }
+  - match: { hits.hits.4.sort.0: 9223372036854775811 }
+          - '{"field" : [ 13835058055282163722, 5, 6, 7 ] }'
+  - match: { hits.hits.2._source.field: [ 13835058055282163715, 13835058055282163716, 2 ] }
+        body:
+  - match: { hits.hits.3._source.field: [ 13835058055282163715, 13835058055282163716, 2 ] }
+  - do:
+  - do:
+  - match: { hits.hits.0._index: unsigned_long_sort }
+        index: unsigned_long_sort
+          - '{ "index" : { "_index" : "unsigned_long_sort", "_id" : "2" } }'
+      indices.create:
+  - match: { hits.hits.0._source.field: [ 13835058055282163712, 1 ] }
+  - match: { hits.hits.4.sort.0: 13835058055282163721 }
+  - length: {hits.hits: 6 }
+          - '{"field" : [ 13835058055282163712, 1 ] }'
+  - match: { hits.hits.1.sort.0: 4611686018427387906 }
+  - match: { hits.hits.0._index: unsigned_long_sort }
+  - do:
+          - '{"field" : [ 13835058055282163715, 13835058055282163716, 2 ] }'
+  - length: { hits.hits: 6 }
+  - match: { hits.hits.4.sort.0: 2305843009213693958 }
+          size: 10
+  - match: { hits.hits.5.sort.0: 13835058055282163718 }
+  - match: {hits.total.value: 6 }
+  - match: { hits.hits.4._source.field: [ 13835058055282163713, 13835058055282163714 ] }
+        body:
+  - match: { hits.hits.3.sort.0: 6917529027641081862 }
+  - match: { hits.hits.0.sort.0: 13835058055282163740 }
+  - length: { hits.hits: 6 }
+  - match: { hits.hits.4.sort.0: 13835058055282163715 }
+        index: unsigned_long_sort
+          - '{ "index" : { "_index" : "unsigned_long_sort", "_id" : "3" } }'
+          sort: [ { field: { mode: min, order: asc } } ]
+      version:  " - 2.19.99"
+  - match: { hits.hits.3._source.field: [ 13835058055282163717, 13835058055282163718, 13835058055282163719 ] }
+          size: 10
+          sort: [ { field: { mode: avg, order: desc } } ]
+  - match: { hits.hits.4._source.field: [ 13835058055282163720, 13835058055282163721, 3, 4 ] }
+          sort: [{ field: { mode: max, order: asc } } ]
+  - match: { hits.hits.4._source.field: [ 13835058055282163713, 13835058055282163714 ] }
+  - match: { hits.hits.0._index: unsigned_long_sort }
+      search:
+          - '{ "index" : { "_index" : "unsigned_long_sort", "_id" : "6" } }'
+        body:
+  - match: { hits.hits.5.sort.0: 4611686018427387922 }
+  - match: { hits.hits.4.sort.0: 13835058055282163714 }
+      search:
+  - match: { hits.hits.1._source.field: [ 13835058055282163713, 13835058055282163714 ] }
+  - match: { hits.hits.1._source.field: [ 13835058055282163720, 13835058055282163721, 3, 4 ] }
+            settings:
+  - match: {hits.total.value: 6 }
+          - '{"field" : [ 13835058055282163720, 13835058055282163721, 3, 4 ] }'
+  - match: { hits.hits.2._source.field: [ 13835058055282163712, 1 ] }
+  - match: { hits.hits.0.sort.0: 7 }
+      bulk:
+  - match: { hits.hits.0._index: unsigned_long_sort }
+          - '{ "index" : { "_index" : "unsigned_long_sort", "_id" : "4" } }'
+          - '{ "index" : { "_index" : "unsigned_long_sort", "_id" : "1" } }'
+  - match: { hits.hits.0._source.field: [ 13835058055282163712, 1 ] }
+        body:
+  - match: { hits.hits.1.sort.0: 4611686018427387906 }
+  - match: { hits.hits.0._source.field: [ 13835058055282163722, 5, 6, 7 ] }
+  - match: { hits.hits.5._source.field: [ 13835058055282163722, 5, 6, 7 ] }
+  - match: { hits.hits.5._source.field: [ 13835058055282163717, 13835058055282163718, 13835058055282163719 ] }
+  - match: { hits.hits.1._source.field: [ 13835058055282163713, 13835058055282163714 ] }
+  - match: { hits.hits.2._source.field: [ 13835058055282163720, 13835058055282163721, 3, 4 ] }
+  - match: { hits.hits.1._source.field: [ 13835058055282163715, 13835058055282163716, 2 ] }
+            mappings:
+"test sorting against unsigned_long only fields":
+          size: 10
+  - match: { hits.hits.2.sort.0: 3 }
+  - length: {hits.hits: 6 }
+  - match: { hits.hits.3.sort.0: 13835058055282163716 }
+  - match: { hits.hits.0._source.field: [ 13835058055282163712, 1 ] }
+  - match: { hits.hits.2.sort.0: 13835058055282163719 }
+          sort: [ { field: { mode: sum, order: desc } } ]
+  - match: { hits.hits.5.sort.0: 13835058055282163712 }
+          size: 10
+  - match: { hits.hits.0._index: unsigned_long_sort }
+  - match: { hits.hits.2.sort.0: 13835058055282163716 }
+          sort: [{ field: { mode: max, order: desc } } ]
+  - match: { hits.hits.3._source.field: [ 13835058055282163722, 5, 6, 7 ] }
+        index: unsigned_long_sort
+  - do:
+          size: 10
+        index: unsigned_long_sort
+  - match: { hits.hits.4._source.field: [ 13835058055282163713, 13835058055282163714 ] }
+  - match: { hits.hits.0.sort.0: 1 }
+  - match: { hits.hits.0.sort.0: 13835058055282163722 }
+      search:
+          - '{"field" : [ 13835058055282163713, 13835058055282163714 ] }'
+                field:
+---
   - match: { hits.hits.5.sort.0: 13835058055282163717 }
+  - match: { hits.hits.2._source.field: [ 13835058055282163720, 13835058055282163721, 3, 4 ] }
+  - match: { hits.hits.3.sort.0: 9223372036854775817 }
+              number_of_replicas: 0
+  - match: { hits.hits.0.sort.0: 13835058055282163712 }
+  - do:

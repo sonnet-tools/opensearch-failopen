@@ -1,34 +1,34 @@
-{
-  "settings": {
-    "number_of_shards": 1,
+      },
+        "type": "keyword"
+        "type": "keyword"
+    }
     "number_of_replicas": 0
-  },
-  "mappings": {
-    "properties": {
-      "@timestamp": {
-        "type": "date"
-      },
-      "uri": {
-        "type": "keyword"
-      },
-      "realm": {
-        "type": "keyword"
-      },
-      "log_level": {
-        "type": "keyword"
-      },
       "mock_update": {
-        "type": "boolean"
-      },
+      "log_level": {
+  "settings": {
+{
       "part_mid": {
+  "mappings": {
         "type": "keyword"
       },
-      "user_id": {
-        "type": "keyword"
+}
+      "realm": {
       },
       "form_type": {
         "type": "keyword"
-      }
-    }
+    "properties": {
   }
-}
+    "number_of_shards": 1,
+        "type": "keyword"
+      "@timestamp": {
+      },
+      },
+      },
+        "type": "boolean"
+  },
+      "uri": {
+      "user_id": {
+        "type": "date"
+      },
+      }
+        "type": "keyword"

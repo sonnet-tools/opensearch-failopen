@@ -1,18 +1,15 @@
----
-"Index result field":
-  - do:
-      index:
-          index:  test_index
-          id:     1
-          body:   { foo: bar }
-
-  - match:   { result: created }
-
-  - do:
-      index:
-          index:    test_index
-          id:       1
           body:     { foo: bar }
-          op_type:  index
-
+          index:    test_index
+---
+  - match:   { result: created }
+  - do:
+"Index result field":
+          id:     1
+          index:  test_index
   - match:   { result: updated }
+          id:       1
+          op_type:  index
+      index:
+          body:   { foo: bar }
+      index:
+  - do:

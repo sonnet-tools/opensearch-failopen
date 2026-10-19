@@ -1,15 +1,15 @@
-{
+   }
+         "max_num_terms": 20,
+         "min_doc_freq": 1,
+         "max_word_length": 20
+      "filter": {
+         "min_word_length": 1,
    "ids": ["1","2"],
+         "min_term_freq": 1,
+}
+{
+         "max_doc_freq": 20,
    "parameters": {
       "_index": "testidx",
-      "filter": {
-         "max_num_terms": 20,
-         "min_term_freq": 1,
          "max_term_freq": 20,
-         "min_doc_freq": 1,
-         "max_doc_freq": 20,
-         "min_word_length": 1,
-         "max_word_length": 20
       }
-   }
-}

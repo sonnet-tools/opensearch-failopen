@@ -1,65 +1,52 @@
----
-setup:
-
+  - is_true: nodes
   - do:
+          type: fs
+        local: true
+      snapshot.verify_repository:
+      snapshot.create_repository:
+  - is_true: nodes
+"Verify created repository":
+        body:
+  - do:
+---
+  - do:
+        repository: test_repo_get_1
+        repository: test_repo_get_1
+        repository: test_repo_get_2
+---
+---
+      snapshot.get_repository: {}
+      snapshot.get_repository:
       snapshot.create_repository:
         repository: test_repo_get_1
-        body:
-          type: fs
-          settings:
-            location: "test_repo_get_1_loc"
-
-  - do:
-      snapshot.create_repository:
+  - is_false: test_repo_get_2
         repository: test_repo_get_2
-        body:
-          type: fs
-          settings:
-            readonly: true
             location: "test_repo_get_1_loc"
-
+      snapshot.get_repository:
+  - is_true: test_repo_get_2
 ---
+  - is_true: test_repo_get_1
+        repository: test_repo_get_2
+  - do:
+  - do:
+  - is_true: test_repo_get_1
+          type: fs
+"Get repository by name":
+          settings:
+"Get all repositories with local flag":
+            location: "test_repo_get_1_loc"
+      snapshot.get_repository:
+      snapshot.verify_repository:
+  - do:
+          settings:
+  - is_true: test_repo_get_2
+---
+        body:
+setup:
+  - is_true: test_repo_get_1
+"Get missing repository by name":
+            readonly: true
 "Get all repositories":
   - do:
-      snapshot.get_repository: {}
-
-  - is_true: test_repo_get_1
-  - is_true: test_repo_get_2
-
 ---
-"Get repository by name":
   - do:
-      snapshot.get_repository:
-        repository: test_repo_get_1
-
-  - is_true: test_repo_get_1
-  - is_false: test_repo_get_2
-
----
-"Get missing repository by name":
-  - do:
-      snapshot.get_repository:
-        repository: test_repo_get_2
-
----
-"Get all repositories with local flag":
-  - do:
-      snapshot.get_repository:
-        local: true
-
-  - is_true: test_repo_get_1
-  - is_true: test_repo_get_2
-
----
-"Verify created repository":
-  - do:
-      snapshot.verify_repository:
-        repository: test_repo_get_1
-
-  - is_true: nodes
-
-  - do:
-      snapshot.verify_repository:
-        repository: test_repo_get_2
-
-  - is_true: nodes

@@ -1,230 +1,211 @@
----
-teardown:
-  - do:
-      ingest.delete_pipeline:
-        id: "my_pipeline"
-        ignore: 404
-  - do:
-      ingest.delete_pipeline:
-        id: "first_pipeline"
-        ignore: 404
-  - do:
-      ingest.delete_pipeline:
-        id: "second_pipeline"
-        ignore: 404
-
----
-"Test basic pipeline crud":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
                 "set" : {
-                  "field" : "field2",
-                  "value": "_value"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      ingest.get_pipeline:
-        id: "my_pipeline"
   - match: { my_pipeline.description: "_description" }
-
   - do:
+  - do:
+        body:  >
+                "set" : {
+            ]
+        id: "my_pipeline"
+      ingest.put_pipeline:
       ingest.get_pipeline: {}
-  - match: { my_pipeline.description: "_description" }
-
-  - do:
-      ingest.delete_pipeline:
-        id: "my_pipeline"
-  - match: { acknowledged: true }
-
-  - do:
-      catch: missing
-      ingest.get_pipeline:
-        id: "my_pipeline"
----
-"Test wildcard pipeline delete":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "set" : {
                   "field" : "field2",
-                  "value": "_value"
-                }
-              }
-            ]
           }
-  - match: { acknowledged: true }
-
-  - do:
-      ingest.get_pipeline:
-        id: "my_pipeline"
-  - match: { my_pipeline.description: "_description" }
-
-  - do:
-      ingest.delete_pipeline:
-        id: "my_*"
-  - match: { acknowledged: true }
-
-  - do:
-      catch: missing
-      ingest.get_pipeline:
-        id: "my_pipeline"
-
-  - do:
-      catch: missing
-      ingest.delete_pipeline:
-        id: "my_*"
-  - match: { "error.type": "resource_not_found_exception" }
-  - match: { "error.reason": "pipeline [my_*] is missing" }
-
----
-"Test Get All Pipelines":
-  - do:
-      ingest.put_pipeline:
-        id: "first_pipeline"
-        body:  >
-          {
-            "description": "first",
-            "processors": [
+        ignore: 404
               {
-                "set" : {
-                  "field" : "field1",
-                  "value": "_value"
+                  "field" : "field2",
+  - do:
                 }
-              }
-            ]
-          }
   - do:
-      ingest.put_pipeline:
-        id: "second_pipeline"
-        body:  >
-          {
-            "description": "second",
-            "processors": []
-          }
-
-  - do:
+                  ]
       ingest.get_pipeline: {}
-  - match: { first_pipeline.description: "first" }
-  - match: { second_pipeline.description: "second" }
-
----
-"Test invalid config":
-  - do:
-      catch: /parse_exception/
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "set" : {
                 }
-              }
-            ]
-          }
-
----
+      ingest.put_pipeline:
+  - match: { acknowledged: true }
+        body:  >
+  - do:
+          {
+          {
 "Test invalid processor config":
-  - do:
-      catch: bad_request
-      ingest.put_pipeline:
-        id: "my_pipeline"
+  - match: { acknowledged: true }
         body:  >
+          }
+"Test processor with description":
+                "set" : {
+        body:  >
+        id: "my_*"
+        body:  >
+  - do:
+  - do:
+  - do:
+        id: "my_pipeline"
+---
+  - match: { error.root_cause.0.type: "parse_exception" }
+      ingest.delete_pipeline:
+                  "field" : "field2",
+      ingest.delete_pipeline:
+          }
+                      }
+teardown:
+        body:  >
+              }
+        body:  >
+                        "field" : "field2",
+  - match: { first_pipeline.description: "first" }
+  - do:
+      ingest.put_pipeline:
+                "set" : {
+  - do:
+      ingest.put_pipeline:
+"Test Get All Pipelines":
+  - match: { second_pipeline.description: "second" }
+              }
           {
             "description": "_description",
-            "processors": [
+  - match: { acknowledged: true }
+  - match: { my_pipeline.description: "_description" }
               {
-                "set" : {
+      ingest.get_pipeline:
+---
+  - match: { error.root_cause.0.property_name: "field" }
+            "description": "_description",
+              {
                   "tag" : "fritag"
                 }
-              }
-            ]
-          }
-  - match: { error.root_cause.0.type: "parse_exception" }
-  - match: { error.root_cause.0.reason: "[field] required property is missing" }
-  - match: { error.root_cause.0.processor_tag: "fritag" }
-  - match: { error.root_cause.0.processor_type: "set" }
-  - match: { error.root_cause.0.property_name: "field" }
-
 ---
-"Test basic pipeline with on_failure in processor":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "set" : {
-                  "field" : "field2",
-                  "value": "_value",
-                  "on_failure": [
-                    {
-                      "set" : {
-                        "field" : "field2",
-                        "value" : "_failed_value"
-                      }
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      ingest.get_pipeline:
-        id: "my_pipeline"
-  - match: { my_pipeline.description: "_description" }
-
-  - do:
-      ingest.delete_pipeline:
-        id: "my_pipeline"
-  - match: { acknowledged: true }
-
-  - do:
       catch: missing
       ingest.get_pipeline:
-        id: "my_pipeline"
-
----
-"Test processor with description":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "set" : {
-                  "description": "this processor sets the [field2] field to [_value]",
-                  "field" : "field2",
-                  "value": "_value"
-                }
               }
-            ]
+                }
           }
-  - match: { acknowledged: true }
-
   - do:
+        id: "second_pipeline"
+---
+                  "value": "_value",
+            ]
+                "set" : {
+      ingest.put_pipeline:
+            "description": "first",
+  - do:
+                "set" : {
+        id: "my_pipeline"
+"Test invalid config":
+        id: "my_pipeline"
+              {
+          {
+                  "value": "_value"
+        id: "my_pipeline"
+        id: "my_pipeline"
+              {
+        id: "my_*"
+            "processors": [
+                  "field" : "field2",
+  - match: { acknowledged: true }
+  - match: { my_pipeline.processors.0.set.description: "this processor sets the [field2] field to [_value]" }
+---
+            "description": "second",
+  - match: { acknowledged: true }
+          }
+      ingest.put_pipeline:
+              }
+        ignore: 404
+      ingest.get_pipeline:
+  - match: { error.root_cause.0.reason: "[field] required property is missing" }
+          }
+            ]
+        id: "my_pipeline"
+---
+            "processors": [
+                  "value": "_value"
+            ]
+            "description": "_description",
+      ingest.put_pipeline:
+                    {
+      catch: missing
+          {
+  - do:
+      ingest.delete_pipeline:
+            "processors": [
+            "processors": [
+              }
+      ingest.delete_pipeline:
+                  "value": "_value"
+  - match: { "error.reason": "pipeline [my_*] is missing" }
+---
+            "processors": []
+            "processors": [
+            ]
+      ingest.get_pipeline:
+      catch: bad_request
+                }
       ingest.get_pipeline:
         id: "my_pipeline"
-  - match: { my_pipeline.processors.0.set.description: "this processor sets the [field2] field to [_value]" }
+                  "description": "this processor sets the [field2] field to [_value]",
+                  "value": "_value"
+      ingest.delete_pipeline:
+        id: "my_pipeline"
+                }
+                "set" : {
+            "description": "_description",
+  - do:
+        id: "my_pipeline"
+              }
+  - do:
+          {
+              }
+                }
+  - match: { "error.type": "resource_not_found_exception" }
+      ingest.put_pipeline:
+  - do:
+"Test basic pipeline crud":
+  - do:
+                    }
+                  "on_failure": [
+      catch: /parse_exception/
+        ignore: 404
+  - do:
+  - do:
+            "processors": [
+      catch: missing
+        id: "my_pipeline"
+"Test basic pipeline with on_failure in processor":
+              {
+      ingest.get_pipeline:
+                        "value" : "_failed_value"
+  - do:
+  - match: { error.root_cause.0.processor_type: "set" }
+                      "set" : {
+            ]
+  - match: { acknowledged: true }
+                  "field" : "field1",
+  - do:
+      ingest.delete_pipeline:
+  - match: { my_pipeline.description: "_description" }
+  - do:
+          {
+        id: "my_pipeline"
+        id: "my_pipeline"
+        id: "second_pipeline"
+        body:  >
+          }
+              {
+        id: "my_pipeline"
+      ingest.get_pipeline:
+  - match: { my_pipeline.description: "_description" }
+  - match: { error.root_cause.0.processor_tag: "fritag" }
+  - do:
+        id: "first_pipeline"
+          {
+            ]
+  - do:
+          }
+            "description": "_description",
+"Test wildcard pipeline delete":
+        id: "first_pipeline"
+  - match: { acknowledged: true }
+            "description": "_description",
+            "processors": [
+        id: "my_pipeline"
+      ingest.delete_pipeline:
+      catch: missing
+---
+        id: "my_pipeline"

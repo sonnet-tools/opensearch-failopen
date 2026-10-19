@@ -1,201 +1,180 @@
-setup:
-  - skip:
-      version: " - 2.12.99"
-      reason: "implemented for versions 2.13.0 and above"
-
----
-"matched queries":
-  - do:
-      indices.create:
+          - '{"field" : 2, "title": "hello universe" }'
+  - length: { hits.hits.0.matched_queries: 2 }
         index: test
-
   - do:
-      bulk:
-        refresh: true
-        body:
-          - '{ "index" : { "_index" : "test_1", "_id" : "1" } }'
-          - '{"field" : 1 }'
-          - '{ "index" : { "_index" : "test_1", "_id" : "2" } }'
-          - '{"field" : [1, 2] }'
-
-  - do:
-      search:
-        index: test_1
-        body:
-          query:
-            bool: {
-              should: [
-                {
-                  match: {
-                    field: {
-                      query: 1,
-                      _name: match_field_1
-                    }
-                  }
-                },
-                {
-                  match: {
-                    field: {
-                      query: 2,
-                      _name: match_field_2,
-                      boost: 10
-                    }
-                  }
-                }
-              ]
-            }
-
-  - match: {hits.total.value: 2}
-  - length: {hits.hits.0.matched_queries: 2}
-  - match: {hits.hits.0.matched_queries: [ "match_field_1", "match_field_2" ]}
-  - length: {hits.hits.1.matched_queries: 1}
-  - match: {hits.hits.1.matched_queries: [ "match_field_1" ]}
-
 ---
-
-"matched queries with scores":
-  - do:
-      indices.create:
-        index: test
-
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - '{ "index" : { "_index" : "test_1", "_id" : "1" } }'
-          - '{"field" : 1 }'
-          - '{ "index" : { "_index" : "test_1", "_id" : "2" } }'
-          - '{"field" : [1, 2] }'
-
-  - do:
-      search:
-        include_named_queries_score: true
-        index: test_1
-        body:
-          query:
-            bool: {
-              should: [
-                {
-                  match: {
-                    field: {
-                      query: 1,
-                      _name: match_field_1
-                    }
-                  }
+                    _name: rescore_query
                 },
-                {
+              rescore_query_weight: 1.5
                   match: {
-                    field: {
-                      query: 2,
-                      _name: match_field_2,
-                      boost: 10
-                    }
-                  }
                 }
-              ]
-            }
-
   - match: { hits.total.value: 2 }
-  - length: { hits.hits.0.matched_queries: 2 }
+setup:
+                }
+        index: test
+                      query: 1,
+  - length: {hits.hits.1.matched_queries: 1}
+  - do:
+                match: {
+              should: [
+      indices.create:
+            }
   - match: { hits.hits.0.matched_queries.match_field_1: 1 }
+                    }
+          rescore:
+        body:
+                {
+  - do:
+          - '{ "index" : { "_index" : "test_1", "_id" : "2" } }'
+                {
   - match: { hits.hits.0.matched_queries.match_field_2: 10 }
-  - length: { hits.hits.1.matched_queries: 1 }
-  - match: { hits.hits.1.matched_queries.match_field_1: 1 }
-
----
-
-"named queries in rescore":
-  - skip:
-      version: " - 3.1.99"
-      reason: "named queries in rescore is supported in 3.2.0 and above"
-
-  - do:
-      indices.create:
-        index: test
-
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - '{ "index" : { "_index" : "test_1", "_id" : "1" } }'
           - '{"field" : 1, "title": "hello world" }'
-          - '{ "index" : { "_index" : "test_1", "_id" : "2" } }'
-          - '{"field" : 2, "title": "hello universe" }'
-
-  - do:
-      search:
+              ]
+          - '{"field" : 1 }'
         index: test_1
-        body:
-          query:
-            match: {
-              field: {
-                query: 1,
-                _name: main_query
-              }
-            }
-          rescore:
-            window_size: 10
-            query:
+                    field: {
+  - do:
               rescore_query:
-                match: {
-                  title: {
-                    query: "hello",
-                    _name: rescore_query
+                _name: main_query
                   }
-                }
-              query_weight: 0.5
-              rescore_query_weight: 1.5
-
-  - match: { hits.total.value: 1 }
-  - length: { hits.hits.0.matched_queries: 2 }
-  - match: { hits.hits.0.matched_queries: [ "main_query", "rescore_query" ] }
-
----
-
-"named queries in rescore with scores":
-  - skip:
-      version: " - 3.1.99"
       reason: "named queries in rescore is supported in 3.2.0 and above"
-
-  - do:
-      indices.create:
-        index: test
-
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - '{ "index" : { "_index" : "test_1", "_id" : "1" } }'
-          - '{"field" : 1, "title": "hello world" }'
-          - '{ "index" : { "_index" : "test_1", "_id" : "2" } }'
-          - '{"field" : 2, "title": "hello universe" }'
-
-  - do:
-      search:
+                },
+            window_size: 10
         include_named_queries_score: true
+          - '{ "index" : { "_index" : "test_1", "_id" : "1" } }'
+"matched queries":
+  - match: { hits.hits.0.matched_queries: [ "main_query", "rescore_query" ] }
         index: test_1
-        body:
-          query:
             match: {
-              field: {
-                query: 1,
-                _name: main_query
-              }
+        index: test_1
+                  }
+                  }
+  - skip:
+  - length: { hits.hits.0.matched_queries: 2 }
             }
           rescore:
+        index: test
+            match: {
+      search:
+      version: " - 2.12.99"
+          - '{"field" : [1, 2] }'
+  - do:
             window_size: 10
+              query_weight: 0.5
+  - do:
+      bulk:
+                    field: {
+        body:
+  - match: {hits.total.value: 2}
+  - do:
             query:
+"named queries in rescore with scores":
+                {
+                    }
+          - '{ "index" : { "_index" : "test_1", "_id" : "1" } }'
+---
+          query:
+          query:
+            }
               rescore_query:
+          - '{ "index" : { "_index" : "test_1", "_id" : "2" } }'
+      indices.create:
+                    field: {
+  - length: {hits.hits.0.matched_queries: 2}
+      indices.create:
+          - '{ "index" : { "_index" : "test_1", "_id" : "1" } }'
+  - length: { hits.hits.1.matched_queries: 1 }
+        body:
+                      query: 2,
+          - '{ "index" : { "_index" : "test_1", "_id" : "2" } }'
                 match: {
+  - gte: { hits.hits.0.matched_queries.main_query: 0.0 }
+                }
+  - length: { hits.hits.0.matched_queries: 2 }
+                      query: 1,
+  - skip:
+              ]
+        refresh: true
+        refresh: true
+            query:
+  - do:
+---
+                  match: {
+  - do:
+      reason: "named queries in rescore is supported in 3.2.0 and above"
+        body:
                   title: {
-                    query: "hello",
-                    _name: rescore_query
+          query:
+                      boost: 10
+"named queries in rescore":
+                    }
+---
+      indices.create:
+  - match: {hits.hits.0.matched_queries: [ "match_field_1", "match_field_2" ]}
+      bulk:
+            bool: {
+          - '{"field" : 1, "title": "hello world" }'
+                      _name: match_field_1
+  - do:
+  - do:
+  - match: {hits.hits.1.matched_queries: [ "match_field_1" ]}
+  - match: { hits.total.value: 1 }
                   }
+                      _name: match_field_2,
+      bulk:
+              rescore_query_weight: 1.5
+              field: {
+          - '{"field" : [1, 2] }'
+                    _name: rescore_query
+            }
+          - '{ "index" : { "_index" : "test_1", "_id" : "1" } }'
+                      _name: match_field_1
+                _name: main_query
+      search:
+                query: 1,
+  - match: { hits.hits.1.matched_queries.match_field_1: 1 }
+        body:
+      version: " - 3.1.99"
+        body:
+        index: test_1
+                  }
+        body:
+                  match: {
+              }
+                query: 1,
+  - match: { hits.total.value: 1 }
+          - '{ "index" : { "_index" : "test_1", "_id" : "2" } }'
+  - skip:
+        body:
+                {
+      search:
+                    field: {
+                  }
+                    }
+"matched queries with scores":
+                      boost: 10
+        include_named_queries_score: true
+                  match: {
+        index: test
+        refresh: true
+                  title: {
+                      _name: match_field_2,
+  - gte: { hits.hits.0.matched_queries.rescore_query: 0.0 }
+                    query: "hello",
+              }
+  - do:
+          query:
+      reason: "implemented for versions 2.13.0 and above"
+        refresh: true
+            bool: {
+      search:
+          - '{"field" : 1 }'
+              field: {
+              should: [
+      bulk:
                 }
               query_weight: 0.5
-              rescore_query_weight: 1.5
-
-  - match: { hits.total.value: 1 }
-  - length: { hits.hits.0.matched_queries: 2 }
-  - gte: { hits.hits.0.matched_queries.main_query: 0.0 }
-  - gte: { hits.hits.0.matched_queries.rescore_query: 0.0 }
+                      query: 2,
+          - '{"field" : 2, "title": "hello universe" }'
+                    query: "hello",
+      version: " - 3.1.99"

@@ -1,19 +1,19 @@
-{
   "from": 0,
-  "size": 10000,
-  "timeout": "1m",
-  "query": {
-    "term": {
-      "UserID": {
-        "value": 435090932899640449,
-        "boost": 1.0
-      }
     }
+  "timeout": "1m",
   },
-  "_source": {
     "includes": [
-      "UserID"
-    ],
     "excludes": []
+    ],
+        "boost": 1.0
+      "UserID"
+  "query": {
+      }
+{
+        "value": 435090932899640449,
+  "size": 10000,
   }
+      "UserID": {
+  "_source": {
 }
+    "term": {

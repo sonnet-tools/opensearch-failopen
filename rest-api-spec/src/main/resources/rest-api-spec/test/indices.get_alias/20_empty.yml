@@ -1,19 +1,14 @@
----
-setup:
-
   - do:
       indices.create:
+      indices.create:
+      indices.get_alias: {}
         index: test_index
-
-  - do:
-      indices.create:
-        index: test_index_2
-
+  - match: {test_index.aliases: {}}
+---
 ---
 "Check empty aliases when getting all aliases via /_alias":
-
-  - do:
-      indices.get_alias: {}
-
-  - match: {test_index.aliases: {}}
   - match: {test_index_2.aliases: {}}
+  - do:
+        index: test_index_2
+setup:
+  - do:

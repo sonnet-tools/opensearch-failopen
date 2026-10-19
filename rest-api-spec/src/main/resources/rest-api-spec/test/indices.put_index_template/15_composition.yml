@@ -1,278 +1,244 @@
----
-"Component and index template composition":
-  - skip:
-      features: allowed_warnings
-
-  - do:
-      cluster.put_component_template:
-        name: ct_low
-        body:
           template:
             settings:
-              number_of_replicas: 1
+  - do:
+        name: ct_high
             mappings:
+  - do:
+        body:
+            aliases:
+          settings:
+      features: allowed_warnings
+                object2.blue:
+          index_patterns: ["foo", "bar-*"]
+          mappings:
+  - match: {bar-baz.settings.index.number_of_shards: "2"}
+          template:
+  - match: {bar-baz.settings.index.number_of_shards: "3"}
+        index: bar-baz
+  - match: {bar-baz.settings.index.number_of_replicas: "0"}
+                object1.red:
+  - match: {bar-baz.mappings.properties.field3: {type: integer}}
+          template:
+                  type: text
+              number_of_shards: 3
+        name: ct_high
+        index: eggplant
+                  type: integer
+  - skip:
+      indices.create:
+        index: bar-baz
+            mappings:
+              properties:
+  - skip:
+  - is_true: purple-index.mappings.properties.nested.include_in_parent
+  - match: {bar-baz.mappings.properties.foo: {type: keyword}}
+                field3:
+  - do:
+              number_of_replicas: 1
+      indices.create:
+---
+        - "index template [another-template] has index patterns [bar-*] matching patterns from existing older templates [global] with patterns (global => [*]); this template [another-template] will take precedence during new index creation"
+  - match: {purple-index.mappings.properties.object1.properties.purple: {type: integer}}
+      indices.create:
+      allowed_warnings:
+            properties:
+"Component and index template composition":
+      indices.create:
+  - match: {purple-index.mappings.properties.object2.properties.purple: {type: double}}
+  - skip:
+                  type: keyword
+        body:
+        name: another-template
+      cluster.put_component_template:
+  - skip:
+          composed_of: []
+                  include_in_root: true
+      indices.put_index_template:
+  - match: {bar-baz.mappings.properties.field2: {type: keyword}}
+  - is_false: purple-index.mappings.properties.nested.include_in_root
+            aliases:
+      features: allowed_warnings
+  - do:
+                type: double
+      allowed_warnings:
+        body:
+        name: ct_low
+              index.number_of_shards: 3
+                field:
+        - "index template [my-template] has index patterns [foo, bar-*] matching patterns from existing older templates [global] with patterns (global => [*]); this template [my-template] will take precedence during new index creation"
+              my_alias: {}
+            settings:
+  - do:
+        name: ct_low
+              index.number_of_shards: 2
+        body:
+      indices.get:
+        body:
+        body:
+            mappings:
+                filter:
+      allowed_warnings:
+                is_write_index: false
+        index: bar-baz
+          composed_of: ["red", "blue"]
+        name: red
+---
+  - do:
+                type: double
+                object2.red:
+      indices.put_index_template:
+          composed_of: ["ct_low", "ct_high"]
+        index: purple-index
+          template:
+          index_patterns: ["eggplant"]
+              alias1: {}
+                field2:
+      indices.get:
+        name: blue
+        name: blue
+            settings:
+  - do:
+          priority: 400
+              foo:
+              object3.purple:
+        - "index template [blue] has index patterns [purple-index] matching patterns from existing older templates [global] with patterns (global => [*]); this template [blue] will take precedence during new index creation"
+  - do:
+          index_patterns: ["purple-index"]
+              index.number_of_shards: 2
+"Index template without component templates":
+  - match: {bar-baz.aliases.other: {}}
+---
+  - do:
+  - match: {purple-index.mappings.properties.object3.properties.purple: {type: double}}
+            settings:
+  - skip:
+        body:
+          aliases:
+      indices.get:
+      features: allowed_warnings
+      indices.get:
+      indices.put_index_template:
+              aliasname:
+                include_in_root: false
+        body:
+        index: bazfoo
+            other: {}
+                object2.purple:
+        - "index template [my-template] has index patterns [foo, bar-*] matching patterns from existing older templates [global] with patterns (global => [*]); this template [my-template] will take precedence during new index creation"
+              aliasname:
+                  type: text
+        - "index template [my-template] has index patterns [eggplant] matching patterns from existing older templates [global] with patterns (global => [*]); this template [my-template] will take precedence during new index creation"
+        body:
+                  type: integer
+  - do:
+      indices.create:
+  - do:
+        name: my-template
+          template:
+              properties:
+        body:
+              properties:
+        index: purple-index
+      cluster.put_component_template:
+          index_patterns: ["bar-*"]
+                is_write_index: true
+  - match: {purple-index.mappings.properties.object1.properties.blue: {type: text}}
+  - match: {bar-baz.mappings.properties.field1: {type: text}}
+            mappings:
+  - do:
+                  type: text
+        body:
+            mappings:
+        body:
+                nested:
+      cluster.put_component_template:
+        body:
+  - match: {purple-index.mappings.properties.object2.properties.red: {type: text}}
+  - do:
+      indices.get:
+                object1.blue:
+        name: my-template
+  - match: {eggplant.settings.index.number_of_shards: "3"}
+        index: eggplant
+---
+          template:
+            aliases:
+            aliases:
+  - do:
+          template:
+        - "index template [my-template] has index patterns [baz*] matching patterns from existing older templates [global] with patterns (global => [*]); this template [my-template] will take precedence during new index creation"
+  - do:
+            settings:
+      cluster.put_component_template:
+        body:
+              aliasname:
+  - match: {bar-baz.aliases.aliasname: {filter: {match_all: {}}}}
+"Index template priority":
+  - do:
+  - match: {purple-index.mappings.properties.object1.properties.red: {type: keyword}}
+        index: bar-baz
+                type: nested
+          template:
+  - match: {bar-baz.aliases.my_alias: {}}
+                  type: text
+                object2.red:
+                type: keyword
+                  type: integer
+  - match: {bar-baz.settings.index.priority: "17"}
+              nested:
+                object1.purple:
+  - do:
+  - do:
+  - do:
+      features: allowed_warnings
+      features: allowed_warnings
+          composed_of: []
+          template:
+        name: my-template
+              properties:
+      allowed_warnings:
+                  type: integer
+      allowed_warnings:
+        index: bazfoo
+            properties:
+          composed_of: ["ct_low", "ct_high"]
+          index_patterns: ["baz*"]
+            mappings:
+              object2.purple:
+"Component template only composition":
+              properties:
+  - do:
               properties:
                 field1:
-                  type: text
-            aliases:
-              aliasname:
-                is_write_index: false
-
-  - do:
-      cluster.put_component_template:
-        name: ct_high
-        body:
-          template:
             settings:
-              index.number_of_replicas: 0
-            mappings:
-              properties:
-                field2:
-                  type: keyword
-            aliases:
-              aliasname:
-                is_write_index: true
-
-  - do:
-      allowed_warnings:
-        - "index template [my-template] has index patterns [foo, bar-*] matching patterns from existing older templates [global] with patterns (global => [*]); this template [my-template] will take precedence during new index creation"
-      indices.put_index_template:
-        name: my-template
-        body:
-          index_patterns: ["foo", "bar-*"]
-          template:
-            settings:
-              index.number_of_shards: 2
-            mappings:
-              properties:
-                field3:
-                  type: integer
-            aliases:
-              my_alias: {}
-              aliasname:
-                filter:
                   match_all: {}
-          composed_of: ["ct_low", "ct_high"]
-          priority: 400
-
-  - do:
-      indices.create:
-        index: bar-baz
-        body:
-          settings:
-            index.priority: 17
-          mappings:
-            properties:
-              foo:
-                type: keyword
-          aliases:
-            other: {}
-
-  - do:
-      indices.get:
-        index: bar-baz
-
-  - match: {bar-baz.settings.index.number_of_shards: "2"}
-  - match: {bar-baz.settings.index.number_of_replicas: "0"}
-  - match: {bar-baz.settings.index.priority: "17"}
-  - match: {bar-baz.mappings.properties.field1: {type: text}}
-  - match: {bar-baz.mappings.properties.field2: {type: keyword}}
-  - match: {bar-baz.mappings.properties.field3: {type: integer}}
-  - match: {bar-baz.mappings.properties.foo: {type: keyword}}
-  - match: {bar-baz.aliases.aliasname: {filter: {match_all: {}}}}
-  - match: {bar-baz.aliases.my_alias: {}}
-  - match: {bar-baz.aliases.other: {}}
-
----
-"Index template priority":
-  - skip:
-      features: allowed_warnings
-
-  - do:
-      allowed_warnings:
-        - "index template [my-template] has index patterns [foo, bar-*] matching patterns from existing older templates [global] with patterns (global => [*]); this template [my-template] will take precedence during new index creation"
-      indices.put_index_template:
-        name: my-template
-        body:
-          index_patterns: ["foo", "bar-*"]
-          template:
-            settings:
-              index.number_of_shards: 2
-          composed_of: []
-          priority: 400
-
-  - do:
-      allowed_warnings:
-        - "index template [another-template] has index patterns [bar-*] matching patterns from existing older templates [global] with patterns (global => [*]); this template [another-template] will take precedence during new index creation"
-      indices.put_index_template:
-        name: another-template
-        body:
-          index_patterns: ["bar-*"]
-          template:
-            settings:
-              index.number_of_shards: 3
-          composed_of: []
-          priority: 405
-
-  - do:
-      indices.create:
-        index: bar-baz
-
-  - do:
-      indices.get:
-        index: bar-baz
-
-  - match: {bar-baz.settings.index.number_of_shards: "3"}
-
----
-"Component template only composition":
-  - skip:
-      features: allowed_warnings
-
-  - do:
-      cluster.put_component_template:
-        name: ct_low
-        body:
-          template:
-            aliases:
-              alias1: {}
-
-  - do:
-      cluster.put_component_template:
-        name: ct_high
-        body:
-          template:
-            mappings:
-              properties:
-                field:
-                  type: keyword
-
-  - do:
-      allowed_warnings:
-        - "index template [my-template] has index patterns [baz*] matching patterns from existing older templates [global] with patterns (global => [*]); this template [my-template] will take precedence during new index creation"
-      indices.put_index_template:
-        name: my-template
-        body:
-          index_patterns: ["baz*"]
-          composed_of: ["ct_low", "ct_high"]
-
-  - do:
-      indices.create:
-        index: bazfoo
-
-  - do:
-      indices.get:
-        index: bazfoo
-
   - match: {bazfoo.mappings.properties.field: {type: keyword}}
-  - match: {bazfoo.aliases.alias1: {}}
-
----
-"Index template without component templates":
-  - skip:
-      features: allowed_warnings
-
-  - do:
-      allowed_warnings:
-        - "index template [my-template] has index patterns [eggplant] matching patterns from existing older templates [global] with patterns (global => [*]); this template [my-template] will take precedence during new index creation"
-      indices.put_index_template:
-        name: my-template
-        body:
-          index_patterns: ["eggplant"]
-          template:
-            settings:
-              number_of_shards: 3
-
-  - do:
-      indices.create:
-        index: eggplant
-
-  - do:
-      indices.get:
-        index: eggplant
-
-  - match: {eggplant.settings.index.number_of_shards: "3"}
-
----
 "Index template mapping merging":
-  - skip:
-      features: allowed_warnings
-
-  - do:
-      cluster.put_component_template:
-        name: red
-        body:
-          template:
-            mappings:
-              properties:
-                object1.red:
                   type: keyword
-                object2.red:
-                  type: keyword
-
-  - do:
       cluster.put_component_template:
-        name: blue
-        body:
-          template:
-            mappings:
-              properties:
-                object2.red:
-                  type: text
-                object1.blue:
-                  type: text
-                object2.blue:
-                  type: text
-
-  - do:
-      allowed_warnings:
-        - "index template [blue] has index patterns [purple-index] matching patterns from existing older templates [global] with patterns (global => [*]); this template [blue] will take precedence during new index creation"
-      indices.put_index_template:
-        name: blue
-        body:
-          index_patterns: ["purple-index"]
-          composed_of: ["red", "blue"]
-          template:
-            mappings:
-              properties:
-                object2.blue:
-                  type: integer
-                object1.purple:
-                  type: integer
-                object2.purple:
-                  type: integer
-                nested:
-                  type: nested
-                  include_in_root: true
-
-  - do:
-      indices.create:
-        index: purple-index
-        body:
+          index_patterns: ["foo", "bar-*"]
           mappings:
-            properties:
-              object2.purple:
-                type: double
-              object3.purple:
-                type: double
-              nested:
-                type: nested
-                include_in_root: false
-                include_in_parent: true
-
   - do:
-      indices.get:
-        index: purple-index
-
-  - match: {purple-index.mappings.properties.object1.properties.red: {type: keyword}}
-  - match: {purple-index.mappings.properties.object1.properties.blue: {type: text}}
-  - match: {purple-index.mappings.properties.object1.properties.purple: {type: integer}}
-
-  - match: {purple-index.mappings.properties.object2.properties.red: {type: text}}
+                  type: nested
+                  type: keyword
+            mappings:
+        name: my-template
+                include_in_parent: true
+---
   - match: {purple-index.mappings.properties.object2.properties.blue: {type: integer}}
-  - match: {purple-index.mappings.properties.object2.properties.purple: {type: double}}
-
-  - match: {purple-index.mappings.properties.object3.properties.purple: {type: double}}
-
-  - is_false: purple-index.mappings.properties.nested.include_in_root
-  - is_true: purple-index.mappings.properties.nested.include_in_parent
+          template:
+      allowed_warnings:
+              index.number_of_replicas: 0
+                object2.blue:
+      indices.put_index_template:
+  - match: {bazfoo.aliases.alias1: {}}
+      indices.put_index_template:
+                  type: keyword
+          template:
+  - do:
+          priority: 405
+      cluster.put_component_template:
+      indices.put_index_template:
+          priority: 400
+              properties:
+            index.priority: 17

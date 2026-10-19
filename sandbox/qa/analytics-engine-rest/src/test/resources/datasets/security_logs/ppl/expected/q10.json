@@ -1,48 +1,48 @@
-{
-  "schema": [
-    {
-      "name": "blocked_count",
-      "type": "bigint"
     },
-    {
       "name": "unique_users",
-      "type": "bigint"
-    },
-    {
       "name": "source_ip",
-      "type": "ip"
-    },
-    {
-      "name": "action",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      8,
+      "type": "bigint"
       5,
-      "10.0.0.100",
-      "blocked"
-    ],
     [
-      8,
-      3,
-      "10.0.0.100",
-      "denied"
-    ],
-    [
-      8,
-      4,
-      "192.168.1.150",
-      "blocked"
-    ],
-    [
-      8,
-      5,
-      "192.168.1.150",
-      "denied"
-    ]
-  ],
-  "total": 4,
-  "size": 4
 }
+    ]
+      8,
+      8,
+      "192.168.1.150",
+{
+      "type": "bigint"
+      "name": "blocked_count",
+      "name": "action",
+  ],
+      "10.0.0.100",
+    [
+      "blocked"
+  "total": 4,
+    {
+      4,
+    {
+      5,
+    },
+      "denied"
+      "type": "ip"
+  "size": 4
+    [
+  "schema": [
+  "datarows": [
+    ],
+  ],
+      "denied"
+      8,
+    ],
+    {
+      "10.0.0.100",
+    {
+      3,
+      "type": "string"
+    [
+      8,
+    },
+    }
+      "192.168.1.150",
+    ],
+      "blocked"

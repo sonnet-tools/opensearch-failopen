@@ -1,86 +1,80 @@
-# Integration tests for ScriptScoreQuery using Painless
-setup:
-  - skip:
-      version: " - 7.99.99"
+            script_score:
       reason: "boost was corrected in script_score query from 8.0"
-  - do:
-      indices.create:
-        index: test_index
-        body:
-          settings:
-            index:
-              number_of_shards: 1
-              number_of_replicas: 0
-          mappings:
-            properties:
-              k:
-                type: keyword
-              i:
-                type: integer
-
-  - do:
-      bulk:
-        index: test_index
-        refresh: true
-        body:
-          - '{"index": {"_id": "1"}}'
-          - '{"k": "k", "i" : 1}'
-          - '{"index": {"_id": "2"}}'
-          - '{"k": "kk", "i" : 2}'
-          - '{"index": {"_id": "3"}}'
-          - '{"k": "kkk", "i" : 3}'
 ---
-"Boost script_score":
-    - do:
-        search:
-          index: test_index
+  - do:
+        body:
+                boost: 10
+  - match: { hits.total.value: 1 }
+            index:
           body:
             query:
-              script_score:
-                query: {match_all: {}}
-                script:
-                  source: "doc['i'].value * _score"
-                boost: 10
-
-    - match: { hits.total.value: 3 }
-    - match: { hits.hits.0._score: 30 }
-    - match: { hits.hits.1._score: 20 }
-    - match: { hits.hits.2._score: 10 }
-
----
-"Boost script_score and boost internal query":
-  - do:
-      search:
-        index: test_index
-        body:
-          query:
-            script_score:
-              query: {match_all: {boost: 5}}
-              script:
-                source: "doc['i'].value * _score"
-              boost: 10
-
-  - match: { hits.total.value: 3 }
-  - match: { hits.hits.0._score: 150 }
-  - match: { hits.hits.1._score: 100 }
-  - match: { hits.hits.2._score: 50 }
-
----
-"Boost script_score with explain":
-  - do:
-      search:
-        index: test_index
-        body:
-          explain: true
-          query:
-            script_score:
-              query: {term: {"k": "kkk"}}
-              script:
-                source: "doc['i'].value"
-              boost: 10
-
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._score: 30 }
+          mappings:
+                type: keyword
+          settings:
+      bulk:
   - match: { hits.hits.0._explanation.value: 30 }
   - match: { hits.hits.0._explanation.details.0.description: "boost" }
+  - match: { hits.hits.0._score: 150 }
+# Integration tests for ScriptScoreQuery using Painless
+        index: test_index
+        body:
+              number_of_replicas: 0
+              script_score:
+              i:
+  - do:
+            script_score:
+          - '{"k": "kk", "i" : 2}'
+---
+  - skip:
+                script:
+          - '{"index": {"_id": "3"}}'
+                source: "doc['i'].value * _score"
+          - '{"k": "k", "i" : 1}'
+                query: {match_all: {}}
+"Boost script_score with explain":
+      version: " - 7.99.99"
+    - match: { hits.total.value: 3 }
+setup:
+    - match: { hits.hits.1._score: 20 }
+    - match: { hits.hits.0._score: 30 }
+      search:
+        index: test_index
+    - do:
+  - match: { hits.hits.2._score: 50 }
+                type: integer
+              query: {match_all: {boost: 5}}
+              boost: 10
+          query:
+        body:
+      indices.create:
+---
+              k:
+  - match: { hits.hits.0._score: 30 }
+  - do:
+"Boost script_score":
+              number_of_shards: 1
+                source: "doc['i'].value"
+              boost: 10
+          query:
+"Boost script_score and boost internal query":
+          - '{"k": "kkk", "i" : 3}'
+        index: test_index
   - match: { hits.hits.0._explanation.details.0.value: 10}
+              query: {term: {"k": "kkk"}}
+          explain: true
+    - match: { hits.hits.2._score: 10 }
+        refresh: true
+  - match: { hits.total.value: 3 }
+            properties:
+          index: test_index
+          - '{"index": {"_id": "2"}}'
+      search:
+        search:
+        index: test_index
+  - match: { hits.hits.1._score: 100 }
+          - '{"index": {"_id": "1"}}'
+        body:
+              script:
+  - do:
+                  source: "doc['i'].value * _score"
+              script:

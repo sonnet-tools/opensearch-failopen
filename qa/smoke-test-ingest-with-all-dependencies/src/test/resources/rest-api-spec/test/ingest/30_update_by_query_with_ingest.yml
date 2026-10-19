@@ -1,42 +1,40 @@
----
-"Update a document using update_by_query":
-  - do:
-      ingest.put_pipeline:
-        id: "test_ingest"
-        body:  >
-          {
-            "description": "tests reindex with ingest",
-            "processors": [
-              {
                 "append" : {
-                  "field" : "new_field",
-                  "value": "cat"
-                }
-              }
+"Update a document using update_by_query":
+        id: "test_ingest"
+  - do:
             ]
-          }
-  - do:
-      index:
-        index:  twitter
-        id:     1
-        body:   { "user": "foobar" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      update_by_query:
-        index:   twitter
-        refresh: true
-        pipeline: test_ingest
-  - match: {updated: 1}
-  - match: {noops: 0}
-
-  - do:
+          query:
+              }
+        body:  >
+                  "value": "cat"
+---
       search:
         rest_total_hits_as_int: true
-        index: twitter
-        body:
-          query:
-            match:
+        pipeline: test_ingest
               new_field: cat
+        refresh: true
+        body:   { "user": "foobar" }
+        index:   twitter
+  - do:
+        body:
+            "description": "tests reindex with ingest",
+        id:     1
+      indices.refresh: {}
+            match:
+  - match: {updated: 1}
   - match: { hits.total: 1 }
+        index: twitter
+  - match: {noops: 0}
+  - do:
+        index:  twitter
+      ingest.put_pipeline:
+                }
+      update_by_query:
+            "processors": [
+      index:
+              {
+  - do:
+          }
+                  "field" : "new_field",
+  - do:
+          {

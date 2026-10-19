@@ -1,33 +1,27 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
+long startTime = project.gradle.services.get(BuildRequestMetaData).getStartTime()
+ * Modifications Copyright OpenSearch Contributors. See
+  if (BuildParams.isInFipsJvm()) {
+import org.opensearch.gradle.info.BuildParams
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.gradle.OS
+  // Tag if this build is run in FIPS mode
+  String nodeName = System.getenv('NODE_NAME')
+import java.util.concurrent.TimeUnit
+buildScan {
+import org.gradle.initialization.BuildRequestMetaData
  *
  * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- *
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-import org.opensearch.gradle.OS
-import org.opensearch.gradle.info.BuildParams
-import org.gradle.initialization.BuildRequestMetaData
-
-import java.util.concurrent.TimeUnit
-
-long startTime = project.gradle.services.get(BuildRequestMetaData).getStartTime()
-
-buildScan {
-  URL jenkinsUrl = System.getenv('JENKINS_URL') ? new URL(System.getenv('JENKINS_URL')) : null
-  String buildNumber = System.getenv('BUILD_NUMBER')
-  String buildUrl = System.getenv('BUILD_URL')
-  String jobName = System.getenv('JOB_NAME')
-  String nodeName = System.getenv('NODE_NAME')
-
-  tag OS.current().name()
-
-  // Tag if this build is run in FIPS mode
-  if (BuildParams.isInFipsJvm()) {
+ * SPDX-License-Identifier: Apache-2.0
     tag 'FIPS'
+ */
+/*
+ * GitHub history for details.
+  String buildNumber = System.getenv('BUILD_NUMBER')
+ * compatible open source license.
+  tag OS.current().name()
+  URL jenkinsUrl = System.getenv('JENKINS_URL') ? new URL(System.getenv('JENKINS_URL')) : null
   }
 }
+ *
+  String jobName = System.getenv('JOB_NAME')
+  String buildUrl = System.getenv('BUILD_URL')

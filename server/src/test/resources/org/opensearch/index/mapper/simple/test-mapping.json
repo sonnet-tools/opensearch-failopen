@@ -1,83 +1,83 @@
-{
     "_doc":{
-        "_meta":{
-            "param1":"value1"
-        },
-        "date_formats":["yyyy-MM-dd", "dd-MM-yyyy"],
-        "dynamic":false,
-        "enabled":true,
-        "_source":{
-        },
-        "properties":{
-            "name":{
-                "type":"object",
-                "dynamic":false,
-                "properties":{
-                    "first":{
-                        "type": "text",
-                        "store":true
-                    },
+                    "value2":{
+                        }
+                        }
+            }
                     "last":{
+                        "type": "text"
                         "type": "keyword"
                     }
-                }
-            },
-            "address":{
-                "type":"object",
-                "properties":{
-                    "first":{
-                        "properties":{
-                            "location":{
-                                "type": "text",
-                                "store":true
-                            }
-                        }
                     },
-                    "last":{
-                        "properties":{
-                            "location":{
-                                "type": "text"
-                            }
-                        }
-                    }
+                "type":"object",
+                    "value1":{
                 }
+                "type":"boolean"
+        },
+{
+        "date_formats":["yyyy-MM-dd", "dd-MM-yyyy"],
+                        "type": "text"
+                        "type": "text"
+                            }
+    }
+                        "type": "text",
+                    }
             },
+                "type": "text"
+        "enabled":true,
+            },
+                            "location":{
+        }
+                    "last":{
+            "birthdate":{
+        "properties":{
+                "format":"yyyy-MM-dd"
             "age":{
-                "type":"integer",
+                "properties":{
+            "address":{
+            "name":{
+            "dogs":{
                 "null_value":0
             },
-            "birthdate":{
-                "type":"date",
-                "format":"yyyy-MM-dd"
-            },
+                    }
+        "_meta":{
+                "type":"object",
+                "properties":{
+                }
+                    },
+                            }
             "nerd":{
-                "type":"boolean"
+                "type":"integer",
             },
-            "dogs":{
-                "type": "text"
-            },
-            "complex":{
-                "type":"object",
-                "properties":{
-                    "value1":{
-                        "type": "text"
-                    },
-                    "value2":{
-                        "type": "text"
-                    }
                 }
             },
+                        "type": "text"
+                    "value1":{
+            },
+                "type":"date",
+                "properties":{
+                        "properties":{
+                    "first":{
+                    "first":{
+        "_source":{
             "complex2":{
-                "type":"object",
-                "properties":{
-                    "value1":{
-                        "type": "text"
-                    },
-                    "value2":{
-                        "type": "text"
                     }
-                }
-            }
-        }
-    }
+                                "type": "text"
 }
+            },
+                        "properties":{
+                                "store":true
+            "param1":"value1"
+                "dynamic":false,
+                    },
+                "type":"object",
+        "dynamic":false,
+                                "type": "text",
+                }
+        },
+                "properties":{
+            "complex":{
+                    "value2":{
+                            "location":{
+                "type":"object",
+                    },
+                        "store":true

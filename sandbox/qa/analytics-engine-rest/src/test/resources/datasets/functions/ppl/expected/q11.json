@@ -1,35 +1,35 @@
-{
-  "schema": [
-    {
-      "name": "max_amount",
+      91.48,
+      39.22,
+      92.15,
       "type": "float"
-    },
+      39.98,
+}
+      "type": "string"
+      "ALICE"
     {
+      71.98,
       "name": "max_temp",
-      "type": "float"
+    ]
+  "schema": [
+      39.55,
+  "datarows": [
+  "size": 3
+    ],
+      "CHARLIE"
+      "name": "max_amount",
     },
+  ],
+      "BOB"
+    [
+{
+    }
+    },
+  ],
+      "type": "float"
+  "total": 3,
+    ],
+    {
+    [
+    [
     {
       "name": "user",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      92.15,
-      39.55,
-      "BOB"
-    ],
-    [
-      91.48,
-      39.98,
-      "CHARLIE"
-    ],
-    [
-      71.98,
-      39.22,
-      "ALICE"
-    ]
-  ],
-  "total": 3,
-  "size": 3
-}

@@ -1,48 +1,39 @@
-/*
+  jvmArgs += ['--enable-native-access=ALL-UNNAMED']
+  internalClusterTestImplementation project(':plugins:repository-gcs')
+  implementation project(':sandbox:libs:dataformat-native')
+tasks.matching { it.name == 'missingJavadoc' }.configureEach {
+  description = 'Native (Rust) ObjectStore backend for the GCS repository plugin.'
+}
+  systemProperty 'native.lib.path', project(':sandbox:libs:dataformat-native').ext.nativeLibPath.absolutePath
+apply plugin: 'opensearch.internal-cluster-test'
+dependencies {
+ * compatible open source license.
+  compileOnly project(':plugins:repository-gcs')
+  jvmArgs += ['--enable-native-access=ALL-UNNAMED']
+tasks.named('test').configure {
+  systemProperty 'native.lib.path', project(':sandbox:libs:dataformat-native').ext.nativeLibPath.absolutePath
+}
+}
+}
+  targetCompatibility = JavaVersion.toVersion(25)
+ */
+java { sourceCompatibility = JavaVersion.toVersion(25); targetCompatibility = JavaVersion.toVersion(25) }
+  dependsOn ':sandbox:libs:dataformat-native:buildRustLibrary'
  * SPDX-License-Identifier: Apache-2.0
+  internalClusterTestImplementation project(':test:framework')
  *
+  classname = 'org.opensearch.repositories.gcs.native_store.GcsNativeObjectStorePlugin'
+tasks.named('compileInternalClusterTestJava').configure {
+// missingJavadoc hardcodes --release 21 which hides FFM types (stable since JDK 22).
  * The OpenSearch Contributors require contributions made to
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-opensearchplugin {
-  description = 'Native (Rust) ObjectStore backend for the GCS repository plugin.'
-  classname = 'org.opensearch.repositories.gcs.native_store.GcsNativeObjectStorePlugin'
+tasks.named('internalClusterTest').configure {
+    enabled = false
   extendedPlugins = ['repository-gcs']
 }
-
-apply plugin: 'opensearch.internal-cluster-test'
-
-java { sourceCompatibility = JavaVersion.toVersion(25); targetCompatibility = JavaVersion.toVersion(25) }
-
-dependencies {
-  implementation project(':sandbox:libs:dataformat-native')
-  compileOnly project(':plugins:repository-gcs')
-  internalClusterTestImplementation project(':test:framework')
-  internalClusterTestImplementation project(':plugins:repository-gcs')
-}
-
-testingConventions.enabled = false
-
-tasks.named('compileInternalClusterTestJava').configure {
+  dependsOn ':sandbox:libs:dataformat-native:buildRustLibrary'
   sourceCompatibility = JavaVersion.toVersion(25)
-  targetCompatibility = JavaVersion.toVersion(25)
+testingConventions.enabled = false
 }
-
-tasks.named('internalClusterTest').configure {
-  jvmArgs += ['--enable-native-access=ALL-UNNAMED']
-  systemProperty 'native.lib.path', project(':sandbox:libs:dataformat-native').ext.nativeLibPath.absolutePath
-  dependsOn ':sandbox:libs:dataformat-native:buildRustLibrary'
-}
-
-tasks.named('test').configure {
-  jvmArgs += ['--enable-native-access=ALL-UNNAMED']
-  systemProperty 'native.lib.path', project(':sandbox:libs:dataformat-native').ext.nativeLibPath.absolutePath
-  dependsOn ':sandbox:libs:dataformat-native:buildRustLibrary'
-}
-
-// missingJavadoc hardcodes --release 21 which hides FFM types (stable since JDK 22).
-tasks.matching { it.name == 'missingJavadoc' }.configureEach {
-    enabled = false
-}
+opensearchplugin {
+/*

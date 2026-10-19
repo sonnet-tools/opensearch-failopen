@@ -1,107 +1,95 @@
----
-"Copy settings during shrink index":
-  - skip:
-        features: allowed_warnings
-  - do:
-      nodes.info:
-        node_id: data:true
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  - do:
       indices.create:
-        index: source
-        wait_for_active_shards: 1
-        body:
-          settings:
-            # ensure everything is allocated on the same node
-            index.routing.allocation.include._id: $node_id
-            index.number_of_shards: 2
-            index.number_of_replicas: 0
-            index.merge.scheduler.max_merge_count: 4
-
-  # make it read-only
-  - do:
-      indices.put_settings:
-        index: source
-        body:
-          index.blocks.write: true
-          index.number_of_replicas: 0
-
-  - do:
       cluster.health:
-        wait_for_status: green
+        features: allowed_warnings
         index: source
-
-  # now we do a actual shrink and copy settings
-  - do:
-      indices.shrink:
-        index: "source"
-        target: "copy-settings-target"
-        wait_for_active_shards: 1
-        master_timeout: 10s
-        copy_settings: true
+        index: source
         body:
-          settings:
-            index.number_of_replicas: 0
+  - match: { default-copy-settings-target.settings.index.merge.scheduler.max_thread_count: "2" }
+        - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
+  - match: { copy-settings-target.settings.index.routing.allocation.include._id: $node_id }
+          index.number_of_replicas: 0
             index.merge.scheduler.max_thread_count: 2
+  - do:
+        index: "source"
+        wait_for_active_shards: 1
+      catch: /illegal_argument_exception/
+        body:
       allowed_warnings:
+      indices.shrink:
+      nodes._arbitrary_key_: node_id
+  - do:
+  # now we do a actual shrink and copy settings (by default)
+        wait_for_status: green
+"Copy settings during shrink index":
+  # now we do a actual shrink and copy settings
+          settings:
+            index.merge.scheduler.max_merge_count: 4
+        target: "copy-settings-target"
         - "parameter [copy_settings] is deprecated and will be removed in 3.0.0"
         - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
-
-  - do:
-      cluster.health:
-        wait_for_status: green
-
-  - do:
-      indices.get_settings:
-        index: "copy-settings-target"
-
-  # settings should be copied
-  - match: { copy-settings-target.settings.index.merge.scheduler.max_merge_count: "4" }
-  - match: { copy-settings-target.settings.index.merge.scheduler.max_thread_count: "2" }
-  - match: { copy-settings-target.settings.index.blocks.write: "true" }
-  - match: { copy-settings-target.settings.index.routing.allocation.include._id: $node_id }
-
-  # now we do a actual shrink and copy settings (by default)
-  - do:
-      allowed_warnings:
-        - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
-      indices.shrink:
-        index: "source"
-        target: "default-copy-settings-target"
         wait_for_active_shards: 1
-        master_timeout: 10s
+  - do:
         body:
-          settings:
-            index.number_of_replicas: 0
-            index.merge.scheduler.max_thread_count: 2
-
   - do:
-      cluster.health:
-        wait_for_status: green
-
-  - do:
-      indices.get_settings:
-        index: "default-copy-settings-target"
-
-  # settings should be copied
   - match: { default-copy-settings-target.settings.index.merge.scheduler.max_merge_count: "4" }
-  - match: { default-copy-settings-target.settings.index.merge.scheduler.max_thread_count: "2" }
-  - match: { default-copy-settings-target.settings.index.blocks.write: "true" }
-  - match: { default-copy-settings-target.settings.index.routing.allocation.include._id: $node_id }
-
-  # now we do a actual shrink and try to set no copy settings
+            # ensure everything is allocated on the same node
+            index.number_of_replicas: 0
+          index.blocks.write: true
   - do:
-      catch: /illegal_argument_exception/
-      allowed_warnings:
-        - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
+  - skip:
+        body:
+            index.number_of_replicas: 0
+      cluster.health:
+          settings:
       indices.shrink:
-        index: "source"
+      indices.get_settings:
+  - match: { default-copy-settings-target.settings.index.blocks.write: "true" }
+      indices.get_settings:
+      allowed_warnings:
+  # now we do a actual shrink and try to set no copy settings
+  - set:
+          settings:
+        body:
+      nodes.info:
+        master_timeout: 10s
+        - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
+      allowed_warnings:
+      indices.put_settings:
+            index.merge.scheduler.max_thread_count: 2
+        target: "default-copy-settings-target"
+            index.number_of_replicas: 0
+  - do:
+  - match: { copy-settings-target.settings.index.merge.scheduler.max_merge_count: "4" }
+        wait_for_status: green
+  - match: { copy-settings-target.settings.index.blocks.write: "true" }
+        master_timeout: 10s
+  - do:
+          settings:
         target: "explicit-no-copy-settings-target"
         wait_for_active_shards: 1
-        master_timeout: 10s
+        wait_for_active_shards: 1
+            index.number_of_shards: 2
+        index: "default-copy-settings-target"
+  - do:
+  - do:
+  - match: { default-copy-settings-target.settings.index.routing.allocation.include._id: $node_id }
+---
+  - do:
+  # make it read-only
         copy_settings: false
-        body:
-          settings:
+        index: "source"
+        index: "source"
+      indices.shrink:
+  - do:
+  - match: { copy-settings-target.settings.index.merge.scheduler.max_thread_count: "2" }
+  # settings should be copied
+        index: source
+        index: "copy-settings-target"
             index.number_of_replicas: 0
+        master_timeout: 10s
+        node_id: data:true
+      cluster.health:
+            index.routing.allocation.include._id: $node_id
+        wait_for_status: green
+  # settings should be copied
+        copy_settings: true

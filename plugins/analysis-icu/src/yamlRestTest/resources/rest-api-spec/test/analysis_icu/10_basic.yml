@@ -1,105 +1,103 @@
-# Integration tests for ICU analysis components
-#
-"Tokenizer":
-    - do:
-        indices.analyze:
-          body:
-            text:         Foo Bar
-            tokenizer:    icu_tokenizer
-    - length: { tokens: 2 }
-    - match:  { tokens.0.token: Foo }
-    - match:  { tokens.1.token: Bar }
 ---
+    - match:  { tokens.0.token: charfilter }
+    - match:  { tokens.3.token: ruß }
 "Normalization filter":
-    - do:
-        indices.analyze:
-          body:
-            filter:       [icu_normalizer]
-            text:         Foo Bar Ruß
-            tokenizer:    standard
-    - length: { tokens: 3 }
-    - match:  { tokens.0.token: foo}
-    - match:  { tokens.1.token: bar }
     - match:  { tokens.2.token: russ }
----
-"Normalization charfilter":
-    - do:
         indices.analyze:
-          body:
-            char_filter:  [icu_normalizer]
-            text:         Foo Bar Ruß
-            tokenizer:    standard
-    - length: { tokens: 3 }
-    - match:  { tokens.0.token: foo }
-    - match:  { tokens.1.token: bar }
-    - match:  { tokens.2.token: russ }
----
-"Folding filter":
-    - do:
-        indices.analyze:
-          body:
-            filter:       [icu_folding]
-            text:         Foo Bar résumé
-            tokenizer:    standard
-    - length: { tokens: 3 }
-    - match:  { tokens.0.token: foo }
-    - match:  { tokens.1.token: bar }
-    - match:  { tokens.2.token: resume }
----
-"Normalization with unicode_set_filter":
-    - do:
-        indices.create:
-            index:  test
-            body:
-                settings:
-                    index:
                         analysis:
-                            char_filter:
-                                charfilter_icu_normalizer:
-                                    type: icu_normalizer
-                                    unicode_set_filter: "[^ß]"
-                            filter:
-                                tokenfilter_icu_normalizer:
-                                    type: icu_normalizer
-                                    unicode_set_filter: "[^ßB]"
-                                tokenfilter_icu_folding:
-                                    type: icu_folding
-                                    unicode_set_filter: "[^â]"
-    - do:
-        indices.analyze:
           index:    test
+"Normalization charfilter":
+                                    unicode_set_filter: "[^â]"
+            text:         Foo Bar
+            text:         Foo Bar Ruß
+        indices.analyze:
+---
+    - match:  { tokens.2.token: Bâr }
+            text:         Foo Bar résumé
+    - match:  { tokens.3.token: russ }
+                                    type: icu_normalizer
+    - length: { tokens: 3 }
+    - match:  { tokens.0.token: Foo }
+                                    type: icu_normalizer
+            tokenizer:    icu_tokenizer
+    - length: { tokens: 3 }
+    - length: { tokens: 2 }
+    - do:
+    - match:  { tokens.1.token: Bar }
+                                charfilter_icu_normalizer:
+            tokenizer:  standard
+"Normalization with unicode_set_filter":
+            index:  test
+    - do:
+            filter:       [icu_folding]
+    - length: { tokens: 4 }
+        indices.analyze:
+    - match:  { tokens.3.token: ruß }
+            tokenizer:    standard
+        indices.analyze:
+    - match:  { tokens.1.token: föo }
+    - match:  { tokens.1.token: foo }
+                                tokenfilter_icu_folding:
+    - do:
+          index:    test
+          body:
+    - match:  { tokens.0.token: foo}
+            body:
+    - match:  { tokens.0.token: foo }
+        indices.analyze:
+    - do:
+            char_filter:  [icu_normalizer]
+        indices.create:
+        indices.analyze:
+                                    type: icu_folding
+          body:
+    - match:  { tokens.2.token: russ }
+          body:
+            tokenizer:    standard
           body:
             char_filter: ["charfilter_icu_normalizer"]
-            tokenizer:  standard
-            text:     charfilter Föo Bâr Ruß
-    - length: { tokens: 4 }
-    - match:  { tokens.0.token: charfilter }
-    - match:  { tokens.1.token: föo }
-    - match:  { tokens.2.token: bâr }
-    - match:  { tokens.3.token: ruß }
-
-    - do:
-        indices.analyze:
-          index:    test
           body:
-            tokenizer:  standard
-            filter: ["tokenfilter_icu_normalizer"]
-            text:     tokenfilter Föo Bâr Ruß
-    - length: { tokens: 4 }
-    - match:  { tokens.0.token: tokenfilter }
-    - match:  { tokens.1.token: föo }
-    - match:  { tokens.2.token: Bâr }
-    - match:  { tokens.3.token: ruß }
-
-    - do:
-        indices.analyze:
+---
           index:    test
+            filter: ["tokenfilter_icu_normalizer"]
+    - match:  { tokens.2.token: bâr }
+                            char_filter:
+    - match:  { tokens.1.token: bar }
+    - do:
+                                tokenfilter_icu_normalizer:
+    - match:  { tokens.2.token: bâr }
+    - match:  { tokens.1.token: bar }
+          body:
+"Folding filter":
+            tokenizer:  standard
+    - length: { tokens: 4 }
+    - length: { tokens: 3 }
           body:
             tokenizer:  standard
             filter: ["tokenfilter_icu_folding"]
+                settings:
+# Integration tests for ICU analysis components
+        indices.analyze:
+    - match:  { tokens.1.token: föo }
+---
+                                    unicode_set_filter: "[^ßB]"
+    - do:
+            tokenizer:    standard
+                            filter:
+    - match:  { tokens.1.token: bar }
+            text:         Foo Bar Ruß
+    - match:  { tokens.2.token: resume }
+    - match:  { tokens.0.token: foo }
+            text:     tokenfilter Föo Bâr Ruß
             text:     icufolding Föo Bâr Ruß
     - length: { tokens: 4 }
+    - match:  { tokens.0.token: tokenfilter }
+                    index:
+            text:     charfilter Föo Bâr Ruß
+"Tokenizer":
+#
     - match:  { tokens.0.token: icufolding }
-    - match:  { tokens.1.token: foo }
-    - match:  { tokens.2.token: bâr }
-    - match:  { tokens.3.token: russ }
+    - do:
+            filter:       [icu_normalizer]
+                                    unicode_set_filter: "[^ß]"
+    - do:

@@ -1,76 +1,70 @@
----
+                  "field" : "bytes_source_field",
+              {
 teardown:
+        index: test
+                  "target_field" : "bytes_target_field"
+          }
   - do:
-      ingest.delete_pipeline:
-        id: "my_pipeline"
-        ignore: 404
-
----
-"Test conditional processor fulfilled condition":
+  - match: { _source.conditional_field: "bar" }
   - do:
-      ingest.put_pipeline:
         id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
             "processors": [
-              {
-                "bytes" : {
                   "if" : "ctx.conditional_field == 'bar'",
-                  "field" : "bytes_source_field",
-                  "target_field" : "bytes_target_field"
-                }
+        id: 1
               }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {bytes_source_field: "1kb", conditional_field: "bar"}
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.bytes_source_field: "1kb" }
-  - match: { _source.conditional_field: "bar" }
-  - match: { _source.bytes_target_field: 1024 }
-
----
-"Test conditional processor unfulfilled condition":
-  - do:
-      ingest.put_pipeline:
+"Test conditional processor fulfilled condition":
         id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "bytes" : {
-                  "if" : "ctx.conditional_field == 'foo'",
-                  "field" : "bytes_source_field",
-                  "target_field" : "bytes_target_field"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
         body: {bytes_source_field: "1kb", conditional_field: "bar"}
-
+              }
+          {
   - do:
-      get:
-        index: test
+        body: {bytes_source_field: "1kb", conditional_field: "bar"}
+          }
         id: 1
-  - match: { _source.bytes_source_field: "1kb" }
+            ]
+"Test conditional processor unfulfilled condition":
+          {
+  - do:
+  - do:
   - match: { _source.conditional_field: "bar" }
+                }
+                  "target_field" : "bytes_target_field"
+        pipeline: "my_pipeline"
+                "bytes" : {
+---
+              {
+  - match: { _source.bytes_source_field: "1kb" }
+  - match: { acknowledged: true }
+      ingest.put_pipeline:
+                "bytes" : {
+        ignore: 404
+---
+            "description": "_description",
+  - match: { _source.bytes_source_field: "1kb" }
+                  "if" : "ctx.conditional_field == 'foo'",
+      index:
+  - do:
+                  "field" : "bytes_source_field",
+  - match: { _source.bytes_target_field: 1024 }
+        index: test
+        body:  >
+        id: 1
+      get:
+        body:  >
+  - do:
+        id: "my_pipeline"
+      ingest.put_pipeline:
+        index: test
+            "description": "_description",
+        id: 1
+---
   - is_false: _source.bytes_target_field
+        index: test
+                }
+      index:
+            ]
+      get:
+  - match: { acknowledged: true }
+      ingest.delete_pipeline:
+        pipeline: "my_pipeline"
+            "processors": [

@@ -1,251 +1,209 @@
-# Integration tests for repository-azure
----
-setup:
-
-  # Register repository
-  - do:
-      snapshot.create_repository:
         repository: repository
-        body:
-          type: azure
+  - do:
           settings:
-            container: ${container}
-            client: "integration_test"
-            base_path: ${base_path}
-
-  # Remove the snapshots, if a previous test failed to delete them. This is
-  # useful for third party tests that runs the test against a real external service.
-  - do:
-      snapshot.delete:
-        repository: repository
-        snapshot: snapshot-one
-        ignore: 404
-  - do:
-      snapshot.delete:
-        repository: repository
-        snapshot: snapshot-two
-        ignore: 404
-
+        body:
 ---
-"Snapshot/Restore with repository-azure":
-
-  - skip:
-      features: allowed_warnings
-
-  # Get repository
-  - do:
-      snapshot.get_repository:
-        repository: repository
-
-  - match: { repository.settings.container: ${container} }
-  - match: { repository.settings.client : "integration_test" }
-  - match: { repository.settings.base_path : "${base_path}" }
-
-  # Index documents
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - index:
-              _index: docs
-              _id:    1
-          - snapshot: one
-          - index:
-              _index: docs
-              _id:    2
-          - snapshot: one
-          - index:
-              _index: docs
-              _id:    3
-          - snapshot: one
-
-  - do:
+  # Remove the snapshots, if a previous test failed to delete them. This is
+      snapshot.delete:
+            client: "integration_test"
       count:
-        index: docs
-
-  - match: {count: 3}
-
-  # Create a first snapshot
-  - do:
-      snapshot.create:
-        repository: repository
-        snapshot: snapshot-one
-        wait_for_completion: true
-
-  - match: { snapshot.snapshot: snapshot-one }
-  - match: { snapshot.state : SUCCESS }
-  - match: { snapshot.include_global_state: true }
-  - match: { snapshot.shards.failed : 0 }
-
-  - do:
-      snapshot.status:
-        repository: repository
-        snapshot: snapshot-one
-
-  - is_true: snapshots
-  - match: { snapshots.0.snapshot: snapshot-one }
   - match: { snapshots.0.state : SUCCESS }
-
-  # Index more documents
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - index:
-              _index: docs
-              _id:    4
-          - snapshot: two
-          - index:
-              _index: docs
-              _id:    5
-          - snapshot: two
-          - index:
-              _index: docs
-              _id:    6
-          - snapshot: two
-          - index:
-              _index: docs
-              _id:    7
-          - snapshot: two
-
-  - do:
-      count:
-        index: docs
-
-  - match: {count: 7}
-
-  # Create a second snapshot
-  - do:
-      snapshot.create:
-        repository: repository
-        snapshot: snapshot-two
-        wait_for_completion: true
-
-  - match: { snapshot.snapshot: snapshot-two }
-  - match: { snapshot.state : SUCCESS }
-  - match: { snapshot.shards.failed : 0 }
-
-  - do:
-      snapshot.get:
-        repository: repository
-        snapshot: snapshot-one,snapshot-two
-
-  - is_true: snapshots
-  - match: { snapshots.0.state : SUCCESS }
-  - match: { snapshots.1.state : SUCCESS }
-
-  # Delete the index
-  - do:
-      indices.delete:
-        index: docs
-
-  # Restore the second snapshot
-  - do:
-      snapshot.restore:
-        repository: repository
-        snapshot: snapshot-two
-        wait_for_completion: true
-
-  - do:
-      count:
-        index: docs
-
-  - match: {count: 7}
-
   # Delete the index again
   - do:
-      indices.delete:
+      snapshot.create:
+"Restore a non existing snapshot":
+              _id:    4
+        repository: repository
+        snapshot: snapshot-one,snapshot-two
+  - do:
+        repository: repository
+              _index: docs
+        repository: repository
+      snapshot.get_repository:
+        body:
+  - do:
+        ignore: 404
+  - do:
         index: docs
-
+        snapshot: snapshot-two
+              _index: docs
+  - match: { snapshot.snapshot: snapshot-two }
   # Restore the first snapshot
   - do:
-      snapshot.restore:
-        repository: repository
-        snapshot: snapshot-one
-        wait_for_completion: true
-
-  - do:
-      count:
-        index: docs
-
-  - match: {count: 3}
-
-  # Remove the snapshots
-  - do:
-      allowed_warnings:
-        - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
-      snapshot.delete:
-        repository: repository
-        snapshot: snapshot-two
-        master_timeout: 5m
-
-  - do:
-      allowed_warnings:
-        - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
-      snapshot.delete:
-        repository: repository
-        snapshot: snapshot-one
-        master_timeout: 5m
-
----
-"Register a repository with a non existing container":
-
-  - do:
-      catch: /repository_verification_exception/
       snapshot.create_repository:
+        snapshot: missing
         repository: repository
-        body:
-          type: azure
-          settings:
-            container: zHHkfSqlbnBsbpSgvCYtxrEfFLqghXtyPvvvKPNBnRCicNHQLE
-            client: integration_test
-
----
-"Register a repository with a non existing client":
-
+setup:
   - do:
-      # TODO this should be a repository_exception
-      catch: /settings_exception/
-      snapshot.create_repository:
-        repository: repository
-        body:
-          type: azure
-          settings:
-            bucket: repository
             client: unknown
-
----
-"Get a non existing snapshot":
-
+      catch: /settings_exception/
+        master_timeout: 5m
   - do:
-      catch: /snapshot_missing_exception/
+              _id:    7
+              _index: docs
+              _index: docs
+        index: docs
+          type: azure
+  - match: { snapshot.snapshot: snapshot-one }
+  - do:
+        repository: repository
+        repository: repository
+            client: integration_test
+       repository: repository
+  - do:
+  - do:
+  # Create a first snapshot
+              _id:    1
+          - snapshot: two
+        repository: repository
+  # useful for third party tests that runs the test against a real external service.
+        repository: repository
+  - match: {count: 7}
+        repository: repository
+              _index: docs
+  - do:
+        snapshot: snapshot-one
+  - do:
+  - do:
+        index: docs
+        ignore: 404
+teardown:
+"Delete a non existing snapshot":
+      snapshot.restore:
+  # Register repository
+        snapshot: snapshot-one
+  # Restore the second snapshot
+  - do:
+  - do:
+          - index:
+          - snapshot: two
+      snapshot.delete:
+          settings:
+      features: allowed_warnings
+        snapshot: snapshot-one
+  - do:
+  - match: {count: 3}
+      # TODO this should be a repository_exception
+"Register a repository with a non existing container":
       snapshot.get:
+        snapshot: missing
+        snapshot: snapshot-two
+  # Index more documents
+---
+      indices.delete:
+              _id:    3
+      snapshot.create_repository:
+  - do:
+---
+              _id:    2
+      count:
+---
+---
+          - index:
+            base_path: ${base_path}
+  - match: { repository.settings.container: ${container} }
+          - snapshot: one
+              _id:    5
+            container: zHHkfSqlbnBsbpSgvCYtxrEfFLqghXtyPvvvKPNBnRCicNHQLE
+# Integration tests for repository-azure
+  - do:
+  - do:
+      snapshot.delete:
+---
+        refresh: true
+      allowed_warnings:
+        wait_for_completion: true
+  # Get repository
+     snapshot.delete_repository:
+        - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
+  - match: { snapshots.1.state : SUCCESS }
+        snapshot: snapshot-two
+      allowed_warnings:
+        body:
+      snapshot.create_repository:
+  - match: { snapshot.state : SUCCESS }
+        repository: repository
+  - do:
+              _id:    6
+          - index:
+  - match: { snapshot.state : SUCCESS }
+  - match: { snapshots.0.state : SUCCESS }
+      snapshot.create:
+          type: azure
+      snapshot.delete:
+      catch: /snapshot_missing_exception/
+  - match: { repository.settings.client : "integration_test" }
+  - is_true: snapshots
+  - do:
+---
+        wait_for_completion: true
+        master_timeout: 5m
+        wait_for_completion: true
+  - do:
+  # Create a second snapshot
+      catch: /snapshot_missing_exception/
+          - snapshot: two
+      count:
+            bucket: repository
+        body:
+  # Remove our repository
         repository: repository
         snapshot: missing
-
 ---
-"Delete a non existing snapshot":
-
+  # Remove the snapshots
+  # Index documents
+        repository: repository
+  - match: { snapshot.shards.failed : 0 }
+        repository: repository
+  - match: {count: 3}
+"Snapshot/Restore with repository-azure":
   - do:
-      catch: /snapshot_missing_exception/
+"Get a non existing snapshot":
+          type: azure
+          - snapshot: one
+        index: docs
+        snapshot: snapshot-one
+        repository: repository
+            container: ${container}
+        - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
+          - index:
+  - do:
+  - match: { snapshots.0.snapshot: snapshot-one }
+              _index: docs
+        wait_for_completion: true
+  - is_true: snapshots
+          settings:
+  - match: { snapshot.shards.failed : 0 }
+      snapshot.get:
+  - skip:
+      indices.delete:
+  - match: { repository.settings.base_path : "${base_path}" }
+          - index:
+          - snapshot: one
+        snapshot: snapshot-one
+      snapshot.restore:
+              _index: docs
+      count:
+      snapshot.status:
+  # Delete the index
+        repository: repository
+          - snapshot: two
+      catch: /snapshot_restore_exception/
+        refresh: true
+      bulk:
+  - do:
+        snapshot: snapshot-two
+        body:
+      catch: /repository_verification_exception/
+        index: docs
+          - index:
+  - match: {count: 7}
+      snapshot.restore:
+          - index:
+        index: docs
+  - match: { snapshot.include_global_state: true }
+        wait_for_completion: true
       snapshot.delete:
         repository: repository
-        snapshot: missing
-
----
-"Restore a non existing snapshot":
-
-  - do:
-      catch: /snapshot_restore_exception/
-      snapshot.restore:
-        repository: repository
-        snapshot: missing
-        wait_for_completion: true
-
----
-teardown:
-
-  # Remove our repository
-  - do:
-     snapshot.delete_repository:
-       repository: repository
+"Register a repository with a non existing client":
+      bulk:

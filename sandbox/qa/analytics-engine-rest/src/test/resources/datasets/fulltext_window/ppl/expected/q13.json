@@ -1,60 +1,60 @@
-{
-  "schema": [
-    {
-      "name": "service",
-      "type": "string"
-    },
-    {
-      "name": "message",
-      "type": "string"
-    },
-    {
-      "name": "latency",
-      "type": "int"
-    },
-    {
-      "name": "rn",
-      "type": "bigint"
-    }
-  ],
-  "datarows": [
     [
-      "auth",
-      "LDAP server timeout during authentication",
+      "order",
       7000,
-      1
+      "Payment processor API timeout",
+      "type": "string"
+  "total": 6,
     ],
-    [
-      "auth",
-      "Connection timeout while connecting to database",
       5000,
       2
     ],
+    {
     [
-      "order",
-      "Order validation timeout exceeded",
-      11000,
+    ],
+    [
       1
-    ],
-    [
-      "order",
-      "Warehouse system connection timeout",
-      10500,
-      2
-    ],
-    [
-      "payment",
-      "Payment processor API timeout",
+    },
+      "name": "latency",
+      "Connection timeout while connecting to database",
       12000,
-      1
-    ],
-    [
-      "payment",
-      "Payment gateway timeout error",
-      10000,
-      2
-    ]
-  ],
-  "total": 6,
-  "size": 6
+      "order",
+      "type": "int"
 }
+    }
+      "name": "service",
+      1
+      "type": "bigint"
+      "payment",
+      10500,
+    },
+    {
+  "schema": [
+    [
+      "name": "message",
+      "payment",
+      "name": "rn",
+  "size": 6
+      "auth",
+    },
+    ]
+      10000,
+    ],
+      "type": "string"
+      11000,
+      2
+    {
+      "LDAP server timeout during authentication",
+      1
+    [
+  ],
+      "Payment gateway timeout error",
+      2
+      "Warehouse system connection timeout",
+{
+      "Order validation timeout exceeded",
+  "datarows": [
+    [
+  ],
+      "auth",
+    {
+    ],

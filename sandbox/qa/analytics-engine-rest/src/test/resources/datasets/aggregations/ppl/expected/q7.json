@@ -1,25 +1,25 @@
-{
-  "schema": [
-    {
       "name": "p50",
-      "type": "int"
     },
-    {
-      "name": "p95",
-      "type": "int"
-    },
-    {
-      "name": "p99",
-      "type": "int"
-    }
-  ],
-  "datarows": [
-    [
-      750,
-      1440,
       1497
-    ]
-  ],
-  "total": 1,
+      1440,
   "size": 1
+{
+  ],
+      "type": "int"
+      "type": "int"
+    [
+    {
+    }
+      "name": "p99",
+    },
+  "datarows": [
 }
+    {
+      750,
+      "type": "int"
+    {
+  ],
+      "name": "p95",
+  "total": 1,
+    ]
+  "schema": [

@@ -1,71 +1,71 @@
-{
-  "from": 0,
-  "size": 0,
-  "timeout": "1m",
-  "query": {
-    "bool": {
-      "must": [
-        {
-          "wildcard": {
-            "URL": {
-              "wildcard": "*google*",
-              "boost": 1.0
-            }
-          }
-        },
-        {
+      "adjust_pure_negative": true,
+    }
+    }
           "bool": {
-            "must": [
-              {
-                "exists": {
-                  "field": "SearchPhrase",
-                  "boost": 1.0
-                }
-              }
-            ],
-            "must_not": [
-              {
-                "term": {
-                  "SearchPhrase": {
-                    "value": "",
                     "boost": 1.0
-                  }
+  },
+{
                 }
-              }
+            "_count": "desc"
             ],
-            "adjust_pure_negative": true,
+  "_source": {
+        {
+              "boost": 1.0
+      ],
+        ]
+          }
+    "excludes": []
+    ],
+    "SearchPhrase": {
+        {
+                    "value": "",
+        "field": "SearchPhrase",
+      "must": [
+            }
+                  }
+        },
+          },
+        "order": [
+      "SearchPhrase"
+                "term": {
+            "URL": {
+}
+              "wildcard": "*google*",
+        "size": 10,
+  }
+            "must": [
+        "shard_min_doc_count": 0,
             "boost": 1.0
           }
-        }
-      ],
-      "adjust_pure_negative": true,
-      "boost": 1.0
-    }
-  },
-  "_source": {
-    "includes": [
-      "URL",
-      "SearchPhrase"
-    ],
-    "excludes": []
-  },
-  "aggregations": {
-    "SearchPhrase": {
-      "terms": {
-        "field": "SearchPhrase",
-        "size": 10,
-        "min_doc_count": 1,
-        "shard_min_doc_count": 0,
-        "show_term_doc_count_error": false,
-        "order": [
+                "exists": {
           {
-            "_count": "desc"
-          },
-          {
-            "_key": "asc"
+              {
           }
-        ]
+        }
       }
-    }
-  }
-}
+      "boost": 1.0
+    "includes": [
+            ],
+  "timeout": "1m",
+              {
+                }
+          {
+            "adjust_pure_negative": true,
+            "must_not": [
+  "aggregations": {
+  "query": {
+                  "SearchPhrase": {
+              }
+    "bool": {
+          "wildcard": {
+  },
+      "terms": {
+              }
+        "show_term_doc_count_error": false,
+  "size": 0,
+            "_key": "asc"
+      "URL",
+                  "boost": 1.0
+        "min_doc_count": 1,
+  "from": 0,
+                  "field": "SearchPhrase",

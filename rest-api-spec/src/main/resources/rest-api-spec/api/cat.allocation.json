@@ -1,88 +1,88 @@
-{
-  "cat.allocation":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-allocation/",
-      "description":"Provides a snapshot of how many shards are allocated to each data node and how much disk space they are using."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_cat/allocation",
-          "methods":[
-            "GET"
-          ]
-        },
-        {
-          "path":"/_cat/allocation/{node_id}",
-          "methods":[
-            "GET"
-          ],
+        "default":false
           "parts":{
-            "node_id":{
-              "type":"list",
-              "description":"A comma-separated list of node IDs or names to limit the returned information"
-            }
-          }
-        }
-      ]
-    },
-    "params":{
-      "format":{
-        "type":"string",
-        "description":"a short version of the Accept header, e.g. json, yaml"
-      },
-      "bytes":{
-        "type":"enum",
-        "description":"The unit in which to display byte values",
-        "options":[
-          "b",
-          "k",
-          "kb",
           "m",
-          "mb",
-          "g",
-          "gb",
-          "t",
-          "tb",
-          "p",
-          "pb"
-        ]
       },
-      "local":{
-        "type":"boolean",
-        "description":"Return local information, do not retrieve the state from master node (default: false)"
-      },
-      "master_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to master node",
         "deprecated":{
-          "version":"2.0.0",
+          "gb",
           "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
-        }
-      },
-      "cluster_manager_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to cluster-manager node"
-      },
-      "h":{
-        "type":"list",
-        "description":"Comma-separated list of column names to display"
-      },
-      "help":{
-        "type":"boolean",
-        "description":"Return help information",
-        "default":false
-      },
-      "s":{
-        "type":"list",
-        "description":"Comma-separated list of column names or column aliases to sort by"
-      },
-      "v":{
-        "type":"boolean",
-        "description":"Verbose mode. Display column headers",
-        "default":false
-      }
-    }
+    },
+      "paths":[
+          "version":"2.0.0",
   }
+{
+    "stability":"stable",
+        "description":"The unit in which to display byte values",
+          "g",
+        "type":"time",
+            }
+        "type":"boolean",
+  "cat.allocation":{
+          "path":"/_cat/allocation",
+        "type":"boolean",
+          "k",
+      "local":{
+        "description":"Comma-separated list of column names to display"
+        "description":"Explicit operation timeout for connection to master node",
+        "options":[
+          "kb",
+      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-allocation/",
+        "description":"Verbose mode. Display column headers",
+          ],
+            "GET"
+      },
+        }
+      "description":"Provides a snapshot of how many shards are allocated to each data node and how much disk space they are using."
+      ]
+        },
+        "type":"time",
+          "tb",
+          }
+      "v":{
+      "s":{
+        "description":"Return help information",
+        "type":"enum",
+        "type":"boolean",
+        }
 }
+        {
+      },
+      },
+        "type":"list",
+    },
+              "type":"list",
+      }
+        "type":"string",
+          "p",
+          "methods":[
+    "documentation":{
+      "h":{
+        "description":"Explicit operation timeout for connection to cluster-manager node"
+    "params":{
+            "GET"
+          "pb"
+        "description":"a short version of the Accept header, e.g. json, yaml"
+        "type":"list",
+    "url":{
+      "help":{
+      },
+              "description":"A comma-separated list of node IDs or names to limit the returned information"
+        {
+      },
+        "description":"Return local information, do not retrieve the state from master node (default: false)"
+      "cluster_manager_timeout":{
+          "methods":[
+          "t",
+      },
+      "format":{
+          ]
+          "mb",
+        "description":"Comma-separated list of column names or column aliases to sort by"
+          "b",
+      "master_timeout":{
+        ]
+        "default":false
+          "path":"/_cat/allocation/{node_id}",
+      },
+    }
+            "node_id":{
+      "bytes":{

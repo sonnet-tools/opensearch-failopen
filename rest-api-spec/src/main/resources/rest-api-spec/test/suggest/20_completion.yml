@@ -1,323 +1,276 @@
-# This test creates one huge mapping in the setup
-# Every test should use its own field to make sure it works
-
-setup:
-
   - do:
-      indices.create:
-          index: test
-          body:
-            mappings:
-              "properties":
-                "suggest_1":
-                   "type" : "completion"
-                "suggest_2":
-                   "type" : "completion"
-                "suggest_3":
-                   "type" : "completion"
-                "suggest_4":
-                   "type" : "completion"
-                "suggest_5a":
-                   "type" : "completion"
-                "suggest_5b":
-                   "type" : "completion"
-                "suggest_6":
-                   "type" : "completion"
-                title:
-                   type: keyword
-
----
-"Simple suggestion should work":
-
   - do:
-      index:
-        index: test
-        id:    1
         body:
-          suggest_1: "bar"
-
-  - do:
-      index:
-        index: test
-        id:    2
-        body:
-          suggest_1: "baz"
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          suggest:
-            result:
-              text: "b"
-              completion:
-                field: suggest_1
-
-  - length: { suggest.result: 1  }
-  - length: { suggest.result.0.options: 2  }
-
----
-"Simple suggestion array should work":
-
-  - do:
-      index:
-        index: test
-        id:    1
-        body:
-          suggest_2: ["bar", "foo"]
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          suggest:
-            result:
-              text: "f"
-              completion:
-                field: suggest_2
-
-  - length: { suggest.result: 1  }
-  - length: { suggest.result.0.options: 1  }
-  - match:  { suggest.result.0.options.0.text: "foo" }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          suggest:
-            result:
-              text: "b"
-              completion:
-                field: suggest_2
-
-  - length: { suggest.result: 1  }
-  - length: { suggest.result.0.options: 1  }
-  - match:  { suggest.result.0.options.0.text: "bar" }
-
----
-"Suggestion entry should work":
-
-  - do:
-      index:
-        index: test
-        id:    1
-        body:
-          suggest_3:
-            input: "bar"
-            weight: 2
-
-  - do:
-      index:
-        index: test
-        id:    2
-        body:
-          suggest_3:
-            input: "baz"
-            weight: 3
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          suggest:
-            result:
-              text: "b"
-              completion:
                 field: suggest_3
-
-  - length: { suggest.result: 1  }
-  - length: { suggest.result.0.options: 2  }
-  - match:  { suggest.result.0.options.0.text: "baz" }
-  - match:  { suggest.result.0.options.1.text: "bar" }
-
----
-"Suggestion entry array should work":
-
-  - do:
-      index:
-        index: test
-        id:    1
-        body:
-          suggest_4:
-            - input: "bar"
-              weight: 3
-            - input: "fo"
-              weight: 3
-
-  - do:
-      index:
-        index: test
+"Simple suggestion should work":
+                   "type" : "completion"
         id:    2
+          suggest_6:
+  - do:
+                "suggest_6":
+  - do:
+              completion:
+          suggest:
+          suggest_3:
+        id:    1
+          suggest_5b: "baz"
+      index:
+          title: "title_bar"
+  - length: { suggest.result: 1  }
         body:
-          suggest_4:
-            - input: "baz"
-              weight: 2
-            - input: "foo"
-              weight: 1
-
-  - do:
-      indices.refresh: {}
-
-  - do:
+              weight: 3
+                   "type" : "completion"
+          suggest_1: "bar"
+      search:
       search:
         rest_total_hits_as_int: true
         body:
+      indices.create:
+                field: suggest_1
+              weight: 1
+      search:
+      indices.refresh: {}
+  - match:  { suggest.result.0.options.0.text: "bar" }
+        id:    2
+  - match:  { suggest.result.0.options.0.text: "bar" }
+                   "type" : "completion"
+  - do:
+              completion:
+  - length: { suggest.result: 1  }
+  - do:
+            weight: 3
+  - do:
+          title: "title_baz"
+                   "type" : "completion"
+          count: 4
+      indices.refresh: {}
+                skip_duplicates: true
+  - length: { suggest.result.0.options: 2  }
+  - do:
+      index:
+                field: suggest_6
           suggest:
+  - do:
+        body:
+          count: 3
+  - do:
+  - do:
+            result:
+        body:
+            input: "baz"
+        id:    1
+---
             result:
               text: "b"
-              completion:
-                field: suggest_4
-
-  - length: { suggest.result: 1  }
-  - length: { suggest.result.0.options: 2  }
-  - match:  { suggest.result.0.options.0.text: "bar" }
+        rest_total_hits_as_int: true
+                "suggest_3":
   - match:  { suggest.result.0.options.1.text: "baz" }
-
+            result:
+            weight: 2
+                   type: keyword
   - do:
-      search:
+  - do:
+  - do:
+      index:
+      index:
+        id:    1
+        index: test
+        id:    1
+  - match:  { suggest.result.0.options.0.text: "bar" }
+  - length: { suggest.result: 1  }
+  - length: { suggest.result: 1  }
+              text: "b"
+        body:
+            - input: "fo"
+        body:
+                field: suggest_4
         rest_total_hits_as_int: true
         body:
+        index: test
+        index: test
+      indices.refresh: {}
+            input: "baz"
           suggest:
+        body:
+          suggest_4:
+          suggest_6:
+                field: suggest_2
             result:
-              text: "f"
               completion:
+          index: test
+        id:    1
+  - do:
+              text: "b"
+              completion:
+  - do:
                 field: suggest_4
-
-  - length: { suggest.result: 1  }
+      search:
+            result:
+  - match:  { suggest.result.0.options.1._index: "test" }
+  - do:
+              completion:
+          suggest_3:
+        id:    2
+  - match:  { suggest.result.0.options.1.text: "foo" }
+      indices.refresh: {}
+        index: test
+  - length: { suggest.result.0.options: 1  }
+              completion:
+              text: "b"
+              completion:
+        body:
+        body:
+                title:
+                "suggest_5b":
+        index: test
+        body:
+        rest_total_hits_as_int: true
+---
+            - input: "baz"
+  - do:
+        index: test
+  - do:
+          suggest_1: "baz"
+            result:
+  - do:
+  - match:  { suggest.result.0.options.1.text: "bar" }
+          suggest:
+              text: "b"
+  - match:  { suggest.result.0.options.0.text: "bar" }
+        id:    1
+                field: suggest_1
+        body:
+  - do:
+"Suggestions with source should work":
   - length: { suggest.result.0.options: 2  }
   - match:  { suggest.result.0.options.0.text: "fo" }
-  - match:  { suggest.result.0.options.1.text: "foo" }
-
+  - do:
+  - do:
 ---
-"Multiple Completion fields should work":
-
-  - do:
-      index:
-        index: test
-        id:    1
-        body:
-          suggest_5a: "bar"
-          suggest_5b: "baz"
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          suggest:
-            result:
-              text: "b"
-              completion:
-                field: suggest_5a
-
-  - length: { suggest.result: 1  }
-  - length: { suggest.result.0.options: 1  }
-  - match:  { suggest.result.0.options.0.text: "bar" }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          suggest:
-            result:
-              text: "b"
-              completion:
-                field: suggest_5b
-
-  - length: { suggest.result: 1  }
-  - length: { suggest.result.0.options: 1  }
-  - match:  { suggest.result.0.options.0.text: "baz" }
-
 ---
-"Suggestions with source should work":
-
-  - do:
+"Simple suggestion array should work":
       index:
-        index: test
-        id:    1
-        body:
-          suggest_6:
-            input: "bar"
-            weight: 2
-          title: "title_bar"
-          count: 4
-
-  - do:
-      index:
-        index: test
-        id:    2
-        body:
-          suggest_6:
-            input: "baz"
-            weight: 3
-          title: "title_baz"
-          count: 3
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          suggest:
-            result:
-              text: "b"
-              completion:
-                field: suggest_6
-
-  - length: { suggest.result: 1  }
+                "suggest_2":
+"Suggestion entry should work":
+                field: suggest_2
   - length: { suggest.result.0.options: 2  }
-  - match:  { suggest.result.0.options.0.text: "baz" }
-  - match:  { suggest.result.0.options.0._index: "test" }
-  - match:  { suggest.result.0.options.0._source.title: "title_baz" }
-  - match:  { suggest.result.0.options.0._source.count: 3 }
-  - match:  { suggest.result.0.options.1.text: "bar" }
-  - match:  { suggest.result.0.options.1._index: "test" }
-  - match:  { suggest.result.0.options.1._source.title: "title_bar" }
-  - match:  { suggest.result.0.options.1._source.count: 4 }
-
----
-"Skip duplicates should work":
-  - do:
-      index:
-        index: test
-        id:    1
         body:
-          suggest_1: "bar"
-
-  - do:
-      index:
-        index: test
-        id:    2
-        body:
-          suggest_1: "bar"
-
-  - do:
-      indices.refresh: {}
-
-  - do:
+                "suggest_5a":
       search:
         rest_total_hits_as_int: true
-        body:
-          suggest:
-            result:
-              text: "b"
-              completion:
-                field: suggest_1
-                skip_duplicates: true
-
-  - length: { suggest.result: 1  }
+  - do:
   - length: { suggest.result.0.options: 1  }
-  - match:  { suggest.result.0.options.0.text: "bar" }
+  - match:  { suggest.result.0.options.0.text: "baz" }
+  - match:  { suggest.result.0.options.1._source.count: 4 }
+              text: "b"
+                field: suggest_5a
+  - match:  { suggest.result.0.options.0._source.title: "title_baz" }
+        id:    2
+  - length: { suggest.result.0.options: 1  }
+"Skip duplicates should work":
+            - input: "bar"
+            - input: "foo"
+        index: test
+        body:
+  - match:  { suggest.result.0.options.1._source.title: "title_bar" }
+              completion:
+          suggest:
+  - do:
+        body:
+  - length: { suggest.result.0.options: 2  }
+              text: "b"
+      index:
+        rest_total_hits_as_int: true
+          suggest_4:
+        body:
+        index: test
+            result:
+          suggest:
+              "properties":
+              completion:
+  - length: { suggest.result: 1  }
+              weight: 2
+  - length: { suggest.result.0.options: 1  }
+  - match:  { suggest.result.0.options.0.text: "foo" }
+              weight: 3
+      index:
+                   "type" : "completion"
+  - do:
+              text: "b"
+---
+setup:
+            result:
+        rest_total_hits_as_int: true
+  - length: { suggest.result.0.options: 2  }
+      search:
+---
+      search:
+  - length: { suggest.result: 1  }
+      index:
+  - length: { suggest.result: 1  }
+            input: "bar"
+        rest_total_hits_as_int: true
+      index:
+          body:
+      index:
+          suggest_5a: "bar"
+        body:
+              completion:
+          suggest_2: ["bar", "foo"]
+  - do:
+              text: "f"
+        index: test
+                field: suggest_5b
+                "suggest_4":
+      indices.refresh: {}
+          suggest_1: "bar"
+            weight: 3
+  - length: { suggest.result: 1  }
+  - do:
+      indices.refresh: {}
+        body:
+  - match:  { suggest.result.0.options.0._index: "test" }
+        id:    1
+          suggest:
+        rest_total_hits_as_int: true
+  - do:
+          suggest:
+                   "type" : "completion"
+                "suggest_1":
+        body:
+        body:
+# This test creates one huge mapping in the setup
+            weight: 2
+      index:
+  - length: { suggest.result: 1  }
+"Suggestion entry array should work":
+        index: test
+"Multiple Completion fields should work":
+        index: test
+              text: "f"
+  - match:  { suggest.result.0.options.0.text: "baz" }
+      search:
+          suggest:
+  - match:  { suggest.result.0.options.1.text: "bar" }
+  - match:  { suggest.result.0.options.0.text: "baz" }
+            input: "bar"
+                   "type" : "completion"
+        body:
+# Every test should use its own field to make sure it works
+        index: test
+          suggest_1: "bar"
+  - length: { suggest.result: 1  }
+        rest_total_hits_as_int: true
+          suggest:
+      index:
+  - do:
+      search:
+  - length: { suggest.result.0.options: 1  }
+            mappings:
+---
+      search:
+            result:
+      indices.refresh: {}
+  - match:  { suggest.result.0.options.0._source.count: 3 }
+        id:    2
+            result:

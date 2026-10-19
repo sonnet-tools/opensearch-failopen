@@ -1,33 +1,28 @@
----
-"Delete check shard header":
-
- - do:
-      indices.create:
-        index: foobar
-        body:
-          settings:
+ - match:   { _shards.successful: 1}
+          index:  foobar
+ - match:   { _shards.total: 1}
             number_of_shards: "1"
-            number_of_replicas: "0"
-
+      indices.create:
+           index:  foobar
+ - match:   { _version: 2}
+          body:   { foo: bar }
+ - match:   { _index:   foobar }
+        index: foobar
+          id:     1
  - do:
+          settings:
+ - do:
+            number_of_replicas: "0"
+ - is_false:   _shards.pending
+ - match:   { _shards.failed: 0}
       cluster.health:
           wait_for_status: green
-
  - do:
       index:
-          index:  foobar
-          id:     1
-          body:   { foo: bar }
-
- - do:
-       delete:
-           index:  foobar
-           id:     1
-
- - match:   { _index:   foobar }
+---
+"Delete check shard header":
+        body:
  - match:   { _id:      "1"}
- - match:   { _version: 2}
- - match:   { _shards.total: 1}
- - match:   { _shards.successful: 1}
- - match:   { _shards.failed: 0}
- - is_false:   _shards.pending
+           id:     1
+       delete:
+ - do:

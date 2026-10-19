@@ -1,228 +1,196 @@
+            number_of_shards:   1
+          index_patterns: test-*
+  - match: {test.index_patterns: ["test-*"]}
+            "index_patterns": "foo*",
+        name: test
+        name: "my_template"
+      indices.put_template:
+  - match: { my_template.version: 6789 }
+  - do:
+  - do:
+      indices.put_template:
+      catch: bad_request
+      indices.get_template:
+  - do:
+  - do:
+        name: test
+  - do:
+  - match: { acknowledged: true }
+      indices.get_template:
+        name: test
+  - is_true: test.aliases.test_alias
+        name: test
+        body: >
+  - match: {test.settings: {index.number_of_shards: '1', index.number_of_replicas: '0'}}
+          index_patterns: test-*
+            "version": 6789,
+      indices.delete_template:
+          mappings: {}
+  - do:
+            number_of_replicas: 0
+          aliases:
+        flat_settings: true
+            "version": 10,
+        body:
+      indices.put_template:
+        name: test
+            "index_patterns": "foo*",
+  - do:
+        name: "my_template"
+  - match: {test.mappings: {properties: {field: {type: text}}}}
+  - do:
+            properties:
+  - do:
+            test_alias: {}
+      indices.put_template:
+  - do:
+        body:
+      indices.put_template:
+        name: "my_template"
+  - do:
 ---
 "Put template":
-  - do:
-      indices.put_template:
-        name: test
-        body:
-          index_patterns: test-*
           settings:
-            number_of_shards:   1
-            number_of_replicas: 0
-          mappings:
-            properties:
-              field:
-                type: keyword
-
-  - do:
-      indices.get_template:
-        name: test
-        flat_settings: true
-
-  - match: {test.index_patterns: ["test-*"]}
-  - match: {test.settings: {index.number_of_shards: '1', index.number_of_replicas: '0'}}
-  - match: {test.mappings: {properties: {field: {type: keyword}}}}
-
----
-"Put multiple template":
-  - do:
       indices.put_template:
-        name: test
-        body:
-          index_patterns: [test-*, test2-*]
-          settings:
-            number_of_shards:   1
-            number_of_replicas: 0
-          mappings:
-            properties:
-              field:
-                type: text
-
-  - do:
-      indices.get_template:
-        name: test
-        flat_settings: true
-
-  - match: {test.index_patterns: ["test-*", "test2-*"]}
-  - match: {test.settings: {index.number_of_shards: '1', index.number_of_replicas: '0'}}
-  - match: {test.mappings: {properties: {field: {type: text}}}}
-
----
-"Put template with empty mappings":
-  - do:
-      indices.put_template:
-        name: test
-        body:
-          index_patterns: test-*
-          settings:
-            number_of_shards:   1
-            number_of_replicas: 0
-          mappings: {}
-
-  - do:
-      indices.get_template:
-        name: test
-        flat_settings: true
-
-  - match: {test.mappings: {}}
-
----
-"Put template with aliases":
-
-  - do:
-      indices.put_template:
-        name: test
-        body:
-          index_patterns: test-*
-          aliases:
-            test_alias: {}
-            test_blias: { routing: b }
-            test_clias: { filter: { term: { user: foobar }}}
-
-  - do:
-      indices.get_template:
-        name: test
-
-  - match:  { test.index_patterns: ["test-*"] }
-  - length: { test.aliases: 3 }
-  - is_true: test.aliases.test_alias
-  - match: { test.aliases.test_blias.index_routing: "b" }
-  - match: { test.aliases.test_blias.search_routing: "b" }
-  - match: { test.aliases.test_clias.filter.term.user: "foobar" }
-
----
-"Put template create":
-
-  - do:
-      indices.put_template:
-        name: test
-        create: true
-        body:
-          index_patterns: test-*
-          settings:
-            number_of_shards:   1
-            number_of_replicas: 0
-
-  - do:
-      indices.get_template:
-        name: test
-        flat_settings: true
-
-  - match: {test.index_patterns: ["test-*"]}
-  - match: {test.settings: {index.number_of_shards: '1', index.number_of_replicas: '0'}}
-
-  - do:
-      catch: bad_request
-      indices.put_template:
-        name: test
-        create: true
-        body:
-          index_patterns: test-*
-          settings:
-            number_of_shards:   1
-            number_of_replicas: 0
-
----
-"Test Put Versioned Template":
-
-  - do:
-      indices.put_template:
-        name: "my_template"
-        body: >
-          {
-            "version": 10,
-            "index_patterns": "foo*",
-            "settings": { "number_of_shards": 1 }
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      indices.get_template:
-        name: "my_template"
-  - match: { my_template.version: 10 }
-
-  # Lower version
-  - do:
-      indices.put_template:
-        name: "my_template"
-        body: >
-          {
-            "version": 9,
-            "index_patterns": "foo*",
-            "settings": { "number_of_shards": 1 }
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      indices.get_template:
-        name: "my_template"
   - match: { my_template.version: 9 }
-
-  # Higher version
-  - do:
-      indices.put_template:
         name: "my_template"
-        body: >
-          {
-            "version": 6789,
-            "index_patterns": "foo*",
-            "settings": { "number_of_shards": 1 }
-          }
-  - match: { acknowledged: true }
-
-  - do:
       indices.get_template:
-        name: "my_template"
-  - match: { my_template.version: 6789 }
-
-  # No version
-  - do:
-      indices.put_template:
-        name: "my_template"
-        body: >
-          {
-            "index_patterns": "foo*",
+  - match: {test.index_patterns: ["test-*"]}
+        body:
             "settings": { "number_of_shards": 1 }
-          }
-  - match: { acknowledged: true }
-
-  - do:
+  - match: { test.aliases.test_clias.filter.term.user: "foobar" }
+        name: test
+            "settings": { "number_of_shards": 1 }
+  - match: {test.settings: {index.number_of_shards: '1', index.number_of_replicas: '0'}}
+  - match:  { test.index_patterns: ["test-*"] }
       indices.get_template:
-        name: "my_template"
-  - is_false: my_template.version
-
-  # Coming back with a version
+---
   - do:
-      indices.put_template:
+  - match: { test.aliases.test_blias.search_routing: "b" }
+---
         name: "my_template"
-        body: >
-          {
+      indices.get_template:
+                type: keyword
+            number_of_replicas: 0
+  - match: {test.index_patterns: ["test-*", "test2-*"]}
+          }
+        name: test
             "version": 5385,
             "index_patterns": "foo*",
-            "settings": { "number_of_shards": 1 }
+                type: text
+        name: test
+  - match: { my_template.version: 10 }
+            number_of_shards:   1
+  - length: { test.aliases: 3 }
+        body: >
           }
-  - match: { acknowledged: true }
-
-  - do:
-      indices.get_template:
+          mappings:
         name: "my_template"
-  - match: { my_template.version: 5385 }
-
-  # Able to delete the versioned template
-  - do:
-      indices.delete_template:
         name: "my_template"
   - match: { acknowledged: true }
-
-  - do:
       catch: missing
-      indices.get_template:
-        name: "my_template"
-
----
-"Put index template without index_patterns":
-
+        body: {}
+            "settings": { "number_of_shards": 1 }
+        name: test
+            "index_patterns": "foo*",
   - do:
+            test_blias: { routing: b }
+  # Higher version
+      indices.put_template:
+            number_of_shards:   1
+      indices.put_template:
+  - match: {test.mappings: {}}
+  - match: { acknowledged: true }
+            "version": 9,
+"Put index template without index_patterns":
+          settings:
+  # Able to delete the versioned template
+          {
+          }
+          index_patterns: test-*
+  - do:
+  - do:
+        body: >
+        name: test
+      indices.put_template:
+      indices.get_template:
+"Put multiple template":
+  - do:
+            test_clias: { filter: { term: { user: foobar }}}
+        body: >
+          index_patterns: test-*
+  - match: { test.aliases.test_blias.index_routing: "b" }
+  - do:
+"Test Put Versioned Template":
+---
+            number_of_replicas: 0
+          mappings:
+        name: "my_template"
+  - is_false: my_template.version
+  - do:
+        name: "my_template"
+        body: >
+  - match: { my_template.version: 5385 }
+        create: true
+  - do:
+            "index_patterns": "foo*",
+        name: "my_template"
+  - match: { acknowledged: true }
+        name: test
+      indices.get_template:
+          }
+        name: "my_template"
+---
+        create: true
+              field:
+        name: "my_template"
+  - match: { acknowledged: true }
+  - match: { acknowledged: true }
+            number_of_replicas: 0
+      indices.get_template:
+"Put template create":
+      indices.put_template:
+          {
+"Put template with aliases":
+        body:
+          }
+      indices.get_template:
+          index_patterns: [test-*, test2-*]
+      indices.put_template:
+---
+          index_patterns: test-*
+        body:
+  - do:
+            "settings": { "number_of_shards": 1 }
+          {
+        name: test
+          settings:
+  # Lower version
+---
+  - do:
+        body:
+          settings:
+  - do:
+            number_of_shards:   1
+            properties:
       catch: /index patterns are missing/
       indices.put_template:
-        name: test
-        body: {}
+          {
+        flat_settings: true
+          {
+      indices.get_template:
+  - do:
+  # Coming back with a version
+            "settings": { "number_of_shards": 1 }
+  - match: {test.mappings: {properties: {field: {type: keyword}}}}
+            number_of_replicas: 0
+"Put template with empty mappings":
+            number_of_shards:   1
+  # No version
+  - do:
+        flat_settings: true
+          settings:
+        flat_settings: true
+              field:
+      indices.get_template:
+  - match: {test.settings: {index.number_of_shards: '1', index.number_of_replicas: '0'}}

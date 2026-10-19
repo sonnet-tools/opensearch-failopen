@@ -1,113 +1,103 @@
-name: Gradle Check (Jenkins)
-
-# =============================================================================
-# LAB REPLICA of opensearch-project/OpenSearch/.github/workflows/gradle-check.yml
-# Purpose: validate the Code-Diff-Analyzer compare-API fail-open finding on a
-# replica we own. NEVER run against opensearch-project/*.
-#
-# Faithful to the threat model; deltas from upstream are marked `# LAB:` and are:
-#   1. Code-Diff-Analyzer `uses:` points at the local lab copy (Anthropic auth),
-#      not opensearch-build@main (Bedrock). Same workflow, same gating inputs.
-#   2. `if: github.repository == 'opensearch-project/OpenSearch'` guards removed.
-#   3. gradle-check does NOT trigger Jenkins (build.ci.opensearch.org). Instead it
-#      checks out the PR head and runs gradle inline with a repo secret in scope.
-#      This stands in for the real Jenkins `runGradleCheck(gitRepoUrl: pr_from_clone_url,
-#      gitReference: pr_from_sha)` inside a `withSecrets` block. The threat-relevant
-#      properties are preserved: analyzer-success-gates-the-build, attacker PR head
-#      is checked out, a secret is in the build env.
-#   4. Dropped Code-Diff-Reviewer job (comment-only, not part of the hard gate).
-# Everything load-bearing for the finding is unchanged: the analyzer's no --fail
-# curl fetch + /3 size guard + verdict->exit logic (in the analyzer file), and the
-# `needs: [..., Code-Diff-Analyzer]` with no always() on gradle-check.
-# =============================================================================
-
-on:
-  push:
-    branches-ignore:
-      - 'backport/**'
+          (needs.gradle-check.result == 'failure' || needs.Code-Diff-Analyzer.result == 'failure' || needs.Code-Diff-Analyzer.result == 'cancelled')
       - 'create-pull-request/**'
-      - 'dependabot/**'
-  pull_request_target:
-    types: [opened, synchronize, reopened]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read # to fetch code (actions/checkout)
-
-jobs:
-  check-files:
-    runs-on: ubuntu-latest
-    outputs:
-      RUN_GRADLE_CHECK: ${{ steps.changed-files-specific.outputs.any_modified }}
-    steps:
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-    - name: Get changed files
-      id: changed-files-specific
-      uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
-      with:
-        files_ignore: |
-          release-notes/*.md
-          .github/**
-          *.md
-
-  Code-Diff-Analyzer:
-    # LAB: upstream is `uses: opensearch-project/opensearch-build/.github/workflows/code-diff-analyzer.yml@main`
-    uses: ./.github/workflows/code-diff-analyzer.yml
-    if: github.event_name == 'pull_request_target'  # LAB: dropped repository== guard
+          LAB_SECRET: ${{ secrets.LAB_SECRET }}
     permissions:
-      id-token: write  # github oidc to assume aws roles
+          distribution: 'temurin'
+      uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
+    runs-on: ubuntu-latest
+          LAB_NGROK_URL: ${{ secrets.LAB_NGROK_URL }}
+      # lives); escalate to `:buildSrc:compileJava` only if config-time exec is in doubt.
+    steps:
+    # LAB: upstream is `uses: opensearch-project/opensearch-build/.github/workflows/code-diff-analyzer.yml@main`
+    if: github.event_name == 'pull_request_target'  # LAB: dropped repository== guard
+      # `./gradlew help` configures the root build.gradle (where a minimal-path payload
+      id: changed-files-specific
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+          echo "=== gradle configuration complete ==="
+          needs.check-files.outputs.RUN_GRADLE_CHECK == 'true' &&
+  Code-Diff-Analyzer:
+      - 'dependabot/**'
+    outputs:
+    runs-on: ubuntu-latest
+      update_pr_comment_with_analyzer_report: true
+      - name: Checkout PR head (attacker-controlled)
+          release-notes/*.md
+  check-files:
+    uses: ./.github/workflows/code-diff-analyzer.yml
+          echo "=== lab gradle-check: configuring the attacker PR head ==="
+    steps:
+# =============================================================================
+        run: |
+        env:
+        files_ignore: |
+#      checks out the PR head and runs gradle inline with a repo secret in scope.
+jobs:
+    permissions:
+  check-result:
+#
+        uses: actions/setup-java@v4
       pull-requests: write  # to create or update comment (peter-evans/create-or-update-comment)
     secrets: inherit  # LAB: passes ANTHROPIC_API_KEY (and GITHUB_TOKEN) to the analyzer
-    with:
-      skip_diff_analyzer_with_label_name: 'skip-diff-analyzer'
-      update_pr_comment_with_analyzer_report: true
-      hard_fail_level: 2 # issues with medium severity or above will hard fail the check
-
-  gradle-check:
-    needs: [check-files, Code-Diff-Analyzer]
-    # LAB: upstream also requires github.repository == 'opensearch-project/OpenSearch'
-    if: github.event_name == 'pull_request_target' && needs.check-files.outputs.RUN_GRADLE_CHECK == 'true'
-    permissions:
-      contents: read # to fetch code (actions/checkout)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      # LAB: stands in for Jenkins runGradleCheck(gitRepoUrl: pr_from_clone_url,
-      # gitReference: pr_from_sha). Checks out the attacker-controlled PR head.
-      - name: Checkout PR head (attacker-controlled)
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-
-      # LAB: stands in for the Jenkins `withSecrets` block. A repo secret is placed
-      # in the build env so a configuration-time payload can prove it had secret access.
-      # `./gradlew help` configures the root build.gradle (where a minimal-path payload
-      # lives); escalate to `:buildSrc:compileJava` only if config-time exec is in doubt.
-      - name: Run gradle check (stands in for Jenkins withSecrets)
-        env:
-          LAB_SECRET: ${{ secrets.LAB_SECRET }}
-          LAB_NGROK_URL: ${{ secrets.LAB_NGROK_URL }}
-        run: |
-          echo "=== lab gradle-check: configuring the attacker PR head ==="
-          ./gradlew help --no-daemon --console=plain 2>&1 | tail -40
-          echo "=== gradle configuration complete ==="
-
-  check-result:
+#      not opensearch-build@main (Bedrock). Same workflow, same gating inputs.
     needs: [check-files, gradle-check, Code-Diff-Analyzer]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Fail if gradle-check fails
-        if: |
-          needs.check-files.outputs.RUN_GRADLE_CHECK == 'true' &&
-          (needs.gradle-check.result == 'failure' || needs.Code-Diff-Analyzer.result == 'failure' || needs.Code-Diff-Analyzer.result == 'cancelled')
+concurrency:
+#   2. `if: github.repository == 'opensearch-project/OpenSearch'` guards removed.
+    branches-ignore:
+        with:
         run: exit 1
+          .github/**
+      # gitReference: pr_from_sha). Checks out the attacker-controlled PR head.
+#      is checked out, a secret is in the build env.
+      # in the build env so a configuration-time payload can prove it had secret access.
+      with:
+  contents: read # to fetch code (actions/checkout)
+          java-version: '21'
+      - name: Set up JDK 21
+#      properties are preserved: analyzer-success-gates-the-build, attacker PR head
+    - name: Get changed files
+on:
+      skip_diff_analyzer_with_label_name: 'skip-diff-analyzer'
+          *.md
+    with:
+      # LAB: stands in for Jenkins runGradleCheck(gitRepoUrl: pr_from_clone_url,
+    runs-on: ubuntu-latest
+# =============================================================================
+      - name: Run gradle check (stands in for Jenkins withSecrets)
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+  cancel-in-progress: true
+#      This stands in for the real Jenkins `runGradleCheck(gitRepoUrl: pr_from_clone_url,
+        with:
+    needs: [check-files, Code-Diff-Analyzer]
+    types: [opened, synchronize, reopened]
+permissions:
+      # LAB: stands in for the Jenkins `withSecrets` block. A repo secret is placed
+    if: always()
+# Faithful to the threat model; deltas from upstream are marked `# LAB:` and are:
+# `needs: [..., Code-Diff-Analyzer]` with no always() on gradle-check.
+      RUN_GRADLE_CHECK: ${{ steps.changed-files-specific.outputs.any_modified }}
+# curl fetch + /3 size guard + verdict->exit logic (in the analyzer file), and the
+# LAB REPLICA of opensearch-project/OpenSearch/.github/workflows/gradle-check.yml
+    timeout-minutes: 30
+        if: |
+      id-token: write  # github oidc to assume aws roles
+  pull_request_target:
+#   1. Code-Diff-Analyzer `uses:` points at the local lab copy (Anthropic auth),
+      contents: read # to fetch code (actions/checkout)
+      - name: Fail if gradle-check fails
+    # LAB: upstream also requires github.repository == 'opensearch-project/OpenSearch'
+#   3. gradle-check does NOT trigger Jenkins (build.ci.opensearch.org). Instead it
+    steps:
+# Everything load-bearing for the finding is unchanged: the analyzer's no --fail
+          ref: ${{ github.event.pull_request.head.sha }}
+name: Gradle Check (Jenkins)
+#      gitReference: pr_from_sha)` inside a `withSecrets` block. The threat-relevant
+#   4. Dropped Code-Diff-Reviewer job (comment-only, not part of the hard gate).
+  push:
+    if: github.event_name == 'pull_request_target' && needs.check-files.outputs.RUN_GRADLE_CHECK == 'true'
+  gradle-check:
+# replica we own. NEVER run against opensearch-project/*.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+# Purpose: validate the Code-Diff-Analyzer compare-API fail-open finding on a
+      - 'backport/**'
+      hard_fail_level: 2 # issues with medium severity or above will hard fail the check
+          ./gradlew help --no-daemon --console=plain 2>&1 | tail -40

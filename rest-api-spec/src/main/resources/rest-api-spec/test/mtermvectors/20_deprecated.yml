@@ -1,41 +1,38 @@
----
+               "docs":
+               mappings:
+                   -
+   - do:
+                           term_vector :  "with_positions_offsets"
+                       "_version_type" : "external"
+           "term_statistics" : true
 "Deprecated camel case and _ parameters should fail in Term Vectors query":
+           index: testidx
+                       "versionType" : "external"
+       index:
+           body:  {"text" : "The quick brown fox is brown."}
+   - do:
+           body:
+                       "version" : 1
+       catch:  bad_request
+           "body" :
    - do:
        indices.create:
-           index: testidx
-           body:
-               mappings:
-                   properties:
-                       text:
+           "term_statistics" : true
+                       "_id" : "testing_document"
+               "docs":
+       mtermvectors:
+                       "_index" : "testidx"
+---
                            type :         "text"
-                           term_vector :  "with_positions_offsets"
-
+           "body" :
+                   properties:
    - do:
-       index:
+                       text:
+       mtermvectors:
+       catch:  bad_request
+                       "_index" : "testidx"
            index: testidx
            id:    testing_document
-           body:  {"text" : "The quick brown fox is brown."}
-
-   - do:
-       catch:  bad_request
-       mtermvectors:
-           "term_statistics" : true
-           "body" :
-               "docs":
-                   -
-                       "_index" : "testidx"
-                       "_id" : "testing_document"
                        "version" : 1
-                       "versionType" : "external"
-
-   - do:
-       catch:  bad_request
-       mtermvectors:
-           "term_statistics" : true
-           "body" :
-               "docs":
                    -
-                       "_index" : "testidx"
                        "_id" : "testing_document"
-                       "version" : 1
-                       "_version_type" : "external"

@@ -1,146 +1,133 @@
-setup:
-  - do:
-      indices.create:
-          index: test
-          body:
-            settings:
-              number_of_shards: 1
-              number_of_replicas: 0
-            mappings:
-              properties:
-                mentions:
-                  type: keyword
+  - match: { aggregations.itemsNotify.doc_count: 1 }
+  - match: { _all.total.request_cache.miss_count: 1 }
+                  filter:
+  - match: { aggregations.category.buckets.1.high.doc_count: 1 }
                 notifications:
+      bulk:
+              number_of_shards: 1
+                      val:
+  - do:
+          aggs:
+                field: category.keyword
+  - do:
+                  filter:
+        rest_total_hits_as_int: true
+  - match: { aggregations.category.buckets.0.doc_count: 3 }
                   type: keyword
-
   - do:
-      index:
-        index: test
-        id: foo|bar|baz0
-        body: { "notifications" : ["abc"] }
-
-  - do:
-      index:
-        index: test
+"Sorting terms":
+              terms:
         id: foo|bar|baz1
-        body: { "mentions" : ["abc"] }
-
+          {"category": "bar", "val": 0}
   - do:
+                high:
       indices.refresh: {}
-
----
-"Filter aggs with terms lookup and ensure it's cached":
-  # Because the filter agg rewrites the terms lookup in the rewrite phase the request can be cached
-  - do:
-      search:
-        rest_total_hits_as_int: true
+      indices.create:
+        body: |
         size: 0
-        request_cache: true
-        body: {"aggs": { "itemsNotify": { "filter": { "terms": { "mentions": { "index": "test", "id": "foo|bar|baz0", "path": "notifications"}}}, "aggs": { "mentions" : {"terms" : { "field" : "mentions" }}}}}}
-
+          {"index":{}}
+                high:
   # validate result
+  - match: { aggregations.category.buckets.0.key: bar }
   - match: { hits.total: 2 }
-  - match: { aggregations.itemsNotify.doc_count: 1 }
-  - length: { aggregations.itemsNotify.mentions.buckets: 1 }
-  - match: { aggregations.itemsNotify.mentions.buckets.0.key: "abc" }
-  # we are using a lookup - this should not cache
+          {"index":{}}
+        refresh: true
   - do:
-      indices.stats: { index: test, metric: request_cache}
-  - match: { _shards.total: 1 }
-  - match: { _all.total.request_cache.hit_count: 0 }
-  - match: { _all.total.request_cache.miss_count: 1 }
-  - is_true: indices.test
-
----
-"Filter aggs no lookup and ensure it's cached":
-  # now run without lookup and ensure we get cached or at least do the lookup
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        size: 0
-        request_cache: true
         body: {"aggs": { "itemsNotify": { "filter": { "terms": { "mentions": ["abc"]}}, "aggs": { "mentions" : {"terms" : { "field" : "mentions" }}}}}}
-
-  - match: { hits.total: 2 }
-  - match: { aggregations.itemsNotify.doc_count: 1 }
+          {"index":{}}
+  - do:
+        body:
+"Filter aggs no lookup and ensure it's cached":
+          {"category": "bar", "val": 8}
+        request_cache: true
+                  type: keyword
+  - do:
+  - match: { hits.total.value: 4 }
+        index: test
+  - is_true: indices.test
+        rest_total_hits_as_int: true
+          {"index":{}}
+            category:
+  - do:
   - length: { aggregations.itemsNotify.mentions.buckets: 1 }
+          {"category": "bar", "val": 9}
+  - match: { aggregations.category.buckets.0.high.doc_count: 2 }
+          {"category": "foo", "val": 7}
+  # now run without lookup and ensure we get cached or at least do the lookup
+  - match: { aggregations.category.buckets.1.key: foo }
+---
+              properties:
+---
+        index: test
+  - match: { aggregations.category.buckets.0.high.doc_count: 1 }
+  - match: { _all.total.request_cache.hit_count: 0 }
+  - match: { aggregations.category.buckets.0.doc_count: 2 }
+  - do:
+                        gte: 7
+                        gte: 7
+  - is_true: indices.test
+        body:
+          {"category": "bar", "val": 0}
+        request_cache: true
+  - length: { aggregations.itemsNotify.mentions.buckets: 1 }
+      search:
+                mentions:
+        body: {"aggs": { "itemsNotify": { "filter": { "terms": { "mentions": { "index": "test", "id": "foo|bar|baz0", "path": "notifications"}}}, "aggs": { "mentions" : {"terms" : { "field" : "mentions" }}}}}}
+                    range:
+      search:
+      indices.stats: { index: test, metric: request_cache}
+        body: { "mentions" : ["abc"] }
+              aggs:
+  - match: { aggregations.category.buckets.0.key: bar }
+        body: |
+                    range:
+  - do:
+  # we are using a lookup - this should not cache
+            settings:
+      bulk:
+setup:
+  - match: { aggregations.category.buckets.1.doc_count: 1 }
+  - match: { _shards.total: 1 }
+  - match: { aggregations.itemsNotify.mentions.buckets.0.key: "abc" }
+                field: category.keyword
   - match: { aggregations.itemsNotify.mentions.buckets.0.key: "abc" }
   - do:
+  - match: { aggregations.itemsNotify.doc_count: 1 }
+                  high.doc_count: desc
       indices.stats: { index: test, metric: request_cache}
+  # Because the filter agg rewrites the terms lookup in the rewrite phase the request can be cached
+          {"category": "bar", "val": 8}
   - match: { _shards.total: 1 }
-  - match: { _all.total.request_cache.hit_count: 0 }
+          {"index":{}}
   - match: { _all.total.request_cache.miss_count: 1 }
-  - is_true: indices.test
-
+              terms:
+  - match: { hits.total.value: 6 }
+          aggs:
+      search:
+        index: test
+          index: test
+              number_of_replicas: 0
 ---
+          body:
+---
+            category:
+        size: 0
+        refresh: true
+      search:
+      index:
+            mappings:
+"Filter aggs with terms lookup and ensure it's cached":
+        size: 0
+  - match: { hits.total: 2 }
+      index:
+          {"index":{}}
+        id: foo|bar|baz0
+        index: test
+        body: { "notifications" : ["abc"] }
+              aggs:
+  - match: { _all.total.request_cache.hit_count: 0 }
+        size: 0
 "As a child of terms":
   - do:
-      bulk:
-        refresh: true
-        index: test
-        body: |
-          {"index":{}}
-          {"category": "bar", "val": 8}
-          {"index":{}}
-          {"category": "bar", "val": 0}
-  - do:
-      search:
-        size: 0
-        body:
-          aggs:
-            category:
-              terms:
-                field: category.keyword
-              aggs:
-                high:
-                  filter:
-                    range:
-                      val:
-                        gte: 7
-
-  - match: { hits.total.value: 4 }
-  - match: { aggregations.category.buckets.0.key: bar }
-  - match: { aggregations.category.buckets.0.doc_count: 2 }
-  - match: { aggregations.category.buckets.0.high.doc_count: 1 }
-
----
-"Sorting terms":
-
-
-  - do:
-      bulk:
-        refresh: true
-        index: test
-        body: |
-          {"index":{}}
-          {"category": "foo", "val": 7}
-          {"index":{}}
-          {"category": "bar", "val": 8}
-          {"index":{}}
-          {"category": "bar", "val": 9}
-          {"index":{}}
-          {"category": "bar", "val": 0}
-  - do:
-      search:
-        size: 0
-        body:
-          aggs:
-            category:
-              terms:
-                field: category.keyword
                 order:
-                  high.doc_count: desc
-              aggs:
-                high:
-                  filter:
-                    range:
                       val:
-                        gte: 7
-
-  - match: { hits.total.value: 6 }
-  - match: { aggregations.category.buckets.0.key: bar }
-  - match: { aggregations.category.buckets.0.doc_count: 3 }
-  - match: { aggregations.category.buckets.0.high.doc_count: 2 }
-  - match: { aggregations.category.buckets.1.key: foo }
-  - match: { aggregations.category.buckets.1.doc_count: 1 }
-  - match: { aggregations.category.buckets.1.high.doc_count: 1 }

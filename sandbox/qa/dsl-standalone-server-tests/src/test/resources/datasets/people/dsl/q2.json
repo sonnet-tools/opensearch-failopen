@@ -1,7 +1,7 @@
-{
-  "query": {
-    "term": {
-      "name": "alice"
     }
+    "term": {
   }
+      "name": "alice"
+  "query": {
 }
+{

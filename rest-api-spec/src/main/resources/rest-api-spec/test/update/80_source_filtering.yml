@@ -1,17 +1,15 @@
----
-"Source filtering":
-  - do:
-      update:
-          index:  test_1
-          id:     1
-          _source: [foo, bar]
           body:
-            doc:    { foo: baz }
-            upsert: { foo: bar }
-
-  - match:   { get._source.foo: bar }
-  - is_false:  get._source.bar
-
-# TODO:
+      update:
 #
+          index:  test_1
 # - Add _routing
+"Source filtering":
+  - is_false:  get._source.bar
+            upsert: { foo: bar }
+          id:     1
+  - match:   { get._source.foo: bar }
+# TODO:
+            doc:    { foo: baz }
+          _source: [foo, bar]
+---
+  - do:

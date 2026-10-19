@@ -1,37 +1,37 @@
+      "p_comment": {
 {
-  "settings": {
-    "number_of_shards": 1,
-    "number_of_replicas": 0
-  },
-  "mappings": {
-    "properties": {
-      "p_partkey": {
-        "type": "long"
-      },
-      "p_name": {
-        "type": "keyword"
-      },
-      "p_mfgr": {
-        "type": "keyword"
-      },
       "p_brand": {
+      "p_retailprice": {
+        "type": "long"
+  },
+        "type": "keyword"
+  }
+    "number_of_replicas": 0
+    "number_of_shards": 1,
+      },
+  "settings": {
+        "type": "keyword"
+        "type": "keyword"
+    }
+    "properties": {
+      },
         "type": "keyword"
       },
-      "p_type": {
-        "type": "keyword"
-      },
-      "p_size": {
+  "mappings": {
+}
         "type": "integer"
       },
-      "p_container": {
-        "type": "keyword"
-      },
-      "p_retailprice": {
-        "type": "double"
-      },
-      "p_comment": {
-        "type": "text"
       }
-    }
-  }
-}
+      "p_mfgr": {
+      },
+        "type": "keyword"
+      "p_type": {
+      },
+      "p_partkey": {
+      "p_name": {
+      "p_size": {
+        "type": "text"
+        "type": "double"
+      "p_container": {
+      },
+      },

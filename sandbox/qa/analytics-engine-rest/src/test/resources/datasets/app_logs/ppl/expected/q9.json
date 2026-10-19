@@ -1,48 +1,48 @@
-{
+    },
+      "api-service",
+      41,
+      948.14
+  "total": 4,
+    [
+      "type": "string"
+      55,
+  ],
+      "name": "service_name",
+      900.5
+      900.5
+      54,
+      870.18
+}
+      "web-service",
+      "type": "string"
+    ],
+      "type": "double"
+  "datarows": [
+      "567",
+    [
+  "size": 4
+      50,
   "schema": [
+    [
+    },
+    },
+    [
+{
+      "type": "bigint"
+    ]
+    ],
+      "db-service",
+      "name": "requests",
     {
       "name": "maxresponsetime",
-      "type": "string"
-    },
-    {
-      "name": "requests",
-      "type": "bigint"
-    },
-    {
-      "name": "service_name",
-      "type": "string"
-    },
-    {
-      "name": "avgresponsetime",
-      "type": "double"
+      "567",
     }
-  ],
-  "datarows": [
-    [
-      "567",
-      41,
-      "api-service",
-      948.14
-    ],
-    [
-      "567",
-      54,
       "auth-service",
-      900.5
-    ],
-    [
+    {
       "567",
-      55,
-      "db-service",
-      870.18
-    ],
-    [
       "567",
-      50,
-      "web-service",
-      900.5
-    ]
+    {
   ],
-  "total": 4,
-  "size": 4
-}
+      "name": "avgresponsetime",
+    {
+    ],

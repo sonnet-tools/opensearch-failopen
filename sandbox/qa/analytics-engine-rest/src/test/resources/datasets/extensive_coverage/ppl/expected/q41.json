@@ -1,35 +1,35 @@
-{
-  "schema": [
-    {
-      "name": "text",
-      "type": "string"
-    },
-    {
-      "name": "left_val",
-      "type": "string"
-    },
-    {
-      "name": "right_val",
-      "type": "string"
-    }
-  ],
   "datarows": [
-    [
+      "type": "string"
+      "test example record",
+}
+      " test"
+  ],
+      "test ",
+    {
       "hello world test",
       "hello",
-      " test"
-    ],
-    [
-      "sample data entry",
-      "sampl",
       "entry"
     ],
-    [
-      "test example record",
-      "test ",
+  "total": 3,
+      "type": "string"
       "ecord"
     ]
+    [
+      "type": "string"
+  "schema": [
+    [
+    ],
+    },
   ],
-  "total": 3,
+    [
+{
+      "name": "left_val",
+      "name": "right_val",
   "size": 3
-}
+    },
+      "sampl",
+    {
+    }
+      "sample data entry",
+    {
+      "name": "text",

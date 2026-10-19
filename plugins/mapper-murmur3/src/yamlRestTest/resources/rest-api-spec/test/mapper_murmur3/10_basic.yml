@@ -1,62 +1,49 @@
-# Integration tests for Mapper Murmur3 components
-#
-
----
-"Mapper Murmur3":
-
+            body: { "foo": "baz" }
     - do:
-        indices.create:
-            index: test
-            body:
-                mappings:
-                    properties: { "foo": { "type": "text", "fields": { "hash": { "type": "murmur3" } } } }
-
-    - do:
+        indices.refresh: {}
         index:
+            id: 3
+            body: { "foo": "bar" }
+                mappings:
+        index:
+    - do:
+            body: { "aggs": { "foo_count": { "cardinality": { "field": "foo.hash" } } } }
+    - do:
+"Mapper Murmur3":
+#
             index: test
+        index:
+---
+    - do:
+    - do:
+    - do:
+    - do:
+        indices.refresh: {}
+    - do:
+            body: { "foo": "bar" }
             id: 0
             body: { "foo": null }
-
-    - do:
-        indices.refresh: {}
-
-    - do:
+        index:
+    - match: { aggregations.foo_count.value: 3 }
+        search:
+            id: 1
         search:
             rest_total_hits_as_int: true
-            body: { "aggs": { "foo_count": { "cardinality": { "field": "foo.hash" } } } }
-
-    - match: { aggregations.foo_count.value: 0 }
-
     - do:
-        index:
-            index: test
-            id: 1
-            body: { "foo": "bar" }
-
-    - do:
-        index:
             index: test
             id: 2
-            body: { "foo": "baz" }
-
-    - do:
-        index:
             index: test
-            id: 3
-            body: { "foo": "quux" }
-
-    - do:
-        index:
-            index: test
-            id: 4
-            body: { "foo": "bar" }
-
-    - do:
-        indices.refresh: {}
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
             body: { "aggs": { "foo_count": { "cardinality": { "field": "foo.hash" } } } }
-
-    - match: { aggregations.foo_count.value: 3 }
+    - do:
+# Integration tests for Mapper Murmur3 components
+            body:
+            id: 4
+            body: { "foo": "quux" }
+            index: test
+            index: test
+            index: test
+        indices.create:
+                    properties: { "foo": { "type": "text", "fields": { "hash": { "type": "murmur3" } } } }
+            rest_total_hits_as_int: true
+    - match: { aggregations.foo_count.value: 0 }
+        index:

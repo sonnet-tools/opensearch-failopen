@@ -1,189 +1,184 @@
----
-"Test with date processor":
-  - do:
-      ingest.put_pipeline:
-        id: "_id"
-        body:  >
-          {
-            "processors": [
-              {
-                "grok" : {
-                  "field" : "log",
-                  "patterns": ["%{COMBINEDAPACHELOG}"]
-                }
-              },
-              {
-                "convert" : {
-                  "field" : "response",
-                  "type": "integer"
-                }
-              },
-              {
-                "convert" : {
-                  "field" : "bytes",
-                  "type": "integer"
-                }
-              },
-              {
-                "date" : {
-                  "field" : "timestamp",
-                  "target_field" : "timestamp",
-                  "formats" : ["dd/MMM/yyyy:HH:mm:ss xx"]
-                }
-              },
-              {
-                "geoip" : {
-                  "field" : "clientip"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "_id"
-        body: {
-          log: "70.193.17.92 - - [08/Sep/2014:02:54:42 +0000] \"GET /presentations/logstash-scale11x/images/ahhh___rage_face_by_samusmmx-d5g5zap.png HTTP/1.1\" 200 175208 \"http://mobile.rivals.com/board_posts.asp?SID=880&mid=198829575&fid=2208&tid=198829575&Team=&TeamId=&SiteId=\" \"Mozilla/5.0 (Linux; Android 4.2.2; VS980 4G Build/JDQ39B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.135 Mobile Safari/537.36\""
-        }
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - length: { _source: 13 }
-  - match: { _source.request: "/presentations/logstash-scale11x/images/ahhh___rage_face_by_samusmmx-d5g5zap.png" }
-  - match: { _source.agent: "\"Mozilla/5.0 (Linux; Android 4.2.2; VS980 4G Build/JDQ39B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.135 Mobile Safari/537.36\"" }
-  - match: { _source.auth: "-" }
-  - match: { _source.verb: "GET" }
-  - match: { _source.referrer: "\"http://mobile.rivals.com/board_posts.asp?SID=880&mid=198829575&fid=2208&tid=198829575&Team=&TeamId=&SiteId=\"" }
-  - match: { _source.response: 200 }
-  - match: { _source.bytes: 175208 }
-  - match: { _source.clientip: "70.193.17.92" }
-  - match: { _source.httpversion: "1.1" }
-  - match: { _source.timestamp: "2014-09-08T02:54:42.000Z" }
-  - match: { _source.geoip.continent_name: "North America" }
-  - match: { _source.geoip.country_iso_code: "US" }
-
----
-"Test mutate":
-  - do:
-      ingest.put_pipeline:
-        id: "_id"
-        body:  >
-          {
-            "processors": [
-              {
-                "foreach" : {
-                  "field" : "friends",
-                  "processor" : {
-                      "remove" : {
-                        "field" : "_ingest._value.id"
-                      }
-                  }
-                }
-              },
-              {
-                "append" : {
-                  "field" : "tags",
-                  "value": "new_value"
-                }
-              },
-              {
-                "split" : {
-                  "field" : "address",
-                  "separator": ","
-                }
-              },
-              {
-                "foreach" : {
-                  "field" : "address",
-                  "processor" : {
-                      "trim" : {
-                        "field" : "_ingest._value"
-                      }
-                  }
-                }
-              },
-              {
-                "lowercase" : {
-                  "field" : "company"
-                }
-              },
-              {
-                "uppercase" : {
-                  "field" : "gender"
-                }
-              },
-              {
-                "rename" : {
-                   "field" : "eyeColor",
-                   "target_field" : "eye_color"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "_id"
-        body: {
-          "age" : 33,
-          "eyeColor" : "brown",
+  - length: { _source.address: 4 }
           "name" : "Miranda Goodwin",
-          "gender" : "male",
-          "company": "ATGEN",
-          "email" : "mirandagoodwin@atgen.com",
-          "phone": "+1 (914) 489-3656",
-          "address" : "713 Bartlett Place, Accoville, Puerto Rico, 9221",
-          "registered": "2014-11-23T08:34:21 -01:00",
-          "tags" : [
-            "ex",
-            "do",
-            "occaecat",
-            "reprehenderit",
-            "anim",
-            "laboris",
+              },
+  - match: { _source.bytes: 175208 }
+                }
+  - do:
+              {
+        body: {
+      index:
+  - is_false: _source.friends.2.id
+                  "type": "integer"
+              },
+  - match: { _source.clientip: "70.193.17.92" }
+                  "formats" : ["dd/MMM/yyyy:HH:mm:ss xx"]
+  - do:
+                  "field" : "address",
+        body:  >
+  - match: { _source.address.1: "Accoville" }
+                "lowercase" : {
             "cillum"
-          ],
+      index:
+            "processors": [
+                  "field" : "friends",
+              "id" : 0,
+                "foreach" : {
+              {
+  - match: { _source.address.2: "Puerto Rico" }
+        pipeline: "_id"
+        id: 1
+                "append" : {
+                }
+              "name" : "Mayra Boyd"
+              {
+  - do:
+                  "field" : "timestamp",
+  - match: { _source.friends.2.name: "Lee Gonzalez" }
+        id: "_id"
+                  "field" : "clientip"
+          ]
+            {
+          "registered": "2014-11-23T08:34:21 -01:00",
           "friends": [
             {
-              "id" : 0,
-              "name" : "Wendi Odonnell"
-            },
-            {
+      ingest.put_pipeline:
+          ],
               "id" : 1,
-              "name" : "Mayra Boyd"
-            },
-            {
-              "id": 2,
-              "name": "Lee Gonzalez"
-            }
-          ]
-        }
-
-  - do:
-      get:
+                  "patterns": ["%{COMBINEDAPACHELOG}"]
+  - match: { _source.verb: "GET" }
+                }
+          "tags" : [
+                "geoip" : {
+              {
         index: test
+        }
+                  "field" : "log",
+  - is_false: _source.friends.1.id
+                   "field" : "eyeColor",
+          }
+              }
+  - match: { _source.company: "atgen" }
+                  "processor" : {
+---
+"Test with date processor":
+                      "remove" : {
+              },
+  - match: { _source.friends.0.name: "Wendi Odonnell" }
+                  "field" : "response",
+  - match: { _source.geoip.continent_name: "North America" }
+            }
+  - match: { _source.eye_color: "brown" }
+              {
+        index: test
+                }
+  - match: { _source.referrer: "\"http://mobile.rivals.com/board_posts.asp?SID=880&mid=198829575&fid=2208&tid=198829575&Team=&TeamId=&SiteId=\"" }
+          log: "70.193.17.92 - - [08/Sep/2014:02:54:42 +0000] \"GET /presentations/logstash-scale11x/images/ahhh___rage_face_by_samusmmx-d5g5zap.png HTTP/1.1\" 200 175208 \"http://mobile.rivals.com/board_posts.asp?SID=880&mid=198829575&fid=2208&tid=198829575&Team=&TeamId=&SiteId=\" \"Mozilla/5.0 (Linux; Android 4.2.2; VS980 4G Build/JDQ39B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.135 Mobile Safari/537.36\""
+              "name" : "Wendi Odonnell"
+            {
+                }
+  - match: { _source.gender: "MALE" }
+          {
+  - is_false: _source.friends.0.id
+      ingest.put_pipeline:
+                  "field" : "gender"
+          "gender" : "male",
+  - match: { acknowledged: true }
+              "id": 2,
+  - do:
+        }
+                "foreach" : {
+                        "field" : "_ingest._value.id"
+            "do",
+"Test mutate":
+                }
         id: 1
   - length: { _source: 11 }
-  - is_false: _source.friends.0.id
-  - is_false: _source.friends.1.id
-  - is_false: _source.friends.2.id
-  - match: { _source.friends.0.name: "Wendi Odonnell" }
-  - match: { _source.friends.1.name: "Mayra Boyd" }
-  - match: { _source.friends.2.name: "Lee Gonzalez" }
+              {
+        id: 1
+        index: test
+            "anim",
+                "convert" : {
+                  "type": "integer"
+                        "field" : "_ingest._value"
   - match: { _source.tags.7: "new_value" }
-  - length: { _source.address: 4 }
+              "name": "Lee Gonzalez"
   - match: { _source.address.0: "713 Bartlett Place" }
-  - match: { _source.address.1: "Accoville" }
-  - match: { _source.address.2: "Puerto Rico" }
+              },
+          }
+                  "processor" : {
+            },
+  - do:
+  - length: { _source: 13 }
+            "ex",
+          "phone": "+1 (914) 489-3656",
+  - match: { _source.geoip.country_iso_code: "US" }
+              {
+  - match: { _source.response: 200 }
+                      "trim" : {
+          "company": "ATGEN",
+                }
+  - match: { _source.httpversion: "1.1" }
+                "uppercase" : {
+        index: test
+                "grok" : {
+                "split" : {
+                  "field" : "address",
+              },
+              }
+            "laboris",
+                }
+  - do:
+            "occaecat",
+---
   - match: { _source.address.3: "9221" }
-  - match: { _source.company: "atgen" }
-  - match: { _source.gender: "MALE" }
-  - match: { _source.eye_color: "brown" }
+                  "value": "new_value"
+                  "field" : "bytes",
+  - match: { acknowledged: true }
+          {
+                "date" : {
+                }
+        id: 1
+                   "target_field" : "eye_color"
+          "email" : "mirandagoodwin@atgen.com",
+            "reprehenderit",
+        body:  >
+                      }
+  - match: { _source.timestamp: "2014-09-08T02:54:42.000Z" }
+  - match: { _source.auth: "-" }
+                  "separator": ","
+              {
+      get:
+              },
+              {
+        pipeline: "_id"
+              },
+              {
+                }
+            "processors": [
+          "eyeColor" : "brown",
+            },
+                      }
+            ]
+  - match: { _source.agent: "\"Mozilla/5.0 (Linux; Android 4.2.2; VS980 4G Build/JDQ39B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.135 Mobile Safari/537.36\"" }
+              {
+                  }
+                  "field" : "company"
+  - match: { _source.request: "/presentations/logstash-scale11x/images/ahhh___rage_face_by_samusmmx-d5g5zap.png" }
+        body: {
+                  "target_field" : "timestamp",
+              },
+          "address" : "713 Bartlett Place, Accoville, Puerto Rico, 9221",
+                  }
+                }
+              },
+                  "field" : "tags",
+  - match: { _source.friends.1.name: "Mayra Boyd" }
+            ]
+              {
+              },
+        id: "_id"
+                }
+                "rename" : {
+                "convert" : {
+      get:
+          "age" : 33,

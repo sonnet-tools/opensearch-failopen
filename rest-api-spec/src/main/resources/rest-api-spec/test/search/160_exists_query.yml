@@ -1,1238 +1,1084 @@
-setup:
-  - skip:
-      features: ["headers"]
-
-  - do:
-      indices.create:
-          index:  test
-          body:
-            mappings:
-              dynamic: false
-              properties:
-                binary:
-                  type: binary
-                  doc_values: true
-                boolean:
-                  type: boolean
-                date:
-                  type: date
-                geo_point:
-                  type: geo_point
-                ip:
-                  type: ip
-                keyword:
-                  type: keyword
-                byte:
-                  type: byte
-                double:
-                  type: double
-                float:
-                  type: float
-                half_float:
-                  type: half_float
-                integer:
-                  type: integer
-                long:
-                  type: long
-                short:
-                  type: short
-                object:
-                  type: object
-                  properties:
-                    inner1:
-                      type: keyword
-                    inner2:
-                      type: keyword
-                text:
-                  type: text
-
-  - do:
-      headers:
-        Content-Type: application/json
-      index:
-          index:  "test"
-          id:     1
-          body:
-            binary: "YWJjZGUxMjM0"
-            boolean: true
-            date: "2017-01-01"
-            geo_point: [0.0, 20.0]
-            ip: "192.168.0.1"
-            keyword: "foo"
-            byte: 1
-            double: 1.0
-            float: 1.0
-            half_float: 1.0
-            integer: 1
-            long: 1
-            short: 1
-            object:
-              inner1: "foo"
-              inner2: "bar"
-            text: "foo bar"
-
-  - do:
-      headers:
-        Content-Type: application/json
-      index:
-          index:  "test"
-          id:     2
-          body:
-            binary: "YWJjZGUxMjM0"
-            boolean: false
-            date: "2017-01-01"
-            geo_point: [0.0, 20.0]
-            ip: "192.168.0.1"
-            keyword: "foo"
-            byte: 1
-            double: 1.0
-            float: 1.0
-            half_float: 1.0
-            integer: 1
-            long: 1
-            short: 1
-            object:
-              inner1: "foo"
-            text: "foo bar"
-
-  - do:
-      headers:
-        Content-Type: application/json
-      index:
-          index:  "test"
-          id:     3
-          routing: "route_me"
-          body:
-            binary: "YWJjZGUxMjM0"
-            boolean: true
-            date: "2017-01-01"
-            geo_point: [0.0, 20.0]
-            ip: "192.168.0.1"
-            keyword: "foo"
-            byte: 1
-            double: 1.0
-            float: 1.0
-            half_float: 1.0
-            integer: 1
-            long: 1
-            short: 1
-            object:
-              inner2: "bar"
-            text: "foo bar"
-
-  - do:
-      index:
-          index:  "test"
-          id:     4
-          body: {}
-
-  - do:
-      indices.create:
-          index:  test-no-dv
-          body:
-            mappings:
-              dynamic: false
-              properties:
-                binary:
-                  type: binary
-                  doc_values: false
-                  store: true
-                boolean:
-                  type: boolean
-                  doc_values: false
-                date:
-                  type: date
-                  doc_values: false
-                geo_point:
-                  type: geo_point
-                  doc_values: false
-                ip:
-                  type: ip
-                  doc_values: false
-                keyword:
-                  type: keyword
-                  doc_values: false
-                byte:
-                  type: byte
-                  doc_values: false
-                double:
-                  type: double
-                  doc_values: false
-                float:
-                  type: float
-                  doc_values: false
-                half_float:
-                  type: half_float
-                  doc_values: false
-                integer:
-                  type: integer
-                  doc_values: false
-                long:
-                  type: long
-                  doc_values: false
-                short:
-                  type: short
-                  doc_values: false
-                object:
-                  type: object
-                  properties:
-                    inner1:
-                      type: keyword
-                      doc_values: false
-                    inner2:
-                      type: keyword
-                      doc_values: false
-                text:
-                  type: text
-
-  - do:
-      headers:
-        Content-Type: application/json
-      index:
-          index:  "test-no-dv"
-          id:     1
-          body:
-            binary: "YWJjZGUxMjM0"
-            boolean: true
-            date: "2017-01-01"
-            geo_point: [0.0, 20.0]
-            ip: "192.168.0.1"
-            keyword: "foo"
-            byte: 1
-            double: 1.0
-            float: 1.0
-            half_float: 1.0
-            integer: 1
-            long: 1
-            short: 1
-            object:
-              inner1: "foo"
-              inner2: "bar"
-            text: "foo bar"
-
-  - do:
-      headers:
-        Content-Type: application/json
-      index:
-          index:  "test-no-dv"
-          id:     2
-          body:
-            binary: "YWJjZGUxMjM0"
-            boolean: false
-            date: "2017-01-01"
-            geo_point: [0.0, 20.0]
-            ip: "192.168.0.1"
-            keyword: "foo"
-            byte: 1
-            double: 1.0
-            float: 1.0
-            half_float: 1.0
-            integer: 1
-            long: 1
-            short: 1
-            object:
-              inner1: "foo"
-            text: "foo bar"
-
-  - do:
-      headers:
-        Content-Type: application/json
-      index:
-          index:  "test-no-dv"
-          id:     3
-          routing: "route_me"
-          body:
-            binary: "YWJjZGUxMjM0"
-            boolean: true
-            date: "2017-01-01"
-            geo_point: [0.0, 20.0]
-            ip: "192.168.0.1"
-            keyword: "foo"
-            byte: 1
-            double: 1.0
-            float: 1.0
-            half_float: 1.0
-            integer: 1
-            long: 1
-            short: 1
-            object:
-              inner2: "bar"
-            text: "foo bar"
-
-  - do:
-      index:
-          index:  "test-no-dv"
-          id:     4
-          body: {}
-
-  - do:
-      indices.create:
-          index:  test-unmapped
-          body:
-            mappings:
-              dynamic: false
-              properties:
-                unrelated:
-                  type: keyword
-
-  - do:
-      index:
-          index:  "test-unmapped"
-          id:     1
-          body:
-            unrelated: "foo"
-
-  - do:
-      indices.create:
-          index:  test-empty
-          body:
-            mappings:
-              dynamic: false
-              properties:
-                binary:
-                  type: binary
-                date:
-                  type: date
-                geo_point:
-                  type: geo_point
-                ip:
-                  type: ip
-                keyword:
-                  type: keyword
-                byte:
-                  type: byte
-                double:
-                  type: double
-                float:
-                  type: float
-                half_float:
-                  type: half_float
-                integer:
-                  type: integer
-                long:
-                  type: long
-                short:
-                  type: short
-                object:
-                  type: object
-                  properties:
-                    inner1:
-                      type: keyword
-                    inner2:
-                      type: keyword
-                text:
-                  type: text
-
-  - do:
-      indices.refresh:
-          index: [test, test-unmapped, test-empty, test-no-dv]
-
----
-"Test exists query on mapped binary field":
-  - do:
       search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: binary
-
   - match: {hits.total: 3}
-
----
-"Test exists query on mapped boolean field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: boolean
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped date field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: date
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped geo_point field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: geo_point
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped ip field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: ip
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped keyword field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: keyword
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped byte field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: byte
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped double field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: double
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped float field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: float
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped half_float field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: half_float
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped integer field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: integer
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped long field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: long
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped short field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
               exists:
                 field: short
-
+            query:
+                geo_point:
+"Test exists query on mapped text field with no doc values":
+          body:
+          index:  "test"
+                keyword:
   - match: {hits.total: 3}
-
----
-"Test exists query on mapped object field":
-  - do:
-      search:
+"Test exists query on short field in empty index":
           rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: object
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped object inner field":
   - do:
-      search:
-          rest_total_hits_as_int: true
           index: test
-          body:
-            query:
-              exists:
-                field: object.inner1
-
-  - match: {hits.total: 2}
-
+            double: 1.0
+  - match: {hits.total: 0}
+          index: test-no-dv
 ---
-"Test exists query on mapped text field":
+              inner1: "foo"
+          id:     3
+          index: test-no-dv
+          index: test-no-dv
+          index: test-unmapped
+            query:
+      search:
+            keyword: "foo"
   - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: text
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on _id field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: _id
-
-  - match: {hits.total: 4}
-
----
-"Test exists query on _index field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: _index
-
-  - match: {hits.total: 4}
-
----
-"Test exists query on _routing field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: _routing
-
-  - match: {hits.total: 1}
-
----
 "Test exists query on _seq_no field":
-  - do:
-      search:
           rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: _seq_no
-
-  - match: {hits.total: 4}
-
----
-"Test exists query on _source field":
-  - do:
-      catch: /query_shard_exception/
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: _source
-
----
-"Test exists query on _version field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
-            query:
-              exists:
-                field: _version
-
-  - match: {hits.total: 4}
-
----
-"Test exists query on unmapped binary field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-unmapped
-          body:
-            query:
-              exists:
-                field: binary
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on unmapped boolean field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-unmapped
-          body:
-            query:
-              exists:
-                field: boolean
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on unmapped date field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-unmapped
-          body:
-            query:
-              exists:
-                field: date
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on unmapped geo_point field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-unmapped
-          body:
-            query:
-              exists:
-                field: geo_point
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on unmapped ip field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-unmapped
-          body:
-            query:
-              exists:
-                field: ip
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on unmapped keyword field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-unmapped
-          body:
-            query:
-              exists:
-                field: keyword
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on unmapped byte field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-unmapped
-          body:
-            query:
-              exists:
-                field: byte
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on unmapped double field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-unmapped
-          body:
-            query:
-              exists:
-                field: double
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on unmapped float field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-unmapped
-          body:
-            query:
-              exists:
-                field: float
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on unmapped half_float field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-unmapped
-          body:
-            query:
-              exists:
-                field: half_float
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on unmapped integer field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-unmapped
-          body:
-            query:
-              exists:
-                field: integer
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on unmapped long field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-unmapped
-          body:
-            query:
-              exists:
+            text: "foo bar"
+      index:
                 field: long
-
+"Test exists query on byte field in empty index":
+                field: half_float
   - match: {hits.total: 0}
-
+        Content-Type: application/json
+                object:
+                short:
+            ip: "192.168.0.1"
 ---
-"Test exists query on unmapped short field":
-  - do:
       search:
+      search:
+  - do:
+                ip:
+  - match: {hits.total: 3}
+  - do:
+                  type: half_float
+                long:
+            mappings:
+              exists:
+  - match: {hits.total: 3}
+            query:
           rest_total_hits_as_int: true
-          index: test-unmapped
           body:
             query:
-              exists:
-                field: short
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on unmapped object field":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-unmapped
-          body:
             query:
-              exists:
-                field: object
-
-  - match: {hits.total: 0}
-
+          index: test
+          index: test-no-dv
+"Test exists query on mapped double field":
+            double: 1.0
+      search:
+          body:
 ---
+          id:     1
+      search:
 "Test exists query on unmapped object inner field":
   - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-unmapped
-          body:
             query:
-              exists:
-                field: object.inner1
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on unmapped text field":
   - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-unmapped
-          body:
-            query:
-              exists:
-                field: text
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on binary field in empty index":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-empty
-          body:
-            query:
-              exists:
-                field: binary
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on boolean field in empty index":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-empty
-          body:
-            query:
-              exists:
-                field: boolean
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on date field in empty index":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-empty
-          body:
-            query:
-              exists:
                 field: date
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on geo_point field in empty index":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-empty
-          body:
-            query:
-              exists:
-                field: geo_point
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on ip field in empty index":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-empty
-          body:
-            query:
-              exists:
-                field: ip
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on keyword field in empty index":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-empty
-          body:
-            query:
-              exists:
-                field: keyword
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on byte field in empty index":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-empty
-          body:
-            query:
-              exists:
-                field: byte
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on double field in empty index":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-empty
-          body:
-            query:
-              exists:
-                field: double
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on float field in empty index":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-empty
-          body:
-            query:
-              exists:
                 field: float
-
   - match: {hits.total: 0}
-
 ---
-"Test exists query on half_float field in empty index":
-  - do:
       search:
-          rest_total_hits_as_int: true
-          index: test-empty
-          body:
+---
+      search:
+                float:
+                half_float:
             query:
               exists:
+          rest_total_hits_as_int: true
+                boolean:
+              exists:
+            object:
+          rest_total_hits_as_int: true
+  - do:
+          rest_total_hits_as_int: true
+            ip: "192.168.0.1"
+              exists:
+            query:
+                field: boolean
+"Test exists query on unmapped binary field":
+          body:
+  - do:
+      search:
+  - match: {hits.total: 3}
+      search:
+                      type: keyword
+                  doc_values: false
+"Test exists query on keyword field in empty index":
+                    inner1:
+                  doc_values: false
+              exists:
+            keyword: "foo"
+                field: object.inner1
+            keyword: "foo"
+  - do:
+  - match: {hits.total: 3}
+      search:
+          id:     2
+              exists:
+          body:
+              exists:
+                text:
+  - match: {hits.total: 0}
+                field: float
+  - match: {hits.total: 0}
+"Test exists query on mapped keyword field with no doc values":
+              exists:
+                  type: half_float
+  - match: {hits.total: 2}
+          body:
+  - match: {hits.total: 0}
+            double: 1.0
+            query:
+      search:
+            ip: "192.168.0.1"
+                field: boolean
+"Test exists query on object inner field in empty index":
+                  doc_values: false
+                byte:
+          rest_total_hits_as_int: true
+              exists:
+          rest_total_hits_as_int: true
+---
+          rest_total_hits_as_int: true
+  - match: {hits.total: 0}
+                  type: byte
+              exists:
+      headers:
+                  doc_values: false
+  - do:
+"Test exists query on mapped date field":
+      index:
+                field: keyword
+            float: 1.0
+          rest_total_hits_as_int: true
+  - match: {hits.total: 3}
+  - do:
+          index: test
+                field: long
+          body:
+  - match: {hits.total: 3}
+          body:
+                      type: keyword
+              properties:
+            half_float: 1.0
+"Test exists query on mapped boolean field":
+          index: test-empty
+              properties:
+          index: test
+---
+---
+            query:
+            query:
+          body:
+          body:
+                field: date
+  - match: {hits.total: 0}
+          rest_total_hits_as_int: true
+---
+      search:
                 field: half_float
-
+            short: 1
   - match: {hits.total: 0}
-
----
-"Test exists query on integer field in empty index":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-empty
+                      doc_values: false
+            geo_point: [0.0, 20.0]
           body:
+"Test exists query on mapped boolean field with no doc values":
+          index:  "test"
+          index: test
+          rest_total_hits_as_int: true
             query:
               exists:
-                field: integer
-
-  - match: {hits.total: 0}
-
+"Test exists query on _version field":
+            query:
+                      doc_values: false
+              exists:
+          body:
+            query:
+"Test exists query on _routing field":
+  - do:
+            keyword: "foo"
+            half_float: 1.0
+              inner1: "foo"
+  - do:
+  - do:
+      search:
+          body:
+            query:
+          index: test-unmapped
+  - do:
+      search:
+"Test exists query on unmapped short field":
+            object:
+  - do:
+                  type: object
+      search:
+                  store: true
+            byte: 1
+            query:
+            geo_point: [0.0, 20.0]
+              dynamic: false
+            query:
+          index: test-unmapped
 ---
+            ip: "192.168.0.1"
+          index: test-unmapped
 "Test exists query on long field in empty index":
   - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-empty
-          body:
-            query:
-              exists:
-                field: long
-
   - match: {hits.total: 0}
-
----
-"Test exists query on short field in empty index":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-empty
-          body:
-            query:
-              exists:
-                field: short
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on object field in empty index":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-empty
-          body:
-            query:
-              exists:
-                field: object
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on object inner field in empty index":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-empty
-          body:
-            query:
-              exists:
-                field: object.inner1
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on text field in empty index":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-empty
-          body:
-            query:
-              exists:
                 field: text
-
+              exists:
+  - do:
+            boolean: false
+      search:
+          body:
+              exists:
+                  type: ip
   - match: {hits.total: 0}
-
----
-"Test exists query on mapped binary field with no doc values":
-  - do:
-      search:
+          index: test
+            query:
+      index:
           rest_total_hits_as_int: true
-          index: test-no-dv
+          body:
+          body:
+              exists:
+            query:
+"Test exists query on mapped object inner field":
+            byte: 1
+          body:
+              exists:
+            query:
+                  doc_values: false
+---
+                  properties:
+"Test exists query on ip field in empty index":
+"Test exists query on mapped long field with no doc values":
           body:
             query:
+            query:
+          body:
+              properties:
+      search:
+  - match: {hits.total: 2}
+  - do:
+                  type: long
+---
+      search:
+          rest_total_hits_as_int: true
+---
+            binary: "YWJjZGUxMjM0"
+          index: test
+            boolean: true
+      search:
+          body:
+          rest_total_hits_as_int: true
+setup:
+              inner2: "bar"
+          index: test-no-dv
               exists:
-                field: binary
-
+      search:
   - match: {hits.total: 3}
-
----
-"Test exists query on mapped boolean field with no doc values":
-  - do:
-      search:
           rest_total_hits_as_int: true
-          index: test-no-dv
-          body:
-            query:
-              exists:
-                field: boolean
-
-  - match: {hits.total: 3}
-
 ---
-"Test exists query on mapped date field with no doc values":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-no-dv
           body:
-            query:
-              exists:
-                field: date
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped geo_point field with no doc values":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-no-dv
           body:
-            query:
-              exists:
-                field: geo_point
-
-  - match: {hits.total: 3}
-
-
----
-"Test exists query on mapped ip field with no doc values":
+                boolean:
   - do:
-      search:
-          rest_total_hits_as_int: true
+            integer: 1
           index: test-no-dv
-          body:
+      indices.create:
+            long: 1
+          index:  "test-no-dv"
             query:
+                  type: object
               exists:
-                field: ip
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped keyword field with no doc values":
+                float:
+          rest_total_hits_as_int: true
+          rest_total_hits_as_int: true
+          body:
+            date: "2017-01-01"
+"Test exists query on float field in empty index":
   - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-no-dv
-          body:
-            query:
-              exists:
-                field: keyword
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped byte field with no doc values":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-no-dv
-          body:
-            query:
-              exists:
                 field: byte
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped double field with no doc values":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-no-dv
           body:
-            query:
+                  doc_values: false
+          rest_total_hits_as_int: true
+          rest_total_hits_as_int: true
+          id:     1
               exists:
                 field: double
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped float field with no doc values":
-  - do:
-      search:
-          rest_total_hits_as_int: true
+                long:
+                keyword:
+                binary:
           index: test-no-dv
-          body:
-            query:
-              exists:
-                field: float
-
-  - match: {hits.total: 3}
-
+                  type: geo_point
 ---
-"Test exists query on mapped half_float field with no doc values":
-  - do:
+          index: [test, test-unmapped, test-empty, test-no-dv]
+            byte: 1
       search:
-          rest_total_hits_as_int: true
-          index: test-no-dv
-          body:
-            query:
-              exists:
-                field: half_float
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped integer field with no doc values":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-no-dv
-          body:
-            query:
-              exists:
-                field: integer
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped long field with no doc values":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-no-dv
-          body:
-            query:
-              exists:
-                field: long
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped short field with no doc values":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-no-dv
-          body:
-            query:
-              exists:
-                field: short
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped object field with no doc values":
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test-no-dv
-          body:
-            query:
-              exists:
+          index: test
                 field: object
-
-  - match: {hits.total: 3}
-
----
-"Test exists query on mapped object inner field with no doc values":
-  - do:
-      search:
           rest_total_hits_as_int: true
+          index:  "test"
+                field: short
+---
           index: test-no-dv
+                  doc_values: false
+          rest_total_hits_as_int: true
+"Test exists query on mapped float field":
+  - match: {hits.total: 3}
+            query:
+              exists:
+          index:  test-empty
+          body:
+          body:
+---
+              exists:
+          rest_total_hits_as_int: true
+          body:
+      search:
+      features: ["headers"]
+                  doc_values: false
+            date: "2017-01-01"
+      search:
+            query:
+                binary:
+---
+  - match: {hits.total: 0}
+  - match: {hits.total: 0}
+  - do:
+              exists:
+                integer:
+            query:
+  - do:
           body:
             query:
+  - skip:
+---
+"Test exists query on unmapped keyword field":
+          index:  "test-no-dv"
+          body:
+                  type: byte
+      search:
+          index: test-empty
+            half_float: 1.0
+              dynamic: false
+                field: ip
+            query:
+              properties:
+          body:
+          body:
+          index: test
+            query:
+          index: test
+            short: 1
+---
+      search:
+                field: text
+                  type: keyword
+  - match: {hits.total: 3}
+          id:     4
+              exists:
+            query:
+          rest_total_hits_as_int: true
+      headers:
+          index: test
+              exists:
+"Test exists query on mapped integer field with no doc values":
+  - match: {hits.total: 0}
+          index: test
+          body:
+                  properties:
+"Test exists query on double field in empty index":
+              exists:
+            float: 1.0
+          rest_total_hits_as_int: true
+                  doc_values: false
+          body:
+---
+---
+      search:
+                  type: double
+      search:
+  - match: {hits.total: 3}
+              exists:
+            integer: 1
+---
+          rest_total_hits_as_int: true
+  - do:
+          body:
+            query:
+          index: test-no-dv
+      search:
+          body:
+---
+      search:
+            long: 1
+                  type: short
+              exists:
+---
+  - do:
+          index: test-no-dv
+  - do:
+          id:     1
+"Test exists query on text field in empty index":
+            boolean: true
+  - do:
+---
+                field: date
+          index: test-empty
+                field: half_float
+            query:
+            query:
+          index: test
+  - do:
+                      type: keyword
+"Test exists query on mapped ip field with no doc values":
+  - do:
+                field: integer
+                  doc_values: false
+  - match: {hits.total: 3}
+                double:
+          body:
+                half_float:
+          rest_total_hits_as_int: true
+          index:  "test-no-dv"
+          body:
+                integer:
+                field: short
+            long: 1
+            query:
+          rest_total_hits_as_int: true
+"Test exists query on mapped byte field with no doc values":
+          index: test-empty
+              exists:
+            query:
+"Test exists query on mapped half_float field":
+      index:
+            query:
+            float: 1.0
+"Test exists query on unmapped geo_point field":
+            byte: 1
+          index: test
+            float: 1.0
+  - match: {hits.total: 0}
+          index: test-empty
+                  type: binary
+            query:
+      search:
+  - do:
+          rest_total_hits_as_int: true
+          index: test
+  - match: {hits.total: 3}
+                      type: keyword
+            query:
+  - do:
+            binary: "YWJjZGUxMjM0"
+  - do:
+          body:
+            byte: 1
+          index: test-empty
+              inner1: "foo"
+                      type: keyword
+                field: double
+---
+                byte:
+---
+            float: 1.0
+                integer:
+  - do:
+          body:
+            query:
+                  type: date
+                field: double
+"Test exists query on unmapped date field":
+---
+              exists:
+                  type: text
+      search:
+          body:
+          body:
+      search:
+"Test exists query on date field in empty index":
+          rest_total_hits_as_int: true
+          body:
+  - do:
+            query:
+              exists:
+"Test exists query on unmapped float field":
+                field: binary
+      search:
+      search:
+"Test exists query on mapped geo_point field":
+                    inner1:
+                field: byte
+          rest_total_hits_as_int: true
+  - match: {hits.total: 4}
+            query:
+---
+          rest_total_hits_as_int: true
+                field: ip
+          rest_total_hits_as_int: true
+---
+---
+---
+          body:
+                    inner2:
+"Test exists query on _source field":
+      search:
+                  type: byte
+                unrelated:
+  - match: {hits.total: 3}
+          rest_total_hits_as_int: true
+              exists:
+            ip: "192.168.0.1"
+"Test exists query on mapped binary field with no doc values":
+          rest_total_hits_as_int: true
+          body: {}
+          body:
+                half_float:
+  - match: {hits.total: 3}
+---
+            long: 1
+                  type: short
+  - match: {hits.total: 3}
+            long: 1
+"Test exists query on boolean field in empty index":
+  - match: {hits.total: 0}
+            query:
+              exists:
+              inner2: "bar"
+      headers:
+      search:
+                field: geo_point
+          rest_total_hits_as_int: true
+  - do:
+                field: object.inner1
+                    inner1:
+                  type: long
+              exists:
+            text: "foo bar"
+  - do:
+          index:  "test-unmapped"
+          index:  "test"
+                  type: ip
+            query:
+              exists:
+          id:     2
+  - do:
+            object:
+            query:
+"Test exists query on unmapped object field":
+          rest_total_hits_as_int: true
+          rest_total_hits_as_int: true
+"Test exists query on unmapped ip field":
+          routing: "route_me"
+          body:
+          body:
+            query:
+          rest_total_hits_as_int: true
+              exists:
+            object:
               exists:
                 field: object.inner1
-
-  - match: {hits.total: 2}
-
+"Test exists query on integer field in empty index":
+                field: _version
+              exists:
+                field: byte
+      indices.create:
+"Test exists query on mapped geo_point field with no doc values":
+          rest_total_hits_as_int: true
+          body:
+          rest_total_hits_as_int: true
+"Test exists query on mapped object field with no doc values":
+                field: object
+"Test exists query on unmapped integer field":
+          index: test-unmapped
 ---
-"Test exists query on mapped text field with no doc values":
+  - do:
+            short: 1
+---
+              exists:
+                ip:
+          rest_total_hits_as_int: true
+---
+              exists:
   - do:
       search:
+  - do:
+            query:
+                field: boolean
+                  type: geo_point
+                date:
+      index:
+            text: "foo bar"
+        Content-Type: application/json
+          index: test
           rest_total_hits_as_int: true
+            date: "2017-01-01"
+        Content-Type: application/json
+---
+          body:
+          rest_total_hits_as_int: true
+  - do:
+                  doc_values: false
+                field: integer
+          index: test
+              exists:
+          index: test-no-dv
+  - do:
+          body:
+            query:
+                field: short
+                  type: date
+              exists:
+      indices.create:
+  - match: {hits.total: 3}
+      indices.refresh:
+          index: test-no-dv
+                ip:
+              exists:
+"Test exists query on half_float field in empty index":
+  - match: {hits.total: 4}
+  - do:
+          index: test-empty
+                field: float
+---
+          index: test
+                  type: float
+            keyword: "foo"
+                  type: double
+          rest_total_hits_as_int: true
+      search:
+                field: ip
+---
+          index:  "test-no-dv"
+            query:
+  - do:
+      search:
+                field: keyword
+            half_float: 1.0
+          rest_total_hits_as_int: true
+      search:
+  - do:
+            object:
+            query:
+"Test exists query on mapped float field with no doc values":
+---
+              exists:
+          rest_total_hits_as_int: true
+      search:
+  - do:
+            geo_point: [0.0, 20.0]
+                  type: ip
+            double: 1.0
+              exists:
+  - match: {hits.total: 0}
+          body:
+  - do:
+      index:
+            date: "2017-01-01"
+"Test exists query on mapped keyword field":
+                  type: long
+  - match: {hits.total: 0}
+            query:
+  - match: {hits.total: 4}
+          body:
+  - match: {hits.total: 0}
+            query:
+---
+"Test exists query on mapped half_float field with no doc values":
+              exists:
+            mappings:
+          index: test-empty
+          index: test-unmapped
+            half_float: 1.0
+              inner2: "bar"
+                  type: half_float
+  - do:
+      search:
+            query:
+  - do:
+  - do:
+---
+"Test exists query on mapped object inner field with no doc values":
+                text:
+          rest_total_hits_as_int: true
+            short: 1
+---
+          body:
+            query:
+                field: object
+                field: _source
+"Test exists query on mapped binary field":
+            query:
+              exists:
+            binary: "YWJjZGUxMjM0"
+            integer: 1
+            short: 1
+---
+                geo_point:
+              exists:
+          rest_total_hits_as_int: true
+          index: test
+              inner2: "bar"
+  - match: {hits.total: 1}
+          body:
+            query:
           index: test-no-dv
           body:
             query:
-              exists:
+      search:
+          body:
+  - do:
+---
+---
+          body:
+          routing: "route_me"
+      search:
+      search:
+          rest_total_hits_as_int: true
+          rest_total_hits_as_int: true
+      search:
+      indices.create:
+  - do:
+            date: "2017-01-01"
+---
+---
+---
                 field: text
-
+          body:
+              exists:
   - match: {hits.total: 3}
+"Test exists query on _index field":
+          id:     4
+      search:
+---
+          id:     3
+  - do:
+  - match: {hits.total: 0}
+          body:
+            query:
+          body:
+          body:
+  - match: {hits.total: 0}
+  - match: {hits.total: 0}
+          body:
+              exists:
+  - do:
+          body:
+                field: byte
+          body:
+                field: date
+                  doc_values: true
+          index: test-no-dv
+                  type: date
+---
+---
+          index: test-unmapped
+            double: 1.0
+                    inner2:
+"Test exists query on unmapped long field":
+            query:
+  - do:
+          index: test-unmapped
+      search:
+            query:
+      search:
+  - do:
+          rest_total_hits_as_int: true
+---
+          body:
+            integer: 1
+                  type: float
+                field: object
+            binary: "YWJjZGUxMjM0"
+---
+  - do:
+                date:
+                field: object.inner1
+"Test exists query on mapped ip field":
+          rest_total_hits_as_int: true
+---
+          rest_total_hits_as_int: true
+                byte:
+  - match: {hits.total: 0}
+          index:  test
+      search:
+          index: test
+          body:
+                text:
+                field: boolean
+      catch: /query_shard_exception/
+              exists:
+      search:
+          rest_total_hits_as_int: true
+          rest_total_hits_as_int: true
+          rest_total_hits_as_int: true
+  - do:
+              exists:
+  - do:
+        Content-Type: application/json
+          body:
+          body:
+            geo_point: [0.0, 20.0]
+  - do:
+      search:
+            unrelated: "foo"
+  - match: {hits.total: 4}
+---
+  - match: {hits.total: 3}
+                  properties:
+  - do:
+  - match: {hits.total: 3}
+      search:
+                field: long
+            text: "foo bar"
+"Test exists query on mapped double field with no doc values":
+  - match: {hits.total: 0}
+      search:
+  - do:
+          body:
+"Test exists query on mapped short field":
+            query:
+                  type: boolean
+            binary: "YWJjZGUxMjM0"
+                  type: binary
+            geo_point: [0.0, 20.0]
+                long:
+                field: binary
+---
+              exists:
+      search:
+          index: test-unmapped
+"Test exists query on mapped long field":
+                  type: text
+            boolean: true
+"Test exists query on unmapped boolean field":
+  - match: {hits.total: 0}
+                  type: boolean
+          index: test-empty
+      index:
+            integer: 1
+  - do:
+      headers:
+          index: test-unmapped
+  - match: {hits.total: 3}
+                binary:
+          rest_total_hits_as_int: true
+                field: _seq_no
+      search:
+  - match: {hits.total: 3}
+  - match: {hits.total: 3}
+          body:
+            geo_point: [0.0, 20.0]
+---
+      search:
+      index:
+              exists:
+          index: test-empty
+              exists:
+                  type: text
+      search:
+          index: test-empty
+                short:
+  - do:
+---
+          body:
+---
+---
+            keyword: "foo"
+                field: binary
+              exists:
+          index: test-unmapped
+"Test exists query on unmapped half_float field":
+            boolean: false
+                  type: double
+                  type: keyword
+  - do:
+                field: geo_point
+            boolean: true
+          index:  test-no-dv
+          rest_total_hits_as_int: true
+      search:
+            object:
+---
+        Content-Type: application/json
+"Test exists query on mapped short field with no doc values":
+                field: _index
+          body:
+                field: integer
+  - match: {hits.total: 0}
+              exists:
+              exists:
+            query:
+---
+                field: keyword
+            double: 1.0
+  - do:
+"Test exists query on unmapped text field":
+---
+  - do:
+              exists:
+            half_float: 1.0
+                field: long
+            text: "foo bar"
+          body:
+                  type: binary
+  - do:
+  - match: {hits.total: 3}
+                field: geo_point
+"Test exists query on mapped object field":
+          body:
+                field: keyword
+"Test exists query on geo_point field in empty index":
+      index:
+  - do:
+      search:
+              exists:
+  - do:
+                short:
+      headers:
+          rest_total_hits_as_int: true
+                geo_point:
+  - match: {hits.total: 0}
+  - do:
+              exists:
+            query:
+                keyword:
+              exists:
+"Test exists query on mapped text field":
+              exists:
+          body:
+"Test exists query on mapped byte field":
+                  type: integer
+          body:
+                field: _id
+                field: integer
+  - match: {hits.total: 3}
+          body:
+  - match: {hits.total: 0}
+          rest_total_hits_as_int: true
+            long: 1
+              exists:
+            byte: 1
+  - do:
+                double:
+          index: test
+          index: test-empty
+          rest_total_hits_as_int: true
+                  type: geo_point
+              exists:
+                      type: keyword
+          index: test-empty
+            query:
+            float: 1.0
+"Test exists query on mapped date field with no doc values":
+"Test exists query on binary field in empty index":
+          index: test-empty
+  - do:
+                  doc_values: false
+          body:
+  - match: {hits.total: 3}
+            query:
+            date: "2017-01-01"
+          rest_total_hits_as_int: true
+          body:
+      search:
+          index: test-unmapped
+          rest_total_hits_as_int: true
+            binary: "YWJjZGUxMjM0"
+      search:
+                  doc_values: false
+                    inner2:
+                  type: short
+                field: text
+      search:
+          rest_total_hits_as_int: true
+  - match: {hits.total: 3}
+          rest_total_hits_as_int: true
+                double:
+                  type: keyword
+              exists:
+          index: test-empty
+  - match: {hits.total: 0}
+            integer: 1
+      search:
+            ip: "192.168.0.1"
+  - match: {hits.total: 0}
+              inner1: "foo"
+            text: "foo bar"
+                object:
+  - do:
+                  type: float
+                field: ip
+      search:
+"Test exists query on mapped integer field":
+      search:
+  - match: {hits.total: 3}
+        Content-Type: application/json
+              dynamic: false
+  - do:
+          body:
+          index: test-unmapped
+  - do:
+          body:
+"Test exists query on _id field":
+                  type: integer
+            mappings:
+          index: test-unmapped
+          rest_total_hits_as_int: true
+            short: 1
+            query:
+                object:
+  - do:
+            query:
+              exists:
+            query:
+          index: test-empty
+      headers:
+                field: binary
+                field: float
+  - do:
+            query:
+  - do:
+"Test exists query on object field in empty index":
+              dynamic: false
+      search:
+              exists:
+          rest_total_hits_as_int: true
+      search:
+  - match: {hits.total: 0}
+  - match: {hits.total: 0}
+          rest_total_hits_as_int: true
+                  type: keyword
+                field: geo_point
+---
+          index: test
+                date:
+            query:
+          index: test-unmapped
+  - do:
+                float:
+                  type: object
+---
+                  type: integer
+  - do:
+  - do:
+  - do:
+          body: {}
+  - do:
+          rest_total_hits_as_int: true
+          body:
+                field: half_float
+  - match: {hits.total: 3}
+              exists:
+            mappings:
+"Test exists query on unmapped byte field":
+                field: double
+          index: test-unmapped
+          index: test-no-dv
+---
+---
+              exists:
+            query:
+      search:
+          index:  test-unmapped
+          index: test-no-dv
+                field: _routing
+---
+"Test exists query on unmapped double field":

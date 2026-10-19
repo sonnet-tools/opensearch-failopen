@@ -1,75 +1,64 @@
+              type: "bool_prefix"
 setup:
+      search:
   - do:
-      indices.create:
-        index:  test_1
-        body:
-          mappings:
-            properties:
-              text:
-                type: search_as_you_type
-                fields:
-                  subField:
-                    type: keyword
-  - do:
-      index:
-        index:  test_1
-        id:     1
-        body:   { text: test search as you type }
-
-  - do:
-      indices.refresh:
+            multi_match:
+---
         index: [test_1]
-
----
-teardown:
-  - do:
-      indices.delete:
-        index: test_1
-
-# related issue: https://github.com/opensearch-project/OpenSearch/issues/5035
----
-"Test search_as_you_type data type supports multi-fields":
-  - skip:
+        index:  test_1
       version: " - 2.17.99"
+  - match: {test_1.mappings.properties.text.type:     search_as_you_type}
+        body:
+  - do:
+      search:
+  - match: {hits.total.value: 1}
+  - do:
+---
+  - match: {test_1.mappings.properties.text.fields.subField.type:     keyword}
+# related issue: https://github.com/opensearch-project/OpenSearch/issues/5035
+  - match: {hits.total.value: 1}
+          mappings:
+  - skip:
+      indices.delete:
+      indices.refresh:
+      index:
+  - do:
+  - do:
+        index: test_1
+            properties:
+        body:
+                type: search_as_you_type
+  - match: {hits.total.value: 1}
+              text.subField: "test search as you type"
+              text:
+        id:     1
+  - do:
+        index: test_1
+          query:
+        index: test_1
+        body:
+              type: "bool_prefix"
+        index: test_1
+          query:
+      search:
       reason: "the bug was fixed since 2.18.0"
-
+  - do:
   - do:
       indices.get_mapping: {
-        index: test_1
       }
-
-  - match: {test_1.mappings.properties.text.type:     search_as_you_type}
-  - match: {test_1.mappings.properties.text.fields.subField.type:     keyword}
-
-  - do:
-      search:
-        index: test_1
-        body:
-          query:
             multi_match:
-              query: "test search"
-              type: "bool_prefix"
-
-  - match: {hits.total.value: 1}
-
-  - do:
-      search:
-        index: test_1
-        body:
           query:
-            multi_match:
+        index:  test_1
+                  subField:
+        index: test_1
+      indices.create:
               query: "test search"
-              type: "bool_prefix"
               fields: ["text.subField"]
-
-  - match: {hits.total.value: 1}
-
-  - do:
-      search:
-        index: test_1
-        body:
-          query:
+"Test search_as_you_type data type supports multi-fields":
+                    type: keyword
+              query: "test search"
+teardown:
             term:
-              text.subField: "test search as you type"
-
-  - match: {hits.total.value: 1}
+                fields:
+        body:   { text: test search as you type }
+        body:

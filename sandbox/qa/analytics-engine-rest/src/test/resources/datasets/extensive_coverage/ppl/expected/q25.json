@@ -1,25 +1,25 @@
-{
-  "schema": [
-    {
+  ],
       "name": "timestamp",
-      "type": "timestamp"
-    },
-    {
-      "name": "curr",
-      "type": "timestamp"
-    },
-    {
-      "name": "curr_date",
-      "type": "date"
-    }
-  ],
-  "datarows": [
-    [
-      "2026-01-15 10:30:00",
-      "%%DATETIME%%",
       "%%DATE%%"
-    ]
-  ],
+      "type": "date"
   "total": 1,
-  "size": 1
+  ],
+      "%%DATETIME%%",
+    }
+    {
+    },
 }
+    ]
+      "type": "timestamp"
+    {
+  "datarows": [
+  "schema": [
+      "type": "timestamp"
+  "size": 1
+    },
+      "name": "curr_date",
+    {
+      "2026-01-15 10:30:00",
+      "name": "curr",
+{
+    [

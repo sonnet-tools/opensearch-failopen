@@ -1,57 +1,56 @@
-index :
-  analysis :
-    tokenizer :
+        type : hyphenation_decompounder
+        filter : [my]
+        type : dictionary_decompounder
+      hyphen_dec :
+      custom6 :
+      custom1 :
+        type : hyphenation_decompounder
+      my :
+      dict_dec :
+      czechAnalyzerWithStemmer :
+      custom7 :
+        filter : [hyphen_dec]
+      stop2 :
+        tokenizer : standard
+        type : standard
       standard :
         type : standard
-    filter :
-      stop :
-        type : stop
-        stopwords : [test-stop]
-      stop2 :
-        type : stop
-        stopwords : [stop2-1, stop2-2]
-      my :
-        type : myfilter
-      dict_dec :
-        type : dictionary_decompounder
+      hyphenationAnalyzerNoSubMatches :
         word_list : [donau, dampf, schiff, spargel, creme, suppe]
-      hyphen_dec :
-        type : hyphenation_decompounder
-        word_list : [læse, hest]
-        hyphenation_patterns_path: "da_UTF8.xml"
-      hyphen_dec_no_sub_matches :
-        type : hyphenation_decompounder
+        only_longest_match: False
+      custom4 :
+        stopwords : [stop2-1, stop2-2]
+        no_overlapping_matches: False
         word_list : [basketball, basket, ball, kurv]
         hyphenation_patterns_path: "da_UTF8.xml"
-        only_longest_match: False
-        no_sub_matches: True
-        no_overlapping_matches: False
-
-    analyzer :
+        tokenizer : standard
+        type : myfilter
+        filter : [dict_dec]
+        tokenizer : standard
+        type : stop
+        stopwords : [test-stop]
+        tokenizer : standard
+        word_list : [læse, hest]
+        filter : [lowercase, stop, czech_stem]
       standard :
         type : standard
-        stopwords : [test1, test2, test3]
-      custom1 :
-        tokenizer : standard
-        filter : [stop, stop2]
-      custom4 :
-        tokenizer : standard
-        filter : [my]
-      custom6 :
-        tokenizer : standard
-        position_increment_gap: 256
-      custom7 :
-        type : standard
         version: 3.6
-      czechAnalyzerWithStemmer :
+      hyphenationAnalyzer :
+  analysis :
+        no_sub_matches: True
+        type : stop
+        filter : [hyphen_dec_no_sub_matches]
+      stop :
+index :
         tokenizer : standard
-        filter : [lowercase, stop, czech_stem]
       decompoundingAnalyzer :
         tokenizer : standard
-        filter : [dict_dec]
-      hyphenationAnalyzer :
+        hyphenation_patterns_path: "da_UTF8.xml"
+    analyzer :
         tokenizer : standard
-        filter : [hyphen_dec]
-      hyphenationAnalyzerNoSubMatches :
-        tokenizer : standard
-        filter : [hyphen_dec_no_sub_matches]
+        filter : [stop, stop2]
+    filter :
+    tokenizer :
+        stopwords : [test1, test2, test3]
+        position_increment_gap: 256
+      hyphen_dec_no_sub_matches :

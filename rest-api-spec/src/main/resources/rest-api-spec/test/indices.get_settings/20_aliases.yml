@@ -1,25 +1,21 @@
----
-"Getting settings for aliases should return the real index as key":
-
-  - do:
-      indices.create:
-        index: test-index
-        body:
-          settings:
-            index:
-              refresh_interval: -1
-              number_of_shards: 2
-              number_of_replicas: 3
-
-  - do:
-      indices.put_alias:
-        index: test-index
-        name:  test-alias
-
-  - do:
-      indices.get_settings:
-        index: test-alias
-
   - match: { test-index.settings.index.number_of_replicas: "3" }
+"Getting settings for aliases should return the real index as key":
+        index: test-index
+          settings:
+  - do:
+              refresh_interval: -1
+        name:  test-alias
+        body:
+      indices.create:
+  - do:
+              number_of_replicas: 3
   - match: { test-index.settings.index.number_of_shards: "2" }
+      indices.get_settings:
+        index: test-index
+            index:
+        index: test-alias
   - match: { test-index.settings.index.refresh_interval: "-1" }
+---
+              number_of_shards: 2
+      indices.put_alias:
+  - do:

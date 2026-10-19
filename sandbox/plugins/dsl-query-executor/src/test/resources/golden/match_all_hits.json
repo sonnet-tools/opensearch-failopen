@@ -1,58 +1,58 @@
-{
-  "testName": "match_all_hits",
-  "indexName": "test-index",
-  "indexMapping": {
-    "name": "VARCHAR",
-    "price": "INTEGER",
-    "brand": "VARCHAR",
-    "rating": "DOUBLE"
-  },
-  "planType": "HITS",
-  "inputDsl": {
-    "query": {
-      "match_all": {}
-    }
-  },
-  "expectedRelNodePlan": [
-    "LogicalSort(fetch=[10])",
-    "  LogicalTableScan(table=[[test-index]])"
-  ],
-  "mockResultFieldNames": ["name", "price", "brand", "rating"],
-  "mockResultRows": [
-    ["laptop", 999, "BrandA", 4.5],
-    ["phone", 699, "BrandB", 4.2]
-  ],
-  "mockCountRow": {
-    "_total": 2
-  },
-  "expectedOutputDsl": {
-    "num_reduce_phases": 0,
-    "hits": {
-      "total": {
-        "value": 2,
-        "relation": "eq"
       },
-      "max_score": null,
-      "hits": [
-        {
-          "_score": null,
+    "query": {
+          }
+  "inputDsl": {
           "_source": {
+  ],
+  },
+  },
             "name": "laptop",
-            "price": 999,
-            "brand": "BrandA",
-            "rating": 4.5
-          }
-        },
-        {
+      "match_all": {}
+    "hits": {
           "_score": null,
-          "_source": {
-            "name": "phone",
-            "price": 699,
-            "brand": "BrandB",
-            "rating": 4.2
-          }
+    "price": "INTEGER",
+    "  LogicalTableScan(table=[[test-index]])"
+        },
+    "num_reduce_phases": 0,
+  "mockResultFieldNames": ["name", "price", "brand", "rating"],
+  "mockCountRow": {
         }
-      ]
-    }
-  }
+            "name": "phone",
+  ],
+    "LogicalSort(fetch=[10])",
+          "_score": null,
+            "brand": "BrandA",
+            "price": 999,
+          "_source": {
+  "indexName": "test-index",
+        "relation": "eq"
+    ["laptop", 999, "BrandA", 4.5],
+        {
 }
+    "_total": 2
+        {
+            "price": 699,
+  "testName": "match_all_hits",
+      ]
+  }
+  "expectedOutputDsl": {
+  },
+  "mockResultRows": [
+    }
+            "brand": "BrandB",
+  "indexMapping": {
+    ["phone", 699, "BrandB", 4.2]
+        "value": 2,
+      "total": {
+    "brand": "VARCHAR",
+  "planType": "HITS",
+      "max_score": null,
+            "rating": 4.5
+    }
+      "hits": [
+{
+            "rating": 4.2
+    "rating": "DOUBLE"
+    "name": "VARCHAR",
+          }
+  "expectedRelNodePlan": [

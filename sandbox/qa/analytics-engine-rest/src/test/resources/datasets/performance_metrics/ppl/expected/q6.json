@@ -1,56 +1,56 @@
-{
-  "schema": [
     {
-      "name": "avg_cpu",
-      "type": "double"
-    },
-    {
-      "name": "max_cpu",
-      "type": "bigint"
-    },
-    {
-      "name": "min_cpu",
-      "type": "bigint"
-    },
-    {
-      "name": "samples",
-      "type": "bigint"
-    },
-    {
-      "name": "host",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      82.12,
-      95,
-      70,
-      25,
-      "host1"
     ],
-    [
-      41.08,
-      60,
+      25,
       21,
-      25,
-      "host2"
-    ],
+    },
     [
       41.12,
-      58,
-      22,
-      25,
-      "host3"
-    ],
-    [
-      43.72,
-      58,
-      22,
-      25,
       "host4"
-    ]
+    {
+      "name": "avg_cpu",
+    [
   ],
+  ],
+  "schema": [
   "total": 4,
-  "size": 4
+  "datarows": [
+    [
 }
+    {
+      "type": "double"
+      25,
+      22,
+    },
+      "name": "max_cpu",
+    },
+      "name": "host",
+    ],
+      22,
+    }
+    },
+      "host3"
+      "name": "samples",
+      "type": "bigint"
+      "type": "bigint"
+      "name": "min_cpu",
+  "size": 4
+      "host2"
+      58,
+      43.72,
+      25,
+      58,
+    ],
+      "type": "bigint"
+{
+      95,
+      25,
+      70,
+      41.08,
+    ]
+    {
+    {
+    [
+      82.12,
+      60,
+      "type": "string"
+      "host1"

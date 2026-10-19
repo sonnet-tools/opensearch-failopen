@@ -1,882 +1,806 @@
----
-# The test setup includes:
-# - 1.Create flat_object mapping for flat_object_doc_values_test index
-# - 2.Index 9 example documents
-# - 3.Search tests about doc_values and index
-# - 4.Fetch doc_value from flat_object field
-
-setup:
-  - skip:
-      version: " - 2.99.99"
-      reason: "introduced in 3.0.0 "
-
-  - do:
-      indices.create:
-        index: flat_object_doc_values_test
-        body:
-          mappings:
-            properties:
-              issue:
-                properties:
-                  labels:
-                    type: "flat_object"
+            }
+              ]
+            }
               order:
-                type: "keyword"
-
-  - do:
-      bulk:
-        refresh: true
-        body: |
-          {"index":{"_index":"flat_object_doc_values_test","_id":"0"}}
-          {"order":"order0","issue":{"labels":{"number":1,"name":"abc0","status":1}}}
-          {"index":{"_index":"flat_object_doc_values_test","_id":"1"}}
-          {"order":"order1","issue":{"labels":{"number":2,"name":"abc1","status":1}}}
-          {"index":{"_index":"flat_object_doc_values_test","_id":"2"}}
-          {"order":"order2","issue":{"labels":{"number":2,"name":"abc2","status":1}}}
-          {"index":{"_index":"flat_object_doc_values_test","_id":"3"}}
-          {"order":"order3","issue":{"labels":{"number":3,"name":"abc3","status":1}}}
-          {"index":{"_index":"flat_object_doc_values_test","_id":"4"}}
-          {"order":"order4","issue":{"labels":{"number":4,"name":"abc4","status":1}}}
-          {"index":{"_index":"flat_object_doc_values_test","_id":"5"}}
-          {"order":"order5","issue":{"labels":{"number":5,"name":"abc5","status":1}}}
-          {"index":{"_index":"flat_object_doc_values_test","_id":"6"}}
-          {"order":"order6","issue":{"labels":{"number":6,"name":"abc6","status":1}}}
-          {"index":{"_index":"flat_object_doc_values_test","_id":"7"}}
-          {"order":"order7","issue":{"labels":{"number":7,"name":"abc7","status":1}}}
-          {"index":{"_index":"flat_object_doc_values_test","_id":"8"}}
-          {"order":"order8","issue":{"labels":{"number":8,"name":"abc8","status":1}}}
-          {"index":{"_index":"flat_object_doc_values_test","_id":"9"}}
-          {"order":"order9","issue":{"labels":{"number":9,"name":"abC8","status":1}}}
-
----
-# Delete Index when connection is teardown
-teardown:
-  - do:
-      indices.delete:
-        index: flat_object_doc_values_test
-
----
-"Supported queries":
-  - skip:
-      version: " - 2.99.99"
-      reason: "introduced in 3.0.0 "
-
-  # Verify Document Count
-  - do:
-      search:
-        body: {
-          query: {
-            match_all: { }
-          }
-        }
-
-  - length: { hits.hits: 10 }
-
-  # Case Insensitive Term Query with exact dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  term: {
-                    issue.labels.name: {
-                      value: "abc8",
-                      case_insensitive: "true"
-                    }
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 2 }
-
-  # Case Insensitive Term Query with no path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  term: {
-                    issue.labels: {
-                      value: "abc8",
-                      case_insensitive: "true"
-                    }
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 2 }
-
-  # Term Query with exact dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  term: {
-                    order: "order8"
-                  }
-                },
-                {
-                  term: {
-                    issue.labels.status: 1
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  term: {
-                    issue.labels.name: "abc8"
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  # Term Query with no path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  term: {
-                    order: "order8"
-                  }
-                },
-                {
-                  term: {
-                    issue.labels: 1
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  term: {
-                    issue.labels: "abc8"
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  # Terms Query with exact dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  term: {
-                    order: "order8"
-                  }
-                },
-                {
-                  terms: {
-                    issue.labels.status: [0,1]
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  terms: {
-                    issue.labels.name: ["abc8"]
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  # Terms Query with no path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  term: {
-                    order: "order8"
-                  }
-                },
-                {
-                  terms: {
-                    issue.labels: [ 0,1 ]
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  terms: {
-                    issue.labels.name: ["abc8"]
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  # Prefix Query with exact dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  term: {
-                    order: "order8"
-                  }
-                },
-                {
-                  prefix: {
                     issue.labels.name: "ab"
-                  }
-                }
-              ]
-            }
-          }
-        }
-
+                    order: "order8"
   - length: { hits.hits: 1 }
+        }
+                  range: {
   - match: { hits.hits.0._source.order: "order8" }
-
+  - match: { hits.hits.0._source.order: "order8" }
+          }
+          stored_fields: "_none_",
   - do:
-      search:
-        body: {
-          _source: true,
-          query: {
+            }
+  # Prefix Query with no path.
             bool: {
-              must: [
+  - match: { hits.hits.0._source.order: "order8" }
+            }
+                  }
                 {
-                  prefix: {
+        body: {
+          {"order":"order6","issue":{"labels":{"number":6,"name":"abc6","status":1}}}
+                      value: "abc8",
+                {
                     issue.labels.name: "abc8"
                   }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  # Prefix Query with no path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
+                  }
+                      from: "abc8"
+      reason: "introduced in 3.0.0 "
                   term: {
-                    order: "order8"
-                  }
-                },
-                {
-                  prefix: {
-                    issue.labels: "ab"
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
   - match: { hits.hits.0._source.order: "order8" }
-
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  prefix: {
-                    issue.labels: "abc8"
-                  }
-                }
-              ]
-            }
           }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  # Regexp Query with exact dot path.
-  - do:
-      search:
+                  }
         body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
                   term: {
-                    order: "order8"
-                  }
-                },
-                {
-                  regexp: {
-                    issue.labels.name: "ab.*"
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-  - match: { hits.hits.0._source.issue.labels.name: "abc8" }
-
-  - do:
-      search:
+                type: "keyword"
+  - skip:
+teardown:
         body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  regexp: {
-                    issue.labels.name: "a.*c8"
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  # Regexp Query with no path.
+                  labels:
   - do:
-      search:
-        body: {
+              ]
           _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  term: {
-                    order: "order8"
-                  }
                 },
-                {
-                  regexp: {
+        }
+          query: {
                     issue.labels: "ab.*"
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  - do:
-      search:
+                      from: 0
         body: {
-          _source: true,
           query: {
-            bool: {
-              must: [
-                {
-                  regexp: {
-                    issue.labels: "a.*c8"
-                  }
-                }
-              ]
+  - do:
+                  prefix: {
+      reason: "introduced in 3.0.0 "
             }
+      search:
+          query: {
+          _source: true,
           }
-        }
-
+  - do:
+                    type: "flat_object"
+                {
+              ]
   - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
+                }
+  - do:
+                    issue.labels: {
+  - do:
+                      value: "abcx",
+              ]
+        }
+          {"index":{"_index":"flat_object_doc_values_test","_id":"9"}}
+            bool: {
+          query: {
+      indices.delete:
+                      fuzziness: 1
+                }
+  - length: { hits.hits: 1 }
+                }
+                {
+          _source: true,
   # Fuzzy Query with exact dot path.
-  - do:
-      search:
+            }
+          {"index":{"_index":"flat_object_doc_values_test","_id":"3"}}
         body: {
-          _source: true,
-          query: {
             bool: {
-              must: [
+          }
+                }
+                    issue.labels: 1
                 {
+            }
+          _source: true,
+  - do:
+                    }
+            bool: {
+            bool: {
                   term: {
-                    order: "order8"
-                  }
-                },
-                {
-                  fuzzy: {
-                    issue.labels.name: {
-                      value: "abcx",
-                      fuzziness: 1
-                    }
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  fuzzy: {
-                    issue.labels.name: {
-                      value: "abc8",
-                      fuzziness: 0
-                    }
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  # Fuzzy Query with no path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
                   term: {
+                  }
+                    issue.labels.name: "a.*c8"
+            }
+        body: {
+        }
+              must: [
+        body: {
+      search:
+  - match: { hits.hits.0.fields: { "order" : [ "order0" ], "issue.labels.name": [ "abc0" ] } }
+                {
+        }
+  - length: { hits.hits: 1 }
+        body: {
+            bool: {
+                properties:
                     order: "order8"
+                }
+              must: [
+          query: {
+                {
+          }
+                }
                   }
+  - match: { hits.hits.0._source.order: "order8" }
+          _source: true,
                 },
-                {
-                  fuzzy: {
-                    issue.labels: {
-                      value: "abcx",
-                      fuzziness: 1
-                    }
-                  }
-                }
-              ]
             }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  - do:
-      search:
-        body: {
+                    order: "order8"
           _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  fuzzy: {
-                    issue.labels: {
-                      value: "abc8",
-                      fuzziness: 0
-                    }
-                  }
-                }
               ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  # Range Query with exact dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
+                  }
+                  }
             bool: {
+        body:
               must: [
-                {
+  - length: { hits.hits: 1 }
+              must: [
+              must: [
+              must: [
+        }
+          _source: true,
+        }
+                },
+      search:
+                },
+          {"order":"order0","issue":{"labels":{"number":1,"name":"abc0","status":1}}}
+            }
+  - do:
+                  }
+          _source: true,
+        }
                   term: {
-                    order: "order8"
-                  }
-                },
-                {
-                  range: {
-                    issue.labels.status: {
-                      from: 0
-                    }
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
             bool: {
-              must: [
-                {
-                  range: {
-                    issue.labels.name: {
-                      from: "abc8"
-                    }
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  # Range Query with no path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
             bool: {
-              must: [
-                {
-                  term: {
-                    order: "order8"
-                  }
-                },
-                {
-                  range: {
-                    issue.labels: {
-                      from: 0
-                    }
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  - do:
       search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
               must: [
-                {
-                  range: {
-                    issue.labels: {
-                      from: "abc8"
-                    }
-                  }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  # Exists Query with exact dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  term: {
-                    order: "order8"
-                  }
-                },
-                {
                   exists: {
-                    field: "issue.labels.status"
-                  }
                 }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  # Exists Query with no path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  term: {
-                    order: "order8"
-                  }
                 },
-                {
-                  exists: {
-                    field: "issue.labels"
-                  }
-                }
-              ]
-            }
-          }
         }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-
-  # Wildcard Query with exact dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
                 {
-                  term: {
-                    order: "order8"
-                  }
-                },
+  - match: { hits.hits.0._source.order: "order8" }
+                    }
+                    issue.labels: {
+                {
+  - length: { hits.hits: 1 }
+        body: {
                 {
                   wildcard: {
+              ]
+                }
+                    field: "issue.labels"
+                  term: {
+                {
+              ]
+                  }
+        body: {
+          {"index":{"_index":"flat_object_doc_values_test","_id":"8"}}
+          {"order":"order5","issue":{"labels":{"number":5,"name":"abc5","status":1}}}
+                  term: {
+                }
+  - length: { hits.hits: 1 }
+          _source: true,
+  # Regexp Query with exact dot path.
+                  }
+                {
+  - do:
+# - 1.Create flat_object mapping for flat_object_doc_values_test index
+                    order: "order8"
+          {"index":{"_index":"flat_object_doc_values_test","_id":"5"}}
+  - do:
+  - match: { hits.hits.0._source.order: "order8" }
+                  }
+          _source: true,
+                    }
+              ]
+                    issue.labels.name: {
+  - do:
+  - do:
+                  term: {
+  - match: { hits.hits.0._source.order: "order8" }
+                {
+                  fuzzy: {
+            bool: {
+                {
+      version: " - 2.99.99"
+          }
+                {
+                  }
+  - do:
+          _source: true,
+                {
+          {"order":"order3","issue":{"labels":{"number":3,"name":"abc3","status":1}}}
+                  }
+              ]
+                {
+          _source: true,
+          }
+  - length: { hits.hits: 1 }
+              ]
+        body: {
+                {
+                {
+                    order: "order0"
+              must: [
+              must: [
+                  prefix: {
+          stored_fields: "_none_",
+  - match: { hits.hits.0._source.order: "order8" }
+        body: {
+              must: [
+        }
+            }
+          }
+  - do:
+              ]
+          query: {
+                {
+          _source: true,
+  # Case Insensitive Term Query with no path.
+                  term: {
+            bool: {
+          docvalue_fields: [ "issue.labels.name","order" ]
+setup:
+          }
+                {
+          }
+          query: {
+              ]
+          _source: true,
+                    order: "order8"
+        }
+                  }
+      search:
+                  }
+                      fuzziness: 0
+  # Wildcard Query with no path.
+          },
+              ]
+  - match: { hits.hits.0._source.order: "order8" }
+          _source: false,
+          _source: true,
+            }
+      search:
+        }
+        refresh: true
+                },
+          _source: true,
+  - length: { hits.hits: 1 }
+                    order: "order8"
+                },
+        }
+                }
+            }
+              must: [
+                  }
+                    }
+                    }
+        }
+        body: {
+      search:
+  # Exists Query with no path.
+              ]
+                    order: "order8"
+                  }
+  # Exists Query with exact dot path.
+  - length: { hits.hits: 1 }
+          query: {
+  - length: { hits.hits: 1 }
+      search:
+  - do:
+        }
+          query: {
+                {
                     issue.labels.name: "abc*"
                   }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
   - match: { hits.hits.0._source.order: "order8" }
-
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  wildcard: {
-                    issue.labels.name: "abc8*"
                   }
-                }
-              ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  # Wildcard Query with no path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            bool: {
               must: [
+  - do:
+  - match: { hits.hits.0._source.order: "order8" }
+  # Verify Document Count
+          query: {
+                    field: "issue.labels.status"
+              must: [
+                  }
+      search:
+                    }
                 {
-                  term: {
+  # Fuzzy Query with no path.
+                      from: "abc8"
+          },
+                    issue.labels: {
+  - match: { hits.hits.0._source.order: "order8" }
+            bool: {
+      indices.create:
+              ]
+                  prefix: {
+                  regexp: {
+        }
+                  }
+  - length: { hits.hits: 1 }
+          }
+  - match: { hits.hits.0._source.order: "order8" }
+      search:
+                  range: {
+            }
+                  }
+          }
+            bool: {
+                      case_insensitive: "true"
+              must: [
+  # Terms Query with no path.
+          }
+                  fuzzy: {
+  - do:
+  - length: { hits.hits: 1 }
+        body: {
+          query: {
                     order: "order8"
+                {
+          }
+                },
+          {"order":"order7","issue":{"labels":{"number":7,"name":"abc7","status":1}}}
                   }
                 },
-                {
-                  wildcard: {
-                    issue.labels: "abc*"
-                  }
-                }
-              ]
-            }
-          }
+              must: [
+                    issue.labels.status: 1
+                      value: "abc8",
         }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.order: "order8" }
-
-  - do:
-      search:
-        body: {
+                  }
+                {
+                    issue.labels.name: {
           _source: true,
-          query: {
-            bool: {
-              must: [
-                {
-                  wildcard: {
-                    issue.labels: "abc8*"
-                  }
-                }
-              ]
             }
+              ]
+                      fuzziness: 0
+            bool: {
           }
-        }
-
+# - 3.Search tests about doc_values and index
+  # Case Insensitive Term Query with exact dot path.
+---
+  - length: { hits.hits: 10 }
+                    }
+        body: {
+  - do:
+                      fuzziness: 1
+        body: {
+          query: {
+                {
+        body: {
+            }
   - length: { hits.hits: 1 }
+          _source: true,
+                  }
+                }
+        }
+      bulk:
+              must: [
+              ]
+          query: {
+        }
+---
+  # Term Query with no path.
+              must: [
+                {
+          }
+  - do:
+  - length: { hits.hits: 1 }
+              ]
+                  wildcard: {
+          query: {
+                  range: {
+          query: {
+        body: {
+            bool: {
+          _source: true,
+            bool: {
+      search:
+              must: [
+# - 2.Index 9 example documents
+  - length: { hits.hits: 1 }
+          _source: true,
+                {
+  - do:
+      search:
+          _source: true,
+                  }
+                  terms: {
+  # Range Query with no path.
+                {
+        body: {
+                  regexp: {
   - match: { hits.hits.0._source.order: "order8" }
-
-  # Stored Fields with exact dot path.
-  - do:
-      search:
-        body: {
-          _source: false,
-          query: {
-            bool: {
-              must: [
-                {
-                  term: {
-                    order: "order0"
-                  }
-                }
-              ]
-            }
-          },
-          stored_fields: "_none_",
-          docvalue_fields: [ "issue.labels.name","order" ]
-        }
-
+                    order: "order8"
   - length: { hits.hits: 1 }
-  - match: { hits.hits.0.fields: { "order" : [ "order0" ], "issue.labels.name": [ "abc0" ] } }
-
-  - do:
-      search:
-        body: {
-          _source: false,
-          query: {
-            bool: {
-              must: [
-                {
-                  term: {
-                    order: "order0"
-                  }
-                }
-              ]
-            }
-          },
-          stored_fields: "_none_",
-          docvalue_fields: [ "issue.labels.name" ]
-        }
-
   - length: { hits.hits: 1 }
+  - length: { hits.hits: 1 }
+      search:
+  - skip:
   - match: { hits.hits.0.fields: { "issue.labels.name": [ "abc0" ] } }
+                {
+  - match: { hits.hits.0._source.order: "order8" }
+  - match: { hits.hits.0._source.order: "order8" }
+# - 4.Fetch doc_value from flat_object field
+            }
+# Delete Index when connection is teardown
+                },
+                  }
+                    issue.labels: [ 0,1 ]
+        }
+  - length: { hits.hits: 1 }
+                    }
+        body: {
+  - match: { hits.hits.0._source.order: "order8" }
+          }
+            bool: {
+              ]
+                {
+                  }
+              must: [
+              must: [
+            }
+  - length: { hits.hits: 1 }
+          }
+                }
+          {"index":{"_index":"flat_object_doc_values_test","_id":"6"}}
+  - do:
+                    issue.labels: "a.*c8"
+  - do:
+        body: {
+                }
+      search:
+            bool: {
+              issue:
+                  term: {
+              must: [
+  - do:
+                }
+                  term: {
+  - match: { hits.hits.0._source.order: "order8" }
+                  wildcard: {
+          mappings:
+                    issue.labels.name: "abc8*"
+                  }
+          }
+          }
+  - length: { hits.hits: 1 }
+      search:
+              ]
+                      value: "abc8",
+                }
+                  prefix: {
+                },
+                    }
+          query: {
+        body: {
+  # Prefix Query with exact dot path.
+                {
+          {"order":"order8","issue":{"labels":{"number":8,"name":"abc8","status":1}}}
+                    issue.labels.name: ["abc8"]
+                {
+        }
+              must: [
+  - do:
+                },
+          query: {
+                  }
+        }
+                  }
+                    }
+        body: {
+            }
+                  }
+          {"index":{"_index":"flat_object_doc_values_test","_id":"7"}}
+                  }
+              ]
+        index: flat_object_doc_values_test
+  - length: { hits.hits: 1 }
+                  range: {
+          }
+            bool: {
+                    order: "order8"
+              must: [
+          _source: true,
+                },
+            }
+---
+                  term: {
+  - do:
+          query: {
+                      from: 0
+            bool: {
+                },
+                }
+          {"order":"order9","issue":{"labels":{"number":9,"name":"abC8","status":1}}}
+  - do:
+          query: {
+          _source: true,
+          }
+                  fuzzy: {
+  - length: { hits.hits: 2 }
+              ]
+      search:
+          query: {
+                    issue.labels: "ab"
+          _source: true,
+  - do:
+        body: {
+  - do:
+        }
+                {
+          }
+                    issue.labels: "abc*"
+                {
+              ]
+              ]
+            bool: {
+            bool: {
+                  wildcard: {
+                }
+                {
+          query: {
+          query: {
+                }
+                      case_insensitive: "true"
+          }
+          query: {
+          _source: true,
+              must: [
+          query: {
+                    issue.labels.name: ["abc8"]
+                }
+            }
+                {
+            }
+              ]
+            }
+        }
+          }
+      version: " - 2.99.99"
+            bool: {
+          query: {
+  # Terms Query with exact dot path.
+              ]
+          }
+            match_all: { }
+                  term: {
+                  term: {
+          {"order":"order2","issue":{"labels":{"number":2,"name":"abc2","status":1}}}
+              ]
+                }
+              must: [
+        }
+  - match: { hits.hits.0._source.order: "order8" }
+                  term: {
+                    issue.labels: {
+            bool: {
+              ]
+              must: [
+          _source: false,
+      search:
+      search:
+                }
+                }
+          }
+              must: [
+  - match: { hits.hits.0._source.order: "order8" }
+  - length: { hits.hits: 1 }
+                  terms: {
+            }
+  - length: { hits.hits: 1 }
+  # Stored Fields with exact dot path.
+  - length: { hits.hits: 1 }
+                    order: "order8"
+        }
+              must: [
+        body: {
+                }
+# The test setup includes:
+      search:
+                  }
+"Supported queries":
+              must: [
+                  }
+          {"order":"order1","issue":{"labels":{"number":2,"name":"abc1","status":1}}}
+                  }
+        body: {
+                {
+  - match: { hits.hits.0._source.order: "order8" }
+        }
+          query: {
+        body: {
+                  }
+  - match: { hits.hits.0._source.order: "order8" }
+            properties:
+        }
+  - do:
+            bool: {
+            }
+                    issue.labels.name: {
+                }
+          query: {
+        body: {
+                {
+        }
+        body: |
+  - length: { hits.hits: 1 }
+        body: {
+                    issue.labels: {
+                {
+          _source: true,
+        }
+                  }
+                      value: "abcx",
+                  }
+          query: {
+  - match: { hits.hits.0._source.order: "order8" }
+                  }
+                }
+  - length: { hits.hits: 1 }
+              must: [
+          _source: true,
+                {
+          _source: true,
+                    order: "order8"
+            bool: {
+  - length: { hits.hits: 1 }
+                {
+                      value: "abc8",
+                {
+              ]
+              ]
+            bool: {
+      search:
+  - length: { hits.hits: 2 }
+                },
+      search:
+        body: {
+                }
+                }
+                  }
+                    issue.labels: "abc8"
+          query: {
+                  term: {
+  - do:
+        }
+                  }
+        }
+        }
+      search:
+                  }
+                }
+              ]
+          query: {
+                }
+            }
+                    issue.labels.status: {
+        body: {
+            bool: {
+            bool: {
+      search:
+  - match: { hits.hits.0._source.order: "order8" }
+                    order: "order8"
+                    order: "order0"
+            bool: {
+                  fuzzy: {
+          {"index":{"_index":"flat_object_doc_values_test","_id":"0"}}
+  - match: { hits.hits.0._source.order: "order8" }
+            }
+                  term: {
+          {"order":"order4","issue":{"labels":{"number":4,"name":"abc4","status":1}}}
+  # Term Query with exact dot path.
+          {"index":{"_index":"flat_object_doc_values_test","_id":"1"}}
+  - match: { hits.hits.0._source.issue.labels.name: "abc8" }
+              ]
+              must: [
+  # Range Query with exact dot path.
+              must: [
+              must: [
+                }
+          }
+          query: {
+                  term: {
+            }
+            }
+  - match: { hits.hits.0._source.order: "order8" }
+                    order: "order8"
+                  term: {
+                  }
+          }
+                {
+                    issue.labels.name: {
+        }
+          _source: true,
+                {
+      search:
+                {
+            bool: {
+          }
+                }
+              must: [
+          query: {
+  - length: { hits.hits: 1 }
+          docvalue_fields: [ "issue.labels.name" ]
+                {
+            bool: {
+                    order: "order8"
+          {"index":{"_index":"flat_object_doc_values_test","_id":"4"}}
+            }
+  - length: { hits.hits: 1 }
+                    issue.labels: "abc8*"
+                }
+                  term: {
+      search:
+                }
+          _source: true,
+      search:
+            }
+                  term: {
+      search:
+            }
+                  term: {
+  - do:
+            }
+                    issue.labels.name: "ab.*"
+                  regexp: {
+                }
+  - match: { hits.hits.0._source.order: "order8" }
+                    issue.labels: "abc8"
+            }
+                {
+          _source: true,
+                    issue.labels.status: [0,1]
+  - do:
+      search:
+                  }
+          }
+  - length: { hits.hits: 1 }
+          query: {
+                  }
+  - do:
+      search:
+  - do:
+                  }
+        body: {
+                  terms: {
+          _source: true,
+                {
+      search:
+                  exists: {
+                {
+      search:
+  - do:
+                  term: {
+            bool: {
+  - do:
+        }
+              ]
+              ]
+          query: {
+                  term: {
+      search:
+      search:
+  # Regexp Query with no path.
+                },
+                  }
+          }
+      search:
+          {"index":{"_index":"flat_object_doc_values_test","_id":"2"}}
+        body: {
+            bool: {
+                    order: "order8"
+                  terms: {
+      search:
+        index: flat_object_doc_values_test
+  - match: { hits.hits.0._source.order: "order8" }
+          query: {
+  - do:
+          }
+                    issue.labels.name: "abc8"
+                  }
+        body: {
+  - match: { hits.hits.0._source.order: "order8" }
+  - do:
+        body: {
+                  regexp: {
+  # Wildcard Query with exact dot path.

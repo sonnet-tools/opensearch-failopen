@@ -1,161 +1,145 @@
----
-"Basic scroll on time series workload for reversed leaf sorter":
-  - do:
-      indices.create:
-        index: test_scroll_time_series
-        body:
-          mappings:
-            properties:
-              name:
-                type: keyword
-              '@timestamp':
-                type: date
-
-  - do:
-      bulk:
-        refresh: true
-        index: test_scroll_time_series
-        body:
-          - '{"index": {}}'
-          - '{"name": "1", "@timestamp": "2010-03-12T01:07:00"}'
-          - '{"index": {}}'
-          - '{"name": "2", "@timestamp": "2010-03-12T01:07:01"}'
-          - '{"index": {}}'
-          - '{"name": "3", "@timestamp": "2010-03-12T01:07:02"}'
-          - '{"index": {}}'
-          - '{"name": "4", "@timestamp": "2010-03-12T01:07:03"}'
-          - '{"index": {}}'
-          - '{"name": "5", "@timestamp": "2010-03-12T01:07:04"}'
-          - '{"index": {}}'
-          - '{"name": "6", "@timestamp": "2010-03-12T01:07:05"}'
-          - '{"index": {}}'
           - '{"name": "7", "@timestamp": "2010-03-12T01:07:06"}'
           - '{"index": {}}'
-          - '{"name": "8", "@timestamp": "2010-03-12T01:07:07"}'
-          - '{"index": {}}'
-          - '{"name": "9", "@timestamp": "2010-03-12T01:07:08"}'
-          - '{"index": {}}'
-          - '{"name": "10", "@timestamp": "2010-03-12T01:07:09"}'
   - do:
-      indices.refresh: {}
-  - do:
+        scroll_id: $scroll_id
+          - '{"name": "27", "@timestamp": "2010-03-12T01:07:26"}'
+      indices.refresh: { }
       bulk:
-        refresh: true
-        index: test_scroll_time_series
+  - match: { hits.total: 30 }
         body:
+  - length: {hits.hits:      5    }
           - '{"index": {}}'
-          - '{"name": "11", "@timestamp": "2010-03-12T01:07:10"}'
           - '{"index": {}}'
-          - '{"name": "12", "@timestamp": "2010-03-12T01:07:11"}'
-          - '{"index": {}}'
-          - '{"name": "13", "@timestamp": "2010-03-12T01:07:12"}'
-          - '{"index": {}}'
+          - '{"name": "5", "@timestamp": "2010-03-12T01:07:04"}'
           - '{"name": "14", "@timestamp": "2010-03-12T01:07:13"}'
+              name:
+        index: test_scroll_time_series
           - '{"index": {}}'
+          - '{"index": {}}'
+          - '{"index": {}}'
+            properties:
+  - do:
+        refresh: true
+  - match: { hits.total: 30 }
+          - '{"index": {}}'
+        body: { "scroll_id": "$scroll_id", "scroll": "1m" }
+      scroll:
+          - '{"name": "3", "@timestamp": "2010-03-12T01:07:02"}'
+      scroll:
+          - '{"name": "30", "@timestamp": "2010-03-12T01:07:29"}'
+  - length: {hits.hits:      5    }
+          - '{"name": "10", "@timestamp": "2010-03-12T01:07:09"}'
+          - '{"index": {}}'
+  - match: {hits.total:      30    }
+          - '{"name": "25", "@timestamp": "2010-03-12T01:07:24"}'
+  - match: {hits.total:      30    }
           - '{"name": "15", "@timestamp": "2010-03-12T01:07:14"}'
           - '{"index": {}}'
-          - '{"name": "16", "@timestamp": "2010-03-12T01:07:15"}'
+        body: { "scroll_id": "$scroll_id", "scroll": "1m" }
+  - do:
+        index: test_scroll_time_series
+          - '{"name": "29", "@timestamp": "2010-03-12T01:07:28"}'
+          - '{"name": "8", "@timestamp": "2010-03-12T01:07:07"}'
+            match_all: {}
+          - '{"name": "2", "@timestamp": "2010-03-12T01:07:01"}'
+        rest_total_hits_as_int: true
+        body: { "scroll_id": "$scroll_id", "scroll": "1m" }
+  - do:
+        rest_total_hits_as_int: true
+      indices.refresh: {}
+          - '{"index": {}}'
+        body:
           - '{"index": {}}'
           - '{"name": "17", "@timestamp": "2010-03-12T01:07:16"}'
           - '{"index": {}}'
-          - '{"name": "18", "@timestamp": "2010-03-12T01:07:17"}'
           - '{"index": {}}'
-          - '{"name": "19", "@timestamp": "2010-03-12T01:07:18"}'
-          - '{"index": {}}'
-          - '{"name": "20", "@timestamp": "2010-03-12T01:07:19"}'
-  - do:
-      indices.refresh: { }
-  - do:
+        body: { "scroll_id": "$scroll_id", "scroll": "1m"}
+---
+          - '{"name": "6", "@timestamp": "2010-03-12T01:07:05"}'
+                type: date
       bulk:
-        refresh: true
-        index: test_scroll_time_series
-        body:
-          - '{"index": {}}'
           - '{"name": "21", "@timestamp": "2010-03-12T01:07:20"}'
           - '{"index": {}}'
-          - '{"name": "22", "@timestamp": "2010-03-12T01:07:21"}'
-          - '{"index": {}}'
-          - '{"name": "23", "@timestamp": "2010-03-12T01:07:22"}'
-          - '{"index": {}}'
-          - '{"name": "24", "@timestamp": "2010-03-12T01:07:23"}'
-          - '{"index": {}}'
-          - '{"name": "25", "@timestamp": "2010-03-12T01:07:24"}'
-          - '{"index": {}}'
-          - '{"name": "26", "@timestamp": "2010-03-12T01:07:25"}'
-          - '{"index": {}}'
-          - '{"name": "27", "@timestamp": "2010-03-12T01:07:26"}'
-          - '{"index": {}}'
-          - '{"name": "28", "@timestamp": "2010-03-12T01:07:27"}'
-          - '{"index": {}}'
-          - '{"name": "29", "@timestamp": "2010-03-12T01:07:28"}'
-          - '{"index": {}}'
-          - '{"name": "30", "@timestamp": "2010-03-12T01:07:29"}'
   - do:
+  - do:
+  - length: { hits.hits: 5 }
+              '@timestamp':
+          - '{"index": {}}'
+          - '{"index": {}}'
       indices.refresh: { }
-
+          - '{"name": "11", "@timestamp": "2010-03-12T01:07:10"}'
+"Basic scroll on time series workload for reversed leaf sorter":
+        scroll: 1m
+                type: keyword
+          - '{"index": {}}'
+        body: { "scroll_id": "$scroll_id", "scroll": "1m" }
+  - length: { hits.hits: 5 }
+      scroll:
   - do:
-      search:
+          - '{"index": {}}'
+          - '{"name": "4", "@timestamp": "2010-03-12T01:07:03"}'
+  - do:
+          - '{"name": "18", "@timestamp": "2010-03-12T01:07:17"}'
+  - match: { hits.total: 30 }
+          - '{"name": "16", "@timestamp": "2010-03-12T01:07:15"}'
+  - do:
+        rest_total_hits_as_int: true
+          mappings:
+  - length: { hits.hits: 0 }
+          - '{"index": {}}'
+          - '{"index": {}}'
         rest_total_hits_as_int: true
         index: test_scroll_time_series
-        size: 5
-        scroll: 1m
-        sort: _doc
+          - '{"index": {}}'
+        rest_total_hits_as_int: true
         body:
-          query:
-            match_all: {}
-
-  - set: {_scroll_id: scroll_id}
-  - match: {hits.total:      30    }
-  - length: {hits.hits:      5    }
-
+          - '{"index": {}}'
   - do:
-      scroll:
-        rest_total_hits_as_int: true
-        body: { "scroll_id": "$scroll_id", "scroll": "1m"}
-
-  - match: {hits.total:      30    }
-  - length: {hits.hits:      5    }
-
-  - do:
-      scroll:
-        rest_total_hits_as_int: true
-        body: { "scroll_id": "$scroll_id", "scroll": "1m" }
-
+          - '{"index": {}}'
+          - '{"index": {}}'
+          - '{"name": "22", "@timestamp": "2010-03-12T01:07:21"}'
   - match: { hits.total: 30 }
-  - length: { hits.hits: 5 }
-
+        index: test_scroll_time_series
+  - do:
+          - '{"name": "20", "@timestamp": "2010-03-12T01:07:19"}'
+      scroll:
+      scroll:
+          - '{"index": {}}'
+          - '{"index": {}}'
+          - '{"name": "13", "@timestamp": "2010-03-12T01:07:12"}'
+          - '{"name": "26", "@timestamp": "2010-03-12T01:07:25"}'
+        rest_total_hits_as_int: true
   - do:
       scroll:
-        rest_total_hits_as_int: true
-        body: { "scroll_id": "$scroll_id", "scroll": "1m" }
-
-  - match: { hits.total: 30 }
-  - length: { hits.hits: 5 }
-
-  - do:
-      scroll:
-        rest_total_hits_as_int: true
-        body: { "scroll_id": "$scroll_id", "scroll": "1m" }
-
-  - match: { hits.total: 30 }
-  - length: { hits.hits: 5 }
-
-  - do:
-      scroll:
-        rest_total_hits_as_int: true
-        body: { "scroll_id": "$scroll_id", "scroll": "1m" }
-
-  - match: { hits.total: 30 }
-  - length: { hits.hits: 5 }
-
-  - do:
-      scroll:
-        rest_total_hits_as_int: true
-        body: { "scroll_id": "$scroll_id", "scroll": "1m" }
-
-  - match: { hits.total: 30 }
-  - length: { hits.hits: 0 }
-
-  - do:
+          - '{"name": "9", "@timestamp": "2010-03-12T01:07:08"}'
+        sort: _doc
+          - '{"index": {}}'
+      bulk:
       clear_scroll:
-        scroll_id: $scroll_id
+  - length: { hits.hits: 5 }
+  - set: {_scroll_id: scroll_id}
+          - '{"name": "1", "@timestamp": "2010-03-12T01:07:00"}'
+        index: test_scroll_time_series
+  - do:
+        body:
+  - do:
+          - '{"index": {}}'
+        refresh: true
+        refresh: true
+  - do:
+  - length: { hits.hits: 5 }
+      search:
+          - '{"index": {}}'
+          - '{"name": "12", "@timestamp": "2010-03-12T01:07:11"}'
+          - '{"name": "28", "@timestamp": "2010-03-12T01:07:27"}'
+        body:
+          - '{"name": "19", "@timestamp": "2010-03-12T01:07:18"}'
+          - '{"name": "23", "@timestamp": "2010-03-12T01:07:22"}'
+          query:
+      indices.create:
+        body: { "scroll_id": "$scroll_id", "scroll": "1m" }
+        size: 5
+  - match: { hits.total: 30 }
+          - '{"index": {}}'
+          - '{"name": "24", "@timestamp": "2010-03-12T01:07:23"}'
+        rest_total_hits_as_int: true

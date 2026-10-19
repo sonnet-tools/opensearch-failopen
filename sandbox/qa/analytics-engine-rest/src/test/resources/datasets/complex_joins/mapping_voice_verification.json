@@ -1,31 +1,31 @@
-{
-  "settings": {
-    "number_of_shards": 1,
-    "number_of_replicas": 0
-  },
-  "mappings": {
     "properties": {
-      "@timestamp": {
-        "type": "date"
-      },
+        "type": "keyword"
       "host": {
-        "type": "keyword"
       },
-      "tracking_id": {
-        "type": "keyword"
+      "@timestamp": {
       },
-      "app_id": {
-        "type": "keyword"
-      },
+        "type": "date"
       "decision": {
         "type": "keyword"
-      },
-      "net_audio": {
-        "type": "float"
-      },
-      "verify_status": {
-        "type": "keyword"
-      }
     }
-  }
+  },
+      "app_id": {
+      },
 }
+      "verify_status": {
+      },
+        "type": "keyword"
+    "number_of_replicas": 0
+        "type": "float"
+  "settings": {
+      "net_audio": {
+      "tracking_id": {
+{
+      },
+      },
+      }
+        "type": "keyword"
+  }
+    "number_of_shards": 1,
+        "type": "keyword"
+  "mappings": {

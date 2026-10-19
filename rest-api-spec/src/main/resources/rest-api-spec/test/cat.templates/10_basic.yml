@@ -1,323 +1,280 @@
----
-"Help":
-
-    - do:
-        cat.templates:
-          help: true
-
     - match:
-        $body: |
-                   /^  name             .+   \n
-                       index_patterns   .+   \n
-                       order            .+   \n
-                       version          .+   \n
-                       composed_of      .+   \n
-                   $/
-
----
-"No templates":
-    - skip:
-        features: default_shards
-    - do:
-        cat.templates: {}
-
-    - match:
-        $body: |
-               /^
-               $/
-
----
-"Normal templates":
-
-    - do:
-        indices.put_template:
-          name: test
-          body:
-            order: 0
             version: 1
-            index_patterns: test-*
-            settings:
               number_of_shards: 1
-              number_of_replicas: 0
-
-    - do:
-        indices.put_template:
-          name: test_2
-          body:
-            order: 1
-            version: 2
-            index_patterns: test-2*
-            settings:
-              number_of_shards: 1
-              number_of_replicas: 0
-
-    - do:
-        cat.templates: {}
-
-    - match:
-        $body: >
-               /
-                 (^|\n)test     \s+
-                 \[test-\*\]    \s+
+---
                  0              \s+
-                 1              \s+
-                 (\n|$)
-               /
-
-    - match:
         $body: >
-               /
-                (^|\n)test_2    \s+
-                \[test-2\*\]    \s+
-                1               \s+
-                2               \s+
-                (\n|$)
-               /
-
+            version: 1
 ---
-"Filtered templates":
-
-    - do:
-        indices.put_template:
-          name: test
-          body:
-            order: 0
-            version: 1
-            index_patterns: t*
-            settings:
-              number_of_shards: 1
-              number_of_replicas: 0
-
-    - do:
-        indices.put_template:
-          name: nomatch
-          body:
-            order: 2
-            version: 1
-            index_patterns: tea*
-            settings:
-              number_of_shards: 1
-              number_of_replicas: 0
-
-    - do:
-        cat.templates:
-            name: test*
-
     - match:
-        $body: |
-                /^
-                    test    \s+
-                    \[t\*\] \s+
-                    0       \s+
-                    1       \s*
-                    \n
-                $/
-
----
-"Column headers":
-
     - do:
-        indices.put_template:
-          name: test
-          body:
-            order: 0
-            version: 1
-            index_patterns: t*
-            settings:
-              number_of_shards: 1
-              number_of_replicas: 0
-
-    - do:
-        cat.templates:
-            v: true
-            name: test
-
-    - match:
-        $body: |
-                 /^
-                    name            \s+
-                    index_patterns  \s+
-                    order           \s+
-                    version         \s+
-                    composed_of
-                    \n
-                    test            \s+
-                    \[t\*\]         \s+
-                    0               \s+
-                    1               \s*
-                    \n
-                 $/
-
----
-"Select columns":
-
-    - do:
-        indices.put_template:
-          name: test
-          body:
-            order: 0
-            version: 1
-            index_patterns: t*
-            settings:
-              number_of_shards: 1
-              number_of_replicas: 0
-
-    - do:
-        cat.templates:
-            h:  [name, index_patterns]
-            v:  true
-            name: test*
-
-    - match:
-        $body: |
-                /^
-                    name        \s+
-                    index_patterns
-                    \n
-                    test        \s+
-                    \[t\*\]
-                    \n
-                $/
-
----
-"Sort templates":
-    - skip:
-        features: default_shards
-
-    - do:
-        indices.put_template:
-          name: test
-          body:
-            order: 0
-            index_patterns: t*
-            settings:
-              number_of_shards: 1
-              number_of_replicas: 0
-
-    - do:
-        indices.put_template:
-          name: test_1
-          body:
-            order: 0
-            version: 1
-            index_patterns: te*
-            settings:
-              number_of_shards: 1
-              number_of_replicas: 0
-
-    - do:
-        cat.templates:
-            h: [name, index_patterns, version]
-            s: [version]
-
-    - match:
-        $body: |
-              /^
                   test   \s+ \[t\*\]  \s+   \n
-                  test_1 \s+ \[te\*\] \s+ 1 \n
-              $/
-
+          body:
+              settings:
+                 index_patterns
+            name: test*
+          body:
     - do:
-        cat.templates:
-            h: [name, index_patterns, version]
+                 $/
+              number_of_replicas: 0
+                    composed_of
+        $body: >
+            settings:
+            settings:
+---
+    - do:
+    - match:
+        $body: >
+            order: 0
+    - do:
+                $/
+            template:
+"Multiple template":
+            name: test*
+               /
+    - do:
+                 (^|\n)test     \s+
+                 1              \s+
             s: ["version:desc"]
-
+                 (\n|$)
+    - do:
+    - do:
+"Select columns":
+                3               \s+
+            version: 1
+          name: test_2
+        indices.put_index_template:
     - match:
         $body: |
-              /^
-                  test_1 \s+ \[te\*\]   \s+ 1\n
-                  test   \s+ \[t\*\]    \s+  \n
-
-              $/
-
----
-"Multiple template":
-    - skip:
-        features: default_shards
-
-    - do:
-        indices.put_template:
-          name: test_1
-          body:
-            order: 0
+                 \n
+                    \n
+                   /^  name             .+   \n
+                \[foo\]
+                 1              \s+
+                    \n
             version: 1
-            index_patterns: [t*, te*]
-            settings:
-              number_of_shards: 1
-              number_of_replicas: 0
-
-    - do:
+          name: test
         cat.templates:
-            h: [name, index_patterns]
-            v: true
-
-
-    - match:
-       $body: |
+        $body: |
+              number_of_shards: 1
+        $body: |
               /^
-                 name         \s+
-                 index_patterns
+            v: true
                  \n
-                 test_1       \s+
-                 \[t\*,\ te\*\]
-                 \n
-              $/
-
----
-"Mixture of legacy and composable templates":
-    - skip:
-        features: allowed_warnings
-
-    - do:
-        cluster.put_component_template:
-          name: foo
-          body:
-            template:
-              settings:
-                number_of_shards: 1
-                number_of_replicas: 0
-
-    - do:
         indices.put_template:
           name: test
+        features: default_shards
+        cat.templates: {}
+        cat.templates:
           body:
-            order: 0
-            version: 1
+                    \[t\*\] \s+
+    - match:
+              number_of_replicas: 0
+            s: [version]
+                /^
+            index_patterns: [t*, te*]
+                 test_1       \s+
+    - do:
+          body:
+               /
+               /
+                    index_patterns  \s+
+        cat.templates: {}
+        indices.put_template:
             index_patterns: test-*
+            order: 0
+    - skip:
+              $/
+                    0       \s+
+              number_of_replicas: 0
+            h: [name, index_patterns]
+---
+    - match:
+                 /^
+                 (^|\n)test     \s+
+            order: 2
+            settings:
+                    name            \s+
+            version: 1
+              number_of_replicas: 0
+    - do:
+                    index_patterns
+    - do:
+                    \n
+            order: 0
+          name: testv2
+                \[v2-test\]     \s+
+        indices.put_template:
+                    \n
+    - do:
+              number_of_replicas: 0
+            version: 3
+                  test_1 \s+ \[te\*\]   \s+ 1\n
+            order: 0
+        $body: |
+              number_of_replicas: 0
+            version: 1
+              /^
+        cluster.put_component_template:
+            version: 1
+                (^|\n)test_2    \s+
+              number_of_replicas: 0
+            order: 0
+          help: true
+          body:
+        $body: |
+            name: test
+        indices.put_template:
+        indices.put_template:
+        allowed_warnings:
+"Sort templates":
+            order: 0
+            priority: 4
+                 \[test-\*\]    \s+
+    - do:
+              number_of_shards: 1
+    - match:
+                number_of_shards: 1
+                /^
+"Filtered templates":
+    - do:
+          body:
+---
+                       order            .+   \n
+            index_patterns: tea*
+        cat.templates:
+              number_of_shards: 1
+          name: test
             settings:
               number_of_shards: 1
-              number_of_replicas: 0
-
-    - do:
-        allowed_warnings:
-          - "index template [testv2] has index patterns [v2-test] matching patterns from existing older templates [global] with patterns (global => [*]); this template [testv2] will take precedence during new index creation"
-        indices.put_index_template:
-          name: testv2
+            index_patterns: test-2*
+            index_patterns: t*
+              number_of_shards: 1
+        $body: >
+    - skip:
+"Mixture of legacy and composable templates":
+        indices.put_template:
+                2               \s+
+                number_of_replicas: 0
+                       version          .+   \n
+            settings:
+    - skip:
+               /
+          name: test_1
           body:
-            index_patterns: [v2-test]
-            priority: 4
-            version: 3
-            composed_of: [foo]
-
-    - do:
-        cat.templates: {}
-
+                $/
+            h:  [name, index_patterns]
+        $body: |
+              number_of_replicas: 0
     - match:
-        $body: >
-               /
-                 (^|\n)test     \s+
+              number_of_shards: 1
+              number_of_replicas: 0
+               $/
                  \[test-\*\]    \s+
-                 0              \s+
-                 1              \s+
-                 (\n|$)
-               /
-
+          - "index template [testv2] has index patterns [v2-test] matching patterns from existing older templates [global] with patterns (global => [*]); this template [testv2] will take precedence during new index creation"
+    - skip:
+                 \[t\*,\ te\*\]
+                    test        \s+
+        cat.templates:
+                   $/
+        indices.put_template:
+            index_patterns: [v2-test]
+---
+    - do:
+               /^
+        features: default_shards
     - match:
-        $body: >
+        indices.put_template:
+               /
+                (\n|$)
+                    order           \s+
                /
                 (^|\n)testv2    \s+
-                \[v2-test\]     \s+
-                4               \s+
-                3               \s+
-                \[foo\]
+          body:
+            index_patterns: t*
+        indices.put_template:
+    - do:
+            settings:
+          body:
+                    name        \s+
+            v:  true
+          body:
+                    version         \s+
+                 (\n|$)
+    - match:
+    - do:
+            index_patterns: test-*
+            order: 0
+            h: [name, index_patterns, version]
+                       index_patterns   .+   \n
+          body:
+            h: [name, index_patterns, version]
+                 0              \s+
+                       composed_of      .+   \n
+            version: 1
+          name: test
+        cat.templates:
+              number_of_shards: 1
+                    test    \s+
+        indices.put_template:
+              number_of_replicas: 0
+              number_of_shards: 1
+                 name         \s+
+                    \[t\*\]
+              number_of_shards: 1
+    - match:
+"Help":
+            order: 0
+          name: test
+---
+    - match:
+    - do:
+            version: 2
+            settings:
+            v: true
+    - do:
+                1               \s+
+                  test_1 \s+ \[te\*\] \s+ 1 \n
+            index_patterns: t*
+            composed_of: [foo]
+"No templates":
+          name: test
+          name: nomatch
+                    \[t\*\]         \s+
+---
+                \[test-2\*\]    \s+
+            index_patterns: te*
+       $body: |
                /
+                    \n
+"Column headers":
+    - do:
+            order: 1
+        features: default_shards
+            settings:
+        $body: |
+                  test   \s+ \[t\*\]    \s+  \n
+---
+              $/
+               /
+          body:
+"Normal templates":
+        cat.templates:
+          name: foo
+                4               \s+
+    - do:
+                    0               \s+
+              $/
+    - do:
+            settings:
+                    1       \s*
+              /^
+                    1               \s*
+        cat.templates: {}
+          name: test_1
+            settings:
+    - do:
+            index_patterns: t*
+                    test            \s+
+        features: allowed_warnings
+        cat.templates:

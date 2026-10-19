@@ -1,49 +1,49 @@
-{
-  "schema": [
-    {
-      "name": "total_monitors",
-      "type": "bigint"
-    },
-    {
-      "name": "total_errors",
-      "type": "bigint"
-    },
-    {
+    }
+      "ap127143",
+      14,
+      "Application Monitor Tracking"
       "name": "application_id",
+  "total": 3,
+  "schema": [
       "type": "string"
+    [
+      21,
+  "size": 3
     },
     {
       "name": "log_level",
-      "type": "string"
-    },
     {
-      "name": "description",
       "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      4,
-      21,
+      "Application Monitor Tracking"
+      "name": "description",
+    },
       "ap127143",
+}
+      4,
       "INFO",
-      "Application Monitor Tracking"
-    ],
+      "type": "bigint"
+    {
     [
+  ],
+      "Application Monitor Tracking"
+      "name": "total_monitors",
       4,
-      14,
-      "ap127143",
-      "WARN",
-      "Application Monitor Tracking"
     ],
-    [
+    },
+    },
+{
+      "WARN",
+  "datarows": [
+    {
       2,
+      "type": "bigint"
+    ],
       2,
-      "ap127143",
-      "ERROR",
-      "Application Monitor Tracking"
+      "type": "string"
+    {
     ]
   ],
-  "total": 3,
-  "size": 3
-}
+      "ap127143",
+    [
+      "name": "total_errors",
+      "ERROR",

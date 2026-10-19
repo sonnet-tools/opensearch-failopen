@@ -1,176 +1,160 @@
 ---
+        body: { field1: "VGhpcyBpcyBhbiBlbmdsaXNoIHRleHQgdG8gdGVzdCBpZiB0aGUgcGlwZWxpbmUgd29ya3M=" }
+        index: test
+  - do:
+  - do:
+            "description": "_description",
+  - match: { _source.attachment.content_type: "text/plain; charset=ISO-8859-1" }
+        pipeline: "my_pipeline"
+        body: { field1: "VGhpcyBpcyBhbiBlbmdsaXNoIHRleHQgdG8gdGVzdCBpZiB0aGUgcGlwZWxpbmUgd29ya3M=" }
+  - match: { _source.attachment.language: "en" }
+              }
+                  "indexed_chars": 30
+      index:
+                  "field" : "field1",
+  - match: { _source.attachment.content: "This is an english text to tes" }
+  - length: { _source.attachment: 1 }
+      index:
+"Test indexed chars are configurable":
+        id: "my_pipeline"
+        id: "my_pipeline"
+                }
+  - match: { _source.attachment.content: "This is an english text to tes" }
+  - do:
+                  "properties" : ["language"]
+  - do:
+---
+        index: test
+        index: test
+            ]
+  - length: { _source.attachment: 4 }
+        index: test
+            "processors": [
+  - match: { _source.attachment.content: "This is an english" }
+      cluster.health:
+  - do:
+      ingest.put_pipeline:
+  - length: { _source.attachment: 4 }
+        id: 1
+  - do:
+      ingest.put_pipeline:
+  - match: { _source.attachment.content: "This is an english text to test if the pipeline works" }
+        index: test
+          {
+                }
+                  "indexed_chars_field": "max_size"
+  - match: { acknowledged: true }
+                }
+            "processors": [
+        index: test
+            ]
+          }
+        index: test
+---
+                "attachment" : {
+        id: 2
+        id: 2
+        pipeline: "my_pipeline"
+        index: test
+  - match: { _source.field1: "VGhpcyBpcyBhbiBlbmdsaXNoIHRleHQgdG8gdGVzdCBpZiB0aGUgcGlwZWxpbmUgd29ya3M=" }
+"Test attachment processor with fields":
+      get:
+  - do:
+              {
+        body:  >
+      get:
+                "attachment" : {
+        body: { field1: "VGhpcyBpcyBhbiBlbmdsaXNoIHRleHQgdG8gdGVzdCBpZiB0aGUgcGlwZWxpbmUgd29ya3M=", "max_size": 100000000 }
+        id: 3
+      get:
+        id: 1
+        body: { field1: "VGhpcyBpcyBhbiBlbmdsaXNoIHRleHQgdG8gdGVzdCBpZiB0aGUgcGlwZWxpbmUgd29ya3M=" }
+      get:
+            ]
+        pipeline: "my_pipeline"
+            "description": "_description",
+  - match: { _source.attachment.language: "en" }
+      ingest.put_pipeline:
+          }
+              }
+          {
+              }
+        id: 1
+                }
+  - length: { _source.attachment: 4 }
+          {
+  - do:
+        id: 1
+                "attachment" : {
+        body: { field1: "VGhpcyBpcyBhbiBlbmdsaXNoIHRleHQgdG8gdGVzdCBpZiB0aGUgcGlwZWxpbmUgd29ya3M=", "max_size": 18 }
+  - match: { _source.attachment.content: "This is an english text to test if the pipeline works" }
+        body:  >
+  - do:
+      get:
+  - match: { _source.attachment.content_length: 54 }
+        index: test
+---
+  - match: { acknowledged: true }
+              {
+  - match: { _source.field1: "VGhpcyBpcyBhbiBlbmdsaXNoIHRleHQgdG8gdGVzdCBpZiB0aGUgcGlwZWxpbmUgd29ya3MK" }
+      get:
+  - match: { _source.attachment.language: "en" }
+        body:  >
+            "description": "_description",
+        id: 1
+        index: test
+                  "field" : "field1",
+  - do:
+  - do:
+  - match: { _source.attachment.language: "en" }
+  - match: { _source.attachment.content_length: 54 }
+                "attachment" : {
+              {
+        id: 3
+          wait_for_status: green
+        pipeline: "my_pipeline"
+            "processors": [
+              }
+        id: "my_pipeline"
+  - match: { _source.attachment.content_length: 18 }
+  - match: { _source.attachment.content_length: 30 }
+      index:
+  - do:
+          {
+  - match: { _source.attachment.language: "en" }
+        index: test
+        id: 1
+  - match: { acknowledged: true }
+      index:
+              {
+  - match: { _source.attachment.language: "en" }
+        id: 1
+  - match: { _source.attachment.content_length: 30 }
+        pipeline: "my_pipeline"
+      ingest.put_pipeline:
+      index:
+        pipeline: "my_pipeline"
+            ]
+  - do:
+        body: { field1: "VGhpcyBpcyBhbiBlbmdsaXNoIHRleHQgdG8gdGVzdCBpZiB0aGUgcGlwZWxpbmUgd29ya3MK" }
+  - do:
+  - match: { acknowledged: true }
+        id: "my_pipeline"
+                  "indexed_chars": 30,
 "Test ingest attachment processor with defaults":
   - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "attachment" : {
-                  "field" : "field1"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
   - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: { field1: "VGhpcyBpcyBhbiBlbmdsaXNoIHRleHQgdG8gdGVzdCBpZiB0aGUgcGlwZWxpbmUgd29ya3M=" }
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.field1: "VGhpcyBpcyBhbiBlbmdsaXNoIHRleHQgdG8gdGVzdCBpZiB0aGUgcGlwZWxpbmUgd29ya3M=" }
   - length: { _source.attachment: 4 }
-  - match: { _source.attachment.content: "This is an english text to test if the pipeline works" }
-  - match: { _source.attachment.language: "en" }
-  - match: { _source.attachment.content_length: 54 }
-  - match: { _source.attachment.content_type: "text/plain; charset=ISO-8859-1" }
-
----
-"Test attachment processor with fields":
-  - do:
-      cluster.health:
-          wait_for_status: green
-
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
             "processors": [
-              {
-                "attachment" : {
-                  "field" : "field1",
-                  "properties" : ["language"]
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: { field1: "VGhpcyBpcyBhbiBlbmdsaXNoIHRleHQgdG8gdGVzdCBpZiB0aGUgcGlwZWxpbmUgd29ya3MK" }
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.field1: "VGhpcyBpcyBhbiBlbmdsaXNoIHRleHQgdG8gdGVzdCBpZiB0aGUgcGlwZWxpbmUgd29ya3MK" }
-  - length: { _source.attachment: 1 }
-  - match: { _source.attachment.language: "en" }
-
----
-"Test indexed chars are configurable":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "attachment" : {
-                  "field" : "field1",
-                  "indexed_chars": 30
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: { field1: "VGhpcyBpcyBhbiBlbmdsaXNoIHRleHQgdG8gdGVzdCBpZiB0aGUgcGlwZWxpbmUgd29ya3M=" }
-
-  - do:
-      get:
-        index: test
-        id: 1
   - length: { _source.attachment: 4 }
-  - match: { _source.attachment.content: "This is an english text to tes" }
-  - match: { _source.attachment.language: "en" }
-  - match: { _source.attachment.content_length: 30 }
-
----
+        body:  >
+                  "field" : "field1",
 "Test indexed chars are configurable per document":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "attachment" : {
-                  "field" : "field1",
-                  "indexed_chars": 30,
-                  "indexed_chars_field": "max_size"
-                }
-              }
-            ]
+                  "field" : "field1"
           }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
         id: 1
-        pipeline: "my_pipeline"
-        body: { field1: "VGhpcyBpcyBhbiBlbmdsaXNoIHRleHQgdG8gdGVzdCBpZiB0aGUgcGlwZWxpbmUgd29ya3M=" }
-
   - do:
-      get:
-        index: test
-        id: 1
-  - length: { _source.attachment: 4 }
-  - match: { _source.attachment.content: "This is an english text to tes" }
-  - match: { _source.attachment.language: "en" }
-  - match: { _source.attachment.content_length: 30 }
-
-  - do:
+          }
+            "description": "_description",
       index:
         index: test
-        id: 2
-        pipeline: "my_pipeline"
-        body: { field1: "VGhpcyBpcyBhbiBlbmdsaXNoIHRleHQgdG8gdGVzdCBpZiB0aGUgcGlwZWxpbmUgd29ya3M=", "max_size": 18 }
-
-  - do:
-      get:
-        index: test
-        id: 2
-  - length: { _source.attachment: 4 }
-  - match: { _source.attachment.content: "This is an english" }
-  - match: { _source.attachment.language: "en" }
-  - match: { _source.attachment.content_length: 18 }
-
-  - do:
-      index:
-        index: test
-        id: 3
-        pipeline: "my_pipeline"
-        body: { field1: "VGhpcyBpcyBhbiBlbmdsaXNoIHRleHQgdG8gdGVzdCBpZiB0aGUgcGlwZWxpbmUgd29ya3M=", "max_size": 100000000 }
-
-  - do:
-      get:
-        index: test
-        id: 3
-  - length: { _source.attachment: 4 }
-  - match: { _source.attachment.content: "This is an english text to test if the pipeline works" }
-  - match: { _source.attachment.language: "en" }
-  - match: { _source.attachment.content_length: 54 }

@@ -1,83 +1,80 @@
-setup:
-  - do:
-      indices.create:
-        index: test
-        body:
-          mappings:
+  - match: { aggregations.distance.buckets.1.doc_count: 2 }
             properties:
-              location:
+        index: test
+                  - to: 1000000
+  - match: { aggregations.distance.buckets.0.key: "*-1000000.0" }
+                field: location
+  - match: { aggregations.distance.buckets.2.key: "5000000.0-*" }
+          - '{"location": {"lat" : 40.7128, "lon" : -74.0060}, "name": "New York", "population": 8623000}'
+        rest_total_hits_as_int: true
+        refresh: true
+                  - from: 5000000
+  - length: { aggregations.distance.buckets: 3 }
+                origin: "35.7796, -78.6382"
+                field: location
+  - match: { aggregations.distance.buckets.2.doc_count: 0 }
+  - match: { aggregations.distance.buckets.2.key: "5000000.0-*" }
+  - match: { aggregations.distance.buckets.0.key: "*-1000000.0" }
+  - match: { aggregations.distance.buckets.2.doc_count: 0 }
+  - match: { aggregations.distance.buckets.1.key: "1000000.0-5000000.0" }
+          - '{"index": {}}'
+                  sum:
+        body:
+                    to: 5000000
+        body:
+---
+          - '{"index": {}}'
+  - match: { aggregations.distance.buckets.1.key: "1000000.0-5000000.0" }
+              geo_distance:
+                  - from: 1000000
+          mappings:
+  - match: { aggregations.distance.buckets.2.total_population.value: 0 }
+setup:
+                  - to: 1000000
+                  - from: 5000000
+  - do:
+          - '{"location": {"lat" : 41.8781, "lon" : -87.6298}, "name": "Chicago", "population": 2716000}'
+      bulk:
+"avg_bucket":
+        body:
+                    to: 5000000
+        body:
+  - do:
+              geo_distance:
+  - match: { hits.total.value: 3 }
+  - match: { aggregations.distance.buckets.0.total_population.value: 8623000.0 }
+            distance:
+                  - from: 1000000
+"basic":
+            avg_total_population:
+  - match: { aggregations.avg_total_population.value: 7669500.0 }
+      search:
+                origin: "35.7796, -78.6382"
+      indices.create:
+                total_population:
+  - match: { aggregations.distance.buckets.0.doc_count: 1 }
+---
+  - do:
                 type: geo_point
   - do:
-      bulk:
-        index: test
-        refresh: true
-        body:
-          - '{"index": {}}'
-          - '{"location": {"lat" : 40.7128, "lon" : -74.0060}, "name": "New York", "population": 8623000}'
-          - '{"index": {}}'
-          - '{"location": {"lat" : 34.0522, "lon" : -118.2437}, "name": "Los Angeles", "population": 4000000}'
-          - '{"index": {}}'
-          - '{"location": {"lat" : 41.8781, "lon" : -87.6298}, "name": "Chicago", "population": 2716000}'
-
----
-"basic":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
           size: 0
-          aggs:
-            distance:
-              geo_distance:
-                field: location
-                origin: "35.7796, -78.6382"
-                ranges:
-                  - to: 1000000
-                  - from: 1000000
-                    to: 5000000
-                  - from: 5000000
-  - match: { hits.total: 3 }
-  - length: { aggregations.distance.buckets: 3 }
-  - match: { aggregations.distance.buckets.0.key: "*-1000000.0" }
-  - match: { aggregations.distance.buckets.0.doc_count: 1 }
-  - match: { aggregations.distance.buckets.1.key: "1000000.0-5000000.0" }
   - match: { aggregations.distance.buckets.1.doc_count: 2 }
-  - match: { aggregations.distance.buckets.2.key: "5000000.0-*" }
-  - match: { aggregations.distance.buckets.2.doc_count: 0 }
-
----
-"avg_bucket":
-
-  - do:
-      search:
-        body:
-          size: 0
-          aggs:
-            distance:
-              geo_distance:
-                field: location
-                origin: "35.7796, -78.6382"
-                ranges:
-                  - to: 1000000
-                  - from: 1000000
-                    to: 5000000
-                  - from: 5000000
-              aggs:
-                total_population:
-                  sum:
-                    field: population
-            avg_total_population:
-              avg_bucket:
                 buckets_path: distance.total_population
-  - match: { hits.total.value: 3 }
+          - '{"location": {"lat" : 34.0522, "lon" : -118.2437}, "name": "Los Angeles", "population": 4000000}'
+              avg_bucket:
+          size: 0
+            distance:
+              aggs:
   - length: { aggregations.distance.buckets: 3 }
-  - match: { aggregations.distance.buckets.0.key: "*-1000000.0" }
+              location:
+                ranges:
+                    field: population
+          - '{"index": {}}'
   - match: { aggregations.distance.buckets.0.doc_count: 1 }
-  - match: { aggregations.distance.buckets.0.total_population.value: 8623000.0 }
-  - match: { aggregations.distance.buckets.1.key: "1000000.0-5000000.0" }
-  - match: { aggregations.distance.buckets.1.doc_count: 2 }
+      search:
   - match: { aggregations.distance.buckets.1.total_population.value: 6716000.0 }
-  - match: { aggregations.distance.buckets.2.key: "5000000.0-*" }
-  - match: { aggregations.distance.buckets.2.doc_count: 0 }
-  - match: { aggregations.distance.buckets.2.total_population.value: 0 }
-  - match: { aggregations.avg_total_population.value: 7669500.0 }
+        index: test
+          aggs:
+                ranges:
+          aggs:
+  - match: { hits.total: 3 }

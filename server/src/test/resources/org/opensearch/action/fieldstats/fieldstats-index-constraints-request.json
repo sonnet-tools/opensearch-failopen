@@ -1,43 +1,43 @@
-{
-  "fields" : [
-    "field1", "field2", "field3", "field4", "field5"
-  ],
-  "index_constraints": {
-    "field2": {
-      "max_value" : {
-        "gte": 9
       }
-    },
-    "field3": {
-      "min_value" : {
-        "gt": 5
-      }
-    },
-    "field4": {
-      "min_value" : {
-        "gte": "a"
-      },
-      "max_value" : {
-        "lte": "g"
-      }
-    },
+        "format" : "date_optional_time"
     "field5": {
+      }
+      },
+}
+    }
+      "max_value" : {
+  "index_constraints": {
+  ],
+      "min_value" : {
       "min_value" : {
         "gt": 2
-      },
+      }
       "max_value" : {
         "lt": 9
-      }
-    },
-    "field1": {
+        "lte": "g"
+    "field4": {
       "min_value" : {
-        "gte": "2014-01-01",
-        "format" : "date_optional_time"
-      },
+    "field1": {
+  "fields" : [
+    "field3": {
       "max_value" : {
-        "lt": "2015-01-01",
+        "gte": "2014-01-01",
+{
+      "max_value" : {
+    "field2": {
+        "gt": 5
+    },
+        "gte": 9
+      },
+    },
+  }
+    },
+        "gte": "a"
+    "field1", "field2", "field3", "field4", "field5"
         "format" : "date_optional_time"
       }
-    }
-  }
-}
+      },
+        "lt": "2015-01-01",
+    },
+      }
+      "min_value" : {

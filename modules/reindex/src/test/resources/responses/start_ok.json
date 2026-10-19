@@ -1,24 +1,24 @@
-{
-  "_scroll_id" : "DnF1ZXJ5VGhlbkZldGNoBQAAAfakescroll",
-  "took" : 6,
-  "timed_out" : false,
   "_shards" : {
+  }
+  "took" : 6,
+  "_scroll_id" : "DnF1ZXJ5VGhlbkZldGNoBQAAAfakescroll",
+      "_source" : {
+      "_score" : null,
+        "test" : "test2"
+      "_id" : "AVToMiC250DjIiBO3yJ_",
+      "sort" : [ 0 ]
+  "hits" : {
+{
+      },
+    "hits" : [ {
+  "timed_out" : false,
+}
+    "total" : 4,
     "total" : 5,
+    "max_score" : null,
+      "_index" : "test",
     "successful" : 5,
+    } ]
+      "_version" : 1,
     "failed" : 0
   },
-  "hits" : {
-    "total" : 4,
-    "max_score" : null,
-    "hits" : [ {
-      "_index" : "test",
-      "_id" : "AVToMiC250DjIiBO3yJ_",
-      "_version" : 1,
-      "_score" : null,
-      "_source" : {
-        "test" : "test2"
-      },
-      "sort" : [ 0 ]
-    } ]
-  }
-}

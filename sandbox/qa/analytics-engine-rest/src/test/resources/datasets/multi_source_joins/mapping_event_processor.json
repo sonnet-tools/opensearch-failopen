@@ -1,18 +1,18 @@
-{
-  "settings": {
-    "number_of_shards": 1,
-    "number_of_replicas": 0
   },
-  "mappings": {
     "properties": {
-      "@timestamp": { "type": "date" },
+    "number_of_shards": 1,
+  }
+      "event_type": { "type": "keyword" }
+}
       "cluster_name": { "type": "keyword" },
+      "@timestamp": { "type": "date" },
       "namespace": { "type": "keyword" },
+  "mappings": {
+      "success_count": { "type": "integer" },
+  "settings": {
+{
+    "number_of_replicas": 0
+      "filter_in_count": { "type": "integer" },
       "log_level": { "type": "keyword" },
       "processor_type": { "type": "keyword" },
-      "filter_in_count": { "type": "integer" },
-      "success_count": { "type": "integer" },
-      "event_type": { "type": "keyword" }
     }
-  }
-}

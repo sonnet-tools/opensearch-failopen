@@ -1,67 +1,67 @@
-{
-  "indices.shrink":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/index-apis/shrink-index/",
-      "description":"Allow to shrink an existing index into a new index with fewer primary shards."
     },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/{index}/_shrink/{target}",
-          "methods":[
-            "PUT",
-            "POST"
-          ],
-          "parts":{
-            "index":{
-              "type":"string",
               "description":"The name of the source index to shrink"
-            },
-            "target":{
-              "type":"string",
-              "description":"The name of the target index to shrink into"
-            }
-          }
-        }
-      ]
-    },
-    "params":{
-      "copy_settings": {
-        "type" : "boolean",
-        "description" : "whether or not to copy settings from the source index (defaults to false)"
-      },
-      "timeout": {
         "type" : "time",
-        "description" : "Explicit operation timeout"
-      },
-      "master_timeout":{
+    "body":{
         "type":"time",
-        "description":"Specify timeout for connection to master",
-        "deprecated":{
-          "version":"2.0.0",
-          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
-        }
-      },
+            }
+}
+        {
       "cluster_manager_timeout":{
-        "type":"time",
-        "description":"Specify timeout for connection to cluster-manager node"
       },
-      "wait_for_active_shards": {
+      },
+    "url":{
         "type" : "string",
         "description" : "Set the number of active shards to wait for on the shrunken index before the operation returns."
-      },
-      "wait_for_completion": {
         "type" : "boolean",
-        "description" : "If false, the request will return a task immediately and the operation will run in background. Defaults to true."
-      },
-      "task_execution_timeout": {
-        "type" : "time",
-        "description" : "Explicit task execution timeout, only useful when wait_for_completion is false, defaults to 1h."
-      }
+    "params":{
+        "type" : "boolean",
     },
-    "body":{
-      "description":"The configuration for the target index (`settings` and `aliases`)"
+      },
+      ]
+        "description" : "Explicit task execution timeout, only useful when wait_for_completion is false, defaults to 1h."
+          "parts":{
+      },
+              "type":"string",
+            },
+          ],
+    },
+        "description" : "whether or not to copy settings from the source index (defaults to false)"
+      },
+        "type":"time",
+      "url":"https://opensearch.org/docs/latest/api-reference/index-apis/shrink-index/",
+      "paths":[
+        "deprecated":{
     }
+            "PUT",
+            "target":{
+        }
+        "description" : "If false, the request will return a task immediately and the operation will run in background. Defaults to true."
+      "wait_for_completion": {
+          "version":"2.0.0",
+    "documentation":{
+        }
+      "task_execution_timeout": {
+      "description":"Allow to shrink an existing index into a new index with fewer primary shards."
+    "stability":"stable",
+        "description" : "Explicit operation timeout"
+          }
+      "timeout": {
+        "type" : "time",
+          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
+        "description":"Specify timeout for connection to cluster-manager node"
   }
-}
+        "description":"Specify timeout for connection to master",
+      "master_timeout":{
+      }
+      "copy_settings": {
+          "methods":[
+      "description":"The configuration for the target index (`settings` and `aliases`)"
+              "type":"string",
+{
+      },
+            "index":{
+            "POST"
+              "description":"The name of the target index to shrink into"
+          "path":"/{index}/_shrink/{target}",
+  "indices.shrink":{
+      "wait_for_active_shards": {

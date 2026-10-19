@@ -1,13 +1,13 @@
-{
-  "settings": {
-    "number_of_shards": 1,
-    "number_of_replicas": 0
-  },
+      "category": {"type": "keyword"},
   "mappings": {
     "properties": {
-      "category": {"type": "keyword"},
-      "category_name": {"type": "keyword"},
-      "description": {"type": "text"}
     }
-  }
+      "description": {"type": "text"}
+{
+    "number_of_replicas": 0
 }
+  }
+  "settings": {
+    "number_of_shards": 1,
+  },
+      "category_name": {"type": "keyword"},

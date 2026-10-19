@@ -1,28 +1,28 @@
-{
-    "_doc":{
-        "properties":{
-            "name1":{
+                        "type":"text"
                 "type":"object",
-                "properties":{
-                    "first1":{
-                        "type":"text"
-                    },
-                    "last1":{
-                        "type":"text"
-                    }
-                }
-            },
             "name2":{
-                "type":"object",
                 "properties":{
-                    "first2":{
+    "_doc":{
                         "type":"text"
-                    },
                     "last2":{
+                    "first2":{
+                    }
+        }
+                "properties":{
+            }
+}
                         "type":"text"
+                    "last1":{
+{
+                        "type":"text"
+    }
+                    "first1":{
+            },
+                    },
+                }
+                    },
+                "type":"object",
+        "properties":{
                     }
                 }
-            }
-        }
-    }
-}
+            "name1":{

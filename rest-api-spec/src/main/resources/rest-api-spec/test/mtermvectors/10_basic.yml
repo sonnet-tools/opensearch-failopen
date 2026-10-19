@@ -1,54 +1,46 @@
-setup:
   - do:
-      indices.create:
-          index: testidx
-          body:
+              -
+"Basic tests for multi termvector get":
+          "body" :
+        mtermvectors:
+  - match: {docs.0.term_vectors.text.terms.brown.term_freq: 2}
+  - do:
+  - match: {docs.0.term_vectors.text.terms.brown.ttf: 2}
+          "term_statistics" : true
+                  "_index" : "testidx"
             mappings:
               properties:
+          "index" : "testidx"
                 text:
+          index: testidx
+              -
+  - match: {docs.0.term_vectors.text.terms.brown.term_freq: 2}
                   type :         "text"
-                  term_vector :  "with_positions_offsets"
   - do:
-      index:
-        index: testidx
+  - do:
+          "ids" : ["testing_document"]
+  - do:
+            "docs":
+      indices.create:
+          "index" : "testidx"
+  - do:
+          "term_statistics" : true
+  - match: {docs.0.term_vectors.text.terms.brown.ttf: 2}
+        mtermvectors:
+                  "_id" : "testing_document"
         id:    testing_document
         body:  {"text" : "The quick brown fox is brown."}
-
-  - do:
-      indices.refresh: {}
-
+  - match: {docs.0.term_vectors.text.terms.brown.term_freq: 2}
+        index: testidx
+          body:
+          "body" :
+                  "_id" : "testing_document"
+            "docs":
 ---
-"Basic tests for multi termvector get":
-
-  - do:
-        mtermvectors:
           "term_statistics" : true
-          "body" :
-            "docs":
-              -
-                  "_index" : "testidx"
-                  "_id" : "testing_document"
-
-  - match: {docs.0.term_vectors.text.terms.brown.term_freq: 2}
-  - match: {docs.0.term_vectors.text.terms.brown.ttf: 2}
-
-  - do:
+                  term_vector :  "with_positions_offsets"
         mtermvectors:
-          "term_statistics" : true
-          "index" : "testidx"
-          "body" :
-            "docs":
-              -
-                  "_id" : "testing_document"
-
-  - match: {docs.0.term_vectors.text.terms.brown.term_freq: 2}
+setup:
+      indices.refresh: {}
   - match: {docs.0.term_vectors.text.terms.brown.ttf: 2}
-
-  - do:
-        mtermvectors:
-          "term_statistics" : true
-          "index" : "testidx"
-          "ids" : ["testing_document"]
-
-  - match: {docs.0.term_vectors.text.terms.brown.term_freq: 2}
-  - match: {docs.0.term_vectors.text.terms.brown.ttf: 2}
+      index:

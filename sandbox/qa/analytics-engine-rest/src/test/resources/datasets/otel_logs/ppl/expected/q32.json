@@ -1,10 +1,10 @@
-{
+  "total": 1,
+    [15]
+  "datarows": [
+}
   "schema": [
     {"name": "count()", "type": "bigint"}
-  ],
-  "datarows": [
-    [15]
-  ],
-  "total": 1,
   "size": 1
-}
+  ],
+  ],
+{

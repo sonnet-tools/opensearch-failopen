@@ -1,56 +1,46 @@
----
-"Test query string with snowball":
-  - do:
-      indices.create:
-          index:  test
-          body:
-            mappings:
-              properties:
-                field:
-                  type: text
-                number:
-                  type: integer
-
-  - do:
-      index:
-          index:  test
-          id:     1
-          body:   { field: foo bar}
-
-  - do:
-      indices.refresh:
-        index: [test]
-
-  - do:
-      indices.validate_query:
-        index: test
-        q: field:bars
-        analyzer: snowball
-
-  - is_true: valid
-
-  - do:
       search:
-        rest_total_hits_as_int: true
-        index: test
-        q: field:bars
         analyzer: snowball
-
-  - match: {hits.total: 1}
-
-  - do:
-      explain:
-        index:  test
+        rest_total_hits_as_int: true
+              properties:
+      indices.create:
         id:     1
         q: field:bars
+  - match: {hits.total: 1}
+          id:     1
+          body:   { field: foo bar}
+  - do:
+      indices.validate_query:
         analyzer: snowball
-
-  - is_true: matched
-
+        index: [test]
+        analyzer: snowball
+        index:  test
+  - do:
+        q: field:bars
+      index:
+"Test query string with snowball":
+                  type: text
+          index:  test
+                number:
+        q: field:bars
+      explain:
+        analyzer: snowball
+        index: test
   - do:
       count:
-        index: test
         q: field:bars
-        analyzer: snowball
-
+  - is_true: matched
+            mappings:
+          index:  test
+  - is_true: valid
+  - do:
+        index: test
+  - do:
+  - do:
+                  type: integer
+        index: test
+  - do:
   - match: {count : 1}
+      indices.refresh:
+---
+          body:
+                field:

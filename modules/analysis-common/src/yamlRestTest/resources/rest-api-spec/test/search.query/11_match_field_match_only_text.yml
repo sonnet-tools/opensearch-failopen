@@ -1,147 +1,138 @@
-# integration tests for queries with specific analysis chains
----
+                  only_on_same_position: true
 "match query with stacked stems":
-  - skip:
-      version: " - 2.11.99"
-      reason: "match_only_text was added in 2.12"
-  # Tests the match query stemmed tokens are "stacked" on top of the unstemmed
-  # versions in the same position.
   - do:
-      indices.create:
-        index: test
-        body:
-          settings:
-            number_of_shards: 1
-            number_of_replicas: 1
-            analysis:
-              analyzer:
-                index:
-                  tokenizer: standard
-                  filter: [lowercase]
-                search:
-                  rest_total_hits_as_int: true
-                  tokenizer: standard
-                  filter: [lowercase, keyword_repeat, porter_stem, unique_stem]
-              filter:
-                unique_stem:
-                  type: unique
-                  only_on_same_position: true
-          mappings:
-            properties:
-              text:
-                type: match_only_text
-                analyzer: index
-                search_analyzer: search
-
-  - do:
-      index:
-        index: test
         id:    1
-        body:  { "text": "the fox runs across the street" }
-        refresh: true
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
+                unique_stem:
           query:
-            match:
-              text:
-                query: fox runs
-                operator: AND
-  - match: {hits.total: 1}
-
-  - do:
-      index:
-        index: test
-        id:    2
-        body:  { "text": "run fox run" }
-        refresh: true
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              text:
-                query: fox runs
-                operator: AND
-  - match: {hits.total: 2}
-
----
-"wildcard highlighting on match_only_text":
-  - skip:
+                  filter: [lowercase]
       version: " - 2.99.99"
-      reason: "wildcard highlighting on match_only_text type was added in 2.19"
-  - do:
-      indices.create:
         index: test
-        body:
-          settings:
-            number_of_shards: 1
-            number_of_replicas: 1
-            analysis:
-              analyzer:
+        body:  { "text": "run fox run" }
                 index:
+        index: test
+                  filter: [lowercase, keyword_repeat, porter_stem, unique_stem]
+            match:
+  - do:
+                  rest_total_hits_as_int: true
+          settings:
+  - match: {hits.hits.0.highlight.text.0: "the <em>fox</em> <em>runs</em> across the street"}
+        body:
+                  rest_total_hits_as_int: true
+                unique_stem:
+  - do:
+                  tokenizer: standard
+              text:
+                  tokenizer: standard
+  - match: {hits.hits.1.highlight.text.0: "<em>run</em> <em>fox</em> <em>run</em>"}
+            match:
+        body:  { "text": "the fox runs across the street" }
+          query:
+      index:
+  - match: {hits.total: 1}
+                search:
+          settings:
                   tokenizer: standard
                   filter: [lowercase]
-                search:
-                  rest_total_hits_as_int: true
-                  tokenizer: standard
-                  filter: [lowercase, keyword_repeat, porter_stem, unique_stem]
-              filter:
-                unique_stem:
-                  type: unique
-                  only_on_same_position: true
+              analyzer:
           mappings:
+      index:
+        index: test
+                query: fox runs
+          highlight:
+            number_of_replicas: 1
+        rest_total_hits_as_int: true
+---
+      search:
+        body:
+      index:
+        rest_total_hits_as_int: true
+"wildcard highlighting on match_only_text":
+              text:
+            number_of_replicas: 1
             properties:
-              text:
-                type: match_only_text
-                analyzer: index
-                search_analyzer: search
-
-  - do:
-      index:
-        index: test
+  # Tests the match query stemmed tokens are "stacked" on top of the unstemmed
+        refresh: true
         id:    1
-        body:  { "text": "the fox runs across the street" }
+            properties:
         refresh: true
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              text:
-                query: fox runs
-                operator: AND
-          highlight:
-            fields:
-              - text: {}
   - match: {hits.total: 1}
-  - match: {hits.hits.0.highlight.text.0: "the <em>fox</em> <em>runs</em> across the street"}
-
-  - do:
-      index:
-        index: test
-        id:    2
-        body:  { "text": "run fox run" }
-        refresh: true
-
-  - do:
+  - match: {hits.total: 2}
       search:
+            match:
+---
+                query: fox runs
+                search_analyzer: search
+      reason: "wildcard highlighting on match_only_text type was added in 2.19"
+  - skip:
+                  tokenizer: standard
+      version: " - 2.11.99"
+                search:
+  - do:
+  - do:
         rest_total_hits_as_int: true
         body:
-          query:
-            match:
-              text:
+  # versions in the same position.
                 query: fox runs
-                operator: AND
-          highlight:
-            fields:
-              - text: {}
-  - match: {hits.total: 2}
+          query:
+        index: test
+        refresh: true
+        rest_total_hits_as_int: true
+        index: test
+                type: match_only_text
+  - skip:
+              text:
   - match: {hits.hits.0.highlight.text.0: "the <em>fox</em> <em>runs</em> across the street"}
-  - match: {hits.hits.1.highlight.text.0: "<em>run</em> <em>fox</em> <em>run</em>"}
+            fields:
+        id:    2
+                operator: AND
+              text:
+      index:
+            fields:
+        id:    2
+  - do:
+                analyzer: index
+        body:  { "text": "the fox runs across the street" }
+# integration tests for queries with specific analysis chains
+          query:
+      search:
+              analyzer:
+                  type: unique
+      reason: "match_only_text was added in 2.12"
+                analyzer: index
+  - do:
+                operator: AND
+              - text: {}
+              text:
+                  filter: [lowercase, keyword_repeat, porter_stem, unique_stem]
+            analysis:
+              filter:
+        body:
+              filter:
+  - do:
+        body:  { "text": "run fox run" }
+          highlight:
+                  only_on_same_position: true
+                operator: AND
+              - text: {}
+        body:
+        body:
+              text:
+                search_analyzer: search
+                  type: unique
+      indices.create:
+            analysis:
+                query: fox runs
+        refresh: true
+            number_of_shards: 1
+  - match: {hits.total: 2}
+  - do:
+      search:
+  - do:
+                type: match_only_text
+        index: test
+          mappings:
+      indices.create:
+                index:
+                operator: AND
+            match:
+            number_of_shards: 1

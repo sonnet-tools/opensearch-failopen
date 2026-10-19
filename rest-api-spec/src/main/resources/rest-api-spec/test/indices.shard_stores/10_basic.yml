@@ -1,78 +1,67 @@
----
-"no indices test":
+  - match:   { indices: {}}
+  - match:   { indices.index1.shards.0.stores.0.allocation: "primary" }
+        allow_no_indices: false
+      index:
   - do:
       indices.shard_stores:
         allow_no_indices: true
-
-  - match:   { indices: {}}
-
-  - do:
-      catch: missing
-      indices.shard_stores:
-        allow_no_indices: false
-
----
-"basic index test":
-
-  - do:
-      indices.create:
-        index: index1
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-  - do:
-      index:
-        index: index1
-        body: { foo: bar }
-        refresh: true
-
-  - do:
-       cluster.health:
-         wait_for_status: green
-
-  - do:
-      indices.shard_stores:
-          index: index1
-          status: "green"
-
-  - match:   { indices.index1.shards.0.stores.0.allocation: "primary" }
-
----
-"multiple indices test":
-
-  - do:
-      indices.create:
-        index: index1
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-  - do:
-      indices.create:
-        index: index2
-        body:
-          settings:
-            number_of_shards: "2"
-            number_of_replicas: "0"
-  - do:
-      index:
-        index: index1
-        body: { foo: bar }
-        refresh: true
-  - do:
-      index:
-        index: index2
-        body: { foo: bar }
-        refresh: true
-  - do:
-       cluster.health:
-         wait_for_status: green
-
-  - do:
       indices.shard_stores:
           status: "green"
-
-  - match:   { indices.index1.shards.0.stores.0.allocation: "primary" }
-  - match:   { indices.index2.shards.0.stores.0.allocation: "primary" }
+      indices.create:
+  - do:
+          settings:
+  - do:
+          settings:
+      indices.shard_stores:
+         wait_for_status: green
+  - do:
+        refresh: true
+---
   - match:   { indices.index2.shards.1.stores.0.allocation: "primary" }
+          index: index1
+  - do:
+            number_of_shards: "1"
+  - do:
+        body:
+"multiple indices test":
+  - do:
+        index: index1
+        body: { foo: bar }
+        body: { foo: bar }
+        body:
+        index: index1
+      index:
+            number_of_shards: "2"
+      indices.shard_stores:
+  - match:   { indices.index2.shards.0.stores.0.allocation: "primary" }
+            number_of_replicas: "0"
+            number_of_shards: "1"
+       cluster.health:
+  - do:
+       cluster.health:
+        index: index2
+      index:
+        index: index2
+      catch: missing
+        refresh: true
+        body:
+          status: "green"
+        refresh: true
+      indices.create:
+  - do:
+  - do:
+        body: { foo: bar }
+      indices.create:
+  - match:   { indices.index1.shards.0.stores.0.allocation: "primary" }
+  - do:
+  - do:
+"no indices test":
+         wait_for_status: green
+---
+          settings:
+"basic index test":
+            number_of_replicas: "0"
+        index: index1
+        index: index1
+---
+            number_of_replicas: "0"

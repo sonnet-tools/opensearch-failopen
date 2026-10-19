@@ -1,146 +1,134 @@
-setup:
-  - do:
-      indices.create:
-        index: test_1
-        body:
-          settings:
-            number_of_replicas: 0
-          mappings:
-            properties:
-              str:
-                type: keyword
-              number:
-                type: integer
-
-  - do:
-      bulk:
-        index: test_1
-        refresh: true
-        body:
-          - '{"index": {}}'
-          - '{"_doc_count": 10, "str": "abc", "number" : 500, "unmapped": "abc" }'
-          - '{"index": {}}'
-          - '{"_doc_count": 5, "str": "xyz", "number" : 100, "unmapped": "xyz" }'
-          - '{"index": {}}'
-          - '{"_doc_count": 7, "str": "foo", "number" : 100, "unmapped": "foo" }'
-          - '{"index": {}}'
-          - '{"_doc_count": 1, "str": "foo", "number" : 200, "unmapped": "foo" }'
-          - '{"index": {}}'
-          - '{"str": "abc", "number" : 500, "unmapped": "abc" }'
-
----
-"Test numeric terms agg with doc_count":
-  - skip:
-      version: "1.0.0 - "
-      reason: "until this is released and we know exact version"
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "num_terms" : { "terms" : { "field" : "number" } } } }
-
-  - match: { hits.total: 5 }
-  - length: { aggregations.num_terms.buckets: 3 }
-  - match: { aggregations.num_terms.buckets.0.key: 100 }
-  - match: { aggregations.num_terms.buckets.0.doc_count: 12 }
-  - match: { aggregations.num_terms.buckets.1.key: 500 }
-  - match: { aggregations.num_terms.buckets.1.doc_count: 11 }
-  - match: { aggregations.num_terms.buckets.2.key: 200 }
-  - match: { aggregations.num_terms.buckets.2.doc_count: 1 }
-
----
-"Test keyword terms agg with doc_count":
-  - skip:
-      version: "1.0.0 - "
-      reason: "until this is released and we know exact version"
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str" } } } }
-
-  - match: { hits.total: 5 }
-  - length: { aggregations.str_terms.buckets: 3 }
+  - match: { aggregations.composite_agg.buckets.2.doc_count: 11 }
   - match: { aggregations.str_terms.buckets.0.key: "abc" }
-  - match: { aggregations.str_terms.buckets.0.doc_count: 11 }
   - match: { aggregations.str_terms.buckets.1.key: "foo" }
-  - match: { aggregations.str_terms.buckets.1.doc_count: 8 }
-  - match: { aggregations.str_terms.buckets.2.key: "xyz" }
-  - match: { aggregations.str_terms.buckets.2.doc_count: 5 }
-
----
-"Test unmapped string terms agg with doc_count":
-  - skip:
+"Test composite num_terms agg with doc_count":
+"Test keyword terms agg with doc_count":
+            properties:
+  - match: { hits.total: 2 }
+  - match: { aggregations.composite_agg.buckets.1.key.num_terms: 200 }
+      search:
+                                  {
+  - match: { aggregations.num_terms.buckets.1.doc_count: 11 }
+          mappings:
+          - '{"index": {}}'
+      bulk:
+          - '{"index": {}}'
       version: "1.0.0 - "
+        index: test_2
+  - match: { aggregations.composite_agg.buckets.0.doc_count: 12 }
+          settings:
+  - match: { hits.total: 5 }
+  - do:
+  - length: { aggregations.composite_agg.buckets: 3 }
+        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str.keyword" } } } }
+  - do:
+  - skip:
+  - match: { aggregations.str_terms.buckets.2.key: "xyz" }
+          - '{"_doc_count": 10, "str": "abc", "number" : 500, "unmapped": "abc" }'
+---
+  - match: { aggregations.str_terms.buckets.2.doc_count: 5 }
+        index: test_1
+        body:
+        index: test_2
+        body: { "size" : 0, "aggs" : { "num_terms" : { "terms" : { "field" : "number" } } } }
+          { "composite_agg" : { "composite" :
+        body:
       reason: "until this is released and we know exact version"
+  - match: { hits.total: 5 }
+        rest_total_hits_as_int: true
+          - '{"str": "abc", "number" : 500, "unmapped": "abc" }'
+      reason: "until this is released and we know exact version"
+        }
+---
+        rest_total_hits_as_int: true
+  - match: { aggregations.str_terms.buckets.0.doc_count: 11 }
+      version: "1.0.0 - "
+  - match: { hits.total: 5 }
+  - match: { aggregations.composite_agg.buckets.0.key.num_terms: 100 }
+          - '{"_doc_count": 10, "str": "abc" }'
+  - match: { aggregations.num_terms.buckets.0.doc_count: 12 }
+              { "composite" :
+      indices.create:
+  - match: { aggregations.num_terms.buckets.2.key: 200 }
+        body: { "size" : 0, "aggs" :
+        }
+        rest_total_hits_as_int: true
+  - length: { aggregations.composite_agg.buckets: 3 }
   - do:
       bulk:
-        index: test_2
+        rest_total_hits_as_int: true
+            number_of_replicas: 0
+      reason: "until this is released and we know exact version"
+                type: integer
+          - '{"index": {}}'
+---
+                  }
+  - match: { aggregations.composite_agg.buckets.1.doc_count: 1 }
+          - '{"index": {}}'
+"Test numeric terms agg with doc_count":
+      search:
+      search:
+              str:
+  - do:
+  - length: { aggregations.num_terms.buckets: 3 }
+          }
+---
         refresh: true
-        body:
-          - '{"index": {}}'
-          - '{"_doc_count": 10, "str": "abc" }'
-          - '{"index": {}}'
-          - '{"str": "abc" }'
   - do:
-      search:
-        index: test_2
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str.keyword" } } } }
-
-  - match: { hits.total: 2 }
-  - length: { aggregations.str_terms.buckets: 1 }
-  - match: { aggregations.str_terms.buckets.0.key: "abc" }
-  - match: { aggregations.str_terms.buckets.0.doc_count: 11 }
-
----
-"Test composite str_terms agg with doc_count":
-  - skip:
-      version: "1.0.0 - "
-      reason: "until this is released and we know exact version"
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" :
-          { "composite_agg" : { "composite" :
-                                  {
-                                    "sources": ["str_terms": { "terms": { "field": "str" } }]
-                                  }
-          }
-          }
-        }
-
   - match: { hits.total: 5 }
-  - length: { aggregations.composite_agg.buckets: 3 }
-  - match: { aggregations.composite_agg.buckets.0.key.str_terms: "abc" }
-  - match: { aggregations.composite_agg.buckets.0.doc_count: 11 }
-  - match: { aggregations.composite_agg.buckets.1.key.str_terms: "foo" }
-  - match: { aggregations.composite_agg.buckets.1.doc_count: 8 }
-  - match: { aggregations.composite_agg.buckets.2.key.str_terms: "xyz" }
-  - match: { aggregations.composite_agg.buckets.2.doc_count: 5 }
-
----
-"Test composite num_terms agg with doc_count":
-  - skip:
-      version: "1.0.0 - "
       reason: "until this is released and we know exact version"
-  - do:
+      version: "1.0.0 - "
+  - match: { aggregations.composite_agg.buckets.1.doc_count: 8 }
+  - match: { aggregations.num_terms.buckets.0.key: 100 }
       search:
-        rest_total_hits_as_int: true
+  - match: { aggregations.composite_agg.buckets.0.key.str_terms: "abc" }
+  - do:
+  - length: { aggregations.str_terms.buckets: 1 }
+        body:
+                type: keyword
+  - match: { aggregations.composite_agg.buckets.1.key.str_terms: "foo" }
+  - skip:
+        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str" } } } }
+"Test composite str_terms agg with doc_count":
+  - do:
+          - '{"index": {}}'
+                                  }
         body: { "size" : 0, "aggs" :
           { "composite_agg" :
-              { "composite" :
+  - do:
+          - '{"_doc_count": 5, "str": "xyz", "number" : 100, "unmapped": "xyz" }'
+          - '{"index": {}}'
+setup:
+                                    "sources": ["str_terms": { "terms": { "field": "str" } }]
+        rest_total_hits_as_int: true
+          - '{"index": {}}'
+        refresh: true
                   {
-                    "sources": ["num_terms" : { "terms" : { "field" : "number" } }]
-                  }
+  - match: { aggregations.num_terms.buckets.2.doc_count: 1 }
+  - match: { aggregations.str_terms.buckets.1.doc_count: 8 }
+  - match: { aggregations.num_terms.buckets.1.key: 500 }
+              number:
+          - '{"str": "abc" }'
+  - match: { aggregations.composite_agg.buckets.0.doc_count: 11 }
+      version: "1.0.0 - "
               }
+          - '{"_doc_count": 1, "str": "foo", "number" : 200, "unmapped": "foo" }'
           }
-        }
-
-  - match: { hits.total: 5 }
-  - length: { aggregations.composite_agg.buckets: 3 }
-  - match: { aggregations.composite_agg.buckets.0.key.num_terms: 100 }
-  - match: { aggregations.composite_agg.buckets.0.doc_count: 12 }
-  - match: { aggregations.composite_agg.buckets.1.key.num_terms: 200 }
-  - match: { aggregations.composite_agg.buckets.1.doc_count: 1 }
+      search:
+                    "sources": ["num_terms" : { "terms" : { "field" : "number" } }]
+          }
   - match: { aggregations.composite_agg.buckets.2.key.num_terms: 500 }
-  - match: { aggregations.composite_agg.buckets.2.doc_count: 11 }
+  - skip:
+  - match: { aggregations.str_terms.buckets.0.doc_count: 11 }
+      reason: "until this is released and we know exact version"
+  - length: { aggregations.str_terms.buckets: 3 }
+        index: test_1
+      version: "1.0.0 - "
+          - '{"_doc_count": 7, "str": "foo", "number" : 100, "unmapped": "foo" }'
+  - skip:
+  - match: { aggregations.str_terms.buckets.0.key: "abc" }
+"Test unmapped string terms agg with doc_count":
+  - match: { aggregations.composite_agg.buckets.2.key.str_terms: "xyz" }
+---
+  - skip:
+  - match: { aggregations.composite_agg.buckets.2.doc_count: 5 }

@@ -1,4 +1,4 @@
-/*
-SELECT COUNT(DISTINCT SearchPhrase) FROM hits;
-*/
 source=hits | stats dc(SearchPhrase)
+/*
+*/
+SELECT COUNT(DISTINCT SearchPhrase) FROM hits;

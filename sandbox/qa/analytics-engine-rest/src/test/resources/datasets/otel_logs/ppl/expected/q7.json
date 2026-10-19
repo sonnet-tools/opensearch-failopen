@@ -1,12 +1,12 @@
-{
-  "schema": [
-    {"name": "c", "type": "bigint"},
-    {"name": "log.http.status_code", "type": "bigint"}
   ],
-  "datarows": [
-    [10, 500],
     [5, 503]
-  ],
-  "total": 2,
+    [10, 500],
   "size": 2
+  "schema": [
+{
+  ],
+    {"name": "log.http.status_code", "type": "bigint"}
 }
+  "total": 2,
+    {"name": "c", "type": "bigint"},
+  "datarows": [

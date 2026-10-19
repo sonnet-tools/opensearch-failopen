@@ -1,28 +1,28 @@
-{
-  "schema": [
-    {
-      "name": "tags",
-      "type": "string"
-    },
-    {
-      "name": "tag_pos",
-      "type": "int"
-    }
-  ],
-  "datarows": [
-    [
-      "tag1,tag2,tag3",
       1
-    ],
+}
+      "tag1,tag2,tag3",
     [
-      "tag2,tag4",
-      0
-    ],
-    [
+      "type": "string"
+  ],
+    {
+  "datarows": [
+  "total": 3,
       "tag1,tag3,tag5",
+    {
+  "size": 3
+    }
+{
+    ],
+    [
+      "name": "tag_pos",
+    ],
+      "name": "tags",
+      "type": "int"
+      0
       null
     ]
   ],
-  "total": 3,
-  "size": 3
-}
+      "tag2,tag4",
+    },
+  "schema": [
+    [

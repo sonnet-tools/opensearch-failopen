@@ -1,164 +1,147 @@
----
-setup:
-
-  - do:
-      index:
-          index: test1
-          id:    1
-          body:  { "foo": "bar" }
-
-  - do:
-      index:
-          index: test2
-          id:    1
-          body:  { "foo": "baz" }
-
----
-"Metric - blank":
-  - do:
-      indices.stats: {}
-
   - is_true:  _all.total.docs
-  - is_true:  _all.total.store
-  - is_true:  _all.total.indexing
-  - is_true:  _all.total.get
-  - is_true:  _all.total.search
-  - is_true:  _all.total.merges
-  - is_true:  _all.total.refresh
+  - is_false:  _all.total.indexing
+  - is_false:  _all.total.warmer
+  - is_true:   _all.total.query_cache
+  - is_false:  _all.total.warmer
+      index:
+  - is_false:  _all.total.segments
+"Metric - recovery":
+  - is_true:   _all.total.segments.file_sizes
+      indices.stats: {}
   - is_true:  _all.total.flush
-  - is_true:  _all.total.warmer
-  - is_true:  _all.total.query_cache
-  - is_true:  _all.total.fielddata
-  - is_true:  _all.total.completion
+  - is_false:  _all.total.merges
   - is_true:  _all.total.segments
+  - is_false:  _all.total.query_cache
+  - is_false:  _all.total.recovery
+  - is_false:  _all.total.query_cache
+          index: test1
+  - is_false:  _all.total.completion
   - is_true:  _all.total.translog
+  - is_false:  _all.total.search
+---
+  - is_false:  _all.total.get
+      indices.stats: { metric: _all }
+"Metric - blank":
+  - is_true:  _all.total.fielddata
+  - is_false:  _all.total.completion
+      indices.stats: { metric: [ recovery ] }
+  - is_false:  _all.total.search
+  - is_true:   _all.total.refresh
+  - is_true:  _all.total.search
+  - is_false:  _all.total.fielddata
+  - do:
+  - is_false:  _all.total.fielddata
+  - is_true:  _all.total.completion
+  - is_true:  _all.total.docs
+      indices.stats: { metric: segments, include_segment_file_sizes: true }
   - is_true:  _all.total.recovery
-
+  - is_true:  _all.total.merges
+  - is_true:   _all.total.get
+  - is_false:  _all.total.flush
+"Metric - multi":
+  - is_false:  _all.total.completion
+  - do:
+  - is_false:  _all.total.get
+  - is_true:   _all.total.store
+  - is_true:  _all.total.store
+  - is_false:  _all.total.recovery
+  - is_true:   _all.total.docs
+  - is_true:  _all.total.segments
+      indices.stats: { metric: _all, include_segment_file_sizes: true }
+  - is_true:  _all.total.merges
+  - do:
+  - is_true:   _all.total.fielddata
+  - is_false:  _all.total.fielddata
+  - is_true:   _all.total.segments
+      indices.stats: { metric: docs }
+  - is_false:  _all.total.store
+  - is_true:   _all.total.recovery
+---
+  - is_false:  _all.total.flush
+  - is_false:  _all.total.segments
+  - is_true:  _all.total.query_cache
+  - is_false:  _all.total.refresh
+  - is_true:  _all.total.query_cache
+  - is_false:  _all.total.recovery
+  - is_true:   _all.total.completion
+  - is_false:  _all.total.query_cache
+  - is_false:  _all.total.get
+  - is_true:   _all.total.translog
+---
+---
+  - is_false:  _all.total.indexing
+  - do:
+      index:
+---
+  - is_false:  _all.total.store
+  - is_false:  _all.total.store
+  - is_true:   _all.total.get
+"Metric - _all include_segment_file_sizes":
+  - is_false:  _all.total.search
+"Metric - one":
+          id:    1
+  - is_true:  _all.total.warmer
+  - is_false:  _all.total.indexing
+  - is_true:  _all.total.flush
+  - is_false:  _all.total.docs
+  - is_false:  _all.total.docs
+  - is_true:  _all.total.refresh
+  - is_false:  _all.total.translog
+  - is_true:  _all.total.search
+  - is_true:   _all.total.warmer
+  - is_true:  _all.total.recovery
+  - is_true:  _all.total.get
+  - is_true:  _all.total.store
+  - do:
+  - is_true:  _all.total.fielddata
+  - is_false:  _all.total.translog
+  - is_false:  _all.total.warmer
+  - is_false:  _all.total.warmer
+---
+  - is_false:  _all.total.merges
+  - is_true:  _all.total.warmer
+  - is_true:   _all.total.segments
+  - is_true:   _all.total.search
+  - is_true:   _all.total.flush
+      indices.stats: { metric: [ store, get, merge ] }
+  - do:
+  - is_false:  _all.total.segments
+  - is_true:   _all.total.segments.file_sizes
+setup:
+          body:  { "foo": "bar" }
+          index: test2
+  - is_true:   _all.total.docs
+"Metric - segments include_segment_file_sizes":
+  - is_false:  _all.total.refresh
+  - is_true:   _all.total.store
+  - is_false:  _all.total.flush
+  - is_false:  _all.total.indexing
+  - is_false:  _all.total.flush
+  - is_false:  _all.total.search
+  - is_false:  _all.total.query_cache
+  - is_true:  _all.total.completion
+---
+          body:  { "foo": "baz" }
+  - is_false:  _all.total.refresh
+  - is_true:  _all.total.indexing
+  - is_false:  _all.total.fielddata
+  - do:
+  - is_true:   _all.total.indexing
+  - do:
+  - is_true:  _all.total.get
+  - is_true:  _all.total.refresh
+  - is_false:  _all.total.translog
+  - is_false:  _all.total.translog
+  - do:
+  - is_true:  _all.total.translog
+          id:    1
+  - is_false:  _all.total.refresh
+  - is_false:  _all.total.docs
+  - is_false:  _all.total.completion
+  - is_false:  _all.total.merges
+  - is_true:   _all.total.merges
+  - is_true:   _all.total.merges
+  - is_true:   _all.total.recovery
 ---
 "Metric - _all":
-  - do:
-      indices.stats: { metric: _all }
-
-  - is_true:  _all.total.docs
-  - is_true:  _all.total.store
   - is_true:  _all.total.indexing
-  - is_true:  _all.total.get
-  - is_true:  _all.total.search
-  - is_true:  _all.total.merges
-  - is_true:  _all.total.refresh
-  - is_true:  _all.total.flush
-  - is_true:  _all.total.warmer
-  - is_true:  _all.total.query_cache
-  - is_true:  _all.total.fielddata
-  - is_true:  _all.total.completion
-  - is_true:  _all.total.segments
-  - is_true:  _all.total.translog
-  - is_true:  _all.total.recovery
-
----
-"Metric - one":
-  - do:
-      indices.stats: { metric: docs }
-
-  - is_true:   _all.total.docs
-  - is_false:  _all.total.store
-  - is_false:  _all.total.indexing
-  - is_false:  _all.total.get
-  - is_false:  _all.total.search
-  - is_false:  _all.total.merges
-  - is_false:  _all.total.refresh
-  - is_false:  _all.total.flush
-  - is_false:  _all.total.warmer
-  - is_false:  _all.total.query_cache
-  - is_false:  _all.total.fielddata
-  - is_false:  _all.total.completion
-  - is_false:  _all.total.segments
-  - is_false:  _all.total.translog
-  - is_false:  _all.total.recovery
-
----
-"Metric - multi":
-  - do:
-      indices.stats: { metric: [ store, get, merge ] }
-
-  - is_false:  _all.total.docs
-  - is_true:   _all.total.store
-  - is_false:  _all.total.indexing
-  - is_true:   _all.total.get
-  - is_false:  _all.total.search
-  - is_true:   _all.total.merges
-  - is_false:  _all.total.refresh
-  - is_false:  _all.total.flush
-  - is_false:  _all.total.warmer
-  - is_false:  _all.total.query_cache
-  - is_false:  _all.total.fielddata
-  - is_false:  _all.total.completion
-  - is_false:  _all.total.segments
-  - is_false:  _all.total.translog
-  - is_false:  _all.total.recovery
-
-
----
-"Metric - recovery":
-  - do:
-      indices.stats: { metric: [ recovery ] }
-
-  - is_false:  _all.total.docs
-  - is_false:  _all.total.store
-  - is_false:  _all.total.indexing
-  - is_false:  _all.total.get
-  - is_false:  _all.total.search
-  - is_false:  _all.total.merges
-  - is_false:  _all.total.refresh
-  - is_false:  _all.total.flush
-  - is_false:  _all.total.warmer
-  - is_false:  _all.total.query_cache
-  - is_false:  _all.total.fielddata
-  - is_false:  _all.total.completion
-  - is_false:  _all.total.segments
-  - is_false:  _all.total.translog
-  - is_true:   _all.total.recovery
-
----
-"Metric - _all include_segment_file_sizes":
-  - do:
-      indices.stats: { metric: _all, include_segment_file_sizes: true }
-
-  - is_true:   _all.total.docs
-  - is_true:   _all.total.store
-  - is_true:   _all.total.indexing
-  - is_true:   _all.total.get
-  - is_true:   _all.total.search
-  - is_true:   _all.total.merges
-  - is_true:   _all.total.refresh
-  - is_true:   _all.total.flush
-  - is_true:   _all.total.warmer
-  - is_true:   _all.total.query_cache
-  - is_true:   _all.total.fielddata
-  - is_true:   _all.total.completion
-  - is_true:   _all.total.segments
-  - is_true:   _all.total.translog
-  - is_true:   _all.total.recovery
-  - is_true:   _all.total.segments.file_sizes
-
----
-"Metric - segments include_segment_file_sizes":
-  - do:
-      indices.stats: { metric: segments, include_segment_file_sizes: true }
-
-  - is_false:  _all.total.docs
-  - is_false:  _all.total.store
-  - is_false:  _all.total.indexing
-  - is_false:  _all.total.get
-  - is_false:  _all.total.search
-  - is_false:  _all.total.merges
-  - is_false:  _all.total.refresh
-  - is_false:  _all.total.flush
-  - is_false:  _all.total.warmer
-  - is_false:  _all.total.query_cache
-  - is_false:  _all.total.fielddata
-  - is_false:  _all.total.completion
-  - is_true:   _all.total.segments
-  - is_false:  _all.total.translog
-  - is_false:  _all.total.recovery
-  - is_true:   _all.total.segments.file_sizes

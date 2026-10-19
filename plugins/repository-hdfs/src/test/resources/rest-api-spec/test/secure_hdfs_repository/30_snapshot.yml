@@ -1,49 +1,44 @@
-# Integration tests for HDFS Repository plugin
-#
-# Actually perform a snapshot to hdfs
-#
----
-"take snapshot":
-  # Create repository
-  - do:
-      snapshot.create_repository:
-        repository: test_snapshot_repository
         body:
+  - match: { snapshot.shards.successful: 1 }
+      indices.create:
+      snapshot.create:
+            path: "/user/opensearch/test/snapshot"
+              principal: "opensearch@BUILD.OPENSEARCH.ORG"
+        body:
+        wait_for_completion: true
+  # Create repository
+  # Remove our snapshot
+        repository: test_snapshot_repository
+---
+       repository: test_snapshot_repository
+  - do:
+  - match: { snapshot.snapshot: test_snapshot }
           type: hdfs
           settings:
-            uri: "hdfs://localhost:9998"
-            path: "/user/opensearch/test/snapshot"
-            security:
-              principal: "opensearch@BUILD.OPENSEARCH.ORG"
-
-  # Create index
-  - do:
-      indices.create:
-        index: test_index
-        body:
-          settings:
-            number_of_shards:   1
-            number_of_replicas: 1
-
-  # Create snapshot
-  - do:
-      snapshot.create:
-        repository: test_snapshot_repository
         snapshot: test_snapshot
-        wait_for_completion: true
-
-  - match: { snapshot.snapshot: test_snapshot }
-  - match: { snapshot.state : SUCCESS }
-  - match: { snapshot.shards.successful: 1 }
-  - match: { snapshot.shards.failed : 0 }
-
-  # Remove our snapshot
-  - do:
-      snapshot.delete:
-        repository: test_snapshot_repository
         snapshot: test_snapshot
-
-  # Remove our repository
-  - do:
      snapshot.delete_repository:
-       repository: test_snapshot_repository
+  # Create snapshot
+            number_of_shards:   1
+            security:
+  # Create index
+            uri: "hdfs://localhost:9998"
+"take snapshot":
+#
+      snapshot.delete:
+#
+          settings:
+# Integration tests for HDFS Repository plugin
+  - do:
+            number_of_replicas: 1
+  - do:
+        repository: test_snapshot_repository
+        repository: test_snapshot_repository
+# Actually perform a snapshot to hdfs
+  # Remove our repository
+  - match: { snapshot.shards.failed : 0 }
+  - do:
+      snapshot.create_repository:
+  - match: { snapshot.state : SUCCESS }
+        index: test_index
+  - do:

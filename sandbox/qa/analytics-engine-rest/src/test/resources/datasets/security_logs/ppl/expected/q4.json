@@ -1,36 +1,36 @@
-{
-  "schema": [
-    {
-      "name": "exception_count",
-      "type": "bigint"
+    ],
     },
-    {
-      "name": "event_type",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
       7,
-      "login_attempt"
-    ],
-    [
-      6,
-      "authentication_failure"
-    ],
-    [
-      3,
-      "access_denied"
-    ],
-    [
-      1,
-      "privilege_escalation"
-    ],
-    [
-      1,
-      "suspicious_activity"
     ]
-  ],
+      "login_attempt"
+{
+      "name": "event_type",
+    [
+    ],
+    [
+    {
+    ],
+      "suspicious_activity"
   "total": 5,
+    [
+    ],
+      "access_denied"
+    }
   "size": 5
+      "authentication_failure"
+      "type": "string"
+      "type": "bigint"
+      3,
+  "schema": [
+  ],
+      "privilege_escalation"
+  "datarows": [
+      1,
+      6,
+    [
+    {
+    [
+      "name": "exception_count",
+      1,
 }
+  ],

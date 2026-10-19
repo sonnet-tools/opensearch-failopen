@@ -1,30 +1,26 @@
-
----
-"Deprecated parameters should fail in Multi Get query":
-   - do:
-       index:
            index:  test_1
-           id:     1
-           body:   { foo: bar }
-
-   - do:
-       index:
-           index:  test_1
-           id:     2
-           body:   { foo: baz }
-
-   - do:
        catch:  bad_request
-       mget:
-           body:
-               docs:
                    - { _index: test_1, _id: 1, _routing : test1 }
-                   - { _index: test_1, _id: 2, _routing : test1 }
-
-   - do:
-       catch:  bad_request
-       mget:
+       index:
+           index:  test_1
            body:
-               docs:
-                   - { _index: test_1, _id: 1, _version : 1 }
                    - { _index: test_1, _id: 2, _version : 1 }
+               docs:
+       index:
+           id:     1
+       mget:
+               docs:
+       catch:  bad_request
+                   - { _index: test_1, _id: 2, _routing : test1 }
+"Deprecated parameters should fail in Multi Get query":
+                   - { _index: test_1, _id: 1, _version : 1 }
+           id:     2
+---
+           body:
+       mget:
+   - do:
+           body:   { foo: bar }
+           body:   { foo: baz }
+   - do:
+   - do:
+   - do:

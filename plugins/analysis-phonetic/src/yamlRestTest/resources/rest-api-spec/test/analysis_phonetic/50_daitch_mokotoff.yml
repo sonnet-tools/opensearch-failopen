@@ -1,29 +1,26 @@
-# Integration tests for Phonetic analysis components
 #
-
-
-"Daitch Mokotoff":
+                                daitch_mokotoff:
+                            analyzer:
     - do:
-        indices.create:
+    - match:  { tokens.0.token: "645740" }
+    - length: { tokens: 1 }
+                analyzer: my_analyzer
+                settings:
+                text: Moskowitz
+                            filter:
+                        analysis:
+                                my_analyzer:
+        indices.analyze:
+                                    type: phonetic
+# Integration tests for Phonetic analysis components
+"Daitch Mokotoff":
+            index: phonetic_sample
+                                    encoder: daitch_mokotoff
+            body:
             index:  phonetic_sample
             body:
-                settings:
-                    index:
-                        analysis:
-                            analyzer:
-                                my_analyzer:
                                     tokenizer:  standard
+                    index:
+        indices.create:
                                     filter: ["lowercase", "daitch_mokotoff"]
-                            filter:
-                                daitch_mokotoff:
-                                    type: phonetic
-                                    encoder: daitch_mokotoff
     - do:
-        indices.analyze:
-            index: phonetic_sample
-            body:
-                analyzer: my_analyzer
-                text: Moskowitz
-
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: "645740" }

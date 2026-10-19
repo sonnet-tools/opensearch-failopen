@@ -1,36 +1,36 @@
-{
-  "schema": [
-    {
       "name": "text",
-      "type": "string"
-    },
-    {
-      "name": "patterns_field",
+    ],
       "type": "string"
     }
-  ],
-  "datarows": [
-    [
+      "<*> <*> <*>"
       "hello world test",
-      "<*> <*> <*>"
-    ],
-    [
-      "sample data entry",
-      "<*> <*> <*>"
-    ],
-    [
-      "test example record",
-      "<*> <*> <*>"
-    ],
-    [
+  "datarows": [
       "another test case",
-      "<*> <*> <*>"
-    ],
+    {
+      "test example record",
+}
+  "schema": [
+    [
     [
       "final test entry",
-      "<*> <*> <*>"
-    ]
   ],
+  ],
+    {
+{
+      "sample data entry",
+    ],
+    [
+      "<*> <*> <*>"
+      "<*> <*> <*>"
+    ],
+      "<*> <*> <*>"
   "total": 5,
+      "name": "patterns_field",
+    [
+    ]
+    },
+      "<*> <*> <*>"
+    ],
+      "type": "string"
+    [
   "size": 5
-}

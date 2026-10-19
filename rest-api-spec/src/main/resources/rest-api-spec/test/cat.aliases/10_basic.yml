@@ -1,317 +1,257 @@
-
----
-"Help":
-
-
-  - do:
-      cat.aliases:
-        help: true
-
-  - match:
-      $body: |
-        /^  alias            .+   \n
-            index            .+   \n
-            filter           .+   \n
-            routing.index    .+   \n
-            routing.search   .+   \n
-            is_write_index   .+   \n
-        $/
-
----
-"Empty cluster":
-
-  - do:
-      cat.aliases: {}
-
-  - match:
-      $body: |
-            /^
-            $/
-
----
-"Simple alias":
-
-
-  - do:
-        indices.create:
-            index: test
-
-  - do:
-        indices.put_alias:
-            index: test
-            name:  test_alias
-
-  - do:
-      cat.aliases: {}
-
-  - match:
-      $body: |
-                /^
-                    test_alias          \s+
-                    test                \s+
-                    -                   \s+
-                    -                   \s+
-                    -                   \s+
-                    -                   \s+
-                $/
-
----
-"Complex alias":
-
-  - do:
-        indices.create:
-            index: test
-            body:
-                mappings:
-                    properties:
-                        foo:
-                            type: text
-
-  - do:
-        indices.put_alias:
-            index: test
-            name:  test_alias
-            body:
-                index_routing:  ir
-                search_routing: "sr1,sr2"
-                is_write_index: true
-                filter:
-                    term:
-                        foo: bar
-  - do:
-      cat.aliases: {}
-
-  - match:
-      $body: |
-                /^
-                    test_alias          \s+
-                    test                \s+
-                    [*]                 \s+
-                    ir                  \s+
-                    sr1,sr2             \s+
-                    true                \s+
-                $/
-
----
-"Alias name":
-
-  - do:
-        indices.create:
-            index: test
-
-  - do:
-        indices.put_alias:
-            index: test
-            name:  test_1
-
-  - do:
-        indices.put_alias:
-            index: test
-            name:  test_2
-
-  - do:
-      cat.aliases:
-        name: test_1
-
-  - match:
-      $body: /^test_1 .+ \n$/
-
-  - do:
-      cat.aliases:
-        name: test_2
-
-  - match:
-      $body: /^test_2 .+ \n$/
-
-  - do:
-      cat.aliases:
-        name: test_*
-
-  - match:
-      $body: / (^|\n)test_1 .+ \n/
-
-  - match:
-      $body: / (^|\n)test_2 .+ \n/
-
----
-"Multiple alias names":
-
-  - do:
-        indices.create:
-            index: test
-
-  - do:
-        indices.create:
-            index: test2
-  - do:
-        indices.create:
-            index: test3
-
-  - do:
-        indices.put_alias:
-            index: test
-            name: foo
-
-  - do:
-        indices.put_alias:
-            index: test2
-            name: bar
-  - do:
-        indices.put_alias:
-            index: test3
-            name: baz
-
-  - do:
-        cat.aliases:
-            name: foo,bar
-            v: true
-            h: [alias, index]
-            s: [index]
-
-  - match:
-      $body: |
-               /^  alias \s+ index \n
+        index: test_index
                    foo   \s+ test  \n
-                   bar   \s+ test2
-               $/
-
----
-"Column headers":
-
-  - do:
-        indices.create:
             index: test
-
+                    true                \s+
+        index: test_index
   - do:
-        indices.put_alias:
+      cat.aliases:
             index: test
-            name:  test_1
-
-  - do:
-        cat.aliases:
-            v: true
-            name: test*
-
   - match:
       $body: |
-               /^  alias           \s+
-                   index           \s+
-                   filter          \s+
-                   routing.index   \s+
-                   routing.search  \s+
-                   is_write_index
-                   \n
-                   test_1          \s+
-                   test            \s+
-                   -               \s+
-                   -               \s+
-                   -               \s+
-                   -               \s+
-               $/
-
+            routing.search   .+   \n
+            $/
 ---
-"Select columns":
-
+                my_alias \s+ test_index\n
   - do:
-        indices.create:
+                    -                   \s+
             index: test
-
+        body:
+  - do:
+  - match:
+  - do:
+"Alias against closed index":
+          aliases:
+        name: test_*
+      $body: |
+      $body: |
+            my_alias: {}
+  - do:
+"Alias sorting":
+            name: test*
+            test_alias: {}
+  - do:
+      $body: /^test_2 .+ \n$/
+  - do:
+  - match:
+  - match:
+                    -                   \s+
+                   -               \s+
+"Multiple alias names":
+                index \s+ alias \n
+            /^
+            index: test
+                    -                   \s+
+      $body: / (^|\n)test_2 .+ \n/
+            index: test
+      cat.aliases:
+      indices.create:
+                    test                \s+
+            s: [index]
+            /^
+"Alias name":
+                /^
+  - do:
+                   -               \s+
+            name: test*
+        s:      [index, alias]
+                    [*]                 \s+
+  - match:
+            v: true
+                other_alias \s+ other_index\n
+      cat.aliases:
+        indices.put_alias:
+                   bar   \s+ test2
+            index            .+   \n
+                   test            \s+
+  - match:
+  - do:
+---
+  - do:
+  - do:
+                        foo: bar
+            index: test2
+                my_alias \s+ test_index\n
+            $/
+        h:      [alias, index]
+      indices.close:
+                test_alias \s+ test_index\n
+  - do:
+  - do:
+               /^  alias           \s+
+---
+          aliases:
+            name: bar
+            h: [alias, index]
+                   index           \s+
+                    test                \s+
+      cat.aliases: {}
+  - do:
   - do:
         indices.put_alias:
-            index: test
-            name:  test_1
-
-  - do:
+            index: test2
+            name:  test_alias
+            name:  test_alias
+                   test_1          \s+
+            body:
+            other_alias: {}
+"Complex alias":
+---
+                    test_alias          \s+
         cat.aliases:
-            h:      [index, alias]
-            name: test*
-
+                   -               \s+
+        /^  alias            .+   \n
+  - match:
+                index_routing:  ir
+            index: test
+        indices.create:
+        $/
+                    properties:
+"Select columns":
+            index: test3
+        name: test_2
+  - do:
+      indices.create:
+            v:      true
+                other_alias \s+ other_index\n
+            name: foo,bar
+                   filter          \s+
   - match:
       $body: /^ test \s+ test_1 \s+ $/
-
-
+                    -                   \s+
   - do:
+      $body: |
+"Empty cluster":
+            index: test
         cat.aliases:
-            h:      [index, alias]
-            v:      true
-            name: test*
-  - match:
-      $body: |
-            /^
-                index \s+ alias \n
-                test  \s+ test_1 \n
+      $body: /^test_1 .+ \n$/
+            name: baz
+        index: other_index
+               /^  alias \s+ index \n
+                   -               \s+
+               $/
+        indices.create:
+        indices.put_alias:
+  - do:
             $/
-
----
-"Alias against closed index":
-
-
-  - do:
-      indices.create:
-        index: test_index
-        body:
-          aliases:
             test_alias: {}
-
-  - do:
-      indices.close:
-        index: test_index
-
-  - do:
-      cat.aliases:
-        name: test*
-
-  - match:
-      $body: |
-                /^
-                    test_alias          \s+
+            filter           .+   \n
+        indices.create:
                     test_index          \s+
                     -                   \s+
-                    -                   \s+
-                    -                   \s+
-                    -                   \s+
-                $/
-
 ---
-"Alias sorting":
-
+                    ir                  \s+
+                    -                   \s+
   - do:
+            name:  test_1
+  - do:
+                   routing.search  \s+
+                            type: text
+---
+  - do:
+                is_write_index: true
+      $body: / (^|\n)test_1 .+ \n/
+  - do:
+  - match:
+"Column headers":
+  - match:
+  - do:
+            name: test*
+            h:      [index, alias]
+                /^
+  - match:
+            name:  test_1
+        indices.put_alias:
+                   routing.index   \s+
+      $body: |
+---
+            name: foo
+      $body: |
+        indices.create:
+  - do:
+  - do:
+                    term:
+        name: test*
+            is_write_index   .+   \n
+      cat.aliases:
+      $body: |
       indices.create:
+  - match:
+      cat.aliases: {}
+        indices.create:
+        help: true
+  - do:
+  - do:
+            index: test3
+                    test_alias          \s+
+                    -                   \s+
+        h:      [alias, index]
+                   is_write_index
+                $/
+  - do:
+                   \n
+               $/
+---
+          aliases:
+  - do:
+                /^
+      cat.aliases:
+  - do:
+        indices.put_alias:
+                        foo:
+                    test_alias          \s+
+                $/
         index: test_index
-        body:
-          aliases:
-            test_alias: {}
-            my_alias: {}
-
+        indices.put_alias:
+                    sr1,sr2             \s+
+        cat.aliases:
+        indices.put_alias:
+        name: test_1
   - do:
-      indices.create:
-        index: other_index
-        body:
-          aliases:
-            other_alias: {}
-
-  - do:
-      cat.aliases:
-        h:      [alias, index]
-        s:      [index, alias]
-
-  - match:
-      $body: |
+        indices.create:
+                mappings:
+                test  \s+ test_1 \n
+            name:  test_2
             /^
-                other_alias \s+ other_index\n
-                my_alias \s+ test_index\n
-                test_alias \s+ test_index\n
-            $/
-
-  - do:
-      cat.aliases:
-        h:      [alias, index]
+      $body: |
+---
+        body:
         s:      [index, "a:desc"]
-
-  - match:
+        indices.create:
       $body: |
-            /^
-                other_alias \s+ other_index\n
+        indices.create:
+---
+            body:
+                search_routing: "sr1,sr2"
+            index: test
+  - do:
+  - do:
+                    -                   \s+
+      cat.aliases:
+            routing.index    .+   \n
                 test_alias \s+ test_index\n
-                my_alias \s+ test_index\n
+            index: test
+            /^
+            index: test
+      $body: |
+      cat.aliases: {}
+            index: test
+      cat.aliases:
             $/
+  - match:
+  - match:
+            v: true
+        indices.put_alias:
+  - match:
+            index: test
+  - do:
+  - do:
+                filter:
+        cat.aliases:
+            index: test
+                $/
+        body:
+"Simple alias":
+"Help":
+        indices.put_alias:
+            h:      [index, alias]
+            name:  test_1

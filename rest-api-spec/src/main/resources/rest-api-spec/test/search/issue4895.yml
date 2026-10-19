@@ -1,33 +1,29 @@
----
-setup:
-  - do:
-      indices.create:
-          index:  test
-
-  - do:
-      index:
-          index:  test
-          id:     1
-          body:
-              user : foo
-              amount : 35
-              data : some
-
-  - do:
-      indices.refresh:
-        index: [test]
-
----
-"Test with _local preference placed in query body - should fail":
-
-  - do:
-      catch: bad_request
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          body:
               query:
-                  term:
-                      data: some
-                  preference: _local
               stored_fields: [user,amount]
+  - do:
+  - do:
+"Test with _local preference placed in query body - should fail":
+              amount : 35
+        index: [test]
+          body:
+---
+      indices.create:
+  - do:
+setup:
+      catch: bad_request
+              data : some
+      search:
+          id:     1
+              user : foo
+                      data: some
+                  term:
+          index:  test
+      indices.refresh:
+          index:  test
+  - do:
+          rest_total_hits_as_int: true
+          body:
+          index: test
+      index:
+                  preference: _local
+---

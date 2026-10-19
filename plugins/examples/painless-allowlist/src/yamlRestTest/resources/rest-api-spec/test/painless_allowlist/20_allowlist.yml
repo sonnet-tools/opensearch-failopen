@@ -1,26 +1,23 @@
-# Example test using allowlisted members and methods
-
-"Allowlisted custom class":
-    - do:
-        index:
-            index: test
-            id: 1
-            body: { "num1": 1.0 }
-    - do:
-        indices.refresh: {}
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
             body:
-                query:
-                    match_all: {}
-                script_fields:
+            id: 1
                     sNum1:
+            rest_total_hits_as_int: true
+        search:
+        index:
+                    match_all: {}
                         script:
-                            source: "def e = new ExampleAllowlistedClass(6, 42); ExampleAllowlistedClass.staticMethod(); return e.publicMember + e.privateMemberAccessor + ExampleAllowlistedClass.CONSTANT + '2'.toInt()"
                             lang: painless
-
+            index: test
+"Allowlisted custom class":
+            index: test
+                script_fields:
     - match: { hits.total: 1 }
+                            source: "def e = new ExampleAllowlistedClass(6, 42); ExampleAllowlistedClass.staticMethod(); return e.publicMember + e.privateMemberAccessor + ExampleAllowlistedClass.CONSTANT + '2'.toInt()"
+        indices.refresh: {}
+                query:
+    - do:
+            body: { "num1": 1.0 }
     - match: { hits.hits.0.fields.sNum1.0: 92 }
+# Example test using allowlisted members and methods
+    - do:
+    - do:

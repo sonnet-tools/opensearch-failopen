@@ -1,13 +1,13 @@
+  ],
+    [10, "dev"]
+  "size": 3
+  ],
+    {"name": "resource.k8s.namespace.name", "type": "string"}
+  "total": 3,
+    [70, "prod"],
+  "datarows": [
 {
+}
   "schema": [
     {"name": "c", "type": "bigint"},
-    {"name": "resource.k8s.namespace.name", "type": "string"}
-  ],
-  "datarows": [
-    [70, "prod"],
     [20, "staging"],
-    [10, "dev"]
-  ],
-  "total": 3,
-  "size": 3
-}

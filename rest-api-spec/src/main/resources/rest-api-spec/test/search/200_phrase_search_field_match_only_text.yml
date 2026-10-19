@@ -1,67 +1,56 @@
----
-"search with indexed phrases":
-  - skip:
-      version: " - 2.11.99"
-      reason: "match_only_text was added in 2.12"
-
+  - match: {hits.total: 1}
+        rest_total_hits_as_int: true
   - do:
-      indices.create:
-        index:  test
         body:
+              text: "peter piper picked"
+      search:
+        rest_total_hits_as_int: true
+            match_phrase:
+          query:
+        body:
+          query:
+      reason: "match_only_text was added in 2.12"
+"search with indexed phrases":
+        q: '"peter piper"~1'
+  - do:
+          index:  test
+      indices.create:
+  - do:
+        index: test
+          query:
+      version: " - 2.11.99"
+        index: test
+        index: [test]
+        body:
+  - match: {hits.total: 1}
+                type: match_only_text
           mappings:
+        rest_total_hits_as_int: true
+      indices.refresh:
+      search:
+        body:
             properties:
               text:
-                type: match_only_text
-
+            match_phrase:
   - do:
-      index:
-          index:  test
-          id:     1
-          body:   { text: "peter piper picked a peck of pickled peppers" }
-
-  - do:
-      indices.refresh:
-        index: [test]
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
             match_phrase:
               text:
-                query: "peter piper"
-
-  - match: {hits.total: 1}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        q: '"peter piper"~1'
         df: text
-
-  - match: {hits.total: 1}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
         index: test
-        body:
-          query:
-            match_phrase:
-              text: "peter piper picked"
-
+          body:   { text: "peter piper picked a peck of pickled peppers" }
+  - skip:
+      index:
   - match: {hits.total: 1}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            match_phrase:
               text: "piper"
-
+        index:  test
+  - do:
+  - do:
+      search:
+                query: "peter piper"
   - match: {hits.total: 1}
+  - do:
+          id:     1
+        index: test
+        rest_total_hits_as_int: true
+      search:
+---

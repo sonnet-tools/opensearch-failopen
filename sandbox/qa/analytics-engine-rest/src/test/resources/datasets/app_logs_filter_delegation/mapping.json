@@ -1,44 +1,44 @@
-{
-  "settings": {
+        "type": "long"
+        "type": "text",
+  }
+      "bytes_sent": {
+}
+    }
+      },
+          }
+        "type": "keyword"
+      },
+        "fields": {
+            "type": "keyword"
+        "type": "text",
+      "error_message": {
     "number_of_shards": 1,
-    "number_of_replicas": 0
-  },
-  "mappings": {
-    "properties": {
-      "@timestamp": {
-        "type": "date"
+      },
       },
       "log_level": {
-        "type": "keyword"
-      },
-      "message": {
-        "type": "text",
-        "fields": {
-          "keyword": {
-            "type": "keyword"
-          }
         }
-      },
-      "service_name": {
-        "type": "keyword"
-      },
-      "host": {
-        "type": "keyword"
-      },
       "status": {
-        "type": "long"
-      },
-      "bytes_sent": {
-        "type": "long"
-      },
-      "error_message": {
-        "type": "text",
+      "service_name": {
         "fields": {
+    "number_of_replicas": 0
+        "type": "date"
+      "message": {
+      "@timestamp": {
+    "properties": {
           "keyword": {
-            "type": "keyword"
-          }
+{
+        "type": "long"
         }
+      "host": {
+          "keyword": {
+      },
       }
-    }
-  }
-}
+  },
+            "type": "keyword"
+  "mappings": {
+  "settings": {
+      },
+        "type": "keyword"
+      },
+        "type": "keyword"
+          }

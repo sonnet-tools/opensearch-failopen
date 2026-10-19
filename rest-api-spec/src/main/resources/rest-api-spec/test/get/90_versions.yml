@@ -1,78 +1,68 @@
----
-"Versions":
-
  - do:
-      index:
+          version: 10
+          index:  test_1
           index:  test_1
           id:     1
-          body:   { foo: bar }
+          id:     1
+      catch:      conflict
+          id:     1
+          id:     1
  - match:   { _version: 1}
-
+ - do:
+          body:   { foo: bar }
+          version: 1
+      catch:      conflict
+      get:
+          id:     1
+      get:
+          index:  test_1
+          index:  test_1
+ - do:
+          version: 2
+          version_type: external_gte
+          id:     1
+      get:
+          id:     1
+      get:
+      get:
+ - do:
+          version: 10
+          index:  test_1
+      catch:      conflict
+ - do:
+          index:  test_1
+ - match:   { _id: "1" }
+          id:     1
+      index:
+ - match:   { _id: "1" }
+      get:
+          version: 2
+---
+          version: 1
+      get:
+          version_type: external_gte
+ - match:   { _version: 2}
+          version: 1
+          body:   { foo: bar }
+          version: 2
+ - match:   { _id: "1" }
  - do:
       index:
           index:  test_1
-          id:     1
-          body:   { foo: bar }
- - match:   { _version: 2}
-
  - do:
-      get:
-          index:  test_1
-          id:     1
-          version: 2
- - match:   { _id: "1" }
-
- - do:
-      catch:      conflict
-      get:
-          index:  test_1
-          id:     1
-          version: 1
-
- - do:
-      get:
-          index:  test_1
-          id:     1
-          version: 2
-          version_type: external
- - match:   { _id: "1" }
-
- - do:
-      catch:      conflict
-      get:
-          index:  test_1
-          id:     1
-          version: 10
-          version_type: external
-
- - do:
-      catch:      conflict
-      get:
-          index:  test_1
-          id:     1
-          version: 1
-          version_type: external
-
- - do:
-      get:
-          index:  test_1
-          id:     1
-          version: 2
           version_type: external_gte
- - match:   { _id: "1" }
-
- - do:
       catch:      conflict
+          index:  test_1
+ - do:
+          version_type: external
+ - do:
       get:
           index:  test_1
+          version_type: external
           id:     1
-          version: 10
-          version_type: external_gte
-
+"Versions":
  - do:
-      catch:      conflict
-      get:
           index:  test_1
           id:     1
-          version: 1
-          version_type: external_gte
+      catch:      conflict
+          version_type: external

@@ -1,35 +1,35 @@
-{
-  "schema": [
-    {
-      "name": "text",
-      "type": "string"
-    },
-    {
-      "name": "sub",
-      "type": "string"
-    },
-    {
-      "name": "pos",
-      "type": "int"
-    }
   ],
-  "datarows": [
-    [
+      "type": "string"
+      "name": "pos",
+    },
       "hello world test",
-      "hello",
+      "name": "sub",
+    {
       13
-    ],
-    [
-      "sample data entry",
-      "sampl",
-      0
-    ],
-    [
-      "test example record",
-      "test ",
-      1
+  "datarows": [
     ]
   ],
-  "total": 3,
-  "size": 3
+    ],
+      "test example record",
+      "sampl",
+      "type": "string"
 }
+      "hello",
+      0
+    [
+  "size": 3
+      "type": "int"
+      1
+    {
+      "test ",
+  "schema": [
+      "name": "text",
+    ],
+    }
+    },
+    [
+{
+    {
+  "total": 3,
+      "sample data entry",
+    [

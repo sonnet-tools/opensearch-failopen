@@ -1,72 +1,65 @@
----
-"Bad window":
-
-
-  - do:
-      catch: /\[window\] must be a positive, non-zero integer\./
-      search:
         rest_total_hits_as_int: true
-        body:
-          size: 0
-          aggs:
-            the_histo:
-              date_histogram:
-                field: "date"
-                calendar_interval: "1d"
-              aggs:
-                the_avg:
-                  avg:
-                    field: "value_field"
-                the_mov_fn:
-                  moving_fn:
-                    buckets_path: "the_avg"
-                    window: -1
-                    script: "MovingFunctions.windowMax(values)"
-
+      search:
+      catch: /\[window\] must be a positive, non-zero integer\./
 ---
-"Bad window deprecated interval":
-
-  - skip:
-
+                the_mov_fn:
+          size: 0
+          size: 0
       features: "allowed_warnings"
-
-  - do:
-      catch: /\[window\] must be a positive, non-zero integer\./
-      allowed_warnings:
-        - "[interval] on [date_histogram] is deprecated, use [fixed_interval] or [calendar_interval] in the future."
-      search:
-        rest_total_hits_as_int: true
-        body:
           size: 0
-          aggs:
-            the_histo:
-              date_histogram:
-                field: "date"
-                interval: "1d"
-              aggs:
-                the_avg:
-                  avg:
-                    field: "value_field"
-                the_mov_fn:
-                  moving_fn:
-                    buckets_path: "the_avg"
-                    window: -1
                     script: "MovingFunctions.windowMax(values)"
----
-"Not under date_histo":
-
-  - do:
-      catch: /\[window\] must be a positive, non-zero integer\./
       search:
-        rest_total_hits_as_int: true
-        body:
-          size: 0
+              aggs:
+      catch: /\[window\] must be a positive, non-zero integer\./
           aggs:
-            the_avg:
-              avg:
+        body:
                 field: "value_field"
-            the_mov_fn:
-              moving_fn:
+            the_histo:
+"Bad window deprecated interval":
                 buckets_path: "the_avg"
+"Bad window":
+  - do:
+      search:
+            the_avg:
+                  avg:
+        rest_total_hits_as_int: true
                 window: -1
+                calendar_interval: "1d"
+---
+---
+                the_avg:
+        - "[interval] on [date_histogram] is deprecated, use [fixed_interval] or [calendar_interval] in the future."
+                    window: -1
+                    field: "value_field"
+                    buckets_path: "the_avg"
+              aggs:
+              date_histogram:
+                interval: "1d"
+                the_avg:
+  - do:
+            the_histo:
+                  moving_fn:
+      catch: /\[window\] must be a positive, non-zero integer\./
+                  moving_fn:
+          aggs:
+            the_mov_fn:
+      allowed_warnings:
+                    field: "value_field"
+                field: "date"
+              moving_fn:
+              avg:
+                field: "date"
                 script: "MovingFunctions.windowMax(values)"
+              date_histogram:
+                  avg:
+        body:
+                    buckets_path: "the_avg"
+  - do:
+"Not under date_histo":
+  - skip:
+          aggs:
+        body:
+                    window: -1
+        rest_total_hits_as_int: true
+                    script: "MovingFunctions.windowMax(values)"
+                the_mov_fn:

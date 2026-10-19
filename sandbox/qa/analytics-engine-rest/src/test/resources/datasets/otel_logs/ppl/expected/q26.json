@@ -1,13 +1,13 @@
-{
-  "schema": [
     {"name": "c", "type": "bigint"},
-    {"name": "sev_band", "type": "string"}
-  ],
-  "datarows": [
-    [80, "mid"],
-    [15, "high"],
+  "schema": [
+{
     [5, "low"]
   ],
   "total": 3,
+    {"name": "sev_band", "type": "string"}
+    [80, "mid"],
+  "datarows": [
+    [15, "high"],
   "size": 3
 }
+  ],

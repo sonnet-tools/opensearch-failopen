@@ -1,63 +1,63 @@
-{
-  "indices.delete_alias":{
-    "documentation":{
-      "url":"https://www.elastic.co/guide/en/elasticsearch/reference/master/indices-aliases.html",
-      "description":"Deletes an alias."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/{index}/_alias/{name}",
-          "methods":[
-            "DELETE"
-          ],
-          "parts":{
-            "index":{
-              "type":"list",
-              "description":"A comma-separated list of index names (supports wildcards); use `_all` for all indices"
-            },
-            "name":{
-              "type":"list",
-              "description":"A comma-separated list of aliases to delete (supports wildcards); use `_all` to delete all aliases for the specified indices."
             }
-          }
-        },
-        {
-          "path":"/{index}/_aliases/{name}",
-          "methods":[
-            "DELETE"
-          ],
-          "parts":{
-            "index":{
-              "type":"list",
-              "description":"A comma-separated list of index names (supports wildcards); use `_all` for all indices"
-            },
-            "name":{
-              "type":"list",
-              "description":"A comma-separated list of aliases to delete (supports wildcards); use `_all` to delete all aliases for the specified indices."
-            }
-          }
-        }
-      ]
-    },
-    "params":{
-      "timeout":{
-        "type":"time",
-        "description":"Explicit timestamp for the document"
-      },
-      "master_timeout":{
-        "type":"time",
         "description":"Specify timeout for connection to master",
-        "deprecated":{
-          "version":"2.0.0",
-          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
-        }
-      },
-      "cluster_manager_timeout":{
+              "type":"list",
+              "description":"A comma-separated list of index names (supports wildcards); use `_all` for all indices"
+        {
         "type":"time",
-        "description":"Specify timeout for connection to cluster-manager node"
-      }
+        "type":"time",
+      ]
+        }
+              "description":"A comma-separated list of aliases to delete (supports wildcards); use `_all` to delete all aliases for the specified indices."
+            "index":{
+          "parts":{
+          "methods":[
     }
-  }
+          "version":"2.0.0",
+            "index":{
+      },
+          "path":"/{index}/_aliases/{name}",
+            "DELETE"
+          ],
+    "stability":"stable",
+        "description":"Explicit timestamp for the document"
+    },
+              "type":"list",
+          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
+{
+          "parts":{
+      "timeout":{
+  "indices.delete_alias":{
+          "methods":[
+              "type":"list",
+              "description":"A comma-separated list of index names (supports wildcards); use `_all` for all indices"
+        "deprecated":{
+        }
 }
+              "description":"A comma-separated list of aliases to delete (supports wildcards); use `_all` to delete all aliases for the specified indices."
+      "url":"https://www.elastic.co/guide/en/elasticsearch/reference/master/indices-aliases.html",
+            }
+    },
+      "paths":[
+          }
+      "description":"Deletes an alias."
+        {
+        "description":"Specify timeout for connection to cluster-manager node"
+            "DELETE"
+        },
+      "master_timeout":{
+          ],
+            "name":{
+              "type":"list",
+      },
+    "documentation":{
+          }
+            },
+    "url":{
+  }
+      }
+            "name":{
+        "type":"time",
+      "cluster_manager_timeout":{
+          "path":"/{index}/_alias/{name}",
+    "params":{
+            },

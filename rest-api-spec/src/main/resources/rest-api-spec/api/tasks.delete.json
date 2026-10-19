@@ -1,26 +1,26 @@
-{
+              "description":"Delete the stored completed task result with specified id (node_id:task_number)"
   "tasks.delete":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/tasks/",
+    "stability":"experimental",
+            }
+          ],
+          "path":"/_tasks/{task_id}",
+      ]
+    "params":{}
       "description":"Deletes a stored completed task result."
     },
-    "stability":"experimental",
-    "url":{
-      "paths":[
         {
-          "path":"/_tasks/{task_id}",
-          "methods":[
-            "DELETE"
-          ],
           "parts":{
-            "task_id":{
-              "type":"string",
-              "description":"Delete the stored completed task result with specified id (node_id:task_number)"
-            }
+          "methods":[
+{
+            "DELETE"
+      "paths":[
           }
-        }
-      ]
+      "url":"https://opensearch.org/docs/latest/api-reference/tasks/",
+            "task_id":{
     },
-    "params":{}
+        }
   }
+    "documentation":{
 }
+              "type":"string",
+    "url":{

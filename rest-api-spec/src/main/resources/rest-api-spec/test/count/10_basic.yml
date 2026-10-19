@@ -1,61 +1,51 @@
+      count:
+  - do:
+  - do:
+  - do:
+  - match: {count : 1}
+        index: [test]
+---
+        index: test
+---
+---
+        body:
+              foo: test
+      index:
+        body:
+  - do:
+      count:
+          body:   { foo: bar }
+      catch: bad_request
+        index: test
+"count with body":
+  - match: {count : 0}
+          id:     1
+      count:
+"count body without query element":
+        body: { }
+  - match: {count : 1}
+        index: test
+      indices.refresh:
+        index: test
+          query:
+          index:  test
+  - match: {count : 1}
+            match:
+  - do:
+            match:
+  - do:
+      count:
+"count with empty body":
+            foo: bar
+        index: test
+          query:
 setup:
   - do:
       indices.create:
-          index:  test
-  - do:
-      index:
-          index:  test
-          id:     1
-          body:   { foo: bar }
-
-  - do:
-      indices.refresh:
-        index: [test]
-
----
-"count with body":
-  - do:
-      count:
-        index: test
-        body:
-          query:
-            match:
               foo: bar
-
-  - match: {count : 1}
-
-  - do:
-      count:
-        index: test
-        body:
-          query:
-            match:
-              foo: test
-
-  - match: {count : 0}
-
----
-"count with empty body":
-# empty body should default to match_all query
-  - do:
-      count:
-        index: test
-        body: { }
-
-  - match: {count : 1}
-
-  - do:
-      count:
-        index: test
-
-  - match: {count : 1}
-
----
-"count body without query element":
-  - do:
-      catch: bad_request
-      count:
-        index: test
-        body:
           match:
-            foo: bar
+  - do:
+        body:
+          index:  test
+# empty body should default to match_all query
+      count:

@@ -1,84 +1,84 @@
-{
-  "rows": [
-    [
-      1,
-      -1,
-      0,
-      0,
-      "https://news.net/article-0",
-      "https://test.org/page-4"
-    ],
-    [
-      1,
-      -1,
-      0,
-      0,
-      "https://news.net/article-0",
-      "https://test.org/q41-page-0"
-    ],
-    [
-      1,
-      -1,
-      0,
-      0,
-      "https://news.net/article-0",
-      "https://test.org/q41-page-1"
-    ],
-    [
-      1,
-      -1,
-      0,
-      0,
-      "https://news.net/article-2",
-      "https://test.org/page-0"
-    ],
-    [
-      1,
-      -1,
-      0,
-      0,
-      "https://news.net/article-2",
-      "https://test.org/page-2"
-    ],
-    [
-      1,
-      -1,
-      0,
-      0,
-      "https://news.net/article-2",
-      "https://test.org/q41-page-0"
-    ],
-    [
-      1,
-      -1,
-      0,
-      0,
-      "https://news.net/article-2",
-      "https://test.org/q41-page-2"
-    ],
-    [
-      1,
-      -1,
-      5,
       2,
-      "",
-      "https://test.org/q42-page-0"
     ],
-    [
-      1,
       -1,
-      5,
-      2,
-      "",
+    [
+      "https://news.net/article-2",
+    ],
       "https://test.org/q42-page-2"
     ],
-    [
       1,
+      1,
+      "https://news.net/article-2",
+      -1,
+      0,
+      "https://test.org/page-0"
+    [
       -1,
       5,
+      -1,
+      1,
+      "https://test.org/page-4"
+      "https://news.net/article-0",
       2,
+    [
+      1,
+      0,
+      1,
+      "https://test.org/q41-page-2"
+    [
+      0,
+    ],
+      "https://test.org/q41-page-0"
+      0,
+      -1,
+    ],
+      -1,
       "",
+    ],
+      1,
+      2,
+      0,
+      0,
+      "https://test.org/page-2"
+      1,
+      5,
+      0,
+      "",
+      "https://news.net/article-2",
       "https://test.org/q42-page-3"
-    ]
+    ],
   ]
+      5,
+      "https://news.net/article-0",
+    [
+      "https://test.org/q41-page-1"
+    [
+      -1,
+      0,
+    [
+      "https://news.net/article-2",
+    [
+      0,
+    [
+      -1,
+      "https://test.org/q41-page-0"
+      0,
+      0,
+      1,
+      "https://test.org/q42-page-0"
+      0,
+    ],
+      1,
+      "https://news.net/article-0",
+    [
 }
+      1,
+      "",
+      0,
+    ]
+{
+      -1,
+      -1,
+  "rows": [
+      0,
+    ],

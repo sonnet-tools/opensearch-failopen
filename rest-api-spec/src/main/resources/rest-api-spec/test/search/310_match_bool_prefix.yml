@@ -1,361 +1,308 @@
-setup:
-
-
-  - do:
-      indices.create:
-        index:  test
-        body:
-          mappings:
-            properties:
-              my_field1:
-                type: text
-              my_field2:
-                type: text
-
-  - do:
-      index:
-        index: test
-        id: 1
-        body:
-          my_field1: "brown fox jump"
-          my_field2: "xylophone"
-
-  - do:
-      index:
-        index: test
-        id: 2
-        body:
-          my_field1: "brown emu jump"
-          my_field2: "xylophone"
-
-  - do:
-      index:
-        index: test
-        id: 3
-        body:
-          my_field1: "jumparound"
-          my_field2: "emu"
-
-  - do:
-      index:
-        index: test
-        id: 4
-        body:
-          my_field1: "dog"
-          my_field2: "brown fox jump lazy"
-
-  - do:
-      indices.refresh: {}
-
----
-"scoring complete term":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
             match_bool_prefix:
-              my_field1: "brown fox jump"
-
-  - match: { hits.total: 3 }
-  - match: { hits.hits.0._source.my_field1: "brown fox jump" }
-  - match: { hits.hits.1._source.my_field1: "brown emu jump" }
-  - match: { hits.hits.2._source.my_field1: "jumparound" }
-
+      search:
+"multi_match multiple fields partial term":
+          query:
+              type: bool_prefix
+        rest_total_hits_as_int: true
+            multi_match:
+        rest_total_hits_as_int: true
+                query: "brown fox jump"
 ---
-"scoring partial term":
-
+        body:
+  - match: { hits.hits.0._source.my_field1: "brown fox jump" }
+"operator":
+  - match: { hits.hits.2._source.my_field1: "jumparound" }
+  - match: { hits.hits.0._source.my_field2: "emu" }
+        rest_total_hits_as_int: true
+  - match: { hits.hits.1._source.my_field1: "brown emu jump" }
+  - match: { hits.hits.0._id: "1" }
+        rest_total_hits_as_int: true
+          my_field1: "brown fox jump"
+        body:
+  - match: { hits.hits.2._source.my_field1: "jumparound" }
+              my_field1:
   - do:
       search:
-        rest_total_hits_as_int: true
+---
+---
+              query: "brown fox ju"
+  - do:
         index: test
         body:
+        rest_total_hits_as_int: true
+          my_field2: "xylophone"
+  - do:
+              query: "brown emu"
           query:
+"scoring partial term":
+          query:
+---
+  - do:
+  - do:
+          my_field2: "xylophone"
+  - do:
+            multi_match:
+        body:
+        body:
+          my_field2: "brown fox jump lazy"
+      indices.create:
+              query: "brown fox jump la"
+  - do:
+---
+        rest_total_hits_as_int: true
+                query: "brown fox jump"
+---
+          query:
+          my_field2: "emu"
+          my_field1: "jumparound"
+      search:
+  - do:
+      search:
+  - match: { hits.hits.1._source.my_field1: "brown emu jump" }
+  - do:
+        id: 3
+---
+  - match: { hits.hits.1._id: "2" }
+  - match: { hits.total: 3 }
+"multi_match multiple fields with cutoff_frequency throws exception":
+      index:
+        rest_total_hits_as_int: true
+      search:
+            match_bool_prefix:
+      search:
+      search:
+            properties:
+        rest_total_hits_as_int: true
+        index: test
+            multi_match:
+              type: bool_prefix
+                fuzzy_transpositions: true
+  - match: { hits.hits.0._source.my_field1: "brown fox jump" }
+              slop: 1
+          query:
+---
+            multi_match:
+"fuzziness":
+        body:
+      catch: /\[slop\] not allowed for type \[bool_prefix\]/
+  - match: { hits.hits.1._source.my_field1: "brown fox jump" }
+              query: "brown"
+        rest_total_hits_as_int: true
+              my_field2:
+  - match: { hits.hits.2._id: "2" }
+  - match: { hits.hits.2._source.my_field1: "jumparound" }
+        id: 2
+  - match: { hits.hits.0._id: "1" }
+              fields: [ "my_field1", "my_field2" ]
+        index: test
+              query: "BROWN FOX JUMP dog"
+  - match: { hits.hits.2._id: "3" }
+  - match: { hits.total: 3 }
+      search:
+        index: test
+              query: "brown fox jump laz"
+              query: "dob nomatch"
+          query:
+  - match: { hits.hits.0._source.my_field2: "brown fox jump lazy" }
+              type: bool_prefix
+              fuzziness: 1
+---
+  - match: { hits.total: 3 }
+  - do:
+                fuzziness: 1
+      index:
+        index: test
+              type: bool_prefix
+      search:
+  - match: { hits.total: 1 }
+  - match: { hits.hits.0._id: "4" }
+      indices.refresh: {}
+  - match: { hits.hits.0._id: "4" }
+              type: bool_prefix
+  - match: { hits.total: 1 }
+              query: "brown fox jump lazy"
+  - match: { hits.hits.1._id: "1" }
+              fields: [ "my_field1", "my_field2" ]
+  - do:
+        id: 1
+  - match: { hits.hits.1._id: "2" }
+              fields: [ "my_field1", "my_field2" ]
+  - do:
+  - match: { hits.hits.2._id: "3" }
+                operator: AND
+        index: test
+  - do:
+  - do:
+            multi_match:
+        rest_total_hits_as_int: true
+        body:
+        body:
+  - do:
+                query: "xylophoen foo"
+              type: bool_prefix
+---
+                minimum_should_match: 3
+            multi_match:
+      index:
+  - match: { hits.hits.2._id: "3" }
+  - match: { hits.hits.0._source.my_field2: "xylophone" }
+---
+            multi_match:
+      search:
+---
+  - match: { hits.hits.0._id: "4" }
+        rest_total_hits_as_int: true
+          query:
+          mappings:
+          query:
+"multi_match multiple fields with slop throws exception":
+  - match: { hits.hits.0._source.my_field1: "brown fox jump" }
+              my_field1:
+      search:
+              my_field1:
+  - match: { hits.hits.0._id: "3" }
+  - match: { hits.hits.2._source.my_field1: "brown emu jump" }
+                type: text
+  - do:
+                query: "BROWN dog"
+              type: bool_prefix
+        index: test
+        index: test
+              fields: [ "my_field1" ]
+                prefix_length: 1
+              fields: [ "my_field1", "my_field2" ]
+  - match: { hits.hits.0._source.my_field1: "dog" }
+                fuzzy_rewrite: constant_score
+              my_field1:
+"minimum should match":
+          my_field1: "dog"
+              fields: [ "my_field1", "my_field2" ]
+  - do:
+  - match: { hits.total: 1 }
+        index: test
+        rest_total_hits_as_int: true
+"multi_match multiple fields with analyzer":
+              type: bool_prefix
+          my_field1: "brown emu jump"
+        index: test
+              fields: [ "my_field1", "my_field2" ]
+  - match: { hits.total: 3 }
+setup:
+---
+        body:
+              fields: [ "my_field1" ]
+  - match: { hits.hits.0._source.my_field1: "dog" }
+              minimum_should_match: 4
+  - match: { hits.total: 1 }
+              query: "brown"
+            match_bool_prefix:
+        index: test
+      search:
+            match_bool_prefix:
+      search:
+"multi_match multiple fields with fuzziness":
+  - match: { hits.hits.1._source.my_field2: "xylophone" }
+  - match: { hits.hits.0._id: "4" }
+"scoring complete term":
+"multi_match multiple fields with boost":
+  - match: { hits.hits.1._source.my_field1: "brown emu jump" }
+              my_field1: "brown fox jump"
+  - match: { hits.hits.0._source.my_field1: "brown fox jump" }
+  - do:
+      search:
+              cutoff_frequency: 0.001
+          query:
+        index: test
             match_bool_prefix:
               my_field1: "brown fox ju"
-
-  - match: { hits.total: 3 }
-  - match: { hits.hits.0._id: "1" }
-  - match: { hits.hits.0._source.my_field1: "brown fox jump" }
-  - match: { hits.hits.1._id: "2" }
-  - match: { hits.hits.1._source.my_field1: "brown emu jump" }
-  - match: { hits.hits.2._id: "3" }
-  - match: { hits.hits.2._source.my_field1: "jumparound" }
-
----
-"minimum should match":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            match_bool_prefix:
-              my_field1:
-                query: "brown fox jump"
-                minimum_should_match: 3
-
-  - match: { hits.total: 1 }
-  - match: { hits.hits.0._id: "1" }
-  - match: { hits.hits.0._source.my_field1: "brown fox jump" }
-
----
-"analyzer":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            match_bool_prefix:
-              my_field1:
-                query: "BROWN dog"
-                analyzer: whitespace                # this analyzer doesn't lowercase terms
-
-  - match: { hits.total: 1 }
-  - match: { hits.hits.0._id: "4" }
-  - match: { hits.hits.0._source.my_field1: "dog" }
-
----
-"operator":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            match_bool_prefix:
-              my_field1:
-                query: "brown fox jump"
-                operator: AND
-
-  - match: { hits.total: 1 }
-  - match: { hits.hits.0._id: "1" }
-  - match: { hits.hits.0._source.my_field1: "brown fox jump" }
-
----
-"fuzziness":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            match_bool_prefix:
-              my_field2:
-                query: "xylophoen foo"
-                fuzziness: 1
-                prefix_length: 1
-                max_expansions: 10
-                fuzzy_transpositions: true
-                fuzzy_rewrite: constant_score
-
-  - match: { hits.total: 2 }
-  - match: { hits.hits.0._source.my_field2: "xylophone" }
-  - match: { hits.hits.1._source.my_field2: "xylophone" }
-
----
-"multi_match single field complete term":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            multi_match:
-              query: "brown fox jump"
-              type: bool_prefix
-              fields: [ "my_field1" ]
-
-  - match: { hits.total: 3 }
-  - match: { hits.hits.0._id: "1" }
-  - match: { hits.hits.0._source.my_field1: "brown fox jump" }
-  - match: { hits.hits.1._id: "2" }
-  - match: { hits.hits.1._source.my_field1: "brown emu jump" }
-  - match: { hits.hits.2._id: "3" }
-  - match: { hits.hits.2._source.my_field1: "jumparound" }
-
----
-"multi_match single field partial term":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            multi_match:
-              query: "brown fox ju"
-              type: bool_prefix
-              fields: [ "my_field1" ]
-
-  - match: { hits.total: 3 }
-  - match: { hits.hits.0._id: "1" }
-  - match: { hits.hits.0._source.my_field1: "brown fox jump" }
-  - match: { hits.hits.1._id: "2" }
-  - match: { hits.hits.1._source.my_field1: "brown emu jump" }
-  - match: { hits.hits.2._id: "3" }
-  - match: { hits.hits.2._source.my_field1: "jumparound" }
-
----
-"multi_match multiple fields complete term":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            multi_match:
-              query: "brown fox jump lazy"
-              type: bool_prefix
-              fields: [ "my_field1", "my_field2" ]
-
-  - match: { hits.total: 3 }
-  - match: { hits.hits.0._id: "4" }
-  - match: { hits.hits.0._source.my_field1: "dog" }
-  - match: { hits.hits.0._source.my_field2: "brown fox jump lazy" }
-  - match: { hits.hits.1._id: "1" }
-  - match: { hits.hits.1._source.my_field1: "brown fox jump" }
-  - match: { hits.hits.2._id: "2" }
-  - match: { hits.hits.2._source.my_field1: "brown emu jump" }
-
----
-"multi_match multiple fields partial term":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            multi_match:
-              query: "brown fox jump laz"
-              type: bool_prefix
-              fields: [ "my_field1", "my_field2" ]
-
-  - match: { hits.total: 3 }
-  - match: { hits.hits.0._id: "4" }
-  - match: { hits.hits.0._source.my_field1: "dog" }
-  - match: { hits.hits.0._source.my_field2: "brown fox jump lazy" }
-  - match: { hits.hits.1._id: "1" }
-  - match: { hits.hits.1._source.my_field1: "brown fox jump" }
-  - match: { hits.hits.2._id: "2" }
-  - match: { hits.hits.2._source.my_field1: "brown emu jump" }
-
----
-"multi_match multiple fields with analyzer":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            multi_match:
-              query: "BROWN FOX JUMP dog"
-              type: bool_prefix
-              fields: [ "my_field1", "my_field2" ]
               analyzer: whitespace                   # this analyzer doesn't lowercase terms
-
-  - match: { hits.total: 1 }
-  - match: { hits.hits.0._id: "4" }
-  - match: { hits.hits.0._source.my_field1: "dog" }
+              fields: [ "my_field1", "my_field2^10" ]
+  - match: { hits.hits.1._id: "2" }
+        rest_total_hits_as_int: true
+"multi_match single field partial term":
   - match: { hits.hits.0._source.my_field2: "brown fox jump lazy" }
-
+  - match: { hits.hits.1._source.my_field1: "brown emu jump" }
+  - match: { hits.total: 1 }
+  - match: { hits.hits.0._id: "1" }
+  - do:
+        rest_total_hits_as_int: true
+              fields: [ "my_field1", "my_field2" ]
+        index: test
+        index: test
+  - match: { hits.total: 1 }
+  - match: { hits.hits.1._id: "1" }
+        body:
+        index: test
+        body:
+---
+      index:
+  - match: { hits.total: 3 }
+  - match: { hits.hits.0._id: "4" }
+            multi_match:
+        index: test
+          query:
+        body:
+        body:
+---
+        body:
+  - match: { hits.hits.0._source.my_field1: "brown fox jump" }
+          query:
+  - do:
+  - match: { hits.hits.0._id: "1" }
+  - match: { hits.hits.2._source.my_field1: "jumparound" }
+            multi_match:
+      search:
+  - match: { hits.hits.0._source.my_field1: "dog" }
+  - match: { hits.hits.0._id: "4" }
+      search:
+  - match: { hits.hits.0._source.my_field1: "brown fox jump" }
+          query:
+        body:
+              my_field2:
+      catch: /\[cutoff_frequency\] not allowed for type \[bool_prefix\]/
+        rest_total_hits_as_int: true
+        body:
+  - match: { hits.hits.0._source.my_field1: "dog" }
+        index: test
+                analyzer: whitespace                # this analyzer doesn't lowercase terms
+"multi_match single field complete term":
+          query:
+  - match: { hits.hits.0._source.my_field1: "dog" }
+                type: text
+        body:
+"analyzer":
+        rest_total_hits_as_int: true
+"multi_match multiple fields complete term":
+  - match: { hits.total: 3 }
+  - do:
+  - match: { hits.hits.1._source.my_field1: "brown fox jump" }
+  - match: { hits.hits.0._source.my_field2: "brown fox jump lazy" }
+        body:
+        id: 4
+  - match: { hits.total: 2 }
+            multi_match:
+                max_expansions: 10
+  - do:
+  - match: { hits.hits.0._source.my_field2: "brown fox jump lazy" }
+          query:
+              query: "brown fox jump"
+        index:  test
+        body:
+        body:
+              type: bool_prefix
+  - match: { hits.hits.2._id: "2" }
+          query:
+        body:
+              type: bool_prefix
+  - match: { hits.hits.0._source.my_field2: "brown fox jump lazy" }
 ---
 "multi_match multiple fields with minimum_should_match":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
+  - match: { hits.hits.2._source.my_field1: "brown emu jump" }
         index: test
-        body:
-          query:
-            multi_match:
-              query: "brown fox jump la"
-              type: bool_prefix
-              fields: [ "my_field1", "my_field2" ]
-              minimum_should_match: 4
-
-  - match: { hits.total: 1 }
-  - match: { hits.hits.0._id: "4" }
-  - match: { hits.hits.0._source.my_field1: "dog" }
-  - match: { hits.hits.0._source.my_field2: "brown fox jump lazy" }
-
----
-"multi_match multiple fields with fuzziness":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
         index: test
-        body:
-          query:
-            multi_match:
-              query: "dob nomatch"
-              type: bool_prefix
-              fields: [ "my_field1", "my_field2" ]
               fuzziness: 1
-
-  - match: { hits.total: 1 }
-  - match: { hits.hits.0._id: "4" }
+        index: test
   - match: { hits.hits.0._source.my_field1: "dog" }
-  - match: { hits.hits.0._source.my_field2: "brown fox jump lazy" }
-
----
-"multi_match multiple fields with boost":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
+  - match: { hits.hits.0._id: "1" }
           query:
-            multi_match:
-              query: "brown emu"
-              type: bool_prefix
-              fields: [ "my_field1", "my_field2^10" ]
-              fuzziness: 1
-
-  - match: { hits.hits.0._id: "3" }
-  - match: { hits.hits.0._source.my_field2: "emu" }
-
----
-"multi_match multiple fields with slop throws exception":
-
-  - do:
-      catch: /\[slop\] not allowed for type \[bool_prefix\]/
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            multi_match:
-              query: "brown"
-              type: bool_prefix
-              fields: [ "my_field1", "my_field2" ]
-              slop: 1
-
----
-"multi_match multiple fields with cutoff_frequency throws exception":
-
-  - do:
-      catch: /\[cutoff_frequency\] not allowed for type \[bool_prefix\]/
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            multi_match:
-              query: "brown"
-              type: bool_prefix
-              fields: [ "my_field1", "my_field2" ]
-              cutoff_frequency: 0.001
+            match_bool_prefix:

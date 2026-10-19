@@ -1,144 +1,129 @@
-setup:
   - do:
-      indices.create:
-          index: source
-          body:
-            mappings:
-              properties:
-                join_field: { "type": "join", "relations": { "parent": "child", "child": "grand_child" } }
-
-  - do:
-      indices.create:
-          index: dest
-          body:
-            mappings:
-              properties:
-                join_field: { "type": "join", "relations": { "parent": "child", "child": "grand_child" } }
-
-  - do:
-      index:
-        index: source
-        id:    1
-        body:  { "join_field": { "name": "parent" } }
-
-  - do:
-      index:
-        index: source
-        id:    2
-        routing: 1
-        body:  { "join_field": { "name": "child", "parent": "1" } }
-
-  - do:
-      index:
-        index: source
-        id:    3
-        routing: 1
-        body:  { "join_field": { "name": "grand_child", "parent": "2" } }
-
-  - do:
-      indices.refresh: {}
-
-
----
-"Reindex with parent join field":
-  - do:
-      reindex:
-        refresh: true
         body:
-          source:
-            index: source
-          dest:
-            index: dest
-  - match: {created: 3}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: dest
-        body:
-          query:
-            parent_id:
-              type: child
-              id: 1
-  - match: {hits.total: 1}
-  - match: {hits.hits.0._id: "2"}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: dest
-        body:
-          query:
-            has_parent:
-              parent_type: child
-              query:
-                parent_id:
-                  type: child
-                  id: 1
-  - match: {hits.total: 1}
-  - match: {hits.hits.0._id: "3"}
-
-  # Make sure reindex closed all the scroll contexts
-  - do:
-      indices.stats:
         index: source
-        metric: search
-  - match: {indices.source.total.search.open_contexts: 0}
-
-
----
-"Reindex from remote with parent join field":
-  # Fetch the http host. We use the host of the cluster-manager because we know there will always be a cluster-manager.
-  - do:
-      cluster.state: {}
   - set: { cluster_manager_node: cluster_manager }
-  - do:
-      nodes.info:
-        metric: [ http ]
-  - is_true: nodes.$cluster_manager.http.publish_address
-  - set: {nodes.$cluster_manager.http.publish_address: host}
-  - do:
-      reindex:
-        refresh: true
-        body:
-          source:
-            remote:
-              host: http://${host}
-            index: source
-          dest:
-            index: dest
-  - match: {created: 3}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: dest
-        body:
-          query:
-            parent_id:
-              type: child
-              id: 1
-  - match: {hits.total: 1}
   - match: {hits.hits.0._id: "2"}
-
+        metric: [ http ]
   - do:
-      search:
-        rest_total_hits_as_int: true
-        index: dest
-        body:
-          query:
-            has_parent:
-              parent_type: child
-              query:
-                parent_id:
-                  type: child
-                  id: 1
-  - match: {hits.total: 1}
-  - match: {hits.hits.0._id: "3"}
-
+      index:
+      indices.refresh: {}
+            index: dest
   # Make sure reindex closed all the scroll contexts
-  - do:
-      indices.stats:
         index: source
+  - match: {hits.total: 1}
+        index: source
+            index: dest
+              parent_type: child
+          source:
+  - match: {hits.hits.0._id: "2"}
+  # Fetch the http host. We use the host of the cluster-manager because we know there will always be a cluster-manager.
+  - match: {hits.hits.0._id: "3"}
+  - match: {created: 3}
+              parent_type: child
+        routing: 1
+        body:
+  - do:
+  - match: {hits.total: 1}
+          query:
+      indices.create:
+      reindex:
+        id:    1
+          index: source
+                  type: child
+  - do:
+        index: dest
+            has_parent:
+            index: source
+                  id: 1
+              host: http://${host}
+  - do:
+  - do:
+  - set: {nodes.$cluster_manager.http.publish_address: host}
+                join_field: { "type": "join", "relations": { "parent": "child", "child": "grand_child" } }
+          query:
+      index:
+        body:
+        body:  { "join_field": { "name": "parent" } }
+          dest:
+        index: dest
+                parent_id:
+      cluster.state: {}
+              query:
+            index: source
+  - match: {hits.total: 1}
+      indices.stats:
+  - do:
+        rest_total_hits_as_int: true
+            mappings:
+          source:
+  - do:
+          dest:
+  - match: {created: 3}
+          body:
+  - do:
+                join_field: { "type": "join", "relations": { "parent": "child", "child": "grand_child" } }
+  # Make sure reindex closed all the scroll contexts
+        body:
         metric: search
+              properties:
+              type: child
   - match: {indices.source.total.search.open_contexts: 0}
+        body:  { "join_field": { "name": "grand_child", "parent": "2" } }
+              type: child
+  - do:
+          index: dest
+---
+            has_parent:
+            parent_id:
+            parent_id:
+"Reindex with parent join field":
+        rest_total_hits_as_int: true
+      index:
+      search:
+"Reindex from remote with parent join field":
+  - do:
+        body:
+        id:    3
+                  id: 1
+        index: source
+      search:
+      reindex:
+        metric: search
+        body:
+      nodes.info:
+  - match: {hits.total: 1}
+      search:
+              id: 1
+        rest_total_hits_as_int: true
+      indices.stats:
+            remote:
+  - match: {hits.hits.0._id: "3"}
+        index: source
+  - match: {indices.source.total.search.open_contexts: 0}
+  - do:
+  - do:
+              query:
+  - is_true: nodes.$cluster_manager.http.publish_address
+        refresh: true
+        routing: 1
+  - do:
+        refresh: true
+        index: dest
+                  type: child
+        rest_total_hits_as_int: true
+          query:
+              id: 1
+            mappings:
+          query:
+        body:  { "join_field": { "name": "child", "parent": "1" } }
+          body:
+              properties:
+                parent_id:
+  - do:
+---
+  - do:
+        id:    2
+      search:
+      indices.create:
+        index: dest
+setup:

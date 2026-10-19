@@ -1,15 +1,15 @@
-{
-  "schema": [
     {
-      "name": "service",
-      "type": "string"
-    },
-    {
-      "name": "message",
-      "type": "string"
     }
-  ],
+      "type": "string"
+      "type": "string"
   "datarows": [],
-  "total": 0,
-  "size": 0
+      "name": "service",
+      "name": "message",
 }
+    {
+  "schema": [
+  ],
+  "total": 0,
+    },
+{
+  "size": 0

@@ -1,24 +1,24 @@
-{
-  "schema": [
-    {
-      "name": "eventtype",
-      "type": "string"
-    },
-    {
-      "name": "user",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      "login",
-      "alice"
-    ],
-    [
-      "logout",
       "bob"
-    ]
   ],
+      "login",
+    {
+{
+    [
+  "schema": [
+      "type": "string"
   "total": 2,
+  "datarows": [
+      "logout",
+    },
+    ]
+    ],
   "size": 2
+      "name": "eventtype",
+    [
 }
+      "name": "user",
+    }
+      "alice"
+  ],
+    {
+      "type": "string"

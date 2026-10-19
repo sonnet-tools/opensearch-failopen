@@ -1,51 +1,40 @@
----
 setup:
+      indices.get_field_mapping:
+  - match: {test_index.mappings.text.mapping.text.type:     text}
+"Get field mapping by field, with another field that doesn't exist":
+        index: test_index
+  - match: {test_index.mappings.text.mapping.text.type:     text}
+        fields: text
   - do:
-        indices.create:
-          index: test_index
-          body:
-              mappings:
-                properties:
+        fields: text
+  - is_false: test_index.mappings.test_type.text1
                   text:
                     type:     text
-
 ---
-"Get field mapping with no index":
-
-  - do:
-      indices.get_field_mapping:
-        fields: text
-
-  - match: {test_index.mappings.text.mapping.text.type:     text}
-
----
+        indices.create:
 "Get field mapping by index only":
-  - do:
-      indices.get_field_mapping:
-        index: test_index
         fields: text
-
-  - match: {test_index.mappings.text.mapping.text.type:     text}
-
----
-"Get field mapping by field, with another field that doesn't exist":
-
-  - do:
       indices.get_field_mapping:
-        index: test_index
-        fields: [ text , text1 ]
-
-  - match: {test_index.mappings.text.mapping.text.type:     text}
-  - is_false: test_index.mappings.test_type.text1
-
----
-"Get field mapping with include_defaults":
-
-  - do:
-      indices.get_field_mapping:
-        index: test_index
-        fields: text
-        include_defaults: true
-
-  - match: {test_index.mappings.text.mapping.text.type:     text}
   - match: {test_index.mappings.text.mapping.text.analyzer: default}
+"Get field mapping with no index":
+      indices.get_field_mapping:
+  - do:
+  - do:
+"Get field mapping with include_defaults":
+---
+---
+                properties:
+          body:
+        index: test_index
+  - do:
+---
+              mappings:
+  - match: {test_index.mappings.text.mapping.text.type:     text}
+  - do:
+        index: test_index
+          index: test_index
+  - match: {test_index.mappings.text.mapping.text.type:     text}
+        include_defaults: true
+---
+      indices.get_field_mapping:
+        fields: [ text , text1 ]

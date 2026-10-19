@@ -1,120 +1,120 @@
-{
-  "schema": [
-    {
-      "name": "count()",
-      "type": "bigint"
-    },
-    {
-      "name": "cluster.name",
-      "type": "string"
-    },
-    {
-      "name": "kubernetes.pod_name",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      2,
+      "pod-14"
       "fdas-prod",
-      "pod-0"
+  "datarows": [
+    ],
+    ],
+      "fdas-prod",
+      2,
+      "pod-12"
+    [
+    {
+      "pod-7"
+      1,
+      "fdas-prod",
+    [
+    },
+      "pod-18"
+{
+  "total": 20,
+      "pod-3"
+    [
     ],
     [
       2,
+      "name": "count()",
+    ],
+      "type": "string"
+      "type": "string"
+      "fdas-prod",
+    }
+      1,
+      "fdas-prod",
+      "pod-16"
+      1,
+    ],
+      "pod-4"
+    [
       "fdas-prod",
       "pod-1"
     ],
     [
-      2,
+    ],
       "fdas-prod",
-      "pod-10"
+      "fdas-prod",
+      "name": "kubernetes.pod_name",
     ],
     [
       1,
+    [
+    ],
       "fdas-prod",
+      "fdas-prod",
+    },
+    [
+    ],
+    [
+  ],
+      "pod-19"
+      "fdas-prod",
+    [
       "pod-11"
-    ],
+    ]
+    [
+      "pod-15"
+      2,
+      1,
+      2,
+      2,
+      "fdas-prod",
+      "fdas-prod",
+      2,
+      "type": "bigint"
+      "fdas-prod",
+      "fdas-prod",
+    [
     [
       2,
       "fdas-prod",
-      "pod-12"
     ],
-    [
+  "schema": [
+      2,
+      "pod-2"
       2,
       "fdas-prod",
+      2,
+    [
+      "pod-8"
+      "pod-6"
+      "pod-5"
+      2,
+      "fdas-prod",
+    ],
+      "fdas-prod",
+      "pod-9"
+    ],
+  ],
       "pod-13"
     ],
     [
-      1,
-      "fdas-prod",
-      "pod-14"
     ],
-    [
+    ],
+}
+    {
+    {
+      "pod-0"
       2,
-      "fdas-prod",
-      "pod-15"
-    ],
     [
+    ],
       2,
-      "fdas-prod",
-      "pod-16"
-    ],
-    [
+      "name": "cluster.name",
       1,
+  "size": 20
+    [
+    [
       "fdas-prod",
+    ],
       "pod-17"
     ],
-    [
+      "pod-10"
       2,
-      "fdas-prod",
-      "pod-18"
-    ],
     [
-      2,
-      "fdas-prod",
-      "pod-19"
-    ],
-    [
-      1,
-      "fdas-prod",
-      "pod-2"
-    ],
-    [
-      2,
-      "fdas-prod",
-      "pod-3"
-    ],
-    [
-      2,
-      "fdas-prod",
-      "pod-4"
-    ],
-    [
-      1,
-      "fdas-prod",
-      "pod-5"
-    ],
-    [
-      2,
-      "fdas-prod",
-      "pod-6"
-    ],
-    [
-      2,
-      "fdas-prod",
-      "pod-7"
-    ],
-    [
-      1,
-      "fdas-prod",
-      "pod-8"
-    ],
-    [
-      2,
-      "fdas-prod",
-      "pod-9"
-    ]
-  ],
-  "total": 20,
-  "size": 20
-}

@@ -1,28 +1,28 @@
+      150.25,
+  ],
 {
-  "schema": [
-    {
-      "name": "value",
       "type": "double"
+    ],
+  "schema": [
+  "total": 3,
+      201.0
+    [
+    ]
     },
     {
-      "name": "rint_val",
       "type": "double"
+}
     }
   ],
   "datarows": [
-    [
-      100.5,
+    ],
       100.0
-    ],
-    [
-      200.75,
-      201.0
-    ],
-    [
-      150.25,
+      "name": "rint_val",
+      100.5,
+    {
       150.0
-    ]
-  ],
-  "total": 3,
+    [
   "size": 3
-}
+    [
+      "name": "value",
+      200.75,

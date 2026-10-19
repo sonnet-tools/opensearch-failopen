@@ -1,55 +1,55 @@
-{
-  "settings": {
-    "number_of_shards": 1,
-    "number_of_replicas": 0
-  },
-  "mappings": {
-    "properties": {
-      "@timestamp": {
-        "type": "date"
+        "type": "text"
       },
-      "event_type": {
         "type": "keyword"
+      "@timestamp": {
+      "resource": {
+      },
+  }
+      },
+      },
+        "type": "keyword"
+        "type": "keyword"
+        "type": "keyword"
+  "mappings": {
+      "user_agent": {
       },
       "severity": {
-        "type": "keyword"
-      },
-      "user": {
-        "type": "keyword"
+        "type": "date"
+        "type": "text"
+      "destination_ip": {
+      "session_id": {
       },
       "source_ip": {
-        "type": "ip"
       },
-      "destination_ip": {
-        "type": "ip"
+      }
       },
       "action": {
         "type": "keyword"
       },
-      "result": {
-        "type": "keyword"
-      },
-      "resource": {
-        "type": "text"
-      },
-      "message": {
-        "type": "text"
-      },
-      "auth_method": {
-        "type": "keyword"
-      },
-      "session_id": {
-        "type": "keyword"
-      },
-      "user_agent": {
-        "type": "text"
-      },
       "status_code": {
+      },
+{
+        "type": "ip"
+    "properties": {
         "type": "integer"
+      "event_type": {
+      "message": {
+        "type": "ip"
+      "user": {
       },
       "threat_level": {
+        "type": "text"
         "type": "keyword"
-      }
+        "type": "keyword"
     }
-  }
+        "type": "keyword"
+      },
+      "auth_method": {
 }
+  },
+    "number_of_shards": 1,
+      },
+    "number_of_replicas": 0
+      },
+      "result": {
+  "settings": {

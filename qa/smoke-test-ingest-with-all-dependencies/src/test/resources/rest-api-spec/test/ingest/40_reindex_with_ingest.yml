@@ -1,46 +1,44 @@
----
-"Modify a document":
-  - do:
-      ingest.put_pipeline:
-        id: "test_ingest"
-        body:  >
-          {
-            "description": "tests reindex with ingest",
-            "processors": [
-              {
-                "append" : {
-                  "field" : "new_field",
-                  "value": "cat"
-                }
-              }
-            ]
           }
-  - do:
-      index:
-        index:  twitter
-        id:     1
-        body:   { "user": "foobar" }
-  - do:
-      indices.refresh: {}
-
-  - do:
+            "processors": [
       reindex:
-        refresh: true
-        body:
-          source:
-            index: twitter
-          dest:
             index: new_twitter
-            pipeline: test_ingest
-  - match: {created: 1}
-  - match: {noops: 0}
-
-  - do:
       search:
-        rest_total_hits_as_int: true
-        index: new_twitter
         body:
-          query:
-            match:
-              new_field: cat
+  - do:
+  - match: {created: 1}
+        body:   { "user": "foobar" }
+            pipeline: test_ingest
+            "description": "tests reindex with ingest",
+                  "value": "cat"
+            index: twitter
   - match: { hits.total: 1 }
+  - do:
+  - do:
+        body:  >
+        refresh: true
+        index: new_twitter
+                }
+                  "field" : "new_field",
+      index:
+          dest:
+        id: "test_ingest"
+                "append" : {
+  - match: {noops: 0}
+---
+        body:
+        index:  twitter
+              new_field: cat
+        rest_total_hits_as_int: true
+  - do:
+              {
+          {
+        id:     1
+  - do:
+          query:
+          source:
+            match:
+              }
+      ingest.put_pipeline:
+"Modify a document":
+      indices.refresh: {}
+            ]

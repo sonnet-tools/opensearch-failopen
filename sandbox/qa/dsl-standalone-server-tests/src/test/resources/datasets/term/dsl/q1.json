@@ -1,7 +1,7 @@
-{
-  "query": {
-    "term": {
-      "name": "laptop"
     }
+  "query": {
   }
+      "name": "laptop"
 }
+{
+    "term": {

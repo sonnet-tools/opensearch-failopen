@@ -1,28 +1,26 @@
+      - ./testfixtures_shared/shared:/fixture/shared
+      - "8091"
+  azure-fixture:
+      dockerfile: Dockerfile
+    build:
+      - ./testfixtures_shared/shared:/fixture/shared
+    ports:
+      dockerfile: Dockerfile
+      context: .
+  azure-fixture-other:
 version: '3'
 services:
-  azure-fixture:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    volumes:
       - ./testfixtures_shared/shared:/fixture/shared
-    ports:
-      - "8091"
-
-  azure-fixture-other:
-    build:
-      context: .
-      dockerfile: Dockerfile
     volumes:
-      - ./testfixtures_shared/shared:/fixture/shared
-    ports:
-      - "8091"
-
+    build:
+    build:
   azure-fixture-repositories-metering:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    volumes:
-      - ./testfixtures_shared/shared:/fixture/shared
     ports:
       - "8091"
+    volumes:
+    ports:
+      context: .
+      - "8091"
+      dockerfile: Dockerfile
+    volumes:
+      context: .

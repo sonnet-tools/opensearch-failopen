@@ -1,35 +1,35 @@
-{
-  "schema": [
-    {
-      "name": "id",
-      "type": "string"
-    },
-    {
-      "name": "value",
-      "type": "double"
-    },
-    {
-      "name": "has_value",
       "type": "boolean"
-    }
-  ],
-  "datarows": [
-    [
-      "1",
-      100.5,
-      true
-    ],
-    [
-      "2",
-      200.75,
-      true
-    ],
-    [
-      "3",
       150.25,
-      true
-    ]
-  ],
-  "total": 3,
   "size": 3
+    {
+    ],
+      "name": "id",
+      "name": "has_value",
+      true
+      200.75,
+      "3",
+    [
+    ],
+      true
+  "total": 3,
+    {
+      "type": "double"
+      "type": "string"
+  "schema": [
+      "1",
+    {
+    [
+      100.5,
+    ]
+      "2",
+    }
+    [
+{
+    },
+      "name": "value",
+  ],
 }
+  ],
+      true
+  "datarows": [
+    },

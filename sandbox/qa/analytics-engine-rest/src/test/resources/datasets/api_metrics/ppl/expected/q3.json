@@ -1,36 +1,36 @@
-{
-  "schema": [
-    {
-      "name": "count()",
-      "type": "bigint"
-    },
-    {
-      "name": "endpoint",
+    ],
       "type": "string"
-    }
+    [
+  "total": 5,
+      "name": "endpoint",
+      14,
+    [
+    ],
+      20,
+  "size": 5
+    ]
   ],
+{
+}
+      "type": "bigint"
+    }
+    },
+      14,
   "datarows": [
+      "/api/products"
+      "/api/users"
+    {
+      "/api/payments"
+    [
+      17,
+    {
+    [
+      "/api/orders"
+  "schema": [
+      "name": "count()",
+  ],
+    ],
     [
       20,
       "/SCS/Retail/v1/orders"
     ],
-    [
-      14,
-      "/api/orders"
-    ],
-    [
-      20,
-      "/api/payments"
-    ],
-    [
-      14,
-      "/api/products"
-    ],
-    [
-      17,
-      "/api/users"
-    ]
-  ],
-  "total": 5,
-  "size": 5
-}

@@ -1,104 +1,96 @@
----
-"Test script processor with inline script and params":
   - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
         body:  >
           {
-            "description": "_description",
-            "processors": [
-              {
-                "script" : {
-                  "source": "ctx.bytes_total = (ctx.bytes_in + ctx.bytes_out) * params.factor",
-                  "params": {
-                     "factor": 10
-                  }
                 }
-              }
-            ]
-          }
+            "description": "_description",
+        id: 1
   - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: { bytes_in: 1234, bytes_out: 4321 }
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.bytes_in: 1234 }
-  - match: { _source.bytes_out: 4321 }
-  - match: { _source.bytes_total: 55550 }
-
 ---
-"Test script processor with stored script":
-  - skip:
-      features: warnings
-
-  - do:
-      put_script:
-        id: "sum_bytes"
-        body: >
-          {
-            "script": {
+        index: test
+                  }
+      catch: bad_request
               "lang": "painless",
               "source" : "ctx.bytes_total = ctx.bytes_in + ctx.bytes_out"
-            }
-          }
-  - match: { acknowledged: true }
-
   - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "script" : {
-                  "id" : "sum_bytes"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: { bytes_in: 1234, bytes_out: 4321 }
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.bytes_in: 1234 }
-  - match: { _source.bytes_out: 4321 }
-  - match: { _source.bytes_total: 5555 }
-
----
-"Test script processor with syntax error in inline script":
-  - do:
-      catch: bad_request
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "script" : {
-                  "source": "invalid painless, hear me roar!"
-                }
-              }
-            ]
-          }
   - match: { error.processor_type: "script" }
-  - match: { error.type: "script_exception" }
+"Test script processor with inline script and params":
+---
+  - match: { acknowledged: true }
+                }
   - match: { error.reason: "compile error" }
+          }
+                "script" : {
+      ingest.put_pipeline:
+      ingest.put_pipeline:
+        body: >
+                  "source": "invalid painless, hear me roar!"
+        id: 1
+            "processors": [
+  - do:
+        id: "my_pipeline"
+            ]
+  - match: { _source.bytes_out: 4321 }
+        pipeline: "my_pipeline"
+                     "factor": 10
+                  "id" : "sum_bytes"
+              {
+"Test script processor with stored script":
+              }
+  - match: { _source.bytes_in: 1234 }
+      features: warnings
+  - match: { acknowledged: true }
+---
+        id: "sum_bytes"
+          }
+  - do:
+              {
+      index:
+              }
+        index: test
+            ]
+  - match: { _source.bytes_total: 55550 }
+        index: test
+        id: "my_pipeline"
+  - do:
+                  "source": "ctx.bytes_total = (ctx.bytes_in + ctx.bytes_out) * params.factor",
+          }
+        index: test
+                "script" : {
+          {
+                }
+          {
+              }
+            "script": {
+      get:
+        pipeline: "my_pipeline"
+        id: 1
+        body:  >
+        id: 1
+            "processors": [
+          {
+            "description": "_description",
+  - do:
+            "processors": [
+  - match: { error.type: "script_exception" }
+        id: "my_pipeline"
+  - match: { _source.bytes_total: 5555 }
+        body:  >
+      put_script:
+        body: { bytes_in: 1234, bytes_out: 4321 }
+  - match: { _source.bytes_out: 4321 }
+                "script" : {
+                  "params": {
+"Test script processor with syntax error in inline script":
+      ingest.put_pipeline:
+      index:
+  - skip:
+            ]
+          }
+  - do:
+            }
+      get:
+            "description": "_description",
+        body: { bytes_in: 1234, bytes_out: 4321 }
+              {
+  - match: { _source.bytes_in: 1234 }
+  - do:

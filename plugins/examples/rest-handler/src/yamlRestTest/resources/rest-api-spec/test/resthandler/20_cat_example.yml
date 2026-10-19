@@ -1,26 +1,21 @@
+      $body: |
+  - match: {$body: "Hello from REST API test\n" }
+        v: false
 ---
+      cat.example:
+               /^  test    .+   \n
+        help: true
+      cat.example:
+"Custom message":
+---
+      cat.example:
+"Default message":
+---
+               $/
+  - match: {$body: "Hello from Cat Example action\n" }
+        message: Hello from REST API test
+  - do:
 "Help":
   - do:
-      cat.example:
-        help: true
-
   - match:
-      $body: |
-               /^  test    .+   \n
-               $/
-
----
-"Default message":
   - do:
-      cat.example:
-        v: false
-
-  - match: {$body: "Hello from Cat Example action\n" }
-
----
-"Custom message":
-  - do:
-      cat.example:
-        message: Hello from REST API test
-
-  - match: {$body: "Hello from REST API test\n" }

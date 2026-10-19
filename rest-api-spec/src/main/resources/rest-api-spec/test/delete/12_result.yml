@@ -1,23 +1,18 @@
----
-"Delete result field":
-
  - do:
-      index:
+ - do:
+---
+      delete:
+      catch: missing
           index:   test_1
+ - do:
+ - match: { result: not_found }
+          id:      1
+"Delete result field":
+          index:   test_1
+          index:   test_1
+ - match: { result: deleted }
           id:      1
           body:    { foo: bar }
-
- - do:
-      delete:
-          index:   test_1
           id:      1
-
- - match: { result: deleted }
-
- - do:
-      catch: missing
       delete:
-          index:   test_1
-          id:      1
-
- - match: { result: not_found }
+      index:

@@ -1,12 +1,12 @@
 {
-    "geo_polygon": {
-        "location": {
+    }
             "points": [
-                [-70, 40],
+        "location": {
+}
+        "bla": ["array"]
                 [-80, 30],
-                [-90, 20]
+    "geo_polygon": {
             ]
         },
-        "bla": ["array"]
-    }
-}
+                [-70, 40],
+                [-90, 20]

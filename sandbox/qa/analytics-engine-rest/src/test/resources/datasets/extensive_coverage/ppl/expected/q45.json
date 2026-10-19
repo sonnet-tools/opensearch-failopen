@@ -1,35 +1,35 @@
-{
-  "schema": [
+      "name": "null_check",
+    }
+      false,
+  "size": 3
+    ],
+    {
+    ],
+      "inactive",
+      "type": "boolean"
+      "type": "string"
+    [
+      false,
     {
       "name": "status",
-      "type": "string"
-    },
-    {
-      "name": "null_check",
+    [
       "type": "boolean"
-    },
+      true
     {
-      "name": "not_null",
-      "type": "boolean"
-    }
+    },
+    },
+      true
+{
+}
+  "schema": [
   ],
   "datarows": [
-    [
-      "active",
-      false,
-      true
-    ],
-    [
-      "inactive",
-      false,
-      true
-    ],
-    [
-      "active",
-      false,
       true
     ]
+    [
+      false,
   ],
+      "name": "not_null",
+      "active",
   "total": 3,
-  "size": 3
-}
+      "active",

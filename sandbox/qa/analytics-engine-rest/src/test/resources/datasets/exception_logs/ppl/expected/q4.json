@@ -1,35 +1,35 @@
-{
-  "schema": [
-    {
-      "name": "count()",
       "type": "bigint"
-    },
-    {
-      "name": "service_name",
       "type": "string"
-    },
-    {
-      "name": "application_id",
-      "type": "bigint"
-    }
-  ],
-  "datarows": [
-    [
-      3,
-      "api-service",
-      107149
-    ],
-    [
-      9,
       "db-service",
-      107149
-    ],
-    [
-      5,
-      "web-service",
-      107149
-    ]
   ],
   "total": 3,
+    {
+      "name": "count()",
+      107149
+    [
+  "datarows": [
+    {
   "size": 3
+    {
+      "name": "service_name",
+    },
+      "type": "bigint"
+    ]
+  ],
+    },
+      107149
+      3,
+      5,
+    }
+    ],
+      "name": "application_id",
 }
+      "web-service",
+      107149
+    [
+{
+      "api-service",
+    ],
+      9,
+    [
+  "schema": [

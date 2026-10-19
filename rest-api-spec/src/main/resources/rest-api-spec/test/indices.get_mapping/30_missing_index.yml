@@ -1,31 +1,27 @@
----
-"Raise 404 when index doesn't exist":
+        allow_no_indices: false
   - do:
-      catch: missing
+        index: test_index
+  - do:
+        ignore_unavailable: true
+      indices.get_mapping:
+  - do:
       indices.get_mapping:
         index: test_index
-
+  - do:
+---
+      catch: missing
+        index: test_index
+      catch: missing
+        ignore_unavailable: true
+"Raise 404 when index doesn't exist":
+  - match: { '':  {} }
+"Index missing, ignore_unavailable=true, allow_no_indices=false":
+"Index missing, ignore_unavailable=true":
+        index: test_index
+---
+---
+      indices.get_mapping:
+      indices.get_mapping:
 ---
 "Index missing, no indexes":
-  - do:
       catch: missing
-      indices.get_mapping:
-        index: test_index
-
----
-"Index missing, ignore_unavailable=true":
-  - do:
-      indices.get_mapping:
-        index: test_index
-        ignore_unavailable: true
-
-  - match: { '':  {} }
-
----
-"Index missing, ignore_unavailable=true, allow_no_indices=false":
-  - do:
-      catch: missing
-      indices.get_mapping:
-        index: test_index
-        ignore_unavailable: true
-        allow_no_indices: false

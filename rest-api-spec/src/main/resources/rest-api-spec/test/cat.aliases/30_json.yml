@@ -1,21 +1,17 @@
----
-"Simple alias with json body through format argument":
-
-  - do:
-        indices.create:
-            index: test
-
-  - do:
         indices.put_alias:
-            index: test
-            name:  test_alias
-
-  - do:
-      cat.aliases:
-        format: json
-
-  - match: {0.alias: test_alias}
-  - match: {0.index: test}
-  - match: {0.filter: "-"}
-  - match: {0.routing\.index: "-"}
   - match: {0.routing\.search: "-"}
+  - do:
+---
+            name:  test_alias
+"Simple alias with json body through format argument":
+  - match: {0.routing\.index: "-"}
+        format: json
+  - do:
+  - match: {0.filter: "-"}
+            index: test
+      cat.aliases:
+            index: test
+  - do:
+  - match: {0.alias: test_alias}
+        indices.create:
+  - match: {0.index: test}

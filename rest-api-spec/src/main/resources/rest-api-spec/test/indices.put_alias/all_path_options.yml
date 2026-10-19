@@ -1,115 +1,87 @@
----
-setup:
-# create three indices
-
-  - do:
-      indices.create:
-        index: test_index1
-  - do:
-      indices.create:
-        index: test_index2
-  - do:
-      indices.create:
-        index: foo
-
----
-"put alias per index":
-  - do:
-      indices.put_alias:
-        index: test_index1
-        name: alias
-  - do:
-      indices.put_alias:
-        index: test_index2
-        name: alias
-
   - do:
       indices.get_alias:
-        name: alias
-
-  - match: {test_index1.aliases.alias: {}}
-
-  - match: {test_index2.aliases.alias: {}}
-
-  - is_false: foo
-
----
-"put alias in _all index":
-
-  - do:
       indices.put_alias:
-        index: _all
-        name: alias
-
-  - do:
       indices.get_alias:
         name: alias
-
+      catch: param
+  - match: {test_index1.aliases.alias: {}}
+  - do:
+  - do:
+        name: alias
+        name: alias
   - match: {test_index1.aliases.alias: {}}
   - match: {test_index2.aliases.alias: {}}
-  - match: {foo.aliases.alias: {}}
-
----
 "put alias in * index":
-
-
-  - do:
-      indices.put_alias:
-        index: '*'
+      indices.put_alias: {}
         name: alias
-
-  - do:
-      indices.get_alias:
-        name: alias
-
-  - match: {test_index1.aliases.alias: {}}
-  - match: {test_index2.aliases.alias: {}}
-  - match: {foo.aliases.alias: {}}
-
+        index: test_index1
 ---
-"put alias prefix* index":
+  - match: {test_index2.aliases.alias: {}}
+setup:
+        name: alias
+  - do:
+"put alias with blank index":
+  - do:
+      indices.create:
+  - do:
+        name: alias
+      indices.put_alias:
+        name: alias
+  - do:
   - do:
       indices.put_alias:
-        index: "test_*"
         name: alias
-
-  - do:
-      indices.get_alias:
-        name: alias
-
-  - match: {test_index1.aliases.alias: {}}
-  - match: {test_index2.aliases.alias: {}}
   - is_false: foo
-
----
-"put alias in list of indices":
   - do:
+      indices.put_alias:
       indices.put_alias:
         index: "test_index1,test_index2"
-        name: alias
-
   - do:
-      indices.get_alias:
-        name: alias
-
+  - do:
+---
+        index: test_index2
+# create three indices
   - match: {test_index1.aliases.alias: {}}
-  - match: {test_index2.aliases.alias: {}}
-  - is_false: foo
-
----
-"put alias with blank index":
-
-
-  - do:
-      catch: param
-      indices.put_alias:
-        name: alias
-
-
----
+      indices.get_alias:
 "put alias with missing name":
-
-
   - do:
+  - match: {foo.aliases.alias: {}}
       catch: param
-      indices.put_alias: {}
+  - do:
+  - is_false: foo
+  - match: {test_index1.aliases.alias: {}}
+      indices.create:
+        index: foo
+      indices.get_alias:
+"put alias per index":
+        index: test_index1
+        name: alias
+  - match: {test_index2.aliases.alias: {}}
+  - match: {test_index2.aliases.alias: {}}
+        index: test_index2
+  - match: {test_index1.aliases.alias: {}}
+  - is_false: foo
+        index: _all
+---
+  - match: {foo.aliases.alias: {}}
+"put alias in _all index":
+---
+        name: alias
+---
+      indices.create:
+  - do:
+      indices.put_alias:
+      indices.put_alias:
+  - do:
+        index: "test_*"
+"put alias in list of indices":
+        name: alias
+---
+"put alias prefix* index":
+---
+  - match: {test_index2.aliases.alias: {}}
+  - do:
+        name: alias
+        index: '*'
+      indices.get_alias:
+---

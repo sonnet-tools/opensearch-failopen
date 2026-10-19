@@ -1,72 +1,72 @@
-{
-  "indices.get":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/index-apis/get-index/",
-      "description":"Returns information about one or more indices."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/{index}",
-          "methods":[
-            "GET"
-          ],
-          "parts":{
-            "index":{
-              "type":"list",
-              "description":"A comma-separated list of index names"
-            }
-          }
-        }
-      ]
-    },
-    "params":{
-      "local":{
-        "type":"boolean",
-        "description":"Return local information, do not retrieve the state from master node (default: false)"
-      },
-      "ignore_unavailable":{
-        "type":"boolean",
-        "description":"Ignore unavailable indexes (default: false)"
-      },
-      "allow_no_indices":{
-        "type":"boolean",
-        "description":"Ignore if a wildcard expression resolves to no concrete indices (default: false)"
-      },
-      "expand_wildcards":{
         "type":"enum",
-        "options":[
+        "type":"time",
+          "path":"/{index}",
+          "version":"2.0.0",
+              "description":"A comma-separated list of index names"
+      "paths":[
+              "type":"list",
+        "type":"time",
+          "parts":{
+        "type":"boolean",
+        }
+    "url":{
+      "description":"Returns information about one or more indices."
+      },
+        "description":"Return local information, do not retrieve the state from master node (default: false)"
+        "description":"Specify timeout for connection to master",
+    "documentation":{
+            "index":{
+      "master_timeout":{
+    }
+        "description":"Ignore unavailable indexes (default: false)"
           "open",
-          "closed",
-          "hidden",
-          "none",
-          "all"
-        ],
-        "default":"open",
-        "description":"Whether wildcard expressions should get expanded to open or closed indices (default: open)"
+        "type":"boolean",
+          ],
+  }
       },
       "flat_settings":{
-        "type":"boolean",
-        "description":"Return settings in flat format (default: false)"
+          "all"
       },
-      "include_defaults":{
+      "expand_wildcards":{
         "type":"boolean",
+{
+      "ignore_unavailable":{
         "description":"Whether to return all default setting for each of the indices.",
-        "default":false
-      },
-      "master_timeout":{
-        "type":"time",
-        "description":"Specify timeout for connection to master",
-        "deprecated":{
-          "version":"2.0.0",
-          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
+        {
         }
+          }
+        "options":[
+      }
+        "description":"Return settings in flat format (default: false)"
+      "allow_no_indices":{
+        "deprecated":{
+    "stability":"stable",
+          "none",
+          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
+      "url":"https://opensearch.org/docs/latest/api-reference/index-apis/get-index/",
+      },
+        "description":"Specify timeout for connection to cluster-manager node"
+        "default":"open",
+      ]
+}
+            "GET"
+    "params":{
+        "type":"boolean",
+      },
+          "closed",
+      "local":{
       },
       "cluster_manager_timeout":{
-        "type":"time",
-        "description":"Specify timeout for connection to cluster-manager node"
-      }
-    }
-  }
-}
+        "description":"Whether wildcard expressions should get expanded to open or closed indices (default: open)"
+          "hidden",
+    },
+      "include_defaults":{
+  "indices.get":{
+    },
+        "default":false
+            }
+      },
+        "description":"Ignore if a wildcard expression resolves to no concrete indices (default: false)"
+        "type":"boolean",
+          "methods":[
+        ],

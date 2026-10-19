@@ -1,35 +1,35 @@
-{
+      "B",
+    {
+  ],
   "schema": [
-    {
-      "name": "category",
+      "A",
+    ]
       "type": "string"
-    },
+      "name": "category",
     {
+    ],
+      "{\"val\":200.75,\"key\":\"B\"}"
+}
+      100.5,
       "name": "value",
-      "type": "double"
+    }
+{
+      "A",
+      "{\"val\":150.25,\"key\":\"A\"}"
+    [
+  ],
     },
-    {
       "name": "json_obj",
       "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      "A",
-      100.5,
-      "{\"val\":100.5,\"key\":\"A\"}"
     ],
     [
-      "B",
-      200.75,
-      "{\"val\":200.75,\"key\":\"B\"}"
-    ],
-    [
-      "A",
-      150.25,
-      "{\"val\":150.25,\"key\":\"A\"}"
-    ]
-  ],
   "total": 3,
   "size": 3
-}
+      150.25,
+    [
+      "type": "double"
+  "datarows": [
+    {
+      200.75,
+    },
+      "{\"val\":100.5,\"key\":\"A\"}"

@@ -1,16 +1,13 @@
 # Integration tests for Discovery GCE components
-#
-"Discovery GCE loaded":
     - skip:
-        reason: "contains is a newly added assertion"
         features: contains
+"Discovery GCE loaded":
+    - contains:  { nodes.$cluster_manager.plugins: { name: discovery-gce } }
+        nodes.info: {}
     - do:
-        cluster.state: {}
-
+#
+        reason: "contains is a newly added assertion"
+    - do:
     # Get cluster-manager node id
     - set: { cluster_manager_node: cluster_manager }
-
-    - do:
-        nodes.info: {}
-
-    - contains:  { nodes.$cluster_manager.plugins: { name: discovery-gce } }
+        cluster.state: {}

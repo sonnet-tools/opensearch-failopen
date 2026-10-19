@@ -1,323 +1,323 @@
-{
-  "settings": {
-    "number_of_shards": 2,
-    "number_of_replicas": 0
-  },
-  "mappings": {
-    "properties": {
-      "AdvEngineID": {
-        "type": "short"
-      },
-      "Age": {
-        "type": "short"
-      },
-      "BrowserCountry": {
-        "type": "keyword"
-      },
-      "BrowserLanguage": {
-        "type": "keyword"
-      },
-      "CLID": {
-        "type": "integer"
-      },
-      "ClientEventTime": {
-        "type": "date",
-        "format": "yyyy-MM-dd HH:mm:ss||strict_date_optional_time||epoch_millis"
-      },
-      "ClientIP": {
-        "type": "integer"
-      },
-      "ClientTimeZone": {
-        "type": "short"
-      },
-      "CodeVersion": {
-        "type": "integer"
-      },
-      "ConnectTiming": {
-        "type": "integer"
-      },
-      "CookieEnable": {
-        "type": "short"
-      },
-      "CounterClass": {
-        "type": "short"
-      },
-      "CounterID": {
-        "type": "integer"
-      },
-      "DNSTiming": {
-        "type": "integer"
-      },
-      "DontCountHits": {
-        "type": "short"
-      },
-      "EventDate": {
-        "type": "date",
-        "format": "yyyy-MM-dd HH:mm:ss||strict_date_optional_time||epoch_millis"
-      },
-      "EventTime": {
-        "type": "date",
-        "format": "yyyy-MM-dd HH:mm:ss||strict_date_optional_time||epoch_millis"
-      },
-      "FUniqID": {
-        "type": "long"
-      },
-      "FetchTiming": {
-        "type": "integer"
-      },
-      "FlashMajor": {
-        "type": "short"
-      },
-      "FlashMinor": {
-        "type": "short"
-      },
-      "FlashMinor2": {
-        "type": "short"
-      },
-      "FromTag": {
-        "type": "keyword"
-      },
-      "GoodEvent": {
-        "type": "short"
-      },
-      "HID": {
-        "type": "integer"
-      },
-      "HTTPError": {
-        "type": "short"
-      },
-      "HasGCLID": {
-        "type": "short"
-      },
-      "HistoryLength": {
-        "type": "short"
-      },
-      "HitColor": {
-        "type": "keyword"
-      },
-      "IPNetworkID": {
-        "type": "integer"
-      },
-      "Income": {
-        "type": "short"
-      },
-      "Interests": {
-        "type": "short"
-      },
-      "IsArtifical": {
-        "type": "short"
-      },
-      "IsDownload": {
-        "type": "short"
-      },
-      "IsEvent": {
-        "type": "short"
-      },
-      "IsLink": {
-        "type": "short"
-      },
-      "IsMobile": {
-        "type": "short"
-      },
-      "IsNotBounce": {
-        "type": "short"
-      },
-      "IsOldCounter": {
-        "type": "short"
-      },
-      "IsParameter": {
-        "type": "short"
-      },
-      "IsRefresh": {
-        "type": "short"
-      },
-      "JavaEnable": {
-        "type": "short"
-      },
-      "JavascriptEnable": {
-        "type": "short"
-      },
-      "LocalEventTime": {
-        "type": "date",
-        "format": "yyyy-MM-dd HH:mm:ss||strict_date_optional_time||epoch_millis"
-      },
-      "MobilePhone": {
-        "type": "short"
-      },
-      "MobilePhoneModel": {
-        "type": "keyword"
-      },
-      "NetMajor": {
-        "type": "short"
-      },
-      "NetMinor": {
-        "type": "short"
-      },
-      "OS": {
-        "type": "short"
-      },
-      "OpenerName": {
-        "type": "integer"
-      },
-      "OpenstatAdID": {
-        "type": "keyword"
-      },
-      "OpenstatCampaignID": {
-        "type": "keyword"
-      },
-      "OpenstatServiceName": {
-        "type": "keyword"
       },
       "OpenstatSourceID": {
         "type": "keyword"
       },
-      "OriginalURL": {
-        "type": "keyword"
       },
-      "PageCharset": {
-        "type": "keyword"
-      },
-      "ParamCurrency": {
-        "type": "keyword"
-      },
-      "ParamCurrencyID": {
+  "mappings": {
         "type": "short"
+      "OS": {
       },
-      "ParamOrderID": {
-        "type": "keyword"
-      },
-      "ParamPrice": {
-        "type": "long"
-      },
-      "Params": {
-        "type": "keyword"
-      },
-      "Referer": {
-        "type": "keyword"
-      },
-      "RefererCategoryID": {
         "type": "short"
-      },
-      "RefererHash": {
-        "type": "long"
-      },
-      "RefererRegionID": {
-        "type": "integer"
-      },
-      "RegionID": {
-        "type": "integer"
-      },
-      "RemoteIP": {
-        "type": "integer"
-      },
-      "ResolutionDepth": {
-        "type": "short"
-      },
-      "ResolutionHeight": {
-        "type": "short"
-      },
-      "ResolutionWidth": {
-        "type": "short"
-      },
-      "ResponseEndTiming": {
-        "type": "integer"
-      },
-      "ResponseStartTiming": {
-        "type": "integer"
-      },
-      "Robotness": {
-        "type": "short"
-      },
-      "SearchEngineID": {
-        "type": "short"
-      },
-      "SearchPhrase": {
-        "type": "keyword"
-      },
-      "SendTiming": {
-        "type": "integer"
-      },
-      "Sex": {
-        "type": "short"
-      },
-      "SilverlightVersion1": {
-        "type": "short"
-      },
-      "SilverlightVersion2": {
-        "type": "short"
-      },
-      "SilverlightVersion3": {
-        "type": "integer"
-      },
-      "SilverlightVersion4": {
-        "type": "short"
-      },
-      "SocialSourceNetworkID": {
-        "type": "short"
-      },
-      "SocialSourcePage": {
-        "type": "keyword"
-      },
-      "Title": {
-        "type": "keyword"
-      },
-      "TraficSourceID": {
-        "type": "short"
-      },
-      "URL": {
-        "type": "keyword"
-      },
-      "URLCategoryID": {
-        "type": "short"
-      },
-      "URLHash": {
-        "type": "long"
-      },
-      "URLRegionID": {
         "type": "integer"
       },
       "UTMCampaign": {
-        "type": "keyword"
       },
-      "UTMContent": {
-        "type": "keyword"
       },
-      "UTMMedium": {
         "type": "keyword"
-      },
-      "UTMSource": {
-        "type": "keyword"
-      },
-      "UTMTerm": {
-        "type": "keyword"
-      },
-      "UserAgent": {
+      "LocalEventTime": {
+      "SendTiming": {
         "type": "short"
       },
-      "UserAgentMajor": {
         "type": "short"
-      },
-      "UserAgentMinor": {
-        "type": "keyword"
-      },
-      "UserID": {
-        "type": "long"
-      },
-      "WatchID": {
-        "type": "long"
-      },
-      "WindowClientHeight": {
-        "type": "short"
-      },
-      "WindowClientWidth": {
-        "type": "short"
-      },
-      "WindowName": {
+      "PageCharset": {
         "type": "integer"
+        "type": "date",
+      "UserAgent": {
+      "EventDate": {
       },
+      },
+      "HID": {
+      },
+        "format": "yyyy-MM-dd HH:mm:ss||strict_date_optional_time||epoch_millis"
+        "type": "keyword"
+      },
+      },
+      "CounterClass": {
+      },
+      "CounterID": {
+        "type": "short"
+      },
+        "type": "short"
+      },
+        "type": "short"
+      },
+        "type": "short"
+        "type": "short"
+        "type": "long"
+      "Referer": {
+        "format": "yyyy-MM-dd HH:mm:ss||strict_date_optional_time||epoch_millis"
+        "type": "short"
+        "type": "short"
+      "RefererCategoryID": {
+      },
+      },
+      "Interests": {
+      "OpenstatAdID": {
+      "ParamCurrency": {
+      },
+      "OpenerName": {
+        "type": "long"
+      "ResponseEndTiming": {
+      "IsRefresh": {
+      },
+      "HTTPError": {
+  "settings": {
+      },
+      },
+      },
+        "type": "short"
+      },
+        "type": "short"
+      },
+      },
+        "type": "short"
+  }
       "WithHash": {
         "type": "short"
+      "WindowName": {
+      "IsParameter": {
+        "type": "integer"
+      },
+      },
+      },
+        "type": "short"
+      },
+      "ParamCurrencyID": {
+      },
+      "IPNetworkID": {
+      "ParamPrice": {
+      "IsOldCounter": {
+      },
+      "Income": {
+        "type": "short"
+      "DNSTiming": {
+        "type": "integer"
+        "type": "keyword"
+      "NetMinor": {
+      "JavascriptEnable": {
+      "GoodEvent": {
+      "AdvEngineID": {
+        "type": "long"
+        "type": "short"
+      "BrowserLanguage": {
+      },
+      "FlashMinor": {
+    "number_of_shards": 2,
+      },
+      },
+        "type": "keyword"
+        "type": "keyword"
+      },
+      },
+        "type": "integer"
+      },
+      "RemoteIP": {
       }
+      "ClientTimeZone": {
+      "ResolutionDepth": {
+        "type": "keyword"
+      "OpenstatServiceName": {
+      "URL": {
+      },
+      },
+        "type": "keyword"
+      },
+      "NetMajor": {
+      },
+        "type": "keyword"
+      },
+        "type": "short"
+        "type": "integer"
+        "type": "integer"
+      },
+        "type": "integer"
+        "type": "short"
+{
+        "type": "integer"
+      },
+      "SilverlightVersion1": {
+      },
+      },
+      },
+        "type": "date",
+        "type": "keyword"
+        "type": "integer"
+      },
+        "type": "short"
+      },
+        "type": "date",
+        "type": "short"
+        "type": "keyword"
+        "type": "keyword"
+      "URLCategoryID": {
+      },
+        "type": "keyword"
+        "type": "short"
+      },
+      },
+      "UTMContent": {
+        "type": "short"
+      },
+        "type": "keyword"
+      "EventTime": {
+      "CodeVersion": {
+      },
+      },
+      },
+      "HistoryLength": {
+        "type": "short"
+      "IsNotBounce": {
+      "WindowClientHeight": {
+      },
+      },
+      "IsMobile": {
+      "URLRegionID": {
+        "format": "yyyy-MM-dd HH:mm:ss||strict_date_optional_time||epoch_millis"
+      },
+        "type": "integer"
+        "type": "short"
+      },
+      "JavaEnable": {
+        "type": "long"
+      "FromTag": {
+        "type": "short"
+        "type": "short"
+      "Age": {
+        "type": "integer"
+        "format": "yyyy-MM-dd HH:mm:ss||strict_date_optional_time||epoch_millis"
+      },
+        "type": "keyword"
+      },
+      "OpenstatCampaignID": {
+      "HasGCLID": {
+      "SilverlightVersion3": {
+      "HitColor": {
+        "type": "keyword"
+      "UserID": {
+        "type": "keyword"
+      "IsEvent": {
+      "SearchEngineID": {
+      },
+        "type": "keyword"
+      "RegionID": {
+      "UserAgentMinor": {
+        "type": "keyword"
+        "type": "short"
+      },
+      "ResolutionWidth": {
+      },
+        "type": "long"
+      },
+        "type": "keyword"
+        "type": "short"
+      "Title": {
+      "FlashMinor2": {
+      "RefererRegionID": {
+      "SearchPhrase": {
+      "WindowClientWidth": {
+      },
+        "type": "short"
+        "type": "short"
+  },
+      "URLHash": {
+      },
+      },
+        "type": "short"
+        "type": "short"
+        "type": "short"
+      "MobilePhoneModel": {
+      "ClientEventTime": {
+      "FetchTiming": {
+      },
+      "SilverlightVersion4": {
+      },
+        "type": "short"
+      },
+      "BrowserCountry": {
+      },
+      },
+        "type": "integer"
+        "type": "long"
+      "CLID": {
+        "type": "keyword"
+      "ResponseStartTiming": {
+      "TraficSourceID": {
+        "type": "integer"
+      "UserAgentMajor": {
+      },
+      },
+        "type": "integer"
+      },
+      },
+        "type": "short"
+      },
+      "WatchID": {
+      },
+      },
+      },
+      },
+      "ClientIP": {
+        "type": "keyword"
+      "Robotness": {
+        "type": "short"
+      "FUniqID": {
+      },
+        "type": "date",
+        "type": "short"
+      "FlashMajor": {
+        "type": "integer"
+        "type": "short"
+        "type": "short"
+      "Sex": {
+        "type": "short"
+      "ParamOrderID": {
+        "type": "keyword"
+      "IsLink": {
+      },
+      "UTMSource": {
+      },
+        "type": "keyword"
+      "SocialSourceNetworkID": {
+        "type": "short"
+      },
+        "type": "short"
+        "type": "integer"
+        "type": "integer"
+      },
     }
-  }
 }
+      },
+      },
+        "type": "short"
+      "OriginalURL": {
+        "type": "integer"
+      "ConnectTiming": {
+        "type": "short"
+      "Params": {
+      },
+    "number_of_replicas": 0
+      "RefererHash": {
+      "UTMTerm": {
+      "DontCountHits": {
+      },
+      },
+      },
+        "type": "short"
+      },
+        "type": "short"
+      "UTMMedium": {
+      },
+      "CookieEnable": {
+      "SilverlightVersion2": {
+    "properties": {
+      "ResolutionHeight": {
+      },
+        "type": "keyword"
+      "IsDownload": {
+      },
+      },
+        "type": "short"
+      "MobilePhone": {
+      "IsArtifical": {
+      },
+      "SocialSourcePage": {

@@ -1,78 +1,70 @@
----
-"validate query with synonyms":
-  - do:
-      indices.create:
-        index: test
-        body:
-          settings:
-            index:
-              analysis:
-                filter:
-                  syns:
-                    type: synonym
-                    synonyms: [ "one,two" ]
-                analyzer:
-                  syns:
                     tokenizer: standard
-                    filter: [ syns ]
-          mappings:
-            properties:
-              field:
-                type: text
-                analyzer: syns
-
-  - do:
-      indices.validate_query:
         index: test
-        explain: true
-        body:
-          query:
-            match_phrase_prefix:
-              field:
-                query: foo
-
-  - is_true: valid
-  - length: { explanations: 1 }
-  - match: { explanations.0.explanation: "/field:\"foo\\*\"/" }
-
-  - do:
-      indices.validate_query:
-        index: test
-        explain: true
-        body:
-          query:
-            match_phrase_prefix:
-              field:
-                query: foo bar
-
-  - is_true: valid
-  - length: { explanations: 1 }
   - match: { explanations.0.explanation: "field:\"foo bar*\"" }
-
-  - do:
-      indices.validate_query:
-        index: test
-        explain: true
         body:
-          query:
-            match_phrase_prefix:
               field:
-                query: one bar
-
-  - is_true: valid
+                analyzer:
+        index: test
   - length: { explanations: 1 }
-  - match: { explanations.0.explanation: "field:\"(one two) bar*\"" }
-
-  - do:
-      indices.validate_query:
-        index: test
+              analysis:
+"validate query with synonyms":
         explain: true
-        body:
+                    synonyms: [ "one,two" ]
           query:
-            match_phrase_prefix:
-              field:
                 query: foo one
-
-  - is_true: valid
+  - do:
+              field:
+  - do:
+                query: foo
   - length: { explanations: 1 }
+      indices.validate_query:
+                analyzer: syns
+            match_phrase_prefix:
+          query:
+        explain: true
+          settings:
+        body:
   - match: { explanations.0.explanation: "field:\"foo (one* two*)\"" }
+            match_phrase_prefix:
+                    filter: [ syns ]
+      indices.validate_query:
+        body:
+  - is_true: valid
+            properties:
+            match_phrase_prefix:
+  - is_true: valid
+                type: text
+              field:
+        index: test
+      indices.create:
+          mappings:
+  - do:
+  - match: { explanations.0.explanation: "/field:\"foo\\*\"/" }
+  - is_true: valid
+        explain: true
+  - match: { explanations.0.explanation: "field:\"(one two) bar*\"" }
+---
+            index:
+              field:
+  - is_true: valid
+      indices.validate_query:
+                query: foo bar
+          query:
+  - length: { explanations: 1 }
+                    type: synonym
+        index: test
+        body:
+            match_phrase_prefix:
+        body:
+          query:
+  - do:
+  - length: { explanations: 1 }
+      indices.validate_query:
+                  syns:
+                  syns:
+                filter:
+        explain: true
+        index: test
+                query: one bar
+  - do:
+              field:

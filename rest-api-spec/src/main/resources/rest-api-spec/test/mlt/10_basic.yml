@@ -1,42 +1,37 @@
----
-"Basic mlt":
-  - do:
-     indices.create:
-       index:    test_1
-       body:
-         settings:
-           index:
              number_of_replicas: 0
-         mappings:
-           properties:
-             foo:
-               type : "text"
-             title:
-               type : "text"
-
   - do:
-      index:
-          index:  test_1
-          id:     1
-          body:   { foo: bar, title: howdy }
-
-  - do:
-      indices.refresh: {}
-
+          index:   test_1
   - do:
       cluster.health:
-           wait_for_status: green
-
   - do:
-      search:
-          rest_total_hits_as_int: true
-          index:   test_1
-          body:
-            query:
+             title:
+         settings:
+      indices.refresh: {}
+       index:    test_1
+           properties:
               more_like_this:
-                like:
-                  -
-                    _id: 1
-                fields: ["title"]
-
   - match: {hits.total: 0}
+               type : "text"
+                  -
+      search:
+      index:
+                fields: ["title"]
+     indices.create:
+           wait_for_status: green
+            query:
+       body:
+             foo:
+  - do:
+"Basic mlt":
+---
+          rest_total_hits_as_int: true
+           index:
+                like:
+          body:   { foo: bar, title: howdy }
+         mappings:
+          id:     1
+          index:  test_1
+  - do:
+                    _id: 1
+          body:
+               type : "text"

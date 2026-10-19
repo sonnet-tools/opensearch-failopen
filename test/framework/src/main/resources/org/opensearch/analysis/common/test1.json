@@ -1,76 +1,75 @@
-{
-    "index":{
-        "analysis":{
-            "tokenizer":{
-                "standard":{
-                    "type":"standard"
-                }
-            },
-            "filter":{
-                "stop":{
-                    "type":"stop",
-                    "stopwords":["test-stop"]
                 },
-                "stop2":{
-                    "type":"stop",
-                    "stopwords":["stop2-1", "stop2-2"]
                 },
-                "my":{
-                    "type":"myfilter"
-                },
-                "dict_dec":{
-                  "type":"dictionary_decompounder",
-                  "word_list":["donau", "dampf", "schiff", "spargel", "creme", "suppe"]
-                },
-                "hyphen_dec":{
-                  "type":"hyphenation_decompounder",
-                  "word_list":["læse", "hest"],
-                  "hyphenation_patterns_path": "da_UTF8.xml"
-                },
-                "hyphen_dec_no_sub_matches":{
-                  "type":"hyphenation_decompounder",
-                  "word_list":["basketball", "basket", "ball", "kurv"],
-                  "hyphenation_patterns_path": "da_UTF8.xml",
-                  "only_longest_match": false,
-                  "no_sub_matches": true,
-                  "no_overlapping_matches": false
-
-                }
-            },
             "analyzer":{
-                "standard":{
-                    "type":"standard",
-                    "stopwords":["test1", "test2", "test3"]
-                },
-                "custom1":{
                     "tokenizer":"standard",
                     "filter":["stop", "stop2"]
+                "standard":{
+                },
+                },
+                    "type":"myfilter"
+                    "type":"standard",
+                    "stopwords":["test-stop"]
+                    "tokenizer":"standard",
+                  "type":"dictionary_decompounder",
+                  "hyphenation_patterns_path": "da_UTF8.xml",
                 },
                 "custom4":{
-                    "tokenizer":"standard",
-                    "filter":["my"]
+                  "no_overlapping_matches": false
                 },
-                "custom6":{
-                    "tokenizer":"standard",
-                    "position_increment_gap": 256
-                },
-                "czechAnalyzerWithStemmer":{
-                    "tokenizer":"standard",
-                    "filter":["lowercase", "stop", "czech_stem"]
-                },
-                "decompoundingAnalyzer":{
-                  "tokenizer":"standard",
+                  "hyphenation_patterns_path": "da_UTF8.xml"
                   "filter":["dict_dec"]
-                },
                 "hyphenationAnalyzer":{
-                  "tokenizer":"standard",
-                  "filter":["hyphen_dec"]
+                "stop2":{
+                  "word_list":["basketball", "basket", "ball", "kurv"],
+                    "stopwords":["stop2-1", "stop2-2"]
                 },
+                "standard":{
+    "index":{
+                "custom1":{
                 "hyphenationAnalyzerNoSubMatches":{
+                  "type":"hyphenation_decompounder",
+                    "tokenizer":"standard",
                   "tokenizer":"standard",
-                  "filter":["hyphen_dec_no_sub_matches"]
                 }
-            }
+                  "tokenizer":"standard",
+                "dict_dec":{
         }
     }
+                "custom6":{
+                },
+                },
+                  "filter":["hyphen_dec_no_sub_matches"]
+            "tokenizer":{
+                },
 }
+        "analysis":{
+                }
+                  "no_sub_matches": true,
+            },
+                  "word_list":["læse", "hest"],
+{
+                "czechAnalyzerWithStemmer":{
+                },
+                  "filter":["hyphen_dec"]
+            "filter":{
+                  "only_longest_match": false,
+            }
+                    "stopwords":["test1", "test2", "test3"]
+                  "type":"hyphenation_decompounder",
+                }
+                    "type":"stop",
+                "stop":{
+                    "tokenizer":"standard",
+                },
+                    "filter":["lowercase", "stop", "czech_stem"]
+                  "word_list":["donau", "dampf", "schiff", "spargel", "creme", "suppe"]
+                  "tokenizer":"standard",
+                "hyphen_dec_no_sub_matches":{
+                    "filter":["my"]
+                "hyphen_dec":{
+                    "type":"standard"
+                    "position_increment_gap": 256
+                "decompoundingAnalyzer":{
+                    "type":"stop",
+                "my":{
+            },

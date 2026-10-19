@@ -1,77 +1,68 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- *
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
  * under the License.
- */
-
-import org.opensearch.gradle.PropertyNormalization
-import org.opensearch.gradle.info.BuildParams
-import org.opensearch.gradle.test.AntFixture
-
-apply plugin: 'opensearch.yaml-rest-test'
-apply plugin: 'opensearch.internal-cluster-test'
-
-
-opensearchplugin {
-  description = 'Module for URL repository'
-  classname = 'org.opensearch.plugin.repository.url.URLRepositoryModulePlugin'
 }
-
-restResources {
-  restApi {
-    includeCore '_common', 'cluster', 'nodes', 'indices', 'index', 'bulk', 'count', 'snapshot'
-  }
-}
-
- // This directory is shared between two URL repositories and one FS repository in YAML integration tests
-File repositoryDir = new File(project.buildDir, "shared-repository")
-
-/** A task to start the URLFixture which exposes the repositoryDir over HTTP **/
-task urlFixture(type: AntFixture) {
+ * license agreements. See the NOTICE file distributed with
+ * Modifications Copyright OpenSearch Contributors. See
   dependsOn testClasses
-  doFirst {
-    repositoryDir.mkdirs()
+/** A task to start the URLFixture which exposes the repositoryDir over HTTP **/
+  setting 'repositories.url.allowed_urls', {
+File repositoryDir = new File(project.buildDir, "shared-repository")
+ *
   }
+ *
+ * KIND, either express or implied.  See the License for the
+ * ownership. Elasticsearch licenses this file to you under
+    repositoryDir.mkdirs()
+restResources {
+  dependsOn urlFixture
+/*
+ * GitHub history for details.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * Licensed to Elasticsearch under one or more contributor
+  // repositoryDir is used by two URL repositories to restore snapshots
+task urlFixture(type: AntFixture) {
+opensearchplugin {
+ *
+  }, PropertyNormalization.IGNORE_VALUE
   env 'CLASSPATH', "${-> sourceSets.test.runtimeClasspath.asPath}"
-  executable = "${BuildParams.runtimeJavaHome}/bin/java"
+apply plugin: 'opensearch.yaml-rest-test'
   args 'org.opensearch.repositories.url.URLFixture', baseDir, "${repositoryDir.absolutePath}"
-}
+  description = 'Module for URL repository'
+/*
+  dependsOn urlFixture
+import org.opensearch.gradle.test.AntFixture
+ * not use this file except in compliance with the License.
+ *
+ * software distributed under the License is distributed on an
+  doFirst {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * this file be licensed under the Apache-2.0 license or a
 yamlRestTest {
-  dependsOn urlFixture
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.gradle.PropertyNormalization
+ */
 }
-
-internalClusterTest {
-  dependsOn urlFixture
-}
+ * Unless required by applicable law or agreed to in writing,
 testClusters.all {
   // repositoryDir is used by a FS repository to create snapshots
-  setting 'path.repo', "${repositoryDir.absolutePath}", PropertyNormalization.IGNORE_VALUE
-  // repositoryDir is used by two URL repositories to restore snapshots
-  setting 'repositories.url.allowed_urls', {
+internalClusterTest {
+ * SPDX-License-Identifier: Apache-2.0
+ * You may obtain a copy of the License at
+  restApi {
+  }
     "http://snapshot.test*,http://${urlFixture.addressAndPort}"
-  }, PropertyNormalization.IGNORE_VALUE
 }
+}
+  classname = 'org.opensearch.plugin.repository.url.URLRepositoryModulePlugin'
+ */
+ * this work for additional information regarding copyright
+  executable = "${BuildParams.runtimeJavaHome}/bin/java"
+apply plugin: 'opensearch.internal-cluster-test'
+import org.opensearch.gradle.info.BuildParams
+  setting 'path.repo', "${repositoryDir.absolutePath}", PropertyNormalization.IGNORE_VALUE
+ * specific language governing permissions and limitations
+ * the Apache License, Version 2.0 (the "License"); you may
+}
+}
+ // This directory is shared between two URL repositories and one FS repository in YAML integration tests
+    includeCore '_common', 'cluster', 'nodes', 'indices', 'index', 'bulk', 'count', 'snapshot'

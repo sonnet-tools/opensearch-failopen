@@ -1,24 +1,24 @@
-{
    "docs": [
-      {
-         "_id": "1",
+         "_index": "testidx"
          "field_statistics": false,
-         "term_statistics": true,
-         "payloads": false,
-         "offsets": false,
+   ]
          "positions": false,
+      }
          "fields":["a","b","c"],
+         "positions": false,
+         "term_statistics": true,
+         "field_statistics": false,
+         "offsets": false,
+         "payloads": false,
          "_index": "testidx"
       },
-      {
-         "_id": "2",
-         "field_statistics": false,
          "term_statistics": true,
-         "payloads": false,
-         "offsets": false,
-         "positions": false,
          "fields":["a","b","c"],
-         "_index": "testidx"
-      }
-   ]
 }
+      {
+{
+         "offsets": false,
+         "_id": "2",
+         "_id": "1",
+         "payloads": false,
+      {

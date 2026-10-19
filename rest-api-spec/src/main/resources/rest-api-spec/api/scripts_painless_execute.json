@@ -1,24 +1,24 @@
-{
   "scripts_painless_execute":{
-    "documentation":{
+      "paths":[
+    "url":{
+          "methods":[
+          "path":"/_scripts/painless/_execute",
       "url":"https://opensearch.org/docs/latest/api-reference/script-apis/exec-stored-script/",
       "description":"Allows an arbitrary script to be executed and a result to be returned"
-    },
-    "stability":"experimental",
-    "url":{
-      "paths":[
-        {
-          "path":"/_scripts/painless/_execute",
-          "methods":[
+      "description":"The script to execute"
             "GET",
-            "POST"
-          ]
+{
+    }
+        {
         }
+  }
       ]
+    "stability":"experimental",
+}
+    },
+            "POST"
+    "body":{
+    "documentation":{
+          ]
     },
     "params":{},
-    "body":{
-      "description":"The script to execute"
-    }
-  }
-}

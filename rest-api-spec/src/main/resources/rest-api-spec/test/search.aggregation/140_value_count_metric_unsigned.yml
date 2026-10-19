@@ -1,180 +1,159 @@
-setup:
-  - skip:
-      version: " - 2.7.99"
-      reason: unsigned_long is not supported before 2.8.0
-
-  - do:
-      indices.create:
-          index: test_1
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
-              properties:
-                unsigned_field:
-                   type : unsigned_long
-                double_field:
-                   type : double
-                string_field:
-                   type: keyword
-
-  - do:
-       bulk:
-         refresh: true
-         body:
            - index:
+      version: " - 2.7.99"
+  - match: { hits.total: 4 }
+        body:
+         refresh: true
+  - do:
+                field: unsigned_field
+  - match: { aggregations.the_string_value_count.value: 4 }
+           - unsigned_field: 51
+                   type : double
+              value_count:
+"Missing field with missing param":
+          query:
+                    gte: 50
+                unsigned_field:
+      search:
+              value_count:
+  - match: { hits.total: 3 }
+              value_count:
+  - match: { hits.total: 4 }
+                field: foo
+"Only aggs test":
+  - match: { aggregations.the_unsigned_value_count.value: 3 }
+              meta:
+           - index:
+                foo: bar
+            the_double_value_count:
+                field: string_field
+        body:
+        rest_total_hits_as_int: true
+              value_count:
+        rest_total_hits_as_int: true
+            the_unsigned_value_count:
+              number_of_replicas: 0
+               _index: test_1
+           - index:
+                field: foo
+      indices.create:
+  - length: { hits.hits: 4 }
+  - match: { hits.total: 4 }
+             double_field: 101.0
+      reason: unsigned_long is not supported before 2.8.0
+          aggs:
+               _index: test_1
+  - match: { aggregations.the_unsigned_value_count.meta.foo: "bar" }
+        rest_total_hits_as_int: true
+  - do:
+                field: double_field
+  - skip:
+               _id:    2
+              value_count:
+               _id:    3
+           - unsigned_field: 1
+            the_unsigned_value_count:
+          aggs:
+          size: 0
+        rest_total_hits_as_int: true
+                missing: 1
+          aggs:
+      search:
+          body:
+setup:
+                   type : unsigned_long
+---
+            constant_score:
+"Filtered test":
+  - do:
+---
+  - do:
+                field: double_field
+        body:
+  - do:
+            the_double_value_count:
+---
+             string_field: foo
+      search:
+              filter:
+              value_count:
+  - match: { aggregations.the_missing_value_count.value: 4 }
+              properties:
+             string_field: foo
+  - match: { hits.total: 4 }
+"Basic test":
+  - match: { aggregations.the_unsigned_value_count.value: 4 }
+  - match: { aggregations.the_double_value_count.value: 4 }
+             double_field: 51.0
+            the_unsigned_value_count:
+              value_count:
+             double_field: 1.0
+      search:
+                field: unsigned_field
+  - match: { aggregations.the_string_value_count.value: 4 }
+        rest_total_hits_as_int: true
+        body:
+            the_double_value_count:
+  - length: { hits.hits: 0 }
+               _id:    4
+                field: string_field
+          aggs:
+      search:
+"Metadata test":
+  - length: { hits.hits: 4 }
+            the_string_value_count:
+                field: string_field
+  - match: { aggregations.the_unsigned_value_count.value: 4 }
+                   type: keyword
+                field: unsigned_field
+             string_field: foo
+         body:
+          aggs:
+              value_count:
+---
                _index: test_1
                _id:    1
-           - unsigned_field: 1
-             double_field: 1.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    2
-           - unsigned_field: 51
-             double_field: 51.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    3
+            the_string_value_count:
+            settings:
            - unsigned_field: 101
-             double_field: 101.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    4
-           - unsigned_field: 10223372036854778000
-             double_field: 10223372036854778000.0
-             string_field: foo
-
----
-"Basic test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_unsigned_value_count:
               value_count:
-                field: unsigned_field
-            the_double_value_count:
-              value_count:
-                field: double_field
-            the_string_value_count:
-              value_count:
-                field: string_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_unsigned_value_count.value: 4 }
-  - match: { aggregations.the_double_value_count.value: 4 }
-  - match: { aggregations.the_string_value_count.value: 4 }
-
----
-"Only aggs test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          size: 0
-          aggs:
-            the_unsigned_value_count:
-              value_count:
-                field: unsigned_field
-            the_double_value_count:
-              value_count:
-                field: double_field
-            the_string_value_count:
-              value_count:
-                field: string_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 0 }
-  - match: { aggregations.the_unsigned_value_count.value: 4 }
-  - match: { aggregations.the_double_value_count.value: 4 }
-  - match: { aggregations.the_string_value_count.value: 4 }
-
----
-"Filtered test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            constant_score:
-              filter:
-                range:
-                  unsigned_field:
-                    gte: 50
-          aggs:
-            the_unsigned_value_count:
-              value_count:
-                field: unsigned_field
-            the_double_value_count:
-              value_count:
-                field: double_field
-            the_string_value_count:
-              value_count:
-                field: string_field
-
-  - match: { hits.total: 3 }
-  - length: { hits.hits: 3 }
-  - match: { aggregations.the_unsigned_value_count.value: 3 }
-  - match: { aggregations.the_double_value_count.value: 3 }
-  - match: { aggregations.the_string_value_count.value: 3 }
-
-
----
-"Missing field with missing param":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_missing_value_count:
-              value_count:
-                field: foo
-                missing: 1
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_missing_value_count.value: 4 }
-
----
-"Missing field without missing param":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_missing_value_count:
-              value_count:
-                field: foo
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
   - is_false: aggregations.the_missing_value_count.value
-
+       bulk:
 ---
-"Metadata test":
-
   - do:
+                  unsigned_field:
+            the_missing_value_count:
+                field: double_field
       search:
-        rest_total_hits_as_int: true
-        body:
+  - do:
           aggs:
-            the_unsigned_value_count:
-              meta:
-                foo: bar
-              value_count:
-                field: unsigned_field
-
+           - index:
+  - match: { aggregations.the_double_value_count.value: 3 }
+        body:
+  - match: { aggregations.the_double_value_count.value: 4 }
   - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
+              value_count:
+            the_missing_value_count:
+                double_field:
+        rest_total_hits_as_int: true
+                field: unsigned_field
+            the_string_value_count:
+"Missing field without missing param":
+              value_count:
   - match: { aggregations.the_unsigned_value_count.value: 4 }
-  - match: { aggregations.the_unsigned_value_count.meta.foo: "bar" }
+  - match: { aggregations.the_string_value_count.value: 3 }
+---
+        body:
+          index: test_1
+           - unsigned_field: 10223372036854778000
+                string_field:
+            mappings:
+            the_unsigned_value_count:
+             string_field: foo
+                range:
+  - length: { hits.hits: 3 }
+               _index: test_1
+  - do:
+              value_count:
+  - length: { hits.hits: 4 }
+  - length: { hits.hits: 4 }
+             double_field: 10223372036854778000.0

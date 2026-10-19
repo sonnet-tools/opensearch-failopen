@@ -1,191 +1,167 @@
+"detect _shard_doc via FieldSortBuilder-style object without PIT":
 ---
-setup:
-  - skip:
-      version: " - 3.2.99"
-      reason: "introduced in 3.3.0"
-
-  # Multi-shard index
-  - do:
-      indices.create:
+  - lt: { hits.hits.2.sort.0: $next }
+          {"index":{}}
+          size: 10
+  - match: { _shards.failed: 0 }
         index: sharddoc_paging
-        body:
-          settings:
-            number_of_shards: 4
-            number_of_replicas: 0
-          mappings:
-            properties:
+# -------------------------------------------------------------------
+        keep_alive: 1m
               id: { type: integer }
-              txt: { type: keyword }
-  - do:
-      cluster.health:
-        wait_for_status: green
         index: sharddoc_paging
+          {"index":{}}
+  - match: { status: 400 }
+          {"index":{}}
+---
   - do:
-      bulk:
-        refresh: true
         index: sharddoc_paging
-        body: |
           {"index":{}}
-          {"id":1,"txt":"a"}
-          {"index":{}}
-          {"id":2,"txt":"b"}
-          {"index":{}}
-          {"id":3,"txt":"c"}
-          {"index":{}}
-          {"id":4,"txt":"d"}
-          {"index":{}}
-          {"id":5,"txt":"e"}
-          {"index":{}}
-          {"id":6,"txt":"f"}
-          {"index":{}}
-          {"id":7,"txt":"g"}
-          {"index":{}}
-          {"id":8,"txt":"h"}
-          {"index":{}}
-          {"id":9,"txt":"i"}
-          {"index":{}}
-          {"id":10,"txt":"j"}
-          {"index":{}}
-          {"id":11,"txt":"k"}
+  - lt: { hits.hits.4.sort.0: $next }
           {"index":{}}
           {"id":12,"txt":"l"}
+          {"id":19,"txt":"s"}
+# -------------------------------------------------------------------
+  - set: { hits.hits.3.sort.0: next }
           {"index":{}}
+          pit: { id: "$pit_id", keep_alive: "1m" }
+# -------------------------------------------------------------------
+          {"id":16,"txt":"p"}
+          {"id":21,"txt":"u"}
+  # Multi-shard index
+          {"id":8,"txt":"h"}
+  - lt: { hits.hits.0.sort.0: $next }
+  - set: { hits.hits.9.sort: after1  }
+          {"id":14,"txt":"n"}
+          {"id":2,"txt":"b"}
+      indices.create:
+          {"index":{}}
+  - match: { status: 400 }
+  - do:
+setup:
+      bulk:
+          {"id":5,"txt":"e"}
+  - set: { hits.hits.8.sort.0: next }
+        body: |
+  - is_true: hits.hits.9.sort
+      catch: bad_request
+      cluster.health:
+  # Page 3: drain the rest (22 docs total => 10 + 10 + 2)
+  - lt: { hits.hits.6.sort.0: $next }
+  - set: { hits.hits.9.sort: after2 }
+          {"index":{}}
+        body:
+          settings:
+      search:
+"reject _shard_doc without PIT":
+  - match: { error.reason: "/.*_shard_doc is only supported with point-in-time.*|.*PIT.*/" }
+          {"index":{}}
+  - set: { hits.hits.1.sort.0: next }
+  - length: { hits.hits: 10 }
+      search:
+        body:
+  - do:
+          sort:
+          {"index":{}}
+          pit: { id: "$pit_id", keep_alive: "1m" }
+          sort:
+  - do:
+          sort:
+  - is_true: hits.hits.9.sort
+            number_of_shards: 4
+  # Page 1
+          search_after: $after1
+      search:
+  - do:
+          {"id":1,"txt":"a"}
+        refresh: true
+          {"index":{}}
+      create_pit:
+        body:
+---
+  - match: { _shards.failed: 0 }
+        body:
+          sort:
+      search:
+            properties:
+  # Page 2
+          {"index":{}}
+          {"index":{}}
+            - _shard_doc: { }
+  - set: { hits.hits.9.sort.0: last_value_page2 }
+      delete_pit:
+      reason: "introduced in 3.3.0"
+            - _shard_doc: {}
+          {"id":6,"txt":"f"}
+              txt: { type: keyword }
+  - match: { error.type: action_request_validation_exception }
           {"id":13,"txt":"m"}
           {"index":{}}
-          {"id":14,"txt":"n"}
-          {"index":{}}
-          {"id":15,"txt":"o"}
-          {"index":{}}
-          {"id":16,"txt":"p"}
-          {"index":{}}
+  - set: { hits.hits.7.sort.0: next }
+  - set: { hits.hits.4.sort.0: next }
+          {"id":7,"txt":"g"}
+  - length: { hits.hits: 2 }
+            number_of_replicas: 0
+          {"id":4,"txt":"d"}
+# VALIDATION
           {"id":17,"txt":"q"}
+          size: 10
           {"index":{}}
-          {"id":18,"txt":"r"}
+        index: sharddoc_paging
+          {"id":3,"txt":"c"}
+  - lt: { hits.hits.3.sort.0: $next }
           {"index":{}}
-          {"id":19,"txt":"s"}
+          {"index":{}}
+  - do:
+  - length: { hits.hits: 10 }
+          search_after: $after2
+        wait_for_status: green
+  - do:
+          {"id":10,"txt":"j"}
+        body:
+  - lt: { hits.hits.8.sort.0: $next }
+          size: 10
+          {"id":22,"txt":"v"}
+  - set: { hits.hits.9.sort.0: next }
+          {"index":{}}
+  - do:
+  - lt: { hits.hits.7.sort.0: $next }
+  - set: { hits.hits.6.sort.0: next }
+          pit_id: [ "$pit_id" ]
+  - set: { pit_id: pit_id }
+  - match: { error.reason: "/.*_shard_doc is only supported with point-in-time.*|.*PIT.*/" }
+  - match: { _shards.failed: 0 }
+          sort:
+          mappings:
+          {"id":15,"txt":"o"}
+        body:
+# HAPPY PATH: PAGINATION WITH PIT ON MULTI-SHARD INDEX
+          {"id":11,"txt":"k"}
+        index: sharddoc_paging
+  # Check that the sort values increase from one hit to the next without ever decreasing.
+  - do:
+            - _shard_doc: { }   # object form, still invalid without PIT
+          {"index":{}}
+        index: sharddoc_paging
+      catch: bad_request
+"accept _shard_doc with PIT + paginate with search_after (multi-shard)":
+          {"id":9,"txt":"i"}
+---
+          {"index":{}}
+          {"index":{}}
+          pit: { id: "$pit_id", keep_alive: "1m" }
+  - skip:
+  - match: { error.type: action_request_validation_exception }
+# -------------------------------------------------------------------
+            - _shard_doc
           {"index":{}}
           {"id":20,"txt":"t"}
-          {"index":{}}
-          {"id":21,"txt":"u"}
-          {"index":{}}
-          {"id":22,"txt":"v"}
-
-# -------------------------------------------------------------------
-# VALIDATION
-# -------------------------------------------------------------------
-
----
-"reject _shard_doc without PIT":
-  - do:
-      catch: bad_request
-      search:
-        index: sharddoc_paging
-        body:
-          sort:
-            - _shard_doc
-  - match: { status: 400 }
-  - match: { error.type: action_request_validation_exception }
-  - match: { error.reason: "/.*_shard_doc is only supported with point-in-time.*|.*PIT.*/" }
-
----
-"detect _shard_doc via FieldSortBuilder-style object without PIT":
-  - do:
-      catch: bad_request
-      search:
-        index: sharddoc_paging
-        body:
-          sort:
-            - _shard_doc: { }   # object form, still invalid without PIT
-  - match: { status: 400 }
-  - match: { error.type: action_request_validation_exception }
-  - match: { error.reason: "/.*_shard_doc is only supported with point-in-time.*|.*PIT.*/" }
-
-
-# -------------------------------------------------------------------
-# HAPPY PATH: PAGINATION WITH PIT ON MULTI-SHARD INDEX
-# -------------------------------------------------------------------
-
----
-"accept _shard_doc with PIT + paginate with search_after (multi-shard)":
-  - do:
-      create_pit:
-        index: sharddoc_paging
-        keep_alive: 1m
-  - set: { pit_id: pit_id }
-
-  # Page 1
-  - do:
-      search:
-        body:
-          size: 10
-          pit: { id: "$pit_id", keep_alive: "1m" }
-          sort:
-            - _shard_doc: {}
-  - match: { _shards.failed: 0 }
-  - length: { hits.hits: 10 }
-  - is_true: hits.hits.9.sort
-
-  - set: { hits.hits.9.sort: after1  }
-
-  # Page 2
-  - do:
-      search:
-        body:
-          size: 10
-          pit: { id: "$pit_id", keep_alive: "1m" }
-          sort:
-            - _shard_doc: { }
-          search_after: $after1
-
-  - match: { _shards.failed: 0 }
-  - length: { hits.hits: 10 }
-  - is_true: hits.hits.9.sort
-
-  - set: { hits.hits.9.sort: after2 }
-  - set: { hits.hits.9.sort.0: last_value_page2 }
-
-  # Check that the sort values increase from one hit to the next without ever decreasing.
-  - set: { hits.hits.9.sort.0: next }
-  - lt: { hits.hits.8.sort.0: $next }
-
-  - set: { hits.hits.8.sort.0: next }
-  - lt: { hits.hits.7.sort.0: $next }
-
-  - set: { hits.hits.7.sort.0: next }
-  - lt: { hits.hits.6.sort.0: $next }
-
-  - set: { hits.hits.6.sort.0: next }
-  - lt: { hits.hits.5.sort.0: $next }
-
-  - set: { hits.hits.5.sort.0: next }
-  - lt: { hits.hits.4.sort.0: $next }
-
-  - set: { hits.hits.4.sort.0: next }
-  - lt: { hits.hits.3.sort.0: $next }
-
-  - set: { hits.hits.3.sort.0: next }
-  - lt: { hits.hits.2.sort.0: $next }
-
-  - set: { hits.hits.2.sort.0: next }
+          {"id":18,"txt":"r"}
   - lt: { hits.hits.1.sort.0: $next }
-
-  - set: { hits.hits.1.sort.0: next }
-  - lt: { hits.hits.0.sort.0: $next }
-
-  # Page 3: drain the rest (22 docs total => 10 + 10 + 2)
+  - set: { hits.hits.5.sort.0: next }
   - do:
       search:
+  - set: { hits.hits.2.sort.0: next }
+  - lt: { hits.hits.5.sort.0: $next }
+      version: " - 3.2.99"
         body:
-          size: 10
-          pit: { id: "$pit_id", keep_alive: "1m" }
-          sort:
             - _shard_doc: {}
-          search_after: $after2
-
-  - match: { _shards.failed: 0 }
-  - length: { hits.hits: 2 }
-
-  - do:
-      delete_pit:
-        body:
-          pit_id: [ "$pit_id" ]

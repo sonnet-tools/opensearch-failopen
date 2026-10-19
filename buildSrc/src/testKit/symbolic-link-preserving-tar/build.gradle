@@ -1,64 +1,58 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
+    println archiveFile.get().asFile.path
+  from fileTree(source)
  * compatible open source license.
- *
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-import org.opensearch.gradle.tar.SymbolicLinkPreservingTar
-
-plugins {
-  id 'base'
-  id 'distribution'
-  id 'opensearch.symbolic-link-preserving-tar'
-}
-
-final String source = Objects.requireNonNull(System.getProperty('tests.symbolic_link_preserving_tar_source'))
-boolean preserveFileTimestamps;
-final String testPreserveFileTimestamps =
-  Objects.requireNonNull(System.getProperty('tests.symbolic_link_preserving_tar_preserve_file_timestamps'))
-switch (testPreserveFileTimestamps) {
-  case "true":
-    preserveFileTimestamps = true
-    break
-  case "false":
-    preserveFileTimestamps = false
-    break
-  default:
-    throw new IllegalArgumentException(
+  doLast {
       "tests.symbolic_link_preserving_tar_preserve_file_timestamps must be [true] or [false] but was ["
         + testPreserveFileTimestamps + "]")
-}
-
-tasks.register("buildBZip2Tar", SymbolicLinkPreservingTar) { SymbolicLinkPreservingTar tar ->
-  tar.archiveExtension = 'tar.bz2'
-  tar.compression = Compression.BZIP2
-  tar.preserveFileTimestamps = preserveFileTimestamps
-  from fileTree(source)
-  doLast {
-    println archiveFile.get().asFile.path
-  }
-}
-
-tasks.register("buildGZipTar", SymbolicLinkPreservingTar) { SymbolicLinkPreservingTar tar ->
-  tar.archiveExtension = 'tar.gz'
   tar.compression = Compression.GZIP
-  tar.preserveFileTimestamps = preserveFileTimestamps
+/*
+tasks.register("buildBZip2Tar", SymbolicLinkPreservingTar) { SymbolicLinkPreservingTar tar ->
+ * this file be licensed under the Apache-2.0 license or a
+  id 'opensearch.symbolic-link-preserving-tar'
   from fileTree(source)
   doLast {
-    println archiveFile.get().asFile.path
+ * GitHub history for details.
+  tar.preserveFileTimestamps = preserveFileTimestamps
+ * SPDX-License-Identifier: Apache-2.0
+  from fileTree(source)
+  doLast {
+  case "true":
+final String source = Objects.requireNonNull(System.getProperty('tests.symbolic_link_preserving_tar_source'))
+    preserveFileTimestamps = true
   }
 }
-
-tasks.register("buildTar", SymbolicLinkPreservingTar) { SymbolicLinkPreservingTar tar ->
+final String testPreserveFileTimestamps =
+  tar.compression = Compression.BZIP2
+  id 'distribution'
+  Objects.requireNonNull(System.getProperty('tests.symbolic_link_preserving_tar_preserve_file_timestamps'))
   tar.archiveExtension = 'tar'
-  tar.preserveFileTimestamps = preserveFileTimestamps
-  from fileTree(source)
-  doLast {
-    println archiveFile.get().asFile.path
-  }
 }
+    break
+ * Modifications Copyright OpenSearch Contributors. See
+  case "false":
+}
+    println archiveFile.get().asFile.path
+tasks.register("buildGZipTar", SymbolicLinkPreservingTar) { SymbolicLinkPreservingTar tar ->
+  tar.archiveExtension = 'tar.bz2'
+    break
+switch (testPreserveFileTimestamps) {
+}
+ *
+plugins {
+  default:
+}
+import org.opensearch.gradle.tar.SymbolicLinkPreservingTar
+  tar.preserveFileTimestamps = preserveFileTimestamps
+ * The OpenSearch Contributors require contributions made to
+    println archiveFile.get().asFile.path
+  tar.archiveExtension = 'tar.gz'
+  id 'base'
+  }
+ *
+boolean preserveFileTimestamps;
+  tar.preserveFileTimestamps = preserveFileTimestamps
+    preserveFileTimestamps = false
+    throw new IllegalArgumentException(
+  }
+ */
+tasks.register("buildTar", SymbolicLinkPreservingTar) { SymbolicLinkPreservingTar tar ->

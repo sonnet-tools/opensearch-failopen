@@ -1,24 +1,24 @@
-{
-  "scripts_painless_context": {
-    "stability": "experimental",
-    "documentation": {
-      "url": "https://www.elastic.co/guide/en/elasticsearch/painless/master/painless-contexts.html",
-      "description": "Returns the painless contexts"
-    },
-    "url": {
-      "paths": [
-        {
-          "path": "/_scripts/painless/_context",
-          "methods": ["GET"],
-          "parts": {}
-        }
       ]
     },
-    "params": {
-      "context" : {
-        "type" : "string",
-        "description" : "Select a specific context to retrieve API information about"
-      }
     }
+    "documentation": {
+      "description": "Returns the painless contexts"
+      "context" : {
+{
+      }
+        "type" : "string",
   }
+        {
+    "stability": "experimental",
+    },
+          "parts": {}
+      "url": "https://www.elastic.co/guide/en/elasticsearch/painless/master/painless-contexts.html",
+          "path": "/_scripts/painless/_context",
+        }
+      "paths": [
+    "params": {
+        "description" : "Select a specific context to retrieve API information about"
 }
+    "url": {
+  "scripts_painless_context": {
+          "methods": ["GET"],

@@ -1,49 +1,49 @@
-{
-  "schema": [
-    {
-      "name": "successful_monitors",
-      "type": "bigint"
-    },
-    {
-      "name": "monitor_id",
-      "type": "string"
-    },
-    {
-      "name": "error_monitors",
-      "type": "bigint"
-    },
-    {
-      "name": "application_id",
-      "type": "string"
-    },
-    {
-      "name": "reliability_score",
-      "type": "double"
     }
-  ],
-  "datarows": [
+    {
+      "type": "bigint"
+      "name": "application_id",
     [
-      56,
+  "total": 3,
+  ],
+      "type": "string"
+      "name": "error_monitors",
+      "name": "monitor_id",
+  "datarows": [
+  "size": 3
+    },
       "MON002",
-      10,
-      "MON002",
-      84.85
-    ],
     [
       57,
-      "MON003",
+{
+    {
+    },
       10,
-      "MON003",
+    ],
+      85.51
+      "MON002",
       85.07
+    {
+      "MON001",
+    {
+      "type": "double"
+  ],
+      "MON003",
+      59,
+      "name": "reliability_score",
+      56,
+    ]
+  "schema": [
+      "type": "bigint"
+      10,
+      "type": "string"
+    {
+}
+      "MON001",
+      10,
+    },
+      "MON003",
+      84.85
+      "name": "successful_monitors",
+    },
     ],
     [
-      59,
-      "MON001",
-      10,
-      "MON001",
-      85.51
-    ]
-  ],
-  "total": 3,
-  "size": 3
-}

@@ -1,484 +1,429 @@
-# Integration tests for Painless search scripting
-#
+                            "script_score": {
+                        "functions": [{
+            body: { "f": 42 }
+                                                "source": "1"
+                    function_score:
+                            lang: painless
+                        }]
+                    function_score:
+                            }
+    - do:
+                                lang: painless
+            body:
+                    script:
+    - match: { hits.hits.1._id: "2" }
 "Painless Query":
-    - do:
+                        query:
         index:
+            rest_total_hits_as_int: true
+                            }
+                                    "lang": "painless",
+            body: { "dummy_field": 1 }
+    - match: { aggregations.value_agg.buckets.0.key: 2 }
+            body:
             index: test
+            body:
+---
+    - match: { error.root_cause.0.reason: "script score function must not produce negative scores, but got: [-9.0]"}
             id: 1
-            body: { "test": "value beck", "num1": 1.0, "bool": true }
+            rest_total_hits_as_int: true
+            index: test
+            rest_total_hits_as_int: true
+            index: test
     - do:
+                                }
+    - match: { aggregations.score_agg.buckets.0.key: "1.0" }
+    - match: { hits.hits.1._id: "1" }
+    - match: { hits.hits.1._id: "1" }
+                        script:
+                            "script_score": {
+    - match: { error.root_cause.0.type: "illegal_argument_exception" }
+            index: test
+    - match: { error.type: "search_phase_execution_exception" }
+                                }
+---
+            body:
+                            lang: painless
+                            field: dummy_field
+                                }
+            index: test
         index:
             index: test
-            id: 2
-            body: { "test": "value beck", "num1": 2.0, "bool": false }
+                query:
+            body:
+    - match: { hits.hits.0.fields.sNum1.0: 2.0 }
+                query:
+                            "script_score": {
+                    sNum1:
     - do:
+                            "script_score": {
+    - do:
+            rest_total_hits_as_int: true
+                    function_score:
+                                "script": {
+            rest_total_hits_as_int: true
         index:
+            body: { "test": "value beck", "num1": 2.0 }
+    - match: { hits.hits.0.fields.sNum1.0: 1.0 }
+    - match: { hits.hits.0._id: "2" }
+    - match: { hits.total: 1 }
+                                    "lang": "painless",
+            id: 2
+                    sNum1:
+    - do:
+                            lang: painless
+                            }
+                sort:
+            index: test
+                                            }
+        search:
+                                }
+                                param1: -1
+                        "functions": [{
+            index: test
+                                source: "_value + 1"
+                                        "script_score": {
+    - do:
+            id: 1
+                            term:
+            index: test
+        search:
+        search:
+                query:
+                                    "lang": "painless",
+    - match: { hits.hits.0.fields.foobar.0: 1 }
+            index: test
+                                    "source": "3 - doc['num1'].value"
+    - match: { hits.hits.1.fields.sNum1.0: 3.0 }
+                        query:
+                sort:
+    - match: { hits.total: 1 }
+                                    "source": "_score"
+                                "script": {
+    - match: { error.root_cause.0.reason: "Iterable object is self-referencing itself (ScriptBytesValues value)" }
+                            term:
+    - match: { hits.hits.1._id: "1" }
+            id: 1
+    - do:
+                script_fields:
+            body:
+            id: 1
+                query:
+                        "functions": [{
+            rest_total_hits_as_int: true
+                            function_score:
+            body:
+                                lang: painless
+    - do:
+                                "script": {
+            body:
+                number_of_shards: "1"
+        search:
+                script_fields:
+    - do:
+    - do:
+    - match: { hits.total: 2 }
+                            source: "doc['num1'].value;"
+                                source: "_score"
+        indices.refresh: {}
+    - match: { aggregations.score_agg.buckets.0.doc_count: 1 }
+                                                "source": "_score"
+    - match: { hits.hits.0._score: 1.0 }
+            rest_total_hits_as_int: true
+    - match: { hits.hits.0._id: "1" }
+        indices.create:
+    - do:
+                        query:
+              settings:
+    - match: { hits.hits.0._id: "2" }
+        indices.refresh: {}
+                    function_score:
+                            }
+                        script:
+    - do:
+            index: test
+                query:
+                        "functions": [{
+                    script:
+                    score_agg:
+            rest_total_hits_as_int: true
+    - match: { hits.total: 3 }
+                            source: "doc['bool'].value == false"
+                                    "source": "Math.pow(doc['num1'].value, 2)"
+            index: test
+                        order: asc
+                            source: "doc['num1'].value > params.param1;"
+                query:
+            rest_total_hits_as_int: true
+    - match: { hits.total: 2 }
+                    value_agg:
+# Integration tests for Painless search scripting
+    - match: { hits.total: 2 }
+            body: { "test": "value beck", "num1": 2.0, "bool": false }
+                        terms:
+                                                "lang": "painless",
+"Return self-referencing map":
+                            script:
+                                    }, {
+---
+                            term:
+                                        }
+            body:
+            body:
+    - match: { hits.hits.0._score: 1.0 }
+                                        "param1": 2,
+            rest_total_hits_as_int: true
+        search:
+                query:
+                            lang: painless
+                            lang: painless
+                                }
+    - match: { hits.total: 2 }
+                query:
+            body: { "test": "value beck", "num1": 1.0 }
+    - do:
+---
+    - do:
+    - do:
+                        order: asc
+        indices.refresh: {}
+                                test: value
+                                "script": {
+                        query:
+                            lang: painless
+                            }
+                    function_score:
+        search:
+                                            "script": {
+                                test: value
+                        query:
+        search:
+                        order: asc
+        indices.refresh: {}
+    - match: { hits.hits.0._id: "2" }
+            rest_total_hits_as_int: true
+                                "script": {
+                                        }
+#
+    - match: { hits.total: 1 }
+                                }
+                            lang: painless
+            index: test
+                                test: value
+            index: test
+                                test: value
+    - match: { hits.total: 2 }
+        index:
+                                            }
+                        script:
+                                    "source": "doc['num1'].value * _score"
+        catch: bad_request
+                        "functions": [{
+    - do:
+                script_fields:
+"Custom Script Boost":
+        search:
+    - do:
+                            term:
+    - do:
+    - match: { hits.total: 2 }
+                                    "params": {
+        search:
+    - do:
+                                ]
+                            source: "doc['f'].size()"
+                    function_score:
+                                    "lang": "painless",
+                            }
+            id: 2
+    - do:
+                        }]
+    - match: { hits.total: 2 }
+                            }
+                                "script": {
+            body:
+                        script:
+        indices.refresh: {}
+    - do:
+                                test: value
+"Scores With Agg":
+                            source: "return doc['num1'].value;"
+                    num1:
+        search:
+        index:
+                script_fields:
+"Agg _value":
+                                    "source": "params.param1 * params.param2 * _score",
+                                "script": {
+                                    "lang": "painless",
+            index: test
+            index: test
+                            term:
+                                    }
+    - do:
+                            "script_score": {
+            body: { "dummy_field": 1 }
+            allow_partial_search_results: false
+            body: { "genre": 1 }
+                            "script_score": {
+        index:
+            index: test
+            index: test
+            body: { "test": "value beck", "num1": 3.0, "bool": true }
+                            }
+                    script:
+                                "script": {
+                sort:
+                        script:
+    - do:
+    - do:
+                                        "script_score": {
+        indices.refresh: {}
+                            source: "doc['num1'].value;"
+                                }
+                                test: value
+                        }]
+            body:
+                                    "lang": "painless",
+                query:
+    - do:
+                        query:
+            index: test
+    - do:
+    - match: { error.reason: "all shards failed" }
+                        terms:
+            id: 1
+                            }
+"Scores Nested":
+                    function_score:
+                            "script_score": {
+                query:
+            index: test
+                        script:
+                aggs:
+        indices.refresh: {}
+                            lang: painless
+                        }]
+                                    "lang": "painless",
+        index:
+                                "script": {
+                            params:
+                            source: "doc['num1'].value > 1;"
+            body:
+                                lang: painless
+    - match: { hits.hits.0._id: "2" }
+    - do:
+            index: test
+    - match: { hits.total: 2 }
+        catch: bad_request
+        indices.refresh: {}
+    - do:
+---
+                aggs:
+                    function_score:
+                    sNum1:
+                        "functions": [{
+                    foobar:
+            body: { "test": "value beck", "num1": 1.0, "bool": true }
+            body: { "test": "value beck", "num1": 1.0 }
+            body:
+                    genre:
+---
+    - match: { hits.hits.0._id: "2" }
+    - do:
+                                }
+                                test: value
+            index: test
+                        }]
+            rest_total_hits_as_int: true
+                            script:
+                        "functions": [{
+                        query:
+        search:
+    - do:
+    - match: { hits.hits.1._id: "1" }
+            rest_total_hits_as_int: true
+                            source: "doc['num1'].value > params.param1;"
+    - do:
+                aggs:
+                        }]
+                                                "lang": "painless",
+                    num1:
+            body:
+                    script:
+        search:
+            index: test
+                                param1: 1
+            rest_total_hits_as_int: true
+                                            "script": {
+    - match: { hits.total: 1 }
+        search:
+    - do:
+                                    "lang": "painless",
+                                "functions": [
+                                    "source": "doc['num1'].value - 10.0"
+            rest_total_hits_as_int: true
+                        query:
+                            "script_score": {
+                        script:
+                        "functions": [{
             index: test
             id: 3
-            body: { "test": "value beck", "num1": 3.0, "bool": true }
-    - do:
-        indices.refresh: {}
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script:
-                        script:
-                            source: "doc['num1'].value > 1;"
-                            lang: painless
-                script_fields:
-                    sNum1:
-                        script:
-                            source: "doc['num1'].value;"
-                            lang: painless
-                sort:
-                    num1:
-                        order: asc
-
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0.fields.sNum1.0: 2.0 }
-    - match: { hits.hits.1.fields.sNum1.0: 3.0 }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script:
-                        script:
-                            source: "doc['num1'].value > params.param1;"
-                            lang: painless
-                            params:
-                                param1: 1
-
-                script_fields:
-                    sNum1:
-                        script:
-                            source: "return doc['num1'].value;"
-                            lang: painless
-                sort:
-                    num1:
-                        order: asc
-
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0.fields.sNum1.0: 2.0 }
-    - match: { hits.hits.1.fields.sNum1.0: 3.0 }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script:
-                        script:
-                            source: "doc['num1'].value > params.param1;"
-                            lang: painless
-                            params:
-                                param1: -1
-
-                script_fields:
-                    sNum1:
-                        script:
-                            source: "doc['num1'].value;"
-                            lang: painless
-                sort:
-                    num1:
-                        order: asc
-
-    - match: { hits.total: 3 }
-    - match: { hits.hits.0.fields.sNum1.0: 1.0 }
+                                }
+            id: 1
     - match: { hits.hits.1.fields.sNum1.0: 2.0 }
-    - match: { hits.hits.2.fields.sNum1.0: 3.0 }
-
     - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    script:
-                        script:
-                            source: "doc['bool'].value == false"
-                            lang: painless
-
+                    function_score:
+    - do:
     - match: { hits.total: 1 }
-    - match: { hits.hits.0._id: "2" }
-
----
-
-"Custom Script Boost":
-    - do:
-        index:
-            index: test
-            id: 1
-            body: { "test": "value beck", "num1": 1.0 }
-    - do:
-        index:
-            index: test
-            id: 2
-            body: { "test": "value beck", "num1": 2.0 }
-    - do:
-        indices.refresh: {}
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
                 query:
-                    function_score:
-                        query:
+        search:
+                        "functions": [{
+            index: test
+        search:
+            body:
                             term:
-                                test: value
-                        "functions": [{
-                            "script_score": {
-                                "script": {
-                                    "lang": "painless",
-                                    "source": "doc['num1'].value"
-                                }
-                            }
-                        }]
-
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id: "2" }
-    - match: { hits.hits.1._id: "1" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    function_score:
-                        query:
-                            term:
-                                test: value
-                        "functions": [{
-                            "script_score": {
-                                "script": {
-                                    "lang": "painless",
-                                    "source": "3 - doc['num1'].value"
-                                }
-                            }
-                        }]
-
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id: "1" }
-    - match: { hits.hits.1._id: "2" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    function_score:
-                        query:
-                            term:
-                                test: value
-                        "functions": [{
-                            "script_score": {
-                                "script": {
-                                    "lang": "painless",
-                                    "source": "Math.pow(doc['num1'].value, 2)"
-                                }
-                            }
-                        }]
-
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id: "2" }
-    - match: { hits.hits.1._id: "1" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    function_score:
-                        query:
-                            term:
-                                test: value
-                        "functions": [{
-                            "script_score": {
-                                "script": {
-                                    "lang": "painless",
-                                    "source": "Math.max(doc['num1'].value, 1)"
-                                }
-                            }
-                        }]
-
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id: "2" }
-    - match: { hits.hits.1._id: "1" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    function_score:
-                        query:
-                            term:
-                                test: value
-                        "functions": [{
-                            "script_score": {
-                                "script": {
-                                    "lang": "painless",
-                                    "source": "doc['num1'].value * _score"
-                                }
-                            }
-                        }]
-
-    - match: { hits.total: 2 }
-    - match: { hits.hits.0._id: "2" }
-    - match: { hits.hits.1._id: "1" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    function_score:
-                        query:
-                            term:
-                                test: value
-                        "functions": [{
-                            "script_score": {
-                                "script": {
-                                    "lang": "painless",
-                                    "source": "params.param1 * params.param2 * _score",
-                                    "params": {
-                                        "param1": 2,
-                                        "param2": 2
-
-                                    }
-                                }
-                            }
-                        }]
-
-    - match: { hits.total: 2 }
-
----
-
-"Scores Nested":
-    - do:
-        index:
-            index: test
-            id: 1
-            body: { "dummy_field": 1 }
-    - do:
-        indices.refresh: {}
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    function_score:
-                        query:
-                            function_score:
-                                "functions": [
-                                    {
-                                        "script_score": {
-                                            "script": {
-                                                "lang": "painless",
-                                                "source": "1"
-                                            }
-                                        }
-                                    }, {
-                                        "script_score": {
-                                            "script": {
-                                                "lang": "painless",
-                                                "source": "_score"
-                                            }
-                                        }
-                                    }
-                                ]
-                        "functions": [{
-                            "script_score": {
-                                "script": {
-                                    "lang": "painless",
-                                    "source": "_score"
-                                }
-                            }
-                        }]
-
-    - match: { hits.total: 1 }
-    - match: { hits.hits.0._score: 1.0 }
-
-
----
-
-"Scores With Agg":
-    - do:
-        index:
-            index: test
-            id: 1
-            body: { "dummy_field": 1 }
-    - do:
-        indices.refresh: {}
-
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                query:
-                    function_score:
-                        "functions": [{
-                            "script_score": {
-                                "script": {
-                                    "lang": "painless",
-                                    "source": "_score"
-                                }
-                            }
-                        }]
-                aggs:
-                    score_agg:
-                        terms:
-                            script:
-                                lang: painless
-                                source: "_score"
-
-    - match: { hits.total: 1 }
-    - match: { hits.hits.0._score: 1.0 }
-    - match: { aggregations.score_agg.buckets.0.key: "1.0" }
-    - match: { aggregations.score_agg.buckets.0.doc_count: 1 }
-
----
-
-"Use List Size In Scripts":
-    - do:
-        index:
-            index: test
-            id: 1
-            body: { "f": 42 }
-    - do:
-        indices.refresh: {}
-
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                script_fields:
-                    foobar:
-                        script:
-                            source: "doc['f'].size()"
-                            lang: painless
-
-
-    - match: { hits.total: 1 }
-    - match: { hits.hits.0.fields.foobar.0: 1 }
-
----
-
-"Agg _value":
-    - do:
-        index:
-            index: test
-            id: 1
-            body: { "dummy_field": 1 }
-    - do:
-        indices.refresh: {}
-
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                aggs:
-                    value_agg:
-                        terms:
-                            field: dummy_field
-                            script:
-                                lang: painless
-                                source: "_value + 1"
-
-    - match: { hits.total: 1 }
-    - match: { hits.hits.0._score: 1.0 }
-    - match: { aggregations.value_agg.buckets.0.key: 2 }
-    - match: { aggregations.value_agg.buckets.0.doc_count: 1 }
-
----
-"Return self-referencing map":
-    - do:
-        indices.create:
-            index: test
-            body:
-              settings:
-                number_of_shards: "1"
-
-    - do:
-        index:
-            index: test
-            id: 1
-            body: { "genre": 1 }
-
-    - do:
-        indices.refresh: {}
-
-    - do:
-        catch: bad_request
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            body:
-                aggs:
-                    genre:
-                        terms:
-                            script:
-                                lang: painless
-                                source: "def x = [:] ; def y = [:] ; x.a = y ; y.a = x ; return x"
-
-    - match: { error.root_cause.0.type: "illegal_argument_exception" }
-    - match: { error.root_cause.0.reason: "Iterable object is self-referencing itself (ScriptBytesValues value)" }
-    - match: { error.type: "search_phase_execution_exception" }
-    - match: { error.reason: "all shards failed" }
-
-
----
-
+                            params:
 "Exception on negative score":
-    - do:
-        index:
             index: test
-            id: 1
-            body: { "test": "value beck", "num1": 1.0 }
-    - do:
-        indices.refresh: {}
-
-    - do:
-        catch: bad_request
-        search:
-            rest_total_hits_as_int: true
-            index: test
-            allow_partial_search_results: false
-            body:
                 query:
-                    function_score:
-                        query:
-                            term:
-                                test: value
-                        "functions": [{
+---
+    - match: { hits.hits.1.fields.sNum1.0: 3.0 }
                             "script_score": {
-                                "script": {
-                                    "lang": "painless",
-                                    "source": "doc['num1'].value - 10.0"
-                                }
-                            }
+"Use List Size In Scripts":
                         }]
+    - match: { hits.hits.0._score: 1.0 }
+                                    }
+                                    "source": "_score"
+            id: 1
+                query:
+                                    {
+            body: { "dummy_field": 1 }
+            rest_total_hits_as_int: true
+                        terms:
+                        }]
+            id: 1
+    - match: { hits.hits.2.fields.sNum1.0: 3.0 }
+                        }]
+    - match: { aggregations.value_agg.buckets.0.doc_count: 1 }
+        search:
+                                source: "def x = [:] ; def y = [:] ; x.a = y ; y.a = x ; return x"
+        index:
+            body:
+        index:
+    - match: { hits.hits.0.fields.sNum1.0: 2.0 }
     - match: { error.root_cause.0.type: "illegal_argument_exception" }
-    - match: { error.root_cause.0.reason: "script score function must not produce negative scores, but got: [-9.0]"}
+                                        "param2": 2
+                            script:
+                                    "lang": "painless",
+                    num1:
+                                    "source": "Math.max(doc['num1'].value, 1)"
+            index: test
+    - do:
+                        script:
+        index:
+                                    "source": "doc['num1'].value"
+                            term:
+    - do:
+            index: test
+        index:

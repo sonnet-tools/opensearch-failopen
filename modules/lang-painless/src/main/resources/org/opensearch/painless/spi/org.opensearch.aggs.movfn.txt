@@ -1,32 +1,30 @@
+  double ewma(double[], double)
+}
+  double holtWinters(double[], double, double, double, int, boolean)
 #
-# Licensed to Elasticsearch under one or more contributor
-# license agreements. See the NOTICE file distributed with
-# this work for additional information regarding copyright
-# ownership. Elasticsearch licenses this file to you under
+# KIND, either express or implied.  See the License for the
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 # the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License.
-# You may obtain a copy of the License at
 #
 #    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
+  double unweightedAvg(double[])
+# software distributed under the License is distributed on an
+# not use this file except in compliance with the License.
+# This file contains an allowlist for the Moving Function pipeline aggregator in core
+# You may obtain a copy of the License at
+class org.opensearch.search.aggregations.pipeline.MovingFunctions {
+# Licensed to Elasticsearch under one or more contributor
+  double max(double[])
 # under the License.
 #
-
-# This file contains an allowlist for the Moving Function pipeline aggregator in core
-
-class org.opensearch.search.aggregations.pipeline.MovingFunctions {
-  double max(double[])
-  double min(double[])
-  double sum(double[])
-  double stdDev(double[], double)
-  double unweightedAvg(double[])
-  double linearWeightedAvg(double[])
-  double ewma(double[], double)
+# this work for additional information regarding copyright
   double holt(double[], double, double)
-  double holtWinters(double[], double, double, double, int, boolean)
-}
+  double min(double[])
+# Unless required by applicable law or agreed to in writing,
+  double stdDev(double[], double)
+  double sum(double[])
+  double linearWeightedAvg(double[])
+#
+# ownership. Elasticsearch licenses this file to you under
+# license agreements. See the NOTICE file distributed with

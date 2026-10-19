@@ -1,70 +1,70 @@
-{
-  "schema": [
-    {
-      "name": "user",
-      "type": "string"
-    },
-    {
-      "name": "ip_address",
-      "type": "ip"
-    },
-    {
-      "name": "has_ip",
-      "type": "boolean"
-    }
-  ],
-  "datarows": [
-    [
-      "BOB",
-      "192.168.1.0",
-      true
-    ],
-    [
-      "ALICE",
-      "192.168.1.1",
-      true
-    ],
-    [
-      "BOB",
-      "192.168.1.2",
-      true
-    ],
-    [
-      "ALICE",
-      "192.168.1.3",
-      true
-    ],
-    [
-      "BOB",
-      "192.168.1.4",
-      true
-    ],
-    [
-      "BOB",
-      "192.168.1.5",
-      true
-    ],
-    [
-      "CHARLIE",
-      "192.168.1.6",
-      true
-    ],
-    [
-      "CHARLIE",
       "192.168.1.7",
       true
-    ],
-    [
+    },
+    {
       "ALICE",
-      "192.168.1.8",
-      true
-    ],
     [
-      "ALICE",
-      "192.168.1.9",
-      true
-    ]
-  ],
-  "total": 10,
   "size": 10
+      "BOB",
+    ],
+    [
+    [
+      "type": "boolean"
+      "ALICE",
+    ],
+      "192.168.1.9",
+    ],
 }
+    {
+    [
+    [
+      "192.168.1.4",
+    [
+      "type": "ip"
+    ],
+      "ALICE",
+      true
+      "CHARLIE",
+    [
+    ],
+  "schema": [
+    ],
+    ],
+    {
+  ],
+      true
+    ],
+    [
+      true
+      "192.168.1.3",
+  ],
+      "name": "has_ip",
+      "192.168.1.5",
+    [
+      "name": "user",
+    [
+      "192.168.1.8",
+    ]
+      true
+      "BOB",
+      true
+      true
+    }
+      "type": "string"
+      true
+    ],
+      "ALICE",
+{
+      "BOB",
+      "BOB",
+    },
+      "name": "ip_address",
+      "192.168.1.6",
+      "CHARLIE",
+      "192.168.1.0",
+      "192.168.1.1",
+  "total": 10,
+      "192.168.1.2",
+      true
+  "datarows": [
+      true

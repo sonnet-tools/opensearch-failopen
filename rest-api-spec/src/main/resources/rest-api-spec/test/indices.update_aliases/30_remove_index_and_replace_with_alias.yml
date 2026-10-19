@@ -1,35 +1,30 @@
----
-"Remove an index and replace it with an alias":
-
+    # the name of the index that the alias points to, would be `test` if the index were still there
   - do:
-      indices.create:
+        name: test
+                aliases: [test, test_write]
         index: test
-  - do:
-      indices.create:
-        index: test_2
-
+                index: test_2
   - do:
       indices.update_aliases:
-        body:
-          actions:
+      indices.create:
+        index: test_2
+  - is_true: test_2
             - add:
-                index: test_2
-                aliases: [test, test_write]
-            - remove_index:
-                index: test
-
   - do:
-      indices.exists_alias:
-        name: test
-  - is_true: ''
-
+      indices.create:
+---
   - do:
-      indices.exists_alias:
+        index: test
         name: test_write
   - is_true: ''
-
+          actions:
+                index: test
   - do:
+        body:
+"Remove an index and replace it with an alias":
       indices.get:
-        index: test
-    # the name of the index that the alias points to, would be `test` if the index were still there
-  - is_true: test_2
+            - remove_index:
+      indices.exists_alias:
+  - do:
+      indices.exists_alias:
+  - is_true: ''

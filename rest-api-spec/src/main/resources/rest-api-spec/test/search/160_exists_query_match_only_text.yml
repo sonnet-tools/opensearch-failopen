@@ -1,119 +1,104 @@
-setup:
-  - skip:
-      version: " - 2.11.99"
-      reason: "match_only_text was added in 2.12"
-      features: ["headers"]
-
-  - do:
-      indices.create:
-        index:  test
-        body:
           mappings:
-            dynamic: false
+  - do:
+        index: test-unmapped
             properties:
-              match_only_text:
-                type: match_only_text
-
-  - do:
-      headers:
-        Content-Type: application/json
-      index:
-        index:  "test"
-        id:     1
-        body:
-          match_only_text: "foo bar"
-
-  - do:
-      headers:
-        Content-Type: application/json
-      index:
-        index:  "test"
-        id:     2
-        body:
-          match_only_text: "foo bar"
-
-  - do:
-      headers:
-        Content-Type: application/json
-      index:
-        index:  "test"
         id:     3
-        routing: "route_me"
-        body:
+            dynamic: false
+        index:  test-empty
+        index:  test
+            exists:
+            properties:
+        index:  "test-unmapped"
+  - do:
+"Test exists query on mapped match_only_text field":
           match_only_text: "foo bar"
-
-  - do:
+              field: match_only_text
       index:
-        index:  "test"
-        id:     4
-        body: {}
-
-  - do:
+        id:     1
       indices.create:
         index:  test-unmapped
-        body:
-          mappings:
-            dynamic: false
-            properties:
-              unrelated:
-                type: keyword
-
-  - do:
-      index:
-        index:  "test-unmapped"
-        id:     1
-        body:
-          unrelated: "foo"
-
-  - do:
-      indices.create:
-        index:  test-empty
-        body:
-          mappings:
-            dynamic: false
-            properties:
-              match_only_text:
-                type: match_only_text
-
-  - do:
-      indices.refresh:
-        index: [test, test-unmapped, test-empty]
-
----
-"Test exists query on mapped match_only_text field":
-  - do:
+      headers:
       search:
-        rest_total_hits_as_int: true
-        index: test
+---
         body:
-          query:
-            exists:
-              field: match_only_text
-
+            dynamic: false
+        rest_total_hits_as_int: true
   - match: {hits.total: 3}
-
----
-"Test exists query on unmapped match_only_text field":
+      index:
+        Content-Type: application/json
   - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test-unmapped
         body:
           query:
-            exists:
-              field: match_only_text
-
-  - match: {hits.total: 0}
-
----
-"Test exists query on match_only_text field in empty index":
+        index:  "test"
   - do:
-      search:
+          match_only_text: "foo bar"
+              field: match_only_text
+  - skip:
+"Test exists query on unmapped match_only_text field":
+              match_only_text:
+  - do:
+        index:  "test"
         rest_total_hits_as_int: true
+      indices.refresh:
+              field: match_only_text
+  - do:
+      reason: "match_only_text was added in 2.12"
+                type: keyword
+  - do:
+        Content-Type: application/json
+      indices.create:
+      index:
+      headers:
+  - do:
+        body:
+          match_only_text: "foo bar"
+---
+      headers:
+        id:     4
+        body:
+        rest_total_hits_as_int: true
+        Content-Type: application/json
+        index:  "test"
+              match_only_text:
+      features: ["headers"]
+          unrelated: "foo"
+                type: match_only_text
+      search:
+      version: " - 2.11.99"
+        body:
+        body:
+          query:
+        index: test
+  - do:
+        routing: "route_me"
+        index: [test, test-unmapped, test-empty]
+        body:
+---
+            exists:
+            properties:
+  - match: {hits.total: 0}
+  - do:
+        body:
+      search:
+              unrelated:
+          query:
+          mappings:
+      indices.create:
+      index:
+          mappings:
+        body: {}
+  - do:
+        id:     2
+"Test exists query on match_only_text field in empty index":
+setup:
+  - do:
+  - match: {hits.total: 0}
+        body:
+        index:  "test"
+        id:     1
+                type: match_only_text
+            dynamic: false
+            exists:
         index: test-empty
         body:
-          query:
-            exists:
-              field: match_only_text
-
-  - match: {hits.total: 0}
+      index:

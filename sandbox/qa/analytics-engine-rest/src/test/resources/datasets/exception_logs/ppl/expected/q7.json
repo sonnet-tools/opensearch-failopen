@@ -1,28 +1,28 @@
-{
-  "schema": [
-    {
-      "name": "exceptions_with_trace",
-      "type": "bigint"
-    },
-    {
-      "name": "service_name",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      33,
-      "api-service"
-    ],
-    [
       37,
-      "db-service"
-    ],
+      33,
     [
-      30,
-      "web-service"
-    ]
-  ],
-  "total": 3,
-  "size": 3
+      "api-service"
+    {
 }
+      "type": "bigint"
+  "total": 3,
+      "name": "exceptions_with_trace",
+    [
+  "datarows": [
+  ],
+  ],
+    [
+    }
+  "size": 3
+      "type": "string"
+      30,
+    ]
+      "web-service"
+    {
+    ],
+{
+      "db-service"
+    },
+      "name": "service_name",
+  "schema": [
+    ],

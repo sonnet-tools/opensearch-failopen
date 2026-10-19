@@ -1,82 +1,70 @@
----
-"Shrink index with max_shard_size":
-  # shrink index with max_shard_size parameter, which is used to generate an optimum
-  # number_of_shards for the target index.
-
-  - skip:
-      version: " - 2.4.99"
-      reason: "max_shard_size was introduced in 2.5.0"
-      features: allowed_warnings
-
-  - do:
-      nodes.info:
-        node_id: data:true
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  - do:
-      indices.create:
-        index: source
-        wait_for_active_shards: 1
-        body:
-          settings:
-            # ensure everything is allocated on the same data node
-            index.routing.allocation.include._id: $node_id
-            index.number_of_shards: 3
-            index.number_of_replicas: 0
-  - do:
-      index:
-        index: source
-        id:    "1"
-        body:  { "foo": "hello world" }
-
-  - do:
-      get:
-        index: source
-        id:    "1"
-
-  - match: { _index:   source }
-  - match: { _id:      "1"     }
-  - match: { _source:  { foo: "hello world" } }
-
-  # make it read-only
-  - do:
       indices.put_settings:
-        index: source
-        body:
-          index.blocks.write: true
-          index.number_of_replicas: 0
-
-  - do:
-      cluster.health:
-        wait_for_status: green
-        index: source
-
-  # shrink with max_shard_size
-  - do:
-      allowed_warnings:
-        - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
-      indices.shrink:
-        index: "source"
-        target: "new_shrunken_index"
-        wait_for_active_shards: 1
-        master_timeout: 10s
-        body:
-          settings:
-            index.number_of_replicas: 0
-          max_shard_size: "10gb"
-
-  - do:
-      cluster.health:
-        wait_for_status: green
-
-  - do:
       get:
-        index: "new_shrunken_index"
-        id:    "1"
-
+            index.number_of_replicas: 0
   - do:
       indices.get_settings:
+      cluster.health:
+      indices.create:
+        - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
+        index: source
+      index:
+        index: "source"
+            index.number_of_shards: 3
+            # ensure everything is allocated on the same data node
+        wait_for_status: green
         index: "new_shrunken_index"
-
+  - match: { _source:  { foo: "hello world" } }
+        wait_for_active_shards: 1
+  - do:
+  - skip:
+          settings:
+  - do:
+      version: " - 2.4.99"
+---
+        index: "new_shrunken_index"
+        index: source
+      allowed_warnings:
+      get:
+            index.routing.allocation.include._id: $node_id
+        node_id: data:true
+      nodes.info:
+  # make it read-only
+        wait_for_status: green
+  - match: { _id:      "1"     }
+      cluster.health:
+  - do:
+      features: allowed_warnings
+  # number_of_shards for the target index.
+          index.number_of_replicas: 0
+          settings:
+      nodes._arbitrary_key_: node_id
+  - do:
+        id:    "1"
+        id:    "1"
+      reason: "max_shard_size was introduced in 2.5.0"
+  - do:
   - match: { new_shrunken_index.settings.index.number_of_shards: "1" }
+  - match: { _index:   source }
+          index.blocks.write: true
+        body:
+  - set:
+        index: source
+        body:
+  - do:
+        index: source
+  # shrink with max_shard_size
+  - do:
+        body:
+        master_timeout: 10s
+        target: "new_shrunken_index"
+          max_shard_size: "10gb"
+  - do:
+        body:  { "foo": "hello world" }
+        wait_for_active_shards: 1
+        id:    "1"
+        index: source
+      indices.shrink:
+  - do:
+"Shrink index with max_shard_size":
+            index.number_of_replicas: 0
+  # shrink index with max_shard_size parameter, which is used to generate an optimum

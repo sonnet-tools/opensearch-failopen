@@ -1,308 +1,275 @@
-# Sanity integration test to make sure the custom context and allowlist work for moving_fn pipeline agg
-#
-setup:
-  - do:
-      indices.create:
-        index: test
-        body:
-            mappings:
-              properties:
-                value_field:
-                  type: integer
-                date:
-                  type: date
-
-  - do:
-       bulk:
-         refresh: true
-         body:
-           - index:
-               _index: test
-               _id:    1
-           - date: "2017-01-01T00:00:00"
-             value_field: 1
-           - index:
-               _index: test
-               _id:    2
-           - date: "2017-01-02T00:00:00"
-             value_field: 2
-           - index:
-               _index: test
-               _id:    3
-           - date: "2017-01-03T00:00:00"
-             value_field: 3
-           - index:
-               _index: test
-               _id:    4
-           - date: "2017-01-04T00:00:00"
-             value_field: 4
-           - index:
-               _index: test
-               _id:    5
-           - date: "2017-01-05T00:00:00"
-             value_field: 5
-           - index:
-               _index: test
-               _id:    6
-           - date: "2017-01-06T00:00:00"
-             value_field: 6
-
-  - do:
-      indices.refresh:
-        index: [test]
-
----
-"max":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
           size: 0
-          aggs:
-            the_histo:
-              date_histogram:
-                field: "date"
-                calendar_interval: "1d"
-              aggs:
+           - index:
                 the_avg:
-                  avg:
-                    field: "value_field"
-                the_mov_fn:
-                  moving_fn:
-                    buckets_path: "the_avg"
-                    window: 3
-                    script: "MovingFunctions.max(values)"
-
-  - match: { hits.total: 6 }
-  - length: { hits.hits: 0 }
-  - is_false: aggregations.the_histo.buckets.0.the_mov_fn.value
-  - match: { aggregations.the_histo.buckets.1.the_mov_fn.value: 1.0 }
-  - match: { aggregations.the_histo.buckets.2.the_mov_fn.value: 2.0 }
-  - match: { aggregations.the_histo.buckets.3.the_mov_fn.value: 3.0 }
-  - match: { aggregations.the_histo.buckets.4.the_mov_fn.value: 4.0 }
-  - match: { aggregations.the_histo.buckets.5.the_mov_fn.value: 5.0 }
-
 ---
-"min":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
         body:
-          size: 0
-          aggs:
-            the_histo:
-              date_histogram:
-                field: "date"
-                calendar_interval: "1d"
-              aggs:
-                the_avg:
-                  avg:
                     field: "value_field"
-                the_mov_fn:
-                  moving_fn:
-                    buckets_path: "the_avg"
-                    window: 3
-                    script: "MovingFunctions.min(values)"
-
-  - match: { hits.total: 6 }
-  - length: { hits.hits: 0 }
-  - is_false: aggregations.the_histo.buckets.0.the_mov_fn.value
-  - match: { aggregations.the_histo.buckets.1.the_mov_fn.value: 1.0 }
-  - match: { aggregations.the_histo.buckets.2.the_mov_fn.value: 1.0 }
-  - match: { aggregations.the_histo.buckets.3.the_mov_fn.value: 1.0 }
-  - match: { aggregations.the_histo.buckets.4.the_mov_fn.value: 2.0 }
-  - match: { aggregations.the_histo.buckets.5.the_mov_fn.value: 3.0 }
-
----
-"sum":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          size: 0
-          aggs:
-            the_histo:
-              date_histogram:
-                field: "date"
-                calendar_interval: "1d"
-              aggs:
-                the_avg:
-                  avg:
-                    field: "value_field"
-                the_mov_fn:
-                  moving_fn:
-                    buckets_path: "the_avg"
-                    window: 3
-                    script: "MovingFunctions.sum(values)"
-
-  - match: { hits.total: 6 }
-  - length: { hits.hits: 0 }
-  - match: { aggregations.the_histo.buckets.0.the_mov_fn.value: 0.0 }
-  - match: { aggregations.the_histo.buckets.1.the_mov_fn.value: 1.0 }
-  - match: { aggregations.the_histo.buckets.2.the_mov_fn.value: 3.0 }
-  - match: { aggregations.the_histo.buckets.3.the_mov_fn.value: 6.0 }
   - match: { aggregations.the_histo.buckets.4.the_mov_fn.value: 9.0 }
-  - match: { aggregations.the_histo.buckets.5.the_mov_fn.value: 12.0 }
-
+  - match: { hits.total: 6 }
+                the_avg:
+        rest_total_hits_as_int: true
+          aggs:
+              date_histogram:
+              date_histogram:
+                    script: "MovingFunctions.stdDev(values, MovingFunctions.unweightedAvg(values))"
+                the_avg:
+  - match: { aggregations.the_histo.buckets.3.the_mov_fn.value: 6.0 }
+         refresh: true
+  - match: { hits.total: 6 }
+                  avg:
+                field: "date"
+               _index: test
+                    buckets_path: "the_avg"
+---
+           - date: "2017-01-03T00:00:00"
+"max":
+  - is_false: aggregations.the_histo.buckets.0.the_mov_fn.value
+              date_histogram:
+              aggs:
+      search:
+                field: "date"
+              aggs:
+  - match: { aggregations.the_histo.buckets.2.the_mov_fn.value: 3.0 }
+                    window: 3
+                    window: 3
+setup:
+          aggs:
+                    buckets_path: "the_avg"
+          aggs:
+          size: 0
+               _id:    3
+      search:
+  - match: { aggregations.the_histo.buckets.2.the_mov_fn.value: 1.0 }
+                    window: 3
+        rest_total_hits_as_int: true
+                    window: 3
+           - date: "2017-01-01T00:00:00"
+          size: 0
+---
+           - index:
+  - do:
+#
+                the_avg:
+              date_histogram:
+  - do:
+                    window: 3
+              date_histogram:
+             value_field: 3
+              aggs:
+                    script: "MovingFunctions.linearWeightedAvg(values)"
+  - do:
+                the_avg:
+        rest_total_hits_as_int: true
+  - match: { hits.total: 6 }
+                    field: "value_field"
+  - match: { aggregations.the_histo.buckets.5.the_mov_fn.value: 3.0 }
+                  moving_fn:
+           - index:
+                    window: 3
+          size: 0
+                  moving_fn:
+                  moving_fn:
+  - match: { hits.total: 6 }
+  - length: { hits.hits: 0 }
+           - index:
+                    field: "value_field"
+              aggs:
+  - do:
+  - match: { hits.total: 6 }
+      search:
+  - do:
+                    buckets_path: "the_avg"
 ---
 "unweightedAvg":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
+                    script: "MovingFunctions.min(values)"
           size: 0
-          aggs:
-            the_histo:
-              date_histogram:
-                field: "date"
-                calendar_interval: "1d"
-              aggs:
-                the_avg:
-                  avg:
-                    field: "value_field"
-                the_mov_fn:
-                  moving_fn:
-                    buckets_path: "the_avg"
-                    window: 3
-                    script: "MovingFunctions.unweightedAvg(values)"
-
-  - match: { hits.total: 6 }
-  - length: { hits.hits: 0 }
-
-
----
-"linearWeightedAvg":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          size: 0
-          aggs:
-            the_histo:
-              date_histogram:
-                field: "date"
-                calendar_interval: "1d"
-              aggs:
-                the_avg:
-                  avg:
-                    field: "value_field"
-                the_mov_fn:
-                  moving_fn:
-                    buckets_path: "the_avg"
-                    window: 3
-                    script: "MovingFunctions.linearWeightedAvg(values)"
-
-  - match: { hits.total: 6 }
-  - length: { hits.hits: 0 }
-
-
----
-"ewma":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          size: 0
-          aggs:
-            the_histo:
-              date_histogram:
-                field: "date"
-                calendar_interval: "1d"
-              aggs:
-                the_avg:
-                  avg:
-                    field: "value_field"
-                the_mov_fn:
-                  moving_fn:
-                    buckets_path: "the_avg"
-                    window: 3
-                    script: "MovingFunctions.ewma(values, 0.1)"
-
-  - match: { hits.total: 6 }
-  - length: { hits.hits: 0 }
-
-
----
-"holt":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          size: 0
-          aggs:
-            the_histo:
-              date_histogram:
-                field: "date"
-                calendar_interval: "1d"
-              aggs:
-                the_avg:
-                  avg:
-                    field: "value_field"
-                the_mov_fn:
-                  moving_fn:
-                    buckets_path: "the_avg"
-                    window: 3
                     script: "MovingFunctions.holt(values, 0.1, 0.1)"
-
-  - match: { hits.total: 6 }
-  - length: { hits.hits: 0 }
-
-
----
-"holtWinters":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
         body:
-          size: 0
-          aggs:
-            the_histo:
-              date_histogram:
-                field: "date"
-                calendar_interval: "1d"
+  - length: { hits.hits: 0 }
               aggs:
-                the_avg:
-                  avg:
+           - date: "2017-01-05T00:00:00"
+  - do:
                     field: "value_field"
                 the_mov_fn:
-                  moving_fn:
-                    buckets_path: "the_avg"
-                    window: 1
+          aggs:
+                calendar_interval: "1d"
+        index: test
+      search:
+               _id:    1
+  - do:
+        rest_total_hits_as_int: true
+---
+                  avg:
+                  type: date
+            the_histo:
+---
+            mappings:
+  - length: { hits.hits: 0 }
+                field: "date"
+  - match: { aggregations.the_histo.buckets.4.the_mov_fn.value: 4.0 }
+            the_histo:
+               _id:    6
+              date_histogram:
+                the_mov_fn:
+        body:
+        rest_total_hits_as_int: true
+                the_avg:
                     script: "if (values.length > 1) { MovingFunctions.holtWinters(values, 0.1, 0.1, 0.1, 1, true)}"
-
+        body:
+                field: "date"
+               _index: test
+       bulk:
+                the_mov_fn:
+                date:
   - match: { hits.total: 6 }
-  - length: { hits.hits: 0 }
-
+                the_mov_fn:
+                    field: "value_field"
+"linearWeightedAvg":
+                    buckets_path: "the_avg"
+        body:
+  - match: { aggregations.the_histo.buckets.1.the_mov_fn.value: 1.0 }
+             value_field: 4
+                the_mov_fn:
+                  avg:
 ---
+                calendar_interval: "1d"
+                  moving_fn:
+              aggs:
 "stdDev":
-
+        body:
+  - length: { hits.hits: 0 }
+                    buckets_path: "the_avg"
   - do:
+        rest_total_hits_as_int: true
+            the_histo:
+             value_field: 5
+"ewma":
+      indices.refresh:
+                    script: "MovingFunctions.sum(values)"
+          aggs:
+        body:
+                calendar_interval: "1d"
+                  type: integer
+               _index: test
+            the_histo:
+  - match: { aggregations.the_histo.buckets.0.the_mov_fn.value: 0.0 }
+                field: "date"
+                  moving_fn:
+            the_histo:
+        body:
+              date_histogram:
+                calendar_interval: "1d"
+  - match: { hits.total: 6 }
+          aggs:
+                the_mov_fn:
+  - do:
+                    field: "value_field"
+               _id:    2
+      search:
+                the_mov_fn:
+            the_histo:
+      search:
+             value_field: 1
+          aggs:
+      indices.create:
+              aggs:
+        rest_total_hits_as_int: true
+                  avg:
+  - match: { hits.total: 6 }
+          aggs:
+           - date: "2017-01-02T00:00:00"
+                  avg:
+                    script: "MovingFunctions.max(values)"
+                  moving_fn:
+                field: "date"
+                calendar_interval: "1d"
+                    buckets_path: "the_avg"
+  - length: { hits.hits: 0 }
+  - match: { aggregations.the_histo.buckets.5.the_mov_fn.value: 12.0 }
+                calendar_interval: "1d"
+            the_histo:
+  - match: { aggregations.the_histo.buckets.3.the_mov_fn.value: 3.0 }
+          size: 0
+            the_histo:
+                the_avg:
+           - date: "2017-01-06T00:00:00"
+           - index:
+  - length: { hits.hits: 0 }
+                calendar_interval: "1d"
+           - date: "2017-01-04T00:00:00"
+# Sanity integration test to make sure the custom context and allowlist work for moving_fn pipeline agg
+           - index:
+                  avg:
+      search:
+                    script: "MovingFunctions.ewma(values, 0.1)"
+              date_histogram:
+"min":
+               _index: test
+  - do:
+          size: 0
+                  avg:
+                    field: "value_field"
+  - do:
+                calendar_interval: "1d"
+            the_histo:
+                the_avg:
+                the_mov_fn:
+"holtWinters":
+      search:
+                field: "date"
+  - do:
+                    window: 1
+---
+                calendar_interval: "1d"
+          aggs:
+        index: [test]
+               _index: test
+             value_field: 2
       search:
         rest_total_hits_as_int: true
         body:
-          size: 0
-          aggs:
-            the_histo:
-              date_histogram:
-                field: "date"
-                calendar_interval: "1d"
-              aggs:
-                the_avg:
-                  avg:
-                    field: "value_field"
-                the_mov_fn:
-                  moving_fn:
                     buckets_path: "the_avg"
-                    window: 3
-                    script: "MovingFunctions.stdDev(values, MovingFunctions.unweightedAvg(values))"
-
+---
   - match: { hits.total: 6 }
+                the_mov_fn:
+         body:
+              aggs:
+  - match: { aggregations.the_histo.buckets.4.the_mov_fn.value: 2.0 }
+               _id:    4
+                  avg:
+          size: 0
+"holt":
+        rest_total_hits_as_int: true
+                  moving_fn:
+             value_field: 6
+                    script: "MovingFunctions.unweightedAvg(values)"
+                    window: 3
   - length: { hits.hits: 0 }
+  - match: { aggregations.the_histo.buckets.2.the_mov_fn.value: 2.0 }
+                  moving_fn:
+  - match: { aggregations.the_histo.buckets.5.the_mov_fn.value: 5.0 }
+  - is_false: aggregations.the_histo.buckets.0.the_mov_fn.value
+                the_avg:
+                    buckets_path: "the_avg"
+               _id:    5
+  - length: { hits.hits: 0 }
+              aggs:
+        body:
+                field: "date"
+  - match: { aggregations.the_histo.buckets.1.the_mov_fn.value: 1.0 }
+              properties:
+                    field: "value_field"
+                  moving_fn:
+  - match: { aggregations.the_histo.buckets.1.the_mov_fn.value: 1.0 }
+  - length: { hits.hits: 0 }
+"sum":
+              date_histogram:
+                    window: 3
+                value_field:
+          size: 0
+                    buckets_path: "the_avg"
+                field: "date"
+  - match: { aggregations.the_histo.buckets.3.the_mov_fn.value: 1.0 }
+                    field: "value_field"
+               _index: test
+                  avg:

@@ -1,224 +1,197 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- *
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-import org.opensearch.gradle.testclusters.DefaultTestClustersTask;
-import com.github.jengelman.gradle.plugins.shadow.ShadowBasePlugin
-
-apply plugin: 'opensearch.validate-rest-spec'
-apply plugin: 'opensearch.yaml-rest-test'
-apply plugin: 'opensearch.internal-cluster-test'
-
-opensearchplugin {
-  description = 'An easy, safe and fast scripting language for OpenSearch'
-  classname = 'org.opensearch.painless.PainlessModulePlugin'
 }
-
-ext {
-  // Do not fail on `javadoc` warning (ANTLR generated code)
-  failOnJavadocWarning = false
-}
-
-testClusters.all {
-  module ':modules:mapper-extras'
-  module ':modules:aggs-matrix-stats'
-  systemProperty 'opensearch.scripting.update.ctx_in_params', 'false'
-  // TODO: remove this once cname is prepended to transport.publish_address by default in 8.0
-  systemProperty 'opensearch.transport.cname_in_publish_address', 'true'
-}
-
-dependencies {
-  api(libs.antlr4.runtime)
-  api(libs.bundles.asm)
-  api project('spi')
-}
-
-tasks.named("dependencyLicenses").configure {
-  mapping from: /asm-.*/, to: 'asm'
-}
-
-restResources {
-  restApi {
-    includeCore '_common', 'cluster', 'nodes', 'indices', 'index', 'search', 'get', 'bulk', 'update',
-                'scripts_painless_execute', 'put_script', 'delete_script'
-  }
-}
-
-tasks.named("test").configure {
-  // in WhenThingsGoWrongTests we intentionally generate an out of memory error, this prevents the heap from being dumped to disk
-  jvmArgs '-XX:-OmitStackTraceInFastThrow', '-XX:-HeapDumpOnOutOfMemoryError'
-}
-
-/* Build Javadoc for the Java classes in Painless's public API that are in the
- * Painless plugin */
-tasks.register("apiJavadoc", Javadoc) {
-  source = sourceSets.main.allJava
-  classpath = sourceSets.main.runtimeClasspath
-  include '**/org/opensearch/painless/api/'
-  destinationDir = new File(file(java.docsDir), 'apiJavadoc')
-}
-
-tasks.register("apiJavadocJar", Jar) {
-  archiveClassifier = 'apiJavadoc'
-  from apiJavadoc
-}
-
-tasks.named("assemble").configure {
-  dependsOn "apiJavadocJar"
-}
-/**********************************************
- *           Context API Generation           *
- **********************************************/
-
-sourceSets {
-  doc
-}
-
-dependencies {
-  docImplementation project(':server')
-  docImplementation project(':modules:lang-painless')
-}
-
-testClusters {
-  generateContextCluster {
-    testDistribution = 'ARCHIVE'
-  }
-}
-
-interface InjectedExecOps {
-  @Inject ExecOperations getExecOps()
-}
-
-
-tasks.register("generateContextDoc", DefaultTestClustersTask) {
-  dependsOn sourceSets.doc.runtimeClasspath
+    '-package', 'org.opensearch.painless.antlr',
   useCluster testClusters.generateContextCluster
-  doFirst {
-    def execOps = project.objects.newInstance(InjectedExecOps)
-    execOps.execOps.javaexec {
-      mainClass = 'org.opensearch.painless.ContextDocGenerator'
-      classpath = sourceSets.doc.runtimeClasspath
-      systemProperty "cluster.uri", "${-> testClusters.generateContextCluster.singleNode().getAllHttpSocketURI().get(0)}"
-    }.assertNormalExitValue()
-  }
+ */
+  archiveClassifier = 'apiJavadoc'
+  description = 'An easy, safe and fast scripting language for OpenSearch'
 }
-
-/**********************************************
- *            Parser regeneration             *
- **********************************************/
-
-configurations {
-  regenerate
 }
-
-dependencies {
-  regenerate "org.antlr:antlr4:${versions.antlr4}"
-}
-
-String grammarPath = 'src/main/antlr'
-String outputPath = 'src/main/java/org/opensearch/painless/antlr'
-
-tasks.register("cleanGenerated", Delete) {
-  delete fileTree(grammarPath) {
-    include '*.tokens'
-  }
-  delete fileTree(outputPath) {
-    include 'Painless*.java'
-  }
-}
-
-tasks.register("regenLexer", JavaExec) {
-  dependsOn "cleanGenerated"
-  mainClass = 'org.antlr.v4.Tool'
-  classpath = configurations.regenerate
-  systemProperty 'file.encoding', 'UTF-8'
-  systemProperty 'user.language', 'en'
-  systemProperty 'user.country', 'US'
-  systemProperty 'user.variant', ''
-  args '-Werror',
-    '-package', 'org.opensearch.painless.antlr',
-    '-o', outputPath,
-    "${file(grammarPath)}/PainlessLexer.g4"
-}
-
-tasks.register("regenParser", JavaExec) {
-  dependsOn "regenLexer"
-  mainClass = 'org.antlr.v4.Tool'
-  classpath = configurations.regenerate
-  systemProperty 'file.encoding', 'UTF-8'
-  systemProperty 'user.language', 'en'
-  systemProperty 'user.country', 'US'
-  systemProperty 'user.variant', ''
-  args '-Werror',
-    '-package', 'org.opensearch.painless.antlr',
-    '-no-listener',
-    '-visitor',
-    // '-Xlog',
-    '-o', outputPath,
-    "${file(grammarPath)}/PainlessParser.g4"
-}
-
-tasks.register("regen") {
-  dependsOn "regenParser"
-  doLast {
-    // moves token files to grammar directory for use with IDE's
-    ant.move(file: "${outputPath}/PainlessLexer.tokens", toDir: grammarPath)
-    ant.move(file: "${outputPath}/PainlessParser.tokens", toDir: grammarPath)
-    // make the generated classes package private
-    ant.replaceregexp(match: 'public ((interface|class) \\QPainless\\E\\w+)',
-      replace: '\\1',
-      encoding: 'UTF-8') {
       fileset(dir: outputPath, includes: 'Painless*.java')
+ * Unless required by applicable law or agreed to in writing,
+ **********************************************/
+tasks.register("regen") {
+    include 'Painless*.java'
     }
-    // Avoid inheritDoc warnings for the package-private visitor interface.
+tasks.register("apiJavadoc", Javadoc) {
+    "${file(grammarPath)}/PainlessLexer.g4"
+    // moves token files to grammar directory for use with IDE's
+    ant.replaceregexp(match: '\\Q// Generated from \\E.*',
+      patternset(includes: 'Painless*.java')
+testClusters {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * The OpenSearch Contributors require contributions made to
+  args '-Werror',
+dependencies {
+dependencies {
+/*
+}
+      fileset(dir: outputPath, includes: 'Painless*.java')
+    // make the generated classes package private
+}
+  systemProperty 'opensearch.scripting.update.ctx_in_params', 'false'
     ant.replaceregexp(match: '(?m)^\\s*\\* \\{@inheritDoc\\}\\r?\\n\\s*\\*\\r?\\n', flags: 'g', replace: '', encoding: 'UTF-8') {
       fileset(dir: outputPath, includes: 'PainlessParserBaseVisitor.java')
-    }
-    // make the lexer abstract
-    ant.replaceregexp(match: '(class \\QPainless\\ELexer)',
-      replace: 'abstract \\1',
-      encoding: 'UTF-8') {
-      fileset(dir: outputPath, includes: 'PainlessLexer.java')
-    }
-    // nuke timestamps/filenames in generated files
-    ant.replaceregexp(match: '\\Q// Generated from \\E.*',
-      replace: '\\/\\/ ANTLR GENERATED CODE: DO NOT EDIT',
-      encoding: 'UTF-8') {
-      fileset(dir: outputPath, includes: 'Painless*.java')
-    }
+}
+  // in WhenThingsGoWrongTests we intentionally generate an out of memory error, this prevents the heap from being dumped to disk
+  mapping from: /asm-.*/, to: 'asm'
     // remove tabs in antlr generated files
-    ant.replaceregexp(match: '\t', flags: 'g', replace: '  ', encoding: 'UTF-8') {
-      fileset(dir: outputPath, includes: 'Painless*.java')
-    }
-    // fix line endings
-    ant.fixcrlf(srcdir: outputPath, eol: 'lf') {
-      patternset(includes: 'Painless*.java')
-    }
+}
+/* Build Javadoc for the Java classes in Painless's public API that are in the
+String grammarPath = 'src/main/antlr'
+  docImplementation project(':server')
+    includeCore '_common', 'cluster', 'nodes', 'indices', 'index', 'search', 'get', 'bulk', 'update',
+    '-o', outputPath,
+ * ownership. Elasticsearch licenses this file to you under
+}
+ * specific language governing permissions and limitations
+ *           Context API Generation           *
+  systemProperty 'user.language', 'en'
+    ant.move(file: "${outputPath}/PainlessParser.tokens", toDir: grammarPath)
+  module ':modules:mapper-extras'
+ * Painless plugin */
+  // Do not fail on `javadoc` warning (ANTLR generated code)
   }
+import com.github.jengelman.gradle.plugins.shadow.ShadowBasePlugin
+    // fix line endings
+ * GitHub history for details.
+tasks.named("dependencyLicenses").configure {
+ *
+                'scripts_painless_execute', 'put_script', 'delete_script'
+    // Avoid inheritDoc warnings for the package-private visitor interface.
+interface InjectedExecOps {
+tasks.named("assemble").configure {
+  docImplementation project(':modules:lang-painless')
+    '-package', 'org.opensearch.painless.antlr',
+    '-visitor',
+    }
+    ant.replaceregexp(match: '(class \\QPainless\\ELexer)',
+configurations {
+}
+}
+ * Modifications Copyright OpenSearch Contributors. See
+apply plugin: 'opensearch.internal-cluster-test'
+  systemProperty 'opensearch.transport.cname_in_publish_address', 'true'
+apply plugin: 'opensearch.validate-rest-spec'
+  api(libs.bundles.asm)
+  api project('spi')
+    include '*.tokens'
+}
+}
+    '-o', outputPath,
+  doFirst {
+  destinationDir = new File(file(java.docsDir), 'apiJavadoc')
+      replace: '\\1',
+  delete fileTree(grammarPath) {
+String outputPath = 'src/main/java/org/opensearch/painless/antlr'
+  dependsOn "regenLexer"
+ * this file be licensed under the Apache-2.0 license or a
+  mainClass = 'org.antlr.v4.Tool'
+      encoding: 'UTF-8') {
+  module ':modules:aggs-matrix-stats'
+  include '**/org/opensearch/painless/api/'
+ **********************************************/
+      replace: 'abstract \\1',
+ * software distributed under the License is distributed on an
+}
+ */
+      replace: '\\/\\/ ANTLR GENERATED CODE: DO NOT EDIT',
+dependencies {
+    // '-Xlog',
+ *            Parser regeneration             *
+  doc
+      classpath = sourceSets.doc.runtimeClasspath
+  regenerate "org.antlr:antlr4:${versions.antlr4}"
+  from apiJavadoc
+    ant.replaceregexp(match: '\t', flags: 'g', replace: '  ', encoding: 'UTF-8') {
+  }
+ * compatible open source license.
+    ant.replaceregexp(match: 'public ((interface|class) \\QPainless\\E\\w+)',
+  failOnJavadocWarning = false
+opensearchplugin {
+}
+restResources {
+tasks.register("generateContextDoc", DefaultTestClustersTask) {
+      mainClass = 'org.opensearch.painless.ContextDocGenerator'
+  classname = 'org.opensearch.painless.PainlessModulePlugin'
+  dependsOn "regenParser"
+/**********************************************
+    }
+  systemProperty 'user.variant', ''
+      fileset(dir: outputPath, includes: 'PainlessLexer.java')
+ * license agreements. See the NOTICE file distributed with
+ext {
+    // nuke timestamps/filenames in generated files
+  systemProperty 'file.encoding', 'UTF-8'
+  classpath = configurations.regenerate
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+  }
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+  generateContextCluster {
+  }
+  restApi {
+  dependsOn "cleanGenerated"
+}
+ * not use this file except in compliance with the License.
+    '-no-listener',
+import org.opensearch.gradle.testclusters.DefaultTestClustersTask;
+  classpath = sourceSets.main.runtimeClasspath
+    ant.fixcrlf(srcdir: outputPath, eol: 'lf') {
+  systemProperty 'user.country', 'US'
+      systemProperty "cluster.uri", "${-> testClusters.generateContextCluster.singleNode().getAllHttpSocketURI().get(0)}"
+/*
+  dependsOn "apiJavadocJar"
+  }
+  api(libs.antlr4.runtime)
+  dependsOn sourceSets.doc.runtimeClasspath
+  delete fileTree(outputPath) {
+}
+    execOps.execOps.javaexec {
+    testDistribution = 'ARCHIVE'
+    }.assertNormalExitValue()
+  systemProperty 'user.variant', ''
+tasks.register("cleanGenerated", Delete) {
+tasks.named("test").configure {
+ *
+    // make the lexer abstract
+/**********************************************
+sourceSets {
+  doLast {
+      encoding: 'UTF-8') {
+tasks.register("regenParser", JavaExec) {
+      fileset(dir: outputPath, includes: 'Painless*.java')
+  args '-Werror',
+  mainClass = 'org.antlr.v4.Tool'
+  }
+  jvmArgs '-XX:-OmitStackTraceInFastThrow', '-XX:-HeapDumpOnOutOfMemoryError'
+ * KIND, either express or implied.  See the License for the
+ * Licensed to Elasticsearch under one or more contributor
+      encoding: 'UTF-8') {
+}
+ * under the License.
+tasks.register("apiJavadocJar", Jar) {
+  regenerate
+  systemProperty 'user.language', 'en'
+  classpath = configurations.regenerate
+}
+}
+    "${file(grammarPath)}/PainlessParser.g4"
+ * SPDX-License-Identifier: Apache-2.0
+  systemProperty 'user.country', 'US'
+testClusters.all {
+    def execOps = project.objects.newInstance(InjectedExecOps)
+apply plugin: 'opensearch.yaml-rest-test'
+  @Inject ExecOperations getExecOps()
+  source = sourceSets.main.allJava
+    }
+tasks.register("regenLexer", JavaExec) {
+ * You may obtain a copy of the License at
+    }
+    ant.move(file: "${outputPath}/PainlessLexer.tokens", toDir: grammarPath)
+ * this work for additional information regarding copyright
+  systemProperty 'file.encoding', 'UTF-8'
+}
+  // TODO: remove this once cname is prepended to transport.publish_address by default in 8.0
 }

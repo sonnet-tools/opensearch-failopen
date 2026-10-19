@@ -1,28 +1,28 @@
-{
-  "schema": [
     {
-      "name": "value",
-      "type": "double"
-    },
-    {
-      "name": "casted",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
       100.5,
-      "100.5"
-    ],
-    [
-      200.75,
-      "200.75"
-    ],
-    [
+      "type": "string"
       150.25,
-      "150.25"
-    ]
+  "schema": [
+      "type": "double"
+    ],
+      "200.75"
+      "name": "casted",
+  "datarows": [
   ],
-  "total": 3,
-  "size": 3
 }
+    }
+    },
+  "total": 3,
+      "100.5"
+    [
+  "size": 3
+    {
+    ]
+      200.75,
+{
+    [
+    ],
+  ],
+    [
+      "name": "value",
+      "150.25"

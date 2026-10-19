@@ -1,83 +1,76 @@
----
-"System-generated search processor - enable all":
-  # 1. Enable all system-generated factories
-  - do:
-      cluster.put_settings:
-        body:
-          persistent:
-            cluster.search.enabled_system_generated_factories: "*"
-
-  # 2. Create test index
-  - do:
-      indices.create:
-        index: "test-system-generated-search-processor-index"
-        body:
-          settings:
-            number_of_shards: 1
-            number_of_replicas: 0
-          mappings:
-            properties:
-              trigger_field:
-                type: keyword
-              content:
-                type: text
-
-  # 3. Index 10 dummy docs
-  - do:
-      bulk:
-        refresh: true
-        body: |
-          {"index": {"_index": "test-system-generated-search-processor-index"}}
-          {"trigger_field": "match", "content": "doc1"}
-          {"index": {"_index": "test-system-generated-search-processor-index"}}
-          {"trigger_field": "match", "content": "doc2"}
-          {"index": {"_index": "test-system-generated-search-processor-index"}}
-          {"trigger_field": "match", "content": "doc3"}
-          {"index": {"_index": "test-system-generated-search-processor-index"}}
-          {"trigger_field": "match", "content": "doc4"}
-          {"index": {"_index": "test-system-generated-search-processor-index"}}
-          {"trigger_field": "match", "content": "doc5"}
-          {"index": {"_index": "test-system-generated-search-processor-index"}}
-          {"trigger_field": "match", "content": "doc6"}
-          {"index": {"_index": "test-system-generated-search-processor-index"}}
+  - length: { hits.hits: 2 }
+  - match: { hits.max_score: 10.0 }
           {"trigger_field": "match", "content": "doc7"}
-          {"index": {"_index": "test-system-generated-search-processor-index"}}
-          {"trigger_field": "match", "content": "doc8"}
-          {"index": {"_index": "test-system-generated-search-processor-index"}}
-          {"trigger_field": "match", "content": "doc9"}
-          {"index": {"_index": "test-system-generated-search-processor-index"}}
-          {"trigger_field": "match", "content": "doc10"}
-
-  # 4. Do a match query against the trigger_field with size 2
-  - do:
-      search:
+  # The system generated search phase results will set this as 10
+              trigger_field:
+  # 2. Create test index
         rest_total_hits_as_int: true
         index: "test-system-generated-search-processor-index"
         body:
-          size: 2
-          query:
-            # Use this to auto generate the search response processor to truncate the response
-            match:
-              trigger_field: "match"
-
-  # 5. Verify only 2 hits returned and max score is 10
-  - match: { hits.total: 10 }
-  # The system generated search response processor will truncate the hits to the original query size 2
-  - length: { hits.hits: 2 }
-  # The system generated search phase results will set this as 10
-  - match: { hits.max_score: 10.0 }
-
+          {"trigger_field": "match", "content": "doc1"}
+          {"trigger_field": "match", "content": "doc8"}
   # 6. Cleanup
   - do:
-      indices.delete:
-        index: "test-system-generated-search-processor-index"
-
+            number_of_shards: 1
   - do:
-      ingest.delete_pipeline:
-        id: "test-user-defined-pipeline"
-
   - do:
-      cluster.put_settings:
-        body:
-          persistent:
+          {"trigger_field": "match", "content": "doc10"}
+          query:
+          {"index": {"_index": "test-system-generated-search-processor-index"}}
+  # 5. Verify only 2 hits returned and max score is 10
             cluster.search.enabled_system_generated_factories: []
+        refresh: true
+        body:
+          {"index": {"_index": "test-system-generated-search-processor-index"}}
+          size: 2
+              content:
+          {"index": {"_index": "test-system-generated-search-processor-index"}}
+          {"index": {"_index": "test-system-generated-search-processor-index"}}
+            properties:
+          {"index": {"_index": "test-system-generated-search-processor-index"}}
+        index: "test-system-generated-search-processor-index"
+          {"trigger_field": "match", "content": "doc3"}
+          {"index": {"_index": "test-system-generated-search-processor-index"}}
+  - do:
+      indices.create:
+          {"index": {"_index": "test-system-generated-search-processor-index"}}
+        body: |
+"System-generated search processor - enable all":
+  - match: { hits.total: 10 }
+  # The system generated search response processor will truncate the hits to the original query size 2
+          mappings:
+            match:
+            cluster.search.enabled_system_generated_factories: "*"
+          {"trigger_field": "match", "content": "doc9"}
+            number_of_replicas: 0
+          settings:
+      ingest.delete_pipeline:
+          {"index": {"_index": "test-system-generated-search-processor-index"}}
+  # 4. Do a match query against the trigger_field with size 2
+---
+        id: "test-user-defined-pipeline"
+  - do:
+            # Use this to auto generate the search response processor to truncate the response
+          {"index": {"_index": "test-system-generated-search-processor-index"}}
+          persistent:
+                type: keyword
+  # 3. Index 10 dummy docs
+  - do:
+          {"trigger_field": "match", "content": "doc4"}
+              trigger_field: "match"
+          {"index": {"_index": "test-system-generated-search-processor-index"}}
+      search:
+          {"trigger_field": "match", "content": "doc2"}
+          {"trigger_field": "match", "content": "doc6"}
+      bulk:
+        index: "test-system-generated-search-processor-index"
+      cluster.put_settings:
+          persistent:
+                type: text
+        body:
+      indices.delete:
+          {"trigger_field": "match", "content": "doc5"}
+  # 1. Enable all system-generated factories
+      cluster.put_settings:
+  - do:
+        body:

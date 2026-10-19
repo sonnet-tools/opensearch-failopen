@@ -1,12 +1,11 @@
-setup:
-  - do:
-      indices.delete_template:
-        name:   '*'
-        ignore: 404
+        name: test
 ---
-"Get missing template":
-
+setup:
+        ignore: 404
+      indices.delete_template:
   - do:
+  - do:
+"Get missing template":
+        name:   '*'
       catch:  missing
       indices.get_template:
-        name: test

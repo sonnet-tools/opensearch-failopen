@@ -1,21 +1,17 @@
----
 "Basic":
+        id:    1
+      get_source:
+  - match: { '':  { foo: bar } }
+  - match: { '':  { foo: bar } }
+        id:    1
+        id:    1
+      get_source:
+  - do:
+        index: test_1
+        index: test_1
   - do:
       index:
         index: test_1
-        id:    1
+---
         body:  { "foo": "bar" }
-
   - do:
-      get_source:
-        index: test_1
-        id:    1
-
-  - match: { '':  { foo: bar } }
-
-  - do:
-      get_source:
-        index: test_1
-        id:    1
-
-  - match: { '':  { foo: bar } }

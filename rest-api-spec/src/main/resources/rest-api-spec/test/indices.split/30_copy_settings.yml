@@ -1,109 +1,97 @@
+  - match: { default-copy-settings-target.settings.index.merge.scheduler.max_thread_count: "2" }
+        - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
+  - match: { default-copy-settings-target.settings.index.blocks.write: "true" }
 ---
-"Copy settings during split index":
-  - skip:
-        features: allowed_warnings
   - do:
-      nodes.info:
-        node_id: data:true
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  - do:
-      indices.create:
-        index: source
-        wait_for_active_shards: 1
-        body:
-          settings:
-            # ensure everything is allocated on the same node
-            index.routing.allocation.include._id: $node_id
-            index.number_of_replicas: 0
-            index.number_of_shards: 1
-            index.number_of_routing_shards: 4
-            index.merge.scheduler.max_merge_count: 4
-
-  # make it read-only
-  - do:
-      indices.put_settings:
-        index: source
-        body:
-          index.blocks.write: true
-          index.number_of_replicas: 0
-
-  - do:
-      cluster.health:
-        wait_for_status: green
-        index: source
-
-  # now we do a actual split and copy settings
-  - do:
-      indices.split:
-        index: "source"
-        target: "copy-settings-target"
-        wait_for_active_shards: 1
-        master_timeout: 10s
-        copy_settings: true
-        body:
-          settings:
-            index.number_of_replicas: 0
-            index.number_of_shards: 2
-            index.merge.scheduler.max_thread_count: 2
-      allowed_warnings:
-        - "parameter [copy_settings] is deprecated and will be removed in 3.0.0"
-        - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
-
-  - do:
-      cluster.health:
-        wait_for_status: green
-
-  - do:
-      indices.get_settings:
-        index: "copy-settings-target"
-
-  # settings should be copied
-  - match: { copy-settings-target.settings.index.merge.scheduler.max_merge_count: "4" }
   - match: { copy-settings-target.settings.index.merge.scheduler.max_thread_count: "2" }
-  - match: { copy-settings-target.settings.index.blocks.write: "true" }
-  - match: { copy-settings-target.settings.index.routing.allocation.include._id: $node_id }
-
-  # now we do a actual shrink and copy settings (by default)
-  - do:
       allowed_warnings:
-        - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
-      indices.split:
         index: "source"
+      nodes._arbitrary_key_: node_id
+  - do:
+  - do:
+        body:
+  # make it read-only
+            index.number_of_routing_shards: 4
+      indices.get_settings:
+        master_timeout: 10s
+  # now we do a actual shrink and copy settings (by default)
+      nodes.info:
+            index.merge.scheduler.max_thread_count: 2
+            index.number_of_replicas: 0
+      cluster.health:
+  # settings should be copied
+  - set:
+  - match: { copy-settings-target.settings.index.routing.allocation.include._id: $node_id }
+        wait_for_status: green
+  # now we do a actual split and copy settings
+      indices.get_settings:
+        - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
+      indices.create:
+            index.merge.scheduler.max_merge_count: 4
+      allowed_warnings:
+        wait_for_status: green
+        index: source
+          index.number_of_replicas: 0
+            index.number_of_shards: 2
+  - do:
+  - match: { copy-settings-target.settings.index.blocks.write: "true" }
+  - match: { default-copy-settings-target.settings.index.merge.scheduler.max_merge_count: "4" }
+        index: "copy-settings-target"
+  - match: { default-copy-settings-target.settings.index.routing.allocation.include._id: $node_id }
+      cluster.health:
+        - "parameter [copy_settings] is deprecated and will be removed in 3.0.0"
+      indices.split:
+        wait_for_active_shards: 1
+        copy_settings: true
+        copy_settings: false
         target: "default-copy-settings-target"
         wait_for_active_shards: 1
-        master_timeout: 10s
-        body:
+        wait_for_active_shards: 1
           settings:
-            index.number_of_replicas: 0
-            index.number_of_shards: 2
-            index.merge.scheduler.max_thread_count: 2
-
-  - do:
-      cluster.health:
-        wait_for_status: green
-
-  - do:
-      indices.get_settings:
-        index: "default-copy-settings-target"
-
-  # settings should be copied
-  - match: { default-copy-settings-target.settings.index.merge.scheduler.max_merge_count: "4" }
-  - match: { default-copy-settings-target.settings.index.merge.scheduler.max_thread_count: "2" }
-  - match: { default-copy-settings-target.settings.index.blocks.write: "true" }
-  - match: { default-copy-settings-target.settings.index.routing.allocation.include._id: $node_id }
-
-  - do:
-      catch: /illegal_argument_exception/
+        features: allowed_warnings
       allowed_warnings:
         - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
-      indices.split:
-        index: "source"
-        target: "explicit-no-copy-settings-target"
-        wait_for_active_shards: 1
-        master_timeout: 10s
-        copy_settings: false
         body:
+            index.number_of_shards: 1
+  - do:
+  - do:
+      indices.split:
+        body:
+        target: "copy-settings-target"
+      indices.split:
           settings:
+        index: source
+        body:
+        wait_for_active_shards: 1
+  - skip:
+  - match: { copy-settings-target.settings.index.merge.scheduler.max_merge_count: "4" }
+      cluster.health:
+  - do:
+            index.number_of_shards: 2
+  # settings should be copied
+  - do:
+  - do:
+  - do:
+            # ensure everything is allocated on the same node
+      catch: /illegal_argument_exception/
+        index: "default-copy-settings-target"
+          settings:
+  - do:
+            index.routing.allocation.include._id: $node_id
+        wait_for_status: green
             index.number_of_replicas: 0
+            index.number_of_replicas: 0
+        node_id: data:true
+        index: "source"
+        body:
+        index: "source"
+          index.blocks.write: true
+      indices.put_settings:
+        master_timeout: 10s
+            index.number_of_replicas: 0
+            index.merge.scheduler.max_thread_count: 2
+        master_timeout: 10s
+        target: "explicit-no-copy-settings-target"
+"Copy settings during split index":
+          settings:
+        index: source

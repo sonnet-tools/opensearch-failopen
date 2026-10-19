@@ -1,355 +1,316 @@
----
-name: Code Diff Analyzer
-on:
-  workflow_call:
-    secrets:
-      BEDROCK_ACCESS_ROLE:
-        required: false  # LAB: Bedrock not available, see CLAUDE_CODE_OAUTH_TOKEN
-      CLAUDE_CODE_OAUTH_TOKEN:  # LAB: subscription OAuth token (from `claude setup-token`)
-        required: true
-    inputs:
-      skip_diff_analyzer_on_push:  # Only update if event is push
-        required: false
-        type: boolean
-        default: true
-      skip_diff_analyzer_with_label_name:  # Only update if event is pull_request_target
-        required: false
-        type: string
-        default: 'skip-diff-analyzer'
-      update_pr_comment_with_analyzer_report:  # Only update if event is pull_request_target
-        required: false
-        type: boolean
-        default: false
-      hard_fail_level:
-        required: false
-        type: number
-        default: 3  # hard fail the workflow on issues with 'high' severity or above
-    outputs:
-      # 0 = no issues found
-      # 1 = Low severity issues found
-      # 2 = Medium severity issues found
-      # 3 = High severity issues found
-      # 4 = Critical severity issues found
-      # 5 = Analyzer failed early
-      # 9 = Analyzer skipped
-      DIFF_ANALYZER_LEVELS:
-        description: Code diff analyzer levels to output (0/1/2/3/4/5/9)
-        value: ${{ jobs.Code-Diff-Analyzer.outputs.OUTPUT_DIFF_ANALYZER_LEVELS }}
-      HEAD_COMMIT_SHA:
-        description: HEAD commit sha value to output (commit id)
-        value: ${{ jobs.Code-Diff-Analyzer.outputs.OUTPUT_HEAD_COMMIT_SHA }}
-
-jobs:
-  Code-Diff-Analyzer:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write  # github oidc to assume aws roles
-      pull-requests: write  # to create or update comment (peter-evans/create-or-update-comment)
-    env:
-      # LAB: Bedrock (OIDC role) replaced with Claude Code subscription OAuth token.
-      # The claude CLI uses CLAUDE_CODE_OAUTH_TOKEN; ANTHROPIC_API_KEY is deliberately
-      # NOT set here (if set it takes precedence over the OAuth token). Same models.
-      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-      ANTHROPIC_MODEL: 'claude-sonnet-4-6'
-      ANTHROPIC_DEFAULT_SONNET_MODEL: 'claude-sonnet-4-6'
-      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-haiku-4-5-20251001'
-      ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-4-7'
-      CLAUDE_CODE_MAX_INPUT_TOKENS: '160000'
-      CLAUDE_CODE_MAX_OUTPUT_TOKENS: '4096'
-      MAX_THINKING_TOKENS: '1024'
-      DIFF_CONTENT_PATH: 'git_diff_content.txt'
-      DIFF_REPORT_PATH: 'git_diff_analyzer.json'
-    timeout-minutes: 10
-    outputs:
-      OUTPUT_DIFF_ANALYZER_LEVELS: ${{ steps.step-final-status.outputs.DIFF_ANALYZER_LEVELS }}
-      OUTPUT_HEAD_COMMIT_SHA: ${{ steps.step-final-status.outputs.HEAD_COMMIT_SHA }}
-    steps:
-      - name: Retrieve ref sha
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            base_sha="${{ github.event.before }}"
-            head_sha="${{ github.event.after }}"
-            if [ "${{ inputs.skip_diff_analyzer_on_push }}" = "true" ]; then
-              echo "Diff analyzer skipped due to inputs.skip_diff_analyzer_on_push is set to 'true'"
-              echo "diff_analyzer=9" >> $GITHUB_ENV
-            fi
-          elif [ "${{ github.event_name }}" = "pull_request_target" ]; then
-            base_sha=${{ github.event.pull_request.base.sha }}
-            head_sha=${{ github.event.pull_request.head.sha }}
-
-            PR_AUTHOR="${{ github.event.pull_request.user.login }}"
-            if [ "$PR_AUTHOR" != "dependabot[bot]" ] && \
-               [ "$PR_AUTHOR" != "opensearch-ci-bot" ] && \
-               [ "$PR_AUTHOR" != "mend-for-github-com[bot]" ]; then
-              echo "PR author '$PR_AUTHOR' is not a bot, proceeding..."
-
-              PR_LABELS=$(curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                -H "Accept: application/vnd.github.v3+json" \
-                "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.number }}/labels" \
-                | jq -r '.[].name')
-              echo "labels: $PR_LABELS"
-              echo "Verifying skip label: ${{ inputs.skip_diff_analyzer_with_label_name }}"
-              if [ -n "$PR_LABELS" ]; then
-                for label in $PR_LABELS
-                do
-                  if [[ "$label" = "${{ inputs.skip_diff_analyzer_with_label_name }}" ]]; then
-                    echo "Diff analyzer skipped due to label ${{ inputs.skip_diff_analyzer_with_label_name }}."
-                    echo "diff_analyzer=9" >> $GITHUB_ENV
-                    break
-                  fi
-                done
-              fi
-            else
-              echo "PR author '$PR_AUTHOR' is a bot, skipping..."
-              echo "diff_analyzer=9" >> $GITHUB_ENV
-            fi
-          else
-            echo "wrong github event: ${{ github.event_name }}, must be 'push' or 'pull_request_target'"
-            echo "diff_analyzer=5" >> $GITHUB_ENV
-            echo "diff_report='wrong github event'" >> $GITHUB_ENV
-            exit 1
-          fi
-
-          echo "BASE_SHA=$base_sha" >> $GITHUB_ENV
-          echo "HEAD_SHA=$head_sha" >> $GITHUB_ENV
-
-      - name: Get diff details
         if: ${{ env.diff_analyzer != '5' && env.diff_analyzer != '9' }}
-        run: |
-          echo "Get diff between base($BASE_SHA) and head($HEAD_SHA)"
-          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3.diff" \
-            "https://api.github.com/repos/${{ github.repository }}/compare/${BASE_SHA}...${HEAD_SHA}" > $DIFF_CONTENT_PATH
-
-          DIFF_SIZE=$(cat $DIFF_CONTENT_PATH | wc -c)
-          DIFF_TOKEN_EST=$((DIFF_SIZE / 3))
-          echo "Check diff size of '$DIFF_SIZE', token number '$DIFF_TOKEN_EST', max token limit '$CLAUDE_CODE_MAX_INPUT_TOKENS'"
-          if [ "$DIFF_TOKEN_EST" -ge "$CLAUDE_CODE_MAX_INPUT_TOKENS" ]; then
-            echo "Diff too large, requires skip by maintainers after manual review"
-            echo "diff_analyzer=5" >> $GITHUB_ENV
-            echo "diff_report='Diff too large, requires skip by maintainers after manual review'" >> $GITHUB_ENV
-            exit 1
-          fi
-          echo "-------------------------------------------------------"
-          cat $DIFF_CONTENT_PATH
-          echo "-------------------------------------------------------"
-
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        if: ${{ env.diff_analyzer != '5' && env.diff_analyzer != '9' }}
-        with:
-          node-version: 24
-
-      - name: Install necessary packages
-        if: ${{ env.diff_analyzer != '5' && env.diff_analyzer != '9' }}
-        run: |
-          npm install -g @anthropic-ai/claude-code@stable
-          pip install json-repair==0.55.2
-
-      # LAB: 'Configure AWS credentials' step removed (Bedrock auth only)
-
-
-      # yamllint disable
-      - name: Verify file diffs
-        if: ${{ env.diff_analyzer != '5' && env.diff_analyzer != '9' }}
-        run: |
-          PROMPT=$(cat <<-EOF
-          	Analyze the git diff for MALICIOUS CODE and INTENTIONAL SECURITY THREATS.
-          	
-          	**PRIMARY FOCUS: Detect deliberate attempts to compromise security, not coding mistakes.**
-          	
-          	**MANDATORY RULE — SUPPLY CHAIN / DEPENDENCY CHANGES:**
-          	- Any dependency, package registry, or build plugin change MUST be flagged as **high** severity
-          	- Do NOT judge whether a dependency name looks "legitimate" — you cannot verify artifact authenticity
-          	- Namespace hijacking and typosquatting are common attack techniques
-          	- Always flag and let maintainers verify
-          	- This applies to changes including but not limited to:
-          	  - Adding, removing, or changing versions of libraries, packages, or modules
-          	  - Adding or modifying package source URLs or repository configurations
-          	  - Annotation processors, postinstall/prebuild scripts, build plugins, or compiler extensions
-          	  - Modifying FROM directives or adding package installs in container files
-          	
-          	**Review for security issues including but not limited to:**
-          	- **Data exfiltration**: Unauthorized transmission of secrets, credentials, or sensitive data to external endpoints
-          	- **Backdoors**: Hidden access mechanisms, debug modes left enabled, or authentication bypasses
-          	- **Obfuscated logic**: Base64-encoded payloads, hex-encoded strings, heavily obfuscated code without clear purpose
-          	- **Suspicious network calls**: Unexpected external API calls, DNS queries, or data transmission to unknown domains
-          	- **Credential harvesting**: Code that captures, logs, or transmits credentials/tokens beyond normal usage
-          	- **Time bombs/logic bombs**: Code triggered by specific dates, conditions, or external signals
-          	- **Privilege escalation**: Deliberate attempts to gain elevated permissions or bypass authorization
-          	- **Supply chain attacks**: Any dependency, package registry, or build plugin change (see mandatory rule above)
-          	- **Environment manipulation**: Attempts to modify CI/CD variables, Jenkins secrets, or deployment configurations
-          	- **Steganography or covert channels**: Hidden data transmission in images, comments, or metadata
-          	
-          	**IMPORTANT DISTINCTIONS:**
-          	- Ignore common coding mistakes (e.g., missing input validation unless clearly intentional)
-          	- Focus on INTENT: Is this code deliberately trying to do something malicious?
-          	- Consider context: Is this behavior justified by the feature being implemented?
-          	- Flag anomalies: Code that seems unrelated to the stated PR purpose
-          	- Dependency/package changes are NEVER considered justified by context — always flag as high
-          	
-          	**Classify each issue by severity:**
-          	- **critical**: Clear evidence of malicious intent with immediate security impact (data exfiltration, backdoors)
-          	- **high**: Highly suspicious patterns that likely indicate malicious intent but may have alternate explanations, OR changes that match a mandatory flagging rule above
-          	- **medium**: Unusual patterns that warrant investigation but could be legitimate
-          	- **low**: Minor anomalies or code that seems out of place but has plausible explanations
-          	
-          	**OUTPUT CONSTRAINTS:**
-          	- Maximum 10 issues in the output
-          	- Prioritize by severity: critical > high > medium > low
-          	- If more than 10 issues found, include only the top 10 most severe
-          	- In "counts.total", report the ACTUAL total number of issues found (even if truncated)
-          	- Update the "truncated" boolean field to 'true' if issues were limited in output, else keep it 'false'
-          	
-          	**IMPORTANT: Your response must be ONLY the raw JSON object. Do NOT wrap it in markdown code blocks. Do NOT add any explanation before or after. Start your response with { and end with }.**
-          	
-          	**Required JSON format:**
-          	{
-          	  "counts": {
-          	    "total": <number>,
-          	    "critical": <number>,
-          	    "high": <number>,
-          	    "medium": <number>,
-          	    "low": <number>
-          	  },
-          	  "truncated": <boolean>,
-          	  "issues": [
-          	    {
-          	      "path": "path/to/file",
-          	      "line": <number>,
-          	      "severity": "critical|high|medium|low",
-          	      "description": "Brief explanation of the issue"
-          	    }
-          	  ]
-          	}
-          	
-          	EOF
-          )
-          cat "$DIFF_CONTENT_PATH" | claude -p "$PROMPT" > $DIFF_REPORT_PATH
-          json_repair $DIFF_REPORT_PATH --inline --strict
-          echo "Processing AI results"
-          diff_report_json=$(cat $DIFF_REPORT_PATH | jq -c '.')
-          echo "-------------------------------------------------------"
-          echo $diff_report_json | jq -r
-          echo "-------------------------------------------------------"
-          unset AWS_ACCESS_KEY_ID
-          unset AWS_SECRET_ACCESS_KEY  
-
-          echo "Start issue count"
-          DIFF_ISSUE_TOTAL=$(echo $diff_report_json | jq -r .counts.total)
-          DIFF_ISSUE_CRITICAL=$(echo $diff_report_json | jq -r .counts.critical)
-          DIFF_ISSUE_HIGH=$(echo $diff_report_json | jq -r .counts.high)
-          DIFF_ISSUE_MEDIUM=$(echo $diff_report_json | jq -r .counts.medium)
-          DIFF_ISSUE_LOW=$(echo $diff_report_json | jq -r .counts.low)
-          DIFF_TRUNCATED=$(echo $diff_report_json | jq -r .truncated)
-          echo "Issue Count: Total($DIFF_ISSUE_TOTAL), Critical($DIFF_ISSUE_CRITICAL), High($DIFF_ISSUE_HIGH), Medium($DIFF_ISSUE_MEDIUM), Low($DIFF_ISSUE_LOW)"
-          echo "-------------------------------------------------------"
-
-          if [ "$DIFF_ISSUE_TOTAL" != "0" ]; then
-            echo "Diff analyzer found issues, generating report"
-
-            diff_report_temp=$(echo "$diff_report_json" | jq -r '
-              "<table><tr><th>Path</th><th>Line</th><th>Severity</th><th>Description</th></tr>" +
-              (
-                .issues | map(
-                  "<tr><td>" + .path + "</td><td>" + 
-                  (.line | tostring) + "</td><td>" + 
-                  .severity + "</td><td>" + 
-                  .description + "</td></tr>"
-                ) | join("")
-              ) +
-              "</table><p>" +
-              "<i>The table above displays the top 10 most important findings.</i> <br/><br/>" +
-              "<strong>Total: " + (.counts.total | tostring) + 
-              " | Critical: " + (.counts.critical | tostring) + 
-              " | High: " + (.counts.high | tostring) + 
-              " | Medium: " + (.counts.medium | tostring) + 
-              " | Low: " + (.counts.low | tostring) + "</strong></p>"
-            ')
-            echo "diff_report=$diff_report_temp" >> $GITHUB_ENV
-          else
-            echo "Diff analyzer did not find any specific issues yet"
-            echo "diff_report='No specific issues has been found by AI on this PR'" >> $GITHUB_ENV
-          fi
-
-          if [ "$DIFF_ISSUE_CRITICAL" != "0" ]; then
-            echo "diff_analyzer=4" >> $GITHUB_ENV
-          elif [ "$DIFF_ISSUE_HIGH" != "0" ]; then
-            echo "diff_analyzer=3" >> $GITHUB_ENV
-          elif [ "$DIFF_ISSUE_MEDIUM" != "0" ]; then
-            echo "diff_analyzer=2" >> $GITHUB_ENV
-          elif [ "$DIFF_ISSUE_LOW" != "0" ]; then
-            echo "diff_analyzer=1" >> $GITHUB_ENV
-          else
-            echo "diff_analyzer=0" >> $GITHUB_ENV
-          fi
-      # yamllint enable
-
-      - name: Check final status
-        id: step-final-status
-        run: |
-          echo "DIFF_ANALYZER_LEVELS=${{ env.diff_analyzer }}" >> $GITHUB_OUTPUT
-          echo "HEAD_COMMIT_SHA=${{ env.HEAD_SHA }}"  >> $GITHUB_OUTPUT
-
-          if [ -z "${{ env.diff_analyzer }}" ] || [ "${{ env.diff_analyzer }}" = "5" ]; then
-            echo "Previous steps failed, no diff status"
-          elif [ "${{ env.diff_analyzer }}" = "0" ]; then
-            echo "Diff analyzer passed"
-          elif [ "${{ env.diff_analyzer }}" = "9" ]; then
             echo "Diff analyzer skipped"
+          repository: ${{ github.repository }}
+                -H "Accept: application/vnd.github.v3+json" \
+          	- If more than 10 issues found, include only the top 10 most severe
+          echo "Start issue count"
+          edit-mode: replace
+    outputs:
+          pip install json-repair==0.55.2
+            :no_entry: **Hard block**: Issues at **${{ env.hard_fail_name }}** severity or above will block this PR from merging.
+            echo "Diff analyzer did not find any specific issues yet"
+              "</table><p>" +
+          fi
+              if [ -n "$PR_LABELS" ]; then
+        default: true
+          if [ "$DIFF_ISSUE_TOTAL" != "0" ]; then
+          fi
+          	  },
+      DIFF_CONTENT_PATH: 'git_diff_content.txt'
+      # 2 = Medium severity issues found
+                    echo "Diff analyzer skipped due to label ${{ inputs.skip_diff_analyzer_with_label_name }}."
+          DIFF_ISSUE_TOTAL=$(echo $diff_report_json | jq -r .counts.total)
+          fi
+            exit 1
+      DIFF_REPORT_PATH: 'git_diff_analyzer.json'
+      - name: Retrieve ref sha
+          	      "line": <number>,
+      OUTPUT_HEAD_COMMIT_SHA: ${{ steps.step-final-status.outputs.HEAD_COMMIT_SHA }}
           else
+          	**Review for security issues including but not limited to:**
+          	- **Time bombs/logic bombs**: Code triggered by specific dates, conditions, or external signals
+              echo "diff_analyzer=9" >> $GITHUB_ENV
+              echo "labels: $PR_LABELS"
+               [ "$PR_AUTHOR" != "mend-for-github-com[bot]" ]; then
+          	- **Obfuscated logic**: Base64-encoded payloads, hex-encoded strings, heavily obfuscated code without clear purpose
+            **Pull Requests Author(s)**: Please update your Pull Request according to the report above.
+            echo "diff_analyzer=5" >> $GITHUB_ENV
+on:
+        run: |
+          	    "medium": <number>,
+        with:
+          	- **Data exfiltration**: Unauthorized transmission of secrets, credentials, or sensitive data to external endpoints
+          	  - Adding or modifying package source URLs or repository configurations
+          json_repair $DIFF_REPORT_PATH --inline --strict
+                ) | join("")
+          elif [ "${{ env.diff_analyzer }}" = "9" ]; then
+      pull-requests: write  # to create or update comment (peter-evans/create-or-update-comment)
+            head_sha=${{ github.event.pull_request.head.sha }}
+        if: ${{ always() && github.event_name == 'pull_request_target' && inputs.update_pr_comment_with_analyzer_report && env.diff_analyzer != '0' && env.diff_analyzer != '9' }}
+                "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.number }}/labels" \
+              echo "diff_analyzer=9" >> $GITHUB_ENV
+            echo "diff_report=$diff_report_temp" >> $GITHUB_ENV
+      - name: Create Comment Failure Git Diff Analyzer
+  workflow_call:
+            echo "diff_analyzer=2" >> $GITHUB_ENV
+                    break
+          	- **Steganography or covert channels**: Hidden data transmission in images, comments, or metadata
+          	**MANDATORY RULE — SUPPLY CHAIN / DEPENDENCY CHANGES:**
+        id: step-final-status
+        if: ${{ env.diff_analyzer != '5' && env.diff_analyzer != '9' }}
+              PR_LABELS=$(curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+        default: 3  # hard fail the workflow on issues with 'high' severity or above
+      DIFF_ANALYZER_LEVELS:
+          DIFF_TRUNCATED=$(echo $diff_report_json | jq -r .truncated)
+          DIFF_TOKEN_EST=$((DIFF_SIZE / 3))
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          	- Dependency/package changes are NEVER considered justified by context — always flag as high
+          	  - Modifying FROM directives or adding package installs in container files
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        type: number
+            else
+          unset AWS_ACCESS_KEY_ID
+              " | Low: " + (.counts.low | tostring) + "</strong></p>"
+      # 3 = High severity issues found
+      - name: Verify file diffs
+            "https://api.github.com/repos/${{ github.repository }}/compare/${BASE_SHA}...${HEAD_SHA}" > $DIFF_CONTENT_PATH
+      # 9 = Analyzer skipped
+          	- Consider context: Is this behavior justified by the feature being implemented?
+      # LAB: 'Configure AWS credentials' step removed (Bedrock auth only)
+            ')
+    outputs:
+        if: ${{ always() && github.event_name == 'pull_request_target' && inputs.update_pr_comment_with_analyzer_report && env.diff_analyzer != '0' && env.diff_analyzer != '9' }}
+          	**Classify each issue by severity:**
+          echo "-------------------------------------------------------"
             echo "Diff analyzer has found issues in the code changes per AI Analysis"
           fi
-
-          if [ "${{ env.diff_analyzer }}" != '9' ] && [ "${{ env.diff_analyzer }}" -ge "${{ inputs.hard_fail_level }}" ]; then
+        uses: peter-evans/find-comment@3eae4d37986fb5a8592848f6a574fdf654e61f9e # v3
+        default: false
+  Code-Diff-Analyzer:
+            echo "diff_analyzer=0" >> $GITHUB_ENV
+          else
+              " | Critical: " + (.counts.critical | tostring) + 
+          	- **medium**: Unusual patterns that warrant investigation but could be legitimate
             echo "Hard fail diff analyzer at level ${{ inputs.hard_fail_level }}"
+      BEDROCK_ACCESS_ROLE:
+            *) echo "hard_fail_name=High" >> $GITHUB_ENV ;;
+              fi
+          elif [ "${{ github.event_name }}" = "pull_request_target" ]; then
+      CLAUDE_CODE_MAX_OUTPUT_TOKENS: '4096'
+          	      "description": "Brief explanation of the issue"
+          	EOF
+        type: boolean
+        type: string
+      id-token: write  # github oidc to assume aws roles
+    secrets:
+            2) echo "hard_fail_name=Medium" >> $GITHUB_ENV ;;
             exit 1
-          fi
-
+          	    "critical": <number>,
+        description: HEAD commit sha value to output (commit id)
+              (
+      # 0 = no issues found
+        type: boolean
+            echo "diff_analyzer=3" >> $GITHUB_ENV
+      # LAB: Bedrock (OIDC role) replaced with Claude Code subscription OAuth token.
+      skip_diff_analyzer_with_label_name:  # Only update if event is pull_request_target
+        required: false  # LAB: Bedrock not available, see CLAUDE_CODE_OAUTH_TOKEN
+      - name: Get diff details
+      update_pr_comment_with_analyzer_report:  # Only update if event is pull_request_target
+          	- Flag anomalies: Code that seems unrelated to the stated PR purpose
+          echo "Processing AI results"
+      # yamllint enable
+          	- **critical**: Clear evidence of malicious intent with immediate security impact (data exfiltration, backdoors)
+          body: |
+          	    {
       - name: Find existing PR Code Analyzer comment
+            if [ "${{ inputs.skip_diff_analyzer_on_push }}" = "true" ]; then
+          echo "-------------------------------------------------------"
+            echo "diff_report='Diff too large, requires skip by maintainers after manual review'" >> $GITHUB_ENV
+            Thanks.
+      # The claude CLI uses CLAUDE_CODE_OAUTH_TOKEN; ANTHROPIC_API_KEY is deliberately
+            if [ "$PR_AUTHOR" != "dependabot[bot]" ] && \
+        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5
+            echo "diff_analyzer=4" >> $GITHUB_ENV
+          	  "issues": [
+      hard_fail_level:
+          DIFF_SIZE=$(cat $DIFF_CONTENT_PATH | wc -c)
+            fi
+          	**IMPORTANT DISTINCTIONS:**
+          	- Focus on INTENT: Is this code deliberately trying to do something malicious?
+          	- Any dependency, package registry, or build plugin change MUST be flagged as **high** severity
+                  (.line | tostring) + "</td><td>" + 
+      ANTHROPIC_DEFAULT_SONNET_MODEL: 'claude-sonnet-4-6'
+                  .description + "</td></tr>"
+            fi
+      OUTPUT_DIFF_ANALYZER_LEVELS: ${{ steps.step-final-status.outputs.DIFF_ANALYZER_LEVELS }}
+          diff_report_json=$(cat $DIFF_REPORT_PATH | jq -c '.')
+            1) echo "hard_fail_name=Low" >> $GITHUB_ENV ;;
+            exit 1
+          echo $diff_report_json | jq -r
+      CLAUDE_CODE_MAX_INPUT_TOKENS: '160000'
+          elif [ "$DIFF_ISSUE_MEDIUM" != "0" ]; then
+          if [ -z "${{ env.diff_analyzer }}" ] || [ "${{ env.diff_analyzer }}" = "5" ]; then
+          fi
+              " | High: " + (.counts.high | tostring) + 
+          echo "-------------------------------------------------------"
+                done
+        required: true
+          	}
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-haiku-4-5-20251001'
+          	      "path": "path/to/file",
+            echo "Diff too large, requires skip by maintainers after manual review"
+          node-version: 24
+          npm install -g @anthropic-ai/claude-code@stable
+          elif [ "${{ env.diff_analyzer }}" = "0" ]; then
+          DIFF_ISSUE_CRITICAL=$(echo $diff_report_json | jq -r .counts.critical)
+        value: ${{ jobs.Code-Diff-Analyzer.outputs.OUTPUT_HEAD_COMMIT_SHA }}
+                | jq -r '.[].name')
+              echo "PR author '$PR_AUTHOR' is not a bot, proceeding..."
+          elif [ "$DIFF_ISSUE_LOW" != "0" ]; then
+          else
+                    echo "diff_analyzer=9" >> $GITHUB_ENV
+            3) echo "hard_fail_name=High" >> $GITHUB_ENV ;;
+        run: |
+        required: false
+          	    "low": <number>
+          	Analyze the git diff for MALICIOUS CODE and INTENTIONAL SECURITY THREATS.
+            base_sha="${{ github.event.before }}"
+            PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+            echo "diff_analyzer=5" >> $GITHUB_ENV
+      # 4 = Critical severity issues found
+               [ "$PR_AUTHOR" != "opensearch-ci-bot" ] && \
+      # 5 = Analyzer failed early
+---
+            echo "Diff analyzer passed"
+        required: false
+          	- **Environment manipulation**: Attempts to modify CI/CD variables, Jenkins secrets, or deployment configurations
+                  .severity + "</td><td>" + 
+        run: |
+          echo "-------------------------------------------------------"
+          body-includes: '## PR Code Analyzer'
+      # yamllint disable
+            echo "diff_analyzer=1" >> $GITHUB_ENV
+          	  - Adding, removing, or changing versions of libraries, packages, or modules
+          	- **Supply chain attacks**: Any dependency, package registry, or build plugin change (see mandatory rule above)
+            ***
+        default: 'skip-diff-analyzer'
+          	    }
+            4) echo "hard_fail_name=Critical" >> $GITHUB_ENV ;;
+      # 1 = Low severity issues found
+        run: |
+          	- **high**: Highly suspicious patterns that likely indicate malicious intent but may have alternate explanations, OR changes that match a mandatory flagging rule above
+    runs-on: ubuntu-latest
+      # NOT set here (if set it takes precedence over the OAuth token). Same models.
+          issue-number: ${{ github.event.number }}
+    env:
+              echo "Verifying skip label: ${{ inputs.skip_diff_analyzer_with_label_name }}"
+          	**PRIMARY FOCUS: Detect deliberate attempts to compromise security, not coding mistakes.**
+          case "${{ inputs.hard_fail_level }}" in
+          	- Namespace hijacking and typosquatting are common attack techniques
+          if [ "${{ env.diff_analyzer }}" != '9' ] && [ "${{ env.diff_analyzer }}" -ge "${{ inputs.hard_fail_level }}" ]; then
+    inputs:
+          	- This applies to changes including but not limited to:
+          	- Maximum 10 issues in the output
+          	- Do NOT judge whether a dependency name looks "legitimate" — you cannot verify artifact authenticity
+      skip_diff_analyzer_on_push:  # Only update if event is push
+          	- **Backdoors**: Hidden access mechanisms, debug modes left enabled, or authentication bypasses
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-4-7'
+            echo "diff_report='No specific issues has been found by AI on this PR'" >> $GITHUB_ENV
+          	**Required JSON format:**
+      - name: Determine hard fail severity name
+          	  - Annotation processors, postinstall/prebuild scripts, build plugins, or compiler extensions
+          issue-number: ${{ github.event.number }}
+        description: Code diff analyzer levels to output (0/1/2/3/4/5/9)
+          	- Ignore common coding mistakes (e.g., missing input validation unless clearly intentional)
+          	- Update the "truncated" boolean field to 'true' if issues were limited in output, else keep it 'false'
+      - name: Install necessary packages
+            :warning: Note: The *Code-Diff-Analyzer* helps protect against potentially harmful code patterns. Please ensure you have thoroughly reviewed the changes beforehand.
+          	- **Credential harvesting**: Code that captures, logs, or transmits credentials/tokens beyond normal usage
+          DIFF_ISSUE_HIGH=$(echo $diff_report_json | jq -r .counts.high)
+          	- Prioritize by severity: critical > high > medium > low
+      ANTHROPIC_MODEL: 'claude-sonnet-4-6'
+                for label in $PR_LABELS
+          )
+          	  "truncated": <boolean>,
+            diff_report_temp=$(echo "$diff_report_json" | jq -r '
+              " | Medium: " + (.counts.medium | tostring) + 
+          echo "HEAD_COMMIT_SHA=${{ env.HEAD_SHA }}"  >> $GITHUB_OUTPUT
+          	    "total": <number>,
+            echo "diff_report='wrong github event'" >> $GITHUB_ENV
+      - name: Check final status
+jobs:
+            ## PR Code Analyzer :exclamation:
+          	- **Privilege escalation**: Deliberate attempts to gain elevated permissions or bypass authorization
+          echo "Get diff between base($BASE_SHA) and head($HEAD_SHA)"
+          unset AWS_SECRET_ACCESS_KEY  
+          	**OUTPUT CONSTRAINTS:**
+          cat "$DIFF_CONTENT_PATH" | claude -p "$PROMPT" > $DIFF_REPORT_PATH
+          cat $DIFF_CONTENT_PATH
+            **Repository Maintainer(s)**: You can `bypass diff analyzer` by adding label `${{ inputs.skip_diff_analyzer_with_label_name }}` after reviewing the changes carefully, then `re-run failed actions`. To re-enable the analyzer, remove the label, then `re-run all actions`.
+      MAX_THINKING_TOKENS: '1024'
+        required: false
+          echo "Issue Count: Total($DIFF_ISSUE_TOTAL), Critical($DIFF_ISSUE_CRITICAL), High($DIFF_ISSUE_HIGH), Medium($DIFF_ISSUE_MEDIUM), Low($DIFF_ISSUE_LOW)"
+              "<strong>Total: " + (.counts.total | tostring) + 
+          echo "BASE_SHA=$base_sha" >> $GITHUB_ENV
+          	**IMPORTANT: Your response must be ONLY the raw JSON object. Do NOT wrap it in markdown code blocks. Do NOT add any explanation before or after. Start your response with { and end with }.**
+name: Code Diff Analyzer
+          	      "severity": "critical|high|medium|low",
+              "<i>The table above displays the top 10 most important findings.</i> <br/><br/>" +
+        run: |
+      HEAD_COMMIT_SHA:
+          if [ "${{ github.event_name }}" = "push" ]; then
+          	  "counts": {
+              echo "PR author '$PR_AUTHOR' is a bot, skipping..."
+          echo "DIFF_ANALYZER_LEVELS=${{ env.diff_analyzer }}" >> $GITHUB_OUTPUT
+          if [ "$DIFF_TOKEN_EST" -ge "$CLAUDE_CODE_MAX_INPUT_TOKENS" ]; then
+          elif [ "$DIFF_ISSUE_HIGH" != "0" ]; then
+            ***
+          	  ]
+          PROMPT=$(cat <<-EOF
+          comment-author: 'github-actions[bot]'
+              ) +
+          	    "high": <number>,
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+          esac
+            echo "Previous steps failed, no diff status"
+                  if [[ "$label" = "${{ inputs.skip_diff_analyzer_with_label_name }}" ]]; then
+            echo "wrong github event: ${{ github.event_name }}, must be 'push' or 'pull_request_target'"
+            ${{ env.diff_report }}
+                do
+          fi
+              "<table><tr><th>Path</th><th>Line</th><th>Severity</th><th>Description</th></tr>" +
+            echo "Diff analyzer found issues, generating report"
+            head_sha="${{ github.event.after }}"
+        with:
+                .issues | map(
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          	- **low**: Minor anomalies or code that seems out of place but has plausible explanations
+    timeout-minutes: 10
+          	- **Suspicious network calls**: Unexpected external API calls, DNS queries, or data transmission to unknown domains
+            **AI-powered '*Code-Diff-Analyzer*' found issues on commit ${{ env.HEAD_SHA }}.**
+          	{
+          DIFF_ISSUE_MEDIUM=$(echo $diff_report_json | jq -r .counts.medium)
         if: ${{ always() && github.event_name == 'pull_request_target' && inputs.update_pr_comment_with_analyzer_report && env.diff_analyzer != '0' && env.diff_analyzer != '9' }}
         id: find-comment
-        uses: peter-evans/find-comment@3eae4d37986fb5a8592848f6a574fdf654e61f9e # v3
+          if [ "$DIFF_ISSUE_CRITICAL" != "0" ]; then
+          echo "Check diff size of '$DIFF_SIZE', token number '$DIFF_TOKEN_EST', max token limit '$CLAUDE_CODE_MAX_INPUT_TOKENS'"
+          	- In "counts.total", report the ACTUAL total number of issues found (even if truncated)
         with:
-          issue-number: ${{ github.event.number }}
-          comment-author: 'github-actions[bot]'
-          body-includes: '## PR Code Analyzer'
-
-      - name: Determine hard fail severity name
-        if: ${{ always() && github.event_name == 'pull_request_target' && inputs.update_pr_comment_with_analyzer_report && env.diff_analyzer != '0' && env.diff_analyzer != '9' }}
+              echo "Diff analyzer skipped due to inputs.skip_diff_analyzer_on_push is set to 'true'"
+          echo "-------------------------------------------------------"
+                  "<tr><td>" + .path + "</td><td>" + 
+        if: ${{ env.diff_analyzer != '5' && env.diff_analyzer != '9' }}
+    permissions:
+            base_sha=${{ github.event.pull_request.base.sha }}
+        if: ${{ env.diff_analyzer != '5' && env.diff_analyzer != '9' }}
+      CLAUDE_CODE_OAUTH_TOKEN:  # LAB: subscription OAuth token (from `claude setup-token`)
+    steps:
+          DIFF_ISSUE_LOW=$(echo $diff_report_json | jq -r .counts.low)
+        required: false
+          	- Always flag and let maintainers verify
+          echo "HEAD_SHA=$head_sha" >> $GITHUB_ENV
+          else
+        value: ${{ jobs.Code-Diff-Analyzer.outputs.OUTPUT_DIFF_ANALYZER_LEVELS }}
         run: |
-          case "${{ inputs.hard_fail_level }}" in
-            1) echo "hard_fail_name=Low" >> $GITHUB_ENV ;;
-            2) echo "hard_fail_name=Medium" >> $GITHUB_ENV ;;
-            3) echo "hard_fail_name=High" >> $GITHUB_ENV ;;
-            4) echo "hard_fail_name=Critical" >> $GITHUB_ENV ;;
-            *) echo "hard_fail_name=High" >> $GITHUB_ENV ;;
-          esac
-
-      - name: Create Comment Failure Git Diff Analyzer
-        if: ${{ always() && github.event_name == 'pull_request_target' && inputs.update_pr_comment_with_analyzer_report && env.diff_analyzer != '0' && env.diff_analyzer != '9' }}
-        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5
-        with:
-          comment-id: ${{ steps.find-comment.outputs.comment-id }}
-          repository: ${{ github.repository }}
-          issue-number: ${{ github.event.number }}
-          edit-mode: replace
-          body: |
-            ## PR Code Analyzer :exclamation:
-
-            **AI-powered '*Code-Diff-Analyzer*' found issues on commit ${{ env.HEAD_SHA }}.**
-
-            :no_entry: **Hard block**: Issues at **${{ env.hard_fail_name }}** severity or above will block this PR from merging.
-
-            ${{ env.diff_report }}
-
-            ***
-
-            **Pull Requests Author(s)**: Please update your Pull Request according to the report above.
-
-            **Repository Maintainer(s)**: You can `bypass diff analyzer` by adding label `${{ inputs.skip_diff_analyzer_with_label_name }}` after reviewing the changes carefully, then `re-run failed actions`. To re-enable the analyzer, remove the label, then `re-run all actions`.
-
-            ***
-
-            :warning: Note: The *Code-Diff-Analyzer* helps protect against potentially harmful code patterns. Please ensure you have thoroughly reviewed the changes beforehand.
-
-            Thanks.
+                  fi
+            -H "Accept: application/vnd.github.v3.diff" \

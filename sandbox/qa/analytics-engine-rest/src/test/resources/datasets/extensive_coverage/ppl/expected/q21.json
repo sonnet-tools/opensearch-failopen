@@ -1,42 +1,42 @@
+      0
+    },
 {
-  "schema": [
-    {
-      "name": "timestamp",
-      "type": "timestamp"
-    },
-    {
-      "name": "hr",
       "type": "int"
-    },
-    {
-      "name": "min",
-      "type": "int"
-    },
-    {
-      "name": "sec",
-      "type": "int"
-    }
   ],
-  "datarows": [
     [
       "2026-01-15 10:30:00",
-      10,
-      30,
-      0
-    ],
-    [
+      "type": "int"
+    {
       "2026-02-20 14:45:00",
-      14,
-      45,
-      0
+    },
     ],
-    [
-      "2026-03-10 08:15:00",
-      8,
-      15,
-      0
-    ]
   ],
-  "total": 3,
-  "size": 3
 }
+      0
+  "total": 3,
+      10,
+  "schema": [
+      30,
+      "name": "min",
+    {
+      "name": "hr",
+    [
+    ]
+      8,
+    [
+      "name": "timestamp",
+      "type": "int"
+      14,
+      "2026-03-10 08:15:00",
+      "name": "sec",
+      45,
+    {
+    ],
+      15,
+    },
+      "type": "timestamp"
+  "datarows": [
+    }
+  "size": 3
+    {
+      0

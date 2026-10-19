@@ -1,55 +1,47 @@
-setup:
-  - skip:
-      features: [arbitrary_key]
----
-"node_info test":
+  - match: { nodes.$node_id.roles.2: "master" }
+      nodes.info: {}
+        # see OpenSearchClientYamlSuiteTestCase#initAndResetContext() for detail.
+      nodes._arbitrary_key_: node_id
+  - set:
   - do:
       nodes.info: {}
-  - set:
       nodes._arbitrary_key_: node_id
-
-  - is_true: nodes
-  - is_true: cluster_name
-
+  - match: { nodes.$node_id.roles.0: "cluster_manager" }
+      node_selector:
+"node_info role test":
+  - skip:
+        version: "1.0.0 - 1.4.99"
+  - is_true: nodes.$node_id.roles
+        # so node_selector is required, and only filtering version in 'skip' is not enough.
+  - match: { nodes.$node_id.roles.2: "ingest" }
+      # Note: It will only stash the first node_id in the api response.
+  - match: { nodes.$node_id.roles.3: "remote_cluster_client" }
+  # the roles output is sorted
+  - match: { nodes.$node_id.roles.1: "ingest" }
 ---
 "node_info role test - before 2.0.0":
-  - skip:
-      version: " - 7.7.99 , 2.0.0 - "
-      reason: "node roles were not sorted before 7.8.0"
-      features: node_selector
-
-  - do:
-      nodes.info: {}
-      node_selector:
-        # Only send request to nodes in <2.0 versions, especially during ':qa:mixed-cluster:v1.x.x#mixedClusterTest'.
-        # Because YAML REST test takes the minimum OpenSearch version in the cluster to apply the filter in 'skip' section,
-        # see OpenSearchClientYamlSuiteTestCase#initAndResetContext() for detail.
+  - match: { nodes.$node_id.roles.3: "remote_cluster_client" }
         # During 'mixedClusterTest', the cluster can be mixed with nodes in 1.x and 2.x versions,
-        # so node_selector is required, and only filtering version in 'skip' is not enough.
-        version: "1.0.0 - 1.4.99"
-
   - set:
-      # Note: It will only stash the first node_id in the api response.
-      nodes._arbitrary_key_: node_id
-
-  - is_true: nodes.$node_id.roles
-  # the roles output is sorted
   - match: { nodes.$node_id.roles.0: "data" }
-  - match: { nodes.$node_id.roles.1: "ingest" }
-  - match: { nodes.$node_id.roles.2: "master" }
-  - match: { nodes.$node_id.roles.3: "remote_cluster_client" }
-
----
-"node_info role test":
-  - do:
-      nodes.info: {}
-
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  - is_true: nodes.$node_id.roles
-  # the roles output is sorted
-  - match: { nodes.$node_id.roles.0: "cluster_manager" }
+      reason: "node roles were not sorted before 7.8.0"
+"node_info test":
+  - skip:
+      features: node_selector
   - match: { nodes.$node_id.roles.1: "data" }
-  - match: { nodes.$node_id.roles.2: "ingest" }
-  - match: { nodes.$node_id.roles.3: "remote_cluster_client" }
+      version: " - 7.7.99 , 2.0.0 - "
+---
+  - is_true: nodes.$node_id.roles
+      nodes.info: {}
+---
+        # Because YAML REST test takes the minimum OpenSearch version in the cluster to apply the filter in 'skip' section,
+      features: [arbitrary_key]
+      nodes._arbitrary_key_: node_id
+  - do:
+  - do:
+setup:
+  # the roles output is sorted
+  - set:
+  - is_true: nodes
+        # Only send request to nodes in <2.0 versions, especially during ':qa:mixed-cluster:v1.x.x#mixedClusterTest'.
+  - is_true: cluster_name

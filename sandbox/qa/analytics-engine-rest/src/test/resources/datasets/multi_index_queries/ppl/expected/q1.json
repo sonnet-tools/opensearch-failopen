@@ -1,84 +1,84 @@
-{
-  "schema": [
+      "asmith",
+    [
+      "authentication_failure",
     {
+    ],
+      "ERROR"
+      "authentication_failure",
+      "type": "string"
+  ],
+    ],
+      "jdoe",
+      "192.168.1.100",
+      "192.168.1.100",
+    [
+      "jdoe",
+    [
+      "type": "string"
       "name": "user",
-      "type": "string"
-    },
-    {
+      "authentication_failure",
+      "ERROR"
+{
+      "authentication_failure",
+      "192.168.1.100",
+    ],
+      "192.168.1.100",
+      "192.168.1.100",
       "name": "source_ip",
-      "type": "ip"
-    },
-    {
-      "name": "event_type",
-      "type": "string"
-    },
-    {
-      "name": "severity",
-      "type": "string"
+    ],
+    ],
+  "schema": [
     }
-  ],
-  "datarows": [
-    [
+      "ERROR"
       "jdoe",
+    [
+      "type": "ip"
       "192.168.1.100",
       "authentication_failure",
-      "ERROR"
-    ],
-    [
-      "jdoe",
-      "192.168.1.100",
-      "authentication_failure",
-      "ERROR"
-    ],
-    [
-      "jdoe",
-      "192.168.1.100",
-      "authentication_failure",
-      "ERROR"
-    ],
-    [
-      "jdoe",
-      "192.168.1.100",
-      "authentication_failure",
-      "ERROR"
-    ],
-    [
-      "jdoe",
-      "192.168.1.100",
-      "authentication_failure",
-      "ERROR"
-    ],
-    [
-      "jdoe",
-      "192.168.1.100",
-      "authentication_failure",
-      "ERROR"
-    ],
-    [
-      "jdoe",
-      "192.168.1.100",
-      "authentication_failure",
-      "ERROR"
-    ],
-    [
-      "jdoe",
-      "192.168.1.100",
-      "authentication_failure",
-      "ERROR"
-    ],
-    [
       "asmith",
-      "192.168.1.100",
-      "authentication_failure",
-      "ERROR"
-    ],
-    [
-      "asmith",
-      "192.168.1.100",
-      "authentication_failure",
-      "ERROR"
-    ]
-  ],
-  "total": 10,
-  "size": 10
 }
+  ],
+      "192.168.1.100",
+      "authentication_failure",
+      "ERROR"
+      "authentication_failure",
+  "size": 10
+      "authentication_failure",
+    [
+    ]
+    ],
+      "ERROR"
+    },
+  "total": 10,
+    },
+      "ERROR"
+    },
+    ],
+      "ERROR"
+    ],
+    {
+      "ERROR"
+    [
+      "authentication_failure",
+      "192.168.1.100",
+      "jdoe",
+      "name": "event_type",
+    [
+      "192.168.1.100",
+  "datarows": [
+      "type": "string"
+    [
+      "name": "severity",
+    {
+    ],
+    [
+    {
+      "jdoe",
+      "authentication_failure",
+      "jdoe",
+      "jdoe",
+      "ERROR"
+      "jdoe",
+      "ERROR"
+      "192.168.1.100",
+    [

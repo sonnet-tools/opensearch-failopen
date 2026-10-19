@@ -1,328 +1,271 @@
 ---
-setup:
-
-  - do:
-      indices.create:
-          index:  test1
-          wait_for_active_shards: all
-          body:
-              settings:
-                # Limit the number of shards so that shards are unlikely
-                # to be relocated or being initialized between the test
-                # set up and the test execution
-                index.number_of_shards: 3
-                index.number_of_replicas: 0
-              mappings:
-                  properties:
-                      bar:
-                          type: text
-                          fielddata: true
-                          fields:
-                              completion:
-                                  type: completion
-                      baz:
-                          type: text
-                          fielddata: true
-                          fields:
-                              completion:
-                                  type: completion
-
-  - do:
-      cluster.health:
-        wait_for_no_relocating_shards: true
-
-  - do:
-      index:
-          index: test1
-          id:    1
-          body:  { "bar": "bar", "baz": "baz" }
-
-  - do:
-      index:
-          index: test1
-          id:    2
-          body:  { "bar": "foo", "baz": "foo" }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test1
-        body:
-          suggest:
-            result:
-              text: "b"
-              completion:
-                field: bar.completion
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test1
-        body:
-          suggest:
-            result:
-              text: "b"
-              completion:
-                field: baz.completion
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          sort: [ "bar", "baz" ]
-
 ---
-"Fields - blank":
-  - do:
-      indices.stats: {}
-
-  - match: { _shards.failed: 0}
-  - gt:       { _all.total.fielddata.memory_size_in_bytes: 0 }
-  - is_false:   _all.total.fielddata.fields
-  - gt:       { _all.total.completion.size_in_bytes: 0 }
-  - is_false:   _all.total.completion.fields
-
----
+"Fielddata fields - one":
 "Fields - one":
-  - do:
-      indices.stats: { fields: bar }
-
-  - match: { _shards.failed: 0}
-  - gt:       { _all.total.fielddata.memory_size_in_bytes: 0 }
-  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
-  - is_false:   _all.total.fielddata.fields.baz
-  - gt:       { _all.total.completion.size_in_bytes: 0 }
-  - is_false:   _all.total.completion.fields.bar
-
+      indices.stats: { fields: "bar*" , metric: [ completion, fielddata, search ]}
 ---
-"Fields - multi":
-  - do:
-      indices.stats: { fields: "bar,baz.completion" }
-
+"Completion - all metric":
+  - is_false:   _all.total.fielddata.fields.baz
   - match: { _shards.failed: 0}
-  - gt:       { _all.total.fielddata.memory_size_in_bytes: 0 }
+  - is_false:   _all.total.fielddata.fields.baz
+  - gt:       { _all.total.completion.fields.baz\.completion.size_in_bytes: 0 }
+              text: "b"
+      search:
+"Fielddata fields - multi":
+                              completion:
+  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
+  - do:
   - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
   - is_false:   _all.total.fielddata.fields.baz
-  - gt:       { _all.total.completion.size_in_bytes: 0 }
+  - match: { _shards.failed: 0}
+              text: "b"
+                field: bar.completion
+  - is_false:   _all.total.fielddata.fields.baz
+  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
+  - do:
+  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
+  - do:
+  - match: { _shards.failed: 0}
   - is_false:   _all.total.completion.fields.bar\.completion
+  - do:
+  - match: { _shards.failed: 0}
+        rest_total_hits_as_int: true
+  - gt:       { _all.total.fielddata.memory_size_in_bytes: 0 }
+      indices.stats: { fielddata_fields: "*r", metric: [ fielddata, search] }
+  - is_false:   _all.total.completion.fields
+  - match: { _shards.failed: 0}
+      indices.stats: { fielddata_fields: bar }
+          body:  { "bar": "foo", "baz": "foo" }
+  - match: { _shards.failed: 0}
+                          fields:
+  - is_false:   _all.total.fielddata.fields
   - gt:       { _all.total.completion.fields.baz\.completion.size_in_bytes: 0 }
-
+"Completion - multi metric":
+  - match: { _shards.failed: 0}
 ---
 "Fields - star":
   - do:
-      indices.stats: { fields: "*" }
-
-  - match: { _shards.failed: 0}
   - gt:       { _all.total.fielddata.memory_size_in_bytes: 0 }
-  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
-  - gt:       { _all.total.fielddata.fields.baz.memory_size_in_bytes: 0 }
-  - gt:       { _all.total.completion.size_in_bytes: 0 }
-  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
-  - gt:       { _all.total.completion.fields.baz\.completion.size_in_bytes: 0 }
-
----
-"Fields - pattern":
-  - do:
-      indices.stats: { fields: "bar*" }
-
   - match: { _shards.failed: 0}
-  - gt:       { _all.total.fielddata.memory_size_in_bytes: 0 }
-  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
-  - is_false:   _all.total.fielddata.fields.baz
-  - gt:       { _all.total.completion.size_in_bytes: 0 }
-  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
-  - is_false:   _all.total.completion.fields.baz\.completion
-
----
-"Fields - _all metric":
-  - do:
-      indices.stats: { fields: "bar*", metric: _all }
-
   - match: { _shards.failed: 0}
-  - gt:       { _all.total.fielddata.memory_size_in_bytes: 0 }
-  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
-  - is_false:   _all.total.fielddata.fields.baz
-  - gt:       { _all.total.completion.size_in_bytes: 0 }
-  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
-  - is_false:   _all.total.completion.fields.baz\.completion
-
----
-"Fields - fielddata metric":
-  - do:
-      indices.stats: { fields: "bar*", metric: fielddata }
-
-  - match: { _shards.failed: 0}
-  - gt:       { _all.total.fielddata.memory_size_in_bytes: 0 }
-  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
-  - is_false:   _all.total.fielddata.fields.baz
-  - is_false:   _all.total.completion
-
----
-"Fields - completion metric":
-  - do:
-      indices.stats: { fields: "bar*", metric: completion }
-
-  - match: { _shards.failed: 0}
-  - is_false:   _all.total.fielddata
-  - gt:       { _all.total.completion.size_in_bytes: 0 }
-  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
-  - is_false:   _all.total.completion.fields.baz\.completion
-
----
-"Fields - multi metric":
-  - do:
-      indices.stats: { fields: "bar*" , metric: [ completion, fielddata, search ]}
-
-  - match: { _shards.failed: 0}
-  - gt:       { _all.total.fielddata.memory_size_in_bytes: 0 }
-  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
-  - is_false:   _all.total.fielddata.fields.baz
-  - gt:       { _all.total.completion.size_in_bytes: 0 }
-  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
-  - is_false:   _all.total.completion.fields.baz\.completion
-
----
-"Fielddata fields - one":
-  - do:
-      indices.stats: { fielddata_fields: bar }
-
-  - match: { _shards.failed: 0}
-  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
-  - is_false:   _all.total.fielddata.fields.baz
-  - is_false:   _all.total.completion.fields
-
----
-"Fielddata fields - multi":
-  - do:
-      indices.stats: { fielddata_fields: "bar,baz,baz.completion" }
-
-  - match: { _shards.failed: 0}
-  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
-  - gt:       { _all.total.fielddata.fields.baz.memory_size_in_bytes: 0 }
-  - is_false:   _all.total.completion.fields
-
----
-"Fielddata fields - star":
-  - do:
-      indices.stats: { fielddata_fields: "*" }
-
-  - match: { _shards.failed: 0}
-  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
-  - gt:       { _all.total.fielddata.fields.baz.memory_size_in_bytes: 0 }
-  - is_false:   _all.total.completion.fields
-
----
-"Fielddata fields - pattern":
-  - do:
-      indices.stats: { fielddata_fields: "*r" }
-
-  - match: { _shards.failed: 0}
-  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
-  - is_false:   _all.total.fielddata.fields.baz
-  - is_false:   _all.total.completion.fields
-
-
----
-"Fielddata fields - all metric":
-  - do:
+                index.number_of_shards: 3
       indices.stats: { fielddata_fields: "*r", metric: _all }
-
-  - match: { _shards.failed: 0}
-  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
+  - do:
+              mappings:
+"Fields - blank":
+  - is_false:   _all.total.completion.fields.baz\.completion
   - is_false:   _all.total.fielddata.fields.baz
-  - is_false:   _all.total.completion.fields
-
 ---
+---
+  - gt:       { _all.total.fielddata.memory_size_in_bytes: 0 }
+      indices.stats: { fields: "bar*", metric: _all }
+  - is_false:   _all.total.completion.fields
+  - gt:       { _all.total.completion.size_in_bytes: 0 }
+  - gt:       { _all.total.fielddata.fields.baz.memory_size_in_bytes: 0 }
+        rest_total_hits_as_int: true
+  - gt:       { _all.total.completion.fields.baz\.completion.size_in_bytes: 0 }
+                field: baz.completion
+  - gt:       { _all.total.fielddata.memory_size_in_bytes: 0 }
+  - match: { _shards.failed: 0}
+  - match: { _shards.failed: 0}
+      indices.stats: { fielddata_fields: "*r", metric: fielddata }
+"Completion - pattern":
+      index:
+  - do:
+---
+---
+  - do:
+  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
+      indices.stats: { completion_fields: "bar.completion,baz,baz.completion" }
+"Fielddata fields - multi metric":
+          id:    1
+  - do:
+  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
+  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
+  - do:
+                                  type: completion
+  - do:
+  - gt:       { _all.total.completion.fields.baz\.completion.size_in_bytes: 0 }
+        rest_total_hits_as_int: true
+                index.number_of_replicas: 0
+  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
+"Completion - one metric":
+  - match: { _shards.failed: 0}
+                          type: text
+  - is_false:   _all.total.completion.fields.baz\.completion
+  - is_false:   _all.total.completion.fields
 "Fielddata fields - one metric":
   - do:
-      indices.stats: { fielddata_fields: "*r", metric: fielddata }
-
-  - match: { _shards.failed: 0}
-  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
-  - is_false:   _all.total.fielddata.fields.baz
+        body:
+          body:
+  - gt:       { _all.total.completion.size_in_bytes: 0 }
+                              completion:
   - is_false:   _all.total.completion.fields
-
-
----
-"Fielddata fields - multi metric":
-  - do:
-      indices.stats: { fielddata_fields: "*r", metric: [ fielddata, search] }
-
+      index:
+"Fields - multi metric":
   - match: { _shards.failed: 0}
+  - is_false:   _all.total.fielddata.fields
+  - is_false:   _all.total.fielddata.fields
   - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
-  - is_false:   _all.total.fielddata.fields.baz
-  - is_false:   _all.total.completion.fields
-
-
----
-"Completion fields - one":
-  - do:
-      indices.stats: { completion_fields: bar.completion }
-
-  - match: { _shards.failed: 0}
-  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
-  - is_false:   _all.total.completion.fields.baz\.completion
-  - is_false:   _all.total.fielddata.fields
-
----
-"Completion fields - multi":
-  - do:
-      indices.stats: { completion_fields: "bar.completion,baz,baz.completion" }
-
-  - match: { _shards.failed: 0}
-  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
-  - gt:       { _all.total.completion.fields.baz\.completion.size_in_bytes: 0 }
-  - is_false:   _all.total.fielddata.fields
-
----
-"Completion fields - star":
-  - do:
-      indices.stats: { completion_fields: "*" }
-
-  - match: { _shards.failed: 0}
-  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
-  - gt:       { _all.total.completion.fields.baz\.completion.size_in_bytes: 0 }
-  - is_false:   _all.total.fielddata.fields
-
----
-"Completion - pattern":
-  - do:
       indices.stats: { completion_fields: "*r*" }
-
-  - match: { _shards.failed: 0}
-  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
-  - is_false:   _all.total.completion.fields.baz\.completion
   - is_false:   _all.total.fielddata.fields
-
+  - match: { _shards.failed: 0}
+                          fielddata: true
+  - do:
+        body:
+  - is_false:   _all.total.completion.fields
+          suggest:
+          id:    2
+        index: test1
+        wait_for_no_relocating_shards: true
+              completion:
+              settings:
+  - is_false:   _all.total.fielddata.fields
+      indices.stats: { fielddata_fields: "*r" }
+  - do:
+  - is_false:   _all.total.fielddata.fields.baz
+  - is_false:   _all.total.fielddata.fields.baz
+  - match: { _shards.failed: 0}
+"Fielddata fields - star":
 ---
-"Completion - all metric":
+      indices.stats: { fields: "*" }
+      indices.create:
+  - gt:       { _all.total.fielddata.memory_size_in_bytes: 0 }
+"Fields - fielddata metric":
+  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
+  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
+---
+  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
+                # set up and the test execution
   - do:
       indices.stats: { completion_fields: "*r*", metric: _all }
-
-  - match: { _shards.failed: 0}
-  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
-  - is_false:   _all.total.completion.fields.baz\.completion
-  - is_false:   _all.total.fielddata.fields
-
+                # Limit the number of shards so that shards are unlikely
+      indices.stats: { fields: "bar*" }
+  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
+"Completion fields - one":
+      indices.stats: { fields: "bar,baz.completion" }
 ---
-"Completion - one metric":
-  - do:
-      indices.stats: { completion_fields: "*r*", metric: completion }
-
-  - match: { _shards.failed: 0}
-  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
+      indices.stats: { completion_fields: bar.completion }
+      indices.stats: {}
+"Completion fields - star":
+                # to be relocated or being initialized between the test
+      search:
+      indices.stats: { fielddata_fields: "*" }
+                          type: text
   - is_false:   _all.total.completion.fields.baz\.completion
+  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
   - is_false:   _all.total.fielddata.fields
-
+"Fields - multi":
+  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
+            result:
 ---
-"Completion - multi metric":
+          index: test1
+                      baz:
+"Fields - pattern":
+  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
+  - match: { _shards.failed: 0}
+                  properties:
+  - gt:       { _all.total.fielddata.memory_size_in_bytes: 0 }
+      indices.stats: { fielddata_fields: "bar,baz,baz.completion" }
   - do:
+  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
+  - do:
+  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
+  - do:
+  - match: { _shards.failed: 0}
+      search:
+---
+---
+  - is_false:   _all.total.completion
+---
+          wait_for_active_shards: all
+  - is_false:   _all.total.completion.fields
+---
+  - do:
+  - gt:       { _all.total.completion.size_in_bytes: 0 }
+  - do:
+  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
+  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
+  - is_false:   _all.total.completion.fields.baz\.completion
+          index:  test1
+  - gt:       { _all.total.completion.size_in_bytes: 0 }
+  - match: { _shards.failed: 0}
+  - do:
+  - do:
+"Fields - completion metric":
+  - is_false:   _all.total.fielddata.fields.baz
+  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
+      indices.stats: { fields: "bar*", metric: fielddata }
+  - do:
+            result:
+  - do:
+  - gt:       { _all.total.fielddata.memory_size_in_bytes: 0 }
+---
+      indices.stats: { completion_fields: "*" }
+  - is_false:   _all.total.completion.fields.baz\.completion
+  - is_false:   _all.total.completion.fields
+"Fielddata fields - pattern":
+      indices.stats: { fields: bar }
       indices.stats: { completion_fields: "*r*", metric: [ completion, search ] }
-
+        body:
   - match: { _shards.failed: 0}
-  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
+  - is_false:   _all.total.completion.fields.bar
+  - gt:       { _all.total.fielddata.memory_size_in_bytes: 0 }
+      indices.refresh: {}
+  - do:
+  - do:
+  - gt:       { _all.total.completion.size_in_bytes: 0 }
+      indices.stats: { fields: "bar*", metric: completion }
   - is_false:   _all.total.completion.fields.baz\.completion
+setup:
   - is_false:   _all.total.fielddata.fields
+      indices.stats: { completion_fields: "*r*", metric: completion }
+---
+  - gt:       { _all.total.completion.size_in_bytes: 0 }
+      cluster.health:
+---
+        index: test1
+  - match: { _shards.failed: 0}
+                          fields:
+---
+---
+"Fielddata fields - all metric":
+  - gt:       { _all.total.fielddata.fields.baz.memory_size_in_bytes: 0 }
+  - is_false:   _all.total.completion.fields.baz\.completion
+              completion:
+                      bar:
+          body:  { "bar": "bar", "baz": "baz" }
+          sort: [ "bar", "baz" ]
+  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
+  - is_false:   _all.total.fielddata.fields.baz
+  - is_false:   _all.total.completion.fields.baz\.completion
+  - gt:       { _all.total.completion.size_in_bytes: 0 }
+  - gt:       { _all.total.fielddata.fields.bar.memory_size_in_bytes: 0 }
+  - is_false:   _all.total.completion.fields.baz\.completion
+                          fielddata: true
+  - gt:       { _all.total.fielddata.fields.baz.memory_size_in_bytes: 0 }
+  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
+---
+"Completion fields - multi":
+          suggest:
+  - match: { _shards.failed: 0}
+  - is_false:   _all.total.fielddata.fields.baz
+"Fields - _all metric":
+  - do:
+  - gt:       { _all.total.completion.size_in_bytes: 0 }
+  - is_false:   _all.total.completion.fields
+                                  type: completion
+          index: test1
+  - is_false:   _all.total.fielddata.fields.baz
+---
+  - is_false:   _all.total.fielddata
+  - do:
+  - do:
+---
+  - match: { _shards.failed: 0}
+  - is_false:   _all.total.fielddata.fields
+  - match: { _shards.failed: 0}
+  - do:
+  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
+  - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
+  - do:

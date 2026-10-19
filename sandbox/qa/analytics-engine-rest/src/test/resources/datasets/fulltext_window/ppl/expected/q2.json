@@ -1,35 +1,35 @@
-{
-  "schema": [
     {
-      "name": "service",
-      "type": "string"
+      "auth",
     },
-    {
       "name": "host",
       "type": "string"
-    },
+      "host1",
     {
-      "name": "message",
-      "type": "string"
-    }
   ],
   "datarows": [
-    [
-      "auth",
-      "host1",
-      "Database connection refused"
     ],
-    [
-      "order",
-      "host3",
-      "Inventory service connection refused"
-    ],
-    [
-      "auth",
-      "host2",
-      "Session store connection refused"
-    ]
-  ],
-  "total": 3,
-  "size": 3
+      "name": "service",
+    }
 }
+      "name": "message",
+  "total": 3,
+    [
+      "Inventory service connection refused"
+    ]
+      "Session store connection refused"
+    [
+  "size": 3
+{
+      "auth",
+      "Database connection refused"
+  "schema": [
+      "type": "string"
+    [
+    {
+  ],
+      "order",
+    ],
+      "host3",
+      "type": "string"
+      "host2",
+    },

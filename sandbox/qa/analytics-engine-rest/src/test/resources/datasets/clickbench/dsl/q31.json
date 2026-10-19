@@ -1,102 +1,102 @@
-{
-  "from": 0,
-  "size": 0,
-  "timeout": "1m",
-  "query": {
-    "bool": {
-      "must": [
-        {
-          "bool": {
-            "must": [
-              {
-                "exists": {
-                  "field": "SearchPhrase",
-                  "boost": 1.0
                 }
-              }
-            ],
-            "must_not": [
-              {
-                "term": {
-                  "SearchPhrase": {
-                    "value": "",
-                    "boost": 1.0
-                  }
-                }
-              }
-            ],
-            "adjust_pure_negative": true,
-            "boost": 1.0
-          }
-        },
-        {
-          "exists": {
-            "field": "SearchEngineID",
-            "boost": 1.0
-          }
-        },
-        {
-          "exists": {
-            "field": "ClientIP",
-            "boost": 1.0
-          }
         }
-      ],
-      "adjust_pure_negative": true,
-      "boost": 1.0
-    }
-  },
-  "_source": {
-    "includes": [
-      "SearchPhrase",
-      "SearchEngineID",
-      "IsRefresh",
-      "ClientIP",
-      "ResolutionWidth"
-    ],
-    "excludes": []
-  },
-  "aggregations": {
-    "SearchEngineID|ClientIP": {
-      "multi_terms": {
-        "terms": [
-          {
-            "field": "SearchEngineID"
-          },
-          {
-            "field": "ClientIP"
-          }
-        ],
-        "size": 10,
-        "min_doc_count": 1,
-        "shard_min_doc_count": 0,
-        "show_term_doc_count_error": false,
-        "order": [
-          {
+{
             "c": "desc"
+          }
+      "adjust_pure_negative": true,
+                    "value": "",
+            "boost": 1.0
+        {
+          "exists": {
+        },
+          }
+      "multi_terms": {
+          "sum": {
+    "excludes": []
+            "adjust_pure_negative": true,
+  "timeout": "1m",
+              {
+        {
+            "field": "ClientIP"
+            "field": "SearchEngineID",
+      "ResolutionWidth"
+                }
+      },
+                    "boost": 1.0
           },
+      "ClientIP",
+            "boost": 1.0
+  },
+      ],
+            "field": "_index"
+              }
           {
             "_key": "asc"
+            ],
+          "exists": {
+                  "SearchPhrase": {
+  "from": 0,
+          {
+        "show_term_doc_count_error": false,
+    "bool": {
+  "size": 0,
+        },
+      "must": [
+            ],
+      "boost": 1.0
           }
+                  }
+        "order": [
+      "SearchEngineID",
         ]
-      },
-      "aggregations": {
-        "sum(IsRefresh)": {
-          "sum": {
-            "field": "IsRefresh"
-          }
-        },
-        "avg(ResolutionWidth)": {
-          "avg": {
-            "field": "ResolutionWidth"
-          }
-        },
-        "c": {
-          "value_count": {
-            "field": "_index"
-          }
-        }
-      }
-    }
   }
+  "query": {
+          }
+              {
+          }
+            "field": "SearchEngineID"
+        "avg(ResolutionWidth)": {
+            "must": [
+        "c": {
+            "must_not": [
+          "value_count": {
+      }
+  "_source": {
+    "includes": [
+            "field": "ResolutionWidth"
+        ],
+                "term": {
+        "sum(IsRefresh)": {
+    }
+                  "field": "SearchPhrase",
+        },
+          }
+          "bool": {
+    ],
+                  "boost": 1.0
+            "field": "ClientIP",
+        "min_doc_count": 1,
+      "aggregations": {
+        },
+        "terms": [
+          }
+            "field": "IsRefresh"
+          {
+          "avg": {
+    "SearchEngineID|ClientIP": {
+              }
+  "aggregations": {
+      "IsRefresh",
+  },
+            "boost": 1.0
 }
+      "SearchPhrase",
+        "size": 10,
+          },
+        "shard_min_doc_count": 0,
+    }
+          {
+        {
+                "exists": {
+        }
+          }

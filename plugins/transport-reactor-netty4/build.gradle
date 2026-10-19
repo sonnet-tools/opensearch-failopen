@@ -1,274 +1,246 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- *
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-import org.opensearch.gradle.info.BuildParams
-import org.opensearch.gradle.test.RestIntegTestTask
-import org.opensearch.gradle.test.TestTask
-import org.opensearch.gradle.test.rest.JavaRestTestPlugin
-import org.opensearch.gradle.test.InternalClusterTestPlugin
-
-apply plugin: 'opensearch.yaml-rest-test'
-apply plugin: 'opensearch.java-rest-test'
-apply plugin: 'opensearch.internal-cluster-test'
-apply from: "$rootDir/gradle/fips.gradle"
-
-// The transport-reactor-netty4 plugin is published to maven
-apply plugin: 'opensearch.publish'
-
-opensearchplugin {
-  description = 'Reactor Netty 4 based transport implementation'
-  classname = 'org.opensearch.transport.reactor.ReactorNetty4Plugin'
-  hasClientJar = true
-}
-
-dependencies {
-  api project(':libs:opensearch-netty4')
-
-  // network stack
-  api libs.bundles.netty
-
-  api libs.bundles.reactornetty
-  api libs.netty.codec.http3
-  api libs.netty.codec.classes.quic
-  api libs.netty.codec.native.quic
-
-  // Bundle all supported OSes and Archs
-  runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:linux-x86_64"
-  runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:linux-aarch_64"
-  runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:osx-x86_64"
-  runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:osx-aarch_64"
-  runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:windows-x86_64"
-
-  testImplementation libs.log4jslf4jimpl
-  javaRestTestImplementation(libs.reactor.test) {
-    // The test framework already supplies reactor-core and core's annotation dependencies.
-    transitive = false
-  }
-  testImplementation project(":modules:transport-netty4")
-  testFipsRuntimeOnly "org.bouncycastle:bc-fips:${versions.bouncycastle_jce}"
-  testFipsRuntimeOnly "org.bouncycastle:bctls-fips:${versions.bouncycastle_tls}"
-  testFipsRuntimeOnly "org.bouncycastle:bcpkix-fips:${versions.bouncycastle_pkix}"
-  testFipsRuntimeOnly "org.bouncycastle:bcutil-fips:${versions.bouncycastle_util}"
-}
-
-restResources {
-  restApi {
-    includeCore '_common', 'cluster', 'nodes'
-  }
-}
-
-tasks.named("dependencyLicenses").configure {
-  mapping from: /netty-.*/, to: 'netty'
-  mapping from: /reactor-.*/, to: 'reactor'
-}
-
-// TODO: Remove that once we have a complete test suite
-testingConventions.enabled = false
-
-test {
-  /*
-   * We have to disable setting the number of available processors as tests in the same JVM randomize processors and will step on each
-   * other if we allow them to set the number of available processors as it's set-once in Netty.
-   */
-  systemProperty 'opensearch.set.netty.runtime.available.processors', 'false'
-}
-
-internalClusterTest {
-  systemProperty 'opensearch.set.netty.runtime.available.processors', 'false'
-}
-
-javaRestTest {
-  systemProperty 'opensearch.set.netty.runtime.available.processors', 'false'
-}
-
-testClusters.javaRestTest {
-  setting 'http.type', 'reactor-netty4'
-}
-
-thirdPartyAudit {
-  ignoreMissingClasses(
-    'com.aayushatharva.brotli4j.Brotli4jLoader',
-    'com.aayushatharva.brotli4j.decoder.DecoderJNI$Status',
-    'com.aayushatharva.brotli4j.decoder.DecoderJNI$Wrapper',
-    'com.aayushatharva.brotli4j.encoder.BrotliEncoderChannel',
+    'io.netty.buffer.AbstractBufferEvent',
+    'io.netty.util.internal.PlatformDependent0$2',
+    'io.netty.util.internal.shaded.org.jctools.queues.unpadded.MpscUnpaddedArrayQueueProducerIndexField',
+    'io.netty.buffer.FreeChunkEvent',
+    'net.jpountz.lz4.LZ4SafeDecompressor',
+    'io.netty.util.internal.shaded.org.jctools.util.UnsafeAccess',
+    'io.micrometer.core.instrument.Timer$Builder',
     'com.aayushatharva.brotli4j.encoder.Encoder$Mode',
-    'com.aayushatharva.brotli4j.encoder.Encoder$Parameters',
-    // classes are missing
-
-    // from io.netty.logging.CommonsLoggerFactory (netty)
-    'org.apache.commons.logging.Log',
-    'org.apache.commons.logging.LogFactory',
-
-    // from Log4j (deliberate, Netty will fallback to Log4j 2)
-    'org.apache.log4j.Level',
-    'org.apache.log4j.Logger',
-
-    // from io.netty.handler.ssl.OpenSslEngine (netty)
-    'io.netty.internal.tcnative.Buffer',
-    'io.netty.internal.tcnative.CertificateCompressionAlgo',
-    'io.netty.internal.tcnative.Library',
-    'io.netty.internal.tcnative.SSL',
-    'io.netty.internal.tcnative.SSLContext',
-    'io.netty.internal.tcnative.SSLPrivateKeyMethod',
-    'io.netty.internal.tcnative.SSLCredential',
-
-    // from io.netty.handler.ssl.util.BouncyCastleSelfSignedCertGenerator (netty)
-    'org.bouncycastle.cert.X509v3CertificateBuilder',
-    'org.bouncycastle.cert.jcajce.JcaX509CertificateConverter',
-    'org.bouncycastle.operator.jcajce.JcaContentSignerBuilder',
-    'org.bouncycastle.openssl.PEMEncryptedKeyPair',
-    'org.bouncycastle.openssl.PEMParser',
-    'org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter',
-    'org.bouncycastle.openssl.jcajce.JceOpenSSLPKCS8DecryptorProviderBuilder',
-    'org.bouncycastle.openssl.jcajce.JcePEMDecryptorProviderBuilder',
-    'org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfo',
-
-    // from io.netty.util.internal.logging.InternalLoggerFactory (netty) - it's optional
-    'org.slf4j.helpers.FormattingTuple',
+    'io.netty.util.internal.PlatformDependent0',
     'org.slf4j.helpers.MessageFormatter',
-    'org.slf4j.Logger',
-    'org.slf4j.LoggerFactory',
-    'org.slf4j.spi.LocationAwareLogger',
-
-    'com.ning.compress.BufferRecycler',
-    'com.ning.compress.lzf.ChunkDecoder',
-    'com.ning.compress.lzf.ChunkEncoder',
-    'com.ning.compress.lzf.LZFChunk',
-    'com.ning.compress.lzf.LZFEncoder',
-    'com.ning.compress.lzf.util.ChunkDecoderFactory',
-    'com.ning.compress.lzf.util.ChunkEncoderFactory',
+    'io.micrometer.core.instrument.Gauge$Builder',
+    'io.netty.internal.tcnative.CertificateVerifier',
+    'io.netty.channel.epoll.EpollDatagramChannel',
+    'io.netty.util.internal.shaded.org.jctools.queues.MpmcArrayQueueConsumerIndexField',
+    'io.micrometer.common.docs.KeyName',
+    'io.micrometer.core.instrument.Tags',
+    'io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueProducerLimitField',
+    'io.micrometer.observation.transport.RequestReplyReceiverContext',
+  api libs.bundles.reactornetty
+    'io.netty.util.internal.shaded.org.jctools.queues.unpadded.MpscUnpaddedArrayQueueProducerLimitField',
+  classname = 'org.opensearch.transport.reactor.ReactorNetty4Plugin'
+  runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:osx-aarch_64"
+thirdPartyAudit {
+    'io.micrometer.observation.transport.ReceiverContext',
+    'io.micrometer.observation.transport.RequestReplySenderContext',
+}
+}
+    'io.micrometer.core.instrument.DistributionSummary$Builder',
+    'net.jpountz.lz4.LZ4Factory',
+}
+    'io.netty.channel.kqueue.KQueueIoHandler',
+    'org.slf4j.helpers.FormattingTuple',
+apply plugin: 'opensearch.internal-cluster-test'
+    'io.netty.util.internal.shaded.org.jctools.queues.unpadded.MpscUnpaddedArrayQueueConsumerIndexField',
+  testFipsRuntimeOnly "org.bouncycastle:bcutil-fips:${versions.bouncycastle_util}"
+    'io.micrometer.observation.ObservationRegistry',
+    // from io.netty.handler.ssl.util.BouncyCastleSelfSignedCertGenerator (netty)
     'lzma.sdk.lzma.Encoder',
     'net.jpountz.lz4.LZ4Compressor',
-    'net.jpountz.lz4.LZ4SafeDecompressor',
-    'net.jpountz.lz4.LZ4Factory',
-    'net.jpountz.xxhash.XXHash32',
-    'net.jpountz.xxhash.XXHashFactory',
-    'io.netty.internal.tcnative.AsyncSSLPrivateKeyMethod',
-    'io.netty.internal.tcnative.AsyncTask',
-    'io.netty.internal.tcnative.CertificateCallback',
-    'io.netty.internal.tcnative.CertificateVerifier',
-    'io.netty.internal.tcnative.ResultCallback',
-    'io.netty.internal.tcnative.SessionTicketKey',
-    'io.netty.internal.tcnative.SniHostNameMatcher',
-    'io.netty.internal.tcnative.SSL',
-    'io.netty.internal.tcnative.SSLSession',
-    'io.netty.internal.tcnative.SSLSessionCache',
-    'io.netty.channel.epoll.Epoll',
-    'io.netty.channel.epoll.EpollDatagramChannel',
-    'io.netty.channel.epoll.EpollServerSocketChannel',
-    'io.netty.channel.epoll.EpollSocketChannel',
-    'io.netty.channel.epoll.SegmentedDatagramPacket',
-    'io.netty.channel.kqueue.KQueue',
-    'io.netty.channel.kqueue.KQueueDatagramChannel',
-    'io.netty.channel.kqueue.KQueueServerSocketChannel',
-    'io.netty.channel.kqueue.KQueueSocketChannel',
-    'io.netty.handler.codec.haproxy.HAProxyMessage',
+    'com.ning.compress.BufferRecycler',
+  api project(':libs:opensearch-netty4')
+    'io.micrometer.tracing.propagation.Propagator'
+    'io.netty.channel.uring.IoUringDatagramChannel',
+   * We have to disable setting the number of available processors as tests in the same JVM randomize processors and will step on each
+    'io.micrometer.core.instrument.Counter$Builder',
+    'io.micrometer.context.ContextAccessor',
+    'io.netty.buffer.PooledByteBufAllocator',
+}
     'io.netty.handler.codec.haproxy.HAProxyMessageDecoder',
-    'io.netty.handler.proxy.ProxyHandler',
+apply plugin: 'opensearch.yaml-rest-test'
+}
+    'com.aayushatharva.brotli4j.encoder.Encoder$Parameters',
+import org.opensearch.gradle.test.InternalClusterTestPlugin
+  ignoreMissingClasses(
+  runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:windows-x86_64"
+testClusters.javaRestTest {
+    'io.micrometer.observation.transport.SenderContext',
+    'io.netty.channel.kqueue.KQueueServerSocketChannel',
+    'net.jpountz.xxhash.XXHash32',
+}
+// The transport-reactor-netty4 plugin is published to maven
+    'reactor.blockhound.BlockHound$Builder',
+    'io.micrometer.tracing.handler.PropagatingReceiverTracingObservationHandler',
+  setting 'http.type', 'reactor-netty4'
+    'io.netty.internal.tcnative.AsyncSSLPrivateKeyMethod',
+    'io.netty.util.internal.PlatformDependent0$3',
+    'io.netty.util.internal.shaded.org.jctools.queues.MpmcArrayQueueProducerIndexField',
+    'io.netty.buffer.AbstractAllocatorEvent',
+apply from: "$rootDir/gradle/fips.gradle"
+ *
+    'io.netty.buffer.AdaptivePoolingAllocator$AdaptiveByteBuf',
+apply plugin: 'opensearch.java-rest-test'
+/*
+    'io.micrometer.core.instrument.Counter',
+    'org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter',
+    'org.slf4j.LoggerFactory',
+    'org.conscrypt.BufferAllocator',
+  mapping from: /netty-.*/, to: 'netty'
+    'io.netty.pkitesting.X509Bundle',
+    'io.micrometer.tracing.Tracer',
+    'com.ning.compress.lzf.LZFChunk',
+    'io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueProducerFields',
+  testFipsRuntimeOnly "org.bouncycastle:bctls-fips:${versions.bouncycastle_tls}"
+    'org.apache.log4j.Logger',
+   * other if we allow them to set the number of available processors as it's set-once in Netty.
+    'org.conscrypt.HandshakeListener',
+  systemProperty 'opensearch.set.netty.runtime.available.processors', 'false'
+opensearchplugin {
+    'io.micrometer.tracing.handler.DefaultTracingObservationHandler',
+  systemProperty 'opensearch.set.netty.runtime.available.processors', 'false'
+    'com.aayushatharva.brotli4j.decoder.DecoderJNI$Wrapper',
+    'io.netty.buffer.AllocateBufferEvent',
+    'io.netty.internal.tcnative.SSLSessionCache',
+    'org.bouncycastle.operator.jcajce.JcaContentSignerBuilder',
+  javaRestTestImplementation(libs.reactor.test) {
+    'org.bouncycastle.openssl.PEMEncryptedKeyPair',
+}
+ * this file be licensed under the Apache-2.0 license or a
+tasks.named("dependencyLicenses").configure {
+    'io.netty.channel.uring.IoUringSocketChannel',
+    'io.netty.channel.uring.IoUring',
+    'io.micrometer.observation.Observation$Context',
+    'org.apache.log4j.Level',
+ *
+    'io.micrometer.core.instrument.Metrics',
+    'io.netty.buffer.FreeBufferEvent',
+    'org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfo',
+    'io.micrometer.core.instrument.MeterRegistry',
+  testImplementation libs.log4jslf4jimpl
+ * Modifications Copyright OpenSearch Contributors. See
+    'io.netty.channel.kqueue.KQueue',
+    'io.netty.internal.tcnative.SSL',
+    'io.netty.internal.tcnative.CertificateCompressionAlgo',
+ * compatible open source license.
+  runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:linux-aarch_64"
+  api libs.bundles.netty
+    // from io.netty.util.internal.logging.InternalLoggerFactory (netty) - it's optional
+    'org.apache.commons.logging.Log',
+  restApi {
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.gradle.info.BuildParams
+  ignoreViolations(
+    'com.aayushatharva.brotli4j.encoder.BrotliEncoderChannel',
+    'io.netty.internal.tcnative.ResultCallback',
+    'io.micrometer.observation.ObservationRegistry$ObservationConfig',
+    'io.netty.channel.uring.IoUringIoHandler',
+  testFipsRuntimeOnly "org.bouncycastle:bcpkix-fips:${versions.bouncycastle_pkix}"
+    'io.micrometer.observation.Observation',
+    'io.netty.internal.tcnative.SessionTicketKey',
+    'com.aayushatharva.brotli4j.decoder.DecoderJNI$Status',
+    'io.netty.buffer.AllocateChunkEvent',
+    'io.netty.handler.codec.haproxy.HAProxyMessage',
+    includeCore '_common', 'cluster', 'nodes'
+restResources {
+    // classes are missing
+    'io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueProducerIndexField',
+    'io.micrometer.core.instrument.Timer$Sample',
+  runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:osx-x86_64"
+  )
+  description = 'Reactor Netty 4 based transport implementation'
+    'io.micrometer.tracing.docs.SpanDocumentation',
+    'org.bouncycastle.openssl.PEMParser',
+dependencies {
+ * GitHub history for details.
+    'net.jpountz.xxhash.XXHashFactory',
+    'io.micrometer.core.instrument.DistributionSummary',
+  systemProperty 'opensearch.set.netty.runtime.available.processors', 'false'
+    // The test framework already supplies reactor-core and core's annotation dependencies.
+  // network stack
+    'io.netty.channel.kqueue.KQueueSocketChannel',
+    'io.netty.util.internal.shaded.org.jctools.queues.BaseLinkedQueueConsumerNodeRef',
+    'io.micrometer.observation.ObservationHandler',
+    'com.ning.compress.lzf.util.ChunkEncoderFactory',
+    'io.netty.util.internal.PlatformDependent0$1',
+    'org.conscrypt.AllocatedBuffer',
+  testImplementation project(":modules:transport-netty4")
+    'io.netty.internal.tcnative.SSLPrivateKeyMethod',
+    'com.ning.compress.lzf.LZFEncoder',
+// TODO: Remove that once we have a complete test suite
+  mapping from: /reactor-.*/, to: 'reactor'
+internalClusterTest {
+  }
+    'io.netty.buffer.AbstractChunkEvent',
+    'io.netty.util.internal.shaded.org.jctools.queues.LinkedQueueNode',
+    'io.netty.internal.tcnative.CertificateCallback',
+    'io.netty.internal.tcnative.Buffer',
+    'com.aayushatharva.brotli4j.Brotli4jLoader',
+    'org.bouncycastle.cert.jcajce.JcaX509CertificateConverter',
+    'io.micrometer.core.instrument.Gauge',
+    'org.bouncycastle.openssl.jcajce.JceOpenSSLPKCS8DecryptorProviderBuilder',
+    'io.netty.channel.kqueue.KQueueIoHandle',
+    'io.micrometer.core.instrument.Timer',
+    // from Log4j (deliberate, Netty will fallback to Log4j 2)
+import org.opensearch.gradle.test.rest.JavaRestTestPlugin
+    'io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueColdProducerFields',
+    'io.micrometer.common.KeyValue',
+    'io.netty.channel.epoll.EpollServerSocketChannel',
+    'io.netty.util.internal.PlatformDependent0$5',
+    'io.micrometer.core.instrument.composite.CompositeMeterRegistry',
+    'org.bouncycastle.cert.X509v3CertificateBuilder',
+  }
+  hasClientJar = true
+    'reactor.blockhound.integration.BlockHoundIntegration',
+test {
+apply plugin: 'opensearch.publish'
+    'io.micrometer.tracing.handler.PropagatingSenderTracingObservationHandler',
+    'io.netty.internal.tcnative.SSLSession',
+    'io.micrometer.core.instrument.observation.MeterObservationHandler',
+    'io.netty.channel.uring.IoUringServerSocketChannel',
+    // from io.netty.logging.CommonsLoggerFactory (netty)
+    'io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueConsumerFields',
+    'io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueConsumerIndexField',
+   */
+}
+javaRestTest {
     'io.netty.channel.epoll.EpollIoHandle',
     'io.netty.channel.epoll.EpollIoHandler',
-    'io.netty.channel.kqueue.KQueueIoHandle',
-    'io.netty.channel.kqueue.KQueueIoHandler',
-    'io.netty.channel.uring.IoUring',
-    'io.netty.channel.uring.IoUringDatagramChannel',
+testingConventions.enabled = false
+    'io.netty.internal.tcnative.Library',
+    'io.netty.channel.epoll.SegmentedDatagramPacket',
+    'io.netty.channel.kqueue.KQueueDatagramChannel',
     'io.netty.channel.uring.IoUringIoHandle',
-    'io.netty.channel.uring.IoUringIoHandler',
-    'io.netty.channel.uring.IoUringServerSocketChannel',
-    'io.netty.channel.uring.IoUringSocketChannel',
-
-    'io.netty.pkitesting.CertificateBuilder',
+  )
+    'io.netty.channel.epoll.EpollSocketChannel',
     'io.netty.pkitesting.CertificateBuilder$Algorithm',
-    'io.netty.pkitesting.X509Bundle',
-
-    'org.conscrypt.AllocatedBuffer',
-    'org.conscrypt.BufferAllocator',
-    'org.conscrypt.Conscrypt',
-    'org.conscrypt.HandshakeListener',
-
-    'reactor.blockhound.BlockHound$Builder',
-    'reactor.blockhound.integration.BlockHoundIntegration',
-
-    'io.micrometer.common.KeyValue',
-    'io.micrometer.common.KeyValues',
-    'io.micrometer.common.docs.KeyName',
-    'io.micrometer.context.ContextAccessor',
-    'io.micrometer.core.instrument.Counter',
-    'io.micrometer.core.instrument.Counter$Builder',
-    'io.micrometer.core.instrument.DistributionSummary',
-    'io.micrometer.core.instrument.DistributionSummary$Builder',
-    'io.micrometer.core.instrument.Gauge',
-    'io.micrometer.core.instrument.Gauge$Builder',
-    'io.micrometer.core.instrument.Meter',
-    'io.micrometer.core.instrument.Meter$Type',
-    'io.micrometer.core.instrument.MeterRegistry',
-    'io.micrometer.core.instrument.Metrics',
-    'io.micrometer.core.instrument.Tags',
-    'io.micrometer.core.instrument.Timer',
-    'io.micrometer.core.instrument.Timer$Builder',
-    'io.micrometer.core.instrument.Timer$Sample',
-    'io.micrometer.core.instrument.composite.CompositeMeterRegistry',
-    'io.micrometer.core.instrument.docs.MeterDocumentation',
-    'io.micrometer.core.instrument.observation.MeterObservationHandler',
-    'io.micrometer.observation.Observation',
-    'io.micrometer.observation.Observation$Context',
-    'io.micrometer.observation.ObservationHandler',
-    'io.micrometer.observation.ObservationRegistry',
-    'io.micrometer.observation.ObservationRegistry$ObservationConfig',
-    'io.micrometer.observation.docs.ObservationDocumentation',
-    'io.micrometer.observation.transport.ReceiverContext',
-    'io.micrometer.observation.transport.RequestReplyReceiverContext',
-    'io.micrometer.observation.transport.RequestReplySenderContext',
-    'io.micrometer.observation.transport.SenderContext',
-    'io.micrometer.tracing.Span',
-    'io.micrometer.tracing.Tracer',
-    'io.micrometer.tracing.docs.SpanDocumentation',
-    'io.micrometer.tracing.handler.DefaultTracingObservationHandler',
-    'io.micrometer.tracing.handler.PropagatingReceiverTracingObservationHandler',
-    'io.micrometer.tracing.handler.PropagatingSenderTracingObservationHandler',
-    'io.micrometer.tracing.propagation.Propagator'
-  )
-
-  ignoreViolations(
-    'io.netty.util.internal.PlatformDependent0',
-    'io.netty.util.internal.PlatformDependent0$1',
-    'io.netty.util.internal.PlatformDependent0$2',
-    'io.netty.util.internal.PlatformDependent0$3',
-    'io.netty.util.internal.PlatformDependent0$5',
-    'io.netty.util.internal.shaded.org.jctools.queues.BaseLinkedQueueConsumerNodeRef',
-    'io.netty.util.internal.shaded.org.jctools.queues.BaseLinkedQueueProducerNodeRef',
-    'io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueColdProducerFields',
-    'io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueConsumerFields',
-    'io.netty.util.internal.shaded.org.jctools.queues.BaseMpscLinkedArrayQueueProducerFields',
-    'io.netty.util.internal.shaded.org.jctools.queues.LinkedQueueNode',
-    'io.netty.util.internal.shaded.org.jctools.queues.MpmcArrayQueueConsumerIndexField',
-    'io.netty.util.internal.shaded.org.jctools.queues.MpmcArrayQueueProducerIndexField',
-    'io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueConsumerIndexField',
-    'io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueProducerIndexField',
-    'io.netty.util.internal.shaded.org.jctools.queues.MpscArrayQueueProducerLimitField',
-    'io.netty.util.internal.shaded.org.jctools.queues.unpadded.MpscUnpaddedArrayQueueConsumerIndexField',
-    'io.netty.util.internal.shaded.org.jctools.queues.unpadded.MpscUnpaddedArrayQueueProducerIndexField',
-    'io.netty.util.internal.shaded.org.jctools.queues.unpadded.MpscUnpaddedArrayQueueProducerLimitField',
-    'io.netty.util.internal.shaded.org.jctools.util.UnsafeAccess',
-    'io.netty.util.internal.shaded.org.jctools.util.UnsafeRefArrayAccess',
     'io.netty.util.internal.shaded.org.jctools.util.UnsafeLongArrayAccess',
-    'io.netty.buffer.AbstractAllocatorEvent',
-    'io.netty.buffer.AbstractBufferEvent',
-    'io.netty.buffer.AbstractChunkEvent',
-    'io.netty.buffer.AdaptivePoolingAllocator$AdaptiveByteBuf',
-    'io.netty.buffer.AdaptivePoolingAllocator$Chunk',
-    'io.netty.buffer.AllocateBufferEvent',
-    'io.netty.buffer.AllocateChunkEvent',
-    'io.netty.buffer.FreeBufferEvent',
-    'io.netty.buffer.FreeChunkEvent',
-    'io.netty.buffer.PooledByteBufAllocator',
+ * SPDX-License-Identifier: Apache-2.0
     'io.netty.buffer.ReallocateBufferEvent'
-  )
+    'org.apache.commons.logging.LogFactory',
+import org.opensearch.gradle.test.TestTask
+    'io.netty.channel.epoll.Epoll',
+    'com.ning.compress.lzf.ChunkEncoder',
+    'io.micrometer.tracing.Span',
+    'io.netty.internal.tcnative.SSLContext',
+    transitive = false
+ */
+    'org.slf4j.Logger',
+    'io.netty.internal.tcnative.SniHostNameMatcher',
+    'org.conscrypt.Conscrypt',
+  runtimeOnly "io.netty:netty-codec-native-quic:${versions.netty}:linux-x86_64"
 }
+    'io.netty.internal.tcnative.SSL',
+    'io.netty.util.internal.shaded.org.jctools.util.UnsafeRefArrayAccess',
+    // from io.netty.handler.ssl.OpenSslEngine (netty)
+    'io.micrometer.core.instrument.Meter',
+    'io.netty.internal.tcnative.AsyncTask',
+    'io.micrometer.common.KeyValues',
+  /*
+  api libs.netty.codec.classes.quic
+    'com.ning.compress.lzf.ChunkDecoder',
+    'io.micrometer.core.instrument.Meter$Type',
+    'io.netty.pkitesting.CertificateBuilder',
+  testFipsRuntimeOnly "org.bouncycastle:bc-fips:${versions.bouncycastle_jce}"
+  // Bundle all supported OSes and Archs
+  api libs.netty.codec.native.quic
+    'com.ning.compress.lzf.util.ChunkDecoderFactory',
+    'io.netty.internal.tcnative.SSLCredential',
+    'io.micrometer.core.instrument.docs.MeterDocumentation',
+  api libs.netty.codec.http3
+    'org.slf4j.spi.LocationAwareLogger',
+    'io.netty.util.internal.shaded.org.jctools.queues.BaseLinkedQueueProducerNodeRef',
+    'io.netty.handler.proxy.ProxyHandler',
+import org.opensearch.gradle.test.RestIntegTestTask
+    'io.micrometer.observation.docs.ObservationDocumentation',
+    'io.netty.buffer.AdaptivePoolingAllocator$Chunk',
+    'org.bouncycastle.openssl.jcajce.JcePEMDecryptorProviderBuilder',

@@ -1,168 +1,147 @@
-setup:
-  - skip:
-      version: " - 2.7.99"
-      reason: unsigned_long is not supported before 2.8.0
-
-  - do:
-      indices.create:
-          index: test_1
-          body:
-            settings:
-              number_of_replicas: 0
             mappings:
-              properties:
-                unsigned_field:
-                   type : unsigned_long
-                double_field:
-                   type : double
-                string_field:
-                   type: keyword
-
-  - do:
-       bulk:
-         refresh: true
-         body:
-           - index:
-               _index: test_1
-               _id:    1
-           - unsigned_field: 1
-             double_field: 1.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    2
-           - unsigned_field: 51
-             double_field: 51.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    3
-           - unsigned_field: 1101
-             double_field: 1101.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    4
-           - unsigned_field: 10223372036854778000
-             double_field: 10223372036854778000
-             string_field: foo
-
----
-"Basic test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
             the_unsigned_sum:
-              sum:
-                field: unsigned_field
-            the_double_sum:
-              sum:
-                field: double_field
-
-  - match: { hits.total: 4 }
   - length: { hits.hits: 4 }
-  - match: { aggregations.the_unsigned_sum.value: 10223372036854780000.0 }
-  - match: { aggregations.the_double_sum.value: 10223372036854780000.0 }
-
----
-"Only aggs test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          size: 0
-          aggs:
-            the_unsigned_sum:
+         refresh: true
+                field: double_field
               sum:
                 field: unsigned_field
-            the_double_sum:
-              sum:
-                field: double_field
-
   - match: { hits.total: 4 }
+  - match: { aggregations.the_double_sum.value: 10223372036854780000.0 }
+        body:
+"Metadata test":
+             string_field: foo
+          body:
+            the_double_sum:
+         body:
+      search:
+              sum:
+             string_field: foo
+             double_field: 10223372036854778000
+            the_unsigned_sum:
+          index: test_1
+           - unsigned_field: 1101
+  - match: { aggregations.the_unsigned_sum.value: 10223372036854780000.0 }
+             double_field: 1.0
+        body:
+  - length: { hits.hits: 3 }
+      version: " - 2.7.99"
+  - match: { hits.total: 4 }
+  - match: { aggregations.the_unsigned_sum.value: 10223372036854780000.0 }
+        rest_total_hits_as_int: true
+  - do:
+              sum:
+              sum:
+                    gte: 50
+        rest_total_hits_as_int: true
+                double_field:
+                field: foo
+            the_missing_sum:
+"Basic test":
+               _id:    3
+               _index: test_1
+             string_field: foo
+                missing: 1
+  - length: { hits.hits: 4 }
+        rest_total_hits_as_int: true
+      reason: unsigned_long is not supported before 2.8.0
+                   type: keyword
+          query:
+---
+  - do:
+                range:
+          aggs:
+                   type : double
+           - unsigned_field: 51
+               _id:    1
+  - match: { aggregations.the_double_sum.value: 10223372036854780000.0 }
+  - do:
+             double_field: 1101.0
+        rest_total_hits_as_int: true
+              meta:
+               _index: test_1
+          aggs:
+  - length: { hits.hits: 4 }
+              sum:
+            the_double_sum:
+"Missing field without missing param":
+  - do:
+           - index:
+                unsigned_field:
+           - unsigned_field: 10223372036854778000
+            constant_score:
+  - match: { aggregations.the_double_sum.value: 10223372036854780000.0 }
+               _index: test_1
+  - match: { hits.total: 3 }
+                   type : unsigned_long
+           - index:
+            settings:
+          size: 0
+  - do:
+        rest_total_hits_as_int: true
+                field: unsigned_field
+                  unsigned_field:
+  - do:
+             string_field: foo
+            the_unsigned_sum:
+        body:
+                field: double_field
+      search:
+           - index:
+      search:
+---
+        body:
+            the_double_sum:
+          aggs:
+        body:
+       bulk:
+      indices.create:
+---
+  - skip:
+          aggs:
+---
+  - match: { aggregations.the_unsigned_sum.meta.foo: "bar" }
+      search:
+setup:
+                field: unsigned_field
+             double_field: 51.0
+              properties:
+            the_unsigned_sum:
+"Filtered test":
+           - unsigned_field: 1
   - length: { hits.hits: 0 }
   - match: { aggregations.the_unsigned_sum.value: 10223372036854780000.0 }
-  - match: { aggregations.the_double_sum.value: 10223372036854780000.0 }
-
----
-"Filtered test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            constant_score:
-              filter:
-                range:
-                  unsigned_field:
-                    gte: 50
-          aggs:
-            the_unsigned_sum:
-              sum:
                 field: unsigned_field
-            the_double_sum:
-              sum:
-                field: double_field
-
-  - match: { hits.total: 3 }
-  - length: { hits.hits: 3 }
-  - match: { aggregations.the_unsigned_sum.value: 10223372036854780000.0 }
-  - match: { aggregations.the_double_sum.value: 10223372036854780000.0 }
-
-
----
-"Missing field with missing param":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_missing_sum:
-              sum:
-                field: foo
-                missing: 1
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_missing_sum.value: 4.0 }
-
----
-"Missing field without missing param":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_missing_sum:
-              sum:
-                field: foo
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
   - match: { aggregations.the_missing_sum.value: 0.0 }
-
----
-"Metadata test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_unsigned_sum:
-              meta:
-                foo: bar
-              sum:
-                field: unsigned_field
-
-  - match: { hits.total: 4 }
+           - index:
+              filter:
   - length: { hits.hits: 4 }
+  - do:
+                field: double_field
+               _index: test_1
+               _id:    4
+                field: foo
+            the_missing_sum:
+  - do:
+              sum:
+  - match: { aggregations.the_missing_sum.value: 4.0 }
+              number_of_replicas: 0
+  - match: { hits.total: 4 }
+              sum:
+                foo: bar
+        body:
+---
+              sum:
+              sum:
+               _id:    2
+"Only aggs test":
+      search:
+      search:
+          aggs:
+          aggs:
+"Missing field with missing param":
+  - match: { hits.total: 4 }
+        rest_total_hits_as_int: true
+  - match: { hits.total: 4 }
+---
   - match: { aggregations.the_unsigned_sum.value: 10223372036854780000.0 }
-  - match: { aggregations.the_unsigned_sum.meta.foo: "bar" }
+                string_field:

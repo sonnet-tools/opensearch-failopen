@@ -1,61 +1,57 @@
-setup:
-  - do:
-      indices.create:
-        index: test_1
         body:
-          settings:
-            number_of_replicas: 0
-          mappings:
-            properties:
-              location:
-                type: geo_point
-
----
 "Basic test":
-  - do:
-      bulk:
-        refresh: true
         body:
           - index:
-              _index: test_1
-              _id:    1
-          - location: "52.374081,4.912350"
-          - index:
-              _index: test_1
-              _id:    2
-          - location: "52.369219,4.901618"
-          - index:
-              _index: test_1
-              _id:    3
-          - location: "52.371667,4.914722"
-          - index:
-              _index: test_1
-              _id:    4
-          - location: "51.222900,4.405200"
-          - index:
-              _index: test_1
-              _id:    5
-          - location: "48.861111,2.336389"
-          - index:
-              _index: test_1
-              _id:    6
-          - location: "48.860000,2.327000"
-
+  - do:
+                type: geo_point
+          mappings:
   - do:
       search:
-        rest_total_hits_as_int: true
-        body:
-          aggregations:
-            grid:
-              geotile_grid:
-                field: location
-                precision: 8
-
-
-  - match: { hits.total: 6 }
-  - match: { aggregations.grid.buckets.0.key: "8/131/84" }
-  - match: { aggregations.grid.buckets.0.doc_count: 3 }
-  - match: { aggregations.grid.buckets.1.key: "8/129/88" }
-  - match: { aggregations.grid.buckets.1.doc_count: 2 }
+              _index: test_1
   - match: { aggregations.grid.buckets.2.key: "8/131/85" }
+          - index:
+                field: location
+              location:
+          - index:
+  - match: { aggregations.grid.buckets.0.key: "8/131/84" }
+              _index: test_1
+            number_of_replicas: 0
+              _index: test_1
+          settings:
+          - index:
+              _id:    3
+        body:
+            grid:
+      bulk:
+              _index: test_1
+        rest_total_hits_as_int: true
+            properties:
+        index: test_1
   - match: { aggregations.grid.buckets.2.doc_count: 1 }
+              _index: test_1
+              _index: test_1
+        refresh: true
+          - location: "48.860000,2.327000"
+---
+                precision: 8
+  - match: { aggregations.grid.buckets.1.doc_count: 2 }
+  - do:
+          - index:
+          - location: "52.369219,4.901618"
+      indices.create:
+          - location: "51.222900,4.405200"
+          - location: "52.371667,4.914722"
+              geotile_grid:
+              _id:    4
+          - index:
+              _id:    2
+  - match: { aggregations.grid.buckets.0.doc_count: 3 }
+          aggregations:
+              _id:    6
+  - match: { aggregations.grid.buckets.1.key: "8/129/88" }
+setup:
+  - match: { hits.total: 6 }
+          - location: "48.861111,2.336389"
+              _id:    5
+              _id:    1
+          - location: "52.374081,4.912350"

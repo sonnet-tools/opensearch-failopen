@@ -1,14 +1,13 @@
----
+                    version     .+   \n
 "Help":
+               $/
+---
   - do:
-      cat.plugins:
-        help: true
-
   - match:
-      $body: |
                /^   id          .+   \n
+      $body: |
+        help: true
+                    description .+   \n
                     name        .+   \n
                     component   .+   \n
-                    version     .+   \n
-                    description .+   \n
-               $/
+      cat.plugins:

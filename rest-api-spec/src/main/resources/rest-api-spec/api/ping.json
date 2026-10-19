@@ -1,20 +1,20 @@
-{
-  "ping":{
-    "documentation":{
-      "url":"https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html",
+    },
       "description":"Returns whether the cluster is running."
+    "url":{
+      ]
+{
+            "HEAD"
+      "url":"https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html",
+          "methods":[
+          "path":"/",
+      "paths":[
+  "ping":{
     },
     "stability":"stable",
-    "url":{
-      "paths":[
         {
-          "path":"/",
-          "methods":[
-            "HEAD"
-          ]
-        }
-      ]
-    },
-    "params":{}
   }
+    "documentation":{
+          ]
+    "params":{}
 }
+        }

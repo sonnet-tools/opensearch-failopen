@@ -1,84 +1,71 @@
-setup:
-  - do:
-      indices.create:
-          index:  test_2
-  - do:
-      indices.create:
-          index:  test_1
-  - do:
-      index:
-          index:  test_1
+          id:     42
+  - match: {hits.total: 2}
+        body:
           id:     1
           body:   { foo: bar }
-
-  - do:
-      index:
-          index:  test_2
-          id:     42
-          body:   { foo: bar }
-
+      search:
+        body:
   - do:
       indices.refresh:
-        index: [test_1, test_2]
-
+              foo: bar
 ---
-"Basic search":
-
-  - do:
       search:
+    - do:
+      search:
+---
+          body:   { foo: bar }
+  - do:
+  - match: {hits.total.relation: eq}
+            match:
+        index: [test_1, test_2]
+            match:
         rest_total_hits_as_int: true
         index: _all
-        body:
-          query:
-            match:
               foo: bar
-
-  - match: {hits.total: 2}
-
-  - do:
       search:
-        rest_total_hits_as_int: true
-        index: test_1
-        body:
-          query:
-            match:
-              foo: bar
-
   - match: {hits.total: 1}
-  - match: {hits.hits.0._index: test_1 }
-  - match: {hits.hits.0._id:    "1"    }
-
+          index:  test_1
+          index:  test_1
+        rest_total_hits_as_int: true
   - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test_2
-        body:
+  - do:
           query:
-            match:
-              foo: bar
-
-  - match: {hits.total: 1}
-  - match: {hits.hits.0._index: test_2 }
-  - match: {hits.hits.0._id:    "42"   }
-
----
-"Search body without query element":
-
-    - do:
-        catch: bad_request
-        search:
-          rest_total_hits_as_int: true
-          body:
-            match:
-              foo: bar
-
----
 "Search with new response format":
+"Search body without query element":
+setup:
+      indices.create:
+              foo: bar
+      index:
+  - match: {hits.hits.0._index: test_2 }
+      index:
+          body:
   - do:
-      search:
-        body:
-          query:
-            match_all: {}
-
   - match: {hits.total.value: 2}
-  - match: {hits.total.relation: eq}
+---
+            match_all: {}
+  - do:
+        index: test_1
+            match:
+  - match: {hits.total: 1}
+          index:  test_2
+      indices.create:
+          query:
+  - match: {hits.hits.0._id:    "1"    }
+        index: test_2
+  - do:
+  - do:
+          rest_total_hits_as_int: true
+        body:
+        catch: bad_request
+              foo: bar
+          query:
+  - match: {hits.hits.0._id:    "42"   }
+        search:
+          query:
+          index:  test_2
+        rest_total_hits_as_int: true
+  - do:
+        body:
+"Basic search":
+            match:
+  - match: {hits.hits.0._index: test_1 }

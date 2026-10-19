@@ -1,28 +1,28 @@
-{
-  "schema": [
+      "type": "double"
+      201.0
     {
-      "name": "value",
+      200.75,
+    ],
+  ],
+  ],
+}
+  "size": 3
+  "datarows": [
+  "total": 3,
       "type": "double"
     },
     {
-      "name": "product",
-      "type": "double"
-    }
-  ],
-  "datarows": [
-    [
       100.5,
-      201.0
-    ],
-    [
-      200.75,
-      401.5
-    ],
-    [
-      150.25,
       300.5
+  "schema": [
+      150.25,
+      "name": "value",
+      401.5
+      "name": "product",
+    ],
+    [
+    [
+{
+    }
+    [
     ]
-  ],
-  "total": 3,
-  "size": 3
-}

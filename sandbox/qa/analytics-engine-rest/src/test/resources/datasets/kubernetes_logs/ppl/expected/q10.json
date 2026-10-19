@@ -1,35 +1,35 @@
-{
-  "schema": [
     {
-      "name": "logs",
-      "type": "bigint"
-    },
-    {
-      "name": "cluster.region",
-      "type": "string"
-    },
-    {
-      "name": "kubernetes.namespace",
-      "type": "string"
-    }
-  ],
   "datarows": [
-    [
-      34,
-      null,
-      "production"
     ],
-    [
-      33,
-      null,
-      "default"
-    ],
-    [
-      33,
-      null,
-      "staging"
-    ]
-  ],
-  "total": 3,
+    {
   "size": 3
+    [
+      null,
+  "total": 3,
+      "type": "string"
+      "name": "logs",
+      null,
+    ],
+      "production"
+      "name": "cluster.region",
+      null,
+{
+    }
+    [
+  ],
+      "name": "kubernetes.namespace",
+  "schema": [
+      33,
+    },
+    [
+      "type": "string"
+      "default"
+    {
+    },
+      34,
+  ],
+      "type": "bigint"
+    ]
 }
+      "staging"
+      33,

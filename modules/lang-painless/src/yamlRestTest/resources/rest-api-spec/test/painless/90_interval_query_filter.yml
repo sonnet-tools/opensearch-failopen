@@ -1,39 +1,37 @@
-setup:
-  - do:
-      indices.create:
-        index:  test
-        body:
-          mappings:
-            properties:
-              text:
-                type: text
-                analyzer: standard
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - '{"index": {"_index": "test", "_id": "1"}}'
-          - '{"text" : "Some like it hot, some like it cold"}'
-          - '{"index": {"_index": "test", "_id": "2"}}'
-          - '{"text" : "Its cold outside, theres no kind of atmosphere"}'
-          - '{"index": {"_index": "test", "_id": "3"}}'
-          - '{"text" : "Baby its cold there outside"}'
           - '{"index": {"_index": "test", "_id": "4"}}'
-          - '{"text" : "Outside it is cold and wet"}'
-
+                  query: "cold"
 ---
+        refresh: true
+          - '{"text" : "Its cold outside, theres no kind of atmosphere"}'
+          query:
+      search:
+          mappings:
+          - '{"index": {"_index": "test", "_id": "2"}}'
+            intervals:
+      indices.create:
+          - '{"index": {"_index": "test", "_id": "3"}}'
+  - do:
+                  filter:
+              text:
+        body:
+  - match: { hits.total.value: 1 }
+        body:
 "Test filtering by script":
   - do:
-      search:
-        index: test
-        body:
-          query:
-            intervals:
-              text:
                 match:
-                  query: "cold"
-                  filter:
-                    script:
+          - '{"text" : "Baby its cold there outside"}'
                       source: "interval.start > 3"
-
-  - match: { hits.total.value: 1 }
+          - '{"text" : "Some like it hot, some like it cold"}'
+setup:
+        body:
+                    script:
+            properties:
+                analyzer: standard
+          - '{"index": {"_index": "test", "_id": "1"}}'
+        index:  test
+        index: test
+  - do:
+              text:
+          - '{"text" : "Outside it is cold and wet"}'
+      bulk:
+                type: text

@@ -1,64 +1,64 @@
-{
-  "schema": [
-    {
-      "name": "incident_count",
-      "type": "bigint"
-    },
-    {
-      "name": "actions",
-      "type": "array"
-    },
-    {
+      "10.0.0.200"
+        "rejected"
+      5,
       "name": "user",
-      "type": "string"
-    },
+      ],
+{
+      "bwilson",
+    [
+      [
     {
-      "name": "source_ip",
-      "type": "ip"
-    }
-  ],
-  "datarows": [
-    [
-      5,
-      [
-        "blocked",
         "denied",
-        "rejected"
-      ],
-      "bwilson",
-      "10.0.0.200"
-    ],
-    [
-      5,
-      [
-        "blocked",
-        "denied",
-        "rejected"
-      ],
-      "asmith",
-      "10.0.0.200"
-    ],
-    [
-      5,
-      [
-        "blocked",
-        "denied",
-        "rejected"
-      ],
-      "bwilson",
-      "192.168.1.200"
-    ],
-    [
-      5,
-      [
-        "blocked",
-        "denied",
-        "rejected"
-      ],
-      "asmith",
+    {
       "192.168.1.200"
     ]
-  ],
-  "total": 4,
-  "size": 4
+      "type": "ip"
+    ],
+      "bwilson",
+      5,
+      "type": "string"
 }
+      [
+      ],
+      "asmith",
+        "blocked",
+    ],
+    },
+  "size": 4
+    ],
+    [
+      "name": "actions",
+      [
+        "blocked",
+  ],
+    [
+  "schema": [
+        "denied",
+  "datarows": [
+      "name": "incident_count",
+      ],
+      "10.0.0.200"
+        "blocked",
+        "blocked",
+    },
+      "type": "array"
+        "rejected"
+      5,
+      "192.168.1.200"
+      5,
+  "total": 4,
+    {
+        "rejected"
+      ],
+        "rejected"
+      "name": "source_ip",
+        "denied",
+  ],
+    },
+      "type": "bigint"
+    [
+    {
+        "denied",
+    }
+      "asmith",
+      [

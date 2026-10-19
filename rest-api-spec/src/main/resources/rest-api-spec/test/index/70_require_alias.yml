@@ -1,26 +1,24 @@
+  - do:
 ---
-"Set require_alias flag":
-  - do:
-      catch: missing
-      index:
-        index:   test_require_alias
-        require_alias: true
         body:    { foo: bar }
+        require_alias: true
   - do:
-      catch: missing
-      indices.get:
-        index: test_require_alias
-
-  - do:
-      indices.create:
-        index: backing_index
-        body:
           mappings: {}
-          aliases:
-            test_require_alias: {}
-
-  - do:
-      index:
         index:   test_require_alias
-        require_alias: true
+      index:
+"Set require_alias flag":
+        body:
         body:    { foo: bar }
+        index:   test_require_alias
+        index: backing_index
+      catch: missing
+  - do:
+  - do:
+      catch: missing
+        require_alias: true
+        index: test_require_alias
+            test_require_alias: {}
+          aliases:
+      indices.get:
+      index:
+      indices.create:

@@ -1,35 +1,35 @@
-{
-  "schema" : [
-    {
-      "name" : "s_suppkey",
+      "type" : "string"
       "type" : "bigint"
+      "34-852-489-8585",
+      "Supplier#000000010",
     },
+      10,
+  "schema" : [
+    [
+    ]
+      "type" : "string"
+      "Saygah3gYWMp72i PY",
+    }
+  ],
+  ],
+    {
+  "size" : 1
+      797313.3838
+      "name" : "s_suppkey",
+  "datarows" : [
+{
+  "total" : 1,
+}
     {
       "name" : "s_name",
-      "type" : "string"
+    {
     },
     {
       "name" : "s_address",
-      "type" : "string"
     },
+      "name" : "total_revenue",
+    },
+      "type" : "double"
     {
       "name" : "s_phone",
       "type" : "string"
-    },
-    {
-      "name" : "total_revenue",
-      "type" : "double"
-    }
-  ],
-  "total" : 1,
-  "datarows" : [
-    [
-      10,
-      "Supplier#000000010",
-      "Saygah3gYWMp72i PY",
-      "34-852-489-8585",
-      797313.3838
-    ]
-  ],
-  "size" : 1
-}

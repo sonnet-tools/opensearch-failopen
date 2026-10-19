@@ -1,54 +1,54 @@
-{
+    {
   "schema": [
-    {
-      "name": "endpoint",
-      "type": "string"
-    },
-    {
-      "name": "total",
-      "type": "bigint"
-    },
-    {
-      "name": "ok",
-      "type": "bigint"
-    },
-    {
-      "name": "error_count",
-      "type": "bigint"
-    }
   ],
-  "datarows": [
-    [
-      "/SCS/Retail/v1/orders",
+      "type": "bigint"
+      "/api/payments",
+    ]
+      37
       45,
+    {
+    ],
+    ],
+    ],
+      43,
+    ],
+      "/api/users",
       7,
       38
-    ],
-    [
-      "/api/orders",
-      43,
-      5,
-      38
-    ],
-    [
-      "/api/payments",
-      43,
       6,
-      37
-    ],
+{
+      "/api/orders",
+    {
+  "datarows": [
+    },
+}
     [
-      "/api/products",
+      "name": "ok",
+      "/SCS/Retail/v1/orders",
       26,
       5,
-      21
-    ],
     [
-      "/api/users",
+    [
+      "name": "endpoint",
+    [
+      38
+  "size": 5
+      43,
+    [
+    },
+  "total": 5,
+      "type": "bigint"
+    {
+      "type": "bigint"
+      "/api/products",
+      "name": "total",
+    }
       43,
       5,
-      38
-    ]
+    },
   ],
-  "total": 5,
-  "size": 5
-}
+      5,
+      38
+      21
+      "name": "error_count",
+      "type": "string"

@@ -1,32 +1,32 @@
-{
-  "from": 0,
-  "size": 0,
-  "timeout": "1m",
-  "aggregations": {
-    "composite_buckets": {
-      "composite": {
-        "size": 10,
-        "sources": [
-          {
-            "UserID": {
-              "terms": {
-                "field": "UserID",
-                "missing_bucket": false,
+                "field": "SearchPhrase",
                 "order": "asc"
-              }
-            }
-          },
-          {
+  }
+                "missing_bucket": false,
             "SearchPhrase": {
               "terms": {
-                "field": "SearchPhrase",
-                "missing_bucket": false,
-                "order": "asc"
-              }
-            }
-          }
+    "composite_buckets": {
         ]
+          },
+          {
+{
+  "from": 0,
       }
+  "aggregations": {
+  "timeout": "1m",
+          }
+      "composite": {
+              }
+            "UserID": {
+              }
+  "size": 0,
+            }
+                "missing_bucket": false,
     }
-  }
+              "terms": {
+                "order": "asc"
+        "sources": [
 }
+                "field": "UserID",
+        "size": 10,
+            }
+          {

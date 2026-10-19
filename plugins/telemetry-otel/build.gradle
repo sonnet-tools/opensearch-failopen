@@ -1,91 +1,82 @@
+    final File tmp = file("${buildDir}/tmp")
+  api project(":libs:opensearch-telemetry")
+    'io.opentelemetry.exporter.internal.marshal.UnsafeStringEncoder$UnsafeHolder'
 /*
+  )
+    'org.bouncycastle.jsse.BCSSLSocket',
+ */
+}
+    'io.opentelemetry.sdk.autoconfigure.spi.internal.ExtendedDeclarativeConfigProperties'
+}
+opensearchplugin {
+    }
+  }
+        "  permission java.io.FilePermission \"config\", \"read\";",
+ * this file be licensed under the Apache-2.0 license or a
+    'org.bouncycastle.jsse.BCSSLParameters',
+  testImplementation libs.opentelemetry.sdk.testing
+    'kotlin.io.path.PathsKt',
+  api libs.bundles.opentelemetry
+}
+import org.opensearch.gradle.OS
+import org.apache.tools.ant.taskdefs.condition.Os
+  runtimeOnly "com.squareup.okio:okio-jvm:3.5.0"
+  classname = 'org.opensearch.telemetry.OTelTelemetryPlugin'
+    'io.opentelemetry.sdk.autoconfigure.spi.metrics.ConfigurableMetricExporterProvider',
+    'io.opentelemetry.sdk.autoconfigure.spi.internal.AutoConfigureListener',
+import org.opensearch.gradle.Architecture
+    'io.opentelemetry.sdk.autoconfigure.spi.traces.ConfigurableSpanExporterProvider',
+}
+tasks.register("writeTestJavaPolicy") {
+  ignoreViolations(
+    'io.grpc.ManagedChannel',
+      ].join("\n"))
+    'android.net.http.X509TrustManagerExtensions',
+        "grant {",
+    'com.fasterxml.jackson.databind.ObjectMapper',
+  ignoreMissingClasses(
+        "};"
+    into 'config'
+    'io.grpc.KnownLength',
+    'io.opentelemetry.sdk.autoconfigure.spi.logs.ConfigurableLogRecordExporterProvider',
+    javaPolicy.write(
+    'io.grpc.Drainable',
+  from('config/telemetry-otel') {
+  hasClientJar = false
+  )
+  doLast {
+    'org.conscrypt.ConscryptHostnameVerifier',
+  runtimeOnly libs.kotlin.stdlib
+    'io.opentelemetry.sdk.autoconfigure.spi.traces.ConfigurableSpanExporterProvider',
+    'android.security.NetworkSecurityPolicy',
+    'org.openjsse.javax.net.ssl.SSLSocket',
+    'org.conscrypt.Conscrypt$Version',
+dependencies {
+  }
+  description = 'Opentelemetry based telemetry implementation.'
+  runtimeOnly libs.opentelemetry.exporter.sender.okhttp
+      throw new GradleException("failed to create temporary directory [${tmp}]")
+    if (tmp.exists() == false && tmp.mkdirs() == false) {
+    'org.openjsse.javax.net.ssl.SSLParameters',
+apply plugin: 'opensearch.internal-cluster-test'
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-import org.apache.tools.ant.taskdefs.condition.Os
-import org.opensearch.gradle.Architecture
-import org.opensearch.gradle.OS
-import org.opensearch.gradle.info.BuildParams
-
-apply plugin: 'opensearch.internal-cluster-test'
-
-opensearchplugin {
-  description = 'Opentelemetry based telemetry implementation.'
-  classname = 'org.opensearch.telemetry.OTelTelemetryPlugin'
-  hasClientJar = false
-}
-
-dependencies {
-  api project(":libs:opensearch-telemetry")
-  api libs.bundles.opentelemetry
-  api "io.opentelemetry:opentelemetry-api-incubator:${libs.versions.opentelemetry.get()}-alpha"
-  runtimeOnly libs.kotlin.stdlib
-  runtimeOnly "com.squareup.okhttp3:okhttp:4.11.0"
-  runtimeOnly "com.squareup.okio:okio-jvm:3.5.0"
-  runtimeOnly libs.opentelemetry.exporter.sender.okhttp
-  testImplementation libs.opentelemetry.sdk.testing
-}
-
-
-thirdPartyAudit {
-  ignoreViolations(
-    'io.opentelemetry.exporter.internal.marshal.UnsafeStringEncoder',
-    'io.opentelemetry.exporter.internal.marshal.UnsafeStringEncoder$UnsafeHolder'
-  )
-
-  ignoreMissingClasses(
-    'android.net.http.X509TrustManagerExtensions',
-    'android.net.ssl.SSLSockets',
-    'android.os.Build$VERSION',
-    'android.security.NetworkSecurityPolicy',
-    'android.util.Log',
     'com.google.common.io.ByteStreams',
-    'com.fasterxml.jackson.databind.ObjectMapper',
-    'io.grpc.Drainable',
-    'io.grpc.KnownLength',
-    'io.grpc.ManagedChannel',
-    'org.bouncycastle.jsse.BCSSLParameters',
-    'org.bouncycastle.jsse.BCSSLSocket',
-    'org.conscrypt.Conscrypt',
-    'org.conscrypt.Conscrypt$Version',
-    'org.conscrypt.ConscryptHostnameVerifier',
-    'org.openjsse.javax.net.ssl.SSLParameters',
-    'org.openjsse.javax.net.ssl.SSLSocket',
-    'io.opentelemetry.sdk.autoconfigure.spi.ConfigProperties',
-    'io.opentelemetry.sdk.autoconfigure.spi.logs.ConfigurableLogRecordExporterProvider',
-    'io.opentelemetry.sdk.autoconfigure.spi.metrics.ConfigurableMetricExporterProvider',
-    'io.opentelemetry.sdk.autoconfigure.spi.traces.ConfigurableSpanExporterProvider',
-    'kotlin.io.path.PathsKt',
-    'io.opentelemetry.sdk.autoconfigure.spi.traces.ConfigurableSpanExporterProvider',
-    'io.opentelemetry.sdk.autoconfigure.spi.internal.AutoConfigureListener',
-    'io.opentelemetry.sdk.autoconfigure.spi.internal.ComponentProvider',
+    'android.net.ssl.SSLSockets',
+    'io.opentelemetry.exporter.internal.marshal.UnsafeStringEncoder',
+ * The OpenSearch Contributors require contributions made to
     'io.opentelemetry.sdk.autoconfigure.spi.internal.DefaultConfigProperties',
-    'io.opentelemetry.sdk.autoconfigure.spi.internal.ExtendedDeclarativeConfigProperties'
-  )
-}
-
-tasks.named("bundlePlugin").configure {
-  from('config/telemetry-otel') {
-    into 'config'
-  }
-}
-
-tasks.register("writeTestJavaPolicy") {
-  doLast {
-    final File tmp = file("${buildDir}/tmp")
-    if (tmp.exists() == false && tmp.mkdirs() == false) {
-      throw new GradleException("failed to create temporary directory [${tmp}]")
-    }
+    'android.os.Build$VERSION',
     final File javaPolicy = file("${tmp}/java.policy")
-    javaPolicy.write(
-      [
-        "grant {",
-        "  permission java.io.FilePermission \"config\", \"read\";",
-        "};"
-      ].join("\n"))
-  }
+  runtimeOnly "com.squareup.okhttp3:okhttp:4.11.0"
 }
+    'io.opentelemetry.sdk.autoconfigure.spi.ConfigProperties',
+      [
+ * compatible open source license.
+    'android.util.Log',
+    'org.conscrypt.Conscrypt',
+thirdPartyAudit {
+    'io.opentelemetry.sdk.autoconfigure.spi.internal.ComponentProvider',
+import org.opensearch.gradle.info.BuildParams
+tasks.named("bundlePlugin").configure {
+  api "io.opentelemetry:opentelemetry-api-incubator:${libs.versions.opentelemetry.get()}-alpha"

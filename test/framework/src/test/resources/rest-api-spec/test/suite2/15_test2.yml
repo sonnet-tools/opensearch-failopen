@@ -1,26 +1,22 @@
----
-"Index without ID":
-
- - do:
-      index:
           index:  test_1
-          type:   test
-          body:   { foo: bar }
-
- - is_true:   _id
  - match:   { _index:   test_1 }
- - match:   { _type:    test   }
- - match:   { _version: 1      }
- - set:     { _id:      id    }
-
+          type:   test
+ - match:   { _index:   test_1 }
  - do:
-      get:
-          index:  test_1
-          type:   test
-          id:     '$id'
-
- - match:   { _index:   test_1 }
- - match:   { _type:    test   }
  - match:   { _id:      $id    }
  - match:   { _version: 1      }
+---
+          body:   { foo: bar }
+      index:
  - match:   { _source: { foo: bar }}
+      get:
+          type:   test
+ - is_true:   _id
+ - match:   { _type:    test   }
+"Index without ID":
+          index:  test_1
+          id:     '$id'
+ - match:   { _version: 1      }
+ - set:     { _id:      id    }
+ - match:   { _type:    test   }
+ - do:

@@ -1,800 +1,719 @@
+  - do:
+                "unit": "km",
+          _source: true,
 ---
-# The initial test setup includes:
-# - Create flat_object mapping
-# - Index two example documents
-# - Refresh the index so it is ready for search tests
-setup:
-  - do:
-      indices.create:
-        index: test
-        body:
-          mappings:
-            properties:
-              ISBN13:
-                type : "keyword"
-              catalog:
-                type : "flat_object"
-              required_matches:
-                type : "long"
-              infos:
-                properties:
-                  info:
-                    type: "flat_object"
-  - do:
-      index:
-        index: test
-        id:    1
-        body:  {
-          "ISBN13": "V9781933988177",
-          "catalog": {
-            "title": "Lucene in Action",
-            "author":
-              {
-                "surname": "McCandless",
-                "given": "Mike"
-              },
-            "catalogId":"c-0002",
-            "quantity": 1234,
-            "rating": 9.2,
-            "location": [-81.7982,41.3847 ],
-            "review": [["great",99.8],["ok",80.0]],
-            "publishDate": "2015-01-01"
-          },
-          "required_matches": 1
         }
-
-  - do:
-      index:
-        index: test
-        id: 2
-        body: {
-          "ISBN13": "V12154942129175",
-          "catalog": {
-            "title": "Mock in Action",
-            "author":
-              {
-                "surname": "Doe",
-                "given": "John"
-              },
-            "catalogId": "c-0050",
-            "quantity": 4321,
-            "rating": 5.2,
-            "location": [-12.7982,33.3847 ],
-            "review": [["bad",30.41],["ok",80.0]],
-            "publishDate": "2016-01-01"
-          },
-          "required_matches": 1,
-          "infos": {
-            "info":{
-              "name": "name1"
-            }
-          }
-        }
-  # Do index refresh
-  - do:
-      indices.refresh:
-        index: test
-
----
-# Delete Index when connection is teardown
-teardown:
-  - do:
-      indices.delete:
-        index: test
-
----
-"Exist query in root field":
-  - skip:
-      version: "- 2.99.99"
-      reason: "the query would throw exception prior to 2.99.99"
-
-  - do:
-      search:
-        body: {
-          _source: true,
-          size: 10,
-          query: {
-            exists: {
-              field: "catalog"
-            }
-          }
-        }
-  - length:   { hits.hits: 2  }
-
-  - do:
-      search:
-        body: {
-          _source: true,
-          size: 10,
-          query: {
-            exists: {
-              field: "infos"
-            }
-          }
-        }
-  - length:   { hits.hits: 1  }
-  - match: { hits.hits.0._source.infos.info.name: "name1" }
-
----
-"Invalid docs":
-  - skip:
-      version: "- 2.17.99"
-      reason: "parsing of these objects would infinite loop prior to 2.18"
-  # The following documents are invalid.
-  - do:
-      catch: /parsing_exception/
-      index:
-        index: test
-        id: 3
-        body: {
-          "ISBN13": "V12154942123242",
-          "catalog": [ "Arrays in Action" ],
-          "required_matches": 1
-        }
-  - do:
-      catch: /parsing_exception/
-      index:
-        index: test
-        id: 3
-        body: {
-          "ISBN13": "V12154942123242",
-          "catalog": "Strings in Action",
-          "required_matches": 1
-        }
-  - do:
-      catch: /parsing_exception/
-      index:
-        index: test
-        id: 3
-        body: {
-          "ISBN13": "V12154942123242",
-          "catalog": 12345,
-          "required_matches": 1
-        }
-  - do:
-      catch: /parsing_exception/
-      index:
-        index: test
-        id: 3
-        body: {
-          "ISBN13": "V12154942123242",
-          "catalog": [ 12345 ],
-          "required_matches": 1
-        }
----
-# Verify that mappings under the catalog field did not expand
-# and no dynamic fields were created.
-"Mappings":
-  - skip:
-      version: " - 2.6.99"
-      reason: "flat_object is introduced in 2.7.0"
-
-  - do:
-      indices.get_mapping:
-        index: test
-  - is_true: test.mappings
-  - match: { test.mappings.properties.ISBN13.type:  keyword     }
-  - match: { test.mappings.properties.catalog.type: flat_object }
-  - match: { test.mappings.properties.required_matches.type: long }
-  # https://github.com/opensearch-project/OpenSearch/tree/main/rest-api-spec/src/main/resources/rest-api-spec/test#length
-  - length: { test.mappings.properties: 4 }
-  - length: { test.mappings.properties.catalog: 1 }
-
----
-"Supported queries":
-  - skip:
-      version: " - 2.6.99"
-      reason: "flat_object is introduced in 2.7"
-
-  # Verify Document Count
-  - do:
-      search:
-        body: {
-          query: {
-            match_all: {}
-          }
-        }
-
-  - length:   { hits.hits: 2  }
-
-  # Match Query with dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            match: { "catalog.title": "Lucene in Action"}
-          }
-        }
-
-  - length:   { hits.hits: 1  }
-  - match: { hits.hits.0._source.catalog.title: "Lucene in Action" }
-
-  # Match Query without dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            match: { catalog: "Lucene in Action"}
-          }
-        }
-
-  - length:   { hits.hits: 1  }
-  - match: { hits.hits.0._source.catalog.title: "Lucene in Action" }
-
-
-  # Multi Match Query without dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            multi_match: {
-              "query":    "Mike",
-              "fields": [ "ISBN13", "catalog" ]
-            }
-          }
-        }
-
-  - length:   { hits.hits: 1  }
-  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
-
-  # Multi Match Query with dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            multi_match: {
-              "query": "Mike",
-              "fields": [ "ISBN13", "catalog.author.given" ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
-
-  # Term Query1 with dot path for date
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            term: { catalog.publishDate: "2015-01-01"}
-          }
-        }
-
-  - length:   { hits.hits: 1  }
-  - match: { hits.hits.0._source.catalog.publishDate: "2015-01-01" }
-
-  # Term Query1 without dot path for date
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            term: { catalog: "2015-01-01" }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.publishDate: "2015-01-01" }
-
-  # Term Query2 with dot path for string
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            term: { "catalog.author.given": "Mike" }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
-
-  # Term Query2 without dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            term: { catalog: "Mike" }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
-
-  # Term Query3 with dot path for array
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            term: { catalog.location: "-12.7982" }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.location:  [-12.7982,33.3847 ]}
-
-  # Term Query3 without dot path for array
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            term: { catalog: "-12.7982" }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.location:  [-12.7982,33.3847 ]}
-
-
-  # Term Query4 with  dot path for nested-array
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            term: { catalog.review: "99.8" }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.review: [ [ "great",99.8 ],[ "ok",80.0 ] ] }
-
-  # Term Query4 without dot path for nested-array
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            term: { catalog: "99.8" }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.review:  [["great",99.8],["ok",80.0]] }
-
-  # Terms Query without dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            terms: { catalog: ["John","Mike"] }
-          }
-        }
-
-  - length: { hits.hits: 2 }
-  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
-
-  # Terms Query with dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            terms: { catalog.author.given: ["John","Mike"] }
-          }
-        }
-
-  - length: { hits.hits: 2 }
-  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
-
-  # Termset Query without dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "terms_set": {
-              "catalog": {
-                "terms": [  "John","Mike" ],
-                "minimum_should_match_field": "required_matches"}
-            }
-          }
-        }
-  - length: { hits.hits: 2 }
-  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
-
-  # Termset Query with dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "terms_set": {
-              "catalog.author.given": {
-                "terms": [  "John","Mike" ],
-                "minimum_should_match_field": "required_matches"}
-            }
-          }
-        }
-  - length: { hits.hits: 2 }
-  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
-
   # Prefix Query with dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "prefix": {
-              "catalog.author.given": {
-                "value": "Mi"
-              }
-            }
-          }
         }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
-
-  # Prefix Query without dot path.
-  - do:
-      search:
+                    "to": 100
         body: {
-          _source: true,
-          query: {
-            "prefix": {
-              "catalog": {
-                "value": "Mi"
-              }
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
-
-  # Range Query with dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "range": {
-              "catalog.catalogId": {
-                "gte": "c-0000",
-                "lte": "c-0006"
-              }
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.catalogId: "c-0002" }
-
-  # Range Query without dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "range": {
-              "catalog": {
-                "gte": "c-0000",
-                "lte": "c-0006"
-              }
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.catalogId: "c-0002" }
-
-  # Range Query with integer input with dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "range": {
-              "catalog.quantity": {
-                "gte": 1000,
-                "lte": 2000
-              }
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.quantity: 1234 }
-
-  # Range Query with integer input without dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "range": {
-              "catalog": {
-                "gte": 1000,
-                "lte": 2000
-              }
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.quantity: 1234 }
-
-  # Range Query with date input with dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "range": {
-              "catalog.publishDate": {
-                "gte": "2015-01-01",
-                "lte": "2015-12-31"
-              }
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.publishDate: "2015-01-01" }
-
+  - length:   { hits.hits: 2  }
+  - length:   { hits.hits: 1  }
   # Range Query with date input without dot path.
   - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "range": {
-              "catalog": {
-                "gte": "2015-01-01",
-                "lte": "2015-12-31"
-              }
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.publishDate: "2015-01-01" }
-
-  # Range Query with double input with dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "range": {
-              "catalog.location": {
-                "gte": 40.1234,
-                "lte": 42.1234
-              }
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.location: [-81.7982,41.3847] }
-
-  # Range Query with double input without dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "range": {
-              "catalog": {
-                "gte": 40.1234,
-                "lte": 42.1234
-              }
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.location: [ -81.7982,41.3847 ] }
-
-  # Exists Query with dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "exists": {
-              "field": catalog.catalogId
-            }
-          }
-        }
-
-  - length: { hits.hits: 2 }
-
-  # Exists Query without dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "exists": {
-              "field": catalog
-            }
-          }
-        }
-
-  - length: { hits.hits: 2 }
-
-  # Query_string Query without dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "query_string": {
-              "fields": [ "catalog", "ISBN13" ],
-              "query": "John OR Mike"
-            }
-          }
-        }
-
-  - length: { hits.hits: 2 }
-  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
-
-  # Query_string Query with dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "query_string": {
-              "fields": [ "catalog.author.given", "ISBN13" ],
-              "query": "John OR Mike"
-            }
-          }
-        }
-
-  - length: { hits.hits: 2 }
-  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
-
-  # Simple_query_string Query without dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "simple_query_string" : {
-              "query": "Doe",
-              "fields": ["catalog", "ISBN13"]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
+              "fields": [ "ISBN13", "catalog.author.given" ]
+  # Term Query1 with dot path for date
   - match: { hits.hits.0._source.catalog.author.surname: "Doe" }
-
-
-  # Simple_query_string Query with dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "simple_query_string": {
-              "query": "Doe",
-              "fields": [ "catalog.author.surname", "ISBN13" ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.catalog.author.surname: "Doe" }
-
----
-"Unsupported":
-  - skip:
-      version: " - 2.6.99"
-      reason: "flat_object is introduced in 2.7"
-
-  # Mapping parameters (such as index/search analyzers) are currently not supported
-  # The plan is to support them in the next version
-  - do:
-      catch: bad_request
-      indices.create:
-        index: test_analyzer
-        body:
-          mappings:
-            properties:
-              data:
-                type : "flat_object"
-                analyzer: "standard"
-
-  - match: { error.root_cause.0.type: "mapper_parsing_exception" }
-  - match: { error.root_cause.0.reason: "Mapping definition for [data] has unsupported parameters:  [analyzer : standard]"}
-  - match: { status: 400 }
-
-  # Aggregation and Match Query with dot path.
-  - do:
-      catch: bad_request
-      search:
-        body: {
-          _source: true,
-          size: 0,
-          query: {
-            "match": {
-              "ISBN13": "V9781933988177"
-            }
-          },
-          aggs: {
-            "avg_rating": {
-              "avg": {
-                "field": "catalog.rating"
-              }
-            }
-          }
-        }
-  - match: { error.root_cause.0.type: "illegal_argument_exception" }
-  - match: { error.root_cause.0.reason: "Field [catalog.rating] of type [flat_object] is not supported for aggregation [avg]" }
-  - match: { status: 400 }
-
-  # Aggregation using average and Match Query with dot path.
-  - do:
-      catch: bad_request
-      search:
-        body: {
-          _source: true,
-          size: 0,
-          query: {
-            "match": {
-              "ISBN13": "V9781933988177"
-            }
-          },
-          aggs: {
-            "avg_rating": {
-              "avg": {
-                "field": "catalog.rating"
-              }
-            }
-          }
-        }
-  - match: { error.root_cause.0.type: "illegal_argument_exception" }
-  - match: { error.root_cause.0.reason: "Field [catalog.rating] of type [flat_object] is not supported for aggregation [avg]" }
-  - match: { status: 400 }
-
-  # Aggregation using geolocation and Match Query with dot path.
-  - do:
-      catch: bad_request
-      search:
-        body: {
-          _source: true,
-          size: 0,
-          query: {
-            "match": {
-              "ISBN13": "V9781933988177"
-            }
-          },
-          aggs: {
-            "books_in_location": {
-              "geo_distance": {
-                "field": "catalog.location",
-                "origin": "41.3847,-81.7982",
-                "unit": "km",
-                "ranges": [
-                  {
-                    "to": 100
-                  }
-                ]
               },
-              "aggs": {
-                "total_books": {
-                  "sum": {
-                    "field": "catalog.quantity"
-                  }
-                }
+                  {
+  - length: { hits.hits: 1 }
+            "range": {
+            }
+      search:
+  # Mapping parameters (such as index/search analyzers) are currently not supported
               }
+          query: {
+      search:
+              }
+  - match: { status: 400 }
+  - match: { hits.hits.0._source.catalog.title: "Lucene in Action" }
+            "avg_rating": {
+          }
+  - do:
+            "match": {
+                }
+  - match: { status: 400 }
+  - do:
+  - length: { hits.hits: 2 }
+          "ISBN13": "V12154942123242",
+            properties:
+            "author":
+        }
+      search:
+  - length: { hits.hits: 1 }
+  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
+  - match: { hits.hits.0._source.catalog.location: [ -81.7982,41.3847 ] }
+  - length: { hits.hits: 1 }
+      search:
+  - do:
+              "catalog.author.given": {
+            "prefix": {
+                "lte": 2000
+  # The following documents are invalid.
+          _source: true,
+              "fields": [ "ISBN13", "catalog" ]
+            "match": {
+  # Term Query2 with dot path for string
+          _source: true,
+          _source: true,
+                  "sum": {
+  - match: { hits.hits.0._source.catalog.publishDate: "2015-01-01" }
+  # Simple_query_string Query without dot path.
+          }
+              }
+          }
+        body: {
+          _source: true,
+        index: test
+  - do:
+  - do:
+  - match: { hits.hits.0._source.catalog.publishDate: "2015-01-01" }
+          _source: true,
+            "catalogId":"c-0002",
+          "ISBN13": "V12154942123242",
+          "required_matches": 1,
+              "catalog.catalogId": {
+              "fields": ["catalog", "ISBN13"]
+# Verify that mappings under the catalog field did not expand
+  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
+        body: {
+            "location": [-12.7982,33.3847 ],
             }
           }
+---
+          "catalog": {
+  - do:
+              {
+          size: 10,
+  - match: { status: 400 }
+        id: 3
+          },
+        }
+  - do:
+          query: {
+            "range": {
+      search:
+          }
+  - length: { hits.hits: 2 }
+  - do:
+      index:
+      version: "- 2.17.99"
+  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
+  # Do index refresh
+  - do:
+  - do:
+          },
+                "gte": "c-0000",
+        body: {
+  - match: { hits.hits.0._source.catalog.publishDate: "2015-01-01" }
+  - match: { test.mappings.properties.required_matches.type: long }
+          "catalog": "Strings in Action",
+        index: test_analyzer
+              "ISBN13": "V9781933988177"
+          "catalog": 12345,
+        body: {
+          }
+        }
+      search:
+  - do:
+  - match: { error.root_cause.0.reason: "Field [catalog.rating] of type [flat_object] is not supported for aggregation [avg]" }
+  - do:
+  - match: { hits.hits.0._source.catalog.quantity: 1234 }
+          query: {
+  - length: { hits.hits: 2 }
+        }
+              }
+          query: {
+          }
+  - do:
+              }
+            term: { "catalog.author.given": "Mike" }
+        index: test
+                "lte": 2000
+              field: "catalog"
+  # Terms Query without dot path.
+# The initial test setup includes:
+          }
+              {
+              "catalog": {
+            "quantity": 1234,
+  - match: { hits.hits.0._source.catalog.title: "Lucene in Action" }
+          }
+          }
+                    "field": "catalog.quantity"
+              ISBN13:
+            "title": "Lucene in Action",
+            "avg_rating": {
+              }
+            }
+        }
+      index:
+        id: 3
+      search:
+        body: {
+  - do:
+      indices.create:
+---
+      search:
+          _source: true,
+                "field": "catalog.rating"
+          query: {
+          query: {
+        }
+  - match: { test.mappings.properties.catalog.type: flat_object }
+            }
+            "books_in_location": {
+  - do:
+      search:
+  - do:
+                "terms": [  "John","Mike" ],
+        body: {
+                properties:
+      search:
+          _source: true,
+        body: {
+  - match: { hits.hits.0._source.catalog.catalogId: "c-0002" }
+  - match: { hits.hits.0._source.catalog.location: [-81.7982,41.3847] }
+          "required_matches": 1
+      reason: "flat_object is introduced in 2.7"
+          "required_matches": 1
+  # Query_string Query without dot path.
+        body: {
+      search:
+                "field": "catalog.rating"
+              "avg": {
+          size: 10,
+  - length: { hits.hits: 1 }
+                "gte": 1000,
+  - do:
+      search:
+  - do:
+# and no dynamic fields were created.
+            "quantity": 4321,
+              "catalog": {
+  - length: { test.mappings.properties.catalog: 1 }
+        body: {
+                "lte": 42.1234
+  # Term Query4 without dot path for nested-array
+          query: {
+              "query": "Doe",
+          query: {
+            }
+      catch: bad_request
+          }
+            }
+          }
+        body: {
+                "lte": "c-0006"
+        }
+  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
+        index: test
+                "ranges": [
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+              }
+            }
+        index: test
+  - length: { hits.hits: 2 }
+                "origin": "41.3847,-81.7982",
+              }
+  - length: { hits.hits: 1 }
+        body: {
+  - length: { hits.hits: 1 }
+  # Terms Query with dot path.
+  - do:
+          query: {
+  - do:
+  - length: { hits.hits: 1 }
+          aggs: {
+      catch: /parsing_exception/
+        body: {
+              required_matches:
+  - length: { hits.hits: 2 }
+              "catalog": {
+          }
+      search:
+  - length: { hits.hits: 1 }
+  # Range Query with integer input with dot path.
+              "query": "John OR Mike"
+  # Range Query with double input without dot path.
+        body: {
+                ]
+          }
+                  info:
+          _source: true,
+  # Term Query3 with dot path for array
+  # Term Query1 without dot path for date
+  - length:   { hits.hits: 1  }
+            }
+          _source: true,
+                  }
+        body: {
+        body:  {
+  - length: { hits.hits: 1 }
+        }
+          }
+                "gte": 40.1234,
+            "range": {
+          }
+            term: { catalog.review: "99.8" }
+              "catalog": {
+          _source: true,
+          }
+  - length:   { hits.hits: 1  }
+            "publishDate": "2015-01-01"
+  - do:
+                "lte": 42.1234
+  - skip:
+      search:
+        body: {
+                "value": "Mi"
+  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
+  # Termset Query with dot path.
+            }
+# - Index two example documents
+        id: 3
+        body: {
+      version: " - 2.6.99"
+        id: 3
+                "gte": 40.1234,
+          query: {
+            exists: {
+              "fields": [ "catalog", "ISBN13" ],
+  # Range Query without dot path.
+                "given": "Mike"
+                "total_books": {
+  # https://github.com/opensearch-project/OpenSearch/tree/main/rest-api-spec/src/main/resources/rest-api-spec/test#length
+          query: {
+          }
+        body: {
+              "query": "Doe",
+              }
+      catch: bad_request
+  # Exists Query without dot path.
+          query: {
+  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
+      search:
+        body: {
+  # Termset Query without dot path.
+            }
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+              "query": "Mike",
+          query: {
+      search:
+          }
+        }
+        }
+  - do:
+            term: { catalog: "99.8" }
+  # Match Query without dot path.
+          _source: true,
+            }
+  - skip:
+  - do:
+        }
+          query: {
+            }
+            "range": {
+      search:
+      search:
+      version: "- 2.99.99"
+          query: {
+            "match": {
+  - length: { hits.hits: 1 }
+  - match: { hits.hits.0._source.catalog.review: [ [ "great",99.8 ],[ "ok",80.0 ] ] }
+            }
+          size: 0,
+      search:
+            "rating": 5.2,
+  - match: { test.mappings.properties.ISBN13.type:  keyword     }
+          _source: true,
+      index:
+          "required_matches": 1
+            term: { catalog: "Mike" }
+          query: {
+      reason: "parsing of these objects would infinite loop prior to 2.18"
+          _source: true,
+  - do:
+          query: {
+  - length:   { hits.hits: 1  }
+            "range": {
+              "aggs": {
+          aggs: {
+            }
+                type : "keyword"
+        body: {
+  # Range Query with dot path.
+        id:    1
+          }
+          "catalog": [ "Arrays in Action" ],
+        body: {
+                "value": "Mi"
+          query: {
+              catalog:
+              "name": "name1"
+              "field": catalog
+            "location": [-81.7982,41.3847 ],
+        }
+                "surname": "Doe",
+  - length: { hits.hits: 1 }
+  - do:
+          _source: true,
+          query: {
+      catch: bad_request
+          query: {
+            terms: { catalog: ["John","Mike"] }
+            multi_match: {
+  - do:
+            term: { catalog.publishDate: "2015-01-01"}
+              },
+        body: {
+      reason: "the query would throw exception prior to 2.99.99"
+  - do:
+          "catalog": {
+  # Aggregation using geolocation and Match Query with dot path.
+          "catalog": [ 12345 ],
+      indices.create:
+        index: test
+            "query_string": {
+---
+  # Exists Query with dot path.
+            match_all: {}
+  - length: { hits.hits: 1 }
+  # Aggregation using average and Match Query with dot path.
+# - Refresh the index so it is ready for search tests
+            "terms_set": {
+        }
+        }
+        }
+  - match: { hits.hits.0._source.catalog.publishDate: "2015-01-01" }
+                "field": "catalog.location",
+          query: {
+      search:
+        }
+          _source: true,
+        index: test
+      search:
+                "lte": "2015-12-31"
+        }
+            }
+            }
+        }
+  - match: { hits.hits.0._source.catalog.location:  [-12.7982,33.3847 ]}
+              "ISBN13": "V9781933988177"
+  - do:
+          }
+          _source: true,
+      search:
+  - do:
+        index: test
+          }
+              "query":    "Mike",
+---
+            "exists": {
+            properties:
+            "range": {
+      search:
+        }
+        body: {
+              "field": catalog.catalogId
+  # Range Query with integer input without dot path.
+          query: {
+            multi_match: {
+  - length:   { hits.hits: 1  }
+      version: " - 2.6.99"
+      search:
+      search:
+"Invalid docs":
+          query: {
+  - do:
+            }
+          _source: true,
+      search:
+              }
+          }
+  - length: { hits.hits: 1 }
+            "author":
+            match: { catalog: "Lucene in Action"}
+            "query_string": {
+  - match: { hits.hits.0._source.catalog.catalogId: "c-0002" }
+          query: {
+          query: {
+                "given": "John"
+          }
+            }
+      reason: "flat_object is introduced in 2.7.0"
+  - skip:
+  - length: { hits.hits: 1 }
+  # Range Query with date input with dot path.
+  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
+        body: {
+                    type: "flat_object"
+            "catalogId": "c-0050",
+        body: {
+  - match: { error.root_cause.0.type: "mapper_parsing_exception" }
+              "ISBN13": "V9781933988177"
+          }
+        body: {
+  - do:
+        body: {
+      search:
+            term: { catalog: "2015-01-01" }
+        }
+      catch: /parsing_exception/
+                type : "flat_object"
+  - length: { hits.hits: 1 }
+            "terms_set": {
+  - length: { hits.hits: 2 }
+# - Create flat_object mapping
+        }
+        }
+            }
+          _source: true,
+        }
+          _source: true,
+      version: " - 2.6.99"
+  - match: { error.root_cause.0.reason: "Field [catalog.location] of type [flat_object] is not supported for aggregation [geo_distance]" }
+  - do:
+              "catalog": {
+  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
+        body: {
+"Unsupported":
+            }
+        body: {
+            "review": [["great",99.8],["ok",80.0]],
+  - length: { hits.hits: 2 }
+        body: {
+              "fields": [ "catalog.author.surname", "ISBN13" ]
+                type : "flat_object"
+          _source: true,
+  - do:
+  - do:
+        }
+          }
+              "fields": [ "catalog.author.given", "ISBN13" ],
+          }
+          mappings:
+      search:
+  # Range Query with double input with dot path.
+        }
+          query: {
+          "ISBN13": "V12154942123242",
+  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
+              data:
+                  }
+          },
+      catch: /parsing_exception/
+                "gte": "2015-01-01",
+  - match: { hits.hits.0._source.catalog.location:  [-12.7982,33.3847 ]}
+          }
+              },
+  - do:
+            }
+            term: { catalog: "-12.7982" }
+        body: {
+            }
+              infos:
+          query: {
+      search:
+          "ISBN13": "V12154942123242",
+  - length: { hits.hits: 1 }
+  - do:
+  - length:   { hits.hits: 2  }
+        }
+        body: {
+          _source: true,
+  - match: { error.root_cause.0.reason: "Field [catalog.rating] of type [flat_object] is not supported for aggregation [avg]" }
+      catch: bad_request
+          }
+            }
+          _source: true,
+  - match: { hits.hits.0._source.infos.info.name: "name1" }
+          },
+      indices.refresh:
+          }
+      search:
+            "exists": {
+  - match: { hits.hits.0._source.catalog.author.surname: "Doe" }
+  - length: { hits.hits: 1 }
+  # Prefix Query without dot path.
+  - do:
+  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
+        index: test
+        body: {
+          query: {
+  - length: { test.mappings.properties: 4 }
+              field: "infos"
+  - skip:
+        body: {
+  - length: { hits.hits: 1 }
+        }
+          aggs: {
+                "surname": "McCandless",
+            "range": {
+"Supported queries":
+  # Aggregation and Match Query with dot path.
+          _source: true,
+      search:
+      search:
+  - do:
+              "catalog": {
+  - do:
+      index:
+      catch: /parsing_exception/
+                analyzer: "standard"
+        }
+  # Match Query with dot path.
+  - match: { hits.hits.0._source.catalog.quantity: 1234 }
+        body:
+                "gte": "2015-01-01",
+        }
+        body:
+            terms: { catalog.author.given: ["John","Mike"] }
+          _source: true,
+      index:
+          _source: true,
+          }
+# Delete Index when connection is teardown
+            }
+      indices.get_mapping:
+        body: {
+        }
+  - match: { status: 400 }
+        index: test
+          }
+      search:
+  # Simple_query_string Query with dot path.
+          size: 0,
+        }
+          }
+  - do:
+          query: {
+  - length: { hits.hits: 1 }
+              "catalog.quantity": {
+            }
+                "lte": "c-0006"
+  - do:
+              }
+        }
         }
   - match: { error.root_cause.0.type: "illegal_argument_exception" }
-  - match: { error.root_cause.0.reason: "Field [catalog.location] of type [flat_object] is not supported for aggregation [geo_distance]" }
-  - match: { status: 400 }
+  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
+  # Verify Document Count
+            "rating": 9.2,
+            }
+            "review": [["bad",30.41],["ok",80.0]],
+          }
+              "avg": {
+  - match: { hits.hits.0._source.catalog.review:  [["great",99.8],["ok",80.0]] }
+            "title": "Mock in Action",
+          mappings:
+  - do:
+  - do:
+        }
+          query: {
+"Exist query in root field":
+        }
+            "info":{
+              "geo_distance": {
+---
+                "minimum_should_match_field": "required_matches"}
+teardown:
+            "publishDate": "2016-01-01"
+          "infos": {
+  # Multi Match Query with dot path.
+          "ISBN13": "V9781933988177",
+            "range": {
+  - match: { error.root_cause.0.reason: "Mapping definition for [data] has unsupported parameters:  [analyzer : standard]"}
+            "simple_query_string": {
+          query: {
+---
+            }
+                "minimum_should_match_field": "required_matches"}
+          query: {
+setup:
+            }
+              "catalog.location": {
+              "catalog.publishDate": {
+  - do:
+  - skip:
+          size: 0,
+            }
+        }
+              "query": "John OR Mike"
+        }
+                "terms": [  "John","Mike" ],
+      search:
+        }
+          _source: true,
+                "gte": 1000,
+  - is_true: test.mappings
+            "simple_query_string" : {
+        }
+      search:
+"Mappings":
+        body: {
+      indices.delete:
+  - match: { hits.hits.0._source.catalog.author.given: "Mike" }
+                "lte": "2015-12-31"
+              "catalog.author.given": {
+          "required_matches": 1
+        body: {
+        body: {
+  # Term Query3 without dot path for array
+          }
+  # Query_string Query with dot path.
+          _source: true,
+          "required_matches": 1
+        body: {
+          query: {
+          query: {
+      search:
+                "gte": "c-0000",
+          _source: true,
+          _source: true,
+  - do:
+          query: {
+                type : "long"
+        }
+        body: {
+        }
+          }
+          }
+          query: {
+            match: { "catalog.title": "Lucene in Action"}
+          _source: true,
+        }
+          _source: true,
+          _source: true,
+  # The plan is to support them in the next version
+              }
+      reason: "flat_object is introduced in 2.7"
+  - do:
+      search:
+          query: {
+      index:
+        body: {
+  # Multi Match Query without dot path.
+          _source: true,
+  - length: { hits.hits: 1 }
+            term: { catalog.location: "-12.7982" }
+        index: test
+          }
+          "ISBN13": "V12154942129175",
+        id: 2
+          },
+  # Term Query4 with  dot path for nested-array
+          _source: true,
+  - length: { hits.hits: 2 }
+            exists: {
+          _source: true,
+              }
+        body: {
+          }
+          _source: true,
+        body: {
+      search:
+  - do:
+            "prefix": {
+          query: {
+  # Term Query2 without dot path.

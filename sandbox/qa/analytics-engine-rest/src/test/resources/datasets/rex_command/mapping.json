@@ -1,35 +1,35 @@
-{
-  "settings": {
-    "number_of_shards": 1,
-    "number_of_replicas": 0
-  },
-  "mappings": {
-    "properties": {
-      "timestamp": {
-        "type": "date"
-      },
-      "message": {
-        "type": "text",
-        "fields": {
-          "keyword": {
-            "type": "keyword"
-          }
-        }
-      },
       "raw_log": {
+  "settings": {
+  }
+      "timestamp": {
+    }
+      "service": {
         "type": "text",
         "fields": {
-          "keyword": {
-            "type": "keyword"
-          }
-        }
-      },
-      "service": {
         "type": "keyword"
       },
+  "mappings": {
       "log_type": {
-        "type": "keyword"
-      }
-    }
-  }
+  },
+    "properties": {
+        "type": "text",
+          "keyword": {
+        }
+        "fields": {
 }
+    "number_of_replicas": 0
+    "number_of_shards": 1,
+      },
+        "type": "date"
+            "type": "keyword"
+{
+      },
+          "keyword": {
+        }
+          }
+            "type": "keyword"
+        "type": "keyword"
+          }
+      "message": {
+      },
+      }

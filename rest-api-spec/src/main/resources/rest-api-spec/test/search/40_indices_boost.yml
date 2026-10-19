@@ -1,185 +1,156 @@
-setup:
-  - do:
-      indices.create:
           index:  test_1
-  - do:
-      indices.create:
-          index:  test_2
-
-  - do:
-      indices.put_alias:
-        index: test_1
+          body:   { foo: bar }
         name: alias_1
-
+  - match: { hits.total: 2}
+          indices_boost: [{"*_2": 2.0}]
   - do:
-      indices.put_alias:
+  - match: { hits.total: 2}
         index: test_2
-        name: alias_2
-
+  - match: { hits.hits.0._index: test_2 }
+        index: _all
+  - match: { hits.total: 2}
   - do:
-      index:
-          index:  test_1
-          id:     1
-          body:   { foo: bar }
-
+        body:
+        index: _all
+          indices_boost: [{test_1: 1.0}, {test_2: 2.0}]
   - do:
-      index:
-          index:  test_2
-          id:     1
-          body:   { foo: bar }
-
-  - do:
-      indices.refresh:
-        index: [test_1, test_2]
-
----
-"Indices boost using object":
-  - skip:
-      reason: deprecation was added in 5.2.0
-      features: "allowed_warnings"
-
-  - do:
-      allowed_warnings:
-        - 'Object format in indices_boost is deprecated, please use array format instead'
       search:
+        index: _all
+      indices.put_alias:
+  - match: { hits.hits.0._index: test_2 }
         rest_total_hits_as_int: true
         index: _all
+"Indices boost using object":
+        body:
+  - skip:
+"Indices boost using array multiple match":
+  - match: { hits.hits.1._index: test_2 }
+  - match: { hits.total: 2}
+"Indices boost using array with alias":
+        rest_total_hits_as_int: true
+        rest_total_hits_as_int: true
+---
+  - match: { hits.total: 2 }
+  - do:
+      search:
+      index:
         body:
           indices_boost: {test_1: 2.0, test_2: 1.0}
-
-  - match: { hits.total: 2 }
-  - match: { hits.hits.0._index: test_1 }
-  - match: { hits.hits.1._index: test_2 }
-
   - do:
-      allowed_warnings:
-        - 'Object format in indices_boost is deprecated, please use array format instead'
-      search:
-        rest_total_hits_as_int: true
         index: _all
         body:
-          indices_boost: {test_1: 1.0, test_2: 2.0}
-
-  - match: { hits.total: 2 }
-  - match: { hits.hits.0._index: test_2 }
+      search:
+      search:
+        index: _all
   - match: { hits.hits.1._index: test_1 }
-
----
-"Indices boost using array":
-  - do:
-      search:
         rest_total_hits_as_int: true
-        index: _all
-        body:
-          indices_boost: [{test_1: 2.0}, {test_2: 1.0}]
-
-  - match: { hits.total: 2 }
-  - match: { hits.hits.0._index: test_1 }
-  - match: { hits.hits.1._index: test_2 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: _all
-        body:
-          indices_boost: [{test_1: 1.0}, {test_2: 2.0}]
-
-  - match: { hits.total: 2 }
-  - match: { hits.hits.0._index: test_2 }
-  - match: { hits.hits.1._index: test_1 }
-
----
-"Indices boost using array with alias":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: _all
-        body:
           indices_boost: [{alias_1: 2.0}]
-
-  - match: { hits.total: 2}
-  - match: { hits.hits.0._index: test_1 }
-  - match: { hits.hits.1._index: test_2 }
-
-  - do:
-      search:
+      indices.refresh:
         rest_total_hits_as_int: true
-        index: _all
         body:
-          indices_boost: [{alias_2: 2.0}]
-
-  - match: { hits.total: 2}
-  - match: { hits.hits.0._index: test_2 }
-  - match: { hits.hits.1._index: test_1 }
-
----
-"Indices boost using array with wildcard":
+        body:
+          indices_boost: [{nonexistent: 2.0}, {test_1: 1.0}, {test_2: 2.0}]
   - do:
+          index:  test_2
+          # First match (3.0) is used for test_1
+          body:   { foo: bar }
+          indices_boost: [{nonexistent: 2.0}, {test_1: 1.0}, {test_2: 2.0}]
+---
+  - match: { hits.hits.0._index: test_1 }
+  - do:
+  - match: { hits.hits.0._index: test_1 }
       search:
         rest_total_hits_as_int: true
+  - match: { hits.hits.1._index: test_2 }
+          indices_boost: [{test_1: 2.0}, {test_2: 1.0}]
+---
+        rest_total_hits_as_int: true
+        body:
+  - match: { hits.total: 2 }
         index: _all
+        name: alias_2
+  - match: { hits.total: 2}
+"Indices boost using array with wildcard":
+        - 'Object format in indices_boost is deprecated, please use array format instead'
+setup:
+        index: test_1
+  - do:
+  - do:
+        body:
+        rest_total_hits_as_int: true
+  - do:
+          indices_boost: [{alias_2: 2.0}]
+      search:
+  - do:
+      search:
+        body:
+          index:  test_1
+      search:
+  - match: { hits.hits.0._index: test_1 }
+        index: [test_1, test_2]
+        index: _all
+  - match: { hits.hits.1._index: test_2 }
+  - match: { hits.hits.1._index: test_1 }
+  - match: { hits.total: 2}
+  - do:
+          id:     1
+  - match: { hits.hits.1._index: test_2 }
+      allowed_warnings:
+  - match: { hits.hits.1._index: test_1 }
+---
         body:
           indices_boost: [{"*_1": 2.0}]
-
+      index:
+      search:
+      reason: deprecation was added in 5.2.0
+        index: _all
   - match: { hits.total: 2}
+      search:
+  - do:
   - match: { hits.hits.0._index: test_1 }
-  - match: { hits.hits.1._index: test_2 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: _all
-        body:
-          indices_boost: [{"*_2": 2.0}]
-
-  - match: { hits.total: 2}
   - match: { hits.hits.0._index: test_2 }
+  - do:
   - match: { hits.hits.1._index: test_1 }
-
----
-"Indices boost using array multiple match":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: _all
-        body:
-          # First match (3.0) is used for test_1
-          indices_boost: [{"*_1": 3.0}, {alias_1: 1.0}, {test_2: 2.0}]
-
-  - match: { hits.total: 2}
-  - match: { hits.hits.0._index: test_1 }
-  - match: { hits.hits.1._index: test_2 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: _all
-        body:
-          # First match (1.0) is used for test_1
-          indices_boost: [{"*_1": 1.0}, {test_2: 2.0}, {alias_1: 3.0}]
-
-  - match: { hits.total: 2}
-  - match: { hits.hits.0._index: test_2 }
-  - match: { hits.hits.1._index: test_1 }
-
----
-"Indices boost for nonexistent index/alias":
-  - do:
-      catch: /no such index/
-      search:
-        rest_total_hits_as_int: true
-        index: _all
-        body:
-          indices_boost: [{nonexistent: 2.0}, {test_1: 1.0}, {test_2: 2.0}]
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: _all
         ignore_unavailable: true
+      allowed_warnings:
+        rest_total_hits_as_int: true
+  - match: { hits.hits.1._index: test_2 }
+  - do:
+        rest_total_hits_as_int: true
+          indices_boost: {test_1: 1.0, test_2: 2.0}
+  - match: { hits.total: 2 }
+  - do:
+          id:     1
         body:
-          indices_boost: [{nonexistent: 2.0}, {test_1: 1.0}, {test_2: 2.0}]
-
-  - match: { hits.total: 2}
+        rest_total_hits_as_int: true
+          indices_boost: [{"*_1": 1.0}, {test_2: 2.0}, {alias_1: 3.0}]
+          # First match (1.0) is used for test_1
+        - 'Object format in indices_boost is deprecated, please use array format instead'
+  - match: { hits.hits.0._index: test_1 }
+      indices.create:
+      indices.create:
+        index: _all
+---
+  - do:
+        index: _all
+        rest_total_hits_as_int: true
+      features: "allowed_warnings"
+  - do:
+          indices_boost: [{"*_1": 3.0}, {alias_1: 1.0}, {test_2: 2.0}]
   - match: { hits.hits.0._index: test_2 }
+      indices.put_alias:
+  - do:
   - match: { hits.hits.1._index: test_1 }
+          index:  test_2
+  - match: { hits.hits.1._index: test_1 }
+  - match: { hits.total: 2 }
+        index: _all
+      catch: /no such index/
+"Indices boost for nonexistent index/alias":
+      search:
+  - match: { hits.hits.0._index: test_2 }
+"Indices boost using array":
+      search:
+  - match: { hits.hits.0._index: test_2 }
+---
+        body:

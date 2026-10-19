@@ -1,20 +1,20 @@
-{
   "schema": [
     {
-      "name": "id",
-      "type": "string"
     },
-    {
-      "name": "cur_time",
-      "type": "time"
-    }
-  ],
-  "datarows": [
-    [
-      "1",
-      "%%TIME%%"
-    ]
-  ],
   "total": 1,
+    [
+      "type": "time"
+  ],
+      "name": "id",
+    {
+  "datarows": [
   "size": 1
+      "%%TIME%%"
+{
+    }
+      "name": "cur_time",
+      "1",
+    ]
+      "type": "string"
+  ],
 }

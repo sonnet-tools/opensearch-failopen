@@ -1,113 +1,89 @@
----
-setup:
-
+      snapshot.create:
+  - match: { results.deleted_bytes: 0 }
+      snapshot.create:
+      catch: missing
+  - match: { snapshot.shards.failed : 0 }
   - do:
-      snapshot.create_repository:
+  - do:
+  - do:
+        snapshot: test_snapshot
+        body: |
+  - match: { acknowledged: true }
+  - match: { results.deleted_bytes: 0 }
         repository: test_repo_create_1
-        body:
-          type: fs
+setup:
+      snapshot.cleanup_repository:
+  - match: { snapshot.snapshot: test_snapshot }
+        snapshot: test_snapshot
+      snapshot.cleanup_repository:
+  - match: { results.deleted_blobs: 0 }
+  - do:
+  - match: { acknowledged: true }
+  - match: { snapshot.shards.successful: 1 }
+        snapshot: test_snapshot_1
+  - match: { acknowledged: true }
+  - match: { results.deleted_blobs: 0 }
+---
           settings:
-            location: "test_repo_create_1_loc"
-
+        wait_for_completion: true
+        repository: test_repo_create_1
+        repository: test_repo_create_1
+        snapshot: test_snapshot
+      snapshot.create:
+  - do:
   - do:
       indices.create:
-        index: test_index
-        body:
-          settings:
-            number_of_shards:   1
-            number_of_replicas: 1
-
----
-"Create a snapshot":
-
-  - do:
-      snapshot.create:
-        repository: test_repo_create_1
-        snapshot: test_snapshot
-        wait_for_completion: true
-
-  - match: { snapshot.snapshot: test_snapshot }
-  - match: { snapshot.state : SUCCESS }
+          { "indices": "missing_2", "ignore_unavailable": true }
   - match: { snapshot.shards.successful: 1 }
-  - match: { snapshot.shards.failed : 0 }
-
+  - do:
+      snapshot.delete:
+          type: fs
+  - match: { snapshot.snapshot: test_snapshot }
+        body:
+  - do:
+  - match: { snapshot.state : SUCCESS }
+        snapshot: test_snapshot_2
+  - do:
+  - match: { snapshot.snapshot: test_snapshot_2 }
+---
+        repository: test_repo_create_1
+        index: test_index
+        repository: test_repo_create_1
   - do:
       snapshot.delete:
         repository: test_repo_create_1
-        snapshot: test_snapshot
-
-  - match: { acknowledged: true }
-
+        repository: test_repo_create_1
+  - match: { snapshot.shards.successful: 0 }
+        repository: test_repo_create_1
+  - do:
+        repository: test_repo_create_1
+            location: "test_repo_create_1_loc"
+  - match: { results.deleted_bytes: 0 }
+      snapshot.create_repository:
+          { "indices": "missing_1" }
 ---
 "Create a snapshot and clean up repository":
-
-
-  - do:
-      snapshot.cleanup_repository:
-        repository: test_repo_create_1
-
-  - match: { results.deleted_bytes: 0 }
-  - match: { results.deleted_blobs: 0 }
-
-  - do:
-      snapshot.create:
-        repository: test_repo_create_1
-        snapshot: test_snapshot
-        wait_for_completion: true
-
-  - match: { snapshot.snapshot: test_snapshot }
-  - match: { snapshot.state : SUCCESS }
-  - match: { snapshot.shards.successful: 1 }
-  - match: { snapshot.shards.failed : 0 }
-
-  - do:
-      snapshot.cleanup_repository:
-        repository: test_repo_create_1
-
-  - match: { results.deleted_bytes: 0 }
-  - match: { results.deleted_blobs: 0 }
-
-  - do:
-      snapshot.delete:
-        repository: test_repo_create_1
-        snapshot: test_snapshot
-
-  - match: { acknowledged: true }
-
-  - do:
-      snapshot.cleanup_repository:
-        repository: test_repo_create_1
-
-  - match: { results.deleted_bytes: 0 }
-  - match: { results.deleted_blobs: 0 }
-
----
+        body: |
+            number_of_shards:   1
 "Create a snapshot for missing index":
-  - do:
-      catch: missing
-      snapshot.create:
-        repository: test_repo_create_1
-        snapshot: test_snapshot_1
         wait_for_completion: true
-        body: |
-          { "indices": "missing_1" }
-
-  - do:
+"Create a snapshot":
+---
+  - match: { results.deleted_blobs: 0 }
+        snapshot: test_snapshot
+            number_of_replicas: 1
       snapshot.create:
-        repository: test_repo_create_1
+        wait_for_completion: true
         snapshot: test_snapshot_2
-        wait_for_completion: true
-        body: |
-          { "indices": "missing_2", "ignore_unavailable": true }
-
-  - match: { snapshot.snapshot: test_snapshot_2 }
+  - do:
+          settings:
+      snapshot.cleanup_repository:
+        repository: test_repo_create_1
   - match: { snapshot.state : SUCCESS }
-  - match: { snapshot.shards.successful: 0 }
   - match: { snapshot.shards.failed : 0 }
-
-  - do:
+        body:
       snapshot.delete:
+  - match: { snapshot.shards.failed : 0 }
+        wait_for_completion: true
+  - match: { snapshot.state : SUCCESS }
         repository: test_repo_create_1
-        snapshot: test_snapshot_2
-
-  - match: { acknowledged: true }

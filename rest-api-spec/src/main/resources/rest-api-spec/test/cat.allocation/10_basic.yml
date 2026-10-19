@@ -1,230 +1,199 @@
----
-"Help":
-  - do:
-      cat.allocation:
-        help: true
-
-  - match:
-      $body: |
-               /^  shards            .+   \n
-                   disk.indices      .+   \n
-                   disk.used         .+   \n
-                   disk.avail        .+   \n
-                   disk.total        .+   \n
-                   disk.percent      .+   \n
-                   host              .+   \n
-                   ip                .+   \n
-                   node              .+   \n
-               $/
-
----
-"Empty cluster":
-
-  - do:
-      cat.allocation: {}
-
-  - match:
-      $body: |
-            /^
-              ( 0                      \s+
-                0b                     \s+
-                \d+(\.\d+)?[kmgt]?b    \s+
-                (\d+(\.\d+)?[kmgt]b    \s+)?  #no value from client nodes
-                (\d+(\.\d+)?[kmgt]b    \s+)?  #no value from client nodes
-                (\d+                   \s+)?  #no value from client nodes
-                [-\w.]+                \s+
-                \d+(\.\d+){3}          \s+
-                [-\w.]+
-                \n
-              )+
-            $/
-
----
-"One index":
-
-  - do:
-        indices.create:
-            index: test
-
-  - do:
-        cat.allocation: {}
-
-  - match:
-      $body: |
-            /^
-              ( \s*                          #allow leading spaces to account for right-justified text
-                \d+                    \s+
-                \d+(\.\d+)?[kmgt]?b    \s+
-                \d+(\.\d+)?[kmgt]?b    \s+
-                (\d+(\.\d+)?[kmgt]b   \s+)  #always should return value since we filter out non data nodes by default
-                (\d+(\.\d+)?[kmgt]b   \s+)  #always should return value since we filter out non data nodes by default
-                (\d+                  \s+)  #always should return value since we filter out non data nodes by default
-                [-\w.]+                \s+
-                \d+(\.\d+){3}          \s+
-                [-\w.]+
-                \n
-              )+
-              (
-                \s*                          #allow leading spaces to account for right-justified text
-                \d+                    \s+
-                UNASSIGNED
-                \n
-              )?
-            $/
-
----
-"Node ID":
-
-  - do:
-        cat.allocation:
-            node_id: _master
-
-  - match:
-      $body: |
-            /^
-              ( 0                      \s+
-                \d+(\.\d+)?[kmgt]?b    \s+
-                \d+(\.\d+)?[kmgt]?b    \s+
-                (\d+(\.\d+)?[kmgt]b   \s+)?  #no value from client nodes
-                (\d+(\.\d+)?[kmgt]b   \s+)?  #no value from client nodes
-                (\d+                  \s+)?  #no value from client nodes
-                [-\w.]+                \s+
-                \d+(\.\d+){3}          \s+
-                [-\w.]+
-                \n
-              )
-            $/
-
-  - do:
-        cat.allocation:
-            node_id: non_existent
-
-  - match:
-      $body: |
-            /^
-            $/
-
----
-
-"All Nodes":
-
-   - do:
-         cat.allocation:
-           node_id: "*"
-
-   - match:
-       $body: |
-             /^
-               ( \s*                          #allow leading spaces to account for right-justified text
-                 \d+                    \s+
-                 \d+(\.\d+)?[kmgt]?b    \s+
-                 \d+(\.\d+)?[kmgt]?b    \s+
-                 (\d+(\.\d+)?[kmgt]b   \s+)?  #no value from client nodes
-                 (\d+(\.\d+)?[kmgt]b   \s+)?  #no value from client nodes
-                 (\d+                  \s+)?  #no value from client nodes
-                 [-\w.]+                \s+
-                 \d+(\.\d+){3}          \s+
-                 [-\w.]+
-                 \n
-               )+
-               (
-                 \s*                          #allow leading spaces to account for right-justified text
-                 \d+                    \s+
-                 UNASSIGNED
-                 \n
                )?
-             $/
-
----
-"Column headers":
-
-  - do:
-        cat.allocation:
-            v: true
-  - match:
-
-      $body: |
-           /^  shards                  \s+
-               disk.indices            \s+
-               disk.used               \s+
-               disk.avail              \s+
-               disk.total              \s+
-               disk.percent            \s+
-               host                    \s+
-               ip                      \s+
-               node
-               \n
-
-              ( \s*                          #allow leading spaces to account for right-justified text
-                0                      \s+
-                0b                     \s+
-                \d+(\.\d+)?[kmgt]?b    \s+
-                (\d+(\.\d+)?[kmgt]b   \s+)  #always should return value since we filter out non data nodes by default
-                (\d+(\.\d+)?[kmgt]b   \s+)  #always should return value since we filter out non data nodes by default
-                (\d+                  \s+)  #always should return value since we filter out non data nodes by default
+                   disk.indices      .+   \n
                 [-\w.]+                \s+
-                \d+(\.\d+){3}          \s+
-                [-\w.]+
-                \n
-              )+
-            $/
-
----
-"Select columns":
-
-  - do:
+               disk.avail              \s+
+                (\d+                 \s+)  #always should return value since we filter out non data nodes by default
         cat.allocation:
-            h: [disk.percent, node]
-            v: false
-
+               /^  shards            .+   \n
+                [-\w.]+
+              )+
+                   disk.avail        .+   \n
+  - do:
   - match:
+                \n
+---
+  - match:
+                \d+                    \s+
+                [-\w.]+
+  - match:
+                \n
       $body: |
+            /^
+                \s+\d*           \s+
+              )+
+                 \n
+                 (\d+(\.\d+)?[kmgt]b   \s+)?  #no value from client nodes
+                \d+(\.\d+)?[kmgt]?b    \s+
+      cat.allocation:
+                 (\d+                  \s+)?  #no value from client nodes
+               disk.indices            \s+
+            $/
+                (\d+                  \s+)  #always should return value since we filter out non data nodes by default
+"Node ID":
+            /^
+                \d+(\.\d+)?[kmgt]?b    \s+
+---
+                   node              .+   \n
+                \s*                          #allow leading spaces to account for right-justified text
+---
+               ip                      \s+
+        cat.allocation:
+                \n
             /^
               ( \d*                 \s+
-                [-\w.]+
-                \n
+                   host              .+   \n
+                [-\w.]+                \s+
+           /^  shards                  \s+
+"All Nodes":
               )+
-            $/
-
-  - do:
-        cat.allocation:
             h: [disk.percent, node]
-            v: true
-
-  - match:
-      $body: |
-            /^
-              disk.percent          \s+
-              node
-              \n
-              (
-                \s+\d*           \s+
-                [-\w.]+
-                \n
-              )+
-            $/
-
-
----
-
-"Bytes":
-
+                \d+(\.\d+){3}          \s+
+                 (\d+(\.\d+)?[kmgt]b   \s+)?  #no value from client nodes
   - do:
-      cat.allocation:
-        bytes: gb
-
-  - match:
-      $body: |
-            /^
-              ( 0                   \s+
-                0                   \s+
-                \d+                 \s+
-                (\d+                 \s+)  #always should return value since we filter out non data nodes by default
-                (\d+                 \s+)  #always should return value since we filter out non data nodes by default
-                (\d+                 \s+)  #always should return value since we filter out non data nodes by default
-                [-\w.]+             \s+
-                \d+(\.\d+){3}       \s+
                 [-\w.]+
                 \n
+                (\d+                  \s+)?  #no value from client nodes
+              ( \s*                          #allow leading spaces to account for right-justified text
+        bytes: gb
+            node_id: _master
+         cat.allocation:
+        cat.allocation:
+             $/
+  - match:
+---
+                (\d+(\.\d+)?[kmgt]b   \s+)?  #no value from client nodes
+              ( 0                   \s+
+      $body: |
+                [-\w.]+
+              \n
+                (\d+                  \s+)  #always should return value since we filter out non data nodes by default
+       $body: |
               )+
+              )
+            /^
+                (\d+(\.\d+)?[kmgt]b    \s+)?  #no value from client nodes
+                [-\w.]+
+                 \d+(\.\d+)?[kmgt]?b    \s+
+---
+               disk.used               \s+
+      $body: |
+               disk.percent            \s+
+                   disk.total        .+   \n
+                [-\w.]+
+            index: test
+                (\d+                 \s+)  #always should return value since we filter out non data nodes by default
+            node_id: non_existent
+              ( 0                      \s+
+        cat.allocation:
+                [-\w.]+             \s+
+  - match:
+      cat.allocation: {}
+"Column headers":
             $/
+               (
+              (
+                \d+(\.\d+){3}       \s+
+  - do:
+   - do:
+  - do:
+"Select columns":
+  - do:
+            v: false
+                (\d+(\.\d+)?[kmgt]b    \s+)?  #no value from client nodes
+                \n
+                (\d+(\.\d+)?[kmgt]b   \s+)  #always should return value since we filter out non data nodes by default
+                \d+(\.\d+)?[kmgt]?b    \s+
+   - match:
+                   disk.used         .+   \n
+  - do:
+             /^
+                \d+(\.\d+){3}          \s+
+  - match:
+                (\d+                   \s+)?  #no value from client nodes
+                [-\w.]+
+---
+               \n
+        cat.allocation:
+              node
+              )+
+                 \d+                    \s+
+                 \d+(\.\d+){3}          \s+
+                 [-\w.]+
+  - match:
+                (\d+(\.\d+)?[kmgt]b   \s+)  #always should return value since we filter out non data nodes by default
+---
+  - match:
+            $/
+      $body: |
+            $/
+                0b                     \s+
+            /^
+      $body: |
+      $body: |
+                (\d+(\.\d+)?[kmgt]b   \s+)?  #no value from client nodes
+               node
+            /^
+      cat.allocation:
+                 \d+(\.\d+)?[kmgt]?b    \s+
+                \d+(\.\d+){3}          \s+
+                 UNASSIGNED
+                \d+(\.\d+){3}          \s+
+                   ip                .+   \n
+                \d+                 \s+
+              disk.percent          \s+
+  - do:
+                \d+                    \s+
+        help: true
+                0                   \s+
+              )+
+                UNASSIGNED
+            /^
+              ( \s*                          #allow leading spaces to account for right-justified text
+      $body: |
+              (
+            $/
+      $body: |
+      $body: |
+            v: true
+  - do:
+                 \n
+               host                    \s+
+                 [-\w.]+                \s+
+               )+
+            h: [disk.percent, node]
+  - do:
+            $/
+                 \s*                          #allow leading spaces to account for right-justified text
+"Help":
+"Empty cluster":
+  - match:
+              ( 0                      \s+
+        cat.allocation: {}
+            v: true
+                0b                     \s+
+            $/
+                (\d+(\.\d+)?[kmgt]b   \s+)  #always should return value since we filter out non data nodes by default
+"Bytes":
+                \n
+                0                      \s+
+            $/
+               $/
+  - do:
+                 \d+                    \s+
+"One index":
+               ( \s*                          #allow leading spaces to account for right-justified text
+                   disk.percent      .+   \n
+                \d+(\.\d+)?[kmgt]?b    \s+
+---
+                \d+(\.\d+)?[kmgt]?b    \s+
+                (\d+                 \s+)  #always should return value since we filter out non data nodes by default
+           node_id: "*"
+              )?
+                \n
+        indices.create:
+                (\d+(\.\d+)?[kmgt]b   \s+)  #always should return value since we filter out non data nodes by default
+                [-\w.]+                \s+
+                [-\w.]+                \s+
+                \d+(\.\d+)?[kmgt]?b    \s+
+               disk.total              \s+
+                \n

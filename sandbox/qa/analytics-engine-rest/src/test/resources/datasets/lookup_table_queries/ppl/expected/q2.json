@@ -1,19 +1,19 @@
-{
-  "schema": [
-    {
-      "name": "id",
-      "type": "int"
-    },
-    {
-      "name": "view_name",
-      "type": "string"
-    },
-    {
       "name": "description",
-      "type": "string"
+  "schema": [
+      "type": "int"
+    {
     }
-  ],
-  "datarows": [],
-  "total": 0,
+    {
   "size": 0
+    {
+{
+      "type": "string"
+      "type": "string"
+  ],
 }
+  "total": 0,
+    },
+      "name": "view_name",
+  "datarows": [],
+      "name": "id",
+    },

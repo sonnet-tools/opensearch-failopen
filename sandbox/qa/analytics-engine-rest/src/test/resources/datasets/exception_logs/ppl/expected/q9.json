@@ -1,42 +1,42 @@
-{
-  "schema": [
+    [
     {
-      "name": "application_id",
-      "type": "bigint"
-    },
-    {
-      "name": "total",
-      "type": "bigint"
-    },
-    {
+  ],
+}
       "name": "errors",
+      0.0
+      107150,
+  "datarows": [
+    ]
       "type": "bigint"
     },
+      33,
     {
       "name": "error_rate",
-      "type": "double"
-    }
-  ],
-  "datarows": [
-    [
-      107148,
-      34,
-      34,
-      100.0
+    },
+      "type": "bigint"
     ],
-    [
+      34,
+      "name": "application_id",
+      0,
       107149,
-      33,
-      0,
-      0.0
     ],
+      "type": "bigint"
+      "type": "double"
     [
-      107150,
-      33,
-      0,
-      0.0
-    ]
-  ],
+    },
   "total": 3,
+      33,
+{
   "size": 3
-}
+    {
+    [
+    {
+    }
+      34,
+  ],
+      0.0
+      "name": "total",
+  "schema": [
+      0,
+      107148,
+      100.0

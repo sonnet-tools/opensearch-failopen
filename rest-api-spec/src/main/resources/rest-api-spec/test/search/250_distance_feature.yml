@@ -1,85 +1,73 @@
-setup:
-
-
-  - do:
-      indices.create:
-        index: index1
-        body:
-          settings:
-            number_of_replicas: 0
-          mappings:
-            properties:
-              my_date:
-                type: date
-              my_date_nanos:
-                type: date_nanos
-              my_geo:
                 type: geo_point
-
-  - do:
-      bulk:
+      index: index1
+              my_date:
         refresh: true
-        body:
-        - '{ "index" : { "_index" : "index1", "_id" : "1" } }'
-        - '{ "my_date": "2018-02-01T10:00:00Z", "my_date_nanos": "2018-02-01T00:00:00.223456789Z", "my_geo": [-71.34, 41.13] }'
-        - '{ "index" : { "_index" : "index1", "_id" : "2" } }'
-        - '{ "my_date": "2018-02-01T11:00:00Z", "my_date_nanos": "2018-02-01T00:00:00.123456789Z", "my_geo": [-71.34, 41.14] }'
-        - '{ "index" : { "_index" : "index1", "_id" : "3" } }'
-        - '{ "my_date": "2018-02-01T09:00:00Z", "my_date_nanos": "2018-02-01T00:00:00.323456789Z", "my_geo": [-71.34, 41.12] }'
-
----
-"test distance_feature query on date type":
-
-- do:
-    search:
-      rest_total_hits_as_int: true
-      index: index1
-      body:
-        query:
-          distance_feature:
-            field: my_date
-            pivot: 1h
             origin: 2018-02-01T08:00:30Z
-
-- length: { hits.hits: 3 }
+        - '{ "index" : { "_index" : "index1", "_id" : "1" } }'
+  - do:
+            number_of_replicas: 0
 - match: { hits.hits.0._id: "3" }
+                type: date_nanos
+            pivot: 1h
 - match: { hits.hits.1._id: "1" }
-- match: { hits.hits.2._id: "2" }
-
----
-"test distance_feature query on date_nanos type":
-
-- do:
-    search:
-      rest_total_hits_as_int: true
-      index: index1
-      body:
-        query:
-          distance_feature:
             field: my_date_nanos
-            pivot: 100000000nanos
-            origin: 2018-02-01T00:00:00.323456789Z
-
-- length: { hits.hits: 3 }
-- match: { hits.hits.0._id: "3" }
-- match: { hits.hits.1._id: "1" }
-- match: { hits.hits.2._id: "2" }
-
----
-"test distance_feature query on geo_point type":
-
-- do:
-    search:
       rest_total_hits_as_int: true
-      index: index1
-      body:
-        query:
           distance_feature:
-            field: my_geo
-            pivot: 1km
-            origin: [-71.35, 41.12]
-
+---
+---
 - length: { hits.hits: 3 }
+      rest_total_hits_as_int: true
+      body:
+            properties:
+- do:
+      body:
+          distance_feature:
+        - '{ "my_date": "2018-02-01T10:00:00Z", "my_date_nanos": "2018-02-01T00:00:00.223456789Z", "my_geo": [-71.34, 41.13] }'
+                type: date
+        query:
+      rest_total_hits_as_int: true
+          distance_feature:
+---
+        query:
 - match: { hits.hits.0._id: "3" }
-- match: { hits.hits.1._id: "1" }
+        body:
+      body:
+          settings:
+- do:
 - match: { hits.hits.2._id: "2" }
+        - '{ "my_date": "2018-02-01T09:00:00Z", "my_date_nanos": "2018-02-01T00:00:00.323456789Z", "my_geo": [-71.34, 41.12] }'
+- match: { hits.hits.0._id: "3" }
+              my_date_nanos:
+            pivot: 100000000nanos
+      indices.create:
+            origin: 2018-02-01T00:00:00.323456789Z
+- match: { hits.hits.1._id: "1" }
+        query:
+"test distance_feature query on date type":
+- length: { hits.hits: 3 }
+    search:
+"test distance_feature query on date_nanos type":
+        index: index1
+- match: { hits.hits.2._id: "2" }
+- length: { hits.hits: 3 }
+            pivot: 1km
+        body:
+            origin: [-71.35, 41.12]
+            field: my_geo
+setup:
+        - '{ "index" : { "_index" : "index1", "_id" : "2" } }'
+    search:
+      bulk:
+      index: index1
+      index: index1
+              my_geo:
+          mappings:
+"test distance_feature query on geo_point type":
+- do:
+            field: my_date
+- match: { hits.hits.1._id: "1" }
+  - do:
+        - '{ "my_date": "2018-02-01T11:00:00Z", "my_date_nanos": "2018-02-01T00:00:00.123456789Z", "my_geo": [-71.34, 41.14] }'
+- match: { hits.hits.2._id: "2" }
+        - '{ "index" : { "_index" : "index1", "_id" : "3" } }'
+    search:

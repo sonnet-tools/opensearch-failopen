@@ -1,77 +1,77 @@
-{
-  "schema": [
-    {
-      "name": "time_bucket",
-      "type": "timestamp"
-    },
-    {
-      "name": "server_name",
-      "type": "string"
-    },
-    {
-      "name": "total_events",
-      "type": "bigint"
-    },
-    {
-      "name": "avg_vals",
-      "type": "double"
-    },
-    {
-      "name": "event_rate",
-      "type": "double"
-    },
-    {
-      "name": "normalized_score",
-      "type": "double"
-    },
-    {
-      "name": "risk_level",
-      "type": "string"
-    },
-    {
-      "name": "score_band",
-      "type": "double"
-    },
-    {
-      "name": "global_total",
-      "type": "bigint"
-    }
-  ],
-  "datarows": [
-    [
-      "2026-05-14 01:30:00",
-      "host1",
       3,
-      8.0,
-      0.3,
-      8.0,
-      "HIGH",
-      8.0,
-      100
-    ],
-    [
-      "2026-05-14 01:20:00",
-      "host2",
-      3,
-      8.0,
-      0.3,
-      8.0,
-      "HIGH",
-      8.0,
-      100
-    ],
-    [
-      "2026-05-14 01:20:00",
-      "host3",
       2,
+    {
+    [
+      3,
+      "host2",
       8.0,
-      0.2,
-      8.0,
-      "HIGH",
+      "type": "double"
+    },
+      "name": "event_rate",
       8.0,
       100
     ]
+      "name": "avg_vals",
+  "datarows": [
+      "name": "normalized_score",
+      8.0,
   ],
+    },
+      "name": "risk_level",
+      "host3",
   "total": 3,
-  "size": 3
+    {
+      8.0,
+    {
+      "name": "score_band",
+  "schema": [
+    },
+    {
+      0.3,
+  ],
+    {
+      "type": "bigint"
+    },
+      100
+      "2026-05-14 01:20:00",
+      "type": "timestamp"
+    },
+      8.0,
+      "name": "global_total",
+    {
+      8.0,
+      "type": "bigint"
 }
+      "2026-05-14 01:20:00",
+      "name": "server_name",
+      "HIGH",
+      "type": "double"
+    },
+    {
+      8.0,
+    }
+      "type": "double"
+      0.2,
+      "type": "string"
+      8.0,
+      100
+      "HIGH",
+      "HIGH",
+    ],
+      "name": "total_events",
+      "type": "string"
+      "2026-05-14 01:30:00",
+    [
+      8.0,
+    ],
+{
+    },
+      "name": "time_bucket",
+    },
+      "type": "double"
+      "host1",
+  "size": 3
+    [
+    {
+    {
+      0.3,

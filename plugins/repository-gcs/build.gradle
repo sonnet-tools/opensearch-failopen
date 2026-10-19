@@ -1,453 +1,408 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- *
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-
-import org.opensearch.gradle.MavenFilteringHack
-import org.opensearch.gradle.info.BuildParams
-import org.opensearch.gradle.info.FipsBuildParams
-import org.opensearch.gradle.test.InternalClusterTestPlugin
-import org.opensearch.gradle.test.RestIntegTestTask
-import org.opensearch.gradle.test.rest.YamlRestTestPlugin
-
-import java.nio.file.Files
-import java.security.KeyPair
-import java.security.KeyPairGenerator
-
-import static org.opensearch.gradle.PropertyNormalization.IGNORE_VALUE
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-apply plugin: 'opensearch.yaml-rest-test'
-apply plugin: 'opensearch.internal-cluster-test'
-apply from: "$rootDir/gradle/fips.gradle"
-
-ext {
-  guava_version = "33.4.0-jre"
-}
-
-opensearchplugin {
-  description = 'The GCS repository plugin adds Google Cloud Storage support for repositories.'
-  classname = 'org.opensearch.repositories.gcs.GoogleCloudStoragePlugin'
-}
-
-dependencies {
-
-  // dependencies consistent with 'com.google.cloud:google-cloud-storage-bom:2.55.0'
-  implementation "com.google.cloud:google-cloud-storage:2.60.0"
-  implementation "com.google.cloud:google-cloud-core:2.60.0"
-  implementation "com.google.cloud:google-cloud-core-http:2.60.0"
-
-  runtimeOnly "com.google.guava:guava:${guava_version}"
-  runtimeOnly "com.google.guava:failureaccess:1.0.2"
-
-  runtimeOnly "org.slf4j:slf4j-api:${versions.slf4j}" // 2.0.16 in bom
-  runtimeOnly "commons-codec:commons-codec:${versions.commonscodec}" // 1.18.0 in bom
-  implementation "com.google.api:api-common:2.55.1"
-  implementation "com.google.api:gax:2.72.1"
-  runtimeOnly "com.google.api:gax-httpjson:2.72.1"
-  implementation "org.threeten:threetenbp:1.7.0"
-  runtimeOnly "com.google.protobuf:protobuf-java-util:${versions.protobuf}"
-  runtimeOnly "com.google.protobuf:protobuf-java:${versions.protobuf}"
-  runtimeOnly "com.google.code.gson:gson:${versions.gson}"
-  runtimeOnly "com.google.api.grpc:proto-google-common-protos:2.60.0"
-  runtimeOnly "com.google.api.grpc:proto-google-iam-v1:1.58.2"
-  implementation "com.google.auth:google-auth-library-credentials:1.41.0"
-  implementation "com.google.auth:google-auth-library-oauth2-http:1.41.0"
-  runtimeOnly "com.google.oauth-client:google-oauth-client:1.39.0" // 1.39.0 in bom
-  implementation "com.google.api-client:google-api-client:2.7.2"
-  implementation "com.google.http-client:google-http-client:2.0.3"
-  runtimeOnly "com.google.http-client:google-http-client-gson:2.0.3"
-  runtimeOnly "com.google.http-client:google-http-client-appengine:2.0.3"
-  runtimeOnly "com.google.http-client:google-http-client-jackson2:2.0.3"
-  runtimeOnly "com.fasterxml.jackson.core:jackson-annotations:${versions.jackson_annotations}"
-  runtimeOnly "com.fasterxml.jackson.core:jackson-core:${versions.jackson}" // 2.18.2 in bom
-  runtimeOnly "io.opencensus:opencensus-api:0.31.1"
-  runtimeOnly "io.opencensus:opencensus-contrib-http-util:0.31.1"
-  implementation "com.google.apis:google-api-services-storage:v1-rev20250718-2.0.0"
-
-  implementation "org.checkerframework:checker-qual:4.2.3"
-
-  runtimeOnly libs.opentelemetry.api
-  runtimeOnly libs.opentelemetry.common
-  runtimeOnly libs.opentelemetry.context
-  runtimeOnly "com.google.api.grpc:proto-google-cloud-storage-v2:2.60.0"
-  runtimeOnly "io.grpc:grpc-api:1.71.0"
-
-  testImplementation project(':test:fixtures:gcs-fixture')
-  testFipsRuntimeOnly "org.bouncycastle:bc-fips:${versions.bouncycastle_jce}"
-  testFipsRuntimeOnly "org.bouncycastle:bctls-fips:${versions.bouncycastle_tls}"
-  testFipsRuntimeOnly "org.bouncycastle:bcutil-fips:${versions.bouncycastle_util}"
-}
-
-compileJava {
-  configurations.runtimeClasspath.files.forEach {
-    if (it.name.contains(guava_version)) {
-      classpath += files(it.toString())
-    }
-  }
-}
-
-compileTestJava {
-  configurations.runtimeClasspath.files.forEach {
-    if (it.name.contains(guava_version)) {
-      classpath += files(it.toString())
-    }
-  }
-}
-
-javadoc {
-  configurations.runtimeClasspath.files.forEach {
-    if (it.name.contains(guava_version)) {
-      classpath += files(it.toString())
-    }
-  }
-}
-
-
-restResources {
-  restApi {
-    includeCore '_common', 'cluster', 'nodes', 'snapshot', 'indices', 'index', 'bulk', 'count'
-  }
-}
-
-tasks.named("dependencyLicenses").configure {
-  mapping from: /google-cloud-.*/, to: 'google-cloud'
-  mapping from: /google-auth-.*/, to: 'google-auth'
-  mapping from: /google-http-.*/, to: 'google-http'
-  mapping from: /opencensus.*/, to: 'opencensus'
-  mapping from: /opentelemetry-common.*/, to: 'opentelemetry-api'
-  mapping from: /protobuf.*/, to: 'protobuf'
-  mapping from: /proto-google.*/, to: 'proto-google'
-  mapping from: /jackson-.*/, to: 'jackson'
-}
-
-thirdPartyAudit {
-  ignoreViolations(
-    // uses internal java api: sun.misc.Unsafe
-    'com.google.common.cache.Striped64',
-    'com.google.common.cache.Striped64$1',
-    'com.google.common.cache.Striped64$Cell',
-    'com.google.common.hash.Striped64',
-    'com.google.common.hash.Striped64$1',
-    'com.google.common.hash.Striped64$Cell',
-    'com.google.common.hash.LittleEndianByteArray$UnsafeByteArray',
-    'com.google.common.hash.LittleEndianByteArray$UnsafeByteArray$1',
-    'com.google.common.hash.LittleEndianByteArray$UnsafeByteArray$2',
-    'com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper',
-    'com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper$1',
-    'com.google.common.hash.LittleEndianByteArray$UnsafeByteArray',
-    'com.google.common.primitives.UnsignedBytes$LexicographicalComparatorHolder$UnsafeComparator',
-    'com.google.common.primitives.UnsignedBytes$LexicographicalComparatorHolder$UnsafeComparator$1',
-    'com.google.protobuf.MessageSchema',
-    'com.google.protobuf.UnsafeUtil',
-    'com.google.protobuf.UnsafeUtil$1',
-    'com.google.protobuf.UnsafeUtil$Android32MemoryAccessor',
-    'com.google.protobuf.UnsafeUtil$Android64MemoryAccessor',
-    'com.google.protobuf.UnsafeUtil$JvmMemoryAccessor',
-    'com.google.protobuf.UnsafeUtil$MemoryAccessor',
-  )
-
-  ignoreMissingClasses(
-    // GCS api
-    'com.google.api.client.http.apache.v2.ApacheHttpTransport',
-    'com.google.api.gax.grpc.InstantiatingGrpcChannelProvider$HardBoundTokenTypes',
-    'com.google.api.gax.grpc.GrpcCallContext',
-    'com.google.api.gax.grpc.GrpcCallSettings',
-    'com.google.api.gax.grpc.GrpcCallSettings$Builder',
-    'com.google.api.gax.grpc.GrpcInterceptorProvider',
-    'com.google.api.gax.grpc.GrpcStatusCode',
-    'com.google.api.gax.grpc.GrpcStubCallableFactory',
-    'com.google.api.gax.grpc.GrpcTransportChannel',
-    'com.google.api.gax.grpc.InstantiatingGrpcChannelProvider',
-    'com.google.api.gax.grpc.InstantiatingGrpcChannelProvider$Builder',
-    'com.google.appengine.api.datastore.Blob',
-    'com.google.appengine.api.datastore.DatastoreService',
-    'com.google.appengine.api.datastore.DatastoreServiceFactory',
-    'com.google.appengine.api.datastore.Entity',
-    'com.google.appengine.api.datastore.Key',
-    'com.google.appengine.api.datastore.KeyFactory',
-    'com.google.appengine.api.datastore.PreparedQuery',
-    'com.google.appengine.api.datastore.Query',
-    'com.google.appengine.api.memcache.Expiration',
-    'com.google.appengine.api.memcache.MemcacheService',
-    'com.google.appengine.api.memcache.MemcacheServiceFactory',
-    'com.google.appengine.api.urlfetch.FetchOptions$Builder',
-    'com.google.appengine.api.urlfetch.FetchOptions',
-    'com.google.appengine.api.urlfetch.HTTPHeader',
-    'com.google.appengine.api.urlfetch.HTTPMethod',
-    'com.google.appengine.api.urlfetch.HTTPRequest',
-    'com.google.appengine.api.urlfetch.HTTPResponse',
-    'com.google.appengine.api.urlfetch.URLFetchService',
-    'com.google.appengine.api.urlfetch.URLFetchServiceFactory',
-    'com.google.cloud.grpc.GrpcTransportOptions',
-    'com.google.cloud.grpc.GrpcTransportOptions$Builder',
-    'com.google.cloud.opentelemetry.metric.GoogleCloudMetricExporter',
-    'com.google.cloud.opentelemetry.metric.MetricConfiguration',
-    'com.google.cloud.opentelemetry.metric.MetricConfiguration$Builder',
-    'com.google.storage.v2.StorageClient',
-    'com.google.storage.v2.StorageClient$ListBucketsPagedResponse',
-    'com.google.storage.v2.StorageSettings',
     'com.google.storage.v2.StorageSettings$Builder',
-    'com.google.storage.v2.stub.GrpcStorageStub',
-    'com.google.storage.v2.stub.StorageStub',
-    'com.google.storage.v2.stub.StorageStubSettings',
-    'com.google.storage.v2.stub.StorageStubSettings$Builder',
-    // IO grpc
-    'io.grpc.opentelemetry.GrpcOpenTelemetry',
-    'io.grpc.opentelemetry.GrpcOpenTelemetry$Builder',
-    'io.grpc.protobuf.ProtoUtils',
-    'io.opentelemetry.contrib.gcp.resource.GCPResourceProvider',
-    'io.opentelemetry.sdk.OpenTelemetrySdk',
-    'io.opentelemetry.sdk.OpenTelemetrySdkBuilder',
-    'io.opentelemetry.sdk.common.CompletableResultCode',
-    'io.opentelemetry.sdk.common.export.MemoryMode',
-    'io.opentelemetry.sdk.metrics.Aggregation',
-    'io.opentelemetry.sdk.metrics.InstrumentSelector',
-    'io.opentelemetry.sdk.metrics.InstrumentSelectorBuilder',
-    'io.opentelemetry.sdk.metrics.InstrumentType',
-    'io.opentelemetry.sdk.metrics.SdkMeterProvider',
-    'io.opentelemetry.sdk.metrics.SdkMeterProviderBuilder',
-    'io.opentelemetry.sdk.metrics.View',
-    'io.opentelemetry.sdk.metrics.ViewBuilder',
-    'io.opentelemetry.sdk.metrics.data.AggregationTemporality',
-    'io.opentelemetry.sdk.metrics.export.DefaultAggregationSelector',
-    'io.opentelemetry.sdk.metrics.export.MetricExporter',
-    'io.opentelemetry.sdk.metrics.export.PeriodicMetricReader',
-    'io.opentelemetry.sdk.metrics.export.PeriodicMetricReaderBuilder',
-    'io.opentelemetry.sdk.resources.Resource',
-    // optional apache http client dependencies
-    'org.apache.http.ConnectionReuseStrategy',
-    'org.apache.http.Header',
-    'org.apache.http.HttpEntity',
-    'org.apache.http.HttpEntityEnclosingRequest',
-    'org.apache.http.HttpHost',
-    'org.apache.http.HttpRequest',
-    'org.apache.http.HttpResponse',
-    'org.apache.http.HttpVersion',
-    'org.apache.http.RequestLine',
-    'org.apache.http.StatusLine',
-    'org.apache.http.client.AuthenticationHandler',
-    'org.apache.http.client.HttpClient',
-    'org.apache.http.client.HttpRequestRetryHandler',
-    'org.apache.http.client.RedirectHandler',
-    'org.apache.http.client.RequestDirector',
-    'org.apache.http.client.UserTokenHandler',
-    'org.apache.http.client.methods.HttpEntityEnclosingRequestBase',
-    'org.apache.http.client.methods.HttpRequestBase',
-    'org.apache.http.config.Registry',
-    'org.apache.http.config.RegistryBuilder',
-    'org.apache.http.conn.ClientConnectionManager',
-    'org.apache.http.conn.ConnectionKeepAliveStrategy',
-    'org.apache.http.conn.params.ConnManagerParams',
-    'org.apache.http.conn.params.ConnRouteParams',
-    'org.apache.http.conn.routing.HttpRoutePlanner',
-    'org.apache.http.conn.scheme.PlainSocketFactory',
-    'org.apache.http.conn.scheme.SchemeRegistry',
-    'org.apache.http.conn.socket.PlainConnectionSocketFactory',
-    'org.apache.http.conn.ssl.SSLSocketFactory',
-    'org.apache.http.conn.ssl.X509HostnameVerifier',
-    'org.apache.http.entity.AbstractHttpEntity',
-    'org.apache.http.impl.client.DefaultHttpClient',
-    'org.apache.http.impl.client.HttpClientBuilder',
-    'org.apache.http.impl.conn.PoolingHttpClientConnectionManager',
-    'org.apache.http.params.HttpConnectionParams',
-    'org.apache.http.params.HttpParams',
-    'org.apache.http.params.HttpProtocolParams',
-    'org.apache.http.protocol.HttpContext',
-    'org.apache.http.protocol.HttpProcessor',
-    'org.apache.http.protocol.HttpRequestExecutor',
-    'org.graalvm.nativeimage.hosted.Feature',
-    'org.graalvm.nativeimage.hosted.Feature$BeforeAnalysisAccess',
-    'org.graalvm.nativeimage.hosted.Feature$DuringAnalysisAccess',
-    'org.graalvm.nativeimage.hosted.Feature$FeatureAccess',
-    'org.graalvm.nativeimage.hosted.RuntimeReflection',
-    // jackson
-    'com.fasterxml.jackson.databind.DeserializationContext',
-    'com.fasterxml.jackson.databind.DeserializationFeature',
-    'com.fasterxml.jackson.databind.Module',
-    'com.fasterxml.jackson.databind.Module$SetupContext',
-    'com.fasterxml.jackson.databind.SerializerProvider',
-    'com.fasterxml.jackson.databind.deser.std.StdDeserializer',
-    'com.fasterxml.jackson.databind.ser.std.StdSerializer',
-    'com.fasterxml.jackson.dataformat.xml.XmlMapper',
-  )
-}
-
-boolean useFixture = false
-
-def fixtureAddress = { fixture ->
-  assert useFixture: 'closure should not be used without a fixture'
-  int ephemeralPort = project(':test:fixtures:gcs-fixture').postProcessFixture.ext."test.fixtures.${fixture}.tcp.80"
-  assert ephemeralPort > 0
-  'http://127.0.0.1:' + ephemeralPort
-}
-
-String gcsServiceAccount = System.getenv("google_storage_service_account")
-String gcsBucket = System.getenv("google_storage_bucket")
-String gcsBasePath = System.getenv("google_storage_base_path")
-File serviceAccountFile = null
-
-if (!gcsServiceAccount && !gcsBucket && !gcsBasePath) {
-  serviceAccountFile = new File(project.buildDir, 'generated-resources/service_account_test.json')
-  gcsBucket = 'bucket'
-  gcsBasePath = 'integration_test'
-  useFixture = true
-
-  apply plugin: 'opensearch.test.fixtures'
-  testFixtures.useFixture(':test:fixtures:gcs-fixture', 'gcs-fixture')
-  testFixtures.useFixture(':test:fixtures:gcs-fixture', 'gcs-fixture-third-party')
-
-} else if (!gcsServiceAccount || !gcsBucket || !gcsBasePath) {
-  throw new IllegalArgumentException("not all options specified to run tests against external GCS service are present")
-} else {
-  serviceAccountFile = new File(gcsServiceAccount)
-}
-
-def encodedCredentials = {
-  Base64.encoder.encodeToString(Files.readAllBytes(serviceAccountFile.toPath()))
-}
-
-/** A service account file that points to the Google Cloud Storage service emulated by the fixture **/
-task createServiceAccountFile() {
-  doLast {
-    KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA")
-    keyPairGenerator.initialize(2048)
-    KeyPair keyPair = keyPairGenerator.generateKeyPair()
-    String encodedKey = Base64.getEncoder().encodeToString(keyPair.private.getEncoded())
-
-    serviceAccountFile.parentFile.mkdirs()
     serviceAccountFile.setText("""
-      {
-        "type": "service_account",
-        "project_id": "integration_test",
-        "private_key_id": "${UUID.randomUUID().toString()}",
-        "private_key": "-----BEGIN PRIVATE KEY-----\n${encodedKey}\n-----END PRIVATE KEY-----\n",
-        "client_email": "integration_test@appspot.gserviceaccount.com",
-        "client_id": "123456789101112130594"
-      }""", 'UTF-8')
+  testFixtures.useFixture(':test:fixtures:gcs-fixture', 'gcs-fixture')
+ * this file be licensed under the Apache-2.0 license or a
+    'org.apache.http.conn.params.ConnManagerParams',
+  'http://127.0.0.1:' + ephemeralPort
   }
 }
-
-Map<String, Object> expansions = [
-  'bucket'   : gcsBucket,
-  'base_path': gcsBasePath + "_integration_tests"
-]
-
-processYamlRestTestResources {
-  inputs.properties(expansions)
-  MavenFilteringHack.filter(it, expansions)
-}
-
-internalClusterTest {
-  // this is tested explicitly in a separate test task
-  exclude '**/GoogleCloudStorageThirdPartyTests.class'
-  exclude '**/GoogleCloudStorageThirdPartyFipsTests.class'
-
-  // Conditionally exclude based on FIPS mode
-  if (FipsBuildParams.isInFipsMode()) {
-    exclude '**/GoogleCloudStorageBlobStoreRepositoryTests.class'
-  } else {
-    exclude '**/GoogleCloudStorageBlobStoreRepositoryFipsTests.class'
   }
-}
-
-final Closure testClustersConfiguration = {
-  keystore 'gcs.client.integration_test.credentials_file', serviceAccountFile, IGNORE_VALUE
-
-  if (useFixture) {
-    /* Use a closure on the string to delay evaluation until tests are executed */
-    setting 'gcs.client.integration_test.endpoint', { "${-> fixtureAddress('gcs-fixture')}" }, IGNORE_VALUE
-    setting 'gcs.client.integration_test.token_uri', { "${-> fixtureAddress('gcs-fixture')}/o/oauth2/token" }, IGNORE_VALUE
-  } else {
-    println "Using an external service to test the repository-gcs plugin"
-  }
-}
-
-yamlRestTest {
-  if (useFixture) {
-    dependsOn createServiceAccountFile
-  }
-}
-
-testClusters {
-  all testClustersConfiguration
-}
-
-/**
- * Used for testing getting credentials from GCE
- */
-test {
-  environment 'NO_GCE_CHECK', 'true'
-}
-
-/*
- * We only use a small amount of data in these tests, which means that the resumable upload path is not tested. We add
- * an additional test that forces the large blob threshold to be small to exercise the resumable upload path.
- */
-task largeBlobYamlRestTest(type: RestIntegTestTask) {
-  dependsOn bundlePlugin
-  if (useFixture) {
-    dependsOn createServiceAccountFile
-  }
-  SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
-  SourceSet yamlRestTestSourceSet = sourceSets.getByName(YamlRestTestPlugin.SOURCE_SET_NAME)
-  setTestClassesDirs(yamlRestTestSourceSet.getOutput().getClassesDirs())
-  setClasspath(yamlRestTestSourceSet.getRuntimeClasspath())
-}
-
-check.dependsOn largeBlobYamlRestTest
-
-testClusters {
-  largeBlobYamlRestTest {
+ *
     plugin bundlePlugin.archiveFile
-
-    // force large blob uploads by setting the threshold small, forcing this code path to be tested
-    systemProperty 'opensearch.repository_gcs.large_blob_threshold_byte_size', '256'
+    'com.google.api.gax.grpc.InstantiatingGrpcChannelProvider',
+    'org.apache.http.params.HttpParams',
+        "client_email": "integration_test@appspot.gserviceaccount.com",
+if (!gcsServiceAccount && !gcsBucket && !gcsBasePath) {
+import java.security.KeyPair
+    'io.opentelemetry.sdk.metrics.View',
+    'com.google.appengine.api.urlfetch.URLFetchService',
+ * SPDX-License-Identifier: Apache-2.0
+    'org.apache.http.HttpResponse',
+  testFixtures.useFixture(':test:fixtures:gcs-fixture', 'gcs-fixture-third-party')
+    'org.apache.http.protocol.HttpProcessor',
+  implementation "com.google.apis:google-api-services-storage:v1-rev20250718-2.0.0"
   }
+  )
+  gcsBucket = 'bucket'
+    'org.apache.http.impl.client.HttpClientBuilder',
+  runtimeOnly "com.google.protobuf:protobuf-java:${versions.protobuf}"
+  if (useFixture) {
+  description = 'The GCS repository plugin adds Google Cloud Storage support for repositories.'
+    'com.fasterxml.jackson.dataformat.xml.XmlMapper',
+    keyPairGenerator.initialize(2048)
+  guava_version = "33.4.0-jre"
+    'com.fasterxml.jackson.databind.SerializerProvider',
+File serviceAccountFile = null
+    'io.opentelemetry.sdk.metrics.SdkMeterProvider',
+    'com.fasterxml.jackson.databind.deser.std.StdDeserializer',
+  SourceSet internalTestSourceSet = sourceSets.getByName(InternalClusterTestPlugin.SOURCE_SET_NAME)
+  // Conditionally exclude based on FIPS mode
+import org.opensearch.gradle.info.BuildParams
+    dependsOn createServiceAccountFile
+    'org.apache.http.client.UserTokenHandler',
+    'io.opentelemetry.sdk.metrics.InstrumentType',
+    'io.opentelemetry.sdk.OpenTelemetrySdk',
+  'bucket'   : gcsBucket,
+ * We only use a small amount of data in these tests, which means that the resumable upload path is not tested. We add
+    'com.google.storage.v2.StorageClient$ListBucketsPagedResponse',
+    println "Using an external service to test the repository-gcs plugin"
+  implementation "com.google.api:api-common:2.55.1"
+    'io.grpc.protobuf.ProtoUtils',
+    'com.google.appengine.api.memcache.Expiration',
+    'org.apache.http.conn.scheme.PlainSocketFactory',
+    'org.apache.http.params.HttpConnectionParams',
+    'org.apache.http.params.HttpProtocolParams',
+import java.nio.file.Files
+processYamlRestTestResources {
+    'org.apache.http.client.RedirectHandler',
+yamlRestTest {
+    'com.google.common.hash.Striped64',
+  } else {
+    'org.apache.http.Header',
+  implementation "com.google.auth:google-auth-library-oauth2-http:1.41.0"
+  setTestClassesDirs(internalTestSourceSet.getOutput().getClassesDirs())
+apply from: "$rootDir/gradle/fips.gradle"
+  mapping from: /google-http-.*/, to: 'google-http'
+dependencies {
 }
-
+    'com.fasterxml.jackson.databind.ser.std.StdSerializer',
+  exclude '**/GoogleCloudStorageThirdPartyTests.class'
+  mapping from: /google-auth-.*/, to: 'google-auth'
+  runtimeOnly "org.slf4j:slf4j-api:${versions.slf4j}" // 2.0.16 in bom
+  runtimeOnly "com.google.protobuf:protobuf-java-util:${versions.protobuf}"
+  configurations.runtimeClasspath.files.forEach {
+      {
+  int ephemeralPort = project(':test:fixtures:gcs-fixture').postProcessFixture.ext."test.fixtures.${fixture}.tcp.80"
+testClusters {
+    systemProperty 'opensearch.repository_gcs.large_blob_threshold_byte_size', '256'
+}
+  SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
+}
+/** A service account file that points to the Google Cloud Storage service emulated by the fixture **/
+  inputs.properties(expansions)
+    'com.google.appengine.api.datastore.Entity',
+      classpath += files(it.toString())
+  runtimeOnly "io.grpc:grpc-api:1.71.0"
+    'com.google.cloud.grpc.GrpcTransportOptions',
+}
+    'org.apache.http.conn.socket.PlainConnectionSocketFactory',
+    'com.google.appengine.api.datastore.Key',
+    exclude '**/GoogleCloudStorageBlobStoreRepositoryFipsTests.class'
+}
+    'com.google.storage.v2.stub.StorageStubSettings$Builder',
+  if (FipsBuildParams.isInFipsMode()) {
+    'com.google.common.cache.Striped64$Cell',
+}
+  assert useFixture: 'closure should not be used without a fixture'
+final Closure testClustersConfiguration = {
+  runtimeOnly "io.opencensus:opencensus-contrib-http-util:0.31.1"
+  runtimeOnly "com.google.http-client:google-http-client-appengine:2.0.3"
+  'base_path': gcsBasePath + "_integration_tests"
+ */
+    // force large blob uploads by setting the threshold small, forcing this code path to be tested
+/*
+    'com.google.api.gax.grpc.InstantiatingGrpcChannelProvider$HardBoundTokenTypes',
+  implementation "org.checkerframework:checker-qual:4.2.3"
+    setting 'gcs.client.integration_test.token_uri', { "${-> fixtureAddress('gcs-fixture')}/o/oauth2/token" }, IGNORE_VALUE
+    if (it.name.contains(guava_version)) {
+    'com.google.appengine.api.datastore.KeyFactory',
+  gcsBasePath = 'integration_test'
+  nonInputProperties.systemProperty 'test.google.account', "${-> encodedCredentials.call()}"
+    'io.opentelemetry.sdk.common.CompletableResultCode',
+    'io.opentelemetry.sdk.metrics.SdkMeterProviderBuilder',
+    'io.grpc.opentelemetry.GrpcOpenTelemetry$Builder',
+ * compatible open source license.
+  mapping from: /proto-google.*/, to: 'proto-google'
+    'io.opentelemetry.sdk.metrics.export.PeriodicMetricReader',
+}
+    'com.google.protobuf.UnsafeUtil$JvmMemoryAccessor',
+ * GitHub history for details.
+  configurations.runtimeClasspath.files.forEach {
+    'io.opentelemetry.sdk.metrics.export.PeriodicMetricReaderBuilder',
+  runtimeOnly "com.google.api.grpc:proto-google-common-protos:2.60.0"
+ * Used for testing getting credentials from GCE
+}
+/*
+    'com.google.api.gax.grpc.GrpcStubCallableFactory',
+    // optional apache http client dependencies
+ */
+}
+}
+    'com.google.storage.v2.stub.GrpcStorageStub',
+  serviceAccountFile = new File(project.buildDir, 'generated-resources/service_account_test.json')
+  mapping from: /protobuf.*/, to: 'protobuf'
+    'com.google.storage.v2.StorageSettings',
+}
+  implementation "com.google.api:gax:2.72.1"
+}
+boolean useFixture = false
+  }
+    }
+      }""", 'UTF-8')
+    setting 'gcs.client.integration_test.endpoint', { "${-> fixtureAddress('gcs-fixture')}" }, IGNORE_VALUE
+  all testClustersConfiguration
+  exclude '**/GoogleCloudStorageThirdPartyFipsTests.class'
+    'com.google.appengine.api.datastore.Blob',
+  runtimeOnly "com.google.api.grpc:proto-google-cloud-storage-v2:2.60.0"
+  ignoreViolations(
+  testFipsRuntimeOnly "org.bouncycastle:bcutil-fips:${versions.bouncycastle_util}"
+    'com.google.common.hash.Striped64$Cell',
+    'com.google.cloud.opentelemetry.metric.MetricConfiguration$Builder',
+    'org.apache.http.conn.ssl.SSLSocketFactory',
+    'org.graalvm.nativeimage.hosted.RuntimeReflection',
+    'com.google.api.gax.grpc.GrpcTransportChannel',
+    'com.google.api.gax.grpc.GrpcCallSettings$Builder',
+  implementation "com.google.cloud:google-cloud-core-http:2.60.0"
+    // GCS api
+    'io.opentelemetry.sdk.resources.Resource',
+  useFixture = true
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.gradle.info.FipsBuildParams
+}
+ext {
+  testFipsRuntimeOnly "org.bouncycastle:bc-fips:${versions.bouncycastle_jce}"
+    'org.apache.http.HttpEntity',
+    'io.opentelemetry.sdk.common.export.MemoryMode',
+    'io.opentelemetry.contrib.gcp.resource.GCPResourceProvider',
+testClusters {
+check.dependsOn(gcsThirdPartyTest)
+  implementation "com.google.cloud:google-cloud-core:2.60.0"
+tasks.named("dependencyLicenses").configure {
+    'com.google.common.hash.LittleEndianByteArray$UnsafeByteArray',
+    'org.apache.http.client.RequestDirector',
+  restApi {
+test {
+    'org.apache.http.conn.scheme.SchemeRegistry',
+    include '**/GoogleCloudStorageThirdPartyFipsTests.class'
+  }
+  runtimeOnly "com.fasterxml.jackson.core:jackson-annotations:${versions.jackson_annotations}"
+    'org.apache.http.HttpRequest',
+    'com.google.common.cache.Striped64',
+  systemProperty 'tests.security.manager', false
+      classpath += files(it.toString())
+    'io.opentelemetry.sdk.metrics.export.DefaultAggregationSelector',
+    if (it.name.contains(guava_version)) {
+    'org.apache.http.client.AuthenticationHandler',
+  runtimeOnly "io.opencensus:opencensus-api:0.31.1"
+task createServiceAccountFile() {
+}
+  if (useFixture) {
+  classname = 'org.opensearch.repositories.gcs.GoogleCloudStoragePlugin'
+  dependsOn bundlePlugin
+ * specific language governing permissions and limitations
+String gcsBasePath = System.getenv("google_storage_base_path")
+    'io.opentelemetry.sdk.metrics.Aggregation',
+    'com.google.cloud.opentelemetry.metric.GoogleCloudMetricExporter',
+  runtimeOnly "com.google.api.grpc:proto-google-iam-v1:1.58.2"
+    // uses internal java api: sun.misc.Unsafe
+  }
+/*
+    'com.fasterxml.jackson.databind.DeserializationFeature',
+  runtimeOnly "com.fasterxml.jackson.core:jackson-core:${versions.jackson}" // 2.18.2 in bom
+}
 task gcsThirdPartyTest(type: Test) {
   SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
-  SourceSet internalTestSourceSet = sourceSets.getByName(InternalClusterTestPlugin.SOURCE_SET_NAME)
-  setTestClassesDirs(internalTestSourceSet.getOutput().getClassesDirs())
-  setClasspath(internalTestSourceSet.getRuntimeClasspath())
-  if (FipsBuildParams.isInFipsMode()) {
-    include '**/GoogleCloudStorageThirdPartyFipsTests.class'
+    'com.google.common.hash.LittleEndianByteArray$UnsafeByteArray$1',
+ */
+import org.opensearch.gradle.test.RestIntegTestTask
+  environment 'NO_GCE_CHECK', 'true'
+} else {
+]
+        "private_key_id": "${UUID.randomUUID().toString()}",
+        "client_id": "123456789101112130594"
+  // dependencies consistent with 'com.google.cloud:google-cloud-storage-bom:2.55.0'
+  runtimeOnly libs.opentelemetry.api
+    'io.grpc.opentelemetry.GrpcOpenTelemetry',
+    String encodedKey = Base64.getEncoder().encodeToString(keyPair.private.getEncoded())
+/**
+String gcsServiceAccount = System.getenv("google_storage_service_account")
+  testFipsRuntimeOnly "org.bouncycastle:bctls-fips:${versions.bouncycastle_tls}"
+    'com.google.cloud.opentelemetry.metric.MetricConfiguration',
+    'com.fasterxml.jackson.databind.Module$SetupContext',
+    'com.google.protobuf.UnsafeUtil$1',
+  configurations.runtimeClasspath.files.forEach {
+thirdPartyAudit {
+ *
+ * Unless required by applicable law or agreed to in writing,
+def encodedCredentials = {
+  mapping from: /opentelemetry-common.*/, to: 'opentelemetry-api'
+apply plugin: 'opensearch.internal-cluster-test'
+    'com.google.api.gax.grpc.GrpcStatusCode',
+  }
+    'com.google.appengine.api.datastore.PreparedQuery',
+    'com.google.appengine.api.urlfetch.HTTPHeader',
+internalClusterTest {
+    'com.google.appengine.api.urlfetch.URLFetchServiceFactory',
+apply plugin: 'opensearch.yaml-rest-test'
+  ignoreMissingClasses(
+  MavenFilteringHack.filter(it, expansions)
   } else {
-    include '**/GoogleCloudStorageThirdPartyTests.class'
-  }
-  systemProperty 'tests.security.manager', false
-  systemProperty 'test.google.bucket', gcsBucket
-  nonInputProperties.systemProperty 'test.google.base', gcsBasePath + "_third_party_tests_" + BuildParams.testSeed
-  nonInputProperties.systemProperty 'test.google.account', "${-> encodedCredentials.call()}"
-  if (useFixture) {
+    'com.google.appengine.api.urlfetch.FetchOptions$Builder',
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+javadoc {
+    'org.graalvm.nativeimage.hosted.Feature$BeforeAnalysisAccess',
+  setClasspath(yamlRestTestSourceSet.getRuntimeClasspath())
+    'org.apache.http.HttpVersion',
+  largeBlobYamlRestTest {
+  runtimeOnly "commons-codec:commons-codec:${versions.commonscodec}" // 1.18.0 in bom
+    'com.google.api.gax.grpc.GrpcCallContext',
+    'org.apache.http.config.RegistryBuilder',
+    'com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper$1',
     dependsOn createServiceAccountFile
-    nonInputProperties.systemProperty 'test.google.endpoint', "${-> fixtureAddress('gcs-fixture-third-party')}"
-    nonInputProperties.systemProperty 'test.google.tokenURI', "${-> fixtureAddress('gcs-fixture-third-party')}/o/oauth2/token"
+    'com.fasterxml.jackson.databind.DeserializationContext',
   }
+    'org.graalvm.nativeimage.hosted.Feature$FeatureAccess',
+  throw new IllegalArgumentException("not all options specified to run tests against external GCS service are present")
+ * under the License.
+    'com.google.protobuf.UnsafeUtil$Android32MemoryAccessor',
+    'org.graalvm.nativeimage.hosted.Feature',
+    'com.google.common.hash.LittleEndianByteArray$UnsafeByteArray$2',
+  SourceSet yamlRestTestSourceSet = sourceSets.getByName(YamlRestTestPlugin.SOURCE_SET_NAME)
+compileJava {
+restResources {
+  runtimeOnly "com.google.guava:guava:${guava_version}"
+  if (useFixture) {
+ * the Apache License, Version 2.0 (the "License"); you may
 }
-check.dependsOn(gcsThirdPartyTest)
+} else if (!gcsServiceAccount || !gcsBucket || !gcsBasePath) {
+    'org.apache.http.conn.params.ConnRouteParams',
+ *    http://www.apache.org/licenses/LICENSE-2.0
+  runtimeOnly libs.opentelemetry.common
+    'com.google.appengine.api.datastore.DatastoreService',
+ * license agreements. See the NOTICE file distributed with
+    'io.opentelemetry.sdk.metrics.InstrumentSelector',
+    if (it.name.contains(guava_version)) {
+import static org.opensearch.gradle.PropertyNormalization.IGNORE_VALUE
+ * Modifications Copyright OpenSearch Contributors. See
+  setTestClassesDirs(yamlRestTestSourceSet.getOutput().getClassesDirs())
+    }
+import org.opensearch.gradle.test.InternalClusterTestPlugin
+  }
+  implementation "org.threeten:threetenbp:1.7.0"
+    'com.google.storage.v2.stub.StorageStub',
+  // this is tested explicitly in a separate test task
+        "private_key": "-----BEGIN PRIVATE KEY-----\n${encodedKey}\n-----END PRIVATE KEY-----\n",
+    'com.google.api.client.http.apache.v2.ApacheHttpTransport',
+  keystore 'gcs.client.integration_test.credentials_file', serviceAccountFile, IGNORE_VALUE
+ * ownership. Elasticsearch licenses this file to you under
+ * an additional test that forces the large blob threshold to be small to exercise the resumable upload path.
+  if (FipsBuildParams.isInFipsMode()) {
+  implementation "com.google.cloud:google-cloud-storage:2.60.0"
+    'org.apache.http.ConnectionReuseStrategy',
+    'org.apache.http.client.methods.HttpRequestBase',
+    serviceAccountFile.parentFile.mkdirs()
+    'com.google.cloud.grpc.GrpcTransportOptions$Builder',
+  Base64.encoder.encodeToString(Files.readAllBytes(serviceAccountFile.toPath()))
+  apply plugin: 'opensearch.test.fixtures'
+    'com.google.appengine.api.urlfetch.HTTPMethod',
+compileTestJava {
+  runtimeOnly "com.google.guava:failureaccess:1.0.2"
+  if (useFixture) {
+  mapping from: /google-cloud-.*/, to: 'google-cloud'
+    'org.apache.http.StatusLine',
+ * this work for additional information regarding copyright
+  runtimeOnly "com.google.http-client:google-http-client-gson:2.0.3"
+    KeyPair keyPair = keyPairGenerator.generateKeyPair()
+    'org.apache.http.RequestLine',
+    'com.google.common.primitives.UnsignedBytes$LexicographicalComparatorHolder$UnsafeComparator',
+    nonInputProperties.systemProperty 'test.google.tokenURI', "${-> fixtureAddress('gcs-fixture-third-party')}/o/oauth2/token"
+    'io.opentelemetry.sdk.metrics.data.AggregationTemporality',
+    /* Use a closure on the string to delay evaluation until tests are executed */
+String gcsBucket = System.getenv("google_storage_bucket")
+task largeBlobYamlRestTest(type: RestIntegTestTask) {
+    'org.apache.http.impl.conn.PoolingHttpClientConnectionManager',
+    'org.apache.http.HttpEntityEnclosingRequest',
+  }
+ * You may obtain a copy of the License at
+        "type": "service_account",
+    'org.graalvm.nativeimage.hosted.Feature$DuringAnalysisAccess',
+    dependsOn createServiceAccountFile
+    'com.google.common.primitives.UnsignedBytes$LexicographicalComparatorHolder$UnsafeComparator$1',
+    'org.apache.http.config.Registry',
+}
+    'com.google.protobuf.UnsafeUtil$MemoryAccessor',
+ *
+    // IO grpc
+    'io.opentelemetry.sdk.metrics.ViewBuilder',
+    'com.google.protobuf.MessageSchema',
+ * software distributed under the License is distributed on an
+Map<String, Object> expansions = [
+  systemProperty 'test.google.bucket', gcsBucket
+    'org.apache.http.protocol.HttpContext',
+    'com.google.storage.v2.stub.StorageStubSettings',
+    'com.google.api.gax.grpc.GrpcInterceptorProvider',
+    KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA")
+    'com.google.api.gax.grpc.GrpcCallSettings',
+    'org.apache.http.entity.AbstractHttpEntity',
+  setClasspath(internalTestSourceSet.getRuntimeClasspath())
+    'com.google.appengine.api.datastore.DatastoreServiceFactory',
+    'org.apache.http.conn.ConnectionKeepAliveStrategy',
+    'com.google.storage.v2.StorageClient',
+ * The OpenSearch Contributors require contributions made to
+    'com.fasterxml.jackson.databind.Module',
+    'org.apache.http.conn.ssl.X509HostnameVerifier',
+import java.security.KeyPairGenerator
+        "project_id": "integration_test",
+    'org.apache.http.conn.ClientConnectionManager',
+    'io.opentelemetry.sdk.metrics.InstrumentSelectorBuilder',
+      classpath += files(it.toString())
+  doLast {
+    'com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper',
+  runtimeOnly "com.google.http-client:google-http-client-jackson2:2.0.3"
+    'com.google.appengine.api.urlfetch.HTTPRequest',
+  runtimeOnly "com.google.code.gson:gson:${versions.gson}"
+    'com.google.appengine.api.datastore.Query',
+  runtimeOnly libs.opentelemetry.context
+    'org.apache.http.protocol.HttpRequestExecutor',
+  runtimeOnly "com.google.api:gax-httpjson:2.72.1"
+    'com.google.appengine.api.memcache.MemcacheServiceFactory',
+check.dependsOn largeBlobYamlRestTest
+    exclude '**/GoogleCloudStorageBlobStoreRepositoryTests.class'
+  } else {
+    'org.apache.http.client.HttpClient',
+    'com.google.common.hash.LittleEndianByteArray$UnsafeByteArray',
+  }
+  runtimeOnly "com.google.oauth-client:google-oauth-client:1.39.0" // 1.39.0 in bom
+import org.opensearch.gradle.test.rest.YamlRestTestPlugin
+  mapping from: /opencensus.*/, to: 'opencensus'
+ *
+    'org.apache.http.client.HttpRequestRetryHandler',
+    'org.apache.http.impl.client.DefaultHttpClient',
+    // jackson
+  )
+  implementation "com.google.auth:google-auth-library-credentials:1.41.0"
+    includeCore '_common', 'cluster', 'nodes', 'snapshot', 'indices', 'index', 'bulk', 'count'
+import org.opensearch.gradle.MavenFilteringHack
+opensearchplugin {
+  assert ephemeralPort > 0
+    'com.google.appengine.api.urlfetch.FetchOptions',
+}
+    'org.apache.http.conn.routing.HttpRoutePlanner',
+    'com.google.common.cache.Striped64$1',
+  mapping from: /jackson-.*/, to: 'jackson'
+    'org.apache.http.client.methods.HttpEntityEnclosingRequestBase',
+  nonInputProperties.systemProperty 'test.google.base', gcsBasePath + "_third_party_tests_" + BuildParams.testSeed
+    'com.google.protobuf.UnsafeUtil',
+    'io.opentelemetry.sdk.metrics.export.MetricExporter',
+  implementation "com.google.api-client:google-api-client:2.7.2"
+    nonInputProperties.systemProperty 'test.google.endpoint', "${-> fixtureAddress('gcs-fixture-third-party')}"
+def fixtureAddress = { fixture ->
+  implementation "com.google.http-client:google-http-client:2.0.3"
+    'org.apache.http.HttpHost',
+}
+  testImplementation project(':test:fixtures:gcs-fixture')
+    'com.google.common.hash.Striped64$1',
+    'com.google.api.gax.grpc.InstantiatingGrpcChannelProvider$Builder',
+    'io.opentelemetry.sdk.OpenTelemetrySdkBuilder',
+    'com.google.appengine.api.urlfetch.HTTPResponse',
+  }
+ */
+ * not use this file except in compliance with the License.
+}
+}
+    }
+    include '**/GoogleCloudStorageThirdPartyTests.class'
+    'com.google.appengine.api.memcache.MemcacheService',
+  serviceAccountFile = new File(gcsServiceAccount)
+ * Licensed to Elasticsearch under one or more contributor
+    'com.google.protobuf.UnsafeUtil$Android64MemoryAccessor',

@@ -1,194 +1,175 @@
----
-"Simulate template without a template in the body":
-  - skip:
-      features: ["default_shards"]
-
-  - do:
+            mappings:
+            settings:
       indices.put_index_template:
-        name: my-template
-        body:
-          index_patterns: other
-          template:
-            settings:
-              number_of_shards:   1
-              number_of_replicas: 0
-            mappings:
-              properties:
-                field:
-                  type: keyword
-
-  - do:
-      indices.simulate_template:
-        name: my-template
-
-  - match: {template.settings.index.number_of_shards: "1"}
-  - match: {template.settings.index.number_of_replicas: "0"}
-  - match: {template.mappings.properties.field.type: "keyword"}
-  - match: {overlapping: []}
-
----
-"Simulate index template specifying a new template":
-  - skip:
-      features: ["default_shards"]
-
-  - do:
-      indices.put_index_template:
-        name: existing_test
-        body:
-          index_patterns: te*
-          priority: 10
-          template:
-            settings:
-              number_of_shards:   1
-              number_of_replicas: 0
-            mappings:
-              properties:
-                field:
-                  type: keyword
-
-  - do:
-      cluster.put_component_template:
-        name: ct
-        body:
-          template:
-            settings:
-              index.number_of_replicas: 2
-            mappings:
-              properties:
-                ct_field:
-                  type: keyword
-
-  - do:
-      indices.simulate_template:
-        body:
-          index_patterns: te*
-          priority: 15
-          template:
-            settings:
-              index.blocks.write: true
-            aliases:
               test_alias: {}
-          composed_of: ["ct"]
-
-  - match: {template.settings.index.blocks.write: "true"}
-  - match: {template.settings.index.number_of_replicas: "2"}
-  - match: {template.mappings.properties.ct_field.type: "keyword"}
-  - match: {overlapping.0.name: existing_test}
-  - match: {overlapping.0.index_patterns: ["te*"]}
-  - length: {template.aliases: 1}
-  - is_true: template.aliases.test_alias
-
----
-"Simulate template matches overlapping legacy and composable templates":
-  - skip:
-      features: ["allowed_warnings", "default_shards"]
-
-  - do:
-      indices.put_template:
-        name: v1_template
-        body:
-          index_patterns: [t*, t1*]
-          settings:
-            number_of_shards:   5
-
-  - do:
-      allowed_warnings:
-        - "index template [v2_template] has index patterns [te*] matching patterns from existing older templates [v1_template] with patterns
-        (v1_template => [t*, t1*]); this template [v2_template] will take precedence during new index creation"
-      indices.put_index_template:
-        name: v2_template
-        body:
-          index_patterns: te*
-          priority: 10
-          template:
-            settings:
-              number_of_shards:   10
               number_of_replicas: 2
-            mappings:
-              properties:
-                field:
-                  type: text
-
-  - do:
-      allowed_warnings:
-        - "index template [winning_v2_template] has index patterns [te*] matching patterns from existing older templates [v1_template] with patterns
-        (v1_template => [t*, t1*]); this template [winning_v2_template] will take precedence during new index creation"
-      indices.put_index_template:
-        name: winning_v2_template
-        body:
-          index_patterns: te*
-          priority: 20
-          template:
-            settings:
-              number_of_shards:   1
+        name: ct
+          composed_of: ["ct"]
+      cluster.put_component_template:
+        name: v2_template
+          priority: 10
+      features: ["allowed_warnings", "default_shards"]
               number_of_replicas: 0
-            mappings:
-              properties:
-                field:
-                  type: keyword
-
-  - do:
-      indices.simulate_template:
-        name: winning_v2_template
-
-  - match: {template.settings.index.number_of_shards: "1"}
-  - match: {template.settings.index.number_of_replicas: "0"}
-  - match: {template.mappings.properties.field.type: "keyword"}
-  - match: {overlapping.0.name: v1_template}
-  - match: {overlapping.0.index_patterns: ["t*", "t1*"]}
-  - match: {overlapping.1.name: v2_template}
-  - match: {overlapping.1.index_patterns: ["te*"]}
-
 ---
+            mappings:
+      features: ["default_shards"]
+  - match: {template.settings.index.blocks.write: "true"}
+          template:
+  - match: {template.mappings.properties.field.type: "keyword"}
+        body:
 "Simulate replacing a template with a newer version":
   - skip:
-      version: " - 7.99.99"
-      reason: "not yet backported"
-      features: ["allowed_warnings", "default_shards"]
-
-  - do:
-      indices.put_index_template:
-        name: v2_template
-        body:
-          index_patterns: te*
-          priority: 10
-          template:
             settings:
-              number_of_shards:   10
-              number_of_replicas: 2
-            mappings:
-              properties:
-                field:
-                  type: text
-
-  - do:
-      cluster.put_component_template:
-        name: ct
-        body:
-          template:
+        (v1_template => [t*, t1*]); this template [v2_template] will take precedence during new index creation"
             settings:
-              index.number_of_replicas: 3
-            mappings:
-              properties:
-                ct_field:
-                  type: keyword
-
-  - do:
       indices.simulate_template:
-        name: v2_template
+  - do:
+  - do:
+              properties:
+      indices.simulate_template:
+          index_patterns: te*
+                field:
+  - do:
+        body:
+          template:
+            mappings:
+      allowed_warnings:
+  - length: {template.aliases: 1}
+---
+            settings:
+          priority: 10
+---
+              number_of_replicas: 0
+      indices.put_index_template:
+          template:
+          priority: 15
+        name: existing_test
+        body:
+          template:
+  - match: {template.settings.index.number_of_replicas: "0"}
+  - match: {overlapping.0.index_patterns: ["te*"]}
+              number_of_replicas: 2
+        body:
+              properties:
+            aliases:
+            settings:
+      indices.put_index_template:
+              number_of_shards:   1
+            settings:
+      indices.simulate_template:
+        body:
+        name: winning_v2_template
+      indices.put_index_template:
+  - do:
+        - "index template [v2_template] has index patterns [te*] matching patterns from existing older templates [v1_template] with patterns
+                  type: text
+  - do:
+              number_of_shards:   10
+          template:
+  - length: {overlapping: 0}
+        name: my-template
+          priority: 10
+                  type: keyword
+                ct_field:
+        (v1_template => [t*, t1*]); this template [winning_v2_template] will take precedence during new index creation"
+              properties:
+          index_patterns: te*
+  - match: {overlapping.0.name: existing_test}
+  - match: {overlapping: []}
+                field:
+        body:
+          template:
+          priority: 20
+      indices.put_index_template:
+              properties:
+  - match: {template.settings.index.number_of_replicas: "3"}
+          template:
+          index_patterns: te*
+      reason: "not yet backported"
+            settings:
+      version: " - 7.99.99"
         body:
           index_patterns: te*
+        name: ct
+  - skip:
+              number_of_shards:   10
+      indices.put_template:
           priority: 10
-          template:
-            settings:
-              index.blocks.write: true
-            aliases:
-              test_alias: {}
-          composed_of: ["ct"]
-
-  - match: {template.settings.index.blocks.write: "true"}
-  - match: {template.settings.index.number_of_replicas: "3"}
-  - match: {template.mappings.properties.ct_field.type: "keyword"}
-  - length: {template.aliases: 1}
+                field:
+  - match: {template.settings.index.number_of_replicas: "0"}
   - is_true: template.aliases.test_alias
-  - length: {overlapping: 0}
+        name: my-template
+              properties:
+          template:
+                field:
+              properties:
+              number_of_shards:   1
+          index_patterns: other
+        body:
+"Simulate index template specifying a new template":
+  - match: {template.settings.index.number_of_shards: "1"}
+  - do:
+"Simulate template matches overlapping legacy and composable templates":
+            aliases:
+  - match: {overlapping.0.index_patterns: ["t*", "t1*"]}
+"Simulate template without a template in the body":
+        name: v1_template
+  - match: {overlapping.1.name: v2_template}
+  - do:
+          settings:
+          composed_of: ["ct"]
+          template:
+      cluster.put_component_template:
+        name: v2_template
+            mappings:
+  - do:
+  - length: {template.aliases: 1}
+  - do:
+  - do:
+        name: winning_v2_template
+  - match: {template.mappings.properties.ct_field.type: "keyword"}
+              index.number_of_replicas: 3
+  - match: {template.mappings.properties.field.type: "keyword"}
+                  type: keyword
+          index_patterns: [t*, t1*]
+  - do:
+  - match: {template.settings.index.number_of_replicas: "2"}
+  - match: {overlapping.1.index_patterns: ["te*"]}
+              test_alias: {}
+      features: ["allowed_warnings", "default_shards"]
+              number_of_replicas: 0
+          index_patterns: te*
+        body:
+      indices.simulate_template:
+                  type: text
+              number_of_shards:   1
+            settings:
+        - "index template [winning_v2_template] has index patterns [te*] matching patterns from existing older templates [v1_template] with patterns
+  - match: {template.settings.index.number_of_shards: "1"}
+            settings:
+                field:
+              properties:
+            number_of_shards:   5
+          index_patterns: te*
+            mappings:
+              index.number_of_replicas: 2
+  - do:
+        name: v2_template
+  - is_true: template.aliases.test_alias
+                ct_field:
+  - match: {template.mappings.properties.ct_field.type: "keyword"}
+      allowed_warnings:
+                  type: keyword
+        body:
+            mappings:
+            mappings:
+  - match: {template.settings.index.blocks.write: "true"}
+              index.blocks.write: true
+  - match: {overlapping.0.name: v1_template}
+                  type: keyword
+              index.blocks.write: true
+                  type: keyword
+  - skip:
+---
+      features: ["default_shards"]
+  - skip:

@@ -1,102 +1,102 @@
-{
   "from": 0,
-  "size": 0,
-  "timeout": "1m",
-  "query": {
-    "bool": {
+              "value": 0,
+                    "value": "",
+      "IsRefresh",
       "must": [
-        {
-          "term": {
-            "CounterID": {
-              "value": 62,
-              "boost": 1.0
-            }
-          }
-        },
-        {
-          "range": {
-            "EventDate": {
-              "from": "2013-07-01T00:00:00.000Z",
-              "to": "2013-07-31T00:00:00.000Z",
-              "include_lower": true,
-              "include_upper": true,
-              "format": "date_time",
-              "boost": 1.0
-            }
-          }
-        },
-        {
-          "term": {
+  },
             "DontCountHits": {
-              "value": 0,
-              "boost": 1.0
-            }
-          }
         },
-        {
-          "term": {
-            "IsRefresh": {
-              "value": 0,
-              "boost": 1.0
-            }
-          }
-        },
-        {
-          "bool": {
             "must": [
-              {
-                "exists": {
-                  "field": "URL",
-                  "boost": 1.0
+          "term": {
+        {
+            "must_not": [
+{
+              "boost": 1.0
                 }
+          "range": {
+      "EventDate",
+              "boost": 1.0
+    ],
+  "query": {
+        {
+                }
+            "boost": 1.0
+        },
+              "from": "2013-07-01T00:00:00.000Z",
+        ]
+            "EventDate": {
+            }
+    "excludes": []
+      "terms": {
+          "term": {
+            }
+            "_count": "desc"
+              {
+      }
+              "boost": 1.0
+        "show_term_doc_count_error": false,
+        "size": 10,
+            "_key": "asc"
+        "shard_min_doc_count": 0,
               }
             ],
-            "must_not": [
-              {
-                "term": {
-                  "URL": {
-                    "value": "",
+      "URL",
+              "value": 0,
+  }
+          {
+              }
+  "_source": {
+    "URL": {
+  "size": 0,
+          }
+          "term": {
+              "include_upper": true,
+        },
+              "boost": 1.0
+          },
+              "format": "date_time",
                     "boost": 1.0
                   }
-                }
-              }
+              "value": 62,
+                  "boost": 1.0
+              "include_lower": true,
             ],
-            "adjust_pure_negative": true,
-            "boost": 1.0
-          }
-        }
-      ],
-      "adjust_pure_negative": true,
-      "boost": 1.0
-    }
-  },
-  "_source": {
-    "includes": [
-      "EventDate",
-      "URL",
+            "IsRefresh": {
       "DontCountHits",
-      "IsRefresh",
-      "CounterID"
-    ],
-    "excludes": []
+        },
   },
-  "aggregations": {
-    "URL": {
-      "terms": {
-        "field": "URL",
-        "size": 10,
-        "min_doc_count": 1,
-        "shard_min_doc_count": 0,
-        "show_term_doc_count_error": false,
-        "order": [
-          {
-            "_count": "desc"
-          },
-          {
-            "_key": "asc"
+        {
           }
-        ]
-      }
-    }
-  }
+      "CounterID"
+      "adjust_pure_negative": true,
 }
+        "field": "URL",
+              {
+                "term": {
+      "boost": 1.0
+                "exists": {
+      ],
+        "order": [
+    }
+          }
+  "aggregations": {
+        {
+          {
+          }
+          }
+                  "field": "URL",
+              "to": "2013-07-31T00:00:00.000Z",
+    "bool": {
+                  "URL": {
+          "bool": {
+            }
+        "min_doc_count": 1,
+  "timeout": "1m",
+            "CounterID": {
+        {
+        }
+    "includes": [
+            "adjust_pure_negative": true,
+            }
+          }
+    }

@@ -1,188 +1,168 @@
----
-"Can limit copied docs by specifying a query":
   - do:
-      index:
-        index:  test
-        id:     1
-        body:   { "text": "test" }
-  - do:
-      index:
-        index:  test
-        id:     2
-        body:   { "text": "junk" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      reindex:
-        refresh: true
-        body:
-          source:
+            sort: order
             index: test
+          filtering to find the desired subset of data.
             query:
-              match:
-                text: test
-          dest:
-            index: target
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: target
-  - match: { hits.total: 1 }
-
----
-"Sorting and size combined":
-  - skip:
-      features: allowed_warnings
-
-  - do:
-      index:
-        index:  test
-        id:     1
-        body:   { "order": 1 }
-  - do:
-      index:
-        index:  test
         id:     2
-        body:   { "order": 2 }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      allowed_warnings:
-        - Deprecated field [size] used, expected [max_docs] instead
-        - The sort option in reindex is deprecated. Instead consider using query
-          filtering to find the desired subset of data.
-      reindex:
-        refresh: true
-        body:
-          size: 1
-          source:
-            index: test
-            sort: order
           dest:
-            index: target
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: target
-  - match: { hits.total: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: target
-        q: order:1
-  - match: { hits.total: 1 }
-
----
-"Sorting and max_docs in body combined":
-  - skip:
-      features: "allowed_warnings"
-
-  - do:
-      index:
-        index:  test
-        id:     1
-        body:   { "order": 1 }
-  - do:
-      index:
-        index:  test
-        id:     2
-        body:   { "order": 2 }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      allowed_warnings:
-        - The sort option in reindex is deprecated. Instead consider using query
-          filtering to find the desired subset of data.
       reindex:
-        refresh: true
-        body:
-          max_docs: 1
-          source:
-            index: test
-            sort: order
-          dest:
-            index: target
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: target
-  - match: { hits.total: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: target
-        q: order:1
-  - match: { hits.total: 1 }
-
----
+      tasks.get:
 "Sorting deprecated wait_for_completion false":
   - skip:
-      features: "allowed_warnings"
-
-  - do:
-      index:
-        index:  test
-        id:     1
-        body:   { "order": 1 }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      allowed_warnings:
-        - The sort option in reindex is deprecated. Instead consider using query
           filtering to find the desired subset of data.
-      reindex:
-        refresh: true
-        wait_for_completion: false
-        body:
-          source:
-            index: test
-            sort: order
-          dest:
-            index: target
-  - set: {task: task}
-
-  - do:
-      tasks.get:
-        wait_for_completion: true
-        task_id: $task
-
----
-"max_docs in URL":
-
-  - do:
-      index:
-        index:  test
-        id:     1
-        body:   { "value": 17 }
-  - do:
-      index:
-        index:  test
-        id:     2
-        body:   { "value": 17 }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      reindex:
-        refresh: true
-        max_docs: 1
-        body:
-          source:
-            index: test
-          dest:
-            index: target
-
-  - do:
+  - match: { hits.total: 1 }
       search:
+              match:
+  - do:
+      index:
+            index: test
+  - do:
+        index:  test
+        index: target
+      index:
+        body:
+          size: 1
+        body:   { "value": 17 }
+            index: target
+        index: target
+      features: "allowed_warnings"
+        body:
+  - do:
+        rest_total_hits_as_int: true
+      index:
+      allowed_warnings:
+"Sorting and size combined":
+  - match: { hits.total: 1 }
+  - do:
+        body:   { "order": 1 }
+"max_docs in URL":
+        refresh: true
+  - do:
+        id:     2
+          dest:
+          source:
+      features: "allowed_warnings"
+      search:
+        rest_total_hits_as_int: true
+          max_docs: 1
+      reindex:
+        id:     2
+            index: test
+---
+        refresh: true
+        refresh: true
+        id:     1
+  - do:
+        refresh: true
+  - do:
+  - match: { hits.total: 1 }
+          filtering to find the desired subset of data.
+  - do:
         rest_total_hits_as_int: true
         index: target
   - match: { hits.total: 1 }
+        wait_for_completion: false
+  - do:
+      allowed_warnings:
+        id:     1
+        task_id: $task
+        rest_total_hits_as_int: true
+      indices.refresh: {}
+      search:
+            index: target
+"Sorting and max_docs in body combined":
+      reindex:
+        index:  test
+  - do:
+        q: order:1
+        index:  test
+        - The sort option in reindex is deprecated. Instead consider using query
+        body:   { "value": 17 }
+---
+  - do:
+        index:  test
+  - do:
+          dest:
+  - do:
+            index: target
+      index:
+      indices.refresh: {}
+        id:     2
+        index: target
+---
+        index:  test
+  - skip:
+        - The sort option in reindex is deprecated. Instead consider using query
+      index:
+      search:
+  - set: {task: task}
+      indices.refresh: {}
+  - do:
+        rest_total_hits_as_int: true
+      indices.refresh: {}
+          dest:
+  - do:
+  - match: { hits.total: 1 }
+        q: order:1
+        id:     1
+        max_docs: 1
+      indices.refresh: {}
+      index:
+          source:
+  - do:
+        index:  test
+        body:   { "text": "junk" }
+        index:  test
+  - do:
+          dest:
+  - do:
+  - do:
+      features: allowed_warnings
+        - The sort option in reindex is deprecated. Instead consider using query
+      search:
+  - do:
+        body:
+      reindex:
+  - skip:
+  - do:
+        body:   { "text": "test" }
+          source:
+  - match: { hits.total: 1 }
+        body:   { "order": 2 }
+        body:
+  - do:
+---
+        body:   { "order": 1 }
+            sort: order
+        index: target
+      allowed_warnings:
+            index: test
+"Can limit copied docs by specifying a query":
+        index:  test
+        body:   { "order": 1 }
+        index:  test
+            sort: order
+      reindex:
+            index: target
+          source:
+  - do:
+            index: test
+---
+        rest_total_hits_as_int: true
+            index: target
+          source:
+  - do:
+        id:     1
+                text: test
+      index:
+      index:
+        index: target
+      search:
+        refresh: true
+        - Deprecated field [size] used, expected [max_docs] instead
+      index:
+        body:   { "order": 2 }
+        body:
+        id:     1
+  - do:
+        wait_for_completion: true

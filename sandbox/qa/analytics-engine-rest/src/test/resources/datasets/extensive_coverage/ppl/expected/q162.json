@@ -1,28 +1,28 @@
+    [
+      "{\"name\":\"item3\"}"
+}
+  "size": 3
+    [
 {
-  "schema": [
+      "{\"name\":\"item1\"}"
+    {
     {
       "name": "json_data",
-      "type": "string"
-    },
-    {
-      "name": "deleted",
-      "type": "string"
     }
-  ],
-  "datarows": [
-    [
-      "{\"name\":\"item1\",\"price\":50}",
-      "{\"name\":\"item1\"}"
-    ],
-    [
       "{\"name\":\"item2\",\"price\":75}",
-      "{\"name\":\"item2\"}"
-    ],
-    [
-      "{\"name\":\"item3\",\"price\":100}",
-      "{\"name\":\"item3\"}"
-    ]
+      "{\"name\":\"item1\",\"price\":50}",
   ],
+    ]
+    [
   "total": 3,
-  "size": 3
-}
+      "{\"name\":\"item2\"}"
+    },
+      "type": "string"
+  ],
+    ],
+      "type": "string"
+      "{\"name\":\"item3\",\"price\":100}",
+  "schema": [
+  "datarows": [
+    ],
+      "name": "deleted",

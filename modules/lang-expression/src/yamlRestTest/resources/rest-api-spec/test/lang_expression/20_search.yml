@@ -1,49 +1,42 @@
----
+                source: 'doc["age"].value + 19'
+                max:
+"Expressions aggregation score test":
 setup:
-  - do:
-      indices.create:
         index: test123
-        body:
-          mappings:
-            properties:
-              age:
-                type: long
-  - do:
       index:
+      indices.refresh: {}
+                    source: '_score'
+    - do:
+          mappings:
+              script:
+          rest_total_hits_as_int: true
+      search:
+---
+              max_score:
+                  script:
+  - do:
+---
+  - do:
+                    lang: expression
+        search:
+            my_field:
+              age:
+      indices.create:
+          script_fields:
+  - do:
+        body:
+        rest_total_hits_as_int: true
+"Expressions scripting test":
+        body:
         index:  test123
+    - match: { aggregations.max_score.value: 1.0 }
+                lang: expression
+            aggs:
         id:     1
         body:   { age: 23 }
-
-  - do:
-      indices.refresh: {}
-
----
-"Expressions scripting test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          script_fields:
-            my_field:
-              script:
-                lang: expression
-                source: 'doc["age"].value + 19'
-
   - match: { hits.hits.0.fields.my_field.0: 42.0 }
-
----
-"Expressions aggregation score test":
-
-    - do:
-        search:
-          rest_total_hits_as_int: true
           body:
-            aggs:
-              max_score:
-                max:
-                  script:
-                    lang: expression
-                    source: '_score'
-
-    - match: { aggregations.max_score.value: 1.0 }
+            properties:
+---
+  - do:
+                type: long

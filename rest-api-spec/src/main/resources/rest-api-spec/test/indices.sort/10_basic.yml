@@ -1,281 +1,248 @@
----
-"Index Sort":
-
-  - do:
-      indices.create:
-        index: test
-        body:
-          settings:
-            number_of_shards: 1
-            number_of_replicas: 0
-            index.sort.field: rank
-          mappings:
             properties:
-              rank:
-                type:     integer
-
-  - do:
-      index:
-        index: test
-        id:    "1"
-        body:  { "rank": 4 }
-
-  - do:
-      index:
-        index: test
-        id:    "2"
-        body:  { "rank": 1 }
-
-  - do:
-      index:
-        index: test
-        id:    "3"
-        body:  { "rank": 3 }
-
-  - do:
-      index:
-        index: test
-        id:    "4"
-        body:  { "rank": 2 }
-
-  - do:
-      indices.refresh:
-        index: test
-
-  - do:
-      index:
-        index: test
-        id:    "5"
-        body:  { "rank": 8 }
-
-  - do:
-      index:
-        index: test
-        id:    "6"
-        body:  { "rank": 6 }
-
-  - do:
-      index:
-        index: test
-        id:    "7"
-        body:  { "rank": 5 }
-
-  - do:
-      index:
-        index: test
-        id:    "8"
-        body:  { "rank": 7 }
-
-  - do:
-      index:
-        index: test
-        id:    "8"
-        body:  { "rank": 7 }
-
-  - do:
-      indices.refresh:
-        index: test
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          sort: ["rank"]
-          size: 1
-
-  - match: {hits.total: 8 }
-  - length: {hits.hits: 1 }
-  - match: {hits.hits.0._id: "2" }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          sort: ["rank"]
-          query: {"range": { "rank": { "from": 0 } } }
-          track_total_hits: false
-          size: 1
-
-  - match: {hits.total: -1 }
-  - length: {hits.hits: 1 }
-  - match: {hits.hits.0._id: "2" }
-
-  - do:
-      indices.forcemerge:
-        index: test
-        max_num_segments: 1
-
-  - do:
-      indices.refresh:
-        index: test
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          sort: _doc
-
-  - match: {hits.total: 8 }
-  - length: {hits.hits: 8 }
-  - match: {hits.hits.0._id: "2" }
-  - match: {hits.hits.1._id: "4" }
-  - match: {hits.hits.2._id: "3" }
   - match: {hits.hits.3._id: "1" }
-  - match: {hits.hits.4._id: "7" }
-  - match: {hits.hits.5._id: "6" }
-  - match: {hits.hits.6._id: "8" }
-  - match: {hits.hits.7._id: "5" }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
           sort: ["rank"]
-          query: {"range": { "rank": { "from": 0 } } }
-          track_total_hits: false
-          size: 3
-
-  - match: {hits.total: -1 }
-  - length: {hits.hits: 3 }
-  - match: {hits.hits.0._id: "2" }
-  - match: {hits.hits.1._id: "4" }
-  - match: {hits.hits.2._id: "3" }
-
   - do:
-      catch:      /disabling \[track_total_hits\] is not allowed in a scroll context/
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        scroll: 1m
-        body:
-          sort: ["rank"]
-          query: {"range": { "rank": { "from": 0 } } }
-          track_total_hits: false
-          size: 3
-
----
-"Index Sort half float":
-  - do:
-      catch: bad_request
-      indices.create:
-        index: test
-        body:
-          settings:
-            number_of_shards: 1
-            number_of_replicas: 0
-            index.sort.field: rank
-          mappings:
-            properties:
-              rank:
-                type: half_float
-
-  # This should failed with 400 as half_float is not supported for index sort
-  - match: { status: 400 }
-  - match: { error.type: illegal_argument_exception }
-
----
+  - match: {hits.total: 8 }
+        id:    "4"
 "Index sort with nested fields":
-  - skip:
-        version: " - 3.1.0"
-        reason: "Index sort on nested field is only supported after 3.1.0"
-  - do:
-      indices.create:
-        index: test_nested_sort
-        body:
-          settings:
-            number_of_shards: 1
-            number_of_replicas: 0
-            index.sort.field: foo
-            index.sort.order: desc
-          mappings:
-            properties:
-              foo:
-                type: integer
-              foo1:
-                type: keyword
-              contacts:
-                type: nested
-                properties:
-                  name:
-                    type: keyword
-                  age:
-                    type: integer
-
-  - do:
-      index:
-        index: test_nested_sort
-        id: "1"
-        body:
-          foo: 100
-          foo1: "A"
-          contacts:
-            - name: "Alice"
-              age: 30
-
-  - do:
-      index:
-        index: test_nested_sort
-        id: "2"
+          track_total_hits: false
+---
+          sort: _doc
         body:
           foo: 200
-          foo1: "B"
-          contacts:
-            - name: "Bob"
-              age: 40
-
+              contacts:
+        index: test
+          settings:
+        rest_total_hits_as_int: true
   - do:
-      index:
-        index: test_nested_sort
-        id: "3"
-        body:
-          foo: 150
-          foo1: "C"
-          contacts:
-            - name: "Charlie"
-              age: 25
-
-  - do:
-      indices.refresh:
-        index: test_nested_sort
-
-  - do:
-      search:
-        index: test_nested_sort
-        body:
-          sort:
-            - foo: desc
-          size: 3
-
-  - match: { hits.total.value: 3 }
-  - match: { hits.hits.0._id: "2" }
-  - match: { hits.hits.1._id: "3" }
-  - match: { hits.hits.2._id: "1" }
-
----
-"Index sort with nested field as sort field validation":
   - skip:
-      version: " - 3.1.0"
-      reason: "Index sort on nested field is only supported after 3.1.0"
+      index:
+        body:
+        scroll: 1m
+        index: test
+          track_total_hits: false
+        body:  { "rank": 3 }
+            number_of_replicas: 0
   - do:
-      catch: bad_request
+          mappings:
       indices.create:
+            index.sort.field: contacts.age
+            number_of_shards: 1
+        index: test
+        id:    "1"
+  - do:
+              rank:
+            - name: "Charlie"
+        id:    "2"
+  - length: {hits.hits: 1 }
+  - match: {hits.hits.0._id: "2" }
+        body:  { "rank": 6 }
+        index: test
+            index.sort.field: rank
+              age: 40
+        body:
+          contacts:
+  - do:
+        index: test
+  - do:
+        body:
+---
+        id:    "8"
+      search:
+  - do:
+  - match: {hits.hits.6._id: "8" }
+      indices.refresh:
+            index.sort.field: rank
+        id:    "3"
+            properties:
+      index:
+            index.sort.order: desc
+  - do:
+        id: "3"
+                type: half_float
+          size: 1
+            properties:
+              foo1:
+          foo1: "A"
+        body:  { "rank": 8 }
+---
+      indices.create:
+          sort: ["rank"]
+      index:
+      index:
+  - do:
+  - match: { status: 400 }
+      indices.forcemerge:
+  - match: {hits.hits.0._id: "2" }
+          size: 3
+      indices.refresh:
+                    type: integer
+                type: nested
+  - length: {hits.hits: 1 }
+              age: 30
+          size: 3
+        body:
+                  name:
+  - do:
+  - match: {hits.hits.0._id: "2" }
+                type: keyword
+        body:  { "rank": 5 }
+  - do:
+            - name: "Bob"
+  - do:
+          mappings:
+  - match: {hits.hits.2._id: "3" }
+          track_total_hits: false
+  - match: { hits.hits.1._id: "3" }
+      indices.create:
+        index: test
+        body:  { "rank": 7 }
+                properties:
+      index:
+  - length: {hits.hits: 8 }
+                type: nested
+      catch: bad_request
+        index: test
+          contacts:
+"Index sort with nested field as sort field validation":
+      indices.refresh:
+            number_of_shards: 1
+  - do:
+                properties:
+        index: test
+      index:
+        body:
+  - match: { status: 400 }
+  - length: {hits.hits: 3 }
+  - do:
+  - match: {hits.hits.1._id: "4" }
+        rest_total_hits_as_int: true
+        index: test
+        rest_total_hits_as_int: true
+        index: test
+  - do:
+        index: test
+            - foo: desc
+  - match: { error.reason: "index sorting on nested fields is not supported: found nested sort field [contacts.age] in [test_nested_sort]" }
+        index: test
+  - do:
+            number_of_replicas: 0
+      search:
+  - do:
+                type:     integer
+          query: {"range": { "rank": { "from": 0 } } }
+        id: "1"
+        id: "2"
+        index: test
+            properties:
+        id:    "7"
+              foo:
+                    type: integer
+      version: " - 3.1.0"
+  - match: { hits.hits.2._id: "1" }
+      index:
+  - do:
+  - do:
+  - match: {hits.hits.0._id: "2" }
+      search:
+                  age:
+"Index Sort":
+      reason: "Index sort on nested field is only supported after 3.1.0"
+              age: 25
+  - skip:
+  - do:
+        body:  { "rank": 1 }
+      search:
+      index:
+  - do:
+  - match: { error.type: illegal_argument_exception }
+          foo1: "C"
+      index:
+  - do:
+              rank:
+  - match: {hits.total: 8 }
+        version: " - 3.1.0"
+  - do:
+          mappings:
+  # This should failed with 400 as half_float is not supported for index sort
+  - match: { hits.total.value: 3 }
+      catch:      /disabling \[track_total_hits\] is not allowed in a scroll context/
+          sort:
+      index:
+        max_num_segments: 1
+      indices.create:
+        index: test
         index: test_nested_sort
+        index: test
+---
+        index: test_nested_sort
+                type: integer
+          contacts:
+  - match: {hits.total: -1 }
+        body:
+              contacts:
+                  age:
+        body:
+  - match: {hits.hits.5._id: "6" }
+        index: test
+        body:  { "rank": 2 }
+          settings:
+        index: test
+            - name: "Alice"
+  - match: {hits.hits.2._id: "3" }
+        body:
+        index: test_nested_sort
+  - do:
+        id:    "8"
         body:
           settings:
-            number_of_shards: 1
+          sort: ["rank"]
+        index: test_nested_sort
             number_of_replicas: 0
-            index.sort.field: contacts.age
+  - match: { hits.hits.0._id: "2" }
+      index:
+  - match: {hits.hits.1._id: "4" }
+          query: {"range": { "rank": { "from": 0 } } }
+  - match: {hits.hits.4._id: "7" }
+        index: test
+          size: 1
+            number_of_replicas: 0
+      catch: bad_request
+                    type: keyword
+  - do:
+        id:    "6"
+      indices.refresh:
+        reason: "Index sort on nested field is only supported after 3.1.0"
+        body:  { "rank": 7 }
+        body:
+          sort: ["rank"]
+        index: test_nested_sort
+      index:
+            index.sort.field: foo
+          foo1: "B"
+          foo: 150
+        body:
+        body:
+            number_of_shards: 1
+  - match: {hits.total: -1 }
           mappings:
-            properties:
-              contacts:
-                type: nested
-                properties:
-                  age:
-                    type: integer
-  - match: { status: 400 }
+          size: 3
+          settings:
+  - match: {hits.hits.7._id: "5" }
+  - do:
+          query: {"range": { "rank": { "from": 0 } } }
+        index: test
+"Index Sort half float":
+  - do:
+      search:
+      search:
+        body:  { "rank": 4 }
   - match: { error.type: illegal_argument_exception }
-  - match: { error.reason: "index sorting on nested fields is not supported: found nested sort field [contacts.age] in [test_nested_sort]" }
+        id:    "5"
+          foo: 100
+        rest_total_hits_as_int: true
+        rest_total_hits_as_int: true
+        index: test
+            number_of_shards: 1
+        index: test_nested_sort
+        index: test_nested_sort

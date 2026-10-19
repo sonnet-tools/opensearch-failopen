@@ -1,28 +1,28 @@
-{
-  "schema": [
-    {
-      "name": "text",
       "type": "string"
-    },
-    {
       "name": "replaced",
+    ]
       "type": "string"
-    }
   ],
-  "datarows": [
     [
-      "hello world test",
-      "hello world TEST"
-    ],
-    [
-      "sample data entry",
+      "TEST example record"
       "sample data entry"
     ],
-    [
-      "test example record",
-      "TEST example record"
-    ]
-  ],
-  "total": 3,
+      "name": "text",
   "size": 3
+    [
+      "hello world test",
+    },
+    {
+  ],
+      "test example record",
+    {
 }
+    ],
+  "total": 3,
+      "hello world TEST"
+  "schema": [
+      "sample data entry",
+  "datarows": [
+    }
+    [
+{

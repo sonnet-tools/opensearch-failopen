@@ -1,63 +1,63 @@
+    [
+      "type": "string"
+    [
+      20
+      28
+    {
+    [
 {
-  "schema": [
+      11
+      1,
+    [
+  "size": 5
+    ],
+    ],
     {
-      "name": "failed_attempts",
       "type": "bigint"
-    },
+      13,
+      5,
+      "bwilson",
     {
+    [
+}
+      "bwilson",
       "name": "user",
-      "type": "string"
-    },
-    {
-      "name": "suspicious_count",
+      7
       "type": "bigint"
-    },
+  "datarows": [
     {
-      "name": "r.user",
-      "type": "string"
+      "admin",
     },
-    {
       "name": "risk_score",
+      4,
+      "admin",
+  ],
+      1,
+      45
+      "name": "r.user",
+      4,
+    },
+      "jdoe",
+      "name": "suspicious_count",
+      "jdoe",
+    {
+    ]
       "type": "bigint"
+      5,
+      "type": "string"
+      "name": "failed_attempts",
+      12,
+    ],
+      "mjones",
+      "mjones",
+      "asmith",
+      "asmith",
+    },
+  "total": 5,
+      16,
     }
   ],
-  "datarows": [
-    [
-      13,
-      "asmith",
-      16,
-      "asmith",
-      45
-    ],
-    [
-      4,
-      "bwilson",
+  "schema": [
       12,
-      "bwilson",
-      28
+    },
     ],
-    [
-      12,
-      "jdoe",
-      4,
-      "jdoe",
-      20
-    ],
-    [
-      1,
-      "mjones",
-      5,
-      "mjones",
-      11
-    ],
-    [
-      5,
-      "admin",
-      1,
-      "admin",
-      7
-    ]
-  ],
-  "total": 5,
-  "size": 5
-}

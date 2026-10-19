@@ -1,36 +1,36 @@
-{
-  "schema": [
-    {
-      "name": "avgresponsetime",
-      "type": "double"
-    },
-    {
-      "name": "requests",
-      "type": "bigint"
-    },
-    {
       "name": "servicename",
-      "type": "string"
-    },
-    {
-      "name": "responsecode",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      1234.0,
+  "size": 2
+      "name": "avgresponsetime",
       18,
       "api-service",
+  "total": 2,
+    [
+      "FAILURE"
+      1234.0,
+      "name": "requests",
+      "type": "double"
+      "name": "responsecode",
+{
+    },
       "SUCCESS"
+  "datarows": [
+      "type": "string"
+      "web-service",
+    {
+}
+  "schema": [
+    ]
+    },
+    }
+    {
+      18,
+      "type": "string"
+    {
+    {
+      "type": "bigint"
+  ],
+  ],
     ],
+    },
     [
       567.0,
-      18,
-      "web-service",
-      "FAILURE"
-    ]
-  ],
-  "total": 2,
-  "size": 2
-}

@@ -1,42 +1,42 @@
-{
-  "schema": [
     {
+      3
+  ],
+      "professional camera",
+      "name": "amount",
+    },
       "name": "userid",
       "type": "string"
-    },
-    {
-      "name": "product",
-      "type": "string"
-    },
-    {
-      "name": "amount",
-      "type": "double"
-    },
-    {
-      "name": "rnk",
-      "type": "bigint"
-    }
-  ],
-  "datarows": [
-    [
-      "user4",
-      "professional camera",
       3200.0,
-      1
-    ],
-    [
-      "user4",
-      "gaming desktop",
       2500.0,
-      2
-    ],
-    [
       "user4",
-      "laptop computer",
-      1250.0,
-      3
-    ]
-  ],
-  "total": 3,
+      "type": "string"
+    [
   "size": 3
+      "user4",
+      1
+    }
+    },
+    ],
+    {
+      "laptop computer",
+      "user4",
+  ],
+      "name": "product",
 }
+      "name": "rnk",
+      2
+  "datarows": [
+  "total": 3,
+      "type": "bigint"
+    ]
+    },
+      1250.0,
+    {
+      "gaming desktop",
+    {
+  "schema": [
+    [
+    [
+    ],
+      "type": "double"
+{

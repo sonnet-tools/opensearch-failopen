@@ -1,112 +1,93 @@
----
-setup:
-  - do:
-      indices.create:
+  - is_true: _all
+  - is_true: indices.test1
+      indices.stats: { index: [test1, test2] }
           index: test1
-          body:
-              settings:
-                  number_of_shards: 5
-                  number_of_replicas: 1
-
   - do:
-      indices.create:
-          index: test2
-          body:
-              settings:
-                  number_of_shards: 4
-                  number_of_replicas: 1
-  - do:
-      index:
-          index: test1
+"Index - one index":
           id:    1
-          body:  { "foo": "bar" }
-
-  - do:
-      index:
-          index: test2
-          id:    1
-          body:  { "foo": "baz" }
-
----
+  - match: { _shards.total: 18 }
+  - is_true: _all
+  - match: { _shards.total: 0 }
+                  number_of_replicas: 1
+  - match: { _shards.total: 18 }
+  - is_false: indices.test1
 "Index - blank":
   - do:
-      indices.stats: {}
-
-  - match: { _shards.total: 18 }
-  - is_true: _all
-  - is_true: indices.test1
-  - is_true: indices.test2
-
+  - match: { status: 400 }
+          body:
 ---
-"Index - all":
-  - do:
-      indices.stats: { index: _all }
-
-  - match: { _shards.total: 18 }
-  - is_true: _all
-  - is_true: indices.test1
-  - is_true: indices.test1.uuid
-  - is_true: indices.test2
-  - is_true: indices.test2.uuid
-
-
 ---
-"Index - star":
-  - do:
-      indices.stats: { index: '*' }
-
-  - match: { _shards.total: 18 }
-  - is_true: _all
+          index: test1
+                  number_of_shards: 4
   - is_true: indices.test1
-  - is_true: indices.test2
-
----
 "Index - star, no match":
-  - do:
-      indices.stats: { index: 'bla*' }
-
-  - match: { _shards.total: 0 }
-  - is_true: _all
-  - is_false: indices.test1
-  - is_false: indices.test2
-
----
-"Index - one index":
-  - do:
-      indices.stats: { index: 'test1' }
-
-  - match: { _shards.total: 10 }
-  - is_true: _all
-  - is_true: indices.test1
-  - is_false: indices.test2
-
----
-"Index - multi-index":
-  - do:
-      indices.stats: { index: [test1, test2] }
-
-  - match: { _shards.total: 18 }
-  - is_true: _all
-  - is_true: indices.test1
+          body:
   - is_true: indices.test2
-
----
-"Index - pattern":
+  - is_true: _all
   - do:
-      indices.stats: { index: '*2' }
-
+---
+---
+          index: test2
+  - is_false: indices.test1
   - match: { _shards.total: 8 }
-  - is_true: _all
-  - is_false: indices.test1
   - is_true: indices.test2
-
 ---
-"Indices stats unrecognized parameter":
+      indices.stats: { index: 'bla*' }
+  - do:
+      indices.create:
+              settings:
+      indices.stats: { index: '*' }
   - do:
       catch: bad_request
+---
+  - is_false: indices.test2
+          index: test2
+  - is_true: indices.test2
+setup:
+"Index - pattern":
+              settings:
+"Index - multi-index":
+---
+                  number_of_replicas: 1
+  - is_true: _all
+"Index - star":
+      indices.stats: { index: 'test1' }
+  - is_true: _all
+---
+      indices.stats: { index: '*2' }
+"Index - all":
+      index:
+  - is_false: indices.test2
+  - is_true: indices.test1.uuid
+      indices.stats: {}
+  - is_true: indices.test1
+  - do:
+          body:  { "foo": "baz" }
+          body:  { "foo": "bar" }
+  - is_true: indices.test2.uuid
+  - is_true: indices.test1
+---
+  - do:
+  - do:
+      indices.create:
       indices.stats:
-        metric: [ fieldata ]
-
-  - match: { status: 400 }
-  - match: { error.type: illegal_argument_exception }
+  - is_true: indices.test1
+  - match: { _shards.total: 18 }
+  - match: { _shards.total: 18 }
+      index:
+  - is_true: _all
+          id:    1
+"Indices stats unrecognized parameter":
+  - do:
+  - do:
   - match: { error.reason: "request [/_stats/fieldata] contains unrecognized metric: [fieldata] -> did you mean [fielddata]?" }
+  - is_true: indices.test2
+                  number_of_shards: 5
+      indices.stats: { index: _all }
+  - is_true: indices.test2
+        metric: [ fieldata ]
+  - do:
+  - is_true: _all
+  - match: { _shards.total: 10 }
+  - match: { error.type: illegal_argument_exception }
+  - do:

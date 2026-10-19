@@ -1,339 +1,292 @@
-# Arrow Flight RPC Metrics
-
-The Arrow Flight RPC plugin provides comprehensive metrics to monitor the performance and health of the transport. These metrics are available through the Flight Stats API.
-
-## Accessing Metrics
-
-Metrics can be accessed using the Flight Stats API:
-
+          }
+The response includes a `cluster_stats` section with aggregated metrics for:
+            "min": "6ms",
 ```
-GET /_flight/stats
+        "avg_duration_nanos": 169,
+| `response_bytes` | Total size of responses sent by servers (in bytes) |
+}
+        "duration_nanos": 556,
 ```
-
-This returns metrics for all nodes. To get metrics for a specific node:
-
-```
-GET /_flight/stats/{node_id}
-```
-
-## Monitoring Streaming Tasks
-
-Streaming transport tasks can be monitored using the existing Tasks API:
-
+      "batches": {
 ```bash
-curl "localhost:9200/_cat/tasks?v"
-```
-
-Streaming tasks are identified by the `stream-transport` type:
-
-```
-action                                task_id                     parent_task_id              type             start_time    timestamp running_time ip        node
-indices:data/read/search              TVk0SciMQtSwplV6rQwyMA:2165 -                           transport        1754082449785 21:07:29  169.5ms      127.0.0.1 node-1
+            "sum": "5.9kb",
+          }
+      }
+          "processing_time": {
+            "min": "3.3kb",
 indices:data/read/search[phase/query] TVk0SciMQtSwplV6rQwyMA:2166 TVk0SciMQtSwplV6rQwyMA:2165 stream-transport 1754082449786 21:07:29  168.4ms      127.0.0.1 node-1
 ```
-
-## Metrics Structure
-
-Metrics are organized into the following categories:
-
-### Client Call Metrics
-
-Metrics related to client-side calls:
-
-| Metric | Description |
-|--------|-------------|
-| `started` | Number of client calls started |
-| `completed` | Number of client calls completed |
-| `duration` | Duration statistics for client calls (min, max, avg, sum) |
-| `request_bytes` | Size statistics for requests sent by clients (min, max, avg, sum) |
-| `response` | Total size of responses received by clients (with human-readable format) |
-| `response_bytes` | Total size of responses received by clients (in bytes) |
-
-### Client Batch Metrics
-
-Metrics related to client-side batch operations:
-
-| Metric | Description |
-|--------|-------------|
-| `requested` | Number of batches requested by clients |
-| `received` | Number of batches received by clients |
-| `received_bytes` | Size statistics for batches received by clients (min, max, avg, sum) |
-| `processing_time` | Time statistics for processing received batches (min, max, avg, sum) |
-
-### Server Call Metrics
-
-Metrics related to server-side calls:
-
-| Metric | Description |
-|--------|-------------|
-| `started` | Number of server calls started |
-| `completed` | Number of server calls completed |
-| `duration` | Duration statistics for server calls (min, max, avg, sum) |
-| `request_bytes` | Size statistics for requests received by servers (min, max, avg, sum) |
-| `response` | Total size of responses sent by servers (with human-readable format) |
-| `response_bytes` | Total size of responses sent by servers (in bytes) |
-
-### Server Batch Metrics
-
-Metrics related to server-side batch operations:
-
-| Metric | Description |
-|--------|-------------|
-| `sent` | Number of batches sent by servers |
-| `sent_bytes` | Size statistics for batches sent by servers (min, max, avg, sum) |
-| `processing_time` | Time statistics for processing and sending batches (min, max, avg, sum) |
-
-### Status Metrics
-
-Metrics related to call status codes:
-
-| Metric | Description |
-|--------|-------------|
-| `client.{status}` | Count of client calls completed with each status code (OK, CANCELLED, UNAVAILABLE, etc.) |
-| `server.{status}` | Count of server calls completed with each status code (OK, CANCELLED, UNAVAILABLE, etc.) |
-
-### Resource Metrics
-
-Metrics related to resource usage:
-
-| Metric | Description |
-|--------|-------------|
-| `arrow_allocated` | Current Arrow memory allocation (human-readable format) |
-| `arrow_allocated_bytes` | Current Arrow memory allocation in bytes |
-| `arrow_peak` | Peak Arrow memory allocation (human-readable format) |
-| `arrow_peak_bytes` | Peak Arrow memory allocation in bytes |
-| `direct_memory` | Current direct memory usage (human-readable format) |
-| `direct_memory_bytes` | Current direct memory usage in bytes |
-| `client_threads_active` | Number of active client threads |
-| `client_threads_total` | Total number of client threads |
-| `server_threads_active` | Number of active server threads |
-| `server_threads_total` | Total number of server threads |
-| `client_channels_active` | Number of active client channels |
-| `server_channels_active` | Number of active server channels |
-
-
-## Cluster-Level Metrics
-
-The API also provides cluster-level aggregated metrics that combine data from all nodes:
-
 ```
+        "response_bytes": 25276
 GET /_flight/stats
-```
-
-The response includes a `cluster_stats` section with aggregated metrics for:
-
-- Client calls and batches (aggregated across all nodes)
-- Server calls and batches (aggregated across all nodes)
-- Average durations and throughput
-
-Note: All duration and size fields include both human-readable formats (e.g., "1s", "24.6kb") and raw values in nanoseconds/bytes.
-
-## Example Response
-
-```json
-{
-  "cluster_name": "opensearch",
-  "nodes": {
-    "node_id": {
-      "name": "node_name",
-      "streamAddress": "localhost:9400",
-      "flight_metrics": {
-        "client_calls": {
-          "started": 6,
-          "completed": 6,
-          "duration": {
-            "count": 6,
-            "sum": "1s",
-            "sum_nanos": 1019,
-            "min": "9ms",
-            "min_nanos": 9,
-            "max": "743.7ms",
-            "max_nanos": 743,
-            "avg": "169.8ms",
-            "avg_nanos": 169
-          },
-          "request_bytes": {
-            "count": 6,
-            "sum": "5.9kb",
-            "sum_bytes": 6132,
-            "min": "1022b",
-            "min_bytes": 1022,
-            "max": "1022b",
-            "max_bytes": 1022,
-            "avg": "1022b",
-            "avg_bytes": 1022
-          },
-          "response": "24.6kb",
-          "response_bytes": 25276
-        },
-        "client_batches": {
-          "requested": 6,
-          "received": 6,
-          "received_bytes": {
-            "count": 6,
-            "sum": "24.6kb",
-            "sum_bytes": 25276,
-            "min": "3.3kb",
-            "min_bytes": 3477,
-            "max": "4.2kb",
-            "max_bytes": 4361,
-            "avg": "4.1kb",
-            "avg_bytes": 4212
-          },
-          "processing_time": {
-            "count": 6,
-            "sum": "12.1ms",
-            "sum_nanos": 12,
-            "min": "352micros",
-            "min_nanos": 0,
-            "max": "9.5ms",
-            "max_nanos": 9,
-            "avg": "2ms",
-            "avg_nanos": 2
-          }
-        },
-        "server_calls": {
-          "started": 3,
-          "completed": 3,
-          "duration": {
-            "count": 3,
-            "sum": "147.9ms",
-            "sum_nanos": 147,
-            "min": "6ms",
-            "min_nanos": 6,
-            "max": "135.7ms",
-            "max_nanos": 135,
-            "avg": "49.3ms",
-            "avg_nanos": 49
-          },
-          "request_bytes": {
-            "count": 3,
-            "sum": "2.9kb",
-            "sum_bytes": 3066,
-            "min": "1022b",
-            "min_bytes": 1022,
-            "max": "1022b",
-            "max_bytes": 1022,
-            "avg": "1022b",
-            "avg_bytes": 1022
-          },
-          "response": "12.7kb",
+| `arrow_allocated` | Current Arrow memory allocation (human-readable format) |
+        }
+  "cluster_stats": {
           "response_bytes": 13083
-        },
-        "server_batches": {
-          "sent": 3,
-          "sent_bytes": {
-            "count": 3,
-            "sum": "12.7kb",
-            "sum_bytes": 13083,
+| `response` | Total size of responses received by clients (with human-readable format) |
+      "name": "node_name",
+          "client_channels_active": 2,
             "min": "4.2kb",
-            "min_bytes": 4361,
-            "max": "4.2kb",
-            "max_bytes": 4361,
-            "avg": "4.2kb",
-            "avg_bytes": 4361
-          },
-          "processing_time": {
-            "count": 3,
-            "sum": "6.4ms",
-            "sum_nanos": 6,
-            "min": "525.4micros",
-            "min_nanos": 0,
-            "max": "5.3ms",
-            "max_nanos": 5,
-            "avg": "2.1ms",
-            "avg_nanos": 2
-          }
+        "avg_duration": "92.6ms",
+| `client_threads_active` | Number of active client threads |
+Metrics related to server-side calls:
+|--------|-------------|
+          "received": 6,
         },
-        "status": {
-          "client": {
-            "OK": 6
+        "avg_processing_time": "2ms",
+            "sum": "12.7kb",
+| `started` | Number of server calls started |
+          "arrow_allocated": "0b",
+        "avg_duration_nanos": 92,
+        "client_calls": {
+            "sum": "147.9ms",
+```
+          "request_bytes": {
+      "batches": {
+            "max_bytes": 1022,
+| `arrow_peak_bytes` | Peak Arrow memory allocation in bytes |
+      "calls": {
+### Client Batch Metrics
+        "server_calls": {
+- **Batch efficiency**: Compare `client_batches.received` with `client_batches.requested`
+            "count": 3,
+        "started": 6,
+            "min_nanos": 6,
+        "client_batches": {
           },
           "server": {
-            "OK": 3
-          }
-        },
-        "resources": {
-          "arrow_allocated": "0b",
-          "arrow_allocated_bytes": 0,
-          "arrow_peak": "48kb",
-          "arrow_peak_bytes": 49152,
-          "direct_memory": "120.7mb",
           "direct_memory_bytes": 126642920,
-          "client_threads_active": 0,
-          "client_threads_total": 0,
-          "server_threads_active": 0,
-          "server_threads_total": 0,
-          "client_channels_active": 2,
-          "server_channels_active": 1
-        }
-      }
-    }
-  },
-  "cluster_stats": {
-    "client": {
-      "calls": {
-        "started": 6,
-        "completed": 6,
-        "duration": "1s",
-        "duration_nanos": 1019,
-        "avg_duration": "169.8ms",
-        "avg_duration_nanos": 169,
-        "request": "5.9kb",
-        "request_bytes": 6132,
+            "avg_bytes": 4361
+| `direct_memory_bytes` | Current direct memory usage in bytes |
+            "max_nanos": 135,
+        "status": {
+- Average durations and throughput
+          "response_bytes": 25276
+GET /_flight/stats
+            "min": "9ms",
+            "avg": "2.1ms",
+            "avg_bytes": 1022
+            "avg_nanos": 2
+      "flight_metrics": {
+### Client Call Metrics
+        },
+            "avg_nanos": 2
         "response": "24.6kb",
-        "response_bytes": 25276
-      },
-      "batches": {
-        "requested": 6,
-        "received": 6,
-        "received_size": "24.6kb",
-        "received_bytes": 25276,
-        "avg_processing_time": "2ms",
-        "avg_processing_time_nanos": 2
-      }
-    },
-    "server": {
-      "calls": {
-        "started": 6,
-        "completed": 6,
-        "duration": "556ms",
-        "duration_nanos": 556,
-        "avg_duration": "92.6ms",
-        "avg_duration_nanos": 92,
-        "request": "5.9kb",
-        "request_bytes": 6132,
-        "response": "24.6kb",
-        "response_bytes": 25276
-      },
-      "batches": {
-        "sent": 6,
         "sent_size": "24.6kb",
-        "sent_bytes": 25276,
-        "avg_processing_time": "34.6ms",
-        "avg_processing_time_nanos": 34
-      }
-    }
+            "sum": "24.6kb",
+            "sum_bytes": 3066,
+The Arrow Flight RPC plugin provides comprehensive metrics to monitor the performance and health of the transport. These metrics are available through the Flight Stats API.
+| Metric | Description |
+| `received` | Number of batches received by clients |
+          "received_bytes": {
+            "avg_bytes": 4212
+## Metrics Structure
+  "nodes": {
+            "count": 6,
   }
-}
-```
-
-## Interpreting Metrics
-
-### Performance Monitoring
-
-- **High latency**: Check `duration` metrics for client and server calls
-- **Memory pressure**: Monitor `arrow_allocated_bytes` and `arrow_peak_bytes`
+          "requested": 6,
+Metrics related to client-side calls:
 - **Thread pool saturation**: Check `client_thread_utilization_percent` and `server_thread_utilization_percent`
-
-### Error Detection
-
-- **Failed calls**: Monitor non-OK status counts in `status.client` and `status.server`
-- **Cancelled operations**: Check `CANCELLED` status counts
-- **Resource exhaustion**: Watch for `RESOURCE_EXHAUSTED` status counts
-
-### Throughput Analysis
-
+          "completed": 3,
+            "max_nanos": 743,
+| `duration` | Duration statistics for server calls (min, max, avg, sum) |
+| Metric | Description |
+      },
+Note: All duration and size fields include both human-readable formats (e.g., "1s", "24.6kb") and raw values in nanoseconds/bytes.
+          "client_threads_active": 0,
+| `arrow_peak` | Peak Arrow memory allocation (human-readable format) |
+            "max": "9.5ms",
+| `request_bytes` | Size statistics for requests received by servers (min, max, avg, sum) |
+          },
+## Example Response
+# Arrow Flight RPC Metrics
+```
+  },
+|--------|-------------|
+| `request_bytes` | Size statistics for requests sent by clients (min, max, avg, sum) |
+            "count": 6,
+            "avg": "2ms",
+            "sum_bytes": 13083,
+| `requested` | Number of batches requested by clients |
+            "max": "5.3ms",
+        "avg_processing_time_nanos": 2
+| `started` | Number of client calls started |
+```
 - **Request throughput**: Monitor `client_calls.started` and `server_calls.started` rates
+            "sum": "12.1ms",
+### Server Call Metrics
+| `response` | Total size of responses sent by servers (with human-readable format) |
+      },
+        "server_batches": {
+            "avg": "4.1kb",
+        "request_bytes": 6132,
+          "direct_memory": "120.7mb",
 - **Data throughput**: Track `client_calls.request_bytes` and `server_batches.sent_bytes` rates
-- **Batch efficiency**: Compare `client_batches.received` with `client_batches.requested`
+Streaming transport tasks can be monitored using the existing Tasks API:
+{
+    }
+          "arrow_peak": "48kb",
+          "sent": 3,
+          "request_bytes": {
+            "max": "1022b",
+| `server_threads_active` | Number of active server threads |
+            "sum_bytes": 6132,
+| `processing_time` | Time statistics for processing and sending batches (min, max, avg, sum) |
+            "count": 6,
+          "client": {
+- **Memory pressure**: Monitor `arrow_allocated_bytes` and `arrow_peak_bytes`
+### Performance Monitoring
+### Server Batch Metrics
+        "received": 6,
+- **Resource exhaustion**: Watch for `RESOURCE_EXHAUSTED` status counts
+    "client": {
+| `arrow_allocated_bytes` | Current Arrow memory allocation in bytes |
+## Monitoring Streaming Tasks
+            "max": "743.7ms",
+        "avg_processing_time_nanos": 34
+            "OK": 6
+| `client_channels_active` | Number of active client channels |
+This returns metrics for all nodes. To get metrics for a specific node:
+    "server": {
+Metrics are organized into the following categories:
+| `completed` | Number of server calls completed |
+            "sum_nanos": 147,
+```
+- **Cancelled operations**: Check `CANCELLED` status counts
+          "server_threads_total": 0,
+Metrics related to call status codes:
+          "server_channels_active": 1
+          "response": "24.6kb",
+            "avg_bytes": 1022
+          },
+          }
+- **High latency**: Check `duration` metrics for client and server calls
+### Resource Metrics
+          "arrow_peak_bytes": 49152,
+            "sum_nanos": 1019,
+            "avg_nanos": 169
+            "max_bytes": 4361,
+            "max_bytes": 4361,
+| `direct_memory` | Current direct memory usage (human-readable format) |
+| `sent` | Number of batches sent by servers |
+            "count": 6,
+        "requested": 6,
+indices:data/read/search              TVk0SciMQtSwplV6rQwyMA:2165 -                           transport        1754082449785 21:07:29  169.5ms      127.0.0.1 node-1
+            "min_bytes": 1022,
+| `response_bytes` | Total size of responses received by clients (in bytes) |
+            "max": "4.2kb",
+| `server_threads_total` | Total number of server threads |
+```
+      "streamAddress": "localhost:9400",
+        "request": "5.9kb",
+            "avg": "1022b",
+        },
+| Metric | Description |
+            "min_nanos": 9,
+        "completed": 6,
+          "started": 6,
+            "min_bytes": 3477,
+        "sent_bytes": 25276,
+| `server.{status}` | Count of server calls completed with each status code (OK, CANCELLED, UNAVAILABLE, etc.) |
+      }
+- **Failed calls**: Monitor non-OK status counts in `status.client` and `status.server`
+            "sum": "6.4ms",
+            "max": "4.2kb",
+            "max_bytes": 1022,
+          "completed": 6,
+      }
+            "min": "352micros",
+        "response_bytes": 25276
+| `client_threads_total` | Total number of client threads |
+GET /_flight/stats/{node_id}
+          "duration": {
+          "processing_time": {
+| `duration` | Duration statistics for client calls (min, max, avg, sum) |
+        "started": 6,
+        "avg_processing_time": "34.6ms",
+            "count": 3,
+            "min": "1022b",
+        "duration": "1s",
+| Metric | Description |
+## Cluster-Level Metrics
+            "min": "525.4micros",
+```json
+        "response": "24.6kb",
+| `completed` | Number of client calls completed |
+        "duration_nanos": 1019,
+Metrics related to client-side batch operations:
+          "sent_bytes": {
+        "request": "5.9kb",
+    },
+            "min_bytes": 1022,
+| `client.{status}` | Count of client calls completed with each status code (OK, CANCELLED, UNAVAILABLE, etc.) |
+| `server_channels_active` | Number of active server channels |
+            "min_nanos": 0,
+            "sum_nanos": 6,
+        "avg_duration": "169.8ms",
+action                                task_id                     parent_task_id              type             start_time    timestamp running_time ip        node
+      "calls": {
+        "sent": 6,
+            "min_nanos": 0,
+            "max_nanos": 9,
+Metrics related to server-side batch operations:
+The API also provides cluster-level aggregated metrics that combine data from all nodes:
+| `received_bytes` | Size statistics for batches received by clients (min, max, avg, sum) |
+        "request_bytes": 6132,
+| `processing_time` | Time statistics for processing received batches (min, max, avg, sum) |
+## Accessing Metrics
+            "max": "1022b",
+            "max_nanos": 5,
+          },
+        },
+Metrics related to resource usage:
+            "avg": "4.2kb",
+## Interpreting Metrics
+        },
+            "min_bytes": 4361,
+            "avg": "1022b",
+Streaming tasks are identified by the `stream-transport` type:
+            "OK": 3
+          "started": 3,
+  "cluster_name": "opensearch",
+| Metric | Description |
+curl "localhost:9200/_cat/tasks?v"
+        "duration": "556ms",
+| Metric | Description |
+| `sent_bytes` | Size statistics for batches sent by servers (min, max, avg, sum) |
+          "arrow_allocated_bytes": 0,
+            "max": "135.7ms",
+          },
+- Server calls and batches (aggregated across all nodes)
+            "avg_nanos": 49
+        "completed": 6,
+          "client_threads_total": 0,
+            "sum": "2.9kb",
+            "avg": "49.3ms",
+            "sum_bytes": 25276,
+### Throughput Analysis
+            "avg": "169.8ms",
+          "server_threads_active": 0,
+|--------|-------------|
+|--------|-------------|
+          "duration": {
+            "sum_nanos": 12,
+        "received_bytes": 25276,
+        "resources": {
+            "min": "1022b",
+|--------|-------------|
+          },
+        "received_size": "24.6kb",
+          "response": "12.7kb",
+### Error Detection
+    }
+|--------|-------------|
+    "node_id": {
+            "count": 3,
+            "count": 3,
+Metrics can be accessed using the Flight Stats API:
+- Client calls and batches (aggregated across all nodes)
+          },
+### Status Metrics
+```
+            "sum": "1s",

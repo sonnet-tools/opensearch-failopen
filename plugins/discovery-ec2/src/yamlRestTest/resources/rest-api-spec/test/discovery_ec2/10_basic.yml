@@ -1,16 +1,13 @@
-# Integration tests for Discovery EC2 component
-#
-"Discovery EC2 loaded":
-    - skip:
-        reason: "contains is a newly added assertion"
-        features: contains
+    # Get cluster-manager node id
+        nodes.info: {}
     - do:
         cluster.state: {}
-
-    # Get cluster-manager node id
-    - set: { cluster_manager_node: cluster_manager }
-
+#
+# Integration tests for Discovery EC2 component
+        features: contains
     - do:
-        nodes.info: {}
-
+"Discovery EC2 loaded":
     - contains:  { nodes.$cluster_manager.plugins: { name: discovery-ec2 } }
+        reason: "contains is a newly added assertion"
+    - skip:
+    - set: { cluster_manager_node: cluster_manager }

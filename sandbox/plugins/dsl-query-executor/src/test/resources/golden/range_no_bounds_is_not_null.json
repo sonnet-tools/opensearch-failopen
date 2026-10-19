@@ -1,73 +1,73 @@
-{
-  "testName": "range_no_bounds_is_not_null",
-  "indexName": "test-index",
-  "indexMapping": {
-    "name": "VARCHAR",
-    "price": "INTEGER",
-    "brand": "VARCHAR",
-    "rating": "DOUBLE"
-  },
-  "planType": "HITS",
-  "inputDsl": {
-    "query": {
-      "range": {
-        "price": {}
-      }
-    }
-  },
-  "expectedRelNodePlan": [
-    "LogicalSort(fetch=[10])",
-    "  LogicalFilter(condition=[IS NOT NULL($1)])",
-    "    LogicalTableScan(table=[[test-index]])"
-  ],
-  "mockResultFieldNames": [
-    "name",
-    "price",
-    "brand",
-    "rating"
-  ],
-  "mockResultRows": [
-    [
+  }
       "laptop",
-      999,
-      "BrandA",
-      4.5
-    ],
-    [
-      "phone",
-      699,
-      "BrandB",
-      4.2
-    ]
-  ],
-  "expectedOutputDsl": {
-    "num_reduce_phases": 0,
-    "hits": {
-      "total": {
-        "value": 2,
-        "relation": "eq"
-      },
-      "max_score": null,
-      "hits": [
-        {
-          "_score": null,
-          "_source": {
-            "name": "laptop",
-            "price": 999,
-            "brand": "BrandA",
-            "rating": 4.5
-          }
-        },
-        {
-          "_score": null,
           "_source": {
             "name": "phone",
-            "price": 699,
-            "brand": "BrandB",
-            "rating": 4.2
-          }
-        }
-      ]
-    }
-  }
+          "_score": null,
+    ]
 }
+            "price": 699,
+      ]
+  "testName": "range_no_bounds_is_not_null",
+    [
+    "name": "VARCHAR",
+  },
+      },
+        "value": 2,
+  "mockResultRows": [
+    "LogicalSort(fetch=[10])",
+  ],
+      }
+    "rating": "DOUBLE"
+        {
+      "range": {
+  "mockResultFieldNames": [
+  "expectedOutputDsl": {
+            "rating": 4.2
+    "price",
+  "indexMapping": {
+        "price": {}
+      699,
+    "brand",
+    [
+        {
+  "planType": "HITS",
+      "max_score": null,
+  },
+    ],
+      "hits": [
+      4.2
+            "brand": "BrandB",
+{
+            "price": 999,
+      4.5
+      "BrandA",
+          }
+            "name": "laptop",
+    "query": {
+  ],
+    }
+      "BrandB",
+      999,
+  "indexName": "test-index",
+  "inputDsl": {
+    "price": "INTEGER",
+  "expectedRelNodePlan": [
+      "total": {
+          "_score": null,
+    "  LogicalFilter(condition=[IS NOT NULL($1)])",
+  ],
+    "name",
+          "_source": {
+    "    LogicalTableScan(table=[[test-index]])"
+      "phone",
+          }
+    "hits": {
+            "brand": "BrandA",
+        },
+    "brand": "VARCHAR",
+    }
+            "rating": 4.5
+    "num_reduce_phases": 0,
+    "rating"
+        "relation": "eq"
+        }

@@ -1,25 +1,25 @@
-{
-  "_scroll_id" : "DnF1ZXJ5VGhlbkZldGNoBQAAAfakescroll",
-  "took" : 3,
-  "timed_out" : false,
-  "terminated_early" : true,
   "_shards" : {
-    "total" : 5,
-    "successful" : 5,
-    "failed" : 0
-  },
-  "hits" : {
     "total" : 4,
+}
+  }
+  },
+  "_scroll_id" : "DnF1ZXJ5VGhlbkZldGNoBQAAAfakescroll",
     "max_score" : null,
-    "hits" : [ {
-      "_index" : "test",
-      "_id" : "AVToMiDL50DjIiBO3yKA",
       "_version" : 1,
-      "_score" : null,
+{
       "_source" : {
-        "test" : "test3"
-      },
+      "_id" : "AVToMiDL50DjIiBO3yKA",
+    "total" : 5,
+  "took" : 3,
+  "hits" : {
       "sort" : [ 0 ]
     } ]
-  }
-}
+  "terminated_early" : true,
+  "timed_out" : false,
+      },
+        "test" : "test3"
+    "successful" : 5,
+    "hits" : [ {
+      "_index" : "test",
+      "_score" : null,
+    "failed" : 0

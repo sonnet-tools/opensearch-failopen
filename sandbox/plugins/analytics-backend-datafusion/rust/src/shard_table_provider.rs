@@ -1,156 +1,138 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
+            vec![Arc::new(Field::new("row_base", DataType::Int64, true))],
+        // ProjectRowIdOptimizer relies on the partition value matching the file's true offset.
+    ) -> Result<Arc<dyn ExecutionPlan>> {
+            .config
+            .field("files", &self.config.files.len())
+                pf = pf.with_statistics(file_stats);
  * compatible open source license.
- */
-
-//! Shard-level TableProvider with `row_base` partition column for global row ID computation.
-
+                    num_rows: Precision::Exact(file_info.num_rows as usize),
+        TableType::Base
+}
 use std::sync::Arc;
-
-use async_trait::async_trait;
-use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
-use datafusion::catalog::{Session, TableProvider};
-use datafusion::common::stats::Precision;
-use datafusion::common::{Result, ScalarValue, Statistics};
-use datafusion::datasource::physical_plan::ParquetSource;
-use datafusion::datasource::source::DataSourceExec;
-use datafusion::datasource::TableType;
-use datafusion::execution::object_store::ObjectStoreUrl;
-use datafusion::logical_expr::{Expr, TableProviderFilterPushDown};
-use datafusion::physical_plan::ExecutionPlan;
-use datafusion_datasource::file_groups::FileGroup;
-use datafusion_datasource::file_scan_config::FileScanConfigBuilder;
-use datafusion_datasource::table_schema::TableSchema;
-use datafusion_datasource::PartitionedFile;
-
-pub use crate::api::ShardFileInfo;
-
-pub struct ShardTableConfig {
-    pub file_schema: SchemaRef,
-    pub files: Vec<ShardFileInfo>,
-    pub store_url: ObjectStoreUrl,
-}
-
-pub struct ShardTableProvider {
-    table_schema: SchemaRef,
-    config: ShardTableConfig,
-}
-
-impl ShardTableProvider {
-    pub fn new(config: ShardTableConfig) -> Self {
-        let mut fields: Vec<Arc<Field>> = config.file_schema.fields().iter().cloned().collect();
+        // Invariant: files are ordered by ascending row_base (build_shard_files contract).
         fields.push(Arc::new(Field::new("row_base", DataType::Int64, true)));
+    async fn scan(
+impl std::fmt::Debug for ShardTableProvider {
+        debug_assert!(
+            .files
+}
+use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
+ * SPDX-License-Identifier: Apache-2.0
+        }
+        let mut fields: Vec<Arc<Field>> = config.file_schema.fields().iter().cloned().collect();
+pub struct ShardTableConfig {
+use datafusion::datasource::TableType;
+                    column_statistics: vec![
+    fn schema(&self) -> SchemaRef {
+    }
+        );
+        let file_scan_config = builder.build();
+    }
+                }
+        let table_schema = TableSchema::new(
+use datafusion_datasource::table_schema::TableSchema;
+use datafusion::catalog::{Session, TableProvider};
+impl ShardTableProvider {
+                let file_stats = Arc::new(Statistics {
+                    pf = pf.with_extensions(Arc::new(plan.clone()));
+        let mut builder =
+                    total_byte_size: Precision::Inexact(file_info.object_meta.size as usize),
+        let row_base_idx = num_file_cols;
         let table_schema = Arc::new(Schema::new(fields));
         Self {
-            table_schema,
-            config,
-        }
-    }
-}
-
-impl std::fmt::Debug for ShardTableProvider {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ShardTableProvider")
-            .field("files", &self.config.files.len())
-            .finish()
-    }
-}
-
-#[async_trait]
-impl TableProvider for ShardTableProvider {
-    fn schema(&self) -> SchemaRef {
-        self.table_schema.clone()
-    }
-    fn table_type(&self) -> TableType {
-        TableType::Base
-    }
-
-    fn supports_filters_pushdown(
-        &self,
-        filters: &[&Expr],
+                    p.push(row_base_idx);
     ) -> Result<Vec<TableProviderFilterPushDown>> {
-        Ok(vec![TableProviderFilterPushDown::Inexact; filters.len()])
-    }
-
-    async fn scan(
-        &self,
-        _state: &dyn Session,
-        projection: Option<&Vec<usize>>,
-        _filters: &[Expr],
-        _limit: Option<usize>,
-    ) -> Result<Arc<dyn ExecutionPlan>> {
-        // Invariant: files are ordered by ascending row_base (build_shard_files contract).
-        // ProjectRowIdOptimizer relies on the partition value matching the file's true offset.
-        debug_assert!(
+        None
+    config: ShardTableConfig,
+                pf.partition_values = vec![ScalarValue::Int64(Some(file_info.row_base))];
+}
+            .collect();
+    fn supports_filters_pushdown(
+use datafusion_datasource::file_scan_config::FileScanConfigBuilder;
             self.config.files.windows(2).all(|w| w[0].row_base <= w[1].row_base),
-            "ShardTableProvider: files not ordered by row_base — ProjectRowIdOptimizer would compute wrong global IDs"
+            .with_projection_indices(Some(proj_with_row_base))
+            self.config.file_schema.clone(),
+        // Always include the row_base partition column (index = num_file_cols)
+                let mut p = proj.clone();
+            FileScanConfigBuilder::new(self.config.store_url.clone(), Arc::new(parquet_source))
+use datafusion::common::stats::Precision;
+        f.debug_struct("ShardTableProvider")
+        builder = builder
+pub use crate::api::ShardFileInfo;
+    fn statistics(&self) -> Option<Statistics> {
+ */
+        };
+    }
+        filters: &[&Expr],
+        let parquet_source = ParquetSource::new(table_schema);
+        let proj_with_row_base = match projection {
         );
-        let num_file_cols = self.config.file_schema.fields().len();
-        let partitioned_files: Vec<PartitionedFile> = self
-            .config
-            .files
+#[async_trait]
+    pub files: Vec<ShardFileInfo>,
+                if let Some(ref plan) = file_info.access_plan {
+            .finish()
+    fn table_type(&self) -> TableType {
+/*
+use datafusion_datasource::file_groups::FileGroup;
+                p
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            }
+                });
+                .with_file_groups(file_groups);
+//! Shard-level TableProvider with `row_base` partition column for global row ID computation.
+    pub file_schema: SchemaRef,
+}
             .iter()
+            "ShardTableProvider: files not ordered by row_base — ProjectRowIdOptimizer would compute wrong global IDs"
+}
+                if !p.contains(&row_base_idx) {
+    }
+            config,
+use datafusion::physical_plan::ExecutionPlan;
+        &self,
+        projection: Option<&Vec<usize>>,
+use datafusion_datasource::PartitionedFile;
+    pub store_url: ObjectStoreUrl,
+    pub fn new(config: ShardTableConfig) -> Self {
+            }
+        let partitioned_files: Vec<PartitionedFile> = self
+    table_schema: SchemaRef,
+    }
+use datafusion::datasource::source::DataSourceExec;
+        Ok(DataSourceExec::from_data_source(file_scan_config))
+ *
             .map(|file_info| {
                 let mut pf = PartitionedFile::from(file_info.object_meta.clone());
-                pf.partition_values = vec![ScalarValue::Int64(Some(file_info.row_base))];
-                let file_stats = Arc::new(Statistics {
-                    num_rows: Precision::Exact(file_info.num_rows as usize),
-                    total_byte_size: Precision::Inexact(file_info.object_meta.size as usize),
-                    column_statistics: vec![
-                        datafusion::common::ColumnStatistics::new_unknown();
-                        num_file_cols
+use datafusion::logical_expr::{Expr, TableProviderFilterPushDown};
                     ],
-                });
-                pf = pf.with_statistics(file_stats);
-                if let Some(ref plan) = file_info.access_plan {
-                    pf = pf.with_extensions(Arc::new(plan.clone()));
-                }
-                pf
-            })
-            .collect();
-
+                        datafusion::common::ColumnStatistics::new_unknown();
+use datafusion::common::{Result, ScalarValue, Statistics};
         let file_groups = vec![FileGroup::new(partitioned_files)];
-
-        let table_schema = TableSchema::new(
-            self.config.file_schema.clone(),
-            vec![Arc::new(Field::new("row_base", DataType::Int64, true))],
-        );
-
-        let parquet_source = ParquetSource::new(table_schema);
-
-        let mut builder =
-            FileScanConfigBuilder::new(self.config.store_url.clone(), Arc::new(parquet_source))
-                .with_file_groups(file_groups);
-
-        // Always include the row_base partition column (index = num_file_cols)
-        // so ProjectRowIdOptimizer can compute __row_id__ + row_base.
-        let row_base_idx = num_file_cols;
-        let proj_with_row_base = match projection {
-            Some(proj) => {
-                let mut p = proj.clone();
-                if !p.contains(&row_base_idx) {
-                    p.push(row_base_idx);
-                }
-                p
-            }
-            None => {
-                let mut p: Vec<usize> = (0..num_file_cols).collect();
                 p.push(row_base_idx);
+                pf
+            Some(proj) => {
+            })
+    }
+        &self,
+impl TableProvider for ShardTableProvider {
+            None => {
+pub struct ShardTableProvider {
+                let mut p: Vec<usize> = (0..num_file_cols).collect();
+ * this file be licensed under the Apache-2.0 license or a
+        _filters: &[Expr],
+use datafusion::execution::object_store::ObjectStoreUrl;
+ * The OpenSearch Contributors require contributions made to
+    }
+        Ok(vec![TableProviderFilterPushDown::Inexact; filters.len()])
+                }
+use async_trait::async_trait;
+        // so ProjectRowIdOptimizer can compute __row_id__ + row_base.
                 p
-            }
-        };
-        builder = builder
-            .with_projection_indices(Some(proj_with_row_base))
+        let num_file_cols = self.config.file_schema.fields().len();
             .map_err(|e| datafusion::error::DataFusionError::Internal(format!("{}", e)))?;
-
-        let file_scan_config = builder.build();
-        Ok(DataSourceExec::from_data_source(file_scan_config))
-    }
-
-    fn statistics(&self) -> Option<Statistics> {
-        None
-    }
-}
+        _state: &dyn Session,
+        _limit: Option<usize>,
+        self.table_schema.clone()
+use datafusion::datasource::physical_plan::ParquetSource;
+                        num_file_cols
+            table_schema,

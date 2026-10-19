@@ -1,82 +1,67 @@
----
-"Refresh":
-
-
  - do:
-      indices.create:
+ - match: { hits.total: 1 }
+          body:    { foo: bar }
+ - match: { hits.total: 1 }
+          id:      2
+          body:    { foo: bar }
+            query:   { term: { _id: 1 }}
+ - do:
+          id:      index_60_refresh_id1
+          body:
+ - do:
+            query:   { term: { _id: 2 }}
+          index:   test_1
+ - match: { hits.total: 0 }
+          index:   index_60_refresh_1
+          rest_total_hits_as_int: true
+ - match: { hits.total: 1 }
+          body:
+ - do:
+          index:   test_1
+      search:
+ - do:
+                  index.refresh_interval: -1
+"refresh=wait_for waits until changes are visible in search":
+          body:    { foo: bar }
+      search:
+      index:
+---
           index:    test_1
+      index:
+          body:
+      index:
+          id:      1
+      search:
+ - is_true: forced_refresh
+            query:   { term: { _id: index_60_refresh_id1 }}
+          refresh: true
+            query:   { term: { _id: 1 }}
+          index:   test_1
+"Refresh":
+ - do:
+          refresh: ""
+---
+      indices.create:
+          refresh: wait_for
+                  number_of_replicas: 0
           body:
               settings:
-                  index.refresh_interval: -1
-                  number_of_replicas: 0
-
- - do:
-      index:
           index:   test_1
-          id:      1
-          body:    { foo: bar }
-
  - do:
-      search:
-          rest_total_hits_as_int: true
-          index:   test_1
-          body:
-            query:   { term: { _id: 1 }}
-
- - match: { hits.total: 0 }
-
- - do:
-      index:
-          index:   test_1
-          id:      2
-          refresh: true
-          body:    { foo: bar }
  - is_true: forced_refresh
-
- - do:
-      search:
-          rest_total_hits_as_int: true
-          index:   test_1
+          id:      1
+      index:
+          index:   index_60_refresh_1
           body:
-            query:   { term: { _id: 2 }}
-
- - match: { hits.total: 1 }
-
----
 "When refresh url parameter is an empty string that means \"refresh immediately\"":
-
- - do:
-      index:
-          index:   test_1
-          id:      1
-          refresh: ""
           body:    { foo: bar }
- - is_true: forced_refresh
-
- - do:
       search:
-          rest_total_hits_as_int: true
           index:   test_1
-          body:
-            query:   { term: { _id: 1 }}
-
- - match: { hits.total: 1 }
-
+ - do:
+ - do:
+          index:   test_1
+          rest_total_hits_as_int: true
+          rest_total_hits_as_int: true
 ---
-"refresh=wait_for waits until changes are visible in search":
-
- - do:
-      index:
-          index:   index_60_refresh_1
-          id:      index_60_refresh_id1
-          body:    { foo: bar }
-          refresh: wait_for
  - is_false: forced_refresh
-
- - do:
-      search:
           rest_total_hits_as_int: true
-          index:   index_60_refresh_1
-          body:
-            query:   { term: { _id: index_60_refresh_id1 }}
- - match: { hits.total: 1 }

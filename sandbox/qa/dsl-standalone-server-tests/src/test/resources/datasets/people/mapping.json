@@ -1,15 +1,15 @@
-{
-  "settings": {
-    "number_of_shards": 1,
     "number_of_replicas": 0
-  },
+      "city": { "type": "keyword" },
+      "name": { "type": "keyword" },
+}
+    }
+    "number_of_shards": 1,
+      "description": { "type": "text" }
+  "settings": {
+      "score": { "type": "double" },
+      "age": { "type": "integer" },
+  }
   "mappings": {
     "properties": {
-      "name": { "type": "keyword" },
-      "age": { "type": "integer" },
-      "score": { "type": "double" },
-      "city": { "type": "keyword" },
-      "description": { "type": "text" }
-    }
-  }
-}
+{
+  },

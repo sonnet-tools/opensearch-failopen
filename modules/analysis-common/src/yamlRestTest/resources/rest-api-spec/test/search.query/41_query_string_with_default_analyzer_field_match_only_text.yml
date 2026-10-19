@@ -1,42 +1,36 @@
----
-"Test default search analyzer is applied":
-  - skip:
-      version: " - 2.11.99"
-      reason: "match_only_text was added in 2.12"
-  - do:
-      indices.create:
         index: test
-        body:
-          settings:
-            index.analysis.analyzer.default.type: simple
-            index.analysis.analyzer.default_search.type: german
-          mappings:
-            properties:
-              body:
-                type: match_only_text
-
-  - do:
-      index:
-        index: test
-        id: 1
-        body:
-          body: Ich lese die Bücher
-
-  - do:
-      indices.refresh:
-        index: [ test ]
-
-  - do:
-      search:
-        index: test
-        q: "body:Bücher"
-
-  - match: { hits.total.value: 0 }
-
-  - do:
-      search:
-        index: test
-        q: "body:Bücher"
         analyzer: simple
-
+      indices.refresh:
+      reason: "match_only_text was added in 2.12"
+        q: "body:Bücher"
+  - do:
+            properties:
+      search:
+        index: test
+        index: test
+      index:
+          settings:
+  - match: { hits.total.value: 0 }
+  - do:
+      version: " - 2.11.99"
   - match: { hits.total.value: 1 }
+      search:
+          mappings:
+"Test default search analyzer is applied":
+                type: match_only_text
+            index.analysis.analyzer.default.type: simple
+        index: test
+          body: Ich lese die Bücher
+            index.analysis.analyzer.default_search.type: german
+        q: "body:Bücher"
+        body:
+        id: 1
+              body:
+      indices.create:
+        index: [ test ]
+  - do:
+  - do:
+  - do:
+---
+  - skip:
+        body:

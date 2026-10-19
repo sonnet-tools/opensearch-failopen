@@ -1,135 +1,123 @@
+  - do:
 ---
-"Verify that we can still find things with the template":
-  - do:
-      search_template:
-        rest_total_hits_as_int: true
-        index: test_search_template
-        body:
-          id: test_search_template
-          params:
-            f1: v5_old
-  - match: { hits.total: 1 }
-
----
-"Verify custom cluster metadata still exists after rolling upgrade":
-  - do:
-      snapshot.get_repository:
-        repository: my_repo
-  - is_true: my_repo
-
-  - do:
-      ingest.get_pipeline:
-        id: "my_pipeline"
-  - match: { my_pipeline.description: "_description" }
-
----
-"Index percolator query and use the percolate query in upgraded cluster":
-  - do:
-      index:
-        index: queries
-        id: q4
-        refresh: true
-        body:
+                - term:
           id: q4
-          query:
-            bool:
-              minimum_should_match: 2
-              should:
-                - term:
-                    field1: value
-                - term:
-                    field2: value
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: queries
-        body:
-          query:
-            percolate:
-              field: query
-              document:
                 field1: value
-  - match: { hits.total: 1 }
-  - match: { hits.hits.0._id: q1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: queries
         body:
-          sort: id
-          query:
-            percolate:
-              field: query
-              document:
-                field1: value
-                field2: value
-  - match: { hits.total: 3 }
-  - match: { hits.hits.0._id: q1 }
-  - match: { hits.hits.1._id: q2 }
-  - match: { hits.hits.2._id: q4 }
-
   - do:
-      search:
-        rest_total_hits_as_int: true
-        index: queries
-        body:
-          query:
-            percolate:
               field: query
-              document:
-                field2: value
-                field3: value
-  - match: { hits.total: 1 }
-  - match: { hits.hits.0._id: q3 }
-
----
-"Find a task result record from the old cluster":
-  - skip:
-      features:
-        - headers
+      tasks.get:
+                - term:
+  - match: { hits.hits.0._id: q1 }
+      headers: { "X-Opaque-Id": "Reindexing Again" }
+  - set: {hits.hits.0._id: task_id}
+                query: 'reindexed_index_copy'
+        wait_for_completion: false
+        rest_total_hits_as_int: true
+            percolate:
+        body:
+      snapshot.get_repository:
+  - do:
         - allowed_warnings
-
+      features:
+            percolate:
+              field: query
+  - match: { hits.total: 1 }
+  - match: { hits.total: 1 }
+        body:
+  - match: { task.headers.X-Opaque-Id: "Reindexing Again" }
+  - match: { hits.hits.0._id: q1 }
   - do:
-      # We don't require this warning because there's a very brief window during upgrades before the IndexMetaData is upgraded when warnings
-      # may not be emitted. That they do get upgraded is tested specifically by FullClusterRestartIT#testSystemIndexMetadataIsUpgraded().
-      allowed_warnings:
-        - "this request accesses system indices: [.tasks], but in a future major version, direct access to system indices will be prevented by default"
+              field: query
+        task_id: $task_id
+      reindex:
+                field2: value
+  - do:
+  - match: { my_pipeline.description: "_description" }
+          query:
+  - match: { hits.total: 1 }
+              document:
+  - is_true: my_repo
+"Verify that we can still find things with the template":
+            percolate:
+          query:
+      search_template:
       search:
+            index: reindexed_index_another_copy
+  - do:
+          query:
+                field2: value
+---
+                    field1: value
+        - headers
+  - set: { task: task_id }
+            index: reindexed_index_copy
+                field1: value
+  - do:
+              document:
+        body:
+        id: "my_pipeline"
+          query:
+          dest:
+"Index percolator query and use the percolate query in upgraded cluster":
+            bool:
+            size: 1
+  - match: { hits.total: 1 }
+          query:
+      tasks.get:
+          source:
+        wait_for_completion: true
+  - match: { hits.hits.0._id: q3 }
+      # may not be emitted. That they do get upgraded is tested specifically by FullClusterRestartIT#testSystemIndexMetadataIsUpgraded().
+        rest_total_hits_as_int: true
+"Verify custom cluster metadata still exists after rolling upgrade":
+  - match: { task: '/.+:\d+/' }
+        id: q4
+      index:
+  - match: { hits.hits.0._id: '/.+:\d+/' }
+          params:
+  - do:
+              should:
+        refresh: true
+        task_id: $task_id
+  - is_false: node_failures
+          sort: id
+        body:
+        index: queries
+"Find a task result record from the old cluster":
+                    field2: value
+        index: queries
+            match:
+        - "this request accesses system indices: [.tasks], but in a future major version, direct access to system indices will be prevented by default"
+  - do:
+        index: queries
+      ingest.get_pipeline:
+      allowed_warnings:
+      search:
+        body:
+  - do:
+        repository: my_repo
+  - is_true: task
+      search:
+              task.description:
+      # We don't require this warning because there's a very brief window during upgrades before the IndexMetaData is upgraded when warnings
+                field3: value
+  - match: { hits.total: 3 }
+      search:
+  - skip:
+        rest_total_hits_as_int: true
+            f1: v5_old
+  - do:
+---
+        body:
+        index: test_search_template
+  - match: { hits.hits.1._id: q2 }
+              minimum_should_match: 2
+          id: test_search_template
+              document:
+        rest_total_hits_as_int: true
+---
+  - match: { hits.hits.2._id: q4 }
         rest_total_hits_as_int: true
         index: .tasks
-        body:
-          query:
-            match:
-              task.description:
-                query: 'reindexed_index_copy'
-  - match: { hits.total: 1 }
-  - match: { hits.hits.0._id: '/.+:\d+/' }
-  - set: {hits.hits.0._id: task_id}
-
-  - do:
-      tasks.get:
-        task_id: $task_id
-
-  - is_false: node_failures
-  - is_true: task
-
-  - do:
-      headers: { "X-Opaque-Id": "Reindexing Again" }
-      reindex:
-        wait_for_completion: false
-        body:
-          source:
-            index: reindexed_index_copy
-            size: 1
-          dest:
-            index: reindexed_index_another_copy
-  - match: { task: '/.+:\d+/' }
-  - set: { task: task_id }
-
-  - do:
-      tasks.get:
-        wait_for_completion: true
-        task_id: $task_id
-  - match: { task.headers.X-Opaque-Id: "Reindexing Again" }
+        index: queries

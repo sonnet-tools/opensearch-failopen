@@ -1,31 +1,31 @@
-{
-  "indices.data_streams_stats":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/im-plugin/data-streams/",
-      "description":"Provides statistics on operations happening in a data stream."
     },
-    "stability":"experimental",
-    "url":{
-      "paths":[
-        {
-          "path":"/_data_stream/_stats",
-          "methods":[
-            "GET"
-          ]
+  }
+  "indices.data_streams_stats":{
+      "url":"https://opensearch.org/docs/latest/im-plugin/data-streams/",
         },
-        {
-          "path":"/_data_stream/{name}/_stats",
+      "paths":[
           "methods":[
             "GET"
-          ],
-          "parts":{
-            "name":{
-              "type":"list",
+          "methods":[
+    "stability":"experimental",
+          "path":"/_data_stream/_stats",
               "description":"A comma-separated list of data stream names; use `_all` or empty string to perform the operation on all data streams"
-            }
-          }
-        }
       ]
     }
-  }
+    "url":{
+              "type":"list",
+          }
+            "GET"
+    "documentation":{
+      "description":"Provides statistics on operations happening in a data stream."
+        }
+{
+          ]
+            }
+        {
+            "name":{
+        {
 }
+          ],
+          "parts":{
+          "path":"/_data_stream/{name}/_stats",

@@ -1,24 +1,24 @@
-{
-  "from": 0,
+      }
+          }
   "size": 0,
-  "timeout": "1m",
+        "shard_min_doc_count": 0,
+          {
+{
+  }
   "aggregations": {
-    "URL": {
-      "terms": {
+            "_count": "desc"
+  "timeout": "1m",
+        "min_doc_count": 1,
+        "order": [
         "field": "URL",
         "size": 10,
-        "min_doc_count": 1,
-        "shard_min_doc_count": 0,
-        "show_term_doc_count_error": false,
-        "order": [
-          {
-            "_count": "desc"
-          },
-          {
-            "_key": "asc"
-          }
-        ]
-      }
+      "terms": {
     }
-  }
+          },
 }
+        "show_term_doc_count_error": false,
+        ]
+          {
+  "from": 0,
+    "URL": {
+            "_key": "asc"

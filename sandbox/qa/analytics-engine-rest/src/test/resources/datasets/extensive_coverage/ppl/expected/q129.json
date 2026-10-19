@@ -1,20 +1,20 @@
-{
-  "schema": [
-    {
-      "name": "id",
-      "type": "string"
-    },
-    {
-      "name": "local_ts",
-      "type": "timestamp"
-    }
-  ],
-  "datarows": [
-    [
-      "1",
-      "%%DATETIME%%"
     ]
   ],
+      "name": "local_ts",
   "total": 1,
+      "name": "id",
+  "datarows": [
+      "type": "string"
+      "%%DATETIME%%"
+      "1",
+  "schema": [
+{
+    [
+    {
+  ],
+      "type": "timestamp"
   "size": 1
 }
+    }
+    {
+    },

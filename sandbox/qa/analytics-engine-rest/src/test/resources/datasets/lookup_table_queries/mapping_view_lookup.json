@@ -1,31 +1,31 @@
+      },
+    }
+}
+      "message": {
+      "timestamp": {
 {
   "settings": {
-    "number_of_shards": 1,
+        "type": "text"
+      },
+        "type": "keyword"
+      },
+      },
+        "type": "text"
+      "host": {
+      "view_id": {
     "number_of_replicas": 0
-  },
-  "mappings": {
+    "number_of_shards": 1,
+      "description": {
     "properties": {
-      "timestamp": {
         "type": "date"
       },
-      "host": {
+  },
         "type": "keyword"
-      },
-      "source": {
-        "type": "keyword"
-      },
-      "message": {
-        "type": "text"
-      },
       "view_name": {
         "type": "keyword"
-      },
-      "view_id": {
-        "type": "keyword"
-      },
-      "description": {
-        "type": "text"
       }
-    }
+        "type": "keyword"
   }
-}
+  "mappings": {
+      "source": {
+      },

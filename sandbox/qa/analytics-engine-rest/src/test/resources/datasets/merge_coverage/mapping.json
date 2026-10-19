@@ -1,55 +1,55 @@
-{
+        "type": "double"
   "settings": {
-    "number_of_shards": 1,
-    "number_of_replicas": 0
-  },
-  "mappings": {
+}
+        "type": "keyword"
+        "type": "integer"
     "properties": {
-      "id": {
+        "format": "yyyy-MM-dd"
+      },
+        "type": "integer"
+      "ts": {
+      "big_amount": {
+      },
+    "number_of_replicas": 0
+      "flag": {
+        "type": "long"
+        "type": "date",
+      },
         "type": "integer"
       },
-      "category": {
-        "type": "keyword"
+    }
+      "@timestamp": {
+        "format": "yyyy-MM-dd"
+      },
       },
       "region": {
-        "type": "keyword"
-      },
-      "amount": {
-        "type": "integer"
-      },
+      "id": {
+{
+  },
+    "number_of_shards": 1,
       "price": {
-        "type": "double"
-      },
-      "label": {
-        "type": "keyword"
-      },
-      "flag": {
-        "type": "boolean"
-      },
-      "ts": {
         "type": "date",
-        "format": "yyyy-MM-dd"
+      },
+        "type": "ip"
+  "mappings": {
       },
       "opt": {
-        "type": "integer"
-      },
-      "payload": {
         "type": "keyword"
       },
-      "big_amount": {
-        "type": "long"
-      },
-      "client_ip": {
-        "type": "ip"
-      },
-      "opt_ts": {
-        "type": "date",
-        "format": "yyyy-MM-dd"
-      },
-      "@timestamp": {
-        "type": "date",
-        "format": "yyyy-MM-dd"
-      }
-    }
   }
-}
+      "client_ip": {
+      },
+      },
+      },
+        "format": "yyyy-MM-dd"
+      "opt_ts": {
+        "type": "keyword"
+        "type": "keyword"
+      },
+      "category": {
+      "label": {
+        "type": "boolean"
+        "type": "date",
+      "payload": {
+      "amount": {
+      }

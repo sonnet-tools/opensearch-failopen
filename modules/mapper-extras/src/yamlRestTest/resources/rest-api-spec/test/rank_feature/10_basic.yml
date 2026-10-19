@@ -1,180 +1,145 @@
-setup:
-  - do:
-      indices.create:
-          index: test
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
-              properties:
-                pagerank:
-                   type: rank_feature
-                url_length:
-                   type: rank_feature
-                   positive_score_impact: false
-
-  - do:
-      index:
-        index: test
-        id: 1
+      search:
+                pivot: 20
+                pivot: 20
         body:
-          pagerank: 10
-          url_length: 50
-
-  - do:
-      index:
-        index: test
-        id: 2
-        body:
-          pagerank: 100
+              field: url_length
+      hits.total: 2
           url_length: 20
-
   - do:
-      indices.refresh: {}
-
----
-"Positive log":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
             rank_feature:
-              field: pagerank
-              log:
-                scaling_factor: 3
-
   - match:
-      hits.total: 2
-
-  - match:
-      hits.hits.0._id: "2"
-
-  - match:
-      hits.hits.1._id: "1"
-
----
-"Positive saturation":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            rank_feature:
-              field: pagerank
               saturation:
-                pivot: 20
-
-  - match:
-      hits.total: 2
-
-  - match:
-      hits.hits.0._id: "2"
-
-  - match:
-      hits.hits.1._id: "1"
-
----
-"Positive sigmoid":
-
-  - do:
       search:
-        rest_total_hits_as_int: true
+      hits.hits.0._id: "2"
+      hits.hits.0._id: "2"
         body:
-          query:
-            rank_feature:
-              field: pagerank
+      hits.total: 2
               sigmoid:
-                pivot: 20
-                exponent: 0.6
-
-  - match:
-      hits.total: 2
-
-  - match:
-      hits.hits.0._id: "2"
-
   - match:
       hits.hits.1._id: "1"
-
----
-"Negative log":
-
-  - do:
-      catch: bad_request
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            rank_feature:
-              field: url_length
               log:
-                scaling_factor: 3
-
----
-"Negative saturation":
-
+              field: pagerank
+            mappings:
+              field: pagerank
   - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            rank_feature:
-              field: url_length
-              saturation:
-                pivot: 20
-
+        index: test
+              linear: {}
   - match:
-      hits.total: 2
-
+      search:
+  - do:
+                   type: rank_feature
+  - do:
+              properties:
+        body:
+  - match:
+              number_of_replicas: 0
+                scaling_factor: 3
+        rest_total_hits_as_int: true
+      hits.hits.1._id: "1"
+          query:
+        index: test
+        body:
+  - match:
+---
+                   type: rank_feature
+          query:
+      hits.hits.1._id: "1"
+            rank_feature:
+  - match:
+          pagerank: 10
+              field: url_length
+      hits.hits.1._id: "1"
+                pivot: 20
+          query:
+                exponent: 0.6
+        rest_total_hits_as_int: true
+      index:
+---
+  - match:
+  - do:
   - match:
       hits.hits.0._id: "2"
-
+          query:
   - match:
+          body:
+        id: 2
+              saturation:
+setup:
+                   positive_score_impact: false
+      hits.total: 2
+        body:
+                pivot: 20
       hits.hits.1._id: "1"
-
+  - do:
+  - do:
+  - match:
+                pagerank:
+      hits.hits.0._id: "2"
+"Negative log":
+  - match:
+          query:
+        body:
+              field: pagerank
+"Positive saturation":
+          pagerank: 100
+        body:
+  - match:
+      search:
+          url_length: 50
+              log:
+  - match:
+---
+                exponent: 0.6
+      hits.total: 2
+      indices.create:
+---
+      hits.hits.1._id: "1"
+            rank_feature:
+          query:
+        rest_total_hits_as_int: true
+      hits.total: 2
+---
+  - match:
+        index: test
+      catch: bad_request
+            settings:
+"Negative linear":
+  - match:
+      indices.refresh: {}
+      hits.hits.0._id: "2"
+              sigmoid:
+      search:
+  - do:
+                scaling_factor: 3
+  - do:
+"Negative saturation":
+            rank_feature:
+  - do:
+  - do:
+      hits.total.value: 2
+"Positive log":
+        rest_total_hits_as_int: true
+                url_length:
+              field: url_length
+        body:
+            rank_feature:
+      index:
 ---
 "Negative sigmoid":
-
-  - do:
-      search:
         rest_total_hits_as_int: true
-        body:
+  - match:
+        rest_total_hits_as_int: true
           query:
-            rank_feature:
-              field: url_length
-              sigmoid:
-                pivot: 20
-                exponent: 0.6
-
-  - match:
-      hits.total: 2
-
-  - match:
       hits.hits.0._id: "2"
-
+"Positive sigmoid":
   - match:
-      hits.hits.1._id: "1"
-
----
-"Negative linear":
-
-  - do:
+            rank_feature:
+          index: test
       search:
-        index: test
-        body:
-          query:
             rank_feature:
+        id: 1
               field: url_length
-              linear: {}
-
+      search:
+---
   - match:
-      hits.total.value: 2
-
-  - match:
-      hits.hits.0._id: "2"
-
-  - match:
-      hits.hits.1._id: "1"
+        body:

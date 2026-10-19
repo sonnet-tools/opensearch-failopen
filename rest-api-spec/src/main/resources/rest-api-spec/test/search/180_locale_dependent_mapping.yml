@@ -1,41 +1,37 @@
----
-"Test Index and Search locale dependent mappings / dates":
-
-  - skip:
-      version: "all"
-      reason: "Awaits fix: https://github.com/elastic/elasticsearch/issues/49719"
-
-  - do:
-      indices.create:
-          index: test_index
+      search:
           body:
-              settings:
-                  number_of_shards: 1
-              mappings:
                   properties:
-                      date_field:
-                          type: date
-                          format: "8E, d MMM uuuu HH:mm:ss Z"
-                          locale: "de"
-  - do:
-      bulk:
-          refresh: true
-          body:
-              - '{"index": {"_index": "test_index", "_id": "1"}}'
-              - '{"date_field": "Mi, 06 Dez 2000 02:55:00 -0800"}'
-              - '{"index": {"_index": "test_index", "_id": "2"}}'
-              - '{"date_field": "Do, 07 Dez 2000 02:55:00 -0800"}'
-
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test_index
-          body: {"query" : {"range" : {"date_field" : {"gte": "Di, 05 Dez 2000 02:55:00 -0800", "lte": "Do, 07 Dez 2000 00:00:00 -0800"}}}}
-  - match: { hits.total: 1 }
-
-  - do:
-      search:
-          rest_total_hits_as_int: true
-          index: test_index
           body: {"query" : {"range" : {"date_field" : {"gte": "Di, 05 Dez 2000 02:55:00 -0800", "lte": "Fr, 08 Dez 2000 00:00:00 -0800"}}}}
+              - '{"index": {"_index": "test_index", "_id": "2"}}'
+          index: test_index
+          index: test_index
+              mappings:
+          body:
+---
+      bulk:
+      reason: "Awaits fix: https://github.com/elastic/elasticsearch/issues/49719"
+  - do:
+  - skip:
+                          locale: "de"
+              settings:
+          rest_total_hits_as_int: true
+  - do:
+                  number_of_shards: 1
+          rest_total_hits_as_int: true
+  - do:
+                          type: date
+                      date_field:
+"Test Index and Search locale dependent mappings / dates":
+              - '{"date_field": "Mi, 06 Dez 2000 02:55:00 -0800"}'
+  - do:
+          index: test_index
+              - '{"index": {"_index": "test_index", "_id": "1"}}'
+  - match: { hits.total: 1 }
   - match: { hits.total: 2 }
+          body: {"query" : {"range" : {"date_field" : {"gte": "Di, 05 Dez 2000 02:55:00 -0800", "lte": "Do, 07 Dez 2000 00:00:00 -0800"}}}}
+      version: "all"
+                          format: "8E, d MMM uuuu HH:mm:ss Z"
+          refresh: true
+      search:
+              - '{"date_field": "Do, 07 Dez 2000 02:55:00 -0800"}'
+      indices.create:

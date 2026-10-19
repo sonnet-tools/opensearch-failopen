@@ -1,110 +1,93 @@
----
-"Basic test for index open/close":
+        index: index_2
+      indices.open:
+  - do:
+        index: "index_*"
+  - is_true: acknowledged
   - do:
       indices.create:
-        index: test_index
-        body:
-          settings:
             number_of_replicas: 0
-
-  - do:
-      cluster.health:
-        wait_for_status: green
-
-  - do:
-      indices.close:
-        index: test_index
-  - is_true: acknowledged
-
-  - do:
-      catch: bad_request
-      search:
-        rest_total_hits_as_int: true
-        index: test_index
-
-  - do:
-      indices.open:
-        index: test_index
-  - is_true: acknowledged
-
-  - do:
-      cluster.health:
-        wait_for_status: green
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test_index
-
----
-"Open index with wait_for_active_shards set to all":
-  - do:
-      indices.create:
-        index: test_index
-        body:
-          settings:
             number_of_replicas: 0
-
-  - do:
-      indices.close:
-        index: test_index
-  - is_true: acknowledged
-
-  - do:
-      indices.open:
-        index: test_index
-        wait_for_active_shards: all
-  - is_true: acknowledged
   - match: { acknowledged: true }
   - match: { shards_acknowledged: true }
-
----
+  - match: { indices.index_3.closed: true }
+        body:
+  - do:
+  - do:
+      indices.create:
+        index: test_index
+      indices.create:
+        wait_for_active_shards: all
+  - do:
+      indices.create:
+          settings:
+  - do:
+        body:
+  - do:
+  - do:
+            number_of_replicas: 0
+          settings:
+  - is_true: acknowledged
+  - do:
+      indices.open:
 "Close index with wait_for_active_shards set to all":
-
-  - do:
-      indices.create:
         index: test_index
-        body:
-          settings:
-            number_of_replicas: 0
-
-  - do:
-      indices.close:
-        index: test_index
-        wait_for_active_shards: all
-  - is_true: acknowledged
-  - match: { acknowledged: true }
-  - match: { shards_acknowledged: true }
+  - match: { indices.index_2.closed: true }
 ---
-"Close index response with result per index":
-
+          settings:
   - do:
+            number_of_replicas: 0
+        index: test_index
+  - match: { acknowledged: true }
       indices.create:
+        index: test_index
+        wait_for_status: green
+            number_of_replicas: 0
+      cluster.health:
+---
+      indices.close:
         index: index_1
         body:
+        wait_for_status: green
           settings:
-            number_of_replicas: 0
-
+      cluster.health:
   - do:
-      indices.create:
-        index: index_2
-        body:
-          settings:
-            number_of_replicas: 0
-
-  - do:
-      indices.create:
-        index: index_3
-        body:
-          settings:
-            number_of_replicas: 0
-
-  - do:
-      indices.close:
-        index: "index_*"
-
+      catch: bad_request
   - match: { acknowledged: true }
+      search:
   - match: { shards_acknowledged: true }
+  - do:
+---
+        index: test_index
+      search:
+"Close index response with result per index":
+        body:
+  - match: { shards_acknowledged: true }
+  - is_true: acknowledged
+        index: test_index
   - match: { indices.index_1.closed: true }
-  - match: { indices.index_2.closed: true }
-  - match: { indices.index_3.closed: true }
+        body:
+      indices.close:
+  - do:
+            number_of_replicas: 0
+        rest_total_hits_as_int: true
+"Open index with wait_for_active_shards set to all":
+"Basic test for index open/close":
+          settings:
+        wait_for_active_shards: all
+  - is_true: acknowledged
+        index: test_index
+  - do:
+  - do:
+        index: test_index
+        index: test_index
+        index: test_index
+        body:
+          settings:
+  - is_true: acknowledged
+---
+      indices.close:
+        index: index_3
+        rest_total_hits_as_int: true
+      indices.create:
+      indices.close:
+  - do:

@@ -1,17 +1,17 @@
-{
-  "from": 0,
-  "size": 0,
-  "timeout": "1m",
-  "aggregations": {
-    "min(EventDate)": {
-      "min": {
         "field": "EventDate"
-      }
     },
-    "max(EventDate)": {
-      "max": {
-        "field": "EventDate"
-      }
     }
   }
+    "max(EventDate)": {
+{
+      }
+  "size": 0,
+        "field": "EventDate"
+      "min": {
+      }
+  "aggregations": {
 }
+    "min(EventDate)": {
+      "max": {
+  "timeout": "1m",
+  "from": 0,

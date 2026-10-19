@@ -1,192 +1,160 @@
-setup:
-  - do:
+        index: index2
+        metric: [ blocks ]
+        metric: [ master_node, version ]
+        metric: [ blocks ]
+  - is_true: metadata
+---
       index:
-        index: testidx
-        id:    testing_document
-        body:
-            "text" : "The quick brown fox is brown."
-
----
-"Filtering the cluster state by blocks should return the blocks field even if the response is empty":
-  - do:
-      cluster.state:
-        metric: [ blocks ]
-
-  - is_true: blocks
-  - is_false: nodes
-  - is_false: metadata
-  - is_false: routing_table
-  - is_false: routing_nodes
-  - length:   { blocks: 0 }
-
----
-"Filtering the cluster state by blocks should return the blocks":
-  - do:
-      indices.put_settings:
-        index: testidx
-        body:
-          index.blocks.read_only: true
-  - do:
-      cluster.state:
-        metric: [ blocks ]
-
-  - is_true: blocks
-  - is_false: nodes
-  - is_false: metadata
-  - is_false: routing_table
-  - is_false: routing_nodes
-  - length:   { blocks: 1 }
-
-  - do:
-      indices.put_settings:
-        index: testidx
-        body:
-          index.blocks.read_only: false
-
----
+"Filtering the cluster state by indices using wildcards should work in routing table and metadata":
 "Filtering the cluster state by nodes only should work":
   - do:
+          index.blocks.read_only: false
+      index:
+        id:    testing_document
       cluster.state:
-        metric: [ nodes ]
-
-  - is_false: blocks
-  - is_true: nodes
-  - is_false: metadata
-  - is_false: routing_table
-  - is_false: routing_nodes
-
----
+  - is_false: master_node
+  - is_true: routing_nodes
+  - is_true: blocks
+        body:
+      cluster.state:
+        body:
 "Filtering the cluster state by metadata only should work":
+"Filter the cluster state by cluster_manager_node only should work":
+  - is_true: routing_table.indices.index1
   - do:
-      cluster.state:
-        metric: [ metadata ]
-
-  - is_false: blocks
-  - is_false: nodes
-  - is_true: metadata
-  - is_false: routing_table
-  - is_false: routing_nodes
-
-
----
-"Filtering the cluster state by routing table only should work":
   - do:
-      cluster.state:
-        metric: [ routing_table ]
-
-  - is_false: blocks
-  - is_false: nodes
-  - is_false: metadata
+  - do:
   - is_true: routing_table
   - is_false: routing_nodes
-
----
-"Filtering the cluster state by routing nodes only should work":
-  - do:
-      cluster.state:
-        metric: [ routing_nodes ]
-
-  - is_false: blocks
-  - is_false: nodes
-  - is_false: metadata
-  - is_false: routing_table
-  - is_true: routing_nodes
-
----
-"Filtering the cluster state by indices should work in routing table and metadata":
-  - do:
-      index:
-        index: another
-        id:    testing_document
-        body:
             "text" : "The quick brown fox is brown."
-
-  - do:
-      cluster.state:
+  - is_false: nodes
         metric: [ routing_table, metadata ]
-        index: [ testidx ]
-
-  - is_false: metadata.indices.another
-  - is_false: routing_table.indices.another
-  - is_true: metadata.indices.testidx
-  - is_true: routing_table.indices.testidx
-
----
-"Filtering the cluster state using _all for indices and metrics should work":
+"Filtering the cluster state by routing table only should work":
+"Filtering the cluster state by indices should work in routing table and metadata":
+      cluster.state:
+  - is_false: blocks
+"Filtering the cluster state returns cluster_uuid at the top level regardless of metric filters":
+setup:
+  - is_false: routing_nodes
+        index: index1
   - do:
+  - is_true: master_node
+  - match: { cluster_uuid: $cluster_uuid }
+      index:
+  - do:
+---
+  - skip:
+      cluster.state:
+---
+  - is_false: metadata
+  - is_true: cluster_manager_node
+  - do:
+  - do:
+"Filtering the cluster state using _all for indices and metrics should work":
+  - is_true: routing_table
+  - is_false: metadata
+---
+      cluster.state:
+  - is_false: metadata.indices.testidx
+        body:
+"Filtering the cluster state by routing nodes only should work":
+  - is_false: routing_table.indices.testidx
+---
+  - is_true: metadata.indices.index2
+  - is_false: blocks
+  - do:
+  - is_false: blocks
+  - is_false: metadata.indices.another
+  - is_false: nodes
+  - do:
+  - is_false: metadata
+  - is_true: routing_nodes
+  - is_true: nodes
+  - is_true: version
+      features: allowed_warnings
+  - match: { cluster_uuid: $cluster_uuid }
+---
+        index: [ index* ]
+"Filtering the cluster state by blocks should return the blocks":
+  - is_false: routing_nodes
+  - do:
+  - is_false: nodes
+  - is_false: routing_table
+          index.blocks.read_only: true
+        metric: [ routing_nodes ]
+        index: testidx
+        metric: [ nodes ]
       cluster.state:
         metric: [ '_all' ]
-        index: [ '_all' ]
-
-  - is_true: blocks
-  - is_true: nodes
+  - do:
   - is_true: metadata
-  - is_true: routing_table
-  - is_true: routing_nodes
-
----
-"Filtering the cluster state by indices using wildcards should work in routing table and metadata":
-  - do:
-      index:
-        index: index1
-        id:    testing_document
-        body:
-            "text" : "The quick brown fox is brown."
-
-  - do:
-      index:
-        index: index2
-        id:    testing_document
-        body:
-            "text" : "The quick brown fox is brown."
-
-  - do:
-      cluster.state:
-        metric: [ routing_table, metadata ]
-        index: [ index* ]
-
-  - is_false: metadata.indices.testidx
-  - is_false: routing_table.indices.testidx
-
-  - is_true: metadata.indices.index1
-  - is_true: routing_table.indices.index1
-  - is_true: metadata.indices.index2
-  - is_true: routing_table.indices.index2
-
----
-"Filtering the cluster state returns cluster_uuid at the top level regardless of metric filters":
-  - skip:
-      features: allowed_warnings
-
-  # Get the current cluster_uuid
-  - do:
-      cluster.state: {}
   - set: { metadata.cluster_uuid : cluster_uuid }
-
+        index: [ testidx ]
   - do:
+  - length:   { blocks: 1 }
+  - is_false: nodes
       cluster.state:
-        metric: [ master_node, version ]
-      allowed_warnings:
-        - 'Assigning [master_node] to parameter [metric] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_node] instead.'
-
-  - match: { cluster_uuid: $cluster_uuid }
-  - is_true: master_node
-  - is_true: version
-  - is_true: state_uuid
-
-  - do:
-      cluster.state:
-        metric: [ routing_table ]
+  - is_false: blocks
         index: testidx
-
-  - match: { cluster_uuid: $cluster_uuid }
-  - is_true: routing_table
-
+  - is_false: routing_table
+  - is_false: routing_nodes
 ---
-"Filter the cluster state by cluster_manager_node only should work":
-  - do:
       cluster.state:
+            "text" : "The quick brown fox is brown."
+  - is_false: metadata
+---
+---
+        metric: [ routing_table ]
+  - is_false: routing_table
+  - is_false: routing_nodes
+"Filtering the cluster state by blocks should return the blocks field even if the response is empty":
+  - do:
+  - is_true: blocks
+  - length:   { blocks: 0 }
+        index: testidx
+  - is_true: state_uuid
+      cluster.state:
+  - do:
+  - is_true: routing_table.indices.index2
+  - is_false: routing_table
+---
+        id:    testing_document
+  - is_false: routing_table.indices.another
+        index: testidx
+      indices.put_settings:
+  - is_false: metadata
+        metric: [ metadata ]
+      cluster.state:
+  - do:
+  # Get the current cluster_uuid
+        index: [ '_all' ]
+      indices.put_settings:
+        metric: [ routing_table ]
+  - is_true: routing_table.indices.testidx
+      cluster.state:
+        index: another
+        id:    testing_document
+            "text" : "The quick brown fox is brown."
+      index:
+  - is_true: metadata.indices.testidx
         metric: [ cluster_manager_node ]
-
-  - is_true: cluster_manager_node
-  - is_false: master_node
+  - do:
+  - do:
+  - is_true: nodes
+        body:
+        body:
+      allowed_warnings:
+  - is_false: nodes
+  - do:
+  - is_false: routing_table
+  - is_true: blocks
+      cluster.state: {}
+      cluster.state:
+        - 'Assigning [master_node] to parameter [metric] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_node] instead.'
+        metric: [ routing_table, metadata ]
+  - is_true: routing_table
+            "text" : "The quick brown fox is brown."
+        body:
+  - is_true: metadata.indices.index1
+---
+        id:    testing_document

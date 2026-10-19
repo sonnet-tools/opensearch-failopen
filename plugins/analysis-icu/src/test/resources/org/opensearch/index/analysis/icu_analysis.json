@@ -1,20 +1,19 @@
-{
-    "index":{
-        "analysis":{
-            "tokenizer" : {
-                "icu_tokenizer" : {
-                    "type":"icu_tokenizer"
-                },
-                "user_rule_tokenizer" : {
-                    "type":"icu_tokenizer",
-                    "rule_files":"Latn:Latin-dont-break-on-hyphens.rbbi"
-                },
-                "multi_rule_tokenizer" : {
-                    "type":"icu_tokenizer",
                     "rule_files":["Cyrl:KeywordTokenizer.rbbi", "thai:KeywordTokenizer.rbbi"]
-
-                }
+                "icu_tokenizer" : {
             }
-        }
-    }
+        "analysis":{
 }
+                    "type":"icu_tokenizer",
+    "index":{
+                    "type":"icu_tokenizer",
+                },
+                }
+        }
+{
+                    "rule_files":"Latn:Latin-dont-break-on-hyphens.rbbi"
+                "multi_rule_tokenizer" : {
+                    "type":"icu_tokenizer"
+    }
+                "user_rule_tokenizer" : {
+            "tokenizer" : {
+                },

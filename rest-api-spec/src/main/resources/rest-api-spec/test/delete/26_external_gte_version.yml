@@ -1,48 +1,39 @@
----
-"External GTE version":
-
  - do:
-      index:
-          index:          test_1
           id:             1
-          body:           { foo: bar }
-          version_type:   external_gte
-          version:        5
-
- - match:   { _version: 5}
-
+      index:
  - do:
+          index:          test_1
       catch:             conflict
-      delete:
-          index:          test_1
-          id:             1
-          version_type:   external_gte
-          version:        4
-
- - do:
-      delete:
-          index:          test_1
-          id:             1
-          version_type:   external_gte
-          version:        6
-
  - match:   { _version: 6}
-
+          version_type:   external_gte
+          id:             1
+ - do:
+          index:          test_1
+---
+ - match:   { _version: 6}
+          version:        6
+ - do:
+          version_type:   external_gte
+      delete:
+          body:           { foo: bar }
  - do:
       index:
           index:          test_1
-          id:             1
-          body:           { foo: bar }
-          version_type:   external_gte
           version:        6
-
- - match:   { _version: 6}
-
- - do:
-      delete:
+"External GTE version":
+          id:             1
+          version_type:   external_gte
+ - match:   { _version: 5}
           index:          test_1
           id:             1
+      delete:
           version_type:   external_gte
           version:        6
-
+      delete:
  - match:   { _version: 6}
+          version:        4
+          id:             1
+          body:           { foo: bar }
+          version:        5
+          version_type:   external_gte
+          index:          test_1

@@ -1,35 +1,35 @@
-{
-  "schema": [
     {
-      "name": "count()",
-      "type": "bigint"
+  "total": 3,
     },
-    {
       "name": "level",
-      "type": "string"
-    },
-    {
-      "name": "service_name",
-      "type": "string"
-    }
-  ],
-  "datarows": [
+      7,
     [
+    {
+      "db-service"
+  "size": 3
+      "web-service"
+      "type": "bigint"
       12,
       "ERROR",
-      "api-service"
     ],
+    {
     [
+      "name": "service_name",
       15,
-      "ERROR",
-      "db-service"
-    ],
-    [
-      7,
-      "ERROR",
-      "web-service"
-    ]
   ],
-  "total": 3,
-  "size": 3
+      "api-service"
+    },
+      "name": "count()",
+  "datarows": [
+    }
+    ],
+  "schema": [
+  ],
+      "ERROR",
+    ]
+      "type": "string"
+      "ERROR",
 }
+      "type": "string"
+    [
+{

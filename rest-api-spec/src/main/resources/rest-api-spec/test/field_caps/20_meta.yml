@@ -1,62 +1,50 @@
+          body:
+                    type: long
+        index: test1,test3
+                      metric_type: gauge
+                      unit: ms
+      field_caps:
 ---
-"Merge metadata across multiple indices":
-
-
+          index: test3
+                      unit: ns
+  - do:
+        index: test3
   - do:
         indices.create:
-          index: test1
-          body:
-              mappings:
                 properties:
-                  latency:
-                    type: long
-                    meta:
-                      unit: ms
-                      metric_type: gauge
-
   - do:
+  - match: {fields.latency.long.meta.unit:              ["ms"]}
+                  latency:
+      field_caps:
+                  latency:
+        index: test1,test2,test3
+  - match: {fields.latency.long.meta.metric_type:       ["gauge"]}
         indices.create:
           index: test2
-          body:
-              mappings:
-                properties:
-                  latency:
-                    type: long
                     meta:
-                      unit: ns
-                      metric_type: gauge
-
-  - do:
-        indices.create:
-          index: test3
-
-  - do:
-      field_caps:
-        index: test3
         fields: [latency]
-
-  - is_false: fields.latency.long.meta.unit
-
-  - do:
       field_caps:
+  - do:
+          body:
         index: test1
-        fields: [latency]
-
-  - match: {fields.latency.long.meta.unit:              ["ms"]}
   - match: {fields.latency.long.meta.metric_type:       ["gauge"]}
-
-  - do:
-      field_caps:
-        index: test1,test3
         fields: [latency]
-
-  - match: {fields.latency.long.meta.unit:              ["ms"]}
+              mappings:
+      field_caps:
+              mappings:
+                    type: long
+  - is_false: fields.latency.long.meta.unit
+"Merge metadata across multiple indices":
+  - do:
+        fields: [latency]
+  - do:
   - match: {fields.latency.long.meta.metric_type:       ["gauge"]}
-
-  - do:
-      field_caps:
-        index: test1,test2,test3
-        fields: [latency]
-
+        indices.create:
   - match: {fields.latency.long.meta.unit:              ["ms", "ns"]}
-  - match: {fields.latency.long.meta.metric_type:       ["gauge"]}
+  - do:
+          index: test1
+                      metric_type: gauge
+        fields: [latency]
+                properties:
+                    meta:
+  - match: {fields.latency.long.meta.unit:              ["ms"]}

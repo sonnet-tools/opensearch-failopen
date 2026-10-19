@@ -1,31 +1,31 @@
-{
+        "type": "integer"
+      "timestamp": {
+}
+      },
+      },
+    }
+        "type": "keyword"
+  "mappings": {
+      "response_time": {
+        "type": "float"
   "settings": {
+        "type": "integer"
+  }
+      "region": {
+    "properties": {
     "number_of_shards": 1,
     "number_of_replicas": 0
-  },
-  "mappings": {
-    "properties": {
-      "timestamp": {
-        "type": "date"
-      },
-      "user": {
-        "type": "keyword"
-      },
       "department": {
         "type": "keyword"
-      },
-      "response_time": {
-        "type": "integer"
-      },
-      "score": {
-        "type": "float"
+        "type": "date"
       },
       "status_code": {
-        "type": "integer"
-      },
-      "region": {
+      "score": {
         "type": "keyword"
+  },
+      "user": {
+      },
       }
-    }
-  }
-}
+      },
+      },
+{

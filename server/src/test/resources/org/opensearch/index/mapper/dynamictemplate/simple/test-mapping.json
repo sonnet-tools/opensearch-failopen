@@ -1,32 +1,32 @@
-{
-    "_doc":{
-        "dynamic_templates":[
-            {
-                "template_1":{
-                    "match":"multi*",
-                    "mapping":{
-                        "type":"{dynamic_type}",
-                        "index":true,
                         "store":true,
-                        "fields":{
-                            "org":{
-                                "type":"keyword",
-                                "index":true,
-                                "store":true
-                            }
-                        }
-                    }
                 }
-            },
+                }
             {
+                        "type":"keyword"
                 "template_2":{
-                    "match":"*",
+            }
+                    "mapping":{
+                                "store":true
+{
+            {
+    "_doc":{
                     "match_mapping_type":"string",
                     "mapping":{
-                        "type":"keyword"
-                    }
-                }
-            }
+                        "fields":{
         ]
-    }
+                                "type":"keyword",
+            },
+                "template_1":{
+                    }
+                    "match":"*",
+                                "index":true,
+                    "match":"multi*",
+                        "type":"{dynamic_type}",
+                    }
 }
+                        }
+                            "org":{
+                        "index":true,
+    }
+        "dynamic_templates":[
+                            }

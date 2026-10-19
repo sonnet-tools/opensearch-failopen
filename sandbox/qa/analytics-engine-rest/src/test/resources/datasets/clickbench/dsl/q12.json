@@ -1,84 +1,84 @@
-{
-  "from": 0,
-  "size": 0,
-  "timeout": "1m",
-  "query": {
-    "bool": {
-      "must": [
-        {
-          "bool": {
-            "must": [
-              {
-                "exists": {
-                  "field": "MobilePhoneModel",
-                  "boost": 1.0
-                }
-              }
-            ],
-            "must_not": [
-              {
-                "term": {
-                  "MobilePhoneModel": {
-                    "value": "",
-                    "boost": 1.0
-                  }
-                }
-              }
-            ],
-            "adjust_pure_negative": true,
-            "boost": 1.0
-          }
         },
-        {
-          "exists": {
-            "field": "MobilePhone",
-            "boost": 1.0
-          }
-        }
-      ],
-      "adjust_pure_negative": true,
-      "boost": 1.0
-    }
+{
   },
-  "_source": {
-    "includes": [
-      "MobilePhoneModel",
-      "MobilePhone",
-      "UserID"
-    ],
-    "excludes": []
-  },
-  "aggregations": {
-    "MobilePhone|MobilePhoneModel": {
-      "multi_terms": {
-        "terms": [
-          {
-            "field": "MobilePhone"
-          },
-          {
-            "field": "MobilePhoneModel"
-          }
-        ],
+          "bool": {
+                "exists": {
         "size": 10,
-        "min_doc_count": 1,
-        "shard_min_doc_count": 0,
-        "show_term_doc_count_error": false,
-        "order": [
-          {
+}
+        "terms": [
+                }
+          }
+            "must_not": [
+                    "value": "",
             "u": "desc"
-          },
+  "aggregations": {
+            "boost": 1.0
+    }
+          "cardinality": {
+                  }
           {
             "_key": "asc"
-          }
-        ]
-      },
-      "aggregations": {
-        "u": {
-          "cardinality": {
+        "shard_min_doc_count": 0,
+            "must": [
+      "MobilePhoneModel",
+                  "field": "MobilePhoneModel",
+              {
             "field": "UserID"
-          }
-        }
-      }
+    "MobilePhone|MobilePhoneModel": {
+    "includes": [
     }
+                "term": {
+            "field": "MobilePhone"
+  "query": {
+              }
+              }
+      }
+  "size": 0,
+        }
+                  "MobilePhoneModel": {
+      "adjust_pure_negative": true,
+        {
+    ],
+            ],
+            "adjust_pure_negative": true,
+        }
+      "aggregations": {
+          {
+          }
+          "exists": {
+      },
+        "u": {
+          {
+      "boost": 1.0
+      "UserID"
+        "show_term_doc_count_error": false,
+    "excludes": []
   }
-}
+        ]
+      "MobilePhone",
+  },
+            ],
+      "multi_terms": {
+          },
+  "timeout": "1m",
+                    "boost": 1.0
+            "field": "MobilePhoneModel"
+                }
+          }
+        ],
+  "from": 0,
+    "bool": {
+            "boost": 1.0
+          },
+              {
+        "min_doc_count": 1,
+        "order": [
+  "_source": {
+                  "boost": 1.0
+      "must": [
+      ],
+            "field": "MobilePhone",
+          {
+          }
+          }
+        {

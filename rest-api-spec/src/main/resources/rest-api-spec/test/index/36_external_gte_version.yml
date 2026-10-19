@@ -1,51 +1,42 @@
----
+ - do:
+          version:        0
+          body:           { foo: bar2 }
+          id:             1
 "External GTE version":
-
- - do:
-      index:
-          index:          test_1
-          id:             1
-          body:           { foo: bar }
+          version:        5
           version_type:   external_gte
-          version:        0
-
+          version_type:   external_gte
+          id:             1
+      index:
+ - match:   { _version: 5}
  - match:   { _version: 0}
-
- - do:
-      index:
-          index:          test_1
-          id:             1
+          version_type:   external_gte
           body:           { foo: bar }
-          version_type:   external_gte
-          version:        5
-
- - match:   { _version: 5}
-
- - do:
-      catch:             conflict
-      index:
           index:          test_1
-          id:             1
-          body:           { foo: bar }
-          version_type:   external_gte
-          version:        0
-
  - do:
-      index:
-          index:          test_1
-          id:             1
-          body:           { foo: bar2 }
-          version_type:   external_gte
-          version:        5
-
- - match:   { _version: 5}
-
- - do:
-      index:
-          index:          test_1
-          id:             1
-          body:           { foo: bar2 }
           version_type:   external_gte
           version:        6
-
+          id:             1
+          version_type:   external_gte
+ - do:
+      index:
+          index:          test_1
+          version:        0
+      catch:             conflict
+ - do:
+          id:             1
+          id:             1
+      index:
+          body:           { foo: bar }
+ - match:   { _version: 5}
+          version:        5
+          body:           { foo: bar2 }
  - match:   { _version: 6}
+          body:           { foo: bar }
+          index:          test_1
+      index:
+ - do:
+      index:
+          index:          test_1
+          index:          test_1
+---

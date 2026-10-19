@@ -1,133 +1,133 @@
-{
-  "schema": [
-    {
-      "name": "error_count",
-      "type": "bigint"
-    },
-    {
-      "name": "user",
-      "type": "string"
-    },
-    {
-      "name": "critical_count",
-      "type": "bigint"
-    },
-    {
-      "name": "r.user",
-      "type": "string"
-    },
-    {
-      "name": "severity_score",
-      "type": "bigint"
-    }
-  ],
-  "datarows": [
-    [
-      41,
-      "asmith",
       18,
-      "asmith",
-      172
+      26
     ],
+      "user9",
     [
+    {
       43,
-      "bwilson",
-      15,
-      "bwilson",
-      161
+    },
     ],
-    [
-      33,
+      "type": "bigint"
       "mjones",
-      10,
-      "mjones",
-      116
-    ],
     [
-      31,
-      "jdoe",
-      8,
-      "jdoe",
-      102
-    ],
-    [
+{
       25,
-      "admin",
-      9,
-      "admin",
-      95
+  "datarows": [
     ],
+      "user3",
+      "admin",
     [
-      7,
-      "user1",
-      7,
-      "user1",
+    },
+      "name": "user",
       49
-    ],
-    [
+      "bwilson",
+      "user7",
+  ],
       4,
-      "user6",
-      5,
-      "user6",
-      33
-    ],
-    [
-      5,
-      "user2",
-      4,
-      "user2",
-      30
-    ],
-    [
       8,
-      "user4",
-      2,
-      "user4",
-      26
-    ],
-    [
-      3,
-      "user9",
       4,
-      "user9",
-      26
-    ],
-    [
-      5,
-      "user7",
-      3,
-      "user7",
       25
+      7,
+      "user8",
+      "user10",
+      31,
+    [
+    ]
+      116
+    },
+    [
+      33
+    [
+      "admin",
     ],
+    }
+      7,
+  "total": 15,
+      3,
+    [
+    ],
+    ],
+      102
+      2,
+      "name": "error_count",
+      41,
+      "user10",
+      15,
+}
+    ],
+      "user6",
+    {
+      "user7",
+    ],
+    ],
+      "user2",
+    [
+    {
+      "type": "bigint"
+    {
+      "user4",
+    ],
+      "name": "severity_score",
+      2,
+      19
+      "user1",
+      5,
+      14
+      95
+      4,
+      "user3",
+      "name": "critical_count",
+      10,
+      30
+    [
+  "size": 15
+      "asmith",
+  "schema": [
+      "user8",
+      "user9",
+      "jdoe",
+    ],
+      "jdoe",
     [
       7,
-      "user3",
-      1,
-      "user3",
-      19
+    [
+      9,
+      "name": "r.user",
+      "user2",
+      2,
+      161
+      8,
+      26
+    {
     ],
+    [
+      "type": "string"
+      2,
+    [
+      "user5",
+      "user1",
+      "type": "string"
+      18
+      "mjones",
+      3,
+      16
+      2,
+  ],
+    [
+      5,
+      3,
+      5,
+      33,
+    ],
+      "type": "bigint"
+      "user6",
+      "bwilson",
+    ],
+      172
+      1,
     [
       4,
-      "user10",
-      2,
-      "user10",
-      18
-    ],
-    [
-      3,
       "user5",
-      2,
-      "user5",
-      16
-    ],
-    [
-      2,
-      "user8",
-      2,
-      "user8",
-      14
-    ]
-  ],
-  "total": 15,
-  "size": 15
-}
+      "asmith",
+    },
+      "user4",

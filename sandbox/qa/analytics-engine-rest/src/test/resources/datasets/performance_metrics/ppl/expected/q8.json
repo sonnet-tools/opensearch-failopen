@@ -1,56 +1,56 @@
-{
+    [
+  ],
+      25,
   "schema": [
-    {
-      "name": "host",
-      "type": "string"
-    },
-    {
-      "name": "total_metrics",
-      "type": "bigint"
-    },
+}
+      "type": "double"
     {
       "name": "avg_cpu",
-      "type": "double"
-    },
-    {
-      "name": "avg_memory",
-      "type": "double"
-    },
-    {
-      "name": "performance_score",
-      "type": "double"
     }
-  ],
-  "datarows": [
-    [
-      "host2",
-      25,
-      41.08,
-      59.4,
-      49.76
     ],
-    [
-      "host3",
+      62.72,
       25,
       41.12,
-      61.12,
-      48.88
-    ],
-    [
-      "host4",
-      25,
-      43.72,
-      59.48,
-      48.4
-    ],
-    [
-      "host1",
-      25,
+      "name": "avg_memory",
       82.12,
-      62.72,
-      27.58
-    ]
   ],
+    {
+      "host1",
+      48.4
+      25,
+      59.48,
+      "host4",
+      27.58
+      49.76
   "total": 4,
+      59.4,
+    ],
+      "host2",
+      "name": "total_metrics",
+    {
+      25,
+    {
+    },
+  "datarows": [
+      "host3",
+      61.12,
+    },
+      "type": "double"
+    },
+    [
+      "type": "bigint"
+{
+    ]
+    [
+    ],
+      "type": "string"
+      41.08,
+    [
+      "name": "host",
+      48.88
+      "type": "double"
+      "name": "performance_score",
+      43.72,
   "size": 4
-}
+    },
+    {

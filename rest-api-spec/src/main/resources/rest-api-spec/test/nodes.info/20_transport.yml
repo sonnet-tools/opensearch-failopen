@@ -1,16 +1,12 @@
----
-
-"node_info test profile is empty":
+      nodes._arbitrary_key_: node_id
+      nodes.info: {}
+      nodes.info:
+  - is_true: nodes.$node_id.transport.profiles
+  - do:
+  - do:
   - skip:
         features: [stash_in_path, arbitrary_key]
-
-  - do:
-      nodes.info: {}
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  - do:
-      nodes.info:
         metric: [ transport ]
-
-  - is_true: nodes.$node_id.transport.profiles
+  - set:
+"node_info test profile is empty":
+---

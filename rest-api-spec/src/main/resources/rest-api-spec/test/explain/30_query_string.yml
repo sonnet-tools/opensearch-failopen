@@ -1,63 +1,51 @@
----
-"explain with query_string parameters":
-  - do:
-      indices.create:
-          index:  test
-          body:
-            mappings:
-              properties:
-                number:
-                  type: integer
-
-  - do:
-      index:
-          index:  test
-          id:     1
-          body:   { field: foo bar}
-
-  - do:
-      indices.refresh:
+        id:     1
         index: [test]
-
-  - do:
       explain:
+  - do:
+---
+              properties:
+          id:     1
+            mappings:
         index:  test
-        id:     1
-        q: bar
-        df: field
-
+          index:  test
   - is_true: matched
-
-  - do:
-      explain:
-        index:  test
-        id:     1
-        q: field:foo field:xyz
-
-  - is_true: matched
-
-  - do:
-      explain:
-        index:  test
-        id:     1
-        q: field:foo field:xyz
-        default_operator: AND
-
-  - is_false: matched
-
-  - do:
-      explain:
-        index:  test
-        id:     1
+          body:   { field: foo bar}
+      indices.create:
         q: field:BA*
-
-  - is_true: matched
-
-  - do:
-      explain:
+"explain with query_string parameters":
+        q: number:foo
         index:  test
         id:     1
-        q: number:foo
+  - do:
+      explain:
+      explain:
+  - is_true: matched
+        q: field:foo field:xyz
+  - do:
+        id:     1
+      index:
+      explain:
+  - is_true: matched
+        default_operator: AND
+        id:     1
+          index:  test
+  - do:
+        index:  test
+                  type: integer
+        df: field
+        q: bar
+      indices.refresh:
+        q: field:foo field:xyz
         lenient: true
-
+        index:  test
+  - do:
+        index:  test
+  - do:
+        id:     1
   - is_false: matched
+  - do:
+                number:
+          body:
+  - do:
+  - is_false: matched
+      explain:

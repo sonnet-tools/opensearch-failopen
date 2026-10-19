@@ -1,35 +1,33 @@
----
-teardown:
-  - do:
-      ingest.delete_pipeline:
-        id: "1"
-        ignore: 404
-
----
-"Test date index name processor with defaults":
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
                 "date_index_name" : {
-                  "field" : "date",
-                  "index_name_prefix": "events-",
-                  "date_rounding": "d"
+  - do:
+        id: "1"
                 }
               }
-            ]
+                  "field" : "date",
           }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: events
-        id: 1
-        pipeline: "1"
-        body: {
-          date: "2016-04-22T16:32:14.968Z"
+                  "date_rounding": "d"
         }
+        id: 1
+              {
+            "processors": [
+  - match: { acknowledged: true }
   - match: { _index: "events-2016-04-22"}
+          {
+---
+      ingest.put_pipeline:
+  - do:
+        id: "1"
+"Test date index name processor with defaults":
+teardown:
+        body:  >
+        ignore: 404
+                  "index_name_prefix": "events-",
+  - do:
+        pipeline: "1"
+        index: events
+          date: "2016-04-22T16:32:14.968Z"
+      ingest.delete_pipeline:
+---
+            ]
+        body: {
+      index:

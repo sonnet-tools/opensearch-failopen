@@ -1,223 +1,184 @@
-setup:
-  - do:
-      indices.create:
-        index: test_index1
-  - do:
-      indices.create:
-        index: test_index2
-  - do:
-      indices.create:
-        index: foo
-
-
----
-"put one mapping per index":
-  - do:
-      indices.put_mapping:
-        index: test_index1
-        body:
-          properties:
-            text:
-              type:     text
-              analyzer: whitespace
-  - do:
-      indices.put_mapping:
-        index: test_index2
-        body:
-          properties:
-            text:
-              type:     text
-              analyzer: whitespace
-
-
-  - do:
-      indices.get_mapping: {}
-
-  - match: {test_index1.mappings.properties.text.type:     text}
-  - match: {test_index1.mappings.properties.text.analyzer: whitespace}
-
-  - match: {test_index2.mappings.properties.text.type:     text}
-  - match: {test_index2.mappings.properties.text.analyzer: whitespace}
-
-  - match: { foo.mappings: {} }
-
----
-"put mapping in _all index":
-
-  - do:
-      indices.put_mapping:
-        index: _all
-        body:
-          properties:
-            text:
-              type:     text
-              analyzer: whitespace
-
-  - do:
-      indices.get_mapping: {}
-
-  - match: {test_index1.mappings.properties.text.type:     text}
-  - match: {test_index1.mappings.properties.text.analyzer: whitespace}
-
-  - match: {test_index2.mappings.properties.text.type:     text}
-  - match: {test_index2.mappings.properties.text.analyzer: whitespace}
-
-  - match: {foo.mappings.properties.text.type:     text}
-  - match: {foo.mappings.properties.text.analyzer: whitespace}
-
----
-"put mapping in * index":
-  - do:
-      indices.put_mapping:
-        index: "*"
-        body:
-          properties:
-            text:
-              type:     text
-              analyzer: whitespace
-
-  - do:
-      indices.get_mapping: {}
-
-  - match: {test_index1.mappings.properties.text.type:     text}
-  - match: {test_index1.mappings.properties.text.analyzer: whitespace}
-
-  - match: {test_index2.mappings.properties.text.type:     text}
-  - match: {test_index2.mappings.properties.text.analyzer: whitespace}
-
-  - match: {foo.mappings.properties.text.type:     text}
-  - match: {foo.mappings.properties.text.analyzer: whitespace}
-
----
-"put mapping in prefix* index":
-  - do:
-      indices.put_mapping:
-        index: "test_index*"
-        body:
-          properties:
-            text:
-              type:     text
-              analyzer: whitespace
-
-  - do:
-      indices.get_mapping: {}
-
-  - match: {test_index1.mappings.properties.text.type:     text}
-  - match: {test_index1.mappings.properties.text.analyzer: whitespace}
-
-  - match: {test_index2.mappings.properties.text.type:     text}
-  - match: {test_index2.mappings.properties.text.analyzer: whitespace}
-
-  - match: { foo.mappings: {} }
-
----
-"put mapping in list of indices":
-  - do:
-      indices.put_mapping:
-        index: [test_index1, test_index2]
-        body:
-          properties:
-            text:
-              type:     text
-              analyzer: whitespace
-
-  - do:
-      indices.get_mapping: {}
-
-  - match: {test_index1.mappings.properties.text.type:     text}
-  - match: {test_index1.mappings.properties.text.analyzer: whitespace}
-
-  - match: {test_index2.mappings.properties.text.type:     text}
-  - match: {test_index2.mappings.properties.text.analyzer: whitespace}
-
-  - match: { foo.mappings: {} }
-
----
-"post a mapping with default analyzer twice":
-
-  - do:
-      indices.put_mapping:
-        index: test_index1
-        body:
-            dynamic: false
-            properties:
-              text:
-                analyzer: default
-                type:     text
-
-  - do:
-      indices.put_mapping:
-        index: test_index1
-        body:
-          dynamic: false
-          properties:
-            text:
-              analyzer: default
-              type:     text
-
-  - do:
-      indices.get_mapping: {}
-
-  - match: {test_index1.mappings.properties.text.type:     text}
-
----
-"post a mapping with setting dynamic to strict_allow_templates":
-  - skip:
-      version: " - 2.15.99"
-      reason: "introduced in 2.16.0"
-  - do:
-      indices.put_mapping:
-        index: test_index1
-        body:
-          dynamic: strict_allow_templates
-          dynamic_templates: [
-            {
-              strings: {
-                "match": "foo*",
-                "match_mapping_type": "string",
-                "mapping": {
                   "type": "keyword"
-                }
-              }
-            }
-          ]
-          properties:
-            test1:
-              type: text
-
   - do:
-      indices.get_mapping: {}
-
-  - match: {test_index1.mappings.dynamic:     strict_allow_templates}
-  - match: {test_index1.mappings.properties.test1.type:     text}
-
----
-"post a mapping with setting dynamic to false_allow_templates":
-  - skip:
-      version: " - 3.2.99"
-      reason: "introduced in 3.3.0"
-  - do:
-      indices.put_mapping:
-        index: test_index1
-        body:
-          dynamic: false_allow_templates
-          dynamic_templates: [
-            {
-              strings: {
-                "match": "foo*",
-                "match_mapping_type": "string",
+            text:
                 "mapping": {
-                  "type": "keyword"
-                }
-              }
-            }
-          ]
-          properties:
-            test1:
-              type: text
-
-  - do:
-      indices.get_mapping: {}
-
   - match: {test_index1.mappings.dynamic:     false_allow_templates}
+---
+              type: text
+"put one mapping per index":
+  - skip:
+  - match: {test_index2.mappings.properties.text.type:     text}
+      indices.put_mapping:
+              type:     text
+        body:
+      indices.put_mapping:
+              type:     text
+  - match: { foo.mappings: {} }
+  - match: {test_index2.mappings.properties.text.analyzer: whitespace}
+        body:
+  - match: {test_index2.mappings.properties.text.analyzer: whitespace}
+  - match: {test_index2.mappings.properties.text.type:     text}
+      version: " - 3.2.99"
+              type:     text
+  - do:
+                }
+                type:     text
+"post a mapping with setting dynamic to strict_allow_templates":
+---
+  - match: {foo.mappings.properties.text.type:     text}
+            text:
+      indices.get_mapping: {}
   - match: {test_index1.mappings.properties.test1.type:     text}
+                  "type": "keyword"
+---
+      indices.put_mapping:
+              text:
+  - match: {test_index1.mappings.properties.text.type:     text}
+      indices.get_mapping: {}
+  - match: {foo.mappings.properties.text.analyzer: whitespace}
+          properties:
+  - match: {test_index1.mappings.properties.text.type:     text}
+          properties:
+  - do:
+      indices.get_mapping: {}
+  - match: {test_index2.mappings.properties.text.analyzer: whitespace}
+          dynamic_templates: [
+  - match: { foo.mappings: {} }
+  - do:
+              }
+              analyzer: whitespace
+          properties:
+        index: [test_index1, test_index2]
+            test1:
+  - match: {test_index1.mappings.properties.text.type:     text}
+  - do:
+      indices.get_mapping: {}
+  - do:
+        body:
+        index: test_index1
+              }
+  - match: {test_index1.mappings.properties.text.analyzer: whitespace}
+  - do:
+          ]
+          properties:
+setup:
+        index: _all
+  - match: {test_index1.mappings.properties.text.analyzer: whitespace}
+      indices.put_mapping:
+              analyzer: whitespace
+              analyzer: whitespace
+            text:
+        body:
+  - do:
+      indices.create:
+            test1:
+              type:     text
+              analyzer: whitespace
+                }
+              analyzer: default
+      indices.put_mapping:
+        body:
+      indices.get_mapping: {}
+          properties:
+        index: test_index2
+  - do:
+            text:
+          dynamic: strict_allow_templates
+  - match: { foo.mappings: {} }
+      indices.create:
+      indices.get_mapping: {}
+              type: text
+      indices.get_mapping: {}
+  - do:
+        index: "test_index*"
+      indices.put_mapping:
+  - match: {test_index1.mappings.properties.text.type:     text}
+"post a mapping with default analyzer twice":
+"put mapping in prefix* index":
+            properties:
+"post a mapping with setting dynamic to false_allow_templates":
+            text:
+          properties:
+          dynamic: false_allow_templates
+        index: test_index1
+        index: test_index1
+          dynamic: false
+        body:
+          ]
+  - do:
+            }
+  - do:
+---
+      indices.put_mapping:
+              analyzer: whitespace
+            dynamic: false
+  - match: {test_index1.mappings.properties.text.analyzer: whitespace}
+                "match_mapping_type": "string",
+            {
+                "match": "foo*",
+---
+  - do:
+  - match: {test_index1.mappings.properties.test1.type:     text}
+        body:
+        index: test_index1
+      indices.put_mapping:
+        body:
+          properties:
+  - do:
+  - match: {test_index2.mappings.properties.text.analyzer: whitespace}
+  - match: {test_index2.mappings.properties.text.type:     text}
+  - do:
+            {
+              strings: {
+  - do:
+  - do:
+  - do:
+---
+  - do:
+        body:
+            text:
+              analyzer: whitespace
+"put mapping in * index":
+  - match: {foo.mappings.properties.text.analyzer: whitespace}
+        index: test_index2
+      indices.put_mapping:
+  - skip:
+  - match: {test_index2.mappings.properties.text.type:     text}
+      reason: "introduced in 3.3.0"
+  - match: {test_index1.mappings.properties.text.type:     text}
+  - match: {test_index2.mappings.properties.text.analyzer: whitespace}
+      version: " - 2.15.99"
+              type:     text
+          properties:
+              type:     text
+            text:
+  - match: {test_index1.mappings.properties.text.type:     text}
+      indices.get_mapping: {}
+---
+  - match: {test_index1.mappings.properties.text.analyzer: whitespace}
+  - do:
+        index: foo
+            }
+      indices.create:
+      reason: "introduced in 2.16.0"
+        index: test_index1
+                "match_mapping_type": "string",
+                analyzer: default
+                "match": "foo*",
+"put mapping in _all index":
+  - match: {foo.mappings.properties.text.type:     text}
+              strings: {
+        index: "*"
+        index: test_index1
+      indices.put_mapping:
+  - match: {test_index1.mappings.dynamic:     strict_allow_templates}
+          dynamic_templates: [
+  - match: {test_index1.mappings.properties.text.analyzer: whitespace}
+  - match: {test_index2.mappings.properties.text.type:     text}
+                "mapping": {
+              type:     text
+  - do:
+          properties:
+---
+        body:
+"put mapping in list of indices":

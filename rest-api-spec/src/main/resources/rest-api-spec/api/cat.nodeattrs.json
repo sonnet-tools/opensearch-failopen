@@ -1,59 +1,59 @@
-{
-  "cat.nodeattrs":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-nodeattrs/",
-      "description":"Returns information about custom node attributes."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_cat/nodeattrs",
-          "methods":[
-            "GET"
-          ]
-        }
-      ]
-    },
-    "params":{
-      "format":{
-        "type":"string",
-        "description":"a short version of the Accept header, e.g. json, yaml"
-      },
-      "local":{
-        "type":"boolean",
-        "description":"Return local information, do not retrieve the state from master node (default: false)"
-      },
-      "master_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to master node",
-        "deprecated":{
-          "version":"2.0.0",
           "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
-        }
-      },
-      "cluster_manager_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to cluster-manager node"
-      },
-      "h":{
-        "type":"list",
+        "description":"a short version of the Accept header, e.g. json, yaml"
         "description":"Comma-separated list of column names to display"
-      },
-      "help":{
-        "type":"boolean",
-        "description":"Return help information",
-        "default":false
-      },
-      "s":{
-        "type":"list",
-        "description":"Comma-separated list of column names or column aliases to sort by"
+      "master_timeout":{
       },
       "v":{
+    "stability":"stable",
+      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-nodeattrs/",
+          "methods":[
         "type":"boolean",
-        "description":"Verbose mode. Display column headers",
-        "default":false
+          "path":"/_cat/nodeattrs",
+    "documentation":{
+        }
+      "local":{
+      "s":{
+    "url":{
+      "cluster_manager_timeout":{
+        }
+      },
       }
+    },
+          "version":"2.0.0",
     }
-  }
+      "h":{
+        "type":"boolean",
+      "help":{
+      },
+        "description":"Verbose mode. Display column headers",
+      ]
+        "description":"Return local information, do not retrieve the state from master node (default: false)"
+      },
+    },
+        "type":"list",
+      },
+      "format":{
+        "type":"boolean",
+        "type":"time",
+          ]
+        "deprecated":{
+  "cat.nodeattrs":{
+        "description":"Return help information",
+    "params":{
+      "paths":[
+      },
 }
+        {
+      "description":"Returns information about custom node attributes."
+      },
+        "default":false
+            "GET"
+  }
+        "default":false
+{
+        "description":"Explicit operation timeout for connection to master node",
+        "type":"string",
+        "description":"Explicit operation timeout for connection to cluster-manager node"
+        "type":"time",
+        "type":"list",
+        "description":"Comma-separated list of column names or column aliases to sort by"

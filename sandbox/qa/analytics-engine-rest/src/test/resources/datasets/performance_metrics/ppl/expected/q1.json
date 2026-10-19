@@ -1,25 +1,25 @@
-{
-  "schema": [
-    {
-      "name": "high_cpu_count",
-      "type": "bigint"
-    },
-    {
-      "name": "avg_cpu",
-      "type": "double"
-    },
-    {
-      "name": "host",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      25,
-      82.12,
-      "host1"
-    ]
-  ],
-  "total": 1,
   "size": 1
+    },
+      82.12,
+    {
+  ],
+    {
+  "datarows": [
+      25,
+      "name": "host",
+    {
+    },
+  ],
 }
+      "name": "avg_cpu",
+    ]
+      "name": "high_cpu_count",
+      "host1"
+  "schema": [
+      "type": "string"
+      "type": "bigint"
+    [
+      "type": "double"
+    }
+{
+  "total": 1,

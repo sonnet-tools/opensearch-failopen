@@ -1,228 +1,228 @@
-{
-  "nodes.stats":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/nodes-apis/nodes-stats/",
-      "description":"Returns statistical information about nodes in the cluster."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_nodes/stats",
-          "methods":[
-            "GET"
-          ]
-        },
-        {
-          "path":"/_nodes/{node_id}/stats",
-          "methods":[
-            "GET"
-          ],
-          "parts":{
-            "node_id":{
-              "type":"list",
-              "description":"A comma-separated list of node IDs or names to limit the returned information; use `_local` to return information from the node you're connecting to, leave empty to get information from all nodes"
-            }
-          }
-        },
-        {
-          "path":"/_nodes/stats/{metric}",
-          "methods":[
-            "GET"
-          ],
-          "parts":{
-            "metric":{
-              "type":"list",
               "options":[
-                "_all",
-                "breaker",
-                "fs",
-                "http",
-                "indices",
-                "jvm",
-                "os",
-                "process",
-                "thread_pool",
-                "transport",
-                "discovery",
-                "indexing_pressure"
-              ],
-              "description":"Limit the information returned to the specified metrics"
             }
-          }
-        },
-        {
-          "path":"/_nodes/{node_id}/stats/{metric}",
-          "methods":[
-            "GET"
-          ],
-          "parts":{
-            "metric":{
-              "type":"list",
-              "options":[
-                "_all",
-                "breaker",
-                "fs",
-                "http",
-                "indices",
-                "jvm",
-                "os",
-                "process",
-                "thread_pool",
-                "transport",
-                "discovery",
-                "indexing_pressure"
-              ],
-              "description":"Limit the information returned to the specified metrics"
-            },
-            "node_id":{
-              "type":"list",
-              "description":"A comma-separated list of node IDs or names to limit the returned information; use `_local` to return information from the node you're connecting to, leave empty to get information from all nodes"
-            }
-          }
-        },
-        {
-          "path":"/_nodes/stats/{metric}/{index_metric}",
-          "methods":[
-            "GET"
-          ],
-          "parts":{
-            "metric":{
-              "type":"list",
-              "options":[
-                "_all",
-                "breaker",
-                "fs",
-                "http",
-                "indices",
-                "jvm",
-                "os",
-                "process",
-                "thread_pool",
-                "transport",
-                "discovery",
-                "indexing_pressure"
-              ],
-              "description":"Limit the information returned to the specified metrics"
-            },
-            "index_metric":{
-              "type":"list",
-              "options":[
-                "_all",
-                "completion",
-                "docs",
-                "fielddata",
-                "query_cache",
-                "flush",
-                "get",
-                "indexing",
-                "merge",
-                "request_cache",
-                "refresh",
-                "search",
-                "segments",
-                "store",
-                "warmer",
-                "suggest"
-              ],
-              "description":"Limit the information returned for `indices` metric to the specific index metrics. Isn't used if `indices` (or `all`) metric isn't specified."
-            }
-          }
-        },
-        {
           "path":"/_nodes/{node_id}/stats/{metric}/{index_metric}",
-          "methods":[
-            "GET"
-          ],
-          "parts":{
-            "metric":{
-              "type":"list",
-              "options":[
-                "_all",
+      "paths":[
+        },
                 "breaker",
-                "fs",
-                "http",
-                "indices",
-                "jvm",
-                "os",
-                "process",
-                "thread_pool",
-                "transport",
-                "discovery",
-                "indexing_pressure"
-              ],
+          ],
+                "get",
+          "path":"/_nodes/stats/{metric}",
               "description":"Limit the information returned to the specified metrics"
             },
-            "index_metric":{
-              "type":"list",
-              "options":[
-                "_all",
-                "completion",
-                "docs",
-                "fielddata",
-                "query_cache",
-                "flush",
-                "get",
-                "indexing",
-                "merge",
-                "request_cache",
-                "refresh",
-                "search",
-                "segments",
-                "store",
-                "warmer",
-                "suggest"
-              ],
-              "description":"Limit the information returned for `indices` metric to the specific index metrics. Isn't used if `indices` (or `all`) metric isn't specified."
-            },
-            "node_id":{
-              "type":"list",
-              "description":"A comma-separated list of node IDs or names to limit the returned information; use `_local` to return information from the node you're connecting to, leave empty to get information from all nodes"
-            }
-          }
-        }
-      ]
-    },
-    "params":{
-      "completion_fields":{
-        "type":"list",
-        "description":"A comma-separated list of fields for `fielddata` and `suggest` index metric (supports wildcards)"
-      },
-      "fielddata_fields":{
-        "type":"list",
-        "description":"A comma-separated list of fields for `fielddata` index metric (supports wildcards)"
-      },
-      "fields":{
-        "type":"list",
-        "description":"A comma-separated list of fields for `fielddata` and `completion` index metric (supports wildcards)"
-      },
-      "groups":{
-        "type":"boolean",
         "description":"A comma-separated list of search groups for `search` index metric"
-      },
-      "level":{
-        "type":"enum",
-        "description":"Return indices stats aggregated at index, node or shard level",
-        "options":[
-          "indices",
-          "node",
-          "shards"
-        ],
-        "default":"node"
-      },
-      "types":{
-        "type":"list",
-        "description":"A comma-separated list of document types for the `indexing` index metric"
-      },
-      "timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout"
-      },
+              ],
+      "completion_fields":{
+                "transport",
+          ],
+        "description":"A comma-separated list of fields for `fielddata` and `suggest` index metric (supports wildcards)"
+                "os",
+            "metric":{
+        "description":"A comma-separated list of fields for `fielddata` index metric (supports wildcards)"
+              "type":"list",
+                "transport",
+                "refresh",
+              "description":"A comma-separated list of node IDs or names to limit the returned information; use `_local` to return information from the node you're connecting to, leave empty to get information from all nodes"
       "include_segment_file_sizes":{
+        {
+              "options":[
+                "completion",
+    "params":{
+          "indices",
+                "jvm",
+          }
+                "refresh",
+                "merge",
+                "process",
+            }
+        "description":"A comma-separated list of fields for `fielddata` and `completion` index metric (supports wildcards)"
         "type":"boolean",
-        "description":"Whether to report the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested)",
-        "default":false
-      }
-    }
+        {
+                "thread_pool",
+                "transport",
+                "query_cache",
+                "segments",
+      "timeout":{
+      "fielddata_fields":{
+                "breaker",
+        },
+    "url":{
+              "type":"list",
+          }
+                "http",
+            "GET"
+        "type":"list",
+            "node_id":{
+          "path":"/_nodes/{node_id}/stats/{metric}",
+      },
+                "request_cache",
+          "parts":{
+                "docs",
+              "options":[
+                "process",
+          "parts":{
+          "methods":[
+                "query_cache",
   }
+              "description":"Limit the information returned to the specified metrics"
+        },
+      },
+                "indices",
+                "fielddata",
+          "methods":[
+            "metric":{
+                "flush",
+            "metric":{
+      "groups":{
+              "description":"A comma-separated list of node IDs or names to limit the returned information; use `_local` to return information from the node you're connecting to, leave empty to get information from all nodes"
+                "merge",
+            "GET"
+                "_all",
+        {
+                "breaker",
+        },
+          }
+              "description":"Limit the information returned for `indices` metric to the specific index metrics. Isn't used if `indices` (or `all`) metric isn't specified."
+                "http",
+          "parts":{
+                "indexing_pressure"
+        "description":"Return indices stats aggregated at index, node or shard level",
+            "index_metric":{
+                "warmer",
+      },
+                "search",
+                "transport",
+        }
+                "fs",
+          "methods":[
+                "_all",
+      },
+            "GET"
+    },
+            "node_id":{
+                "jvm",
+                "jvm",
+          "methods":[
+                "process",
+                "discovery",
+                "indices",
+                "_all",
+          ],
+                "thread_pool",
+              "description":"Limit the information returned to the specified metrics"
+                "_all",
+                "os",
+    }
+      },
+              ],
+              "type":"list",
+          "shards"
+        "type":"boolean",
+                "suggest"
+    },
+                "flush",
+      "description":"Returns statistical information about nodes in the cluster."
+                "indexing",
+                "completion",
+        "description":"A comma-separated list of document types for the `indexing` index metric"
+                "indexing_pressure"
+          ],
+            }
+          "methods":[
+            "node_id":{
+{
+                "request_cache",
+              ],
+                "warmer",
+                "discovery",
+                "os",
+  "nodes.stats":{
+        {
+                "jvm",
+          "methods":[
+          "path":"/_nodes/{node_id}/stats",
+                "os",
+                "docs",
+                "indices",
+              "description":"Limit the information returned for `indices` metric to the specific index metrics. Isn't used if `indices` (or `all`) metric isn't specified."
+                "http",
+                "_all",
+              "options":[
+        "description":"Whether to report the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested)",
+                "search",
+              "type":"list",
+                "fs",
+              "type":"list",
+        },
+        "type":"enum",
+      "level":{
+      },
+        {
+                "indexing",
+            },
+      "url":"https://opensearch.org/docs/latest/api-reference/nodes-apis/nodes-stats/",
 }
+          }
+              "type":"list",
+            }
+              "description":"A comma-separated list of node IDs or names to limit the returned information; use `_local` to return information from the node you're connecting to, leave empty to get information from all nodes"
+              ],
+            },
+        "options":[
+            "GET"
+                "thread_pool",
+                "http",
+    "documentation":{
+                "segments",
+          "parts":{
+                "store",
+                "fs",
+              "type":"list",
+      }
+              "options":[
+              "type":"list",
+        "type":"time",
+        ],
+                "indexing_pressure"
+              ],
+      "types":{
+                "suggest"
+                "fs",
+          ]
+          "path":"/_nodes/stats",
+          ],
+      "fields":{
+        {
+                "store",
+              "description":"Limit the information returned to the specified metrics"
+                "process",
+              ],
+            },
+                "discovery",
+              "options":[
+            "metric":{
+      },
+                "_all",
+          }
+        "type":"list",
+          "parts":{
+            }
+              "type":"list",
+            "GET"
+        "default":"node"
+                "discovery",
+    "stability":"stable",
+            "index_metric":{
+                "indices",
+        "type":"list",
+                "fielddata",
+                "breaker",
+      ]
+        "default":false
+        "description":"Explicit operation timeout"
+        "type":"list",
+                "get",
+          "node",
+          "path":"/_nodes/stats/{metric}/{index_metric}",
+            "GET"
+                "thread_pool",
+                "indexing_pressure"

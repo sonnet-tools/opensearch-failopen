@@ -1,281 +1,251 @@
----
-setup:
-  - do:
-      indices.create:
-          index:  test
-          body:
-            mappings:
-              properties:
-                bigint:
-                  type: keyword
-
-
-  - do:
-      index:
-        index:  test_1
-        id:     1
-        body:   { "include": { "field1": "v1", "field2": "v2" }, "count": 1, "bigint": 72057594037927936, d: 3.14 }
-  - do:
-      indices.refresh: {}
-
----
-"_source: true":
-
-  - do:
-      search:
-        body: { _source: true, query: { match_all: {} } }
-
-  - length:   { hits.hits: 1  }
-  - match: { hits.hits.0._source.count: 1 }
-
----
-"_source: false":
-  - do: { search: { body: { _source: false, query: { match_all: {} } } } }
-  - length:   { hits.hits: 1  }
-  - is_false: hits.hits.0._source
-
----
-"_source as an empty object":
-  - skip:
-      version: " - 3.6.99"
-      reason: "validation was added later"
-      features: "warnings"
-  - do:
-      warnings:
-        - 'An empty object was provided as [_source]. Provide at least one of [includes] or [excludes] or use `_source: true` to fetch the entire source.'
-      search: { body: { _source: {  }, query: { match_all: {} } } }
-  - length:   { hits.hits: 1  }
-  - match: { hits.hits.0._source.count: 1 }
-
----
-"_source as an empty array":
-  - skip:
-      version: " - 3.6.99"
-      reason: "validation was added later"
-      features: "warnings"
-  - do:
-      warnings:
-        - 'An empty array was provided as [_source]. Provide at least one field pattern or use `_source: true` to fetch the entire source.'
-      search: { body: { _source: [], query: { match_all: {} } } }
-  - length:   { hits.hits: 1  }
-  - match: { hits.hits.0._source.count: 1 }
-
----
-"_source as object with an empty excludes array":
-  - skip:
-      version: " - 3.6.99"
-      reason: "validation was added later"
-      features: "warnings"
-  - do:
-      warnings:
-        - 'Expected at least one value for an array of [excludes]'
-      search:
-        body:
           _source:
-            includes: [ include.field1, include.field2 ]
-            excludes: []
-          query: { match_all: {} }
-  - length:   { hits.hits: 1  }
-  - match:  { hits.hits.0._source.include.field1: v1 }
-  - match:  { hits.hits.0._source.include.field2: v2 }
-  - is_false: hits.hits.0._source.count
-
----
-"_source as object with an empty includes array":
-  - skip:
-      version: " - 3.6.99"
-      reason: "validation was added later"
-      features: "warnings"
-  - do:
-      warnings:
-        - 'Expected at least one value for an array of [includes]'
-      search:
         body:
-          _source:
+  - do:
             includes: []
-            excludes: [ include.field1 ]
-          query: { match_all: {} }
-  - length:   { hits.hits: 1  }
-  - is_false: hits.hits.0._source.include.field1
-  - match:  { hits.hits.0._source.include.field2: v2 }
-  - match: { hits.hits.0._source.count: 1 }
-
----
-"_source with an ambiguous field":
-  - skip:
       version: " - 3.6.99"
-      reason: "validation was added later"
   - do:
-      search:
-        body:
-          _source:
-            includes: [ include.field1, include.field2 ]
-            excludes: [ include.field1 ]
+  - do:
+      body:
           query: { match_all: {} }
-      catch: bad_request
-  - match: { status: 400 }
-  - match: { error.type: illegal_argument_exception }
-  - match: { error.reason: "The same entry [include.field1] cannot be both included and excluded in _source." }
-
----
-"no filtering":
-  - do: { search: { body: { query: { match_all: {} } } } }
-  - length:   { hits.hits: 1  }
-  - match: { hits.hits.0._source.count: 1 }
-
----
-"_source in body":
-  - do: { search: { body: { _source: include.field1, query: { match_all: {} } } } }
-  - match:  { hits.hits.0._source.include.field1: v1 }
-  - is_false: hits.hits.0._source.include.field2
-
----
-"_source_includes and _source in body":
-  - do: { search: { _source_includes: include.field1, body: { _source: include.field2, query: { match_all: {} } } } }
-  - match:  { hits.hits.0._source.include.field1: v1 }
-  - is_false: hits.hits.0._source.include.field2
-
----
-"_source_includes":
-  - do: { search: { _source_includes: include.field1, body: { query: { match_all: {} } } } }
-  - match:  { hits.hits.0._source.include.field1: v1 }
-  - is_false: hits.hits.0._source.include.field2
-
----
-"_source_excludes":
-  - do: { search: { _source_excludes: count, body: { query: { match_all: {} } } } }
   - match:  { hits.hits.0._source.include: { field1 : v1 , field2: v2 }}
-  - is_false: hits.hits.0._source.count
-
----
-"_source field1 field2":
+"_source: false":
+        search:
   - do:
-      search:
+      features: allowed_warnings
         body:
-          _source: [ include.field1, include.field2 ]
+        body:
+  - do:
           query: { match_all: {} }
-  - match:  { hits.hits.0._source.include.field1: v1 }
-  - match:  { hits.hits.0._source.include.field2: v2 }
-  - is_false: hits.hits.0._source.count
-
 ---
-"_source.include field1 field2":
-  - do:
-      search:
-        body:
-          _source:
-            includes: [ include.field1, include.field2 ]
-          query: { match_all: {} }
-  - match:  { hits.hits.0._source.include.field1: v1 }
+  - length:   { hits.hits: 1  }
   - match:  { hits.hits.0._source.include.field2: v2 }
-  - is_false: hits.hits.0._source.count
-
----
-"_source includes and excludes":
-  - do:
-      search:
-        body:
-          _source:
+  - match: { hits.hits.0.fields.count: [1] }
+        - 'Expected at least one value for an array of [excludes]'
             includes: include
             excludes: "*.field2"
-          query: { match_all: {} }
-  - match:  { hits.hits.0._source.include.field1: v1 }
-  - is_false:  hits.hits.0._source.include.field2
-
----
-"_source include on bigint":
-  - do:
-      search:
-        body:
+        - 'An empty array was provided as [_source]. Provide at least one field pattern or use `_source: true` to fetch the entire source.'
           _source:
-            includes: bigint
-          query: { match_all: {} }
-  - match:  { hits.hits.0._source.bigint: 72057594037927936 }
-  - is_false:  hits.hits.0._source.include.field2
-
-
----
-"_source filtering on bigint":
-- do:
-    search:
-      body:
-        _source: ["bigint"]
-        query: { match_all: {} }
-- match:  { hits.hits.0._source.bigint: 72057594037927936 }
-
----
-"fields in body":
-  - do:
+  - is_false: hits.hits.0._source.count
       search:
-        body:
-          stored_fields: [ include.field2 ]
-          query: { match_all: {} }
-  - is_false:  hits.hits.0._source
-
----
-"fields in body with source":
-  - do:
-        search:
-          body:
-            stored_fields: [ include.field2, _source ]
-            query: { match_all: {} }
-  - match: { hits.hits.0._source.include.field2: v2 }
-  - is_true:  hits.hits.0._source
-
----
-"docvalue_fields":
-  - do:
-      search:
-        body:
-          docvalue_fields: [ "count" ]
+"_source field1 field2":
+      warnings:
   - match: { hits.hits.0.fields.count: [1] }
-
+  - do:
+        _source: ["bigint"]
+"docvalue_fields with explicit format":
+            includes: [ include.field1, include.field2 ]
+  - do:
+  - match: { status: 400 }
 ---
 "multiple docvalue_fields":
+  - do: { search: { body: { query: { match_all: {} } } } }
+        - 'An empty object was provided as [_source]. Provide at least one of [includes] or [excludes] or use `_source: true` to fetch the entire source.'
+  - match:  { hits.hits.0._source.include.field2: v2 }
+  - length:   { hits.hits: 1  }
   - do:
       search:
-        body:
-          docvalue_fields: [ "count", "include.field1.keyword" ]
-  - match: { hits.hits.0.fields.count: [1] }
-
+            - field: "count"
+  - do:
+        query: { match_all: {} }
+      search:
+      search:
+  - is_false:  hits.hits.0._source
+            excludes: []
+      search:
 ---
-"docvalue_fields as url param":
-  - do:
-      search:
+          body:
         docvalue_fields: [ "count" ]
-  - match: { hits.hits.0.fields.count: [1] }
-
----
-"docvalue_fields with default format":
+      reason: "validation was added later"
+      search:
+  - is_false: hits.hits.0._source.include.field2
+  - is_false:  hits.hits.0._source.include.field2
+"_source as an empty object":
+  - match:  { hits.hits.0._source.include.field1: v1 }
+  - match:  { hits.hits.0._source.include.field1: v1 }
+            includes: bigint
+  - match: { hits.hits.0._source.include.field2: v2 }
+  - length:   { hits.hits: 1  }
+"fields in body":
+"_source_includes and _source in body":
+  - is_false: hits.hits.0._source
+      search:
+"docvalue_fields":
+                  type: keyword
+            includes: [ include.field1, include.field2 ]
+        body:
+        index:  test_1
+          query: { match_all: {} }
+- match:  { hits.hits.0._source.bigint: 72057594037927936 }
+          _source:
+      features: "warnings"
   - skip:
-      features: allowed_warnings
+  - match: { hits.hits.0._source.count: 1 }
+        body:
+          body:
+  - length:   { hits.hits: 1  }
+---
   - do:
-      allowed_warnings:
+          index:  test
+      search: { body: { _source: {  }, query: { match_all: {} } } }
+          query: { match_all: {} }
+      search:
+---
+            stored_fields: [ include.field2, _source ]
+  - gte: { hits.hits.0.fields.d.0: 3.14 }
+  - match:  { hits.hits.0._source.include.field1: v1 }
+          query: { match_all: {} }
+  # Doc values produce floating point errors.
+  - match: { hits.hits.0._source.count: 1 }
+  - skip:
+          docvalue_fields: [ "count" ]
+      index:
+        body:   { "include": { "field1": "v1", "field2": "v2" }, "count": 1, "bigint": 72057594037927936, d: 3.14 }
+---
+  - match: { hits.hits.0._source.count: 1 }
+  - do:
+  - do:
+  - skip:
+"_source: true":
+      search:
+      warnings:
+      version: " - 3.6.99"
+      search:
+  - do: { search: { body: { _source: false, query: { match_all: {} } } } }
+---
+  - do:
+      reason: "validation was added later"
+  - do: { search: { _source_includes: include.field1, body: { _source: include.field2, query: { match_all: {} } } } }
+"_source.include field1 field2":
+"docvalue_fields with default format":
+      indices.create:
+  - match:  { hits.hits.0._source.bigint: 72057594037927936 }
+"_source as object with an empty includes array":
+          docvalue_fields:
+"_source with an ambiguous field":
         - "[use_field_mapping] is a special format that was only used to ease the transition to 7.x. It has become the default and shouldn't be set explicitly anymore."
       search:
-        body:
-          docvalue_fields:
-            - field: "count"
-              format: "use_field_mapping"
-  - match: { hits.hits.0.fields.count: [1] }
-
 ---
-"docvalue_fields with explicit format":
-  - do:
-      search:
         body:
           docvalue_fields:
-            - field: "count"
-              format: "#.0"
+---
+      search:
+  - match:  { hits.hits.0._source.include.field1: v1 }
+"_source_excludes":
+    search:
+  - is_false: hits.hits.0._source.count
+  - length:   { hits.hits: 1  }
+          query: { match_all: {} }
+---
+        body:
+- do:
+  - match:  { hits.hits.0._source.include.field2: v2 }
+"no filtering":
+        id:     1
+      version: " - 3.6.99"
+          _source:
+      features: "warnings"
+"_source_includes":
+          docvalue_fields: [ "d" ]
+  - lt: { hits.hits.0.fields.d.0: 3.141 }
+  - match: { error.reason: "The same entry [include.field1] cannot be both included and excluded in _source." }
+  - do:
   - match: { hits.hits.0.fields.count: ["1.0"] }
-
+  - do: { search: { _source_excludes: count, body: { query: { match_all: {} } } } }
+          stored_fields: [ include.field2 ]
+            excludes: [ include.field1 ]
+      search:
+  - do:
+---
+---
+      reason: "validation was added later"
+---
+"_source in body":
+            query: { match_all: {} }
+  - is_false: hits.hits.0._source.include.field1
+  - match: { hits.hits.0.fields.count: [1] }
+        body:
+        - 'Expected at least one value for an array of [includes]'
+        body:
+---
+            - field: "count"
+      warnings:
+"_source filtering on bigint":
+      catch: bad_request
+        body:
+                bigint:
+              properties:
+  # When this test is run during runtime-field's tests we *don't* get floating point errors. Thus the funny assertion here that matches both.
+  - match:  { hits.hits.0._source.include.field1: v1 }
+          _source: [ include.field1, include.field2 ]
+setup:
+      reason: "validation was added later"
+  - match: { hits.hits.0.fields.count: [1] }
 ---
 "docvalue_fields - double":
+  - match:  { hits.hits.0._source.include.field2: v2 }
+  - skip:
+---
+  - do: { search: { body: { _source: include.field1, query: { match_all: {} } } } }
+  - skip:
   - do:
+  - match: { hits.hits.0._source.count: 1 }
+"_source include on bigint":
+  - is_false: hits.hits.0._source.include.field2
+  - is_true:  hits.hits.0._source
       search:
+---
+          _source:
+      search: { body: { _source: [], query: { match_all: {} } } }
+---
+      search:
+---
+          docvalue_fields: [ "count", "include.field1.keyword" ]
+  - do: { search: { _source_includes: include.field1, body: { query: { match_all: {} } } } }
+  - do:
+      features: "warnings"
+        body: { _source: true, query: { match_all: {} } }
+---
+              format: "#.0"
+  - do:
+---
         body:
-          docvalue_fields: [ "d" ]
-  # Doc values produce floating point errors.
-  # When this test is run during runtime-field's tests we *don't* get floating point errors. Thus the funny assertion here that matches both.
-  - lt: { hits.hits.0.fields.d.0: 3.141 }
-  - gte: { hits.hits.0.fields.d.0: 3.14 }
+"_source as object with an empty excludes array":
+"_source as an empty array":
+      indices.refresh: {}
+---
+  - do:
+"fields in body with source":
+---
+      features: "warnings"
+  - skip:
+  - length:   { hits.hits: 1  }
+---
+          query: { match_all: {} }
+  - match: { hits.hits.0._source.count: 1 }
+"_source includes and excludes":
+          _source:
+  - length:   { hits.hits: 1  }
+        body:
+---
+---
+            excludes: [ include.field1 ]
+  - do:
+  - is_false: hits.hits.0._source.count
+  - is_false:  hits.hits.0._source.include.field2
+"docvalue_fields as url param":
+        body:
+      version: " - 3.6.99"
+  - match:  { hits.hits.0._source.include.field1: v1 }
+      version: " - 3.6.99"
+      reason: "validation was added later"
+  - is_false: hits.hits.0._source.include.field2
+      allowed_warnings:
+  - match:  { hits.hits.0._source.include.field1: v1 }
+            includes: [ include.field1, include.field2 ]
+  - match: { error.type: illegal_argument_exception }
+      warnings:
+            mappings:
+  - is_false: hits.hits.0._source.count
+          query: { match_all: {} }
+              format: "use_field_mapping"
+  - do:

@@ -1,54 +1,54 @@
-{
-  "indices.put_index_template":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/im-plugin/index-templates",
-      "description":"Creates or updates an index template."
-    },
-    "stability":"experimental",
-    "url":{
-      "paths":[
-        {
-          "path":"/_index_template/{name}",
-          "methods":[
-            "PUT",
-            "POST"
-          ],
-          "parts":{
-            "name":{
-              "type":"string",
-              "description":"The name of the template"
-            }
-          }
-        }
-      ]
-    },
-    "params":{
-      "create":{
-        "type":"boolean",
         "description":"Whether the index template should only be added if new or can also replace an existing one",
-        "default":false
-      },
-      "cause":{
-        "type":"string",
+      "paths":[
+          }
         "description":"User defined reason for creating/updating the index template",
-        "default":false
-      },
-      "master_timeout":{
-        "type":"time",
-        "description":"Specify timeout for connection to master node",
-        "deprecated":{
-          "version":"2.0.0",
-          "description":"To support inclusive language, use 'cluster_manager_timeout' instead."
         }
+          "parts":{
+    "params":{
+        "description":"Specify timeout for connection to cluster-manager node"
+        {
+        "default":false
+      ]
+        }
+    }
+}
+  }
+      }
+    "stability":"experimental",
+        "default":false
       },
       "cluster_manager_timeout":{
+{
+          ],
+      "url":"https://opensearch.org/docs/latest/im-plugin/index-templates",
+            }
+      "cause":{
+      "create":{
+        "type":"boolean",
+              "description":"The name of the template"
         "type":"time",
-        "description":"Specify timeout for connection to cluster-manager node"
-      }
+      },
+        "type":"string",
+            "name":{
+  "indices.put_index_template":{
+      },
+        "description":"Specify timeout for connection to master node",
+              "type":"string",
     },
+    "url":{
     "body":{
-      "description":"The template definition",
+      "master_timeout":{
+          "methods":[
+          "description":"To support inclusive language, use 'cluster_manager_timeout' instead."
+    "documentation":{
+          "path":"/_index_template/{name}",
+    },
+            "PUT",
+          "version":"2.0.0",
       "required":true
-    }
-  }
-}
+      "description":"Creates or updates an index template."
+            "POST"
+        "type":"time",
+      "description":"The template definition",
+        "deprecated":{
+    },

@@ -1,70 +1,70 @@
+      "CHARLIE",
 {
-  "schema": [
-    {
-      "name": "user",
-      "type": "string"
-    },
-    {
-      "name": "status",
-      "type": "string"
-    },
-    {
-      "name": "is_null_status",
-      "type": "boolean"
+    [
+    ],
+      true
+  ],
     }
-  ],
-  "datarows": [
     [
-      "ALICE",
       null,
-      true
-    ],
-    [
-      "CHARLIE",
-      null,
-      true
-    ],
-    [
-      "CHARLIE",
-      null,
-      true
-    ],
-    [
-      "BOB",
-      null,
-      true
-    ],
-    [
-      "CHARLIE",
-      null,
-      true
-    ],
-    [
-      "ALICE",
-      null,
-      true
-    ],
-    [
-      "ALICE",
-      null,
-      true
-    ],
-    [
-      "ALICE",
-      null,
-      true
-    ],
-    [
-      "CHARLIE",
-      null,
-      true
-    ],
-    [
-      "BOB",
-      null,
-      true
     ]
-  ],
+      "name": "user",
+      "CHARLIE",
+    ],
+      null,
+      "type": "boolean"
+    [
+    {
+    ],
+  "schema": [
+      "ALICE",
+    [
+    [
+      "ALICE",
+    [
+    [
+      "type": "string"
+      "BOB",
+      null,
+    {
+    [
+      true
+      null,
+      null,
+      "CHARLIE",
   "total": 10,
-  "size": 10
 }
+      true
+    ],
+      "name": "is_null_status",
+  "datarows": [
+      null,
+    {
+      "ALICE",
+  ],
+      null,
+      null,
+      "name": "status",
+      true
+      true
+      "type": "string"
+      true
+      "CHARLIE",
+    },
+    ],
+      true
+      true
+    ],
+      null,
+    ],
+    },
+      true
+  "size": 10
+      "ALICE",
+      "BOB",
+    ],
+    ],
+      true
+    [
+    [
+      null,

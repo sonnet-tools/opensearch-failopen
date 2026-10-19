@@ -1,70 +1,70 @@
-{
-  "schema": [
-    {
-      "name": "error_count",
-      "type": "bigint"
-    },
-    {
-      "name": "event_type",
-      "type": "string"
-    },
-    {
-      "name": "severity",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      82,
-      "access_denied",
-      "ERROR"
-    ],
-    [
-      55,
-      "login_attempt",
-      "ERROR"
-    ],
-    [
       51,
-      "authentication_failure",
+      82,
+      "type": "string"
       "ERROR"
-    ],
     [
-      35,
-      "privilege_escalation",
-      "CRITICAL"
     ],
+      "name": "event_type",
     [
-      28,
-      "authentication_failure",
-      "CRITICAL"
-    ],
-    [
-      26,
-      "suspicious_activity",
       "ERROR"
-    ],
-    [
-      13,
-      "access_denied",
-      "CRITICAL"
-    ],
-    [
-      12,
-      "suspicious_activity",
-      "CRITICAL"
-    ],
-    [
-      7,
-      "privilege_escalation",
-      "ERROR"
-    ],
-    [
+    {
       4,
-      "login_attempt",
+    [
+    [
       "CRITICAL"
+      "access_denied",
+    ],
+    ],
+      "privilege_escalation",
+      "ERROR"
+      28,
+      "suspicious_activity",
+      "ERROR"
+    [
+      "authentication_failure",
+    }
+    [
+    ],
+      "suspicious_activity",
+    ],
+      35,
+    ],
     ]
+  "schema": [
+      "login_attempt",
+    {
+      "type": "bigint"
+      "name": "error_count",
+    [
+      "privilege_escalation",
+    {
+{
+      "type": "string"
+      13,
   ],
+      26,
+    ],
+      "name": "severity",
   "total": 10,
-  "size": 10
+    },
+    [
+      "ERROR"
+      7,
 }
+    ],
+    },
+  "datarows": [
+      "authentication_failure",
+    ],
+      55,
+    [
+      "CRITICAL"
+      "access_denied",
+  "size": 10
+      12,
+      "CRITICAL"
+      "CRITICAL"
+      "CRITICAL"
+      "login_attempt",
+    [
+  ],

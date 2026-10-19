@@ -1,133 +1,119 @@
----
-"Response format":
   - do:
-      index:
-        index:   foo
-        id:      doc1
-        body:    { "bar": 1 }
-
-  - do:
-      index:
-        index:  foo
-        id:     doc2
-        body:   { "bar": 2 }
-
-  - do:
-      index:
-        index:  foo
-        id:     doc3
-        body:   { "bar": 3 }
-
-  - do:
-      index:
-        index:  foo
-        id:     doc4
-        body:   { "bar": 4 }
-
-  - do:
-      index:
-        index:  foo
-        id:     doc5
-        body:   { "bar": 5 }
-
-  - do:
-      index:
-        index:  foo
-        id:     doc6
-        body:   { "bar": 6 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      rank_eval:
-        body: {
           "requests" : [
-            {
-                "id": "dcg_query",
-                "request": { "query": { "match_all" : {}}, "sort" : [ "bar" ] },
-                "ratings": [
-                    {"_index" : "foo", "_id" : "doc1", "rating": 3},
                     {"_index" : "foo", "_id" : "doc2", "rating": 2},
-                    {"_index" : "foo", "_id" : "doc3", "rating": 3},
-                    {"_index" : "foo", "_id" : "doc4", "rating": 0},
-                    {"_index" : "foo", "_id" : "doc5", "rating": 1},
-                    {"_index" : "foo", "_id" : "doc6", "rating": 2}]
-            }
-          ],
-          "metric" : { "dcg": {}}
         }
-
-  - gt: {metric_score: 13.848263 }
-  - lt: {metric_score: 13.848264 }
-  - gt: {details.dcg_query.metric_score: 13.848263}
-  - lt: {details.dcg_query.metric_score: 13.848264}
-  - match: {details.dcg_query.unrated_docs: [ ]}
-
-# reverse the order in which the results are returned (less relevant docs first)
-
-  - do:
-      rank_eval:
-        body: {
-          "requests" : [
-            {
-                "id": "dcg_query_reverse",
+          ],
                 "request": { "query": { "match_all" : {}}, "sort" : [ {"bar" : "desc" }] },
-                "ratings": [
-                    {"_index" : "foo", "_id" : "doc1", "rating": 3},
-                    {"_index" : "foo", "_id" : "doc2", "rating": 2},
-                    {"_index" : "foo", "_id" : "doc3", "rating": 3},
-                    {"_index" : "foo", "_id" : "doc4", "rating": 0},
-                    {"_index" : "foo", "_id" : "doc5", "rating": 1},
-                    {"_index" : "foo", "_id" : "doc6", "rating": 2}]
-            },
-          ],
-          "metric" : { "dcg": { }}
-        }
-
-  - gt: {metric_score: 10.299674}
-  - lt: {metric_score: 10.299675}
-  - gt: {details.dcg_query_reverse.metric_score: 10.299674}
-  - lt: {details.dcg_query_reverse.metric_score: 10.299675}
-  - match: {details.dcg_query_reverse.unrated_docs: [ ]}
-
-# if we mix both, we should get the average
-
-  - do:
-      rank_eval:
-        body: {
-          "requests" : [
-            {
-                "id": "dcg_query",
-                "request": { "query": { "match_all" : {}}, "sort" : [ "bar" ] },
-                "ratings": [
-                  {"_index" : "foo", "_id" : "doc1", "rating": 3},
-                  {"_index" : "foo", "_id" : "doc2", "rating": 2},
-                  {"_index" : "foo", "_id" : "doc3", "rating": 3},
-                  {"_index" : "foo", "_id" : "doc4", "rating": 0},
-                  {"_index" : "foo", "_id" : "doc5", "rating": 1},
-                  {"_index" : "foo", "_id" : "doc6", "rating": 2}]
-            },
-            {
-                "id": "dcg_query_reverse",
-                "request": { "query": { "match_all" : {}}, "sort" : [ {"bar" : "desc" }] },
-                "ratings": [
-                  {"_index" : "foo", "_id" : "doc1", "rating": 3},
-                  {"_index" : "foo", "_id" : "doc2", "rating": 2},
-                  {"_index" : "foo", "_id" : "doc3", "rating": 3},
-                  {"_index" : "foo", "_id" : "doc4", "rating": 0},
-                  {"_index" : "foo", "_id" : "doc5", "rating": 1},
-                  {"_index" : "foo", "_id" : "doc6", "rating": 2}]
-            },
-          ],
-          "metric" : { "dcg": { }}
-        }
-
   - gt: {metric_score: 12.073969}
-  - lt: {metric_score: 12.073970}
-  - gt: {details.dcg_query.metric_score: 13.848263}
-  - lt: {details.dcg_query.metric_score: 13.848264}
+                    {"_index" : "foo", "_id" : "doc3", "rating": 3},
+            {
   - match: {details.dcg_query.unrated_docs: [ ]}
-  - gt: {details.dcg_query_reverse.metric_score: 10.299674}
+        index:  foo
+                    {"_index" : "foo", "_id" : "doc1", "rating": 3},
+          ],
+  - do:
+  - lt: {details.dcg_query.metric_score: 13.848264}
+                    {"_index" : "foo", "_id" : "doc1", "rating": 3},
+                "ratings": [
+        index:   foo
   - lt: {details.dcg_query_reverse.metric_score: 10.299675}
+        index:  foo
+        index:  foo
+        }
+      index:
   - match: {details.dcg_query_reverse.unrated_docs: [ ]}
+        index:  foo
+      rank_eval:
+        id:     doc3
+      rank_eval:
+                    {"_index" : "foo", "_id" : "doc3", "rating": 3},
+        body:   { "bar": 4 }
+                    {"_index" : "foo", "_id" : "doc4", "rating": 0},
+  - lt: {metric_score: 12.073970}
+        id:     doc4
+        body:   { "bar": 2 }
+                "request": { "query": { "match_all" : {}}, "sort" : [ {"bar" : "desc" }] },
+                  {"_index" : "foo", "_id" : "doc3", "rating": 3},
+  - gt: {details.dcg_query_reverse.metric_score: 10.299674}
+          "requests" : [
+      indices.refresh: {}
+        index:  foo
+            {
+        }
+        id:     doc5
+                  {"_index" : "foo", "_id" : "doc3", "rating": 3},
+  - do:
+        id:     doc2
+                  {"_index" : "foo", "_id" : "doc6", "rating": 2}]
+  - gt: {metric_score: 13.848263 }
+  - do:
+            }
+            {
+        body:   { "bar": 5 }
+                  {"_index" : "foo", "_id" : "doc1", "rating": 3},
+        body: {
+          "metric" : { "dcg": { }}
+                    {"_index" : "foo", "_id" : "doc4", "rating": 0},
+      index:
+            },
+  - lt: {metric_score: 13.848264 }
+---
+  - do:
+  - lt: {details.dcg_query.metric_score: 13.848264}
+  - gt: {details.dcg_query.metric_score: 13.848263}
+  - gt: {metric_score: 10.299674}
+        id:      doc1
+                "id": "dcg_query",
+  - match: {details.dcg_query.unrated_docs: [ ]}
+        body:   { "bar": 3 }
+                "request": { "query": { "match_all" : {}}, "sort" : [ "bar" ] },
+  - gt: {details.dcg_query_reverse.metric_score: 10.299674}
+      index:
+      index:
+                    {"_index" : "foo", "_id" : "doc5", "rating": 1},
+        id:     doc6
+            },
+                  {"_index" : "foo", "_id" : "doc2", "rating": 2},
+                  {"_index" : "foo", "_id" : "doc4", "rating": 0},
+        body: {
+          "metric" : { "dcg": { }}
+"Response format":
+                  {"_index" : "foo", "_id" : "doc5", "rating": 1},
+      index:
+                "id": "dcg_query",
+                "id": "dcg_query_reverse",
+  - gt: {details.dcg_query.metric_score: 13.848263}
+          ],
+                  {"_index" : "foo", "_id" : "doc4", "rating": 0},
+                    {"_index" : "foo", "_id" : "doc5", "rating": 1},
+  - lt: {metric_score: 10.299675}
+                  {"_index" : "foo", "_id" : "doc1", "rating": 3},
+            {
+                "request": { "query": { "match_all" : {}}, "sort" : [ "bar" ] },
+                    {"_index" : "foo", "_id" : "doc6", "rating": 2}]
+                "ratings": [
+  - do:
+                "ratings": [
+  - match: {details.dcg_query_reverse.unrated_docs: [ ]}
+                  {"_index" : "foo", "_id" : "doc6", "rating": 2}]
+                    {"_index" : "foo", "_id" : "doc2", "rating": 2},
+            },
+        body:    { "bar": 1 }
+        body: {
+  - lt: {details.dcg_query_reverse.metric_score: 10.299675}
+                "id": "dcg_query_reverse",
+  - do:
+          "requests" : [
+        body:   { "bar": 6 }
+  - do:
+      index:
+  - do:
+  - do:
+          "metric" : { "dcg": {}}
+# reverse the order in which the results are returned (less relevant docs first)
+                  {"_index" : "foo", "_id" : "doc2", "rating": 2},
+# if we mix both, we should get the average
+                  {"_index" : "foo", "_id" : "doc5", "rating": 1},
+                    {"_index" : "foo", "_id" : "doc6", "rating": 2}]
+                "ratings": [
+      rank_eval:

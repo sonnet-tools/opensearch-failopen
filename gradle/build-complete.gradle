@@ -1,59 +1,52 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- *
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-import java.nio.file.Files
-
-String buildNumber = System.getenv('BUILD_NUMBER')
-
-if (buildNumber) {
-  File uploadFile = file("build/${buildNumber}.tar.bz2")
-  project.gradle.buildFinished { result ->
-    println "build complete, generating: $uploadFile"
-    if (uploadFile.exists()) {
-      project.delete(uploadFile)
-    }
-
-    try {
-      ant.tar(destfile: uploadFile, compression: "bzip2", longfile: "gnu") {
-        fileset(dir: projectDir) {
-          Set<File> fileSet = fileTree(projectDir) {
             include("**/*.hprof")
-            include("**/reaper.log")
-            include("**/build/testclusters/**")
-            exclude("**/build/testclusters/**/data/**")
-            exclude("**/build/testclusters/**/distro/**")
+          Set<File> fileSet = fileTree(projectDir) {
+ * this file be licensed under the Apache-2.0 license or a
             exclude("**/build/testclusters/**/repo/**")
+  File uploadFile = file("build/${buildNumber}.tar.bz2")
+ * compatible open source license.
+      }
+  project.gradle.buildFinished { result ->
+ * The OpenSearch Contributors require contributions made to
+          } else {
+          }
+          include(name: "**/daemon-${ProcessHandle.current().pid()}*.log")
+ * GitHub history for details.
+}
+    }
+            include("**/build/testclusters/**")
+        }
+String buildNumber = System.getenv('BUILD_NUMBER')
+ * SPDX-License-Identifier: Apache-2.0
+            // In cases where we don't match any workspace files, exclude everything
+    try {
+        fileset(dir: "${gradle.gradleUserHomeDir}/daemon/${gradle.gradleVersion}", followsymlinks: false) {
             exclude("**/build/testclusters/**/extract/**")
           }
-            .files
+import java.nio.file.Files
+            include("**/reaper.log")
+ * Modifications Copyright OpenSearch Contributors. See
             .findAll { Files.isRegularFile(it.toPath()) }
-
           if (fileSet.empty) {
-            // In cases where we don't match any workspace files, exclude everything
-            ant.exclude(name: "**/*")
-          } else {
-            fileSet.each {
-              ant.include(name: projectDir.toPath().relativize(it.toPath()))
-            }
-          }
-        }
-
-        fileset(dir: "${gradle.gradleUserHomeDir}/daemon/${gradle.gradleVersion}", followsymlinks: false) {
-          include(name: "**/daemon-${ProcessHandle.current().pid()}*.log")
-        }
-
-        fileset(dir: "${gradle.gradleUserHomeDir}/workers", followsymlinks: false)
-      }
-    } catch (Exception e) {
-      logger.lifecycle("Failed to archive additional logs", e)
-    }
+            .files
+if (buildNumber) {
+            exclude("**/build/testclusters/**/data/**")
   }
-}
+            exclude("**/build/testclusters/**/distro/**")
+      ant.tar(destfile: uploadFile, compression: "bzip2", longfile: "gnu") {
+    }
+      logger.lifecycle("Failed to archive additional logs", e)
+        fileset(dir: "${gradle.gradleUserHomeDir}/workers", followsymlinks: false)
+        }
+    } catch (Exception e) {
+/*
+ */
+    if (uploadFile.exists()) {
+ *
+    println "build complete, generating: $uploadFile"
+            }
+        fileset(dir: projectDir) {
+              ant.include(name: projectDir.toPath().relativize(it.toPath()))
+ *
+            fileSet.each {
+            ant.exclude(name: "**/*")
+      project.delete(uploadFile)

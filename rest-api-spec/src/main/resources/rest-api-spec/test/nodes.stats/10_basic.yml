@@ -1,36 +1,29 @@
+        metric: [ transprot ]
+  - do:
+      nodes.stats:
+      nodes.info: {}
+  - do:
+  - match: { error.type: illegal_argument_exception }
+        metric: [ indices, transport ]
+  - skip:
 ---
+      catch: bad_request
+  - is_true: nodes.$node_id.indices.indices
+  - do:
 "Nodes stats":
   - do:
-      nodes.stats:
-        metric: [ indices, transport ]
-
-  - is_true: cluster_name
-  - is_true: nodes
-
 ---
-"Nodes stats level":
-  - skip:
-      features: [arbitrary_key]
-
-  - do:
-      nodes.info: {}
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  - do:
+  - match: { status: 400 }
       nodes.stats:
+  - is_true: cluster_name
         metric: [ indices ]
         level: "indices"
-
-  - is_true: nodes.$node_id.indices.indices
-
----
-"Nodes stats unrecognized parameter":
-  - do:
-      catch: bad_request
+      features: [arbitrary_key]
       nodes.stats:
-        metric: [ transprot ]
-
-  - match: { status: 400 }
-  - match: { error.type: illegal_argument_exception }
+"Nodes stats level":
   - match: { error.reason: "request [/_nodes/stats/transprot] contains unrecognized metric: [transprot] -> did you mean [transport]?" }
+---
+      nodes._arbitrary_key_: node_id
+  - is_true: nodes
+  - set:
+"Nodes stats unrecognized parameter":

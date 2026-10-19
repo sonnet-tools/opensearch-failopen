@@ -1,16 +1,16 @@
-{
-  "rows": [
-    [
-      3,
       "data fusion"
+      3,
     ],
     [
-      3,
       "opensearch tutorial"
+  ]
+      3,
     ],
+{
     [
       2,
+  "rows": [
       "clickbench schema"
+    [
     ]
-  ]
 }

@@ -1,15 +1,15 @@
-{
-  "schema" : [
-    {
-      "name" : "s_name",
-      "type" : "string"
-    },
-    {
-      "name" : "numwait",
-      "type" : "bigint"
     }
-  ],
-  "total" : 0,
   "datarows" : [ ],
-  "size" : 0
+{
+  "total" : 0,
 }
+    {
+      "type" : "string"
+    {
+  "schema" : [
+      "name" : "numwait",
+      "name" : "s_name",
+  "size" : 0
+      "type" : "bigint"
+  ],
+    },

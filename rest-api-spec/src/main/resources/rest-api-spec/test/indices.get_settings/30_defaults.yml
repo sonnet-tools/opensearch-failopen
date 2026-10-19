@@ -1,25 +1,25 @@
----
-setup:
-  - do:
-      indices.create:
-        body:
-          settings:
-            index:
-              number_of_shards: 1
-              number_of_replicas: 1
         index: test-index
----
-Test retrieval of default settings:
-  - do:
-      indices.get_settings:
-        flat_settings: true
         index: test-index
-  - is_false:
       test-index.settings.index\.refresh_interval
+        index: test-index
+              number_of_replicas: 1
+---
+  - do:
+              number_of_shards: 1
+        flat_settings: true
+  - do:
+---
+      test-index.defaults.index\.refresh_interval: "1s"
   - do:
       indices.get_settings:
+          settings:
+  - is_false:
+        body:
         include_defaults: true
-        flat_settings: true
-        index: test-index
   - match:
-      test-index.defaults.index\.refresh_interval: "1s"
+            index:
+        flat_settings: true
+      indices.create:
+Test retrieval of default settings:
+      indices.get_settings:
+setup:

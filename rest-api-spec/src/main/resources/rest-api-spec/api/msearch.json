@@ -1,77 +1,77 @@
-{
-  "msearch":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/multi-search/",
-      "description":"Allows to execute several search operations in one request."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_msearch",
-          "methods":[
-            "GET",
-            "POST"
-          ]
-        },
-        {
-          "path": "/{index}/_msearch",
-          "methods": [
-            "GET",
-            "POST"
-          ],
-          "parts": {
-            "index": {
-              "type": "list",
-              "description": "A comma-separated list of index names to use as default"
-            }
-          }
-        }
-      ]
-    },
-    "params": {
-      "search_type":{
-        "type":"enum",
-        "options":[
-          "query_then_fetch",
-          "query_and_fetch",
-          "dfs_query_then_fetch",
-          "dfs_query_and_fetch"
-        ],
-        "description":"Search operation type"
+        "default" : 5
+      "rest_total_hits_as_int" : {
       },
-      "max_concurrent_searches" : {
         "type" : "number",
-        "description" : "Controls the maximum number of concurrent searches the multi search api will execute"
-      },
-      "typed_keys": {
+      "max_concurrent_searches" : {
+              "type": "list",
+}
+          ]
+            "GET",
+        "description":"Search operation type"
+      "paths":[
+          "dfs_query_then_fetch",
+    "body":{
+        },
         "type" : "boolean",
-        "description" : "Specify whether aggregation and suggester names should be prefixed by their respective types in the response"
+      },
+    "url":{
+    "stability":"stable",
+        ],
+        "description" : "Controls the maximum number of concurrent searches the multi search api will execute"
+    },
+        "description" : "A threshold that enforces a pre-filter roundtrip to prefilter search shards based on query rewriting if the number of shards the search request expands to exceeds the threshold. This filter roundtrip can limit the number of shards significantly if for instance a shard can not match any documents based on its rewrite method ie. if date filters are mandatory to match but the shard bounds and the query are disjoint."
+        {
+      "search_type":{
+        "description" : "The number of concurrent shard requests each sub search executes concurrently per node. This value should be used to limit the impact of the search on the cluster in order to limit the number of concurrent shard requests",
+            "index": {
+              "description": "A comma-separated list of index names to use as default"
+          "path":"/_msearch",
+          ],
+        "type":"number",
+        "default":"true"
+      "serialize":"bulk"
+          "query_and_fetch",
+          "path": "/{index}/_msearch",
+    "documentation":{
+      "description":"The request definitions (metadata-search request definition pairs), separated by newlines",
+        "type" : "number",
+        "description": "Indicates whether hits.total should be rendered as an integer or an object in the rest search response",
+          "methods":[
+        }
+        "options":[
+      "typed_keys": {
+      },
+    "params": {
       },
       "pre_filter_shard_size":{
-        "type":"number",
-        "description" : "A threshold that enforces a pre-filter roundtrip to prefilter search shards based on query rewriting if the number of shards the search request expands to exceeds the threshold. This filter roundtrip can limit the number of shards significantly if for instance a shard can not match any documents based on its rewrite method ie. if date filters are mandatory to match but the shard bounds and the query are disjoint."
-      },
-      "max_concurrent_shard_requests" : {
-        "type" : "number",
-        "description" : "The number of concurrent shard requests each sub search executes concurrently per node. This value should be used to limit the impact of the search on the cluster in order to limit the number of concurrent shard requests",
-        "default" : 5
-      },
-      "rest_total_hits_as_int" : {
-        "type": "boolean",
-        "description": "Indicates whether hits.total should be rendered as an integer or an object in the rest search response",
-        "default": false
-      },
-      "ccs_minimize_roundtrips":{
-        "type":"boolean",
-        "description":"Indicates whether network round-trips should be minimized as part of cross-cluster search requests execution",
-        "default":"true"
-      }
-    },
-    "body":{
-      "description":"The request definitions (metadata-search request definition pairs), separated by newlines",
       "required":true,
-      "serialize":"bulk"
+  "msearch":{
+        "default": false
+        "type": "boolean",
+          "methods": [
+    },
+        "description" : "Specify whether aggregation and suggester names should be prefixed by their respective types in the response"
+          "dfs_query_and_fetch"
     }
+      "max_concurrent_shard_requests" : {
+        "type":"enum",
+      }
+      },
+        "type":"boolean",
+            }
+          }
+          "query_then_fetch",
+            "GET",
+{
+        "description":"Indicates whether network round-trips should be minimized as part of cross-cluster search requests execution",
+      "ccs_minimize_roundtrips":{
+            "POST"
+      },
+          "parts": {
+            "POST"
   }
-}
+      "description":"Allows to execute several search operations in one request."
+      ]
+      "url":"https://opensearch.org/docs/latest/api-reference/multi-search/",
+    },
+        {

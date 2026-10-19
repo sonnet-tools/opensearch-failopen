@@ -1,30 +1,30 @@
-{
-  "schema" : [
+  "total" : 2,
+    [
     {
-      "name" : "l_shipmode",
-      "type" : "string"
-    },
     {
-      "name" : "high_line_count",
-      "type" : "bigint"
-    },
-    {
-      "name" : "low_line_count",
-      "type" : "bigint"
     }
   ],
-  "total" : 2,
-  "datarows" : [
-    [
-      "MAIL",
-      5,
-      5
+      "type" : "string"
     ],
-    [
-      "SHIP",
+    ]
+      5
       5,
       10
-    ]
+      "name" : "l_shipmode",
   ],
-  "size" : 2
+    {
+  "datarows" : [
+    },
+{
+  "schema" : [
+    [
+      "name" : "low_line_count",
 }
+      "name" : "high_line_count",
+      "MAIL",
+      "SHIP",
+    },
+  "size" : 2
+      5,
+      "type" : "bigint"
+      "type" : "bigint"

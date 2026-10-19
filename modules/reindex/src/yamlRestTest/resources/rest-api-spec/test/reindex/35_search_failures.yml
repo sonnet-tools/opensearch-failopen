@@ -1,42 +1,40 @@
----
 "Response format for search failures":
-  - do:
-      indices.create:
-        index: source
-        body:
-          settings:
-            index.number_of_shards: 2
-
-  - do:
-      index:
-        index:   source
-        id:      1
+  - match: {error.root_cause.0.type:   script_exception}
         body:    { "text": "test" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      catch: bad_request
+            index:   source
+          source:
+          dest:
       reindex:
         body:
-          source:
-            index:   source
-            query:
-              script:
-                script:
-                  lang: painless
-                  source: throw new IllegalArgumentException("Cats!")
-          dest:
-            index:   dest
-  - match: {error.type: search_phase_execution_exception}
-  - match: {error.reason: "Partial shards failure"}
-  - match: {error.phase: query}
-  - match: {error.root_cause.0.type:   script_exception}
+  - is_true: error.failed_shards.0.node
   - match: {error.root_cause.0.reason: runtime error}
+        id:      1
   - match: {error.failed_shards.0.shard: 0}
   - match: {error.failed_shards.0.index:  source}
-  - is_true: error.failed_shards.0.node
-  - match: {error.failed_shards.0.reason.type:   script_exception}
-  - match: {error.failed_shards.0.reason.reason: runtime error}
-  - match: {error.failed_shards.0.reason.caused_by.type:   illegal_argument_exception}
+                  lang: painless
+        index: source
+            index:   dest
+      indices.create:
+                  source: throw new IllegalArgumentException("Cats!")
+  - match: {error.reason: "Partial shards failure"}
+              script:
   - match: {error.failed_shards.0.reason.caused_by.reason: Cats!}
+  - do:
+  - match: {error.phase: query}
+        body:
+  - do:
+      catch: bad_request
+                script:
+---
+      index:
+          settings:
+  - match: {error.failed_shards.0.reason.caused_by.type:   illegal_argument_exception}
+  - match: {error.type: search_phase_execution_exception}
+  - do:
+      indices.refresh: {}
+  - do:
+            query:
+  - match: {error.failed_shards.0.reason.type:   script_exception}
+        index:   source
+            index.number_of_shards: 2
+  - match: {error.failed_shards.0.reason.reason: runtime error}

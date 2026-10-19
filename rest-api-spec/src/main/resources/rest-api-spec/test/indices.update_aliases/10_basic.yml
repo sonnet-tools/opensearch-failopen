@@ -1,168 +1,143 @@
----
-"Basic test for aliases":
-
-  - do:
-      indices.create:
-        index: test_index
-
-  - do:
-      indices.exists_alias:
-        name: test_alias
-
-  - is_false: ''
-
-  - do:
-      indices.update_aliases:
-        body:
-          actions:
             - add:
-                index: test_index
-                alias: test_alias
-                routing: routing_value
-                filter:
-                  ids:
-                    values: ["1", "2", "3"]
-
+      indices.update_aliases:
+  - do:
+        body:
+  - is_true: ''
+      indices.exists_alias:
   - do:
       indices.exists_alias:
-        name: test_alias
-
-  - is_true: ''
-
-  - do:
-      indices.get_alias:
         index: test_index
-        name: test_alias
-
+        name: test_alias2
   - match: {test_index.aliases.test_alias: {filter: { ids : { values: ["1", "2", "3"]}}, 'index_routing': 'routing_value', 'search_routing': 'routing_value'}}
-
----
-"Basic test for multiple aliases":
-
-  - do:
-      indices.create:
         index: test_index
-
-  - do:
       indices.exists_alias:
-        name: test_alias1
-
-  - is_false: ''
-
-  - do:
-      indices.exists_alias:
-        name: test_alias2
-
-  - is_false: ''
-
-  - do:
-      indices.update_aliases:
-        body:
+                index: test_index
+"Basic test for multiple aliases":
           actions:
+      indices.exists_alias:
+  - do:
+        name: test_alias3
+---
+      indices.update_aliases:
+      indices.create:
+      indices.exists_alias:
+        name: test_alias3
+      indices.get_alias:
+      indices.exists_alias:
+      indices.exists_alias:
+  - is_true: ''
+  - is_false: ''
             - add:
-                indices: [test_index]
-                aliases: [test_alias1, test_alias2]
-                routing: routing_value
-
-  - do:
-      indices.exists_alias:
+      indices.update_aliases:
         name: test_alias1
-
-  - is_true: ''
-
+---
+            - add:
+                filter:
   - do:
-      indices.exists_alias:
-        name: test_alias2
-
-  - is_true: ''
-
+  - do:
+        body:
+      indices.create:
+                index: test_index
+      indices.create:
+  - do:
+                index: test_index
+        name: test_alias3
+            - remove:
+          actions:
   - do:
       indices.get_alias:
-        index: test_index
-
-  - match: {test_index.aliases.test_alias1: {'index_routing': 'routing_value', 'search_routing': 'routing_value'}}
-  - match: {test_index.aliases.test_alias2: {'index_routing': 'routing_value', 'search_routing': 'routing_value'}}
-
----
-"Remove alias":
+"Basic test for aliases":
   - do:
-      indices.create:
-        index: test_index
-  - do:
-      indices.exists_alias:
-        name: test_alias1
-  - is_false: ''
-  - do:
-      indices.exists_alias:
-        name: test_alias2
-  - is_false: ''
-  - do:
-      indices.exists_alias:
-        name: test_alias3
-  - is_false: ''
-
-  - do:
-      indices.update_aliases:
-        body:
-          actions:
-            - add:
+                alias: test_alias2
                 index: test_index
-                aliases: [test_alias1, test_alias2]
   - do:
+                indices: [test_index]
+  - match: {test_index.aliases.test_alias2: {'index_routing': 'routing_value', 'search_routing': 'routing_value'}}
       indices.exists_alias:
-        name: test_alias1
-  - is_true: ''
-  - do:
-      indices.exists_alias:
+                index: test_index
         name: test_alias2
-  - is_true: ''
   - do:
+                alias: test_alias
       indices.exists_alias:
+      indices.exists_alias:
+        body:
+            - remove:
+  - do:
+  - is_true: ''
+                alias: test_alias3
+  - match: {test_index.aliases.test_alias1: {'index_routing': 'routing_value', 'search_routing': 'routing_value'}}
+        index: test_index
+        name: test_alias
+      indices.update_aliases:
+  - do:
         name: test_alias3
   - is_false: ''
-
+        name: test_alias2
   - do:
-      indices.update_aliases:
-        body:
           actions:
-            - remove:
+        name: test_alias1
+  - is_false: ''
+  - do:
+        name: test_alias1
+  - do:
+  - is_true: ''
+        name: test_alias2
+        index: test_index
+          actions:
+  - do:
+---
+                  ids:
+                routing: routing_value
+  - is_false: ''
+        name: test_alias1
+  - is_false: ''
+      indices.exists_alias:
+        index: test_index
+                alias: test_alias3
+        body:
+        name: test_alias1
+  - is_false: ''
+  - is_false: ''
+  - is_false: ''
+        name: test_alias1
+  - do:
+  - do:
+  - do:
+  - do:
+      indices.exists_alias:
+  - is_false: ''
+      indices.exists_alias:
+      indices.exists_alias:
+  - is_false: ''
+        name: test_alias2
+            - add:
+          actions:
+                    values: ["1", "2", "3"]
+  - do:
+  - do:
+"Remove alias":
+                aliases: [test_alias1, test_alias2]
+      indices.exists_alias:
+        body:
+  - do:
+  - do:
+      indices.exists_alias:
+  - do:
+  - is_true: ''
+      indices.exists_alias:
+        name: test_alias
+      indices.update_aliases:
+  - do:
+        name: test_alias
+  - do:
                 index: test_index
                 alias: test_alias1
-            - add:
-                index: test_index
-                alias: test_alias3
-  - do:
-      indices.exists_alias:
-        name: test_alias1
-  - is_false: ''
-  - do:
-      indices.exists_alias:
-        name: test_alias2
-  - is_true: ''
-  - do:
-      indices.exists_alias:
-        name: test_alias3
-  - is_true: ''
-
-  - do:
-      indices.update_aliases:
-        body:
-          actions:
             - remove:
-                index: test_index
-                alias: test_alias2
-            - remove:
-                index: test_index
-                alias: test_alias3
-  - do:
       indices.exists_alias:
-        name: test_alias1
   - is_false: ''
-  - do:
-      indices.exists_alias:
+                aliases: [test_alias1, test_alias2]
         name: test_alias2
-  - is_false: ''
   - do:
-      indices.exists_alias:
-        name: test_alias3
-  - is_false: ''
+                routing: routing_value
+  - is_true: ''
+  - is_true: ''

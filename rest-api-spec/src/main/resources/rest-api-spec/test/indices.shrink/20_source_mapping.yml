@@ -1,73 +1,66 @@
----
-"Shrink index ignores target template mapping":
-    - skip:
-        features: [warnings, arbitrary_key, allowed_warnings]
-    - do:
         nodes.info:
-          node_id: data:true
-    - set:
-        nodes._arbitrary_key_: node_id
-
-  # create index
-    - do:
-        indices.create:
-          index: source
-          wait_for_active_shards: 1
-          body:
-            settings:
-              # ensure everything is allocated on a single node
-              index.routing.allocation.include._id: $node_id
-              index.number_of_shards: 2
-              index.number_of_replicas: 0
-            mappings:
-              properties:
-                count:
-                  type: text
-
-    # index document
-    - do:
-        index:
-          index: source
-          id:    "1"
-          body:  { "count": "1" }
-
-    # create template matching shrink target
-    - do:
-        indices.put_template:
-          name: tpl1
-          body:
-            index_patterns: targ*
-            mappings:
-              properties:
-                count:
                   type: integer
-
-    # make it read-only
     - do:
-        indices.put_settings:
-          index: source
-          body:
-            index.blocks.write: true
-            index.number_of_replicas: 0
-
-    - do:
-        cluster.health:
-          wait_for_status: green
-          index: source
-
+          master_timeout: 10s
+                count:
+            mappings:
+          node_id: data:true
+  # create index
+              index.number_of_replicas: 0
     # now we do the actual shrink
     - do:
-        allowed_warnings:
-          - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
-        indices.shrink:
-          index: "source"
+          id:    "1"
+        indices.put_settings:
+        cluster.health:
+"Shrink index ignores target template mapping":
+          body:
+          index: source
           target: "target"
           wait_for_active_shards: 1
-          master_timeout: 10s
-          body:
-            settings:
-              index.number_of_replicas: 0
-
     - do:
-        cluster.health:
+          body:
+          index: "source"
+        index:
+          index: source
+              index.number_of_shards: 2
+    - set:
+    - do:
+            settings:
+              properties:
           wait_for_status: green
+                  type: text
+            index.number_of_replicas: 0
+                count:
+          index: source
+        nodes._arbitrary_key_: node_id
+          wait_for_active_shards: 1
+          body:
+    - skip:
+        features: [warnings, arbitrary_key, allowed_warnings]
+        cluster.health:
+        allowed_warnings:
+    - do:
+    # index document
+            settings:
+            index.blocks.write: true
+          index: source
+            index_patterns: targ*
+          wait_for_status: green
+              # ensure everything is allocated on a single node
+              index.routing.allocation.include._id: $node_id
+            mappings:
+              properties:
+    - do:
+    # create template matching shrink target
+---
+          body:  { "count": "1" }
+    # make it read-only
+    - do:
+    - do:
+        indices.create:
+          body:
+        indices.put_template:
+              index.number_of_replicas: 0
+          name: tpl1
+          - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
+        indices.shrink:

@@ -1,348 +1,320 @@
-setup:
-  - skip:
-      version: " - 2.7.99"
-      reason: unsigned_long is not supported before 2.8.0
-
-  - do:
-        indices.create:
-          index: test
-          body:
-              mappings:
-                properties:
-                  date:
-                    type: date
-                  keyword:
-                    type: keyword
-                  unsigned_long:
-                    type: unsigned_long
-                  geo_point:
-                    type: geo_point
-                  nested:
-                    type: nested
-                    properties:
-                      nested_unsigned_long:
-                        type: unsigned_long
-
-  - do:
-        indices.create:
-          index: other
-          body:
-            mappings:
-              properties:
-                date:
-                  type: date
-                unsigned_long:
-                  type: unsigned_long
-                nested:
-                  type: nested
-                  properties:
-                    nested_long:
-                      type: long
-
-  - do:
-      index:
-        index: test
-        id:    1
-        body:  { "keyword": "foo", "unsigned_long": [10223372036854775807, 184], "geo_point": "37.2343,-115.8067", "nested": [{"nested_unsigned_long": 10223372036854775807}, {"nested_unsigned_long": 184}] }
-
-  - do:
-      index:
-        index: test
-        id:    2
-        body:  { "keyword": ["foo", "bar"], "geo_point": "41.12,-71.34" }
-
-  - do:
-      index:
-        index: test
-        id:    3
-        body:  { "keyword": "bar", "unsigned_long": [100, 0], "geo_point": "90.0,0.0", "nested": [{"nested_unsigned_long": 184}, {"nested_unsigned_long": 0}] }
-
-  - do:
-      index:
-        index: test
-        id:    4
-        body:  { "keyword": "bar", "unsigned_long": [1000, 0], "geo_point": "41.12,-71.34", "nested": [{"nested_unsigned_long": 1000}, {"nested_unsigned_long": 10223372036854775807}] }
-
-  - do:
-      index:
-        index: test
-        id:    5
-        body:  { "date": "2017-10-20T03:08:45" }
-
-  - do:
-      index:
-        index: test
-        id:    6
-        body:  { "date": "2017-10-21T07:00:00" }
-
-  - do:
-      index:
-        index: other
-        id:    0
-        body:  { "date": "2017-10-20T03:08:45" }
-
-  - do:
       indices.refresh:
-        index: [test, other]
-
-
----
-"Nested Composite aggregation":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          aggregations:
-            test:
-              composite:
-                sources: [
-                  {
-                    "unsigned_long": {
-                      "terms": {
-                        "field": "unsigned_long"
-                      }
-                    }
+                {
                   },
-                  {
-                    "kw": {
-                      "terms": {
-                        "field": "keyword"
-                      }
-                    }
-                  }
-                ]
-
-  - match: { hits.total: 6 }
-  - length: { aggregations.test.buckets: 5 }
-  - match: { aggregations.test.buckets.0.key.unsigned_long: 0}
-  - match: { aggregations.test.buckets.0.key.kw: "bar" }
-  - match: { aggregations.test.buckets.0.doc_count: 2 }
-  - match: { aggregations.test.buckets.1.key.unsigned_long: 100 }
-  - match: { aggregations.test.buckets.1.key.kw: "bar"}
-  - match: { aggregations.test.buckets.1.doc_count: 1 }
-  - match: { aggregations.test.buckets.2.key.unsigned_long: 184 }
-  - match: { aggregations.test.buckets.2.key.kw: "foo" }
-  - match: { aggregations.test.buckets.2.doc_count: 1 }
-  - match: { aggregations.test.buckets.3.key.unsigned_long: 1000}
-  - match: { aggregations.test.buckets.3.key.kw: "bar" }
-  - match: { aggregations.test.buckets.3.doc_count: 1 }
   - match: { aggregations.test.buckets.4.key.unsigned_long: 10223372036854775807 }
-  - match: { aggregations.test.buckets.4.key.kw: "foo" }
-  - match: { aggregations.test.buckets.4.doc_count: 1 }
-
----
-"Aggregate After":
+        id:    5
   - do:
-      search:
         rest_total_hits_as_int: true
-        index: test
-        body:
-          aggregations:
-            test:
-              composite:
-                sources: [
-                  {
-                    "unsigned_long": {
-                      "terms": {
-                        "field": "unsigned_long"
-                      }
-                    }
-                  },
-                  {
-                    "kw": {
-                      "terms": {
-                        "field": "keyword"
-                      }
-                    }
-                  }
-                ]
-                after: { "unsigned_long": 184, "kw": "foo" }
-
-  - match: { hits.total: 6 }
-  - length: { aggregations.test.buckets: 2 }
-  - match: { aggregations.test.buckets.0.key.unsigned_long: 1000 }
-  - match: { aggregations.test.buckets.0.key.kw: "bar" }
-  - match: { aggregations.test.buckets.0.doc_count: 1 }
-  - match: { aggregations.test.buckets.1.key.unsigned_long: 10223372036854775807 }
-  - match: { aggregations.test.buckets.1.key.kw: "foo" }
-  - match: { aggregations.test.buckets.1.doc_count: 1 }
-
----
-"Composite aggregation with nested parent":
-  - do:
-        search:
-          rest_total_hits_as_int: true
-          index: test
+                {
           body:
-            aggregations:
-              1:
-                nested:
-                  path: nested
-                aggs:
-                  2:
-                    composite:
-                      sources: [
-                        "nested": {
-                          "terms": {
-                            "field": "nested.nested_unsigned_long"
-                        }
-                      }
-                    ]
-
-  - match: { hits.total: 6 }
-  - length: { aggregations.1.2.buckets: 4 }
-  - match: { aggregations.1.2.buckets.0.key.nested: 0 }
-  - match: { aggregations.1.2.buckets.0.doc_count:  1 }
-  - match: { aggregations.1.2.buckets.1.key.nested: 184 }
-  - match: { aggregations.1.2.buckets.1.doc_count:  2 }
-  - match: { aggregations.1.2.buckets.2.key.nested: 1000 }
-  - match: { aggregations.1.2.buckets.2.doc_count:  1 }
-  - match: { aggregations.1.2.buckets.3.key.nested: 10223372036854775807 }
-  - match: { aggregations.1.2.buckets.3.doc_count:  2 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          aggregations:
-            1:
-              nested:
-                path: nested
-              aggs:
-                2:
-                  composite:
-                    after: { "nested": 184 }
-                    sources: [
-                      "nested": {
-                        "terms": {
-                          "field": "nested.nested_unsigned_long"
-                        }
-                      }
-                    ]
-
-  - match: {hits.total: 6}
-  - length: { aggregations.1.2.buckets: 2 }
-  - match: { aggregations.1.2.buckets.0.key.nested: 1000 }
-  - match: { aggregations.1.2.buckets.0.doc_count:  1 }
-  - match: { aggregations.1.2.buckets.1.key.nested: 10223372036854775807 }
-  - match: { aggregations.1.2.buckets.1.doc_count:  2 }
-
----
-"Composite aggregation with unmapped field":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: [test, other]
-        body:
-          aggregations:
-            test:
-              composite:
-                sources: [
-                {
                   "unsigned_long": {
-                    "terms": {
-                      "field": "unsigned_long"
-                    }
+        id:    3
+setup:
                   }
-                },
-                {
-                  "kw": {
-                    "terms": {
-                      "field": "keyword"
-                    }
-                  }
-                }
-                ]
-
-  - match: {hits.total: 7}
-  - length: { aggregations.test.buckets: 5 }
-  - match: { aggregations.test.buckets.0.key.unsigned_long: 0}
-  - match: { aggregations.test.buckets.0.key.kw: "bar" }
+        body:  { "keyword": "bar", "unsigned_long": [1000, 0], "geo_point": "41.12,-71.34", "nested": [{"nested_unsigned_long": 1000}, {"nested_unsigned_long": 10223372036854775807}] }
+        indices.create:
   - match: { aggregations.test.buckets.0.doc_count: 2 }
-  - match: { aggregations.test.buckets.1.key.unsigned_long: 100 }
-  - match: { aggregations.test.buckets.1.key.kw: "bar"}
-  - match: { aggregations.test.buckets.1.doc_count: 1 }
-  - match: { aggregations.test.buckets.2.key.unsigned_long: 184 }
-  - match: { aggregations.test.buckets.2.key.kw: "foo" }
-  - match: { aggregations.test.buckets.2.doc_count: 1 }
-  - match: { aggregations.test.buckets.3.key.unsigned_long: 1000}
-  - match: { aggregations.test.buckets.3.key.kw: "bar" }
-  - match: { aggregations.test.buckets.3.doc_count: 1 }
-  - match: { aggregations.test.buckets.4.key.unsigned_long: 10223372036854775807 }
-  - match: { aggregations.test.buckets.4.key.kw: "foo" }
-  - match: { aggregations.test.buckets.4.doc_count: 1 }
-
+  - length: { aggregations.test.buckets: 5 }
+        index: test
+                    "kw": {
   - do:
-      search:
-        rest_total_hits_as_int: true
-        index: [test, other]
-        body:
-          aggregations:
-            test:
-              composite:
-                after: { "unsigned_long": 1000, "kw": "bar" }
-                sources: [
-                {
-                  "unsigned_long": {
-                    "terms": {
-                      "field": "unsigned_long"
-                    }
-                  }
-                },
-                {
-                  "kw": {
-                    "terms": {
-                      "field": "keyword"
-                    }
-                  }
-                }
-                ]
-
-  - match: {hits.total: 7}
-  - length: { aggregations.test.buckets: 1 }
-  - match: { aggregations.test.buckets.0.key.unsigned_long: 10223372036854775807 }
-  - match: { aggregations.test.buckets.0.key.kw: "foo" }
-  - match: { aggregations.test.buckets.0.doc_count: 1 }
-
----
+  - match: { aggregations.1.2.buckets.1.key.nested: 184 }
 "Terms source from sorted":
   - do:
-        indices.create:
-          index: sorted_test
-          body:
-              settings:
-                sort.field: keyword
-              mappings:
-                properties:
-                  keyword:
-                    type: keyword
-                  unsigned_long:
-                    type: unsigned_long
-
-
-  - do:
-      index:
-        index:   sorted_test
-        id:      2
-        refresh: true
-        body:  { "keyword": "foo", "unsigned_long": 1 }
-
-  - do:
-      search:
-        index: sorted_test
-        rest_total_hits_as_int: true
-        body:
+  - match: { aggregations.test.buckets.1.key.unsigned_long: 10223372036854775807 }
+                  2:
+  - match: { aggregations.1.2.buckets.0.doc_count:  1 }
           aggregations:
-            test:
+  - do:
               composite:
-                sources:
+          aggregations:
+                      }
+                    sources: [
+      search:
+                      }
+                ]
+        index: test
+      index:
+          aggregations:
+                  }
+  - match: { aggregations.test.buckets.3.key.unsigned_long: 1000}
+            1:
+                    type: keyword
+                    type: unsigned_long
+          body:
+  - length: { aggregations.1.2.buckets: 2 }
+                      type: long
+      index:
+  - do:
+                {
+      search:
+      search:
+  - match: { aggregations.test.buckets.2.doc_count: 1 }
+      version: " - 2.7.99"
+                        "field": "keyword"
+        index: [test, other]
+                sources: [
+                      "nested": {
+  - match: { aggregations.test.buckets.4.key.unsigned_long: 10223372036854775807 }
+              1:
+                    "terms": {
+                    }
+  - match: { aggregations.test.buckets.3.key.kw: "bar" }
+                    }
+                    "terms": {
+            test:
+                    after: { "nested": 184 }
+                          "field": "nested.nested_unsigned_long"
+  - match: { aggregations.test.buckets.2.key.unsigned_long: 184 }
+                  type: date
+  - match: { aggregations.1.2.buckets.0.key.nested: 0 }
+                      "field": "unsigned_long"
+                      "field": "unsigned_long"
+  - match: { aggregations.test.buckets.1.doc_count: 1 }
+                        }
+  - match: { aggregations.test.buckets.1.key.kw: "foo" }
                   - keyword:
-                      terms:
-                        field: keyword
-
-  - match: { hits.total: 1 }
+                    "unsigned_long": {
+          aggregations:
+                      "terms": {
+---
+                  {
+      search:
+  - match: { aggregations.1.2.buckets.1.doc_count:  2 }
+  - match: { aggregations.1.2.buckets.2.doc_count:  1 }
+                  properties:
+                  },
+        id:    2
+        body:
+  - match: { aggregations.test.buckets.2.key.kw: "foo" }
+        index:   sorted_test
+        body:  { "date": "2017-10-21T07:00:00" }
+              composite:
+                    }
+  - match: {hits.total: 6}
+                },
+                  path: nested
+                sources: [
+  - match: { aggregations.test.buckets.0.key.unsigned_long: 0}
+                    type: nested
+              settings:
+                  {
+                  }
+  - match: { aggregations.test.buckets.4.key.kw: "foo" }
+                  keyword:
+                  nested:
+  - match: { aggregations.1.2.buckets.3.key.nested: 10223372036854775807 }
+---
+          index: sorted_test
+"Composite aggregation with unmapped field":
   - length: { aggregations.test.buckets: 1 }
+                    type: geo_point
+      index:
+                      "terms": {
+  - match: { aggregations.test.buckets.0.key.kw: "bar" }
+                after: { "unsigned_long": 184, "kw": "foo" }
+  - do:
+                        field: keyword
+      index:
+        index: test
+        rest_total_hits_as_int: true
+                    }
+                  date:
+                {
+          index: test
+                    "terms": {
+            test:
+                      "terms": {
+                    type: unsigned_long
+  - match: { hits.total: 6 }
   - match: { aggregations.test.buckets.0.key.keyword: "foo" }
+  - match: { aggregations.test.buckets.3.key.unsigned_long: 1000}
+        body:
+  - match: { aggregations.test.buckets.2.doc_count: 1 }
+  - length: { aggregations.1.2.buckets: 4 }
+  - match: { aggregations.test.buckets.0.key.unsigned_long: 0}
+        body:  { "date": "2017-10-20T03:08:45" }
+        body:
+                    properties:
+        body:  { "keyword": "bar", "unsigned_long": [100, 0], "geo_point": "90.0,0.0", "nested": [{"nested_unsigned_long": 184}, {"nested_unsigned_long": 0}] }
+        index: test
+                      }
+            aggregations:
+                ]
+  - match: { aggregations.test.buckets.0.doc_count: 2 }
+        rest_total_hits_as_int: true
+                  "unsigned_long": {
   - match: { aggregations.test.buckets.0.doc_count: 1 }
+                },
+                  type: nested
+        body:  { "keyword": ["foo", "bar"], "geo_point": "41.12,-71.34" }
+                  }
+  - match: { aggregations.test.buckets.1.key.kw: "bar"}
+      index:
+                  geo_point:
+  - match: {hits.total: 7}
+        index: sorted_test
+        id:    4
+  - match: { aggregations.test.buckets.1.key.unsigned_long: 100 }
+  - do:
+          aggregations:
+  - length: { aggregations.test.buckets: 2 }
+            mappings:
+      reason: unsigned_long is not supported before 2.8.0
+                      nested_unsigned_long:
+  - match: { aggregations.test.buckets.1.doc_count: 1 }
+  - do:
+                unsigned_long:
+                ]
+  - do:
+                properties:
+        index: test
+                  unsigned_long:
+                }
+                properties:
+        index: test
+                nested:
+                    "terms": {
+              aggs:
+                  type: unsigned_long
+  - match: { aggregations.1.2.buckets.3.doc_count:  2 }
+              mappings:
+  - match: { aggregations.test.buckets.0.doc_count: 1 }
+                sources: [
+                      }
+        index: [test, other]
+  - length: { aggregations.test.buckets: 5 }
+  - do:
+                  "kw": {
+  - match: { aggregations.test.buckets.3.doc_count: 1 }
+                        "terms": {
+  - match: { aggregations.test.buckets.0.doc_count: 1 }
+        body:  { "keyword": "foo", "unsigned_long": 1 }
+          rest_total_hits_as_int: true
+                  }
+                ]
+            test:
+        index: test
+                  "kw": {
+                    }
+                        }
+                    composite:
+                      "terms": {
+  - match: { aggregations.1.2.buckets.2.key.nested: 1000 }
+        refresh: true
+          index: other
+                sources:
+        index: [test, other]
+      index:
+      index:
+              properties:
+  - do:
+  - match: { aggregations.test.buckets.1.key.unsigned_long: 100 }
+  - match: { aggregations.test.buckets.0.key.unsigned_long: 1000 }
+        id:    0
+                  {
+  - do:
+              mappings:
+                    ]
+        body:  { "date": "2017-10-20T03:08:45" }
+  - do:
+                      sources: [
+                        "field": "unsigned_long"
+  - match: { aggregations.test.buckets.0.key.kw: "bar" }
+                  keyword:
+                  {
+                  unsigned_long:
+                      }
+  - match: { hits.total: 1 }
+        rest_total_hits_as_int: true
+---
+  - do:
+        rest_total_hits_as_int: true
+  - match: { aggregations.test.buckets.3.doc_count: 1 }
+  - match: { aggregations.1.2.buckets.1.key.nested: 10223372036854775807 }
+                    }
+  - match: {hits.total: 7}
+  - match: { aggregations.test.buckets.3.key.kw: "bar" }
+  - match: { aggregations.test.buckets.4.doc_count: 1 }
+                        "nested": {
+                      }
+                sources: [
+  - match: { aggregations.test.buckets.0.key.kw: "bar" }
+                    "unsigned_long": {
+  - match: { aggregations.test.buckets.1.doc_count: 1 }
+        index: test
+              nested:
+                      "field": "keyword"
+                date:
+  - do:
+        id:    1
+  - match: { aggregations.1.2.buckets.0.key.nested: 1000 }
+          aggregations:
+                        "field": "keyword"
+  - match: { aggregations.test.buckets.0.key.unsigned_long: 10223372036854775807 }
+      index:
+        search:
+                2:
+                    "kw": {
+  - match: { aggregations.1.2.buckets.1.doc_count:  2 }
+                    ]
+                  composite:
+  - do:
+  - match: { hits.total: 6 }
+                      terms:
+      search:
+        body:  { "keyword": "foo", "unsigned_long": [10223372036854775807, 184], "geo_point": "37.2343,-115.8067", "nested": [{"nested_unsigned_long": 10223372036854775807}, {"nested_unsigned_long": 184}] }
+                            "field": "nested.nested_unsigned_long"
+        index: other
+      search:
+            test:
+  - do:
+  - skip:
+          body:
+              composite:
+                sort.field: keyword
+  - do:
+        indices.create:
+                }
+            test:
+"Aggregate After":
+                aggs:
+                    nested_long:
+        body:
+  - match: { aggregations.test.buckets.2.key.unsigned_long: 184 }
+  - length: { aggregations.test.buckets: 1 }
+              composite:
+        id:      2
+  - match: { aggregations.test.buckets.4.key.kw: "foo" }
+  - match: { hits.total: 6 }
+              composite:
+                  }
+---
+                          "terms": {
+                      "field": "keyword"
+                after: { "unsigned_long": 1000, "kw": "bar" }
+---
+                    type: date
+  - do:
+"Composite aggregation with nested parent":
+                nested:
+        body:
+                    }
+  - match: { aggregations.test.buckets.1.key.kw: "bar"}
+                path: nested
+"Nested Composite aggregation":
+                    type: keyword
+                    }
+                        "field": "unsigned_long"
+  - match: { aggregations.test.buckets.2.key.kw: "foo" }
+        id:    6
+        rest_total_hits_as_int: true
+          index: test
+                        type: unsigned_long
+        indices.create:
+        index: test
+  - match: { aggregations.1.2.buckets.0.doc_count:  1 }
+  - match: { aggregations.test.buckets.4.doc_count: 1 }
+        body:
+          body:
+  - match: { aggregations.test.buckets.0.key.kw: "foo" }

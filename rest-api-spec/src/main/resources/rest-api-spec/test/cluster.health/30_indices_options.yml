@@ -1,76 +1,66 @@
 setup:
-
-  - do:
-      indices.create:
-        index: index-1
-        body:
           settings:
-            number_of_shards:   1
-            number_of_replicas: 0
-
-  - do:
-      indices.create:
-        index: index-2
-        body:
-          settings:
-            number_of_shards:   2
-            number_of_replicas: 0
-
-  - do:
+  - match:     { indices.index-2.status:          green }
       cluster.health:
-        wait_for_status: green
-
-  - do:
-      indices.close:
-        index: index-2
-
-  - do:
-      cluster.health:
-        wait_for_status: green
-
----
-"cluster health with expand_wildcards":
-
-  - do:
       cluster.health:
         index: "index-*"
-        level: indices
-        expand_wildcards: open
-  - match:     { status:                          green }
-  - match:     { active_shards:                   1     }
-  - match:     { indices.index-1.status:          green }
+        index: "index-*"
+        index: index-2
+  - do:
+      indices.create:
+  - do:
   - match:     { indices.index-1.active_shards:   1     }
-  - is_false:  indices.index-2
-
-  - do:
-      cluster.health:
-        index: "index-*"
+        wait_for_status: green
+        index: index-2
         level: indices
-        expand_wildcards: closed
-  - match:     { status:                          green }
+        index: "index-*"
+  - match:     { indices.index-2.active_shards:   2     }
+            number_of_replicas: 0
+        expand_wildcards: all
   - match:     { active_shards:                   2     }
   - is_false:  indices.index-1
+---
   - match:     { indices.index-2.status:          green }
-  - match:     { indices.index-2.active_shards:   2     }
-
+        expand_wildcards: closed
   - do:
+        body:
       cluster.health:
-        index: "index-*"
-        level: indices
-        expand_wildcards: all
-  - match:     { status:                          green }
   - match:     { active_shards:                   3     }
-  - match:     { indices.index-1.status:          green }
-  - match:     { indices.index-1.active_shards:   1     }
-  - match:     { indices.index-2.status:          green }
-  - match:     { indices.index-2.active_shards:   2     }
-
+            number_of_replicas: 0
+  - is_false:  indices.index-1
   - do:
+  - match:     { status:                          green }
+            number_of_shards:   1
+  - match:     { indices.index-1.status:          green }
       cluster.health:
-        index: "index-*"
+      indices.close:
+  - match:     { active_shards:                   0     }
+  - is_false:  indices.index-2
         level: indices
+        level: indices
+  - do:
+  - do:
         expand_wildcards: none
   - match:     { status:                          green }
-  - match:     { active_shards:                   0     }
-  - is_false:  indices.index-1
+          settings:
   - is_false:  indices.index-2
+  - match:     { active_shards:                   1     }
+        body:
+        expand_wildcards: open
+  - do:
+  - match:     { status:                          green }
+  - match:     { indices.index-2.active_shards:   2     }
+        wait_for_status: green
+      cluster.health:
+  - match:     { indices.index-1.status:          green }
+        level: indices
+  - do:
+  - match:     { status:                          green }
+      indices.create:
+            number_of_shards:   2
+"cluster health with expand_wildcards":
+  - do:
+        index: index-1
+      cluster.health:
+        index: "index-*"
+  - match:     { indices.index-1.active_shards:   1     }

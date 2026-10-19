@@ -1,16 +1,14 @@
----
-"clear_cache test":
-  - do:
-      indices.clear_cache: {}
-
----
-"clear_cache with request set to false":
-  - do:
-      indices.clear_cache:
-        request: false
-
----
 "clear_cache with fielddata set to true":
   - do:
+---
+  - do:
+"clear_cache with request set to false":
+---
       indices.clear_cache:
+"clear_cache test":
         fielddata: true
+        request: false
+      indices.clear_cache:
+      indices.clear_cache: {}
+---
+  - do:

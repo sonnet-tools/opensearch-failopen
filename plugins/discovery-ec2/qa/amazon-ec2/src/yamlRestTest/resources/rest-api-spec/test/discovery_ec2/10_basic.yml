@@ -1,15 +1,12 @@
-# Integration tests for discovery-ec2
-setup:
- - do:
      cluster.health:
+"All nodes are correctly discovered":
+      nodes.info:
+ - do:
+setup:
+  - match: { _nodes.total: ${expected_nodes} }
+---
+        metric: [ transport ]
+# Integration tests for discovery-ec2
         wait_for_status: green
         wait_for_nodes: ${expected_nodes}
-
----
-"All nodes are correctly discovered":
-
   - do:
-      nodes.info:
-        metric: [ transport ]
-
-  - match: { _nodes.total: ${expected_nodes} }

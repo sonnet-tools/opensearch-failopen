@@ -1,76 +1,76 @@
-{
   "schema": [
-    {
-      "name": "event_count",
-      "type": "bigint"
-    },
-    {
-      "name": "user",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      59,
-      "asmith"
+    ]
+    ],
     ],
     [
-      58,
-      "bwilson"
-    ],
-    [
-      51,
-      "jdoe"
-    ],
-    [
-      46,
-      "admin"
-    ],
-    [
-      43,
-      "mjones"
-    ],
-    [
-      24,
-      "user1"
-    ],
-    [
-      23,
-      "user4"
-    ],
-    [
-      23,
       "user6"
     ],
-    [
-      22,
-      "user9"
     ],
-    [
-      21,
-      "user2"
-    ],
-    [
-      20,
-      "user3"
-    ],
-    [
-      20,
-      "user5"
-    ],
-    [
-      17,
-      "user8"
-    ],
-    [
-      16,
-      "user7"
-    ],
-    [
-      14,
-      "user10"
-    ]
-  ],
-  "total": 15,
   "size": 15
+    }
+      "user9"
+      "user3"
+    [
+  "datarows": [
+    },
+      20,
+    [
+      "name": "event_count",
+      46,
+      23,
+    [
+      "user1"
+    ],
+      24,
+    [
+    ],
+      17,
+    ],
+    [
+      "asmith"
+    [
+      "jdoe"
+      "admin"
+    [
+    {
+  ],
+    [
+    ],
+      58,
+    ],
+      22,
+      "type": "string"
+      14,
+    [
+      20,
+      51,
+      59,
+      "user4"
+    [
+    [
+    ],
+      "name": "user",
+      16,
+      "mjones"
+      "user7"
+    [
+    [
+    [
+      "user2"
+      23,
+  "total": 15,
+      "bwilson"
+    ],
 }
+    ],
+      "type": "bigint"
+    ],
+  ],
+      "user10"
+    {
+      "user8"
+      "user5"
+      21,
+      43,
+{
+    ],

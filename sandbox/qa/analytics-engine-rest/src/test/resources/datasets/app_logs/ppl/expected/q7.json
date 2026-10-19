@@ -1,70 +1,70 @@
-{
-  "schema": [
-    {
-      "name": "error_count",
-      "type": "bigint"
-    },
-    {
-      "name": "service_name",
-      "type": "string"
-    },
-    {
-      "name": "log_level",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      22,
-      "web-service",
-      "ERROR"
-    ],
-    [
-      21,
-      "db-service",
-      "ERROR"
-    ],
-    [
-      18,
-      "auth-service",
-      "ERROR"
-    ],
-    [
-      17,
       "api-service",
+  "schema": [
+    },
+    },
+      "WARN"
+  "total": 10,
+    [
+      1,
       "ERROR"
+  ],
+      "name": "error_count",
+    [
+    ],
+      "INFO"
+      "auth-service",
+      "WARN"
+      18,
+    [
     ],
     [
       4,
-      "web-service",
+    ],
+      "ERROR"
+    [
+{
+      "name": "service_name",
+    ],
+  "datarows": [
+    [
+      "type": "string"
+      "auth-service",
+      "auth-service",
+    {
+    {
+      "INFO"
+    [
+      "db-service",
+    ]
+    ],
       "INFO"
     ],
+      1,
     [
+    [
+      21,
+    {
+      "type": "string"
+    ],
+      17,
+  "size": 10
+      22,
+    ],
       2,
+}
       "api-service",
       "INFO"
-    ],
-    [
-      2,
-      "db-service",
-      "INFO"
-    ],
-    [
-      2,
-      "db-service",
-      "WARN"
-    ],
-    [
-      1,
-      "auth-service",
-      "INFO"
-    ],
-    [
-      1,
-      "auth-service",
-      "WARN"
-    ]
+      "web-service",
   ],
-  "total": 10,
-  "size": 10
-}
+      "web-service",
+    [
+    }
+      "name": "log_level",
+      "db-service",
+      2,
+      "ERROR"
+    ],
+      2,
+      "ERROR"
+      "db-service",
+      "type": "bigint"

@@ -1,70 +1,70 @@
-{
-  "schema": [
-    {
-      "name": "total",
-      "type": "bigint"
+    ],
     },
+    ],
+      "192.168.1.100",
+      "login_attempt"
+      "suspicious_activity"
+      10,
+}
+      10,
     {
-      "name": "client_ip",
-      "type": "ip"
-    },
-    {
-      "name": "event",
-      "type": "string"
-    }
-  ],
-  "datarows": [
     [
-      39,
+    [
+      "192.168.1.100",
+    [
+    {
+    [
+    [
+      16,
+      "172.16.0.200",
+    ]
+  "size": 10
+      "access_denied"
+    [
+{
+  "total": 10,
+      "name": "event",
+    ],
+      "10.0.0.200",
+    {
+      "192.168.1.28",
+      "name": "client_ip",
+      15,
+    ],
+    [
+    ],
+    [
+      16,
+      "authentication_failure"
       "10.0.0.50",
+    [
+      "login_attempt"
+      15,
+  "schema": [
+      "10.0.0.100",
+      8,
+      "access_denied"
+      "login_attempt"
+  "datarows": [
+    ],
+      "login_attempt"
+      "type": "string"
+  ],
+      39,
+      "192.168.1.200",
+      "type": "bigint"
+      "type": "ip"
+  ],
+    [
+      "192.168.1.19",
+    ],
+      11,
+    ],
+      "name": "total",
+    },
       "login_attempt"
     ],
-    [
-      16,
-      "10.0.0.100",
-      "access_denied"
-    ],
-    [
-      16,
-      "192.168.1.100",
-      "authentication_failure"
-    ],
-    [
       16,
       "192.168.1.150",
-      "access_denied"
-    ],
-    [
-      15,
-      "172.16.0.200",
-      "login_attempt"
-    ],
-    [
-      15,
-      "192.168.1.100",
-      "login_attempt"
-    ],
-    [
-      11,
-      "192.168.1.19",
-      "login_attempt"
-    ],
-    [
-      10,
-      "10.0.0.200",
+    }
       "suspicious_activity"
-    ],
-    [
-      10,
-      "192.168.1.200",
-      "suspicious_activity"
-    ],
-    [
-      8,
-      "192.168.1.28",
-      "login_attempt"
-    ]
-  ],
-  "total": 10,
-  "size": 10
-}

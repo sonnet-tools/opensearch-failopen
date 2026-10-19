@@ -1,209 +1,194 @@
+      search:
+          body:
 setup:
-  - skip:
-      version: " - 2.11.99"
-      reason: "match_only_text was added in 2.12"
-  - do:
-      indices.create:
-        index: test
-        body:
-          settings:
-            index:
-              number_of_shards: 1     # keep scoring stable
-            analysis:
-              filter:
-                syns:
-                  type: synonym
-                  synonyms: [ "wtf, what the fudge", "foo, bar baz" ]
-                graph_syns:
-                  type: synonym_graph
-                  synonyms: [ "wtf, what the fudge", "foo, bar baz" ]
-              analyzer:
-                lower_syns:
-                  type: custom
                   tokenizer: standard
-                  filter: [ lowercase, syns ]
-                lower_graph_syns:
-                  type: custom
-                  tokenizer: standard
-                  filter: [ lowercase, graph_syns ]
-          mappings:
-            properties:
-              field:
-                type: match_only_text
-
-  - do:
-      index:
-          index: test
-          id: 1
-          body:
-            text: say wtf happened foo
-  - do:
-      index:
-          index: test
           id: 2
-          body:
-            text: bar baz what the fudge man
-
-  - do:
-      index:
-          index: test
-          id: 3
-          body:
-            text: wtf
-
-  - do:
-      index:
-          index: test
-          id: 4
-          body:
-            text: what is the name for fudge
-
-  - do:
-      index:
-          index: test
-          id: 5
-          body:
-            text: bar two three
-
-  - do:
-      index:
-          index: test
-          id: 6
-          body:
-            text: bar baz two three
-          refresh: true
-
----
 "simple multiterm phrase":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match_phrase:
-              text:
-                query: foo two three
-                analyzer: lower_syns
+          index: test
   - match: { hits.total: 1 }
-  - match: { hits.hits.0._id: "5" }  # incorrect match because we're not using graph synonyms
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match_phrase:
-              text:
-                query: foo two three
-                analyzer: lower_graph_syns
   - match: { hits.total: 1 }
-  - match: { hits.hits.0._id: "6" }  # correct match because we're using graph synonyms
-
----
-"simple multiterm and":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              text:
-                query: say what the fudge
-                analyzer: lower_syns
-                operator: and
-  - match: { hits.total: 1 }
-  - match: { hits.hits.0._id: "1" }   # non-graph synonyms coincidentally give us the correct answer here
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              text:
-                query: say what the fudge
-                analyzer: lower_graph_syns
-                operator: and
-  - match: { hits.total: 1 }
-  - match: { hits.hits.0._id: "1" }
-
----
-"minimum should match":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              text:
-                query: three what the fudge foo
-                operator: or
-                analyzer: lower_graph_syns
-                auto_generate_synonyms_phrase_query: false
-  - match: { hits.total: 6 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              text:
-                query: three what the fudge foo
-                operator: or
-                analyzer: lower_graph_syns
-                minimum_should_match: 80%
-  - match: { hits.total: 3 }
+        index: test
+            match_phrase_prefix:
   - match: { hits.hits.0._id: "2" }
+  - match: { hits.hits.3._id: "8" }
+          query:
+                syns:
+  - match: { hits.hits.1._id: "3" }
+                query: say what the fudge
   - match: { hits.hits.1._id: "6" }
-  - match: { hits.hits.2._id: "1" }
-
+          id: 7
+          mappings:
+                query: foo two three
+                operator: or
+            match_phrase:
+                  filter: [ lowercase, graph_syns ]
+              text:
 ---
+        body:
+  - do:
+  - do:
+  - do:
+        body:
+  - match: { hits.hits.0._id: "6" }  # correct match because we're using graph synonyms
+          body:
+      search:
+      index:
+      index:
+          query:
+          body:
+          id: 8
+        body:
+                  type: custom
+            text: bar two three
+  - match: { hits.hits.2._id: "1" }
+      index:
+          id: 3
+        rest_total_hits_as_int: true
+        body:
+  - match: { hits.hits.0._id: "1" }
+            text: wtf
+                analyzer: lower_syns
+                operator: or
+            text: "Weird Al's WHAT THE FUDGESICLE"
+        rest_total_hits_as_int: true
+            match_phrase:
+  - do:
+            match:
+                  synonyms: [ "wtf, what the fudge", "foo, bar baz" ]
+        rest_total_hits_as_int: true
+                query: foo two three
+  - match: { hits.total: 3 }
+              text:
+                lower_graph_syns:
+                analyzer: lower_graph_syns
+                lower_syns:
+          refresh: true
+---
+              text:
+        rest_total_hits_as_int: true
+  - do:
+          index: test
+      search:
+      reason: "match_only_text was added in 2.12"
+  - match: { hits.hits.0._id: "1" }   # non-graph synonyms coincidentally give us the correct answer here
+  - do:
+  - do:
+                  type: synonym
+      search:
+          id: 6
+                operator: and
+  - match: { hits.total: 5 }
+  - do:
+                  tokenizer: standard
+                  synonyms: [ "wtf, what the fudge", "foo, bar baz" ]
+                analyzer: lower_syns
+          query:
+                minimum_should_match: 80%
+              field:
+                analyzer: lower_graph_syns
 "multiterm synonyms phrase":
   - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
             match:
-              text:
-                query: wtf
-                operator: and
-                analyzer: lower_graph_syns
-  - match: { hits.total: 3 }
-  - match: { hits.hits.0._id: "2" }
-  - match: { hits.hits.1._id: "3" }
   - match: { hits.hits.2._id: "1" }
-
----
-"phrase prefix":
   - do:
-      index:
+  - match: { hits.total: 6 }
+            text: bar baz two three
+                query: three what the fudge foo
+          query:
           index: test
-          id: 7
-          body:
-            text: "WTFD!"
-
   - do:
-      index:
-          index: test
-          id: 8
-          body:
-            text: "Weird Al's WHAT THE FUDGESICLE"
+  - match: { hits.hits.0._id: "2" }
           refresh: true
-
-  - do:
+          body:
+              filter:
+---
+"minimum should match":
+  - match: { hits.total: 1 }
+        rest_total_hits_as_int: true
+                  type: synonym_graph
+                analyzer: lower_graph_syns
+            match:
+  - match: { hits.hits.0._id: "5" }  # incorrect match because we're not using graph synonyms
+  - match: { hits.hits.2._id: "1" }
+                  filter: [ lowercase, syns ]
+            text: say wtf happened foo
+            match:
+      indices.create:
+          id: 1
+          body:
       search:
+  - match: { hits.hits.1._id: "7" }
+      search:
+      index:
+        body:
+          body:
+          settings:
+              text:
+            analysis:
+            text: what is the name for fudge
+  - do:
+                analyzer: lower_graph_syns
+            properties:
+          index: test
+                  type: custom
+        rest_total_hits_as_int: true
+                graph_syns:
+              text:
+      version: " - 2.11.99"
+          index: test
+          body:
+"phrase prefix":
+                analyzer: lower_graph_syns
+                type: match_only_text
+          index: test
+  - do:
+                query: three what the fudge foo
+          query:
+            index:
         rest_total_hits_as_int: true
         body:
-          query:
-            match_phrase_prefix:
-              text:
-                query: wtf
-                analyzer: lower_graph_syns
-  - match: { hits.total: 5 }
-  - match: { hits.hits.0._id: "3" }
-  - match: { hits.hits.1._id: "7" }
-  - match: { hits.hits.2._id: "1" }
-  - match: { hits.hits.3._id: "8" }
+  - do:
+          body:
+                auto_generate_synonyms_phrase_query: false
+        body:
+  - do:
+"simple multiterm and":
   - match: { hits.hits.4._id: "2" }
+                query: wtf
+        rest_total_hits_as_int: true
+            text: "WTFD!"
+            match:
+      index:
+                analyzer: lower_graph_syns
+  - match: { hits.total: 1 }
+          id: 4
+      search:
+                query: say what the fudge
+          query:
+  - match: { hits.hits.0._id: "3" }
+      index:
+              text:
+      search:
+                operator: and
+              analyzer:
+---
+          id: 5
+            text: bar baz what the fudge man
+                query: wtf
+          index: test
+              text:
+      index:
+---
+      index:
+  - skip:
+                operator: and
+              text:
+          query:
+          query:
+        body:
+  - do:
+          index: test
+  - match: { hits.total: 3 }
+              number_of_shards: 1     # keep scoring stable
+  - do:
+        body:

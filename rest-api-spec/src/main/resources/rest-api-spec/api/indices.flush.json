@@ -1,63 +1,63 @@
-{
-  "indices.flush":{
-    "documentation":{
-      "url":"https://www.elastic.co/guide/en/elasticsearch/reference/master/indices-flush.html",
-      "description":"Performs the flush operation on one or more indices."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_flush",
-          "methods":[
-            "POST",
-            "GET"
-          ]
-        },
-        {
-          "path":"/{index}/_flush",
-          "methods":[
-            "POST",
-            "GET"
-          ],
-          "parts":{
+          "all"
             "index":{
-              "type":"list",
-              "description":"A comma-separated list of index names; use `_all` or empty string for all indices"
-            }
-          }
-        }
-      ]
-    },
-    "params":{
-      "force":{
-        "type":"boolean",
-        "description":"Whether a flush should be forced even if it is not necessarily needed ie. if no changes will be committed to the index. This is useful if transaction log IDs should be incremented even if no uncommitted changes are present. (This setting can be considered as internal)"
-      },
-      "wait_if_ongoing":{
-        "type":"boolean",
-        "description":"If set to true the flush operation will block until the flush can be executed if another flush operation is already executing. The default is true. If set to false the flush will be skipped iff if another flush operation is already running."
-      },
-      "ignore_unavailable":{
-        "type":"boolean",
-        "description":"Whether specified concrete indices should be ignored when unavailable (missing or closed)"
-      },
+      "paths":[
+        "default":"open",
       "allow_no_indices":{
-        "type":"boolean",
+    }
+        "description":"If set to true the flush operation will block until the flush can be executed if another flush operation is already executing. The default is true. If set to false the flush will be skipped iff if another flush operation is already running."
         "description":"Whether to ignore if a wildcard indices expression resolves into no concrete indices. (This includes `_all` string or when no indices have been specified)"
+          "open",
+            "POST",
+      },
+        "options":[
+          "hidden",
       },
       "expand_wildcards":{
-        "type":"enum",
-        "options":[
-          "open",
-          "closed",
-          "hidden",
-          "none",
-          "all"
-        ],
-        "default":"open",
-        "description":"Whether to expand wildcard expression to concrete indices that are open, closed or both."
+              "type":"list",
+            "GET"
+  "indices.flush":{
       }
-    }
-  }
+        }
+          "path":"/_flush",
+            }
+        "description":"Whether specified concrete indices should be ignored when unavailable (missing or closed)"
+      "force":{
+    "url":{
 }
+        "type":"boolean",
+      },
+            "GET"
+  }
+        "type":"boolean",
+      },
+          "methods":[
+              "description":"A comma-separated list of index names; use `_all` or empty string for all indices"
+          "methods":[
+    "documentation":{
+          "path":"/{index}/_flush",
+    "params":{
+        "description":"Whether to expand wildcard expression to concrete indices that are open, closed or both."
+          "closed",
+    "stability":"stable",
+        "type":"boolean",
+    },
+      ]
+      "wait_if_ongoing":{
+          }
+          "none",
+      "description":"Performs the flush operation on one or more indices."
+            "POST",
+        {
+    },
+        {
+          ]
+        "type":"enum",
+      "ignore_unavailable":{
+          ],
+          "parts":{
+        ],
+        "description":"Whether a flush should be forced even if it is not necessarily needed ie. if no changes will be committed to the index. This is useful if transaction log IDs should be incremented even if no uncommitted changes are present. (This setting can be considered as internal)"
+        },
+        "type":"boolean",
+{
+      "url":"https://www.elastic.co/guide/en/elasticsearch/reference/master/indices-flush.html",

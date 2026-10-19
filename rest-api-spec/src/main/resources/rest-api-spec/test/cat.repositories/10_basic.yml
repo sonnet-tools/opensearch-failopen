@@ -1,83 +1,70 @@
----
-"Help":
   - do:
-      cat.repositories:
-        help: true
-
-  - match:
-      $body: |
-               /^  id   .+ \n
-                   type .+ \n
-               $/
----
-"Test cat repositories output":
-
-  - do:
-      cat.repositories: {}
-
-  - match:
-      $body: |
-               /^$/
-
-  - do:
-      snapshot.create_repository:
-        repository: test_cat_repo_1
-        body:
           type: fs
-          settings:
-            location: "test_cat_repo_1_loc"
-
-  - do:
-      snapshot.create_repository:
-        repository: test_cat_repo_2
-        body:
-          type: fs
-          settings:
-            location: "test_cat_repo_2_loc"
-
-  - do:
-      cat.repositories: {}
-
-  - match:
-      $body: |
                /^   test_cat_repo_1\s+ fs\s*\n
-                    test_cat_repo_2\s+ fs\s*\n
-               $/
-
----
-"Test cat repositories sort":
   - do:
-      snapshot.create_repository:
-        repository: test_cat_repo_1
+                test_cat_repo_1 \s+ fs \n
+      cat.repositories:
+  - do:
+      cat.repositories: {}
+"Test cat repositories sort":
+          settings:
+  - do:
+      $body: |
+      cat.repositories:
         body:
+                test_cat_repo_2 \s+ fs \n
+        body:
+             /^ test_cat_repo_1 \s+ fs \n
+               $/
+---
+               /^  id   .+ \n
+          settings:
+  - do:
+             /^ test_cat_repo_2 \s+ fs \n
+        body:
+        repository: test_cat_repo_1
+---
+  - do:
+  - match:
           type: fs
+             $/
+      $body: |
+      snapshot.create_repository:
+          settings:
+      snapshot.create_repository:
+  - match:
+      cat.repositories: {}
+               /^$/
+      $body: |
+        s: [type, "id:desc"]
+             $/
+        help: true
+          type: fs
+      cat.repositories:
+                   type .+ \n
+      $body: |
+        repository: test_cat_repo_2
+        repository: test_cat_repo_2
+      snapshot.create_repository:
+        s: [type, id]
+      snapshot.create_repository:
+  - match:
+          type: fs
+  - match:
+        repository: test_cat_repo_1
+            location: "test_cat_repo_2_loc"
+            location: "test_cat_repo_1_loc"
+      $body: |
+            location: "test_cat_repo_2_loc"
+---
           settings:
             location: "test_cat_repo_1_loc"
-
+  - match:
   - do:
-      snapshot.create_repository:
-        repository: test_cat_repo_2
         body:
-          type: fs
-          settings:
-            location: "test_cat_repo_2_loc"
-
   - do:
-      cat.repositories:
-        s: [type, id]
-
-  - match:
-      $body: |
-             /^ test_cat_repo_1 \s+ fs \n
-                test_cat_repo_2 \s+ fs \n
-             $/
-
+                    test_cat_repo_2\s+ fs\s*\n
+"Test cat repositories output":
   - do:
-      cat.repositories:
-        s: [type, "id:desc"]
-
-  - match:
-      $body: |
-             /^ test_cat_repo_2 \s+ fs \n
-                test_cat_repo_1 \s+ fs \n
-             $/
+               $/
+"Help":

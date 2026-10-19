@@ -1,43 +1,41 @@
-# Integration tests for Phonetic analysis components
-#
----
-"Index phonetic content":
-    - do:
-        indices.create:
-            index:  phonetic_sample
-            body:
-                settings:
-                    index:
-                        analysis:
-                            analyzer:
-                                my_analyzer:
-                                    tokenizer:  standard
-                                    filter: ["lowercase", "my_metaphone"]
-                            filter:
-                                my_metaphone:
-                                    type: phonetic
-                                    encoder: metaphone
-                                    replace: false
-                mappings:
-                    properties:
-                        text:
-                            type:     text
-                            analyzer: my_analyzer
-
-    - do:
-        index:
-            index:  phonetic_sample
-            id:     1
-            body:   { "text": "hello world" }
-    - do:
-        indices.refresh: {}
-
     - do:
         search:
-            rest_total_hits_as_int: true
-            index: phonetic_sample
-            body:
-                query:
+            index:  phonetic_sample
+        indices.create:
+                                my_metaphone:
                     match:
                         text: helllo
+                                my_analyzer:
+                mappings:
+            id:     1
+                query:
+                            analyzer: my_analyzer
+                            filter:
+        indices.refresh: {}
+                        text:
+    - do:
+                            type:     text
+                        analysis:
+"Index phonetic content":
+#
+                settings:
+    - do:
+        index:
+                                    tokenizer:  standard
+            body:   { "text": "hello world" }
+                                    replace: false
+# Integration tests for Phonetic analysis components
+---
+                                    type: phonetic
+                    properties:
+                                    encoder: metaphone
+    - do:
     - match: { hits.total: 1 }
+            rest_total_hits_as_int: true
+                                    filter: ["lowercase", "my_metaphone"]
+                    index:
+                            analyzer:
+            body:
+            index:  phonetic_sample
+            body:
+            index: phonetic_sample

@@ -1,13 +1,11 @@
----
 "Test pending tasks":
-  - do:
+      cluster.pending_tasks:
       cluster.pending_tasks: {}
-
+  - do:
   - is_true: tasks
+  - is_true: tasks
+  - do:
+---
+        local: true
 ---
 "Test pending tasks with local flag":
-  - do:
-      cluster.pending_tasks:
-        local: true
-
-  - is_true: tasks

@@ -1,72 +1,72 @@
-{
-  "cat.tasks":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-tasks/",
-      "description":"Returns information about the tasks currently executing on one or more nodes in the cluster."
+          "d",
     },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_cat/tasks",
-          "methods":[
-            "GET"
-          ]
-        }
-      ]
-    },
-    "params":{
-      "format":{
-        "type":"string",
-        "description":"a short version of the Accept header, e.g. json, yaml"
-      },
-      "nodes":{
-        "type":"list",
-        "description":"A comma-separated list of node IDs or names to limit the returned information; use `_local` to return information from the node you're connecting to, leave empty to get information from all nodes"
-      },
-      "actions":{
-        "type":"list",
-        "description":"A comma-separated list of actions that should be returned. Leave empty to return all."
-      },
-      "detailed":{
-        "type":"boolean",
-        "description":"Return detailed task information (default: false)"
-      },
-      "parent_task_id":{
-        "type":"string",
-        "description":"Return tasks with specified parent task id (node_id:task_number). Set to -1 to return all."
-      },
-      "h":{
-        "type":"list",
-        "description":"Comma-separated list of column names to display"
-      },
-      "help":{
-        "type":"boolean",
-        "description":"Return help information",
-        "default":false
       },
       "s":{
-        "type":"list",
-        "description":"Comma-separated list of column names or column aliases to sort by"
-      },
-      "time":{
-        "type":"enum",
-        "description":"The unit in which to display time values",
-        "options":[
-          "d",
-          "h",
-          "m",
-          "s",
-          "ms",
-          "micros",
-          "nanos"
-        ]
-      },
-      "v":{
-        "type":"boolean",
-        "description":"Verbose mode. Display column headers",
-        "default":false
-      }
+    "url":{
+      "description":"Returns information about the tasks currently executing on one or more nodes in the cluster."
+      "nodes":{
     }
-  }
+        "type":"boolean",
+      },
+      "parent_task_id":{
+      },
+        "type":"list",
+      "help":{
+    "params":{
+      "h":{
+        "description":"Comma-separated list of column names or column aliases to sort by"
+        "description":"Verbose mode. Display column headers",
+        "type":"list",
+          "nanos"
+      },
+      },
+        "description":"A comma-separated list of node IDs or names to limit the returned information; use `_local` to return information from the node you're connecting to, leave empty to get information from all nodes"
+        "type":"boolean",
+      "paths":[
+      },
+          "s",
+      "time":{
+          "methods":[
+          ]
+      ]
+        }
+        "type":"enum",
+        "default":false
+          "h",
+        "description":"Return tasks with specified parent task id (node_id:task_number). Set to -1 to return all."
+          "ms",
+        {
+    "documentation":{
+      },
+    },
+  "cat.tasks":{
+          "m",
+        "type":"boolean",
+{
+        "type":"string",
+      },
+        "description":"The unit in which to display time values",
 }
+        "type":"list",
+        "description":"Return help information",
+          "path":"/_cat/tasks",
+      "detailed":{
+      "actions":{
+        "default":false
+      },
+      "format":{
+        "options":[
+        "type":"list",
+        "type":"string",
+        "description":"Return detailed task information (default: false)"
+      }
+        ]
+      "v":{
+        "description":"Comma-separated list of column names to display"
+        "description":"A comma-separated list of actions that should be returned. Leave empty to return all."
+  }
+            "GET"
+          "micros",
+    "stability":"stable",
+      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-tasks/",
+        "description":"a short version of the Accept header, e.g. json, yaml"

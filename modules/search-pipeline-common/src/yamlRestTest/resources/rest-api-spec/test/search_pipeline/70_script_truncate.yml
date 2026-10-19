@@ -1,70 +1,66 @@
----
-teardown:
-  - do:
-      search_pipeline.delete:
-        id: "my_pipeline"
-        ignore: 404
-
----
-"Test state propagating from script request to truncate_hits processor":
-  - do:
-      search_pipeline.put:
-        id: "my_pipeline"
+  - match: { hits.total.value: 4 }
         body: >
-          {
-            "description": "_description",
-            "request_processors": [
-              {
-                "script" : {
-                  "source" : "ctx.request_context['foo.original_size'] = 2"
-                }
-              }
-            ],
-            "response_processors": [
-              {
-                "truncate_hits" : {
-                  "context_prefix" : "foo"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        body: {}
-  - do:
-      index:
-        index: test
-        id: 2
-        body: {}
-  - do:
-      index:
-        index: test
         id: 3
+          }
         body: {}
+        index: test
   - do:
+        body: {
+        id: "my_pipeline"
+            "response_processors": [
       index:
-        index: test
-        id: 4
+      search_pipeline.delete:
         body: {}
-  - do:
-      indices.refresh:
-        index: test
-
-  - do:
-      search:
-        body: {
-        }
-  - match: { hits.total.value: 4 }
+        id: 1
+            "request_processors": [
+"Test state propagating from script request to truncate_hits processor":
   - length: { hits.hits: 4 }
-
+        id: 2
   - do:
+  - do:
+        index: test
+      index:
+  - do:
+              {
+        index: test
       search:
+  - match: { acknowledged: true }
         search_pipeline: my_pipeline
-        body: {
-        }
+      indices.refresh:
   - match: { hits.total.value: 4 }
+              {
+        index: test
+      index:
+          {
+                  "context_prefix" : "foo"
+        ignore: 404
+        index: test
+        }
+  - do:
+                }
+  - do:
+        id: "my_pipeline"
+      search:
+              }
+        body: {}
+---
+---
   - length: { hits.hits: 2 }
+        }
+teardown:
+            "description": "_description",
+      search_pipeline.put:
+  - do:
+                }
+  - do:
+            ]
+  - do:
+        id: 4
+              }
+                "script" : {
+            ],
+      index:
+                "truncate_hits" : {
+                  "source" : "ctx.request_context['foo.original_size'] = 2"
+        body: {}
+        body: {

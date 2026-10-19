@@ -1,37 +1,32 @@
----
-"Noop":
-  - do:
-      index:
-        index: test_1
-        id:    1
-        body:  { foo: bar }
-
-  - match: { _seq_no:       0       }
   - match: { _version:      1       }
-  - match: { _primary_term: 1       }
-  - match: { result:        created }
-
-  - do:
-      update:
-          index:            test_1
-          id:               1
-          body:
+        body:  { foo: bar }
             doc:            { foo: bar }
-
-  - match: { _seq_no:       0    }
-  - match: { _version:      1    }
-  - match: { _primary_term: 1    }
-  - match: { result:        noop }
-
-  - do:
-      update:
-          index:            test_1
-          id:               1
-          body:
-            doc:            { foo: bar }
-            detect_noop:    false
-
-  - match: { _seq_no:       1       }
-  - match: { _primary_term: 1       }
+        index: test_1
   - match: { _version:      2       }
   - match: { result:        updated }
+  - match: { _primary_term: 1    }
+          body:
+  - match: { _version:      1    }
+          index:            test_1
+          id:               1
+  - do:
+          body:
+  - match: { _seq_no:       0    }
+            detect_noop:    false
+      update:
+  - match: { _seq_no:       1       }
+  - match: { result:        created }
+  - match: { _primary_term: 1       }
+            doc:            { foo: bar }
+      update:
+  - match: { _seq_no:       0       }
+  - match: { result:        noop }
+---
+"Noop":
+        id:    1
+          id:               1
+          index:            test_1
+  - do:
+      index:
+  - match: { _primary_term: 1       }
+  - do:

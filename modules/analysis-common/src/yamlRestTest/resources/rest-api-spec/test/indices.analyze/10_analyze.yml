@@ -1,61 +1,56 @@
----
-"Custom normalizer with illegal filter in request":
-    # Tests analyze api with normalizer. This is in the analysis-common module
-    # because there are no filters that support multiTermAware
-    - do:
-        catch: bad_request
-        indices.analyze:
-          body:
-            text: ABc
-            explain: true
             filter: [word_delimiter]
-
-    - match: { status: 400 }
-    - match: { error.type: illegal_argument_exception }
-    - match: { error.reason: "Custom normalizer may not use filter [word_delimiter]" }
-
----
-"Synonym filter with tokenizer":
-    - do:
-        indices.create:
-          index: test_synonym
-          body:
-            settings:
-              index:
-                analysis:
-                  tokenizer:
-                    trigram:
-                      type: ngram
-                      min_gram: 3
-                      max_gram: 3
-                  filter:
-                    synonym:
-                      type: synonym
-                      synonyms: ["foobar => fred"]
-
-    - do:
-        indices.analyze:
-          index: test_synonym
-          body:
             tokenizer: trigram
-            filter: [synonym]
-            text: foobar
-    - length: { tokens: 2 }
+    # Tests analyze api with normalizer. This is in the analysis-common module
+    - do:
+    - match: { status: 400 }
+    - do:
     - match:  { tokens.0.token: fre }
-    - match:  { tokens.1.token: red }
-
+    - length: { detail.tokenfilters.0.tokens: 1 }
+          index: test_synonym
+        indices.analyze:
+            settings:
+    - do:
+    - length: { tokens: 2 }
+          body:
 ---
+                analysis:
+    - match: { error.type: illegal_argument_exception }
+                  filter:
+    - match:  { detail.tokenizer.name: keyword }
+            text: ABc
+    - length: { detail.tokenizer.tokens: 1 }
+"Synonym filter with tokenizer":
+          body:
+        indices.analyze:
+    # because there are no filters that support multiTermAware
+    - match: { error.reason: "Custom normalizer may not use filter [word_delimiter]" }
+            filter: ["lowercase"]
+          index: test_synonym
+              index:
+            text: ABc
+                      type: ngram
+        indices.create:
+    - match:  { detail.tokenfilters.0.name: lowercase }
+                    synonym:
+            filter: [synonym]
+                      max_gram: 3
 "Custom normalizer in request":
+            explain: true
+          body:
+                  tokenizer:
+                      type: synonym
+        catch: bad_request
+"Custom normalizer with illegal filter in request":
+                      synonyms: ["foobar => fred"]
+            text: foobar
+          body:
+    - match:  { detail.tokenizer.tokens.0.token: ABc }
+            explain: true
+    - match:  { tokens.1.token: red }
+                    trigram:
+    - match:  { detail.tokenfilters.0.tokens.0.token: abc }
+---
     - do:
         indices.analyze:
-          body:
-            text: ABc
-            explain: true
-            filter: ["lowercase"]
-
-    - length: { detail.tokenizer.tokens: 1 }
-    - length: { detail.tokenfilters.0.tokens: 1 }
-    - match:  { detail.tokenizer.name: keyword }
-    - match:  { detail.tokenizer.tokens.0.token: ABc }
-    - match:  { detail.tokenfilters.0.name: lowercase }
-    - match:  { detail.tokenfilters.0.tokens.0.token: abc }
+---
+                      min_gram: 3

@@ -1,35 +1,35 @@
-{
-  "schema": [
-    {
-      "name": "timeout_count",
-      "type": "bigint"
+      "web-service",
     },
-    {
-      "name": "service_name",
-      "type": "string"
-    },
-    {
-      "name": "level",
-      "type": "string"
-    }
-  ],
+      "WARN"
+    [
   "datarows": [
     [
-      4,
-      "api-service",
-      "WARN"
-    ],
-    [
-      7,
-      "db-service",
-      "WARN"
-    ],
-    [
+      "name": "timeout_count",
       6,
-      "web-service",
-      "WARN"
-    ]
-  ],
-  "total": 3,
   "size": 3
+      "db-service",
 }
+    },
+  ],
+    ]
+    {
+    ],
+      "api-service",
+      "name": "service_name",
+      "type": "bigint"
+      "type": "string"
+    {
+    {
+      "type": "string"
+    [
+    ],
+{
+  "schema": [
+      "WARN"
+      "WARN"
+  "total": 3,
+  ],
+      "name": "level",
+      4,
+      7,
+    }

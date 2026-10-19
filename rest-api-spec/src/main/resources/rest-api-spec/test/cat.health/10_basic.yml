@@ -1,122 +1,112 @@
----
-"Help - before 2.0.0":
-  - skip:
-      version: " - 7.10.99 , 2.0.0 - "
-      reason: "discovered_master added in OpenSearch 1.0.0, and renamed to discovered_cluster_manager in 2.0.0"
-      features: node_selector
-  - do:
-      cat.health:
-        help: true
-      node_selector:
-        # Only send request to nodes in <2.0 versions, especially during ':qa:mixed-cluster:v1.x.x#mixedClusterTest'.
-        # Because YAML REST test takes the minimum OpenSearch version in the cluster to apply the filter in 'skip' section,
-        # see OpenSearchClientYamlSuiteTestCase#initAndResetContext() for detail.
-        # During 'mixedClusterTest', the cluster can be mixed with nodes in 1.x and 2.x versions,
-        # so node_selector is required, and only filtering version in 'skip' is not enough.
-        version: "1.0.0 - 1.4.99"
-
-  - match:
-      $body: |
-               /^  epoch         .+ \n
-                   timestamp     .+ \n
                    cluster       .+ \n
-                   status        .+ \n
-                   node.total    .+ \n
-                   node.data     .+ \n
-                   discovered_master .+ \n
-                   shards        .+ \n
-                   pri           .+ \n
-                   relo          .+ \n
-                   init          .+ \n
-                   unassign      .+ \n
-                   pending_tasks .+ \n
-                   max_task_wait_time .+ \n
-                   active_shards_percent .+ \n
-
-               $/
-
----
-"Help":
-  - do:
-      cat.health:
-        help: true
-
-  - match:
-      $body: |
-               /^  epoch         .+ \n
-                   timestamp     .+ \n
-                   cluster       .+ \n
-                   status        .+ \n
-                   node.total    .+ \n
-                   node.data     .+ \n
-                   discovered_cluster_manager .+ \n
-                   shards        .+ \n
-                   pri           .+ \n
-                   relo          .+ \n
-                   init          .+ \n
-                   unassign      .+ \n
-                   pending_tasks .+ \n
-                   max_task_wait_time .+ \n
-                   active_shards_percent .+ \n
-
-               $/
-
----
-"Empty cluster":
-  - skip:
-      version: " - 7.10.99"
-      reason: "discovered_master added in OpenSearch 1.0.0"
-  - do:
-      cat.health: {}
-
-  - match:
-      $body: |
-            /^
-              ( \d+            \s+ # epoch
-                \d\d:\d\d:\d\d \s+ # timestamp
-                \S+            \s+ # cluster
-                \w+            \s+ # status
-                \d+            \s+ # node.total
-                \d+            \s+ # node.data
-                \w+            \s+ # discovered_master
-                \d+            \s+ # shards
-                \d+            \s+ # pri
-                \d+            \s+ # relo
-                \d+            \s+ # init
-                \d+            \s+ # unassign
-                \d+            \s+ # pending_tasks
-                (-|\d+(?:[.]\d+)?m?s) \s+ # max task waiting time
-                \d+\.\d+%             # active shards percent
-                \n
-              )+
-            $/
-
-
----
-"With ts parameter":
-  - skip:
-      version: " - 7.10.99"
-      reason: "discovered_master added in OpenSearch 1.0.0"
-  - do:
-      cat.health:
         ts: false
-
-  - match:
-      $body: |
-            /^
-              ( \S+            \s+ # cluster
-                \w+            \s+ # status
-                \d+            \s+ # node.total
-                \d+            \s+ # node.data
-                \w+            \s+ # discovered_master
-                \d+            \s+ # shards
-                \d+            \s+ # pri
-                \d+            \s+ # relo
-                \d+            \s+ # init
-                \d+            \s+ # unassign
-                \d+            \s+ # pending_tasks
-                (-|\d+(?:[.]\d+)?m?s) \s+ # max task waiting time
+  - do:
+                   discovered_master .+ \n
                 \d+\.\d+%             # active shards percent
-                \n
+  - skip:
+                \w+            \s+ # status
+                \w+            \s+ # discovered_master
+                   cluster       .+ \n
+      $body: |
+               $/
+                   shards        .+ \n
+                   pri           .+ \n
+---
+                \d+            \s+ # node.data
+                \d+            \s+ # pri
+                \d+            \s+ # unassign
+      $body: |
+      reason: "discovered_master added in OpenSearch 1.0.0"
+        help: true
+                \w+            \s+ # discovered_master
+        # so node_selector is required, and only filtering version in 'skip' is not enough.
+  - match:
+                \d+            \s+ # shards
+                \d+            \s+ # pending_tasks
+            $/
+                   node.data     .+ \n
+                \d+            \s+ # pending_tasks
+                \d+            \s+ # node.data
+                \w+            \s+ # status
+"Help - before 2.0.0":
+        # Because YAML REST test takes the minimum OpenSearch version in the cluster to apply the filter in 'skip' section,
+                   timestamp     .+ \n
+                (-|\d+(?:[.]\d+)?m?s) \s+ # max task waiting time
+---
+                   unassign      .+ \n
+      reason: "discovered_master added in OpenSearch 1.0.0, and renamed to discovered_cluster_manager in 2.0.0"
+                   pending_tasks .+ \n
+                   max_task_wait_time .+ \n
+                   status        .+ \n
+                   init          .+ \n
+                \d+            \s+ # node.total
+                   discovered_cluster_manager .+ \n
+                   unassign      .+ \n
+      cat.health:
+  - do:
+      reason: "discovered_master added in OpenSearch 1.0.0"
               )+
             $/
+      $body: |
+               /^  epoch         .+ \n
+                   init          .+ \n
+  - match:
+---
+  - match:
+      $body: |
+                \d+            \s+ # unassign
+      features: node_selector
+              ( \S+            \s+ # cluster
+  - do:
+                \d+            \s+ # relo
+                   node.total    .+ \n
+                   relo          .+ \n
+                \S+            \s+ # cluster
+---
+      version: " - 7.10.99 , 2.0.0 - "
+"Empty cluster":
+"Help":
+        # see OpenSearchClientYamlSuiteTestCase#initAndResetContext() for detail.
+"With ts parameter":
+               /^  epoch         .+ \n
+                   status        .+ \n
+      node_selector:
+      version: " - 7.10.99"
+      cat.health:
+        version: "1.0.0 - 1.4.99"
+                   relo          .+ \n
+                \d+            \s+ # init
+                \n
+      cat.health: {}
+                   node.data     .+ \n
+                   node.total    .+ \n
+            /^
+        # Only send request to nodes in <2.0 versions, especially during ':qa:mixed-cluster:v1.x.x#mixedClusterTest'.
+                   shards        .+ \n
+                (-|\d+(?:[.]\d+)?m?s) \s+ # max task waiting time
+                \d+            \s+ # relo
+        help: true
+                   pri           .+ \n
+  - match:
+                   timestamp     .+ \n
+                \d+            \s+ # pri
+                   max_task_wait_time .+ \n
+      version: " - 7.10.99"
+                \d+            \s+ # node.total
+            /^
+                   active_shards_percent .+ \n
+                \d+            \s+ # shards
+      cat.health:
+        # During 'mixedClusterTest', the cluster can be mixed with nodes in 1.x and 2.x versions,
+               $/
+              ( \d+            \s+ # epoch
+  - skip:
+                   active_shards_percent .+ \n
+                \d+\.\d+%             # active shards percent
+                   pending_tasks .+ \n
+                \d+            \s+ # init
+  - do:
+                \d\d:\d\d:\d\d \s+ # timestamp
+                \n
+              )+
+  - skip:

@@ -1,61 +1,61 @@
-{
-  "cat.health":{
-    "documentation":{
-      "url":"https://www.elastic.co/guide/en/elasticsearch/reference/master/cat-health.html",
-      "description":"Returns a concise representation of the cluster health."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_cat/health",
-          "methods":[
-            "GET"
-          ]
-        }
-      ]
-    },
-    "params":{
-      "format":{
-        "type":"string",
-        "description":"a short version of the Accept header, e.g. json, yaml"
-      },
-      "h":{
-        "type":"list",
-        "description":"Comma-separated list of column names to display"
-      },
-      "help":{
-        "type":"boolean",
-        "description":"Return help information",
-        "default":false
-      },
-      "s":{
-        "type":"list",
-        "description":"Comma-separated list of column names or column aliases to sort by"
-      },
-      "time":{
-        "type":"enum",
-        "description":"The unit in which to display time values",
-        "options":[
-          "d",
-          "h",
-          "m",
-          "s",
-          "ms",
-          "micros",
-          "nanos"
-        ]
-      },
-      "ts":{
-        "type":"boolean",
-        "description":"Set to false to disable timestamping",
-        "default":true
-      },
-      "v":{
-        "type":"boolean",
-        "description":"Verbose mode. Display column headers",
-        "default":false
-      }
     }
+        "description":"Return help information",
+        {
+        "default":false
+          "m",
+          "methods":[
+      "s":{
+    "params":{
   }
 }
+      },
+        "type":"list",
+{
+        "description":"Comma-separated list of column names or column aliases to sort by"
+        "type":"boolean",
+          "h",
+        "default":false
+        "description":"The unit in which to display time values",
+    "url":{
+        "type":"enum",
+      },
+      "ts":{
+          "d",
+        "default":true
+      "format":{
+        "description":"Comma-separated list of column names to display"
+          "micros",
+        "description":"Set to false to disable timestamping",
+          "nanos"
+      "description":"Returns a concise representation of the cluster health."
+        "type":"string",
+      "url":"https://www.elastic.co/guide/en/elasticsearch/reference/master/cat-health.html",
+      }
+  "cat.health":{
+        "options":[
+      },
+    },
+      "help":{
+        "type":"boolean",
+        "type":"list",
+        }
+    "documentation":{
+      "v":{
+      "paths":[
+      "time":{
+      },
+        ]
+      ]
+      },
+    "stability":"stable",
+        "description":"a short version of the Accept header, e.g. json, yaml"
+        "description":"Verbose mode. Display column headers",
+      },
+    },
+      "h":{
+            "GET"
+          "ms",
+        "type":"boolean",
+          "s",
+          "path":"/_cat/health",
+          ]

@@ -1,8 +1,8 @@
-/*
-SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY EventTime, SearchPhrase LIMIT 10;
 */
-source=hits
-| where SearchPhrase != ''
-| sort EventTime, SearchPhrase
 | fields SearchPhrase
+| sort EventTime, SearchPhrase
 | head 10
+SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY EventTime, SearchPhrase LIMIT 10;
+| where SearchPhrase != ''
+source=hits
+/*

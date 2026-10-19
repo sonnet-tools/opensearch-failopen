@@ -1,35 +1,35 @@
-{
-  "schema": [
-    {
-      "name": "id",
-      "type": "string"
     },
     {
-      "name": "text",
-      "type": "string"
-    },
-    {
-      "name": "is_blank",
-      "type": "boolean"
-    }
-  ],
-  "datarows": [
-    [
-      "1",
-      "hello world test",
-      false
-    ],
-    [
-      "2",
       "sample data entry",
       false
-    ],
-    [
-      "3",
-      "test example record",
-      false
     ]
-  ],
+      "type": "boolean"
+      false
+    [
+      "1",
+    [
+    }
+      false
+  "datarows": [
+      "name": "text",
   "total": 3,
+      "hello world test",
+      "name": "is_blank",
+      "test example record",
+{
+      "name": "id",
+    ],
+      "2",
+    {
+      "3",
+      "type": "string"
+    ],
+  ],
+  ],
+    },
   "size": 3
+    [
+    {
+  "schema": [
+      "type": "string"
 }

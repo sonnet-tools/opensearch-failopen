@@ -1,37 +1,30 @@
----
-"Realtime Term Vectors":
-
- - do:
-      indices.create:
-        index:    test_1
-        body:
-          settings:
-            index:
-              refresh_interval: -1
-              number_of_replicas: 0
-
- - do:
-      cluster.health:
-          wait_for_status: green
-
- - do:
-      index:
-          index:   test_1
-          id:      1
-          body:    { foo: bar }
-
- - do:
-      termvectors:
           index:    test_1
+          id:       1
+              number_of_replicas: 0
+ - is_true: found
+          realtime: true
+            index:
+---
+          body:    { foo: bar }
+      index:
+          wait_for_status: green
+          id:      1
+      termvectors:
+"Realtime Term Vectors":
           id:       1
           realtime: false
-
- - is_false: found
-
  - do:
-      termvectors:
+        body:
           index:    test_1
-          id:       1
-          realtime: true
-
- - is_true: found
+        index:    test_1
+      termvectors:
+ - do:
+      cluster.health:
+ - do:
+ - is_false: found
+ - do:
+      indices.create:
+          index:   test_1
+ - do:
+          settings:
+              refresh_interval: -1

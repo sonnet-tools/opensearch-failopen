@@ -1,212 +1,198 @@
----
-"Terms Query - Lookup by Query":
-  # --- SKIP IF VERSION IS LESS THAN 3.2.0 --- #
-  - skip:
-      version: " - 3.1.99"
-      reason: All tests in this file require features added in 3.2.0 or later (terms query lookup by query).
-
-  # --- SETUP: CREATE INDICES AND POPULATE DATA --- #
-  - do:
-      indices.create:
-        index: lookup_index
-        body:
-          settings:
-            number_of_replicas: 0
-  # Wait for index to be fully ready (avoids race in multi-node clusters)
-  - do:
-      cluster.health:
-        index: lookup_index
-        wait_for_status: green
-        timeout: 30s
-  - do:
-      indices.create:
-        index: main_index
-        body:
-          settings:
-            number_of_replicas: 0
-  - do:
-      cluster.health:
-        index: main_index
-        wait_for_status: green
-        timeout: 30s
-
-  # Populate lookup_index
-  - do:
-      bulk:
-        refresh: true
-        body: |
-          { "index": { "_index": "lookup_index", "_id": "1" } }
-          { "group": "g1", "followers": ["foo", "bar"], "tag": "a" }
-          { "index": { "_index": "lookup_index", "_id": "2" } }
-          { "group": "g1", "followers": ["baz"], "tag": "b" }
-          { "index": { "_index": "lookup_index", "_id": "3" } }
-          { "group": "g2", "followers": null, "tag": "c" }
-          { "index": { "_index": "lookup_index", "_id": "4" } }
-          { "group": "g1", "tag": "d" }
-          { "index": { "_index": "lookup_index", "_id": "5" } }
-          { "group": "g1", "followers": ["baz"], "tag": "e" }
-          { "index": { "_index": "lookup_index", "_id": "6" } }
-          { "group": "g3", "followers": [], "tag": "f" }
-  - match: { errors: false }
-
-  # Populate main_index
-  - do:
-      bulk:
-        refresh: true
-        body: |
-          { "index": { "_index": "main_index", "_id": "u1" } }
-          { "user": "foo" }
-          { "index": { "_index": "main_index", "_id": "u2" } }
-          { "user": "bar" }
-          { "index": { "_index": "main_index", "_id": "u3" } }
-          { "user": "baz" }
-          { "index": { "_index": "main_index", "_id": "u4" } }
-          { "user": "qux" }
-          { "index": { "_index": "main_index", "_id": "u5" } }
-          { "user": "foo" }
-  - match: { errors: false }
-
-  - do:
-      cluster.health:
-        index: lookup_index,main_index
-        wait_for_status: green
-        timeout: 30s
-
-  # --- TEST CASES --- #
-
-  # Match all docs in lookup_index with group=g1, use their 'followers' as terms
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: main_index
-        body:
-          query:
-            terms:
               user:
-                index: lookup_index
-                path: followers
-                query:
-                  term:
-                    group: "g1"
-  - match: { hits.total: 4 } # foo (u1), bar (u2), baz (u3), foo (u5)
-
-  # Query returns docs, but some have missing/null/empty field
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: main_index
-        body:
-          query:
-            terms:
-              user:
-                index: lookup_index
-                path: followers
-                query:
-                  terms:
-                    tag: ["a", "c", "f"]
-  - match: { hits.total: 3 } # foo (u1), bar (u2), foo (u5)
-
-  # Query returns docs but field is always empty list
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: main_index
-        body:
-          query:
-            terms:
-              user:
-                index: lookup_index
-                path: followers
-                query:
-                  term:
-                    tag: "d"
-  - match: { hits.total: 0 } # No terms found
-
-  # Query returns docs but field is scalar, not array (now array, see above)
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: main_index
-        body:
-          query:
-            terms:
-              user:
-                index: lookup_index
-                path: followers
-                query:
-                  term:
-                    tag: "e"
   - match: { hits.total: 1 } # Only user baz (from doc 5: followers=["baz"])
-
-  # Query returns no docs
+          { "index": { "_index": "lookup_index", "_id": "3" } }
   - do:
-      search:
-        rest_total_hits_as_int: true
-        index: main_index
         body:
-          query:
-            terms:
-              user:
-                index: lookup_index
-                path: followers
+                    tag: "e"
+        index: lookup_index
+        body:
+      search:
                 query:
+      reason: All tests in this file require features added in 3.2.0 or later (terms query lookup by query).
+        timeout: 30s
+        rest_total_hits_as_int: true
+        body: |
+  - match: { errors: false }
+        index: main_index
+        refresh: true
+            terms:
+          { "user": "foo" }
                   term:
-                    tag: "zzz"
-  - match: { hits.total: 0 }
-
-  # Query returns docs, some with missing field, some with lists, some with nulls
+      bulk:
+        index: main_index
+          query:
   - do:
-      search:
+  # Match all docs in lookup_index with group=g1, use their 'followers' as terms
         rest_total_hits_as_int: true
+---
+                path: followers
+  - do:
+          { "index": { "_index": "lookup_index", "_id": "1" } }
+        wait_for_status: green
+                index: lookup_index
+  # --- SETUP: CREATE INDICES AND POPULATE DATA --- #
+      search:
+          settings:
+                query:
+            terms:
+                    tag: ["a", "c", "f"]
+      search:
+              user:
+  - do:
+        index: main_index
+          { "user": "foo" }
         index: main_index
         body:
-          query:
-            terms:
-              user:
                 index: lookup_index
-                path: followers
+                query:
+        index: lookup_index
+            terms:
+  # Wait for index to be fully ready (avoids race in multi-node clusters)
+                query:
+        body:
+      search:
+        rest_total_hits_as_int: true
+          query:
+                index: lookup_index
+        index: main_index
+        index: main_index
+          { "group": "g1", "tag": "d" }
+      search:
+      indices.create:
+          { "group": "g3", "followers": [], "tag": "f" }
+          { "group": "g1", "followers": ["foo", "bar"], "tag": "a" }
                 query:
                   terms:
-                    tag: ["a", "b", "c", "d", "e", "f"]
+          { "index": { "_index": "lookup_index", "_id": "4" } }
   - match: { hits.total: 4 } # foo (u1), bar (u2), baz (u3), foo (u5)
-
-  # Duplicates across docs should be deduplicated (foo appears in 2 docs)
+          { "index": { "_index": "main_index", "_id": "u4" } }
   - do:
-      search:
         rest_total_hits_as_int: true
-        index: main_index
-        body:
-          query:
             terms:
-              user:
-                index: lookup_index
-                path: followers
-                query:
-                  terms:
-                    tag: ["a", "b"]
-  - match: { hits.total: 4 } # foo (u1), bar (u2), baz (u3), foo (u5)
-
-  # Query returns docs but none have the field specified.
-  - do:
-      search:
-        rest_total_hits_as_int: true
         index: main_index
-        body:
-          query:
-            terms:
-              user:
-                index: lookup_index
-                path: not_a_field
-                query:
-                  match_all: {}
-  - match: { hits.total: 0 }
-
-  # Optional: sanity check for main_index docs
-  - do:
+      version: " - 3.1.99"
       search:
+          { "index": { "_index": "main_index", "_id": "u1" } }
         rest_total_hits_as_int: true
-        index: main_index
-        body:
-          query:
-            match_all: {}
   - match: { hits.total: 5 } # Should always be 5
+                path: followers
+      cluster.health:
+          { "group": "g1", "followers": ["baz"], "tag": "e" }
+        refresh: true
+  # Query returns docs but field is scalar, not array (now array, see above)
+  # Optional: sanity check for main_index docs
+        rest_total_hits_as_int: true
+                  terms:
+              user:
+  # Query returns docs, but some have missing/null/empty field
+                path: followers
+  # Duplicates across docs should be deduplicated (foo appears in 2 docs)
+            terms:
+  - do:
+                  term:
+        index: main_index
+  - match: { errors: false }
+        rest_total_hits_as_int: true
+  # --- TEST CASES --- #
+                index: lookup_index
+        rest_total_hits_as_int: true
+                  term:
+        timeout: 30s
+        index: main_index
+  - match: { hits.total: 0 } # No terms found
+        body:
+                index: lookup_index
+            terms:
+  # --- SKIP IF VERSION IS LESS THAN 3.2.0 --- #
+              user:
+                path: followers
+                    tag: "zzz"
+                    group: "g1"
+        body:
+                query:
+          settings:
+            terms:
+  - match: { hits.total: 4 } # foo (u1), bar (u2), baz (u3), foo (u5)
+  - do:
+        body: |
+  - do:
+            number_of_replicas: 0
+                  match_all: {}
+          { "index": { "_index": "lookup_index", "_id": "6" } }
+      indices.create:
+                path: followers
+                index: lookup_index
+  - match: { hits.total: 3 } # foo (u1), bar (u2), foo (u5)
+          { "index": { "_index": "main_index", "_id": "u3" } }
+  # Populate main_index
+          query:
+  - do:
+      search:
+          query:
+        index: lookup_index,main_index
+            match_all: {}
+  - do:
+  - do:
+          { "index": { "_index": "lookup_index", "_id": "5" } }
+  # Query returns docs but none have the field specified.
+          { "index": { "_index": "main_index", "_id": "u2" } }
+        wait_for_status: green
+          { "group": "g1", "followers": ["baz"], "tag": "b" }
+          query:
+          { "user": "qux" }
+          query:
+          query:
+      bulk:
+        index: main_index
+        index: main_index
+  - do:
+                path: followers
+        body:
+  - do:
+                index: lookup_index
+  - match: { hits.total: 0 }
+          { "user": "baz" }
+                index: lookup_index
+"Terms Query - Lookup by Query":
+          query:
+                  terms:
+          { "index": { "_index": "lookup_index", "_id": "2" } }
+          { "index": { "_index": "main_index", "_id": "u5" } }
+          { "user": "bar" }
+  - skip:
+                    tag: ["a", "b"]
+  - match: { hits.total: 0 }
+            number_of_replicas: 0
+        body:
+                    tag: "d"
+                query:
+                query:
+  - do:
+  - do:
+              user:
+                  term:
+              user:
+      cluster.health:
+              user:
+                path: not_a_field
+                path: followers
+  - do:
+          { "group": "g2", "followers": null, "tag": "c" }
+      search:
+  # Populate lookup_index
+              user:
+      cluster.health:
+          query:
+                    tag: ["a", "b", "c", "d", "e", "f"]
+  # Query returns no docs
+        body:
+        body:
+  # Query returns docs, some with missing field, some with lists, some with nulls
+  # Query returns docs but field is always empty list
+        rest_total_hits_as_int: true
+        timeout: 30s
+            terms:
+      search:
+  - match: { hits.total: 4 } # foo (u1), bar (u2), baz (u3), foo (u5)
+        body:
+        wait_for_status: green

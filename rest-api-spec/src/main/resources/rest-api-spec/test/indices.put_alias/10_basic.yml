@@ -1,308 +1,252 @@
----
-"Basic test for put alias":
-
-  - do:
-      indices.create:
-        index: test_index
-
-  - do:
-      indices.exists_alias:
-        name: test_alias
-
-  - is_false: ''
-
-  - do:
-      indices.put_alias:
-        index: test_index
-        name: test_alias
-
-  - do:
-      indices.exists_alias:
-        name: test_alias
-
-  - is_true: ''
-
-  - do:
       indices.get_alias:
-        name: test_alias
-
-  - match: {test_index.aliases.test_alias: {}}
-
-  - do:
-      indices.put_alias:
-        index: test_index
-        body: {"alias": "test_alias_1"}
-
-  - do:
-      indices.get_alias:
-        index: test_index
-        name: test_alias_1
-
-  - match: {test_index.aliases.test_alias_1: {}}
-
-  - do:
-      indices.put_alias:
-        name: test_alias_2
-        body: {"index": "test_index"}
-
-  - do:
-      indices.get_alias:
-        index: test_index
-        name: test_alias_2
-
-  - match: {test_index.aliases.test_alias_2: {}}
-
-  - do:
-      catch: bad_request
-      indices.put_alias:
-        index: null
-        name: null
-
 ---
-"Can't create alias with invalid characters":
-
   - do:
-      indices.create:
-        index: test_index
-
-  - do:
-      catch: bad_request
-      indices.put_alias:
-        index: test_index
-        name: test_*
-
----
-"Can't create alias with the same name as an index":
-
-  - do:
-      indices.create:
-        index: test_index
-  - do:
-      indices.create:
-        index: foo
-
-  - do:
-      catch: bad_request
-      indices.put_alias:
-        index: test_index
-        name: foo
-
----
-"Can set is_write_index":
-  - do:
-      indices.create:
-        index: test_index
-
-  - do:
-      indices.put_alias:
-        index: test_index
-        name: test_alias
-        body:
-          is_write_index: true
-
-  - do:
-      indices.get_alias:
-        index: test_index
-        name: test_alias
-  - match: {test_index.aliases.test_alias: { 'is_write_index': true }}
-
----
-"Can create filtered alias with a date_nanos range query":
-
-
-  - do:
-      indices.create:
-        index: test_index
-        body:
-          mappings:
-            properties:
-              date_nanos_field:
-                type: date_nanos
-
-  - do:
-      indices.put_alias:
-        index: test_index
-        name: test_alias
-        body: {"filter": {"range": {"date_nanos_field": {"gt": "now-7d/d"}}}}
-
-  - do:
-      indices.get_alias:
-        index: test_index
-        name: test_alias
-  - match: {test_index.aliases.test_alias: {"filter": {"range": {"date_nanos_field": {"gt": "now-7d/d"}}}}}
-
----
+      version: " - 2.15.99"
 "Can set index_routing":
-  - do:
-      indices.create:
-        index: test_index
-
-  - do:
-      indices.put_alias:
-        index: test_index
-        name: test_alias
-        body:
-          index_routing: "test"
-
-  - do:
       indices.get_alias:
-        index: test_index
-        name: test_alias
-  - match: {test_index.aliases.test_alias: { 'index_routing': "test" }}
-
----
-"Can set routing":
-  - do:
-      indices.create:
-        index: test_index
-
-  - do:
-      indices.put_alias:
-        index: test_index
-        name: test_alias
-        body:
-          routing: "test"
-
-  - do:
       indices.get_alias:
-        index: test_index
-        name: test_alias
-  - match: {test_index.aliases.test_alias: { 'index_routing': "test", 'search_routing': "test" }}
-
----
-"Can set search_routing":
-  - do:
-      indices.create:
-        index: test_index
-
-  - do:
-      indices.put_alias:
-        index: test_index
-        name: test_alias
-        body:
-          search_routing: "test"
-
-  - do:
       indices.get_alias:
-        index: test_index
-        name: test_alias
-  - match: {test_index.aliases.test_alias: { 'search_routing': "test" }}
-
----
-"Index parameter supports multiple values":
-  - do:
-      indices.create:
-        index: test_index
-  - do:
-      indices.create:
-        index: test_index1
-
-  - do:
-      indices.put_alias:
-        index: test_index,test_index1
-        name: test_alias
-
-  - do:
-      indices.get_alias:
-        index: test_index
-        name: test_alias
-  - match: {test_index.aliases.test_alias: { }}
-  - do:
-      indices.get_alias:
-        index: test_index1
-        name: test_alias
-  - match: {test_index1.aliases.test_alias: { }}
-
-  - do:
-      indices.put_alias:
-        body: {"index": "test_index,test_index1", "alias": "test_alias_1"}
-
-  - do:
-      indices.get_alias:
-        index: test_index
-        name: test_alias_1
   - match: {test_index.aliases.test_alias_1: { }}
-  - do:
-      indices.get_alias:
-        index: test_index1
-        name: test_alias_1
-  - match: {test_index1.aliases.test_alias_1: { }}
-
----
-"Index and alias in request body can override path parameters":
-  - do:
-      indices.create:
-        index: test_index
-
-  - do:
-      indices.put_alias:
-        index: test_index_unknown
         name: test_alias
         body: {"index": "test_index"}
-
-  - do:
-      indices.get_alias:
         index: test_index
-        name: test_alias
-  - match: {test_index.aliases.test_alias: { }}
-
+      indices.put_alias:
+        body:
   - do:
       indices.put_alias:
+          mappings:
+        name: test_alias
         index: test_index
-        name: test_alias_unknown
-        body: {"alias": "test_alias_2"}
-
+      indices.put_alias:
+        name: test_alias_1
+  - match: {test_index.aliases.test_alias: { 'is_write_index': true }}
+          is_hidden: true
   - do:
-      indices.get_alias:
+  - match: {test_index.aliases.test_alias: { }}
+  - do:
+  - do:
+      indices.put_alias:
+  - do:
+  - match: {test_index.aliases.test_alias: { 'search_routing': "test" }}
+        name: test_alias
+        index: test_index
+      indices.create:
+      indices.put_alias:
+  - do:
         index: test_index
         name: test_alias_2
-  - match: {test_index.aliases.test_alias_2: { }}
-
+---
   - do:
-      indices.put_alias:
-        body: {"index": "test_index", "alias": "test_alias_3"}
-
-  - do:
-      indices.get_alias:
+---
         index: test_index
-        name: test_alias_3
+"Can't create alias with invalid characters":
+  - do:
+  - do:
+        index: test_index
   - match: {test_index.aliases.test_alias_3: { }}
-
----
-"Can set is_hidden":
   - skip:
-      version: " - 2.15.99"
+"Throws exception with invalid parameters":
+  - do:
+        body: {"filter": {"range": {"date_nanos_field": {"gt": "now-7d/d"}}}}
+  - do:
+      indices.put_alias:
+  - do:
+      indices.put_alias:
+      indices.get_alias:
+      catch: bad_request
+"Index and alias in request body can override path parameters":
+        index: test_index
+        name: test_alias
+      indices.put_alias:
+  - do:
+            properties:
+        name: test_alias
+      indices.put_alias:
+        index: test_index
+  - match: {test_index.aliases.test_alias: { 'index_routing': "test" }}
+        name: test_alias
+  - do:
+        index: test_index
+  - match: {test_index.aliases.test_alias: {}}
+      indices.create:
+"Can set search_routing":
+        index: test_index
+        name: test_alias
+      indices.create:
+  - do:
+      indices.create:
+  - do:
+        body: {"index": "test_index,test_index1", "alias": "test_alias_1"}
+          index_routing: "test"
+        index: test_index
+  - do:
+      indices.put_alias:
+"Basic test for put alias":
+                type: date_nanos
+          is_write_index: true
+        index: test_index1
+        index: test_index
+        index: test_index
+  - do:
+  - match: {test_index.aliases.test_alias: { 'is_hidden': true }}
+        index: test_index
+        index: test_index
+      indices.create:
+  - skip:
+---
+        index: test_index
+        name: test_alias_2
+        body: {"index": "test_index", "alias": "test_alias_3"}
+  - match: {test_index1.aliases.test_alias_1: { }}
       reason: "Fix was introduced in 2.16.0"
+      indices.get_alias:
+        name: test_alias
+  - do:
+"Can set is_hidden":
+  - match: {test_index.aliases.test_alias_2: { }}
+        index: test_index1
+        name: test_alias
+        name: test_alias_1
+        name: test_alias
   - do:
       indices.create:
         index: test_index
-
-  - do:
-      indices.put_alias:
         index: test_index
+---
         name: test_alias
+  - match: {test_index.aliases.test_alias_1: {}}
+        index: test_index
+        index: test_index
+  - do:
         body:
-          is_hidden: true
-
+  - do:
+  - do:
+"Can create filtered alias with a date_nanos range query":
+      indices.create:
+          search_routing: "test"
+        index: test_index
+        index: test_index
+        index: test_index_unknown
+  - do:
+  - match: {test_index.aliases.test_alias: { 'index_routing': "test", 'search_routing': "test" }}
+  - do:
+      indices.create:
+  - match: {test_index.aliases.test_alias: { }}
+      indices.create:
+  - do:
+"Index parameter supports multiple values":
+      indices.get_alias:
+        index: foo
+        index: test_index
+        body:
+  - do:
+        index: test_index
+        body:
+      indices.get_alias:
+        name: test_alias_1
+        index: test_index
+  - do:
+        name: test_*
+---
+        name: test_alias
+  - do:
+        name: test_alias_3
+---
+  - do:
+        index: test_index
+        index: test_index
+        body:
+        index: test_index1
+        index: test_index
+      catch: /unknown field \[abc\]/
+        index: test_index
+  - do:
   - do:
       indices.get_alias:
-        index: test_index
-        name: test_alias
-  - match: {test_index.aliases.test_alias: { 'is_hidden': true }}
-
----
-"Throws exception with invalid parameters":
-  - skip:
-      version: " - 2.15.99"
-      reason: "Fix was introduced in 2.16.0"
-
+      indices.get_alias:
+      indices.put_alias:
+      indices.put_alias:
   - do:
       indices.create:
+        name: test_alias
+      indices.get_alias:
+"Can set routing":
         index: test_index
-
+        body: {"alias": "test_alias_2"}
   - do:
-      catch: /unknown field \[abc\]/
+      indices.get_alias:
+  - do:
+  - do:
+  - do:
       indices.put_alias:
-        index: test_index
+  - do:
+"Can't create alias with the same name as an index":
+        name: test_alias
+      indices.get_alias:
+        index: test_index,test_index1
+  - do:
+      indices.put_alias:
+        name: test_alias
+      indices.get_alias:
+---
+  - is_false: ''
+"Can set is_write_index":
+        body: {"index": "test_index"}
         name: test_alias
         body: {"abc": 1}
+  - is_true: ''
+      indices.put_alias:
+  - do:
+        name: test_alias
+  - do:
+      indices.get_alias:
+      indices.put_alias:
+        name: test_alias_unknown
+      indices.put_alias:
+        name: null
+        index: null
+  - do:
+        body: {"alias": "test_alias_1"}
+      indices.create:
+  - do:
+      indices.create:
+        index: test_index
+  - do:
+      indices.get_alias:
+  - match: {test_index1.aliases.test_alias: { }}
+---
+  - do:
+---
+        index: test_index
+  - do:
+      indices.create:
+        body:
+      indices.create:
+        index: test_index
+  - match: {test_index.aliases.test_alias_2: {}}
+      version: " - 2.15.99"
+  - match: {test_index.aliases.test_alias: {"filter": {"range": {"date_nanos_field": {"gt": "now-7d/d"}}}}}
+        index: test_index
+  - do:
+      indices.exists_alias:
+---
+        name: test_alias
+      reason: "Fix was introduced in 2.16.0"
+      catch: bad_request
+      catch: bad_request
+---
+        name: foo
+              date_nanos_field:
+        index: test_index
+        index: test_index
+        name: test_alias
+          routing: "test"
+        name: test_alias_2
+  - do:
+      indices.exists_alias:
+        name: test_alias
+        name: test_alias
+  - do:
+        name: test_alias
+      indices.put_alias:
+        index: test_index

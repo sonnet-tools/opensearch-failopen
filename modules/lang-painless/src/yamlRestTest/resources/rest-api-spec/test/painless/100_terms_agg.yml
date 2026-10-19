@@ -1,141 +1,120 @@
-setup:
   - do:
-      indices.create:
+  - match: { aggregations.placeholder.buckets.0.str_terms.buckets.0.key: "abc" }
+  - match: { aggregations.str_terms.buckets.1.key: "bcd1" }
+                    the_avg:
           index: test_1
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
+  - length: { aggregations.double_terms.buckets: 2 }
+  - do:
+  - do:
+  - is_false: aggregations.placeholder.buckets.0.str_terms.buckets.1.key_as_string
+          str: "abc"
+                    field: "str"
+      index:
+        body:
+      search:
+                  terms:
+        rest_total_hits_as_int: true
+          size: 0
+  - match: { aggregations.double_terms.buckets.1.key: 3.0 }
+  - match: { aggregations.long_terms.buckets.0.doc_count: 2 }
+                 - match_all: {}
+"Long Value Script with doc notation":
+        rest_total_hits_as_int: true
               properties:
+"Bucket script with keys":
+  - match: { aggregations.placeholder.buckets.0.the_bucket_script.value: 2.0 }
+      search:
+                    script: "params.foo"
+            mappings:
+  - match: { aggregations.placeholder.buckets.0.str_terms.buckets.1.key: "bcd" }
+        body:
+---
+        rest_total_hits_as_int: true
+      index:
+      cluster.health:
+        body:
+          double: 2.0
+        index: test_1
+---
+  - do:
+---
+        body: { "size" : 0, "aggs" : { "double_terms" : { "terms" : { "field" : "double", "script": { "source": "return doc.double[0] + 1"} } } } }
+                      avg:
+  - match: { hits.total: 3 }
+              filters:
+  - match: { aggregations.double_terms.buckets.0.key: 2.0 }
+  - is_false: aggregations.str_terms.buckets.0.key_as_string
+      search:
+          body:
+  - do:
+"String Value Script with doc notation":
+  - match: { hits.total: 3 }
+        index: test_1
+      index:
+  - do:
+                    buckets_path:
+  - length: { aggregations.long_terms.buckets: 2 }
+  - is_false: aggregations.long_terms.buckets.0.key_as_string
+                  type: long
+  - match: { aggregations.long_terms.buckets.1.doc_count: 1 }
+  - is_false: aggregations.long_terms.buckets.1.key_as_string
+  - match: { hits.total: 3 }
+              aggs:
+              number_of_replicas: 0
+  - is_false: aggregations.str_terms.buckets.1.key_as_string
+        body: { "size" : 0, "aggs" : { "long_terms" : { "terms" : { "field" : "number", "script": { "source": "return doc.number[0] + 1"} } } } }
+                str_terms:
                 str:
+        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str", "script": { "source": "return doc.str[0] + \"1\""} } } } }
+                  bucket_script:
+  - match: { aggregations.str_terms.buckets.0.doc_count: 2 }
+  - match: { aggregations.long_terms.buckets.0.key: 2.0 }
+                number:
+  - is_false: aggregations.double_terms.buckets.0.key_as_string
+  - length: { aggregations.placeholder.buckets.0.str_terms.buckets: 2 }
+        id: 2
+                  aggs:
+  - length: { aggregations.str_terms.buckets: 2 }
+                      foo: "str_terms['bcd']>the_avg.value"
+        wait_for_status: green
+  - match: { aggregations.long_terms.buckets.1.key: 3.0 }
+  - do:
+"Double Value Script with doc notation":
+          double: 1.0
+      indices.create:
+          aggs:
+                the_bucket_script:
+          str: "abc"
+      indices.refresh: {}
+  - match: { aggregations.str_terms.buckets.0.key: "abc1" }
                    type: keyword
+        id: 3
+                        field: "number"
+            placeholder:
+  - match: { aggregations.str_terms.buckets.1.doc_count: 1 }
+  - is_false: aggregations.placeholder.buckets.0.str_terms.buckets.0.key_as_string
+        body:
+          number: 1
+                filters:
+      search:
+        index: test_1
+            settings:
+          number: 1
+  - match: { hits.total: 3 }
+        id: 1
+          str: "bcd"
+  - is_false: aggregations.double_terms.buckets.1.key_as_string
+  - match: { aggregations.double_terms.buckets.0.doc_count: 2 }
+          number: 2
+---
+  - do:
                 double:
                   type: double
-                number:
-                  type: long
-
   - do:
-      cluster.health:
-        wait_for_status: green
-
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body:
-          str: "abc"
-          double: 1.0
-          number: 1
-
-  - do:
-      index:
-        index: test_1
-        id: 2
-        body:
-          str: "abc"
-          double: 1.0
-          number: 1
-
-  - do:
-      index:
-        index: test_1
-        id: 3
-        body:
-          str: "bcd"
-          double: 2.0
-          number: 2
-
-  - do:
-      indices.refresh: {}
-
----
-"String Value Script with doc notation":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str", "script": { "source": "return doc.str[0] + \"1\""} } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.str_terms.buckets: 2 }
-  - match: { aggregations.str_terms.buckets.0.key: "abc1" }
-  - is_false: aggregations.str_terms.buckets.0.key_as_string
-  - match: { aggregations.str_terms.buckets.0.doc_count: 2 }
-  - match: { aggregations.str_terms.buckets.1.key: "bcd1" }
-  - is_false: aggregations.str_terms.buckets.1.key_as_string
-  - match: { aggregations.str_terms.buckets.1.doc_count: 1 }
-
----
-"Long Value Script with doc notation":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "long_terms" : { "terms" : { "field" : "number", "script": { "source": "return doc.number[0] + 1"} } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.long_terms.buckets: 2 }
-  - match: { aggregations.long_terms.buckets.0.key: 2.0 }
-  - is_false: aggregations.long_terms.buckets.0.key_as_string
-  - match: { aggregations.long_terms.buckets.0.doc_count: 2 }
-  - match: { aggregations.long_terms.buckets.1.key: 3.0 }
-  - is_false: aggregations.long_terms.buckets.1.key_as_string
-  - match: { aggregations.long_terms.buckets.1.doc_count: 1 }
-
----
-"Double Value Script with doc notation":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "double_terms" : { "terms" : { "field" : "double", "script": { "source": "return doc.double[0] + 1"} } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.double_terms.buckets: 2 }
-  - match: { aggregations.double_terms.buckets.0.key: 2.0 }
-  - is_false: aggregations.double_terms.buckets.0.key_as_string
-  - match: { aggregations.double_terms.buckets.0.doc_count: 2 }
-  - match: { aggregations.double_terms.buckets.1.key: 3.0 }
-  - is_false: aggregations.double_terms.buckets.1.key_as_string
   - match: { aggregations.double_terms.buckets.1.doc_count: 1 }
-
----
-"Bucket script with keys":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          size: 0
-          aggs:
-            placeholder:
-              filters:
-                filters:
-                 - match_all: {}
-              aggs:
-                str_terms:
-                  terms:
-                    field: "str"
-                  aggs:
-                    the_avg:
-                      avg:
-                        field: "number"
-                the_bucket_script:
-                  bucket_script:
-                    buckets_path:
-                      foo: "str_terms['bcd']>the_avg.value"
-                    script: "params.foo"
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.placeholder.buckets.0.str_terms.buckets: 2 }
-  - match: { aggregations.placeholder.buckets.0.str_terms.buckets.0.key: "abc" }
-  - is_false: aggregations.placeholder.buckets.0.str_terms.buckets.0.key_as_string
   - match: { aggregations.placeholder.buckets.0.str_terms.buckets.0.doc_count: 2 }
-  - match: { aggregations.placeholder.buckets.0.str_terms.buckets.1.key: "bcd" }
-  - is_false: aggregations.placeholder.buckets.0.str_terms.buckets.1.key_as_string
+  - do:
+          double: 1.0
+        rest_total_hits_as_int: true
+setup:
   - match: { aggregations.placeholder.buckets.0.str_terms.buckets.1.doc_count: 1 }
-  - match: { aggregations.placeholder.buckets.0.the_bucket_script.value: 2.0 }

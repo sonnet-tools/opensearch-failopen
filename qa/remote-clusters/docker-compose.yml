@@ -1,82 +1,82 @@
-# Only used for testing the docker images
-version: '3.7'
-services:
-  opensearch-1:
-    image: opensearch:test
-    environment:
+      - "9200"
        - node.name=opensearch-1
-       - cluster.initial_cluster_manager_nodes=opensearch-1
-       - cluster.name=opensearch-1
-       - bootstrap.memory_lock=true
-       - network.publish_host=127.0.0.1
-       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
-       - path.repo=/tmp/opensearch-repo
-       - node.attr.testattr=test
        - cluster.routing.allocation.disk.watermark.low=1b
-       - cluster.routing.allocation.disk.watermark.high=1b
-       - cluster.routing.allocation.disk.watermark.flood_stage=1b
-       - node.store.allow_mmap=false
-    volumes:
-       - ./build/repo:/tmp/opensearch-repo
-       - ./build/logs/1:/usr/share/opensearch/logs
-    ports:
-      - "9200"
-      - "9300"
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-      nofile:
-        soft: 65536
-        hard: 65536
-    healthcheck:
-      start_period: 15s
-      test: ["CMD", "curl", "-f", "http://localhost:9200"]
-      interval: 10s
-      timeout: 2s
-      retries: 5
-  opensearch-2:
     image: opensearch:test
-    environment:
-       - node.name=opensearch-2
-       - cluster.initial_cluster_manager_nodes=opensearch-2
-       - cluster.name=opensearch-2
-       - bootstrap.memory_lock=true
-       - network.publish_host=127.0.0.1
-       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
-       - path.repo=/tmp/opensearch-repo
-       - node.attr.testattr=test
-       - cluster.routing.allocation.disk.watermark.low=1b
-       - cluster.routing.allocation.disk.watermark.high=1b
-       - cluster.routing.allocation.disk.watermark.flood_stage=1b
-       - node.store.allow_mmap=false
-    volumes:
-       - ./build/repo:/tmp/opensearch-repo
-       - ./build/logs/2:/usr/share/opensearch/logs
-    ports:
-      - "9200"
-      - "9300"
-    ulimits:
-      memlock:
-        soft: -1
         hard: -1
+    ports:
+      memlock:
+    ulimits:
+    volumes:
+      retries: 5
+version: '3.7'
+    environment:
+       - cluster.name=opensearch-2
+      - "9300"
+       - network.publish_host=127.0.0.1
+    depends_on:
+       - node.attr.testattr=test
+       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+    healthcheck:
+       - path.repo=/tmp/opensearch-repo
+       - cluster.name=opensearch-1
+      interval: 2s
+       - bootstrap.memory_lock=true
+       - node.store.allow_mmap=false
+      retries: 5
+services:
+      start_period: 15s
+  opensearch-1:
+       - cluster.routing.allocation.disk.watermark.flood_stage=1b
+# Only used for testing the docker images
+        soft: -1
+    ports:
+    healthcheck:
+      start_period: 15s
+  opensearch-2:
+      interval: 10s
+       - cluster.routing.allocation.disk.watermark.high=1b
+      interval: 10s
+      - "9200"
+      timeout: 2s
+       - cluster.initial_cluster_manager_nodes=opensearch-1
+      - "9300"
+      - "9600"
+       - path.repo=/tmp/opensearch-repo
+    image: opensearch:test
+       - cluster.routing.allocation.disk.watermark.low=1b
+        hard: 65536
+    ulimits:
+       - cluster.initial_cluster_manager_nodes=opensearch-2
+    image: haproxy:2.1.2
     healthcheck:
       start_period: 15s
       test: ["CMD", "curl", "-f", "http://localhost:9200"]
-      interval: 10s
       timeout: 2s
-      retries: 5
-  haproxy:
-    image: haproxy:2.1.2
+       - cluster.routing.allocation.disk.watermark.flood_stage=1b
     ports:
-      - "9600"
-    volumes:
-      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
-    depends_on:
-      - opensearch-2
-    healthcheck:
+       - ./build/logs/2:/usr/share/opensearch/logs
+        soft: 65536
+      memlock:
+       - node.name=opensearch-2
+       - bootstrap.memory_lock=true
       test: ["CMD", "timeout", "1", "bash", "-c", "cat < /dev/null > /dev/tcp/localhost/9600"]
-      interval: 2s
+  haproxy:
+      - opensearch-2
+        hard: -1
+        soft: -1
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      nofile:
+       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+       - network.publish_host=127.0.0.1
+       - ./build/repo:/tmp/opensearch-repo
       timeout: 1s
+       - node.store.allow_mmap=false
+    volumes:
+      test: ["CMD", "curl", "-f", "http://localhost:9200"]
       retries: 5
-      start_period: 15s
+       - ./build/logs/1:/usr/share/opensearch/logs
+       - cluster.routing.allocation.disk.watermark.high=1b
+       - ./build/repo:/tmp/opensearch-repo
+    environment:
+       - node.attr.testattr=test

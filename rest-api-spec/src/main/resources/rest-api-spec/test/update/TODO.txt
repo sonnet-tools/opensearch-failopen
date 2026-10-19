@@ -1,5 +1,4 @@
 Tests missing for:
-
-# consistency
 # retry_on_conflict
+# consistency
 # timeout

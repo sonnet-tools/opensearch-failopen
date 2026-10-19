@@ -1,15 +1,15 @@
-{
   "schema" : [
-    {
-      "name" : "revenue",
-      "type" : "double"
-    }
   ],
-  "total" : 1,
-  "datarows" : [
+      "type" : "double"
     [
+  ],
+  "datarows" : [
+      "name" : "revenue",
+    {
+    }
+{
       null
     ]
-  ],
   "size" : 1
+  "total" : 1,
 }

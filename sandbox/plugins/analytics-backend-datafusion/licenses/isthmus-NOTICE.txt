@@ -1,7 +1,5 @@
-Substrait Java
 Copyright The Substrait Authors
-
 This product includes software developed by The Substrait Authors
-(https://github.com/substrait-io/substrait-java).
-
+Substrait Java
 Licensed under the Apache License, Version 2.0.
+(https://github.com/substrait-io/substrait-java).

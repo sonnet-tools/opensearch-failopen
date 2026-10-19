@@ -1,10 +1,10 @@
-{
-  "schema": [
     {"name": "count()", "type": "bigint"}
+{
   ],
+}
   "datarows": [
+  "size": 1
     [5]
+  "schema": [
   ],
   "total": 1,
-  "size": 1
-}

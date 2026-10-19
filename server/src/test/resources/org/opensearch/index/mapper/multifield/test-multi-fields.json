@@ -1,38 +1,38 @@
 {
+            "fields": {
+          "test1": {
   "_doc": {
-    "properties": {
-      "name": {
-        "type": "text",
-        "store": true,
-        "fields": {
-          "indexed": {
+          }
+}
+          "multi1": {
+              "string": {
             "type": "text",
-            "store": false
+        "properties": {
+        "store": true,
+            "store": true,
+          "indexed": {
+        }
+                "type": "keyword"
+          }
+            "type": "date",
+            }
+        "type": "text",
+      },
+              }
+        }
+    "properties": {
           },
+  }
+    }
+            "store": true
+            "eager_global_ordinals": true
+        "fields": {
+            "type": "text",
           "not_indexed": {
             "type": "text",
-            "index": false,
-            "store": true
-          },
-          "test1": {
-            "type": "text",
-            "store": true,
-            "eager_global_ordinals": true
-          }
-        }
-      },
+            "store": false
       "object1": {
-        "properties": {
-          "multi1": {
-            "type": "date",
-            "fields": {
-              "string": {
-                "type": "keyword"
-              }
-            }
-          }
-        }
+            "index": false,
+          },
+      "name": {
       }
-    }
-  }
-}

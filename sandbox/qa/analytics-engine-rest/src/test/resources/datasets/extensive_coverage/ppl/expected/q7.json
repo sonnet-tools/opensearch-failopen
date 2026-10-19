@@ -1,28 +1,28 @@
+      3
 {
-  "schema": [
-    {
-      "name": "category",
-      "type": "string"
-    },
-    {
-      "name": "cnt",
-      "type": "bigint"
-    }
-  ],
-  "datarows": [
-    [
       "A",
+      "name": "cnt",
+}
+  "total": 3,
+    {
+  "datarows": [
       4
     ],
-    [
-      "B",
-      3
-    ],
-    [
-      "C",
-      3
-    ]
+    }
   ],
-  "total": 3,
+    ]
+    [
+      "type": "bigint"
+      "C",
+  ],
+      3
+    {
   "size": 3
-}
+    },
+    [
+    ],
+      "type": "string"
+  "schema": [
+      "B",
+      "name": "category",
+    [

@@ -1,130 +1,117 @@
----
-"Test percolator basics via rest":
-  - do:
-      indices.create:
-        index: queries_index
-        body:
-          mappings:
-            properties:
-              query:
-                type: percolator
               foo:
-                type: keyword
-
-  - do:
-      indices.create:
-        index: documents_index
-        body:
-          mappings:
-            properties:
-              foo:
-                type: keyword
-
-  - do:
-      index:
-        index: queries_index
         id:   test_percolator
-        body:
-          query:
-            match_all: {}
-
-  - do:
-      index:
-        index: documents_index
-        id: some_id
-        body:
-          foo: bar
-
-  - do:
-        indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          - query:
               percolate:
-                field: query
-                document:
-                  foo: bar
-  - match:  { hits.total:     1  }
-
   - do:
-      msearch:
-        rest_total_hits_as_int: true
-        body:
-          - index: queries_index
-          - query:
-              percolate:
-                field: query
-                document:
-                  foo: bar
-  - match:  { responses.0.hits.total:     1  }
-
   - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          - query:
-              percolate:
-                field: query
-                index: documents_index
-                id: some_id
-  - match:  { hits.total:     1  }
-
-  - do:
-      msearch:
-        rest_total_hits_as_int: true
-        body:
-          - index: queries_index
-          - query:
-              percolate:
-                field: query
-                index: documents_index
-                id: some_id
-  - match:  { responses.0.hits.total:     1  }
-
-  - do:
-      catch: bad_request
-      index:
         index: queries_index
-        body:
           query:
-            query_string:
-              query: "unmapped: *"
-
-  - do:
-      catch: bad_request
-      index:
-        index: queries_index
-        body:
-          query:
-            query_string:
-              query: "_exists_: unmappedField"
-
-  - do:
         catch: bad_request
-        index:
-          index: queries_index
-          body:
-            query:
-              query_string:
-                query: "unmappedField: <100"
-
-  - do:
-      catch: bad_request
-      index:
-        index: queries_index
         body:
+              percolate:
+  - match:  { hits.total:     1  }
+        body:
+          - query:
+        index: queries_index
+        index: documents_index
+  - do:
           query:
-            query_string:
+              foo:
+                field: query
+                id: some_id
               query: "unmappedField: test~"
-
-  - do:
+                field: query
+        body:
       catch: bad_request
+      indices.create:
+        body:
+          - index: queries_index
+  - do:
+                index: documents_index
+        body:
+                field: query
+          query:
+              query:
+        rest_total_hits_as_int: true
+        id: some_id
+                  foo: bar
+        indices.refresh: {}
+        body:
+          mappings:
+      indices.create:
+          - query:
+        body:
+        rest_total_hits_as_int: true
+        body:
+      index:
+  - match:  { responses.0.hits.total:     1  }
+          body:
+              query_string:
+                  foo: bar
+                id: some_id
+      msearch:
+      search:
+      catch: bad_request
+            query_string:
+          - query:
+      catch: bad_request
+          foo: bar
+---
+      index:
+  - do:
+  - do:
+        index: queries_index
+              percolate:
+          index: queries_index
+          mappings:
+        body:
+        index: queries_index
       index:
         index: queries_index
-        body:
-          query:
+              query: "unmapped: *"
             query_string:
+            properties:
+                query: "unmappedField: <100"
+            match_all: {}
+              query: "_exists_: unmappedField"
+      msearch:
+        body:
+"Test percolator basics via rest":
+      index:
+            query_string:
+  - do:
+        index: queries_index
+  - match:  { responses.0.hits.total:     1  }
+                type: percolator
+        rest_total_hits_as_int: true
+        body:
+                document:
+          query:
+      index:
               query: "unmappedField: test*"
+        rest_total_hits_as_int: true
+              percolate:
+        index:
+                document:
+                index: documents_index
+      search:
+          - index: queries_index
+                type: keyword
+  - do:
+  - do:
+  - match:  { hits.total:     1  }
+            properties:
+          - query:
+        body:
+                type: keyword
+  - do:
+  - do:
+      index:
+  - do:
+        index: documents_index
+                field: query
+  - do:
+            query_string:
+            query:
+  - do:
+      catch: bad_request
+          query:

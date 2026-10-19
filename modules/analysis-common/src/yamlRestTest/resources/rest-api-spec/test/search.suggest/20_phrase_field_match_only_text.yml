@@ -1,238 +1,226 @@
-# Integration tests for the phrase suggester with a few analyzers
-
-setup:
-  - skip:
-      version: " - 2.11.99"
-      reason: "match_only_text was added in 2.12"
-  - do:
+                type: match_only_text
+        body:
+          { "body": "Dr. Piglet" }
+          { "body": "Xorr the God-Jewel" }
+                  filter: [lowercase]
+        index: test
+        rest_total_hits_as_int: true
+      search:
+          { "body": "Leader of Robin's Minstrels" }
+        size: 0
+                direct_generator:
+                force_unigrams: true
+                    type: match_only_text
+                  min_shingle_size: 2
+                    analyzer: bigram
       indices.create:
+  - do:
+          { "body": "Frank, the Historian" }
+            test:
+                    suggest_mode: always
+                  max_shingle_size: 2
+                field: body
+          { "body": "Miss Islington, the Witch" }
+  - do:
+          { "body": "Old Crone" }
+  - skip:
+                    type: match_only_text
+                force_unigrams: true
+  - match: {suggest.test.0.options.0.score: $body.suggest.test.0.options.0.score}
+                  output_unigrams: false
+                reverse:
+              phrase:
+      search:
+          { "index": {} }
+          { "index": {} }
+                max_errors: 0.5
+            number_of_shards: 1
+                direct_generator:
+                  filter: [lowercase, ngram]
+            text: xor the got-jewel
+                    type: match_only_text
+        rest_total_hits_as_int: true
+        size: 0
+          { "body": "Frank's Wife" }
+                field: body.ngram
+  - do:
+"doesn't fail when asked to run on a field without unigrams when force_unigrams=false":
+                  ngram:
+                  tokenizer: standard
+      version: " - 2.11.99"
+                  filter: [lowercase, bigram]
+          mappings:
+                ngram:
+          { "index": {} }
+                    analyzer: reverse
+  - match: {suggest.test.0.options.0.text: arthur king of the britons}
+      reason: "match_only_text was added in 2.12"
+          { "body": "Police sergeant who stops the film" }
+      version: " - 2.11.99"
+      catch: /since it doesn't emit unigrams/
+          { "body": "Xorn" }
+"breaks ties by sorting terms":
+          { "body": "Zoot" }
+                  - field: body.ngram
+          { "body": "Sir Lancelot the Brave" }
+        body:
         index: test
         body:
-          settings:
-            number_of_shards: 1
-            number_of_replicas: 1
-            analysis:
-              analyzer:
-                body:
-                  tokenizer: standard
-                  filter: [lowercase]
-                bigram:
-                  tokenizer: standard
-                  filter: [lowercase, bigram]
-                ngram:
-                  tokenizer: standard
-                  filter: [lowercase, ngram]
-                reverse:
-                  tokenizer: standard
-                  filter: [lowercase, reverse]
-              filter:
-                bigram:
-                  type: shingle
-                  output_unigrams: false
-                  min_shingle_size: 2
-                  max_shingle_size: 2
-                ngram:
-                  type: shingle
-                  output_unigrams: true
-                  min_shingle_size: 2
-                  max_shingle_size: 2
-          mappings:
-            properties:
-              body:
-                type: match_only_text
-                analyzer: body
-                fields:
-                  bigram:
-                    type: match_only_text
-                    analyzer: bigram
-                  ngram:
-                    type: match_only_text
-                    analyzer: ngram
-                  reverse:
-                    type: match_only_text
-                    analyzer: reverse
-
+                field: body.ngram
+                    suggest_mode: always
+              phrase:
+                    min_word_length: 1
   - do:
-      bulk:
+        size: 0
+        body:
         index: test
-        refresh: true
-        body: |
-          { "index": {} }
-          { "body": "Xorr the God-Jewel" }
-          { "index": {} }
-          { "body": "Xorn" }
-          { "index": {} }
-          { "body": "Arthur, King of the Britons" }
-          { "index": {} }
-          { "body": "Sir Lancelot the Brave" }
-          { "index": {} }
-          { "body": "Patsy, Arthur's Servant" }
-          { "index": {} }
+                  max_shingle_size: 2
+          suggest:
+      search:
+  - match: {suggest.test.0.options.0.text: xorr the god jewel}
           { "body": "Sir Robin the Not-Quite-So-Brave-as-Sir-Lancelot" }
           { "index": {} }
-          { "body": "Sir Bedevere the Wise" }
-          { "index": {} }
-          { "body": "Sir Galahad the Pure" }
-          { "index": {} }
-          { "body": "Miss Islington, the Witch" }
-          { "index": {} }
-          { "body": "Zoot" }
-          { "index": {} }
-          { "body": "Leader of Robin's Minstrels" }
-          { "index": {} }
-          { "body": "Old Crone" }
-          { "index": {} }
-          { "body": "Frank, the Historian" }
-          { "index": {} }
-          { "body": "Frank's Wife" }
-          { "index": {} }
-          { "body": "Dr. Piglet" }
-          { "index": {} }
-          { "body": "Dr. Winston" }
-          { "index": {} }
-          { "body": "Sir Robin (Stand-in)" }
-          { "index": {} }
-          { "body": "Knight Who Says Ni" }
-          { "index": {} }
-          { "body": "Police sergeant who stops the film" }
-
----
-"sorts by score":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        size: 0
-        index: test
         body:
-          suggest:
-            text: xor the got-jewel
-            test:
-              phrase:
-                field: body.ngram
-                force_unigrams: true
-                max_errors: 0.5
-                direct_generator:
-                  - field: body.ngram
-                    min_word_length: 1
-                    suggest_mode: always
-
-  - match: {suggest.test.0.options.0.text: xorr the god jewel}
-  - match: {suggest.test.0.options.1.text: xorn the god jewel}
-
----
-"breaks ties by sorting terms":
-  - skip:
-      version: " - 2.11.99"
-      reason: "match_only_text was added in 2.12"
-  # This runs the suggester without bigrams so we can be sure of the sort order
-  - do:
+                force_unigrams: false
+                field: body.bigram
       search:
-        rest_total_hits_as_int: true
-        size: 0
-        index: test
-        body:
           suggest:
-            text: xor the got-jewel
+                analyzer: bigram
             test:
-              phrase:
-                field: body
-                analyzer: body
-                force_unigrams: true
-                max_errors: 0.5
+                bigram:
+        size: 0
                 direct_generator:
-                  - field: body
-                    min_word_length: 1
-                    suggest_mode: always
-
-  # The scores are identical but xorn comes first because it sorts first
-  - match: {suggest.test.0.options.0.text: xorn the god jewel}
-  - match: {suggest.test.0.options.1.text: xorr the god jewel}
-  - match: {suggest.test.0.options.0.score: $body.suggest.test.0.options.0.score}
-
----
+            test:
+      search:
+      bulk:
+      search:
+                  tokenizer: standard
+        index: test
+          suggest:
 "fails when asked to run on a field without unigrams":
-  - do:
-      catch: /since it doesn't emit unigrams/
-      search:
-        rest_total_hits_as_int: true
-        size: 0
-        index: test
-        body:
-          suggest:
             text: xor the got-jewel
-            test:
-              phrase:
-                field: body.bigram
-
-  - do:
-      catch: /since it doesn't emit unigrams/
-      search:
-        rest_total_hits_as_int: true
-        size: 0
-        index: test
-        body:
-          suggest:
-            text: xor the got-jewel
-            test:
-              phrase:
-                field: body.bigram
-                analyzer: bigram
-
----
-"doesn't fail when asked to run on a field without unigrams when force_unigrams=false":
   - skip:
-      version: " - 2.11.99"
-      reason: "match_only_text was added in 2.12"
+                  tokenizer: standard
+        refresh: true
   - do:
-      search:
-        rest_total_hits_as_int: true
-        size: 0
-        index: test
-        body:
-          suggest:
-            text: xor the got-jewel
-            test:
-              phrase:
-                field: body.bigram
+          { "body": "Sir Bedevere the Wise" }
                 force_unigrams: false
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        size: 0
-        index: test
-        body:
-          suggest:
-            text: xor the got-jewel
-            test:
-              phrase:
                 field: body.bigram
-                analyzer: bigram
-                force_unigrams: false
-
----
-"reverse suggestions":
-  - skip:
-      version: " - 2.11.99"
+  - match: {suggest.test.0.options.0.text: xorn the god jewel}
+        body: |
       reason: "match_only_text was added in 2.12"
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        size: 0
-        index: test
+                field: body.bigram
+            test:
+          { "index": {} }
+          { "index": {} }
+          { "index": {} }
+          { "index": {} }
         body:
+                  tokenizer: standard
+          settings:
+          { "index": {} }
+          { "index": {} }
           suggest:
             text: Artur, Ging of the Britons
-            test:
-              phrase:
-                field: body.ngram
-                force_unigrams: true
-                max_errors: 0.5
-                direct_generator:
-                  - field: body.reverse
-                    min_word_length: 1
-                    suggest_mode: always
-                    pre_filter: reverse
+  - match: {suggest.test.0.options.1.text: xorr the god jewel}
+                ngram:
+              body:
+          { "index": {} }
                     post_filter: reverse
-
-  - match: {suggest.test.0.options.0.text: arthur king of the britons}
+setup:
+                  filter: [lowercase, reverse]
+  - skip:
+          { "index": {} }
+          { "body": "Sir Galahad the Pure" }
+        rest_total_hits_as_int: true
+            test:
+"sorts by score":
+      reason: "match_only_text was added in 2.12"
+  - do:
+            text: xor the got-jewel
+        body:
+                  min_shingle_size: 2
+      version: " - 2.11.99"
+        index: test
+      search:
+                body:
+              phrase:
+              filter:
+          { "index": {} }
+              phrase:
+---
+            properties:
+  # This runs the suggester without bigrams so we can be sure of the sort order
+  - match: {suggest.test.0.options.1.text: xorn the god jewel}
+                  reverse:
+---
+  # The scores are identical but xorn comes first because it sorts first
+            text: xor the got-jewel
+                max_errors: 0.5
+        index: test
+                  bigram:
+        index: test
+                force_unigrams: true
+        rest_total_hits_as_int: true
+            text: xor the got-jewel
+            number_of_replicas: 1
+          { "body": "Arthur, King of the Britons" }
+"reverse suggestions":
+                    suggest_mode: always
+          suggest:
+                    analyzer: ngram
+            analysis:
+        rest_total_hits_as_int: true
+  - do:
+# Integration tests for the phrase suggester with a few analyzers
+                    min_word_length: 1
+---
+---
+        body:
+              phrase:
+            test:
+          suggest:
+                  type: shingle
+          { "body": "Dr. Winston" }
+        rest_total_hits_as_int: true
+            test:
+          { "body": "Sir Robin (Stand-in)" }
+---
+        index: test
+          { "index": {} }
+        index: test
+                  - field: body
+                field: body.bigram
+                    pre_filter: reverse
+                analyzer: body
+        rest_total_hits_as_int: true
+          { "index": {} }
+                analyzer: bigram
+              phrase:
+          { "index": {} }
+      version: " - 2.11.99"
+        size: 0
+      reason: "match_only_text was added in 2.12"
+            text: xor the got-jewel
+              analyzer:
+  - do:
+              phrase:
+  - do:
+      catch: /since it doesn't emit unigrams/
+          { "body": "Knight Who Says Ni" }
+                fields:
+          { "body": "Patsy, Arthur's Servant" }
+        size: 0
+          suggest:
+                analyzer: body
+                    min_word_length: 1
+          { "index": {} }
+                bigram:
+          { "index": {} }
+        size: 0
+                max_errors: 0.5
+          { "index": {} }
+  - skip:
+                  - field: body.reverse
+                  output_unigrams: true
+                  type: shingle

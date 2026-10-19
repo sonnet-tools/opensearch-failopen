@@ -1,40 +1,40 @@
-{
-  "schema": [
     {
-      "name": "high_util_count",
-      "type": "bigint"
-    },
-    {
-      "name": "host",
-      "type": "string"
-    },
-    {
-      "name": "region",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      16,
-      "host1",
-      null
-    ],
-    [
-      4,
-      "host2",
-      null
-    ],
-    [
-      6,
-      "host3",
-      null
-    ],
-    [
-      7,
-      "host4",
-      null
-    ]
-  ],
   "total": 4,
+    {
+    ],
+    [
+    }
+      "name": "high_util_count",
+    },
+    [
+      "host4",
+      4,
+      "host3",
+    [
+      null
+      "host2",
+      "type": "bigint"
+      "name": "region",
+    {
+  ],
   "size": 4
+      "host1",
+    ],
+  ],
+      "type": "string"
+    ]
+    [
 }
+      null
+  "datarows": [
+      "type": "string"
+    ],
+{
+    },
+      6,
+  "schema": [
+      16,
+      "name": "host",
+      null
+      null
+      7,

@@ -1,32 +1,29 @@
-# Integration tests for Phonetic analysis components
+                                    name_type: ashkenazi
+                                my_analyzer:
 #
-
-
 "Double Metaphone":
+                                    tokenizer:  standard
+    - match:  { tokens.0.token: Svarts }
+                            filter:
+            index: phonetic_sample
+                text: Szwarc
     - do:
+                settings:
         indices.create:
             index:  phonetic_sample
-            body:
-                settings:
-                    index:
-                        analysis:
-                            analyzer:
-                                my_analyzer:
-                                    tokenizer:  standard
-                                    filter: ["lowercase", "beider_morse"]
-                            filter:
                                 beider_morse:
-                                    type: phonetic
+                                    filter: ["lowercase", "beider_morse"]
                                     encoder: beider_morse
                                     rule_type: exact
-                                    name_type: ashkenazi
-                                    languageset: polish
-    - do:
-        indices.analyze:
-            index: phonetic_sample
             body:
+                                    type: phonetic
                 analyzer: my_analyzer
-                text: Szwarc
-
+        indices.analyze:
+                    index:
+    - do:
+                                    languageset: polish
+# Integration tests for Phonetic analysis components
+                            analyzer:
+                        analysis:
     - length: { tokens: 1 }
-    - match:  { tokens.0.token: Svarts }
+            body:

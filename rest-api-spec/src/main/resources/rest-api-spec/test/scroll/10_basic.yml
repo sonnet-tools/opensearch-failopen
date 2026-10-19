@@ -1,332 +1,279 @@
+  - length: {hits.hits:      1    }
+        body:   { foo: 1 }
+  - length: {hits.hits:      1    }
+  - match: {hits.total:      2    }
+        scroll: 1m
+  - length: {hits.hits:      1    }
+  - length: {hits.hits:      1    }
+        scroll: 1m
+      search:
+        body:   { foo: 2 }
+      scroll:
+---
+---
+        sort: foo
+      indices.create:
+  - do:
+            match_all: {}
+        index:  test_scroll
+      index:
+        scroll_id: $scroll_id
+---
+        scroll_id: $scroll_id
+        index: test_scroll
+      index:
+  - do:
+        size: 1
+        scroll_id: invalid_scroll_id
+        body:   { foo: 3 }
+  - length: {hits.hits:      1    }
+        rest_total_hits_as_int: true
+        index:  test_scroll
+  - set: {_scroll_id: scroll_id}
+        request_cache: true
+        request_cache: true
+  - do:
+  - do:
+        scroll_id: $scroll_id
+        id:     43
+  - do:
+  - length: {hits.hits:      1    }
+            index:
+"Scroll cannot used the request cache":
+  - do:
+          query:
+  - do:
+        index:  test_scroll
+  - length: {hits.hits:      1    }
+  - set: {_scroll_id: scroll_id}
+        index:  test_scroll
+      index:
+"Basic scroll with 1 shard":
+        rest_total_hits_as_int: true
+        index:  test_scroll
+  - match: {hits.total:      2    }
+        id:     42
+"Scroll with new response format":
+"Scroll max_score is null":
+        scroll: 1m
+        rest_total_hits_as_int: true
+  - do:
+            match_all: {}
+      clear_scroll:
+        index: test_scroll
+        scroll: 1m
+        body:
+        body: { "scroll_id": "$scroll_id", "scroll": "1m"}
+      scroll:
+  - do:
+        id:     44
+        scroll_id: $scroll_id
+        index:  test_scroll
+        body:   { foo: 2 }
+        body: { "scroll_id": "$scroll_id", "scroll": "1m"}
+      index:
+      index:
+  - match: {hits.total.relation:      eq   }
+  - match: {hits.total.value:      2    }
+        index: test_scroll
 ---
 "Basic scroll":
   - do:
-      indices.create:
-        index: test_scroll
+  - match: {hits.total.value:         2    }
+        rest_total_hits_as_int: true
   - do:
       index:
-        index:  test_scroll
-        id:     42
-        body:   { foo: 1 }
-
-  - do:
-      index:
-        index:  test_scroll
-        id:     43
-        body:   { foo: 2 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test_scroll
-        size: 1
-        scroll: 1m
-        sort: foo
-        body:
-          query:
-            match_all: {}
-
-  - set: {_scroll_id: scroll_id}
-  - match: {hits.total:      2    }
-  - length: {hits.hits:      1    }
-  - match: {hits.hits.0._id: "42" }
-
-  - do:
-      index:
-        index:  test_scroll
-        id:     44
-        body:   { foo: 3 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      scroll:
-        rest_total_hits_as_int: true
-        body: { "scroll_id": "$scroll_id", "scroll": "1m"}
-
-  - match: {hits.total:      2    }
-  - length: {hits.hits:      1    }
-  - match: {hits.hits.0._id: "43" }
-
-  - do:
-      scroll:
-        rest_total_hits_as_int: true
-        scroll_id: $scroll_id
-        scroll: 1m
-
-  - match: {hits.total:      2    }
-  - length: {hits.hits:      0    }
-
-  - do:
-      clear_scroll:
-        scroll_id: $scroll_id
-
----
-"Basic scroll with 1 shard":
-  - do:
-      indices.create:
-        index: test_scroll
-        body:
-          settings:
-            index:
               number_of_shards: 1
-
-  - do:
-      index:
         index:  test_scroll
-        id:     42
-        body:   { foo: 1 }
-
-  - do:
-      index:
-        index:  test_scroll
-        id:     43
-        body:   { foo: 2 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test_scroll
-        size: 1
-        scroll: 1m
-        sort: foo
         body:
-          query:
-            match_all: {}
-
-  - set: {_scroll_id: scroll_id}
-  - match: {hits.total:      2    }
-  - length: {hits.hits:      1    }
-  - match: {hits.hits.0._id: "42" }
-
   - do:
-      index:
-        index:  test_scroll
-        id:     44
-        body:   { foo: 3 }
-
+  - do:
+      indices.create:
+  - do:
+  - do:
+  - do:
+  - match: {hits.total:      2    }
+  - do:
+        index: test_scroll
+  - do:
   - do:
       indices.refresh: {}
-
   - do:
-      scroll:
-        rest_total_hits_as_int: true
-        body: { "scroll_id": "$scroll_id", "scroll": "1m"}
-
-  - match: {hits.total:      2    }
-  - length: {hits.hits:      1    }
-  - match: {hits.hits.0._id: "43" }
-
   - do:
-      scroll:
-        rest_total_hits_as_int: true
         scroll_id: $scroll_id
-        scroll: 1m
-
-  - match: {hits.total:      2    }
   - length: {hits.hits:      0    }
-
+      indices.refresh: {}
+        id:     44
+        rest_total_hits_as_int: true
   - do:
+        body: { "scroll_id": "$scroll_id", "scroll": "1m"}
+        scroll: 1m
+        rest_total_hits_as_int: true
+  - match: {hits.hits.0._id: "43" }
+        rest_total_hits_as_int: true
       clear_scroll:
-        scroll_id: $scroll_id
-
----
-"Body params override query string":
-  - do:
       indices.create:
         index: test_scroll
   - do:
-      index:
-        index:  test_scroll
-        id:     42
-        body:   { foo: 1 }
-
-  - do:
-      index:
-        index:  test_scroll
-        id:     43
-        body:   { foo: 2 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
+          settings:
       search:
-        rest_total_hits_as_int: true
-        index: test_scroll
+      indices.create:
+        index:  test_scroll
+  - do:
+  - match: {hits.hits.0._id: "42" }
         size: 1
+        id:     44
+      indices.refresh: {}
+        body:   { foo: 2 }
+  - do:
+      index:
         scroll: 1m
-        sort: foo
-        body:
+        index:  test_scroll
           query:
+      indices.create:
+      search:
             match_all: {}
-
-  - set: {_scroll_id: scroll_id}
-  - match: {hits.total:      2    }
+      scroll:
+  - match: {hits.hits.0._id: "42" }
+  - do:
+  - do:
+          query:
+      indices.refresh: {}
+        id:     43
+      clear_scroll:
+  - match: { hits.max_score: null }
+        size: 1
+        id:     42
+      scroll:
+          query:
+        index: test_scroll
+            match_all: {}
+          query:
+---
+        id:     42
+      catch: /\[size\] cannot be \[0\] in a scroll context/
+        body:   { foo: 1 }
+  - do:
+---
+      index:
+  - do:
   - length: {hits.hits:      1    }
   - match: {hits.hits.0._id: "42" }
-
-  - do:
-      index:
-        index:  test_scroll
-        id:     44
-        body:   { foo: 3 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      scroll:
-        rest_total_hits_as_int: true
-        scroll_id: invalid_scroll_id
-        body: { "scroll_id": "$scroll_id", "scroll": "1m"}
-
+        body:
+  - match: { hits.max_score: null }
   - match: {hits.total:      2    }
-  - length: {hits.hits:      1    }
-  - match: {hits.hits.0._id: "43" }
-
-  - do:
-      clear_scroll:
-        scroll_id: $scroll_id
-
----
-"Scroll cannot used the request cache":
+        body:   { foo: 1 }
+        body:   { foo: 3 }
+        index: test_scroll
+  - set: {_scroll_id: scroll_id}
+        rest_total_hits_as_int: true
+        id:     42
+      index:
   - do:
       indices.create:
+  - match: {hits.hits.0._id: "42" }
+  - do:
+  - do:
+            match_all: {}
+        scroll: 1m
+        body:   { foo: 3 }
+          query:
+        index:  test_scroll
+  - match: {hits.hits.0._id: "43" }
+  - do:
+  - do:
+  - length: {hits.hits:      0    }
+  - match: {hits.total:      2    }
+        scroll: 1m
+  - match: {hits.total.value:      2    }
+        scroll: 1m
+  - match: {hits.hits.0._id: "43" }
+  - do:
+        rest_total_hits_as_int: true
+  - match: {hits.total:      2    }
+        scroll_id: $scroll_id
+        id:     42
+          query:
+  - do:
+        body:
+            match_all: {}
+        sort: foo
+  - do:
+        sort: foo
+      scroll:
+        rest_total_hits_as_int: true
+      index:
+      scroll:
+        index:  test_scroll
+      search:
+  - do:
+        scroll_id: $scroll_id
+        scroll: 1m
+        scroll: 1m
+      indices.refresh: {}
+        rest_total_hits_as_int: true
+      index:
+  - do:
+      indices.create:
+      indices.refresh: {}
+  - do:
+        body:   { foo: 1 }
+      index:
+      clear_scroll:
         index: test_scroll
+        sort: foo
+"Body params override query string":
+      search:
+        body:
+        rest_total_hits_as_int: true
+        body:
+  - match: {hits.total:      2    }
+  - set: {_scroll_id: scroll_id}
+  - do:
+        body: { "scroll_id": "$scroll_id", "scroll": "1m"}
+      scroll:
+---
+        scroll_id: $scroll_id
+        id:     43
+        index: test_scroll
+        body:   { foo: 1 }
+      indices.refresh: {}
   - do:
       catch: /\[request_cache\] cannot be used in a scroll context/
-      search:
-        rest_total_hits_as_int: true
-        index: test_scroll
-        scroll: 1m
-        request_cache: true
+  - match: {hits.total:      2    }
         body:
-          query:
-            match_all: {}
-
----
+  - match: {hits.total.relation:   eq   }
+      scroll:
 "Scroll with size 0":
-  - do:
-      indices.create:
-        index: test_scroll
-  - do:
-      catch: /\[size\] cannot be \[0\] in a scroll context/
-      search:
-        rest_total_hits_as_int: true
-        index: test_scroll
-        scroll: 1m
-        request_cache: true
-        body:
-          query:
-            match_all: {}
-          size: 0
-
----
-"Scroll max_score is null":
-  - do:
-      indices.create:
-        index: test_scroll
-  - do:
-      index:
-        index:  test_scroll
-        id:     42
-        body:   { foo: 1 }
-
-  - do:
-      index:
-        index:  test_scroll
-        id:     43
-        body:   { foo: 2 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test_scroll
         size: 1
-        scroll: 1m
-        sort: foo
-        body:
-          query:
-            match_all: {}
-
   - set: {_scroll_id: scroll_id}
-  - length: {hits.hits:      1    }
-  - match: { hits.max_score: null }
-
   - do:
-      scroll:
-        rest_total_hits_as_int: true
-        scroll_id: $scroll_id
-        scroll: 1m
-
-  - length: {hits.hits:      1    }
-  - match: { hits.max_score: null }
-
----
-"Scroll with new response format":
-  - do:
-      indices.create:
+            match_all: {}
         index: test_scroll
   - do:
       index:
-        index:  test_scroll
-        id:     42
-        body:   { foo: 1 }
-
-  - do:
-      index:
-        index:  test_scroll
+        index: test_scroll
         id:     43
-        body:   { foo: 2 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        index: test_scroll
-        size: 1
-        scroll: 1m
-        sort: foo
         body:
-          query:
-            match_all: {}
-
-  - set: {_scroll_id: scroll_id}
-  - match: {hits.total.value:         2    }
-  - match: {hits.total.relation:      eq   }
+      search:
+        sort: foo
+        index: test_scroll
+        body:   { foo: 2 }
   - length: {hits.hits:      1    }
-  - match: {hits.hits.0._id: "42" }
-
-  - do:
-      scroll:
-        body: { "scroll_id": "$scroll_id", "scroll": "1m"}
-
-  - match: {hits.total.value:      2    }
-  - match: {hits.total.relation:   eq   }
-  - length: {hits.hits:      1    }
-  - match: {hits.hits.0._id: "43" }
-
-  - do:
-      scroll:
-        scroll_id: $scroll_id
-        scroll: 1m
-
-  - match: {hits.total.value:      2    }
-  - match: {hits.total.relation:   eq   }
   - length: {hits.hits:      0    }
-
+        id:     43
+      search:
+        size: 1
+      indices.refresh: {}
+        index: test_scroll
+  - match: {hits.total.relation:   eq   }
+          size: 0
   - do:
-      clear_scroll:
-        scroll_id: $scroll_id
+        index:  test_scroll
+  - match: {hits.hits.0._id: "43" }
+  - do:
+        index:  test_scroll
+        index: test_scroll
+        body:   { foo: 2 }
+  - do:
+  - length: {hits.hits:      1    }

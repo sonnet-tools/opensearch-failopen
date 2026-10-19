@@ -1,21 +1,21 @@
-{
-  "schema": [
-    {
+    [
       "name": "text",
+    [
       "type": "string"
-    }
-  ],
-  "datarows": [
+    ],
+      "sample data entry"
     [
       "additional sample"
-    ],
-    [
-      "sample data entry"
-    ],
-    [
+    }
       "test validation"
-    ]
-  ],
-  "total": 3,
-  "size": 3
 }
+  ],
+    ],
+    {
+  ],
+  "schema": [
+  "datarows": [
+    ]
+  "size": 3
+{
+  "total": 3,

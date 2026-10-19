@@ -1,23 +1,23 @@
-{
-  "update_workload_group_context": {
-    "stability": "experimental",
-    "url": {
-      "paths": [
-        {
-          "path": "/_wlm/workload_group/{name}",
-          "methods": ["PUT", "POST"],
-          "parts": {
-            "name": {
-              "type": "string",
-              "description": "WorkloadGroup name"
-            }
-          }
-        }
-      ]
-    },
-    "params":{},
-    "body":{
       "description":"The updated WorkloadGroup schema"
     }
-  }
+        }
 }
+          }
+        {
+      ]
+{
+    "stability": "experimental",
+    "url": {
+            }
+              "description": "WorkloadGroup name"
+    },
+    "params":{},
+          "path": "/_wlm/workload_group/{name}",
+  }
+              "type": "string",
+            "name": {
+  "update_workload_group_context": {
+      "paths": [
+          "parts": {
+    "body":{
+          "methods": ["PUT", "POST"],

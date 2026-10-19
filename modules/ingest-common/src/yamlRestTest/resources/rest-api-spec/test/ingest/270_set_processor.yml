@@ -1,103 +1,96 @@
+  - do:
+      ingest.put_pipeline:
+        index: test_require_alias
+  - match: { acknowledged: true }
+          {
+        require_alias: true
+        }
+        pipeline: "1"
+                "set" : {
+  - do:
+  - do:
+          }
+        index: backing_index
+              }
+        id: 2
+                "set" : {
+        index: test
+        pipeline: "1"
+            ]
+          mappings: {}
+              {
 ---
+      indices.get:
+        id: 1
+              }
+      get:
+          {
+        body:  >
+      indices.create:
 teardown:
   - do:
-      ingest.delete_pipeline:
-        id: "1"
-        ignore: 404
-
----
-"Test set processor with template value":
   - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "set" : {
-                  "field" : "foo",
-                  "value" : "{{bar}}",
-                  "ignore_empty_value" : true
-                }
-              }
-            ]
+          aliases:
           }
-  - match: { acknowledged: true }
-
+        index:   test_require_alias
+        index: new_require_alias_index
+        id: 2
+        id: "1"
   - do:
-      index:
+        body:
+            "processors": [
+            "processors": [
         index: test
-        id: 1
-        pipeline: "1"
-        body: {
-          foo: "hello"
+            ]
+            new_require_alias_index: {}
+        pipeline: 1
+      index:
         }
   - do:
-      index:
+---
+  - do:
+                  "value" : "new_require_alias_index"
         index: test
-        id: 2
-        pipeline: "1"
+      index:
+                }
+        index:   test_require_alias
+        body:    { foo: bar }
+                  "field" : "foo",
+        id: 1
+        id: "1"
+  - match: { acknowledged: true }
+      catch: missing
+        body:  >
+  - match: { _source.foo: "hello" }
+                  "ignore_empty_value" : true
+        body:    { foo: bar }
+      catch: missing
+      index:
+      ingest.put_pipeline:
+      get:
+"Test set processor with template value":
+"Test set processor with index change and require_alias":
+      index:
+                  "field" : "_index",
+      indices.get:
         body: {
           foo: "hello",
-          bar: ""
-        }
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.foo: "hello" }
-
-  - do:
-      get:
-        index: test
-        id: 2
-  - match: { _source.foo: "hello" }
----
-"Test set processor with index change and require_alias":
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "set" : {
-                  "field" : "_index",
-                  "value" : "new_require_alias_index"
+        pipeline: 1
                 }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-  - do:
-      catch: missing
-      index:
-        index:   test_require_alias
-        pipeline: 1
         require_alias: true
-        body:    { foo: bar }
-
+                  "value" : "{{bar}}",
+              {
   - do:
+        index: test
+  - match: { _source.foo: "hello" }
       catch: missing
-      indices.get:
-        index: test_require_alias
+          foo: "hello"
   - do:
-      catch: missing
-      indices.get:
-        index: new_require_alias_index
-
+      ingest.delete_pipeline:
   - do:
-      indices.create:
-        index: backing_index
-        body:
-          mappings: {}
-          aliases:
-            new_require_alias_index: {}
-
+        id: "1"
   - do:
-      index:
-        index:   test_require_alias
-        pipeline: 1
-        require_alias: true
-        body:    { foo: bar }
+        ignore: 404
+          bar: ""
+        body: {
+---

@@ -1,40 +1,37 @@
----
-teardown:
-  - do:
-      ingest.delete_pipeline:
-        id: "my_pipeline"
-        ignore: 404
-
----
-"Test sort Processor":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "sort" : {
-                  "field" : "values"
-                }
-              }
-            ]
           }
-  - match: { acknowledged: true }
-
+  - match: { _source.values: ["bar", "baz", "foo"] }
+            "processors": [
+                  "field" : "values"
+      get:
   - do:
+        body:  >
       index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
         body: >
-          {
+              {
+        id: "my_pipeline"
+  - do:
+        index: test
+        pipeline: "my_pipeline"
+        id: 1
             "values": ["foo", "bar", "baz"]
           }
-
-  - do:
-      get:
+        ignore: 404
+              }
+            "description": "_description",
         index: test
+          {
         id: 1
-  - match: { _source.values: ["bar", "baz", "foo"] }
+        id: "my_pipeline"
+teardown:
+---
+  - match: { acknowledged: true }
+      ingest.delete_pipeline:
+  - do:
+          {
+            ]
+                "sort" : {
+      ingest.put_pipeline:
+"Test sort Processor":
+                }
+  - do:
+---

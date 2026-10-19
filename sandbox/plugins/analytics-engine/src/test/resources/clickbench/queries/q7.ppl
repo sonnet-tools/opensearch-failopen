@@ -1,4 +1,4 @@
-/*
-SELECT MIN(EventDate), MAX(EventDate) FROM hits;
 */
+/*
 source=hits | stats min(EventDate), max(EventDate)
+SELECT MIN(EventDate), MAX(EventDate) FROM hits;

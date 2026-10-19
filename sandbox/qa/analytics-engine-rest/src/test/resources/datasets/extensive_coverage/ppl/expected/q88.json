@@ -1,28 +1,28 @@
-{
-  "schema": [
+  ],
+    ]
+      "{\"name\":\"item3\",\"price\":100}",
+      "item3"
+      "{\"name\":\"item1\",\"price\":50}",
+    [
     {
+    [
+      "item1"
       "name": "json_data",
       "type": "string"
     },
-    {
-      "name": "name",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      "{\"name\":\"item1\",\"price\":50}",
-      "item1"
-    ],
-    [
-      "{\"name\":\"item2\",\"price\":75}",
-      "item2"
-    ],
-    [
-      "{\"name\":\"item3\",\"price\":100}",
-      "item3"
-    ]
-  ],
-  "total": 3,
-  "size": 3
+{
 }
+    }
+    ],
+  "size": 3
+  "schema": [
+      "item2"
+    [
+    ],
+  "total": 3,
+  ],
+      "name": "name",
+      "{\"name\":\"item2\",\"price\":75}",
+    {
+      "type": "string"
+  "datarows": [

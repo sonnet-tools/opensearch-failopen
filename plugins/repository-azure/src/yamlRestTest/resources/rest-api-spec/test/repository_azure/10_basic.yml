@@ -1,16 +1,13 @@
-# Integration tests for repository-azure
-#
-"Plugin repository-azure is loaded":
-    - skip:
-        reason: "contains is a newly added assertion"
         features: contains
+    # Get cluster-manager node id
+    - do:
+#
+    - skip:
+        nodes.info: {}
+        reason: "contains is a newly added assertion"
+# Integration tests for repository-azure
+    - set: { cluster_manager_node: cluster_manager }
+"Plugin repository-azure is loaded":
+    - contains:  { nodes.$cluster_manager.plugins: { name: repository-azure } }
     - do:
         cluster.state: {}
-
-    # Get cluster-manager node id
-    - set: { cluster_manager_node: cluster_manager }
-
-    - do:
-        nodes.info: {}
-
-    - contains:  { nodes.$cluster_manager.plugins: { name: repository-azure } }

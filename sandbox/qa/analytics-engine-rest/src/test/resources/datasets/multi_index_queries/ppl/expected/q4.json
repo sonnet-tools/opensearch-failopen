@@ -1,20 +1,20 @@
-{
-  "schema": [
-    {
       "name": "avg_cpu",
-      "type": "double"
-    },
-    {
       "name": "host",
-      "type": "string"
+      82.625,
+  "schema": [
     }
   ],
-  "datarows": [
-    [
-      82.625,
-      "host1"
-    ]
-  ],
-  "total": 1,
   "size": 1
+    [
+    {
+    ]
+    {
+  "total": 1,
+    },
 }
+  ],
+      "host1"
+      "type": "string"
+  "datarows": [
+      "type": "double"
+{

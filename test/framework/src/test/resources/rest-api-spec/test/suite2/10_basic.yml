@@ -1,26 +1,22 @@
----
-"Index with ID":
-
- - do:
-      index:
-          index:  test-weird-index-中文
-          type:   weird.type
-          id:     1
+ - match:   { _type:    weird.type }
           body:   { foo: bar }
-
  - match:   { _index:   test-weird-index-中文 }
- - match:   { _type:    weird.type }
- - match:   { _id:      "1"}
- - match:   { _version: 1}
-
- - do:
-      get:
-          index:  test-weird-index-中文
           type:   weird.type
+          index:  test-weird-index-中文
           id:     1
-
+      index:
+---
+ - do:
+          id:     1
+      get:
+"Index with ID":
+          type:   weird.type
+ - match:   { _id:      "1"}
+ - match:   { _version: 1}
  - match:   { _index:   test-weird-index-中文 }
  - match:   { _type:    weird.type }
  - match:   { _id:      "1"}
- - match:   { _version: 1}
  - match:   { _source: { foo: bar }}
+ - match:   { _version: 1}
+          index:  test-weird-index-中文
+ - do:

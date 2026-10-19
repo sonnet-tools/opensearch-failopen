@@ -1,49 +1,49 @@
-{
-  "schema": [
+  "datarows": [
+  "total": 3,
+      100.0
     {
-      "name": "service_name",
+      33,
+    [
+    },
+      100.0
+    {
+      37,
       "type": "string"
-    },
-    {
-      "name": "total_logs",
-      "type": "bigint"
-    },
-    {
+  "schema": [
       "name": "exceptions",
       "type": "bigint"
-    },
-    {
+      33,
       "name": "with_stacktrace",
       "type": "bigint"
+  ],
     },
+      30,
+    },
+    },
+    [
     {
-      "name": "exception_rate",
       "type": "double"
-    }
-  ],
-  "datarows": [
-    [
-      "db-service",
-      37,
-      37,
-      37,
-      100.0
-    ],
-    [
-      "api-service",
-      33,
-      33,
-      33,
-      100.0
-    ],
-    [
-      "web-service",
-      30,
-      30,
-      30,
-      100.0
-    ]
-  ],
-  "total": 3,
   "size": 3
+      33,
+    ],
 }
+    ],
+      "name": "service_name",
+      "type": "bigint"
+    }
+    ]
+    {
+      37,
+      30,
+    {
+      "api-service",
+      "db-service",
+      30,
+      "web-service",
+      100.0
+{
+    [
+      "name": "exception_rate",
+  ],
+      "name": "total_logs",
+      37,

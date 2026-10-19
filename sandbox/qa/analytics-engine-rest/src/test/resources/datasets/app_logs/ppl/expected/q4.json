@@ -1,65 +1,65 @@
-{
-  "schema": [
+      "host2"
+      "auth-service",
+      2,
+      "api-service",
+    ]
+      1,
+}
+    [
+      1,
+    [
+      "web-service",
+      "web-service",
+    },
+    [
+      "api-service",
+    ],
+      "type": "bigint"
+    {
+    ],
+    ],
+    ],
+      "db-service",
     {
       "name": "count()",
-      "type": "bigint"
-    },
-    {
-      "name": "service_name",
+{
+      3,
       "type": "string"
-    },
+      3,
+      "host3"
+    ],
+  "schema": [
     {
+      "host3"
       "name": "host",
-      "type": "string"
+    [
+    [
+      2,
+      "api-service",
+    ],
+  ],
+    [
+      "host1"
+  "datarows": [
+      "host2"
+  "total": 9,
+      2,
+      2,
+    },
+  "size": 9
+    [
+      "name": "service_name",
+    ],
+      "db-service",
+      "host1"
+    ],
+      2,
+    [
+    [
+      "db-service",
     }
   ],
-  "datarows": [
-    [
-      2,
-      "api-service",
-      "host1"
-    ],
-    [
-      3,
-      "api-service",
       "host2"
-    ],
-    [
-      3,
-      "api-service",
-      "host3"
-    ],
-    [
-      2,
-      "auth-service",
       "host1"
-    ],
-    [
-      2,
-      "db-service",
-      "host1"
-    ],
-    [
-      2,
-      "db-service",
-      "host2"
-    ],
-    [
-      1,
-      "db-service",
       "host3"
-    ],
-    [
-      1,
-      "web-service",
-      "host2"
-    ],
-    [
-      2,
-      "web-service",
-      "host3"
-    ]
-  ],
-  "total": 9,
-  "size": 9
-}
+      "type": "string"

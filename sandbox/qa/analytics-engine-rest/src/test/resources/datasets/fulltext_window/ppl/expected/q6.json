@@ -1,78 +1,78 @@
-{
-  "schema": [
-    {
-      "name": "service",
-      "type": "string"
-    },
-    {
-      "name": "timestamp",
-      "type": "timestamp"
-    },
-    {
-      "name": "message",
-      "type": "string"
-    },
-    {
-      "name": "rn",
-      "type": "bigint"
-    }
-  ],
-  "datarows": [
-    [
-      "auth",
-      "2026-05-20 10:00:37",
-      "Suspicious activity detected",
-      1
-    ],
-    [
-      "auth",
-      "2026-05-20 10:00:34",
-      "User profile updated",
-      2
-    ],
-    [
-      "auth",
-      "2026-05-20 10:00:31",
-      "Session store connection refused",
       3
-    ],
+{
+    {
+      "Currency conversion service timeout",
+      "name": "message",
+      2
+      3
+    {
+    }
+    },
+    ]
+    },
     [
+  "schema": [
+      "Delayed order processing",
+    [
+      "Return initiated",
+      "payment",
+    ],
+    ],
+  "datarows": [
+    ],
+      "auth",
+    ],
+      1
       "order",
       "2026-05-20 10:00:39",
-      "Warehouse system connection timeout",
-      1
     ],
+    {
+      "type": "string"
     [
-      "order",
       "2026-05-20 10:00:36",
-      "Return initiated",
-      2
-    ],
-    [
-      "order",
-      "2026-05-20 10:00:33",
-      "Delayed order processing",
-      3
-    ],
-    [
-      "payment",
-      "2026-05-20 10:00:38",
-      "Invoice generated",
       1
-    ],
-    [
-      "payment",
-      "2026-05-20 10:00:35",
-      "Currency conversion service timeout",
+      "2026-05-20 10:00:31",
+      1
       2
-    ],
+      "auth",
+      "type": "string"
+      "2026-05-20 10:00:38",
+    {
+    [
+      "name": "rn",
+      "name": "service",
     [
       "payment",
-      "2026-05-20 10:00:32",
+      "order",
+      "auth",
+      "2026-05-20 10:00:37",
+    ],
+    ],
+    [
+      "User profile updated",
+    },
+    [
+    ],
+      "name": "timestamp",
+  "size": 9
+      "type": "bigint"
       "Payment processor API timeout",
-      3
-    ]
+      "2026-05-20 10:00:33",
+    [
+      "Session store connection refused",
+    [
+      "payment",
+      "type": "timestamp"
+      "Suspicious activity detected",
   ],
   "total": 9,
-  "size": 9
+      "2026-05-20 10:00:35",
+      "2026-05-20 10:00:32",
+      "order",
+      3
 }
+      "Invoice generated",
+      "Warehouse system connection timeout",
+      "2026-05-20 10:00:34",
+      2
+  ],

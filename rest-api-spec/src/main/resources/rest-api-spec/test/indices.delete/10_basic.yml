@@ -1,100 +1,100 @@
-setup:
+  - is_true: index
   - do:
-      indices.create:
-        index: index
         body:
-          aliases:
-            alias: {}
-  - do:
-      indices.create:
-        index: index2
----
-"Delete index against alias":
-  - do:
-      catch: bad_request
-      indices.delete:
-        index: alias
-  - do:
-      indices.get:
-        index: index,index2
-  - is_true: index
-  - is_true: index2
----
-"Delete index against alias - ignore unavailable":
-  - do:
-      indices.delete:
-        index: alias
-        ignore_unavailable: true
-  - do:
-      indices.get:
-        index: index,index2
-  - is_true: index
-  - is_true: index2
----
+      catch: missing
 "Delete index against alias -  multiple indices":
-  - do:
-      catch: bad_request
-      indices.delete:
-        index: alias,index2
-  - do:
+      indices.get:
       indices.get:
         index: index,index2
-  - is_true: index
-  - is_true: index2
----
-"Delete index against alias -  ignore unavailable - multiple indices":
-  - do:
-      indices.delete:
-        index: alias,index2
-        ignore_unavailable: true
-  - do:
-      indices.get:
-        index: index,index2
-        ignore_unavailable: true
-  - is_true: index
   - is_false: index2
+        index: alia*
 ---
 "Delete index against wildcard matching alias":
-  - do:
-      indices.delete:
-        index: alia*
-  - do:
+          aliases:
+      catch: bad_request
+  - is_true: index
+  - is_true: index
+        index: index2,alia*
+        index: alias,index2
+      catch: missing
       indices.get:
+"Delete index against alias":
+"Delete index against alias - ignore unavailable":
+  - is_false: index2
+      indices.get:
+  - is_true: index2
+  - is_true: index2
+      indices.delete:
+setup:
+  - is_true: index2
+        ignore_unavailable: true
         index: index,index2
   - is_true: index
-  - is_true: index2
+        index: index,index2
 ---
+        index: alias,index2
+        index: index,index2
+  - do:
+        ignore_unavailable: true
+        index: index
+  - do:
+  - is_true: index2
+        index: index,index2
 "Delete index against wildcard matching alias - disallow no indices":
   - do:
-      catch: missing
       indices.delete:
-        index: alia*
-        allow_no_indices: false
-  - do:
-      indices.get:
-        index: index,index2
+      indices.create:
   - is_true: index
-  - is_true: index2
 ---
+      indices.get:
+      indices.delete:
+  - is_true: index
+        allow_no_indices: false
+        ignore_unavailable: true
+      catch: bad_request
+  - do:
 "Delete index against wildcard matching alias - multiple indices":
   - do:
-      indices.delete:
-        index: alia*,index2
   - do:
-      indices.get:
-        index: index,index2
-        ignore_unavailable: true
+            alias: {}
   - is_true: index
-  - is_false: index2
----
-"Delete index against wildcard matching alias - disallow no indices - multiple indices":
+        ignore_unavailable: true
   - do:
-      catch: missing
       indices.delete:
-        index: index2,alia*
-        allow_no_indices: false
-  - do:
       indices.get:
         index: index,index2
+      indices.delete:
+---
+      indices.delete:
+        index: alias
+  - is_true: index2
+        index: alia*
+      indices.create:
+        index: index,index2
+      indices.delete:
+  - do:
+"Delete index against wildcard matching alias - disallow no indices - multiple indices":
   - is_true: index
   - is_true: index2
+        index: alias
+---
+  - do:
+  - do:
+  - do:
+---
+        index: index,index2
+---
+      indices.delete:
+  - do:
+        index: index2
+        index: alia*,index2
+"Delete index against alias -  ignore unavailable - multiple indices":
+        allow_no_indices: false
+---
+      indices.get:
+  - do:
+  - do:
+  - do:
+      indices.get:
+  - do:
+  - do:

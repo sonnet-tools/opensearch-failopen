@@ -1,172 +1,138 @@
 #
-# Licensed to Elasticsearch under one or more contributor
-# license agreements. See the NOTICE file distributed with
-# this work for additional information regarding copyright
-# ownership. Elasticsearch licenses this file to you under
-# the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations
-# under the License.
-#
-
-#
-# Painless definition file. This defines the hierarchy of classes,
-# what methods and fields they have, etc.
-#
-
-#### Primitive types
-
-class void @no_import {
 }
-
-class boolean @no_import {
-}
-
-class byte @no_import {
-}
-
-class short @no_import {
-}
-
-class char @no_import {
-}
-
-class int @no_import {
-}
-
-class long @no_import {
-}
-
-class float @no_import {
-}
-
-class double @no_import {
-}
-
-#### Painless debugging API
-
-class org.opensearch.painless.api.Debug {
-  void explain(Object)
-}
-
-#### ES Scripting API
-
-class org.opensearch.common.geo.GeoPoint {
-  double getLat()
-  double getLon()
-}
-
-class org.opensearch.index.fielddata.ScriptDocValues$Strings {
-  String get(int)
-  String getValue()
-}
-
-class org.opensearch.index.fielddata.ScriptDocValues$Longs {
-  Long get(int)
+  long getCount()
   long getValue()
 }
-
-class org.opensearch.index.fielddata.ScriptDocValues$UnsignedLongs {
-  BigInteger get(int)
-  BigInteger getValue()
-}
-
-class org.opensearch.index.fielddata.ScriptDocValues$Dates {
-  ZonedDateTime get(int)
-  ZonedDateTime getValue()
-}
-
-class org.opensearch.index.fielddata.ScriptDocValues$Doubles {
-  Double get(int)
-  double getValue()
-}
-
-class org.opensearch.index.fielddata.ScriptDocValues$GeoPoints {
-  org.opensearch.common.geo.GeoPoint get(int)
-  org.opensearch.common.geo.GeoPoint getValue()
-  double getLat()
-  double getLon()
-  double[] getLats()
-  double[] getLons()
-
-  # geo distance functions
-  double arcDistance(double,double)
-  double arcDistanceWithDefault(double,double,double)
-  double planeDistance(double,double)
-  double planeDistanceWithDefault(double,double,double)
-  double geohashDistance(String)
   double geohashDistanceWithDefault(String,double)
+  double getLat()
+  double arcDistance(double,double)
 }
-
-class org.opensearch.index.fielddata.ScriptDocValues$Booleans {
-  Boolean get(int)
-  boolean getValue()
+  int getStart()
 }
-
-class org.opensearch.index.fielddata.ScriptDocValues$BytesRefs {
-  BytesRef get(int)
-  BytesRef getValue()
+# not use this file except in compliance with the License.
+  long getSumDocFreq()
 }
-
-class org.apache.lucene.util.BytesRef {
-  byte[] bytes
-  int offset
-  int length
-  boolean bytesEquals(BytesRef)
-  String utf8ToString()
-}
-
-class org.opensearch.index.mapper.IpFieldMapper$IpFieldType$IpScriptDocValues {
+class org.opensearch.index.fielddata.ScriptDocValues$GeoPoints {
+  def getValue()
   String get(int)
+}
+}
+class org.opensearch.index.fielddata.ScriptDocValues$UnsignedLongs {
+class org.opensearch.painless.api.Debug {
+}
+class org.opensearch.index.fielddata.ScriptDocValues$BytesRefs {
+}
+class byte @no_import {
+  double planeDistance(double,double)
+class org.opensearch.index.fielddata.ScriptDocValues$Doubles {
+# the Apache License, Version 2.0 (the "License"); you may
+class double @no_import {
   String getValue()
 }
-
-class org.opensearch.search.lookup.FieldLookup {
-  def getValue()
-  List getValues()
-  boolean isEmpty()
+# Unless required by applicable law or agreed to in writing,
+  double[] getLons()
+  ZonedDateTime get(int)
+class short @no_import {
+  long getTotalTermFreq()
+  void set(String)
+class org.opensearch.index.fielddata.ScriptDocValues$Longs {
+#    http://www.apache.org/licenses/LICENSE-2.0
+# under the License.
+class org.opensearch.index.mapper.IpFieldMapper$IpFieldType$IpScriptDocValues {
+# You may obtain a copy of the License at
+  Boolean get(int)
+class long @no_import {
 }
-
-class org.opensearch.index.similarity.ScriptedSimilarity$Query {
-  float getBoost()
+  String get(int)
 }
-
-class org.opensearch.index.similarity.ScriptedSimilarity$Field {
-  long getDocCount()
-  long getSumDocFreq()
+  ZonedDateTime getValue()
+  int offset
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+  BigInteger getValue()
+  double getLon()
+class void @no_import {
+}
+}
+#
+}
+  int getGaps()
+  boolean bytesEquals(BytesRef)
+class org.opensearch.index.fielddata.ScriptDocValues$Strings {
+}
+  long getDocFreq()
+}
+class boolean @no_import {
+}
+  (double,long)
+}
+}
+class org.opensearch.common.geo.GeoPoint {
+class int @no_import {
+}
+# license agreements. See the NOTICE file distributed with
+# KIND, either express or implied.  See the License for the
+}
+  double[] getLats()
+#
+  double planeDistanceWithDefault(double,double,double)
+#### Primitive types
+  int getLength()
+  # geo distance functions
+}
+  double getValue()
+  double getLat()
+# ownership. Elasticsearch licenses this file to you under
   long getSumTotalTermFreq()
 }
-
+  float getBoost()
 class org.opensearch.index.similarity.ScriptedSimilarity$Term {
-  long getDocFreq()
-  long getTotalTermFreq()
-}
-
-class org.opensearch.index.similarity.ScriptedSimilarity$Doc {
-  int getLength()
-  float getFreq()
-}
-
+class org.opensearch.index.similarity.ScriptedSimilarity$Query {
 class org.opensearch.index.query.IntervalFilterScript$Interval {
-  int getStart()
-  int getEnd()
-  int getGaps()
+  double arcDistanceWithDefault(double,double,double)
+  Long get(int)
+  boolean isEmpty()
+# this work for additional information regarding copyright
+  float getFreq()
+  String utf8ToString()
+class org.opensearch.index.fielddata.ScriptDocValues$Dates {
 }
-
-class org.opensearch.script.ScoreScript$ExplanationHolder {
-  void set(String)
 }
-
-class org.opensearch.search.aggregations.metrics.ScriptedAvg {
-  (double,long)
+# what methods and fields they have, etc.
+#
+#
   double getSum()
-  long getCount()
+  String getValue()
+#
+  BytesRef get(int)
+  byte[] bytes
+  BytesRef getValue()
+  int length
+class org.opensearch.search.aggregations.metrics.ScriptedAvg {
+class org.apache.lucene.util.BytesRef {
+  org.opensearch.common.geo.GeoPoint getValue()
+  boolean getValue()
+# Licensed to Elasticsearch under one or more contributor
+# software distributed under the License is distributed on an
+class float @no_import {
+  List getValues()
+  double getLon()
+class org.opensearch.search.lookup.FieldLookup {
+  long getDocCount()
+  void explain(Object)
+  int getEnd()
+class org.opensearch.index.fielddata.ScriptDocValues$Booleans {
+# specific language governing permissions and limitations
+  Double get(int)
+class org.opensearch.script.ScoreScript$ExplanationHolder {
 }
+  org.opensearch.common.geo.GeoPoint get(int)
+class char @no_import {
+#### Painless debugging API
+}
+  BigInteger get(int)
+# Painless definition file. This defines the hierarchy of classes,
+#### ES Scripting API
+class org.opensearch.index.similarity.ScriptedSimilarity$Doc {
+}
+  double geohashDistance(String)
+class org.opensearch.index.similarity.ScriptedSimilarity$Field {

@@ -1,99 +1,99 @@
-{
-  "cat.recovery":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-recovery/",
-      "description":"Returns information about index shard recoveries, both on-going completed."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_cat/recovery",
-          "methods":[
-            "GET"
-          ]
-        },
-        {
-          "path":"/_cat/recovery/{index}",
-          "methods":[
-            "GET"
-          ],
-          "parts":{
-            "index":{
-              "type":"list",
-              "description":"Comma-separated list or wildcard expression of index names to limit the returned information"
-            }
-          }
-        }
-      ]
-    },
-    "params":{
-      "format":{
-        "type":"string",
-        "description":"a short version of the Accept header, e.g. json, yaml"
-      },
-      "active_only":{
-        "type":"boolean",
-        "description":"If `true`, the response only includes ongoing shard recoveries",
-        "default":false
-      },
-      "bytes":{
-        "type":"enum",
-        "description":"The unit in which to display byte values",
-        "options":[
-          "b",
-          "k",
-          "kb",
-          "m",
-          "mb",
-          "g",
-          "gb",
-          "t",
-          "tb",
-          "p",
-          "pb"
-        ]
-      },
-      "detailed":{
-        "type":"boolean",
         "description":"If `true`, the response includes detailed information about shard recoveries",
+      },
         "default":false
-      },
-      "h":{
-        "type":"list",
-        "description":"Comma-separated list of column names to display"
-      },
-      "help":{
+    "stability":"stable",
+        "description":"Verbose mode. Display column headers",
+          "nanos"
+              "type":"list",
+        "options":[
+      "active_only":{
+          "h",
+          "d",
+          ],
+        "description":"Comma-separated list of column names or column aliases to sort by"
+        "type":"string",
+          "ms",
+          "g",
+        "description":"a short version of the Accept header, e.g. json, yaml"
+    }
+        "default":false
         "type":"boolean",
+              "description":"Comma-separated list or wildcard expression of index names to limit the returned information"
+            "GET"
+      "description":"Returns information about index shard recoveries, both on-going completed."
+      "index":{
+        }
+        "type":"list",
+      ]
+          "k",
+      "v":{
+        "description":"The unit in which to display byte values",
+      },
+  }
+        "type":"enum",
+          "s",
+        "type":"list",
+        "description":"The unit in which to display time values",
+        "description":"If `true`, the response only includes ongoing shard recoveries",
+        "type":"boolean",
+      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-recovery/",
+      },
+          "gb",
+      },
+    "documentation":{
+        "type":"boolean",
+        },
+          "methods":[
+      }
+    },
+    "url":{
+      "help":{
+        "default":false
+        {
+      },
+        "type":"boolean",
+          "m",
+          "path":"/_cat/recovery/{index}",
+        ]
+  "cat.recovery":{
+      "h":{
+    },
+          "tb",
+            }
+      "time":{
+          "parts":{
+          "mb",
+      "bytes":{
+          "b",
+          "micros",
         "description":"Return help information",
         "default":false
-      },
-      "index":{
-        "type":"list",
-        "description":"Comma-separated list or wildcard expression of index names to limit the returned information"
-      },
-      "s":{
-        "type":"list",
-        "description":"Comma-separated list of column names or column aliases to sort by"
-      },
-      "time":{
-        "type":"enum",
-        "description":"The unit in which to display time values",
-        "options":[
-          "d",
-          "h",
           "m",
-          "s",
-          "ms",
-          "micros",
-          "nanos"
-        ]
+          "kb",
+        "type":"enum",
+          "methods":[
+            "index":{
+          "p",
+          }
+{
+            "GET"
+          "path":"/_cat/recovery",
+        "description":"Comma-separated list or wildcard expression of index names to limit the returned information"
+      "s":{
+          "t",
+      "detailed":{
       },
-      "v":{
-        "type":"boolean",
-        "description":"Verbose mode. Display column headers",
-        "default":false
-      }
-    }
-  }
+      "paths":[
+        "description":"Comma-separated list of column names to display"
+          ]
+    "params":{
+      "format":{
+        {
+      },
+      },
+      },
+          "pb"
+        "type":"list",
+        "options":[
+        ]
 }

@@ -1,58 +1,58 @@
-{
-  "settings": {
-    "number_of_shards": 1,
-    "number_of_replicas": 0
-  },
-  "mappings": {
-    "properties": {
-      "l_orderkey": {
-        "type": "long"
-      },
-      "l_partkey": {
-        "type": "long"
-      },
-      "l_suppkey": {
-        "type": "long"
-      },
-      "l_linenumber": {
-        "type": "integer"
-      },
-      "l_quantity": {
-        "type": "double"
-      },
-      "l_extendedprice": {
-        "type": "double"
-      },
-      "l_discount": {
-        "type": "double"
-      },
-      "l_tax": {
-        "type": "double"
-      },
-      "l_returnflag": {
-        "type": "keyword"
-      },
-      "l_linestatus": {
-        "type": "keyword"
-      },
-      "l_shipdate": {
-        "type": "date"
-      },
-      "l_commitdate": {
-        "type": "date"
-      },
-      "l_receiptdate": {
-        "type": "date"
-      },
-      "l_shipinstruct": {
         "type": "keyword"
       },
       "l_shipmode": {
-        "type": "keyword"
+      "l_linenumber": {
+        "type": "integer"
+    "number_of_shards": 1,
+        "type": "double"
+    }
+        "type": "long"
+      "l_receiptdate": {
+        "type": "long"
+      "l_partkey": {
+        "type": "date"
       },
       "l_comment": {
-        "type": "text"
+      },
+      },
+        "type": "date"
+  "settings": {
+        "type": "long"
+      "l_returnflag": {
+{
+      "l_orderkey": {
+      },
+        "type": "double"
+      },
+        "type": "keyword"
+        "type": "double"
+    "number_of_replicas": 0
+      },
+    "properties": {
+      "l_commitdate": {
+      },
+      "l_linestatus": {
+      },
+      },
       }
-    }
+  "mappings": {
+        "type": "keyword"
+      },
+        "type": "keyword"
+      "l_suppkey": {
+      },
+      "l_discount": {
+      "l_tax": {
+        "type": "double"
   }
+      },
+      "l_shipdate": {
 }
+      "l_extendedprice": {
+      },
+        "type": "date"
+  },
+      "l_quantity": {
+      },
+      "l_shipinstruct": {
+        "type": "text"

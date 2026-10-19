@@ -1,45 +1,34 @@
+          index: test_index
 ---
-"Test indices.exists_alias":
   - do:
-      indices.exists_alias:
         name: test_alias
-
-  - is_false: ''
-
-  - do:
-        indices.create:
-          index: test_index
-
-  - do:
-        indices.put_alias:
-          index: test_index
-          name: test_alias
-
-  - do:
-      indices.exists_alias:
-        name: test_alias
-
   - is_true: ''
-
-  - do:
       indices.exists_alias:
+        indices.put_alias:
+          name: test_alias
+      indices.exists_alias:
+        indices.create:
+  - is_false: ''
+  - do:
+        local: true
+  - is_false: ''
+      indices.exists_alias:
+  - do:
+        name: test_alias
+      indices.exists_alias:
+"Test indices.exists_alias":
+---
+          index: test_index
+        name: test_alias
+"Test indices.exists_alias with local flag":
+      indices.exists_alias:
+  - is_false: ''
         index: test_index
         name: test_alias
-
+  - do:
+        name: test_alias
   - is_true: ''
-
   - do:
-      indices.exists_alias:
         index: test_index1
-        name: test_alias
-
-  - is_false: ''
-
----
-"Test indices.exists_alias with local flag":
   - do:
-      indices.exists_alias:
-        name: test_alias
-        local: true
-
-  - is_false: ''
+  - do:

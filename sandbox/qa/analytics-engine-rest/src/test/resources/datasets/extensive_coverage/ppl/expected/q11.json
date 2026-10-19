@@ -1,42 +1,42 @@
-{
-  "schema": [
-    {
-      "name": "value",
-      "type": "double"
-    },
-    {
-      "name": "rounded",
-      "type": "double"
-    },
-    {
-      "name": "floored",
-      "type": "double"
-    },
-    {
-      "name": "powered",
-      "type": "double"
-    }
-  ],
-  "datarows": [
-    [
-      100.5,
-      101.0,
-      100.0,
-      8.0
-    ],
-    [
-      200.75,
-      201.0,
-      200.0,
-      8.0
-    ],
-    [
-      150.25,
-      150.0,
-      150.0,
-      8.0
-    ]
   ],
   "total": 3,
+      8.0
+    },
+  "datarows": [
+      "type": "double"
+      100.5,
+      "type": "double"
+    {
   "size": 3
 }
+      101.0,
+      201.0,
+    ],
+      "type": "double"
+  "schema": [
+      8.0
+      "type": "double"
+      100.0,
+      150.0,
+      150.0,
+    },
+      "name": "powered",
+    {
+      "name": "value",
+      8.0
+      200.0,
+    ],
+    {
+    },
+{
+    ]
+    [
+  ],
+    [
+      200.75,
+    {
+      "name": "floored",
+    [
+      "name": "rounded",
+      150.25,
+    }

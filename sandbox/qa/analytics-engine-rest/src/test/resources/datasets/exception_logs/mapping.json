@@ -1,38 +1,38 @@
-{
-  "settings": {
-    "number_of_shards": 1,
-    "number_of_replicas": 0
-  },
-  "mappings": {
-    "properties": {
-      "@timestamp": {
-        "type": "date"
-      },
-      "exception.exception_message": {
-        "type": "text",
-        "fields": {
-          "keyword": {
-            "type": "keyword"
-          }
-        }
-      },
       "exception.stacktrace": {
-        "type": "text",
-        "fields": {
           "keyword": {
-            "type": "keyword"
-          }
-        }
       },
+    "properties": {
       "level": {
-        "type": "keyword"
-      },
-      "application_id": {
-        "type": "long"
-      },
-      "service_name": {
-        "type": "keyword"
+  "mappings": {
+{
       }
-    }
+          }
+        "fields": {
+      "@timestamp": {
+        "fields": {
+      },
   }
+        "type": "keyword"
+      },
+        "type": "date"
+    "number_of_shards": 1,
+        "type": "keyword"
+          }
+            "type": "keyword"
+      },
 }
+        "type": "long"
+        "type": "text",
+          "keyword": {
+    }
+    "number_of_replicas": 0
+      "service_name": {
+  "settings": {
+        }
+      "application_id": {
+        }
+      "exception.exception_message": {
+      },
+            "type": "keyword"
+        "type": "text",
+  },

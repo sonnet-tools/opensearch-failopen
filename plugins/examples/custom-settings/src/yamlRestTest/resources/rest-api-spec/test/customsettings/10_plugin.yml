@@ -1,10 +1,8 @@
-"Test that the custom-settings plugin is loaded in OpenSearch":
-
-  # Use the Cat Plugins API to retrieve the list of plugins
   - do:
-      cat.plugins:
+"Test that the custom-settings plugin is loaded in OpenSearch":
         local: true
-        h: component
-
+      cat.plugins:
+  # Use the Cat Plugins API to retrieve the list of plugins
   - match:
       $body: /^custom-settings\n$/
+        h: component

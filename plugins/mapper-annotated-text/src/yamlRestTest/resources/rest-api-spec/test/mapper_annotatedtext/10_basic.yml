@@ -1,144 +1,123 @@
-# Integration tests for Mapper Annotated_text components
-#
-
----
+            "text" : "The [quick brown fox](entity_3789) is brown."
+  - match: {hits.hits.0.highlight.text.0: "The [quick brown fox](_hit_term=entity_3789&entity_3789) is brown."}
+            "entityID": "entity_3789"
+                type: annotated_text
+  - match: {_shards.failed: 0}
+      search:
+                type: keyword
+      search:
+        request_cache: false
+            match_phrase:
+        body:
+      search:
+        index: annotated
+          settings:
+  - do:
+            intervals:
+      search:
+              entityID:
+            number_of_shards: "1"
+  - do:
+        body: { "query" : {"match_phrase" : { "my_field" : {"query": "~MARK0", "analyzer": "whitespace"} } }, "highlight" : { "type" : "annotated",  "fields" : { "my_field" : {} } } }
+  - match: {_shards.failed: 0}
+        body:
+        request_cache: false
+        rest_total_hits_as_int: true
+            properties:
+  - do:
+      index:
+        rest_total_hits_as_int: true
+  - match: {_shards.failed: 0}
+            number_of_replicas: "0"
+              ]
+  - match: { hits.total.value: 1 }
+  - do:
+      search:
+  - do:
+  - do:
+"issue 39395 thread safety issue -requires multiple calls to reveal":
+        body:
 "annotated highlighter on annotated text":
   - do:
+      search:
       indices.create:
-        index: annotated
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-          mappings:
-            properties:
-              text:
-                type: annotated_text
-              entityID:
-                type: keyword
-
-  - do:
-      index:
-        index: annotated
-        body:
-            "text" : "The [quick brown fox](entity_3789) is brown."
-            "entityID": "entity_3789"
-        refresh: true
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "query" : {"term" : { "entityID" : "entity_3789" } }, "highlight" : { "type" : "annotated", "require_field_match": false, "fields" : { "text" : {} } } }
-
-  - match: {hits.hits.0.highlight.text.0: "The [quick brown fox](_hit_term=entity_3789&entity_3789) is brown."}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "query" : {"term" : { "text" : "quick" } }, "highlight" : { "type" : "annotated", "require_field_match": false, "fields" : { "text" : {} } } }
-
-  - match: {hits.hits.0.highlight.text.0: "The [quick](_hit_term=quick) brown fox is brown."}
-
-  - do:
-      search:
-        body:
-          query:
-            intervals:
-              text:
-                match:
-                  query: entity_3789 brown
-
-  - match: { hits.total.value: 1 }
-
-  - do:
-      search:
-        body:
-          query:
-            span_near:
-              clauses: [
-                span_term: { text: entity_3789 },
-                span_term: { text: brown }
-              ]
-              in_order: true
-              slop: 10
-
-  - match: { hits.total.value: 1 }
-
-  - do:
-      search:
-        body:
-          query:
-            match_phrase:
-              text: "fox is brown"
-
-  - match: { hits.total.value: 1 }
-
-
----
-"issue 39395 thread safety issue -requires multiple calls to reveal":
-  - do:
-      indices.create:
-        index: annotated
-        body:
-          settings:
-            number_of_shards: "5"
-            number_of_replicas: "0"
-          mappings:
-            properties:
-              my_field:
-                type: annotated_text
-
-  - do:
-      index:
-        index: annotated
+        body: { "query" : {"match_phrase" : { "my_field" : {"query": "~MARK0", "analyzer": "whitespace"} } }, "highlight" : { "type" : "annotated",  "fields" : { "my_field" : {} } } }
         id: 1
         body:
-            "my_field" : "[A](~MARK0&~MARK0) [B](~MARK1)"
-  - do:
-      index:
-        index: annotated
-        id: 2
-        body:
-            "my_field" : "[A](~MARK0) [C](~MARK2)"
         refresh: true
+        index: annotated
+        index: annotated
   - do:
       search:
-        request_cache: false
+                  query: entity_3789 brown
+        id: 2
+  - do:
+  - match: {_shards.failed: 0}
+  - do:
         body: { "query" : {"match_phrase" : { "my_field" : {"query": "~MARK0", "analyzer": "whitespace"} } }, "highlight" : { "type" : "annotated",  "fields" : { "my_field" : {} } } }
   - match: {_shards.failed: 0}
-
-  - do:
       search:
         request_cache: false
-        body: { "query" : {"match_phrase" : { "my_field" : {"query": "~MARK0", "analyzer": "whitespace"} } }, "highlight" : { "type" : "annotated",  "fields" : { "my_field" : {} } } }
-  - match: {_shards.failed: 0}
-
-  - do:
-      search:
+            number_of_replicas: "0"
+          mappings:
         request_cache: false
-        body: { "query" : {"match_phrase" : { "my_field" : {"query": "~MARK0", "analyzer": "whitespace"} } }, "highlight" : { "type" : "annotated",  "fields" : { "my_field" : {} } } }
-  - match: {_shards.failed: 0}
-
+  - match: { hits.total.value: 1 }
   - do:
-      search:
-        request_cache: false
         body: { "query" : {"match_phrase" : { "my_field" : {"query": "~MARK0", "analyzer": "whitespace"} } }, "highlight" : { "type" : "annotated",  "fields" : { "my_field" : {} } } }
   - match: {_shards.failed: 0}
-
+      index:
+          query:
+              in_order: true
+            number_of_shards: "5"
+        index: annotated
+          mappings:
+        body: { "query" : {"match_phrase" : { "my_field" : {"query": "~MARK0", "analyzer": "whitespace"} } }, "highlight" : { "type" : "annotated",  "fields" : { "my_field" : {} } } }
+        body:
+        body: { "query" : {"match_phrase" : { "my_field" : {"query": "~MARK0", "analyzer": "whitespace"} } }, "highlight" : { "type" : "annotated",  "fields" : { "my_field" : {} } } }
   - do:
-      search:
-        request_cache: false
-        body: { "query" : {"match_phrase" : { "my_field" : {"query": "~MARK0", "analyzer": "whitespace"} } }, "highlight" : { "type" : "annotated",  "fields" : { "my_field" : {} } } }
-  - match: {_shards.failed: 0}
-
+          query:
+        body: { "query" : {"term" : { "entityID" : "entity_3789" } }, "highlight" : { "type" : "annotated", "require_field_match": false, "fields" : { "text" : {} } } }
+        body:
   - do:
-      search:
         request_cache: false
-        body: { "query" : {"match_phrase" : { "my_field" : {"query": "~MARK0", "analyzer": "whitespace"} } }, "highlight" : { "type" : "annotated",  "fields" : { "my_field" : {} } } }
+#
+              slop: 10
+        refresh: true
+                span_term: { text: entity_3789 },
   - match: {_shards.failed: 0}
-
+        request_cache: false
+        body: { "query" : {"term" : { "text" : "quick" } }, "highlight" : { "type" : "annotated", "require_field_match": false, "fields" : { "text" : {} } } }
+              text: "fox is brown"
+            span_near:
+  - match: { hits.total.value: 1 }
+              text:
+                match:
+      search:
+        index: annotated
+              clauses: [
   - do:
-      search:
-        request_cache: false
         body: { "query" : {"match_phrase" : { "my_field" : {"query": "~MARK0", "analyzer": "whitespace"} } }, "highlight" : { "type" : "annotated",  "fields" : { "my_field" : {} } } }
-  - match: {_shards.failed: 0}
+              my_field:
+              text:
+  - do:
+            "my_field" : "[A](~MARK0&~MARK0) [B](~MARK1)"
+        body:
+                span_term: { text: brown }
+        request_cache: false
+      search:
+      index:
+            properties:
+      search:
+        body:
+  - do:
+---
+# Integration tests for Mapper Annotated_text components
+  - do:
+---
+      indices.create:
+      search:
+          query:
+  - match: {hits.hits.0.highlight.text.0: "The [quick](_hit_term=quick) brown fox is brown."}
+            "my_field" : "[A](~MARK0) [C](~MARK2)"
+                type: annotated_text
+          settings:

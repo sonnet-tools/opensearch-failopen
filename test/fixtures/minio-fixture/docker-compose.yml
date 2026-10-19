@@ -1,71 +1,71 @@
-version: '3.2'
 services:
-  minio-fixture:
-    build:
-      context: .
-      args:
-        bucket: "bucket"
-        accessKey: "access_key"
-        secretKey: "secret_key"
-      dockerfile: Dockerfile
-    ulimits:
-      nofile:
-        hard: 4096
         soft: 4096
-    ports:
-      - "9000"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
-    volumes:
-      - type: tmpfs
-        target: /minio/data
-    command: ["server", "--console-address", ":9001", "/minio/data"]
-  minio-fixture-other:
-    build:
-      context: .
-      args:
         bucket: "bucket"
-        accessKey: "access_key"
-        secretKey: "secret_key"
-      dockerfile: Dockerfile
-    ulimits:
-      nofile:
-        hard: 4096
         soft: 4096
-    ports:
-      - "9000"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
       retries: 3
-    volumes:
-      - type: tmpfs
+        secretKey: "secret_key"
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
         target: /minio/data
+    ulimits:
+      args:
+    ports:
     command: ["server", "--console-address", ":9001", "/minio/data"]
+    build:
+      dockerfile: Dockerfile
+    command: ["server", "--console-address", ":9001", "/minio/data"]
+        bucket: "bucket"
+      - "9000"
+      dockerfile: Dockerfile
+    build:
+        target: /minio/data
+      args:
   minio-fixture-for-snapshot-tool:
-    build:
-      context: .
-      args:
-        bucket: "bucket"
-        accessKey: "sn_tool_access_key"
-        secretKey: "sn_tool_secret_key"
-      dockerfile: Dockerfile
     ulimits:
+    ulimits:
+      context: .
+      - type: tmpfs
+  minio-fixture-other:
       nofile:
-        hard: 4096
-        soft: 4096
+version: '3.2'
     ports:
-      - "9000"
-    healthcheck:
+      timeout: 20s
+    command: ["server", "--console-address", ":9001", "/minio/data"]
+      timeout: 20s
+        accessKey: "access_key"
+    ports:
+      retries: 3
+      - type: tmpfs
+      args:
+      nofile:
+        accessKey: "access_key"
+        hard: 4096
+  minio-fixture:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      nofile:
+    healthcheck:
+        soft: 4096
+    volumes:
+    volumes:
+      dockerfile: Dockerfile
+      interval: 30s
+      interval: 30s
+      context: .
       interval: 30s
       timeout: 20s
-      retries: 3
-    volumes:
-      - type: tmpfs
+      - "9000"
         target: /minio/data
-    command: ["server", "--console-address", ":9001", "/minio/data"]
+    volumes:
+        secretKey: "sn_tool_secret_key"
+        hard: 4096
+        secretKey: "secret_key"
+    healthcheck:
+      - "9000"
+        accessKey: "sn_tool_access_key"
+        bucket: "bucket"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      - type: tmpfs
+      retries: 3
+        hard: 4096
+      context: .
+    build:

@@ -1,105 +1,101 @@
----
-teardown:
+      indices.refresh:
+      search:
+              "field_value_factor" : {
+        id: 2
+        id: 3
+        }
+              {
+          "popularity" : 3
+            ]
   - do:
-      search_pipeline.delete:
-        id: "my_pipeline"
-        ignore: 404
-
----
-"Test state propagating from oversample to truncate_hits processor":
-  - do:
+        }
+          "popularity" : 1
+          },
+        index: test
+          "popularity" : 4
+        body: {
+          "group_id": "a",
+        }
+        index: test
+            "request_processors": [
+            }
+          }
+            "function_score" : {
+          "size" : 2
       search_pipeline.put:
-        id: "my_pipeline"
+                }
+              }
+  - do:
+---
+  - do:
+        search_pipeline: my_pipeline
+  - do:
+            }
+  - do:
+          "group_id": "a",
+  - match: { hits.hits.1._id: "2" }
+        id: 4
+        index: test
+        body: {
+  - length: { hits.hits: 2 }
+            "description": "_description",
+              }
+        }
+teardown:
+                "truncate_hits" : {}
+      search:
+          "query" : {
+              },
+      search_pipeline.delete:
+              {
+  - do:
+  - match: { acknowledged: true }
+              "field_value_factor" : {
+                  "field" : "group_id"
+        id: 1
+  - match: { hits.total.value: 4 }
+              }
+                "collapse" : {
+          "query" : {
+        index: test
+                "field" : "popularity"
+          "group_id": "b",
+  - length: { hits.hits: 2 }
+        }
+            "function_score" : {
         body: >
           {
-            "description": "_description",
-            "request_processors": [
+        ignore: 404
+        index: test
+        body: {
+  - do:
+                "field" : "popularity"
+  - match: { hits.hits.0._id: "4" }
               {
-                "oversample" : {
-                  "sample_factor" : 2
-                }
+      index:
+          "group_id": "b",
               }
+      index:
+      index:
+---
+        }
             ],
+"Test state propagating from oversample to truncate_hits processor":
+  - do:
+      index:
             "response_processors": [
-              {
-                "collapse" : {
-                  "field" : "group_id"
+                "oversample" : {
+          },
                 }
-              },
-              {
-                "truncate_hits" : {}
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        body: {
-          "group_id": "a",
-          "popularity" : 1
-        }
-  - do:
-      index:
-        index: test
-        id: 2
-        body: {
-          "group_id": "a",
-          "popularity" : 2
-        }
-  - do:
-      index:
-        index: test
-        id: 3
-        body: {
-          "group_id": "b",
-          "popularity" : 3
-        }
-  - do:
-      index:
-        index: test
-        id: 4
-        body: {
-          "group_id": "b",
-          "popularity" : 4
-        }
-  - do:
-      indices.refresh:
-        index: test
-
-  - do:
-      search:
-        body: {
-          "query" : {
-            "function_score" : {
-              "field_value_factor" : {
-                "field" : "popularity"
-              }
-            }
-          },
-          "size" : 2
-        }
-  - match: { hits.total.value: 4 }
-  - length: { hits.hits: 2 }
-  - match: { hits.hits.0._id: "4" }
+        id: "my_pipeline"
   - match: { hits.hits.1._id: "3" }
-
-  - do:
-      search:
-        search_pipeline: my_pipeline
-        body: {
-          "query" : {
-            "function_score" : {
-              "field_value_factor" : {
-                "field" : "popularity"
-              }
-            }
-          },
-          "size" : 2
-        }
-  - match: { hits.total.value: 4 }
-  - length: { hits.hits: 2 }
   - match: { hits.hits.0._id: "4" }
-  - match: { hits.hits.1._id: "2" }
+  - match: { hits.total.value: 4 }
+        id: "my_pipeline"
+          "popularity" : 2
+          "size" : 2
+                  "sample_factor" : 2
+        body: {
+  - do:
+        body: {
+        body: {

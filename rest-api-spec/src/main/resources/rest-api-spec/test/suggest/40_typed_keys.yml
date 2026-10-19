@@ -1,57 +1,52 @@
-setup:
-
-  - do:
-      indices.create:
-          index: test
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
-              properties:
-                title:
-                  type: keyword
-                suggestions:
-                  type: completion
-                  contexts:
-                      -
+---
                         "name" : "format"
-                        "type" : "category"
-
+                field: suggestions
+  - is_true: suggest.phrase#phrase_suggester
+            phrase_suggester:
+          - '{"title": "Elasticsearch in Action", "suggestions": {"input": "ELK in Action", "contexts": {"format": "ebook"}}}'
+        rest_total_hits_as_int: true
+                  contexts:
+              prefix: "Elastic"
   - do:
+  - is_true: suggest.completion#context_suggester
+                  format: "ebook"
+"Test typed keys parameter for suggesters":
+  - do:
+          query:
+              properties:
+            context_suggester:
       bulk:
         refresh: true
+        body:
+          suggest:
+            match_all: {}
+            term_suggester:
         index: test
         body:
+      indices.create:
+setup:
           - '{"index": {}}'
-          - '{"title": "Elasticsearch in Action", "suggestions": {"input": "ELK in Action", "contexts": {"format": "ebook"}}}'
-          - '{"index": {}}'
-          - '{"title": "Elasticsearch - The Definitive Guide", "suggestions": {"input": ["Elasticsearch in Action"], "contexts": {"format": "ebook"}}}'
-
----
-"Test typed keys parameter for suggesters":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        typed_keys: true
-        body:
-          query:
-            match_all: {}
-          suggest:
-            text: "Elastic"
-            term_suggester:
-              term:
-                field: title
-            context_suggester:
-              prefix: "Elastic"
-              completion:
-                field: suggestions
+                title:
                 contexts:
-                  format: "ebook"
-            phrase_suggester:
-              phrase:
-                field: title
-
+          index: test
+            settings:
+                  type: completion
   - is_true: suggest.term#term_suggester
-  - is_true: suggest.completion#context_suggester
-  - is_true: suggest.phrase#phrase_suggester
+                field: title
+              term:
+        typed_keys: true
+          body:
+      search:
+          - '{"title": "Elasticsearch - The Definitive Guide", "suggestions": {"input": ["Elasticsearch in Action"], "contexts": {"format": "ebook"}}}'
+                  type: keyword
+            mappings:
+                      -
+          - '{"index": {}}'
+                field: title
+              phrase:
+              completion:
+            text: "Elastic"
+              number_of_replicas: 0
+  - do:
+                        "type" : "category"
+                suggestions:

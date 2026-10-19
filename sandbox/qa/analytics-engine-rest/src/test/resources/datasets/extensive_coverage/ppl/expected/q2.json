@@ -1,45 +1,45 @@
-{
-  "schema": [
-    {
-      "name": "category",
-      "type": "string"
-    },
-    {
-      "name": "value",
       "type": "double"
-    },
+    ],
     {
-      "name": "newval",
-      "type": "double"
-    }
-  ],
-  "datarows": [
+      "B",
     [
-      "A",
-      100.5,
       201.0
-    ],
-    [
-      "B",
-      200.75,
-      401.5
-    ],
-    [
-      "A",
-      150.25,
-      300.5
-    ],
-    [
-      "C",
-      300.0,
-      600.0
-    ],
-    [
-      "B",
-      250.5,
-      501.0
     ]
+      "A",
   ],
-  "total": 5,
   "size": 5
+      "name": "newval",
+    {
+    [
+    [
+      200.75,
+      150.25,
+      401.5
+      300.0,
+    }
+  "datarows": [
+      600.0
+  "schema": [
+      "name": "category",
+    },
+    ],
+    ],
+      "C",
+      501.0
+  ],
+      "A",
+      250.5,
+    [
+      "B",
+      100.5,
+      "type": "double"
+    ],
+      300.5
+{
+    [
+    {
+    },
 }
+      "type": "string"
+      "name": "value",
+  "total": 5,

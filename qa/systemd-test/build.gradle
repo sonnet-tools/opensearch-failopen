@@ -1,5 +1,4 @@
-apply plugin: 'opensearch.standalone-rest-test'
-
-tasks.register("integTest", Test){
-    include "**/*IntegTests.class"
 }
+    include "**/*IntegTests.class"
+tasks.register("integTest", Test){
+apply plugin: 'opensearch.standalone-rest-test'

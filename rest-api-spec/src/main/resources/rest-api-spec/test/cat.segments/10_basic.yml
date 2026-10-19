@@ -1,167 +1,144 @@
----
-"Help":
-  - do:
-      cat.segments:
-        help: true
-
-  - match:
-      $body: |
-               /^   index        .+   \n
-                    shard        .+   \n
-                    prirep       .+   \n
-                    ip           .+   \n
-                    id           .+   \n
-                    segment      .+   \n
-                    generation   .+   \n
-                    docs.count   .+   \n
-                    docs.deleted .+   \n
-                    size         .+   \n
-                    size.memory  .+   \n
-                    committed    .+   \n
-                    searchable   .+   \n
-                    version      .+   \n
-                    compound     .+   \n
-               $/
----
-"Test cat segments output":
-
-  - do:
-      cat.segments: {}
-
-  - match:
-      $body: |
-               /^$/
-
-  - do:
-      indices.create:
-        index: index1
+        h: i
         body:
-          settings:
-            number_of_shards: "3"
-            number_of_replicas: "0"
-  - do:
-      index:
-        index: index1
-        body: { foo: bar }
-        refresh: true
-  - do:
-      cat.segments: {}
-  - match:
-      $body: |
+      indices.create:
+        index: foo
                  /^(index1 \s+ \d \s+ (p|r) \s+ \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3} \s+ _\d (\s\d){3} \s+
-                 (\d+|\d+[.]\d+)(kb|b) \s+ \d+ (\s+ (false|true)){2} \s+  \d+\.\d+(\.\d+)? \s+ (false|true) \s? \n?)$/
-
-  - do:
-      indices.create:
-        index: index2
-        body:
           settings:
-            number_of_shards: "3"
+---
+  - match:
+        index: bar
+  - do:
+      $body: |
+"Test cat segments output":
+  - do:
+---
+                 (\d+|\d+[.]\d+)(kb|b) \s+ \d+ (\s+ (false|true)){2} \s+  \d+\.\d+(\.\d+)? \s+ (false|true) \s? \n?)$/
+        body: { test: bar }
+      $body: |
+                    generation   .+   \n
+  - do:
+          settings:
+               $/
+                  /^(index2 .+ \n?)$/
+  - do:
+                    prirep       .+   \n
+                    version      .+   \n
+  - match:
+      index:
+      index:
+            number_of_shards: "1"
+        v: false
+"Test cat segments on closed index behaviour":
             number_of_replicas: "0"
   - do:
+        body:
+        index: index1
+                    ip           .+   \n
+      cat.segments:
       index:
-        index: index2
+               /^(ba(r|z) \n?){2}$/
+            number_of_shards: "1"
+        help: true
         body: { foo: bar }
+  - match:
         refresh: true
+        refresh: true
+        body:
+            number_of_replicas: "0"
+                    id           .+   \n
+                  /^(index(1|2) .+ \n?){2}$/
+  - do:
+      cat.segments: {}
+  - match:
+      $body: |
+        refresh: true
+      indices.create:
+  - do:
+               /^$/
+      indices.create:
+        v: false
+  - do:
+          settings:
+      cat.segments:
+                    committed    .+   \n
+            number_of_replicas: "0"
+                    searchable   .+   \n
+               /^   index        .+   \n
+  - do:
+---
+        index: index1
+                    size.memory  .+   \n
+  - do:
+  - do:
+        index: index1
+  - do:
+  - do:
+        index: index2
+  - do:
+                    size         .+   \n
+            number_of_replicas: "0"
+                    compound     .+   \n
+        index: baz
+  - do:
+---
+      cat.segments:
+      $body: |
+                    segment      .+   \n
+        index: index2
+        index: f*
+      $body: |
+  - match:
+  - do:
+        h: i
+      $body: |
+      cat.segments:
+        body: { test: baz }
+      indices.close:
+      indices.create:
+            number_of_replicas: "0"
+"Test cat segments using wildcards":
+      $body: |
+          settings:
+                    docs.deleted .+   \n
+          settings:
+        body:
+        index: bar
+  - match:
+        body:
+        body: { foo: bar }
+        body:
+        index: index1
+        refresh: true
+                    docs.count   .+   \n
+               /^(foo \n?)$/
+            number_of_replicas: "0"
+        index: index1
+      indices.create:
+      cat.segments: {}
   - do:
        cluster.health:
-         wait_for_status: green
-
-
+        body: { test: foo }
   - do:
       cat.segments: {}
-  - match:
-      $body: |
-                  /^(index(1|2) .+ \n?){2}$/
-
-  - do:
-      cat.segments:
+            number_of_shards: "3"
+      catch: bad_request
+        index: foo
+         wait_for_status: green
+        index: ba*
+      index:
         index: index2
   - match:
-      $body: |
-                  /^(index2 .+ \n?)$/
-
----
-"Test cat segments on closed index behaviour":
-
-  - do:
-      indices.create:
-        index: index1
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-
-  - do:
-      indices.close:
-        index: index1
-
-  - do:
-      catch: bad_request
-      cat.segments:
-        index: index1
-
----
-"Test cat segments using wildcards":
-
-  - do:
-      indices.create:
-        index: foo
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-
-  - do:
-      index:
-        index: foo
-        body: { test: foo }
-        refresh: true
-
-  - do:
-      indices.create:
-        index: bar
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-
-  - do:
-      index:
-        index: bar
-        body: { test: bar }
-        refresh: true
-
-  - do:
-      indices.create:
         index: baz
-        body:
-          settings:
             number_of_shards: "1"
-            number_of_replicas: "0"
-
   - do:
-      index:
-        index: baz
-        body: { test: baz }
+  - do:
         refresh: true
-
-  - do:
+            number_of_shards: "1"
       cat.segments:
-        index: f*
-        v: false
-        h: i
-
-  - match:
-      $body: |
-               /^(foo \n?)$/
-
+                    shard        .+   \n
   - do:
-      cat.segments:
-        index: ba*
-        v: false
-        h: i
-
-  - match:
-      $body: |
-               /^(ba(r|z) \n?){2}$/
+            number_of_shards: "3"
+      indices.create:
+"Help":
+      index:
+          settings:

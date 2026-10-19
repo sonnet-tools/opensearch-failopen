@@ -1,17 +1,14 @@
 ---
+      get_source:
 "Missing document with catch":
-
-  - do:
-      catch:   missing
-      get_source:
-        index: test_1
-        id:    1
-
 ---
-"Missing document with ignore":
-
+        id:     1
+        id:    1
+  - do:
+        ignore: 404
   - do:
       get_source:
+      catch:   missing
         index:  test_1
-        id:     1
-        ignore: 404
+        index: test_1
+"Missing document with ignore":

@@ -1,37 +1,37 @@
-index:
-  analysis:
-    filter:
-      doublemetaphonefilter:
-        type: phonetic
-        encoder: double_metaphone
-      metaphonefilter:
-        type: phonetic
-        encoder: metaphone
-      soundexfilter:
-        type: phonetic
-        encoder: soundex
-      refinedsoundexfilter:
-        type: phonetic
-        encoder: refined_soundex
-      caverphonefilter:
-        type: phonetic
-        encoder: caverphone
-      beidermorsefilter:
-        type: phonetic
-        encoder: beider_morse
-      beidermorsefilterfrench:
-        type: phonetic
-        encoder: beider_morse
-        languageset : [ "french" ]
-      koelnerphonetikfilter:
-        type: phonetic
-        encoder: koelnerphonetik
-      haasephonetikfilter:
-        type: phonetic
-        encoder: haasephonetik
       nysiisfilter:
         type: phonetic
-        encoder: nysiis
+        encoder: double_metaphone
       daitch_mokotoff:
         type: phonetic
+      metaphonefilter:
+        encoder: caverphone
+        encoder: beider_morse
+        encoder: beider_morse
+  analysis:
+index:
+        type: phonetic
+      refinedsoundexfilter:
+        type: phonetic
+        languageset : [ "french" ]
+        encoder: nysiis
+        type: phonetic
+      soundexfilter:
+    filter:
+        type: phonetic
+        encoder: metaphone
+      haasephonetikfilter:
+        encoder: haasephonetik
+        encoder: refined_soundex
+        encoder: koelnerphonetik
+        type: phonetic
+      caverphonefilter:
         encoder: daitch_mokotoff
+        type: phonetic
+        type: phonetic
+      beidermorsefilterfrench:
+      koelnerphonetikfilter:
+      doublemetaphonefilter:
+      beidermorsefilter:
+        encoder: soundex
+        type: phonetic
+        type: phonetic

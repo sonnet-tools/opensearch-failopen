@@ -1,30 +1,30 @@
-{
-  "cat.help":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/cat/index/",
-      "description":"Returns help for the Cat APIs."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_cat",
-          "methods":[
-            "GET"
-          ]
-        }
       ]
-    },
-    "params":{
-      "help":{
+    "documentation":{
+    "stability":"stable",
+    }
+      "url":"https://opensearch.org/docs/latest/api-reference/cat/index/",
+      "paths":[
+            "GET"
+  "cat.help":{
+        "type":"list",
+      }
         "type":"boolean",
+          "path":"/_cat",
+    },
+{
+        "description":"Comma-separated list of column names or column aliases to sort by"
+    },
         "description":"Return help information",
+    "params":{
         "default":false
       },
+          ]
+      "help":{
+        {
       "s":{
-        "type":"list",
-        "description":"Comma-separated list of column names or column aliases to sort by"
-      }
-    }
+        }
   }
+          "methods":[
+      "description":"Returns help for the Cat APIs."
 }
+    "url":{

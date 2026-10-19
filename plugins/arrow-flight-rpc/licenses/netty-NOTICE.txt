@@ -1,116 +1,86 @@
-
-                            The Netty Project
-                            =================
-
-Please visit the Netty web site for more information:
-
-  * http://netty.io/
-
-Copyright 2011 The Netty Project
-
-The Netty Project licenses this file to you under the Apache License,
-version 2.0 (the "License"); you may not use this file except in compliance
-with the License. You may obtain a copy of the License at:
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-License for the specific language governing permissions and limitations
-under the License.
-
 Also, please refer to each LICENSE.<component>.txt file, which is located in
-the 'license' directory of the distribution file, for the license terms of the
-components that this product depends on.
-
--------------------------------------------------------------------------------
-This product contains the extensions to Java Collections Framework which has
-been derived from the works by JSR-166 EG, Doug Lea, and Jason T. Greene:
-
-  * LICENSE:
-    * license/LICENSE.jsr166y.txt (Public Domain)
+  * http://netty.io/
   * HOMEPAGE:
-    * http://gee.cs.oswego.edu/cgi-bin/viewcvs.cgi/jsr166/
-    * http://viewvc.jboss.org/cgi-bin/viewvc.cgi/jbosscache/experimental/jsr166/
-
-This product contains a modified version of Robert Harder's Public Domain
-Base64 Encoder and Decoder, which can be obtained at:
-
-  * LICENSE:
-    * license/LICENSE.base64.txt (Public Domain)
-  * HOMEPAGE:
-    * http://iharder.sourceforge.net/current/java/base64/
-
-This product contains a modified version of 'JZlib', a re-implementation of
-zlib in pure Java, which can be obtained at:
-
-  * LICENSE:
-    * license/LICENSE.jzlib.txt (BSD Style License)
-  * HOMEPAGE:
-    * http://www.jcraft.com/jzlib/
-
-This product contains a modified version of 'Webbit', a Java event based
-WebSocket and HTTP server:
-
-  * LICENSE:
-    * license/LICENSE.webbit.txt (BSD License)
-  * HOMEPAGE:
-    * https://github.com/joewalnes/webbit
-
-This product optionally depends on 'Protocol Buffers', Google's data
-interchange format, which can be obtained at:
-
-  * LICENSE:
-    * license/LICENSE.protobuf.txt (New BSD License)
-  * HOMEPAGE:
-    * http://code.google.com/p/protobuf/
-
-This product optionally depends on 'Bouncy Castle Crypto APIs' to generate
 a temporary self-signed X.509 certificate when the JVM does not provide the
-equivalent functionality.  It can be obtained at:
-
-  * LICENSE:
-    * license/LICENSE.bouncycastle.txt (MIT License)
-  * HOMEPAGE:
+WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+This product contains a modified version of Robert Harder's Public Domain
     * http://www.bouncycastle.org/
-
-This product optionally depends on 'SLF4J', a simple logging facade for Java,
+This product contains a modified version of 'JZlib', a re-implementation of
+    * http://viewvc.jboss.org/cgi-bin/viewvc.cgi/jbosscache/experimental/jsr166/
+components that this product depends on.
+This product optionally depends on 'Bouncy Castle Crypto APIs' to generate
+under the License.
+This product contains the extensions to Java Collections Framework which has
+  * LICENSE:
 which can be obtained at:
-
-  * LICENSE:
-    * license/LICENSE.slf4j.txt (MIT License)
-  * HOMEPAGE:
-    * http://www.slf4j.org/
-
-This product optionally depends on 'Apache Commons Logging', a logging
-framework, which can be obtained at:
-
-  * LICENSE:
-    * license/LICENSE.commons-logging.txt (Apache License 2.0)
+    * http://anonsvn.jboss.org/repos/common/common-logging-spi/
+    * https://github.com/joewalnes/webbit
   * HOMEPAGE:
     * http://commons.apache.org/logging/
-
 This product optionally depends on 'Apache Log4J', a logging framework,
-which can be obtained at:
-
-  * LICENSE:
+This product contains a modified version of 'Webbit', a Java event based
+-------------------------------------------------------------------------------
+    * license/LICENSE.jsr166y.txt (Public Domain)
     * license/LICENSE.log4j.txt (Apache License 2.0)
+  * LICENSE:
+This product optionally depends on 'SLF4J', a simple logging facade for Java,
+    * http://www.jcraft.com/jzlib/
   * HOMEPAGE:
-    * http://logging.apache.org/log4j/
-
+  * HOMEPAGE:
+  * HOMEPAGE:
 This product optionally depends on 'JBoss Logging', a logging framework,
-which can be obtained at:
-
+    * license/LICENSE.commons-logging.txt (Apache License 2.0)
+with the License. You may obtain a copy of the License at:
   * LICENSE:
+    * http://iharder.sourceforge.net/current/java/base64/
     * license/LICENSE.jboss-logging.txt (GNU LGPL 2.1)
+This product optionally depends on 'Protocol Buffers', Google's data
+The Netty Project licenses this file to you under the Apache License,
+zlib in pure Java, which can be obtained at:
   * HOMEPAGE:
-    * http://anonsvn.jboss.org/repos/common/common-logging-spi/
-
-This product optionally depends on 'Apache Felix', an open source OSGi
-framework implementation, which can be obtained at:
-
-  * LICENSE:
-    * license/LICENSE.felix.txt (Apache License 2.0)
-  * HOMEPAGE:
+Base64 Encoder and Decoder, which can be obtained at:
     * http://felix.apache.org/
+    * http://www.slf4j.org/
+  * LICENSE:
+the 'license' directory of the distribution file, for the license terms of the
+This product optionally depends on 'Apache Commons Logging', a logging
+                            The Netty Project
+  * LICENSE:
+Please visit the Netty web site for more information:
+Unless required by applicable law or agreed to in writing, software
+interchange format, which can be obtained at:
+    * license/LICENSE.jzlib.txt (BSD Style License)
+  * LICENSE:
+This product optionally depends on 'Apache Felix', an open source OSGi
+framework, which can be obtained at:
+  * LICENSE:
+which can be obtained at:
+  * HOMEPAGE:
+  * LICENSE:
+    * http://gee.cs.oswego.edu/cgi-bin/viewcvs.cgi/jsr166/
+  * HOMEPAGE:
+http://www.apache.org/licenses/LICENSE-2.0
+  * HOMEPAGE:
+License for the specific language governing permissions and limitations
+  * LICENSE:
+framework implementation, which can be obtained at:
+distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+which can be obtained at:
+equivalent functionality.  It can be obtained at:
+    * license/LICENSE.webbit.txt (BSD License)
+    * license/LICENSE.felix.txt (Apache License 2.0)
+    * license/LICENSE.protobuf.txt (New BSD License)
+    * license/LICENSE.slf4j.txt (MIT License)
+version 2.0 (the "License"); you may not use this file except in compliance
+  * HOMEPAGE:
+    * http://code.google.com/p/protobuf/
+Copyright 2011 The Netty Project
+  * HOMEPAGE:
+  * LICENSE:
+    * license/LICENSE.bouncycastle.txt (MIT License)
+    * http://logging.apache.org/log4j/
+                            =================
+WebSocket and HTTP server:
+    * license/LICENSE.base64.txt (Public Domain)
+  * LICENSE:
+been derived from the works by JSR-166 EG, Doug Lea, and Jason T. Greene:

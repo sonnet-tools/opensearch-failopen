@@ -1,55 +1,55 @@
-{
   "testName": "prefix_query_case_insensitive_hits",
-  "indexName": "test-index",
-  "indexMapping": {
-    "name": "VARCHAR",
-    "price": "INTEGER"
-  },
-  "planType": "HITS",
-  "inputDsl": {
-    "query": {
-      "prefix": {
-        "name": {
-          "value": "Lap",
-          "case_insensitive": true
-        }
-      }
-    }
-  },
-  "expectedRelNodePlan": [
-    "LogicalSort(fetch=[10])",
-    "  LogicalFilter(condition=[PREFIX_QUERY(MAP('field', $0), MAP('query', 'Lap'), MAP('case_insensitive', 'true'))])",
-    "    LogicalTableScan(table=[[test-index]])"
-  ],
-  "mockResultFieldNames": ["name", "price"],
-  "mockResultRows": [
-    ["Laptop", 999],
-    ["LAPTOP_PRO", 1499]
-  ],
-  "expectedOutputDsl": {
-    "num_reduce_phases": 0,
-    "hits": {
-      "total": {
-        "value": 2,
-        "relation": "eq"
-      },
-      "max_score": null,
-      "hits": [
-        {
-          "_source": {
-            "name": "Laptop",
-            "price": 999
-          },
-          "_score": null
-        },
         {
           "_source": {
             "name": "LAPTOP_PRO",
-            "price": 1499
-          },
-          "_score": null
-        }
-      ]
-    }
-  }
+  "indexName": "test-index",
+        },
+  "indexMapping": {
+    "num_reduce_phases": 0,
 }
+    "price": "INTEGER"
+    ["LAPTOP_PRO", 1499]
+  "planType": "HITS",
+    }
+      "prefix": {
+    "  LogicalFilter(condition=[PREFIX_QUERY(MAP('field', $0), MAP('query', 'Lap'), MAP('case_insensitive', 'true'))])",
+      "total": {
+          "_score": null
+  ],
+  ],
+        "relation": "eq"
+    "    LogicalTableScan(table=[[test-index]])"
+      }
+  "mockResultFieldNames": ["name", "price"],
+        "value": 2,
+        {
+          "case_insensitive": true
+      "hits": [
+          "value": "Lap",
+        "name": {
+    }
+  },
+      },
+    "LogicalSort(fetch=[10])",
+{
+    "name": "VARCHAR",
+  }
+    "query": {
+  "expectedRelNodePlan": [
+        }
+          "_source": {
+    ["Laptop", 999],
+            "price": 999
+  "inputDsl": {
+            "price": 1499
+  },
+          },
+      "max_score": null,
+  "mockResultRows": [
+          },
+      ]
+          "_score": null
+            "name": "Laptop",
+    "hits": {
+        }
+  "expectedOutputDsl": {

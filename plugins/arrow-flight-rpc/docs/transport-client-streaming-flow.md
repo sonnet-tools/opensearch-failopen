@@ -1,95 +1,80 @@
-# Client-Side Streaming API Flow
-
-```mermaid
-flowchart TD
-    %% Simple Client Flow
-    START[Client sends streaming request] --> WAIT[Wait for response]
-    
-    WAIT --> RESPONSE{Response Type?}
-    RESPONSE -->|Success| STREAM[handleStreamResponse called]
-    RESPONSE -->|Error| ERROR[handleException called]
-    RESPONSE -->|Timeout| TIMEOUT[Timeout exception]
-    
-    %% Stream Processing
-    STREAM --> NEXT[Get next response]
-    NEXT --> PROCESS[Process response]
-    PROCESS --> CONTINUE{Continue?}
-    CONTINUE -->|Yes| NEXT
-    CONTINUE -->|No - Complete| CLOSE[streamResponse.close]
-    CONTINUE -->|No - Cancel| CANCEL[streamResponse.cancel]
-    
-    %% Error & Completion
-    ERROR --> HANDLE_ERROR[Handle error]
-    TIMEOUT --> HANDLE_ERROR
-    CLOSE --> SUCCESS[Complete]
-    CANCEL --> SUCCESS
-    HANDLE_ERROR --> SUCCESS
-    
-    %% Simple styling
-    classDef client fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
-    classDef framework fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
-    classDef error fill:#ffebee,stroke:#c62828,stroke-width:2px
-    
-    class START,NEXT,PROCESS,CLOSE,CANCEL client
-    class WAIT,STREAM,ERROR,TIMEOUT framework
-    class HANDLE_ERROR error
-    class RESPONSE,CONTINUE decision
-```
-
-## Simple Client Usage
-
-### **Thread-Safe Implementation**:
-```java
-StreamTransportResponseHandler<MyResponse> handler = new StreamTransportResponseHandler<MyResponse>() {
-    private volatile boolean cancelled = false;
-    private volatile StreamTransportResponse<MyResponse> currentStream;
-    
-    @Override
-    public void handleStreamResponse(StreamTransportResponse<MyResponse> streamResponse) {
-        currentStream = streamResponse;
-        
-        if (cancelled) {
-            handleTermination(streamResponse, "Handler already cancelled", null);
-            return;
-        }
-        
-        try {
-            MyResponse response;
-            while ((response = streamResponse.nextResponse()) != null) {  // BLOCKING CALL
-                if (cancelled) {
-                    handleTermination(streamResponse, "Processing cancelled", null);
-                    return;
-                }
-                processResponse(response);
             }
-            streamResponse.close();
-        } catch (Exception e) {
             handleTermination(streamResponse, "Error: " + e.getMessage(), e);
-        }
+    %% Stream Processing
+            streamResponse.close();
+                processResponse(response);
+    CLOSE --> SUCCESS[Complete]
+    TIMEOUT --> HANDLE_ERROR
+        handleError(exp);
+```
+        } catch (Exception e) {
+        streamResponse.cancel(reason, cause);
+    TransportRequestOptions.builder().withType(STREAM).withTimeout(30s).build(), 
+    classDef client fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
+```mermaid
+            while ((response = streamResponse.nextResponse()) != null) {  // BLOCKING CALL
+    %% Simple styling
     }
-    
-    @Override
-    public void handleException(TransportException exp) {
-        cancelled = true;
+    private volatile StreamTransportResponse<MyResponse> currentStream;
+                    handleTermination(streamResponse, "Processing cancelled", null);
+    CONTINUE -->|No - Cancel| CANCEL[streamResponse.cancel]
         if (currentStream != null) {
+            return;
+    %% Simple Client Flow
+        }
+        if (cancelled) {
+    classDef framework fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    handler);
+        try {
+        // Add custom cleanup/logging logic here
+transportService.sendRequest(node, "action", request, 
+    }
+    HANDLE_ERROR --> SUCCESS
+    private volatile boolean cancelled = false;
+        }
+            handleTermination(streamResponse, "Handler already cancelled", null);
+        cancelled = true;
+    NEXT --> PROCESS[Process response]
+    CANCEL --> SUCCESS
+    PROCESS --> CONTINUE{Continue?}
+```java
+    ERROR --> HANDLE_ERROR[Handle error]
             handleTermination(currentStream, "Exception occurred: " + exp.getMessage(), exp);
         }
-        handleError(exp);
-    }
-    
     // Placeholder for custom termination logic
-    private void handleTermination(StreamTransportResponse<MyResponse> streamResponse, String reason, Exception cause) {
-        // Add custom cleanup/logging logic here
-        streamResponse.cancel(reason, cause);
-    }
-};
-
-transportService.sendRequest(node, "action", request, 
-    TransportRequestOptions.builder().withType(STREAM).withTimeout(30s).build(), 
-    handler);
-```
-
-### **Key Points**:
+    classDef error fill:#ffebee,stroke:#c62828,stroke-width:2px
 - **Blocking**: `nextResponse()` blocks waiting for server data - use background threads
-- **Timeout Handling**: `handleException` can cancel active streams for timeout scenarios
+StreamTransportResponseHandler<MyResponse> handler = new StreamTransportResponseHandler<MyResponse>() {
+                }
+    class HANDLE_ERROR error
+};
+            MyResponse response;
 - **Always Close/Cancel**: Stream must be closed or cancelled to prevent resource leaks
+    STREAM --> NEXT[Get next response]
+## Simple Client Usage
+```
+    CONTINUE -->|No - Complete| CLOSE[streamResponse.close]
+# Client-Side Streaming API Flow
+    %% Error & Completion
+    RESPONSE -->|Success| STREAM[handleStreamResponse called]
+    private void handleTermination(StreamTransportResponse<MyResponse> streamResponse, String reason, Exception cause) {
+    WAIT --> RESPONSE{Response Type?}
+    class WAIT,STREAM,ERROR,TIMEOUT framework
+### **Key Points**:
+    public void handleException(TransportException exp) {
+### **Thread-Safe Implementation**:
+    RESPONSE -->|Timeout| TIMEOUT[Timeout exception]
+    }
+    public void handleStreamResponse(StreamTransportResponse<MyResponse> streamResponse) {
+                    return;
+    START[Client sends streaming request] --> WAIT[Wait for response]
+    class RESPONSE,CONTINUE decision
+    @Override
+    @Override
+- **Timeout Handling**: `handleException` can cancel active streams for timeout scenarios
+flowchart TD
+    CONTINUE -->|Yes| NEXT
+        currentStream = streamResponse;
+    class START,NEXT,PROCESS,CLOSE,CANCEL client
+    RESPONSE -->|Error| ERROR[handleException called]
+                if (cancelled) {

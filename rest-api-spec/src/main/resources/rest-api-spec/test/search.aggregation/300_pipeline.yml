@@ -1,188 +1,174 @@
-setup:
-
-
-  - do:
-      indices.create:
-          index: test_1
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
-              properties:
-                int_field:
-                   type : integer
-
-  - do:
-       bulk:
-         refresh: true
-         body:
-           - index:
-               _index: test_1
-               _id:    1
-           - int_field: 1
-           - index:
-               _index: test_1
-               _id:    2
-           - int_field: 2
-           - index:
-               _index: test_1
-               _id:    3
-           - int_field: 3
-           - index:
-               _index: test_1
-               _id:    4
-           - int_field: 4
-
----
-"Max pipeline through terms agg":
-
-  - do:
-      catch: /\[Object\[\]\] at aggregation \[the_terms_2\]/
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_terms:
-              terms:
                 field: "int_field"
-              aggs:
+          aggs:
                 the_terms_2:
-                  terms:
-                    field: "int_field"
-                  aggs:
-                    the_max:
-                      max:
-                        field: "int_field"
-            the_bad_max:
-              max_bucket:
-                buckets_path: "the_terms>the_terms_2>the_max"
-
----
-"Max pipeline on terms agg":
-
-  - do:
-      catch: /\[LongTerms\] at aggregation \[the_terms_2\]/
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_terms:
-              terms:
                 field: "int_field"
-              aggs:
-                the_terms_2:
-                  terms:
-                    field: "int_field"
-            the_bad_max:
-              max_bucket:
-                buckets_path: "the_terms>the_terms_2"
-
----
-"Max pipeline on percentiles agg without specifying percent":
-
-  - do:
-      catch: /buckets_path must reference either a number value or a single value numeric metric aggregation, but \[the_percentiles\] contains multiple values. Please specify which to use\./
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_terms:
-              terms:
-                field: "int_field"
-              aggs:
-                the_percentiles:
-                  percentiles:
-                    field: "int_field"
-            the_bad_max:
-              max_bucket:
-                buckets_path: "the_terms>the_percentiles"
-
----
-"Top level bucket_sort":
-
-
-  - do:
-      catch: /bucket_sort aggregation \[the_bad_bucket_sort\] must be declared inside of another aggregation/
-      search:
-        body:
-          aggs:
-            the_terms:
-              terms:
-                field: "int_field"
-              aggs:
-                the_max:
-                  max:
-                    field: "int_field"
-            the_bad_bucket_sort:
-              bucket_sort:
-                sort:
-                  - the_terms>the_max
-
----
-"deep cumulative sum":
-  - do:
-      indices.create:
-        index: test
-        body:
-          settings:
-            number_of_replicas: 0
-            number_of_shards: 3
-  - do:
       bulk:
-        index: test
-        refresh: true
+              aggs:
+          aggs:
+                    sum:
+                  terms:
+  - match: { aggregations.t.buckets.1.by_date.buckets.1.sum.value: 100 }
+        body:
+  - match: { aggregations.t.buckets.1.by_date.buckets.1.avg.value: 99 }
         body:
           - '{"index": {}}'
-          - '{"t": "a", "int" :  1, "@timestamp" : "2020-07-16T00:00:00.000Z"}'
+      catch: /\[Object\[\]\] at aggregation \[the_terms_2\]/
+          aggs:
+                      avg:
           - '{"index": {}}'
-          - '{"t": "a", "int" : 50, "@timestamp" : "2020-07-17T00:00:00.000Z"}'
-          - '{"index": {}}'
-          - '{"t": "a", "int" : 99, "@timestamp" : "2020-07-18T00:00:00.000Z"}'
-          - '{"index": {}}'
-          - '{"t": "b", "int" :  1, "@timestamp" : "2020-07-16T00:00:00.000Z"}'
-          - '{"index": {}}'
-          - '{"t": "b", "int" : 99, "@timestamp" : "2020-07-17T00:00:00.000Z"}'
-
+  - length: { aggregations.t.buckets: 2 }
   - do:
+                field: "int_field"
+              aggs:
+              terms:
+                by_date:
+            mappings:
+            the_terms:
+  - match: { aggregations.t.buckets.0.by_date.buckets.2.key_as_string: "2020-07-18T00:00:00.000Z" }
+        index: test
+                the_percentiles:
+  - length: { aggregations.t.buckets.0.by_date.buckets: 3 }
+            the_terms:
+            the_terms:
+          - '{"index": {}}'
+              aggs:
+          - '{"t": "b", "int" :  1, "@timestamp" : "2020-07-16T00:00:00.000Z"}'
+  - do:
+                  max:
+                sort:
+           - index:
+              terms:
+  - match: { aggregations.t.buckets.0.by_date.buckets.1.key_as_string: "2020-07-17T00:00:00.000Z" }
+            number_of_replicas: 0
+  - match: { aggregations.t.buckets.0.by_date.buckets.1.sum.value: 51 }
+            the_bad_max:
+  - match: { aggregations.t.buckets.1.key: b }
+  - do:
+           - int_field: 1
+              properties:
+  - match: { aggregations.t.buckets.0.by_date.buckets.0.sum.value: 1 }
+         body:
+            the_bad_max:
+                    field: "int_field"
+               _id:    4
+                    the_max:
+              number_of_replicas: 0
+           - index:
+                        buckets_path: avg.value
+              aggs:
+      catch: /buckets_path must reference either a number value or a single value numeric metric aggregation, but \[the_percentiles\] contains multiple values. Please specify which to use\./
+            t:
+      catch: /bucket_sort aggregation \[the_bad_bucket_sort\] must be declared inside of another aggregation/
+          body:
+           - int_field: 3
+"Top level bucket_sort":
+"Max pipeline through terms agg":
+            the_terms:
       search:
+                  terms:
+  - match: { aggregations.t.buckets.0.by_date.buckets.1.avg.value: 50 }
+  - match: { aggregations.t.buckets.0.by_date.buckets.2.sum.value: 150 }
+            the_bad_max:
+                      cumulative_sum:
+      search:
+                    field: "int_field"
+  - match: { aggregations.t.buckets.0.by_date.buckets.0.key_as_string: "2020-07-16T00:00:00.000Z" }
+                    field: "int_field"
+           - index:
+      search:
+               _index: test_1
+        index: test
+                  aggs:
+  - match: { hits.total: 5 }
+                field: t.keyword
+               _id:    1
+                        field: int
+  - match: { aggregations.t.buckets.1.by_date.buckets.0.key_as_string: "2020-07-16T00:00:00.000Z" }
+               _index: test_1
+"deep cumulative sum":
+                field: "int_field"
+              aggs:
+        body:
+                        field: "int_field"
+  - match: { aggregations.t.buckets.1.by_date.buckets.1.key_as_string: "2020-07-17T00:00:00.000Z" }
+---
+---
+                buckets_path: "the_terms>the_percentiles"
+      search:
+          - '{"t": "b", "int" : 99, "@timestamp" : "2020-07-17T00:00:00.000Z"}'
+---
+  - do:
+                buckets_path: "the_terms>the_terms_2>the_max"
+              max_bucket:
+  - do:
+                the_max:
+          size: 0
+  - do:
+      indices.create:
+setup:
+        refresh: true
+         refresh: true
+              terms:
+"Max pipeline on percentiles agg without specifying percent":
+                buckets_path: "the_terms>the_terms_2"
+        body:
+        rest_total_hits_as_int: true
+              max_bucket:
+        rest_total_hits_as_int: true
+           - index:
+              bucket_sort:
+  - do:
+               _index: test_1
+  - match: { aggregations.t.buckets.0.by_date.buckets.2.avg.value: 99 }
+---
+        body:
+               _id:    3
+                int_field:
+---
+              terms:
+          index: test_1
+           - int_field: 2
+  - match: { aggregations.t.buckets.1.by_date.buckets.0.avg.value: 1 }
+          - '{"index": {}}'
+                    field: "int_field"
+      catch: /\[LongTerms\] at aggregation \[the_terms_2\]/
+                  aggs:
+          - '{"t": "a", "int" : 50, "@timestamp" : "2020-07-17T00:00:00.000Z"}'
+          - '{"t": "a", "int" :  1, "@timestamp" : "2020-07-16T00:00:00.000Z"}'
+                    avg:
+  - length: { aggregations.t.buckets.1.by_date.buckets: 2 }
+      search:
+            settings:
+            the_bad_bucket_sort:
+  - match: { aggregations.t.buckets.1.by_date.buckets.0.sum.value: 1 }
+          settings:
+                      max:
+        body:
+                   type : integer
+       bulk:
+"Max pipeline on terms agg":
+              max_bucket:
+        rest_total_hits_as_int: true
+                  - the_terms>the_max
+  - match: { aggregations.t.buckets.0.by_date.buckets.0.avg.value: 1 }
+          - '{"t": "a", "int" : 99, "@timestamp" : "2020-07-18T00:00:00.000Z"}'
+                  percentiles:
+           - int_field: 4
+               _id:    2
+            number_of_shards: 3
+                the_terms_2:
+        body:
+              terms:
+          aggs:
+                    fixed_interval: 1d
+          aggs:
+                    field: "@timestamp"
+                  date_histogram:
+  - do:
+          - '{"index": {}}'
+  - match: { aggregations.t.buckets.0.key: a }
         rest_total_hits_as_int: true
         index: test
-        body:
-          size: 0
-          aggs:
-            t:
-              terms:
-                field: t.keyword
-              aggs:
-                by_date:
-                  date_histogram:
-                    field: "@timestamp"
-                    fixed_interval: 1d
-                  aggs:
-                    avg:
-                      avg:
-                        field: int
-                    sum:
-                      cumulative_sum:
-                        buckets_path: avg.value
-  - match: { hits.total: 5 }
-  - length: { aggregations.t.buckets: 2 }
-  - match: { aggregations.t.buckets.0.key: a }
-  - match: { aggregations.t.buckets.1.key: b }
-  - length: { aggregations.t.buckets.0.by_date.buckets: 3 }
-  - match: { aggregations.t.buckets.0.by_date.buckets.0.key_as_string: "2020-07-16T00:00:00.000Z" }
-  - match: { aggregations.t.buckets.0.by_date.buckets.0.avg.value: 1 }
-  - match: { aggregations.t.buckets.0.by_date.buckets.0.sum.value: 1 }
-  - match: { aggregations.t.buckets.0.by_date.buckets.1.key_as_string: "2020-07-17T00:00:00.000Z" }
-  - match: { aggregations.t.buckets.0.by_date.buckets.1.avg.value: 50 }
-  - match: { aggregations.t.buckets.0.by_date.buckets.1.sum.value: 51 }
-  - match: { aggregations.t.buckets.0.by_date.buckets.2.key_as_string: "2020-07-18T00:00:00.000Z" }
-  - match: { aggregations.t.buckets.0.by_date.buckets.2.avg.value: 99 }
-  - match: { aggregations.t.buckets.0.by_date.buckets.2.sum.value: 150 }
-  - length: { aggregations.t.buckets.1.by_date.buckets: 2 }
-  - match: { aggregations.t.buckets.1.by_date.buckets.0.key_as_string: "2020-07-16T00:00:00.000Z" }
-  - match: { aggregations.t.buckets.1.by_date.buckets.0.avg.value: 1 }
-  - match: { aggregations.t.buckets.1.by_date.buckets.0.sum.value: 1 }
-  - match: { aggregations.t.buckets.1.by_date.buckets.1.key_as_string: "2020-07-17T00:00:00.000Z" }
-  - match: { aggregations.t.buckets.1.by_date.buckets.1.avg.value: 99 }
-  - match: { aggregations.t.buckets.1.by_date.buckets.1.sum.value: 100 }
+      indices.create:
+               _index: test_1
+  - do:

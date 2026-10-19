@@ -1,18 +1,18 @@
-{
-  "settings": {
-    "number_of_shards": 1,
-    "number_of_replicas": 0
-  },
-  "mappings": {
-    "properties": {
-      "@timestamp": { "type": "date" },
+      "status": { "type": "keyword" },
+    }
       "monitor_id": { "type": "keyword" },
-      "realm": { "type": "keyword" },
+      "description": { "type": "text" }
+  },
+    "number_of_replicas": 0
       "mock_update": { "type": "boolean" },
+{
+    "number_of_shards": 1,
+    "properties": {
+  }
+      "@timestamp": { "type": "date" },
       "monitor_fail": { "type": "boolean" },
       "call_count": { "type": "integer" },
-      "status": { "type": "keyword" },
-      "description": { "type": "text" }
-    }
-  }
+  "mappings": {
 }
+      "realm": { "type": "keyword" },
+  "settings": {

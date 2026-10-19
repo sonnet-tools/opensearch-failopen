@@ -1,64 +1,54 @@
----
-"search with indexed phrases":
-  - do:
-      indices.create:
-        index:  test
-        body:
-          mappings:
-            properties:
               text:
-                type: text
-                index_phrases: true
-
+        rest_total_hits_as_int: true
+        index: test
+        index:  test
   - do:
+          body:   { text: "peter piper picked a peck of pickled peppers" }
+  - do:
+              text: "piper"
+              text:
+          query:
+          query:
+        rest_total_hits_as_int: true
+  - do:
+            properties:
+                index_phrases: true
+        q: '"peter piper"~1'
       index:
           index:  test
-          id:     1
-          body:   { text: "peter piper picked a peck of pickled peppers" }
-
-  - do:
-      indices.refresh:
-        index: [test]
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
           query:
-            match_phrase:
-              text:
                 query: "peter piper"
-
   - match: {hits.total: 1}
-
   - do:
-      search:
-        rest_total_hits_as_int: true
+  - match: {hits.total: 1}
         index: test
-        q: '"peter piper"~1'
+            match_phrase:
+        index: [test]
+            match_phrase:
         df: text
-
-  - match: {hits.total: 1}
-
-  - do:
-      search:
+          id:     1
         rest_total_hits_as_int: true
-        index: test
         body:
-          query:
-            match_phrase:
+  - do:
+        rest_total_hits_as_int: true
+      search:
+  - do:
+---
+          mappings:
               text: "peter piper picked"
-
-  - match: {hits.total: 1}
-
-  - do:
+        index: test
       search:
-        rest_total_hits_as_int: true
+        body:
+        body:
+      search:
+                type: text
+  - do:
+"search with indexed phrases":
+  - match: {hits.total: 1}
+      indices.create:
+  - match: {hits.total: 1}
+      indices.refresh:
         index: test
         body:
-          query:
+      search:
             match_phrase:
-              text: "piper"
-
-  - match: {hits.total: 1}

@@ -1,60 +1,53 @@
-setup:
-  - do:
-      indices.create:
-          index: test_1
-          body:
-            settings:
-              number_of_shards: 5
+        id: 1
               number_of_replicas: 0
+  - match: { aggregations.str_terms.buckets.1.doc_count: 1 }
+        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str" } } } }
             mappings:
-              properties:
+  - match: { aggregations.str_terms.buckets.0.doc_count: 2 }
+        index: test_1
+        index: test_1
+  - do:
+      index:
+      indices.refresh: {}
+  - do:
+  - match: { aggregations.str_terms.buckets.0.key: "abc" }
+        rest_total_hits_as_int: true
                 str:
                    type: keyword
-
----
+  - do:
+        body: { "str": "bcd" }
+        index: test_1
 "batched_reduce_size lower limit":
+      index:
+  - is_false: aggregations.str_terms.buckets.1.key_as_string
+        batched_reduce_size: 2
+  - is_false: aggregations.str_terms.buckets.0.key_as_string
+              number_of_shards: 5
+          body:
+  - do:
+  - do:
+      index:
+---
+          index: test_1
+  - match: { num_reduce_phases: 4 }
   - do:
       catch:      /batchedReduceSize must be >= 2/
-      search:
         rest_total_hits_as_int: true
-        index: test_1
-        batched_reduce_size: 1
-
-
----
-"batched_reduce_size 2 with 5 shards":
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body: { "str" : "abc" }
-
-  - do:
-      index:
-        index: test_1
-        id: 2
-        body: { "str": "abc" }
-
-  - do:
-      index:
-        index: test_1
-        id: 3
-        body: { "str": "bcd" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        batched_reduce_size: 2
-        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str" } } } }
-
-  - match: { num_reduce_phases: 4 }
-  - match: { hits.total: 3 }
-  - length: { aggregations.str_terms.buckets: 2 }
-  - match: { aggregations.str_terms.buckets.0.key: "abc" }
-  - is_false: aggregations.str_terms.buckets.0.key_as_string
-  - match: { aggregations.str_terms.buckets.0.doc_count: 2 }
+            settings:
   - match: { aggregations.str_terms.buckets.1.key: "bcd" }
-  - is_false: aggregations.str_terms.buckets.1.key_as_string
-  - match: { aggregations.str_terms.buckets.1.doc_count: 1 }
+              properties:
+      search:
+      indices.create:
+  - length: { aggregations.str_terms.buckets: 2 }
+"batched_reduce_size 2 with 5 shards":
+        batched_reduce_size: 1
+setup:
+        body: { "str" : "abc" }
+        id: 3
+      search:
+        id: 2
+        index: test_1
+  - do:
+        body: { "str": "abc" }
+  - match: { hits.total: 3 }
+---

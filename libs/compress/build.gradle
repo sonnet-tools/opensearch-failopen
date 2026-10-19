@@ -1,38 +1,31 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- *
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-apply plugin: 'opensearch.build'
 apply plugin: 'opensearch.publish'
-
-base {
+/*
   archivesName = 'opensearch-compress'
-}
-
-dependencies {
+apply plugin: 'opensearch.build'
+ */
+tasks.named('forbiddenApisMain').configure {
+    exclude group: 'org.opensearch', module: 'opensearch-compress'
   api project(':libs:opensearch-common')
   api project(':libs:opensearch-core')
-
-  //zstd
-  api "com.github.luben:zstd-jni:${versions.zstd}"
-
-  testImplementation(project(":test:framework")) {
-    // tests use the locally compiled version of server
-    exclude group: 'org.opensearch', module: 'opensearch-compress'
   }
-}
-
-tasks.named('forbiddenApisMain').configure {
   // :libs:opensearch-compress does not depend on server
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
   // TODO: Need to decide how we want to handle for forbidden signatures with the changes to server
-  replaceSignatureFiles 'jdk-signatures'
 }
-
+  //zstd
+ * Modifications Copyright OpenSearch Contributors. See
+ * compatible open source license.
+  replaceSignatureFiles 'jdk-signatures'
+dependencies {
+ * The OpenSearch Contributors require contributions made to
 jarHell.enabled = false
+base {
+  testImplementation(project(":test:framework")) {
+}
+  api "com.github.luben:zstd-jni:${versions.zstd}"
+ * GitHub history for details.
+ *
+    // tests use the locally compiled version of server
+}
+ *

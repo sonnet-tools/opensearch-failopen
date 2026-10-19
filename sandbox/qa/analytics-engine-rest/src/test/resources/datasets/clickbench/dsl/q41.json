@@ -1,102 +1,102 @@
-{
-  "from": 0,
-  "size": 0,
-  "timeout": "1m",
-  "query": {
-    "bool": {
+        }
+              "boost": 1.0
+          }
+              "boost": 1.0
+              "boost": 1.0
+              "to": "2013-07-31T00:00:00.000Z",
+          }
+    "excludes": []
+      "URLHash",
+            "RefererHash": {
+      "RefererHash",
+        ]
       "must": [
         {
           "term": {
-            "CounterID": {
-              "value": 62,
-              "boost": 1.0
-            }
           }
-        },
-        {
-          "range": {
-            "EventDate": {
-              "from": "2013-07-01T00:00:00.000Z",
-              "to": "2013-07-31T00:00:00.000Z",
-              "include_lower": true,
-              "include_upper": true,
-              "format": "date_time",
-              "boost": 1.0
-            }
           }
-        },
-        {
-          "term": {
-            "IsRefresh": {
-              "value": 0,
-              "boost": 1.0
-            }
-          }
-        },
-        {
-          "terms": {
-            "TraficSourceID": [
-              -1.0,
-              6.0
-            ],
-            "boost": 1.0
-          }
-        },
-        {
-          "term": {
-            "RefererHash": {
               "value": 3594120000172545465,
+      "adjust_pure_negative": true,
+            "_key": "asc"
+        "order": [
+        },
+            "TraficSourceID": [
+        {
+      "boost": 1.0
+          {
+              "value": 0,
+          "range": {
+          },
+            }
+            }
+        },
+  "timeout": "1m",
+            "EventDate": {
+    ],
+            "field": "URLHash"
+          "term": {
+              6.0
+}
+  },
+        },
+              "value": 62,
+          {
+          }
+      }
+            "boost": 1.0
+            }
+            "CounterID": {
+          "terms": {
+    }
+      "TraficSourceID",
+            "IsRefresh": {
+  "size": 0,
+    }
+  "query": {
+          "term": {
+  "_source": {
+            ],
+        {
+          },
+      ],
+        "show_term_doc_count_error": false,
+    "includes": [
+      "CounterID"
+        },
+          {
               "boost": 1.0
             }
-          }
-        },
+          {
         {
-          "exists": {
-            "field": "URLHash",
-            "boost": 1.0
-          }
-        }
-      ],
-      "adjust_pure_negative": true,
-      "boost": 1.0
-    }
-  },
-  "_source": {
-    "includes": [
-      "EventDate",
-      "RefererHash",
-      "TraficSourceID",
-      "URLHash",
-      "IsRefresh",
-      "CounterID"
-    ],
-    "excludes": []
-  },
-  "aggregations": {
-    "URLHash|EventDate": {
-      "multi_terms": {
-        "terms": [
-          {
-            "field": "URLHash"
-          },
-          {
-            "field": "EventDate",
-            "value_type": "long"
-          }
-        ],
-        "size": 110,
-        "min_doc_count": 1,
         "shard_min_doc_count": 0,
-        "show_term_doc_count_error": false,
-        "order": [
-          {
-            "_count": "desc"
-          },
-          {
-            "_key": "asc"
+              -1.0,
+            "field": "EventDate",
           }
-        ]
-      }
-    }
+  },
+    "URLHash|EventDate": {
+      "IsRefresh",
+            "_count": "desc"
+{
+              "include_upper": true,
+        ],
+          }
+            "field": "URLHash",
+              "include_lower": true,
+          }
+        {
+        "terms": [
+            "boost": 1.0
+              "from": "2013-07-01T00:00:00.000Z",
+  "aggregations": {
+        {
+        "size": 110,
+              "format": "date_time",
+        "min_doc_count": 1,
   }
-}
+  "from": 0,
+          "exists": {
+      "multi_terms": {
+    "bool": {
+            "value_type": "long"
+        },
+      "EventDate",

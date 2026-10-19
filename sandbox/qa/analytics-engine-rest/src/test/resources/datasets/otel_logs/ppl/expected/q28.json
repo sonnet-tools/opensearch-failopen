@@ -1,13 +1,13 @@
-{
-  "schema": [
-    {"name": "c", "type": "bigint"},
-    {"name": "serviceName", "type": "string"}
   ],
-  "datarows": [
-    [20, "payment"],
-    [13, "search"],
     [2, "checkout"]
-  ],
-  "total": 3,
-  "size": 3
 }
+  ],
+{
+  "size": 3
+    [13, "search"],
+  "total": 3,
+    {"name": "serviceName", "type": "string"}
+  "schema": [
+    [20, "payment"],
+  "datarows": [
+    {"name": "c", "type": "bigint"},

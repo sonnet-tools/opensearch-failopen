@@ -1,56 +1,56 @@
-{
-  "schema": [
-    {
-      "name": "unique_codes",
-      "type": "bigint"
-    },
-    {
-      "name": "min_score",
-      "type": "float"
-    },
-    {
-      "name": "max_score",
-      "type": "float"
-    },
-    {
-      "name": "p90_score",
-      "type": "float"
-    },
-    {
-      "name": "region",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      3,
-      3.0,
-      100.0,
-      91.0,
       "East"
-    ],
-    [
       3,
-      0.0,
-      100.0,
-      89.0,
-      "North"
-    ],
-    [
-      3,
-      1.0,
-      97.0,
-      86.0,
       "South"
-    ],
-    [
-      3,
-      0.0,
-      98.0,
-      83.0,
-      "West"
-    ]
-  ],
   "total": 4,
-  "size": 4
+      89.0,
 }
+      86.0,
+      91.0,
+      "West"
+      0.0,
+      "name": "min_score",
+      "name": "unique_codes",
+  "schema": [
+      3,
+    }
+    ],
+    },
+      "type": "float"
+    [
+    [
+    },
+    {
+    },
+  "size": 4
+    ]
+    ],
+      "type": "bigint"
+      "North"
+    {
+    {
+    ],
+      "name": "max_score",
+      3,
+    {
+    [
+    [
+  ],
+      "name": "region",
+      "type": "float"
+      1.0,
+      100.0,
+      83.0,
+      0.0,
+      "type": "string"
+      "name": "p90_score",
+      3.0,
+      "type": "float"
+  ],
+      100.0,
+    },
+      3,
+      98.0,
+    {
+{
+      97.0,
+  "datarows": [

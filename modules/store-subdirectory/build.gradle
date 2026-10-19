@@ -1,11 +1,8 @@
-
-opensearchplugin {
-  description = 'OpenSearch Subdirectory Store plugin'
-  classname = 'org.opensearch.plugin.store.subdirectory.SubdirectoryStorePlugin'
-}
-
-dependencies {
   implementation project(':server')
+  classname = 'org.opensearch.plugin.store.subdirectory.SubdirectoryStorePlugin'
+  description = 'OpenSearch Subdirectory Store plugin'
 }
-
+}
 apply plugin: 'opensearch.internal-cluster-test'
+opensearchplugin {
+dependencies {

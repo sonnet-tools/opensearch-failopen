@@ -1,197 +1,176 @@
 ---
-"invalid conflicts fails":
-  - do:
-      index:
-        index:   test
-        id:      1
-        body:    { "text": "test" }
-  - do:
-      catch: /conflicts may only be .* but was \[cat\]/
-      update_by_query:
-        index: test
-        conflicts: cat
-
----
-"invalid size fails":
-  - do:
-      index:
-        index:   test
-        id:      1
-        body:    { "text": "test" }
-  - do:
-      catch: /\[max_docs\] parameter cannot be negative, found \[-4\]/
-      update_by_query:
-        index: test
-        size: -4
-
----
-"invalid max_docs in URL fails":
-
-  - do:
-      index:
-        index:   test
-        id:      1
-        body:    { "text": "test" }
-  - do:
-      catch: /\[max_docs\] parameter cannot be negative, found \[-4\]/
-      update_by_query:
-        index: test
-        max_docs: -4
-
----
-"invalid max_docs in body fails":
-
-  - do:
-      index:
-        index:   test
-        id:      1
-        body:    { "text": "test" }
-  - do:
-      catch: /\[max_docs\] parameter cannot be negative, found \[-4\]/
-      update_by_query:
-        index: test
-        body:
-          max_docs: -4
-
----
-"inconsistent max_docs and size fails":
-
-  - do:
-      index:
-        index:   test
-        id:      1
-        body:    { "text": "test" }
-  - do:
-      catch: /\[max_docs\] set to two different values \[4\] and \[5\]/
-      delete_by_query:
-        index: test
-        size: 4
-        max_docs: 5
-        body:
-          query:
-            match_all: {}
-
----
-"inconsistent max_docs in body and max_docs in URL fails":
-
-  - do:
-      index:
-        index:   test
-        id:      1
-        body:    { "text": "test" }
-  - do:
-      catch: /\[max_docs\] set to two different values \[4\] and \[5\]/
-      delete_by_query:
-        index: test
-        max_docs: 5
-        body:
-          max_docs: 4
-          query:
-            match_all: {}
-
----
-"max_docs shoule be greater than slices":
-
-  - do:
-      index:
-        index:   test
-        id:      1
-        body:    { "text": "test" }
-  - do:
-      catch: /\[max_docs\] should be >= \[slices\]/
-      update_by_query:
-        index: test
         max_docs: 1
-        slices: 2
-
----
-"invalid scroll_size fails":
-  - do:
       index:
         index:   test
-        id:      1
+"invalid size fails":
+      index:
+"junk in slices fails":
+        index: test
+      catch: /\[requests_per_second\] must be a float greater than 0. Use -1 to disable throttling./
+        index:   test
+"requests_per_second cannot be negative":
         body:    { "text": "test" }
   - do:
-      catch: /Failed to parse int parameter \[scroll_size\] with value \[asdf\]/
-      update_by_query:
-        index: test
-        scroll_size: asdf
-
 ---
-"update_by_query without source gives useful error message":
-  - do:
-      indices.create:
-        index: test
-        body:
-          mappings:
-            _source:
-              enabled: false
   - do:
       index:
-        index:  test
-        id:     1
-        body:   { age: 23 }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      catch: /\[test\]\[1\] didn't store _source/
-      update_by_query:
-        index: test
-
+"invalid max_docs in URL fails":
 ---
-"source fields may not be modified":
-  - do:
-      catch: /stored_fields is not supported in this context/
-      update_by_query:
-        index: test
-        body:
-          stored_fields: [_id]
-
----
-"requests_per_second cannot be an empty string":
-  - do:
-      catch: /\[requests_per_second\] must be a float greater than 0. Use -1 to disable throttling./
-      update_by_query:
-        requests_per_second: ""
-        index: test
-
----
-"requests_per_second cannot be negative":
-  - do:
-      catch: /\[requests_per_second\] must be a float greater than 0. Use -1 to disable throttling./
-      update_by_query:
-        requests_per_second: -12
-        index: test
-
----
-"requests_per_second cannot be zero":
-  - do:
-      catch: /\[requests_per_second\] must be a float greater than 0. Use -1 to disable throttling./
-      update_by_query:
-        requests_per_second: 0
-        index: test
-
----
+            match_all: {}
+        id:      1
+      catch: /conflicts may only be .* but was \[cat\]/
 "requests_per_second cannot be unlimited":
   - do:
-      catch: /\[requests_per_second\] must be a float greater than 0. Use -1 to disable throttling./
-      update_by_query:
-        requests_per_second: 0
         index: test
-
+        slices: junk
+      index:
 ---
-"junk in slices fails":
+        slices: 2
+        index:  test
+        index: test
+        id:      1
+      index:
+          max_docs: -4
+        scroll_size: asdf
   - do:
       catch: /\[slices\] must be a positive integer or the string "auto"/
-      update_by_query:
-        slices: junk
+        body:    { "text": "test" }
+  - do:
+  - do:
+      catch: /\[requests_per_second\] must be a float greater than 0. Use -1 to disable throttling./
+      catch: /\[max_docs\] set to two different values \[4\] and \[5\]/
         index: test
-
+"invalid conflicts fails":
+"source fields may not be modified":
+        index: test
+  - do:
+  - do:
+              enabled: false
+  - do:
+        index:   test
+      indices.refresh: {}
+          stored_fields: [_id]
+  - do:
+      delete_by_query:
+      update_by_query:
+  - do:
+        size: -4
+        index: test
+"update_by_query without source gives useful error message":
+      update_by_query:
+  - do:
+        index: test
+  - do:
+        index: test
 ---
+      catch: /\[requests_per_second\] must be a float greater than 0. Use -1 to disable throttling./
+---
+        requests_per_second: 0
+  - do:
+      update_by_query:
+---
+---
+        body:    { "text": "test" }
+"requests_per_second cannot be an empty string":
+        max_docs: 5
+        body:    { "text": "test" }
+        id:      1
+      update_by_query:
+        index: test
+      indices.create:
+        index: test
+        index:   test
+---
+          query:
+        index: test
+        slices: 0
+        body:
+---
+  - do:
+"invalid max_docs in body fails":
+      index:
+  - do:
+        body:    { "text": "test" }
+  - do:
+        body:    { "text": "test" }
+        index: test
+  - do:
+"inconsistent max_docs and size fails":
+      catch: /\[max_docs\] set to two different values \[4\] and \[5\]/
+      catch: /\[slices\] must be a positive integer or the string "auto"/
+        body:    { "text": "test" }
+        size: 4
+      catch: /\[max_docs\] parameter cannot be negative, found \[-4\]/
+        conflicts: cat
+        requests_per_second: 0
+        max_docs: 5
+        index: test
+      index:
+        body:
 "zero slices fails":
   - do:
-      catch: /\[slices\] must be a positive integer or the string "auto"/
+  - do:
       update_by_query:
-        slices: 0
+        index:   test
+  - do:
+---
+        body:
+      index:
+      catch: /stored_fields is not supported in this context/
         index: test
+            _source:
+      update_by_query:
+        index: test
+  - do:
+      catch: /\[max_docs\] parameter cannot be negative, found \[-4\]/
+      update_by_query:
+      update_by_query:
+        max_docs: -4
+---
+---
+        id:      1
+"max_docs shoule be greater than slices":
+        id:      1
+        requests_per_second: ""
+      update_by_query:
+  - do:
+---
+        index:   test
+"invalid scroll_size fails":
+        body:    { "text": "test" }
+        body:   { age: 23 }
+        id:      1
+          max_docs: 4
+      update_by_query:
+  - do:
+          mappings:
+      catch: /\[requests_per_second\] must be a float greater than 0. Use -1 to disable throttling./
+        index:   test
+      catch: /Failed to parse int parameter \[scroll_size\] with value \[asdf\]/
+          query:
+      update_by_query:
+      catch: /\[max_docs\] should be >= \[slices\]/
+        id:      1
+        id:      1
+            match_all: {}
+"inconsistent max_docs in body and max_docs in URL fails":
+        index: test
+  - do:
+      update_by_query:
+        id:     1
+        body:
+        index: test
+"requests_per_second cannot be zero":
+      index:
+      update_by_query:
+---
+---
+      delete_by_query:
+        index:   test
+      catch: /\[max_docs\] parameter cannot be negative, found \[-4\]/
+      catch: /\[test\]\[1\] didn't store _source/
+      update_by_query:
+  - do:
+        body:
+        requests_per_second: -12
+  - do:

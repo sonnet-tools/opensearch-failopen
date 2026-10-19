@@ -1,55 +1,49 @@
----
-"Basic mlt query with docs":
-  - do:
-      indices.create:
-        index: test_1
-        body:
-          settings:
-            number_of_replicas: 0
-  - do:
-      index:
-          index:  test_1
           id:     1
-          body:   { foo: bar }
-
-  - do:
-      index:
-          index:  test_1
           id:     2
-          body:   { foo: baz }
-
+            query:
   - do:
-      index:
-          index:  test_1
-          id:     3
-          body:   { foo: foo }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      cluster.health:
-           wait_for_status: green
-
+                  -
   - do:
       search:
-          rest_total_hits_as_int: true
-          index:   test_1
-          body:
-            query:
-              more_like_this:
-                like:
-                  -
-                    _index: test_1
+           wait_for_status: green
                     doc:
-                      foo: bar
+  - do:
+      indices.create:
+              more_like_this:
+        body:
+  - do:
                   -
+          index:  test_1
+                include: true
+          index:   test_1
+          settings:
+  - do:
+            number_of_replicas: 0
+          index:  test_1
+                      foo: bar
+                min_doc_freq: 0
+      index:
+                  -
+          index:  test_1
+        index: test_1
+      cluster.health:
+          rest_total_hits_as_int: true
+          body:   { foo: foo }
+"Basic mlt query with docs":
+---
+  - do:
+                    _index: test_1
+          id:     3
+          body:   { foo: bar }
+      index:
+  - do:
+      indices.refresh: {}
+                like:
+  - match: { hits.total: 3 }
+      index:
+          body:   { foo: baz }
+                    _id: 3
                     _index: test_1
                     _id: 2
-                  -
-                    _id: 3
-                include: true
-                min_doc_freq: 0
+          body:
                 min_term_freq: 0
-
-  - match: { hits.total: 3 }

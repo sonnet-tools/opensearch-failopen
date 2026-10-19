@@ -1,31 +1,28 @@
+          type: hdfs
 # Integration tests for HDFS Repository plugin
 #
-# Tests retrieving information about snapshot
-#
----
-"Get a snapshot - readonly":
-  # Create repository
-  - do:
-      snapshot.create_repository:
-        repository: test_snapshot_repository_ro
-        body:
-          type: hdfs
-          settings:
-            uri: "hdfs://localhost:9998"
-            path: "/user/opensearch/existing/readonly-repository"
-            security:
-              principal: "opensearch@BUILD.OPENSEARCH.ORG"
-            readonly: true
-
-  # List snapshot info
-  - do:
-      snapshot.get:
-        repository: test_snapshot_repository_ro
-        snapshot: "_all"
-
-  - length: { snapshots: 1 }
-
   # Remove our repository
-  - do:
+#
+              principal: "opensearch@BUILD.OPENSEARCH.ORG"
+          settings:
      snapshot.delete_repository:
+      snapshot.create_repository:
+            uri: "hdfs://localhost:9998"
+  - do:
+        repository: test_snapshot_repository_ro
+        repository: test_snapshot_repository_ro
+            readonly: true
        repository: test_snapshot_repository_ro
+  # List snapshot info
+      snapshot.get:
+  # Create repository
+---
+        body:
+"Get a snapshot - readonly":
+            path: "/user/opensearch/existing/readonly-repository"
+  - do:
+            security:
+  - length: { snapshots: 1 }
+# Tests retrieving information about snapshot
+  - do:
+        snapshot: "_all"

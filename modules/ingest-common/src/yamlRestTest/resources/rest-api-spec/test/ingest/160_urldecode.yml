@@ -1,38 +1,35 @@
----
-teardown:
-  - do:
+                  "field" : "my_url"
       ingest.delete_pipeline:
-        id: "1"
+                }
+        id: 1
         ignore: 404
-
----
-"Test KV Processor":
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
+teardown:
+        pipeline: "1"
           {
-            "processors": [
+  - do:
+---
+        index: test
               {
                 "urldecode" : {
-                  "field" : "my_url"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "1"
-        body: {
           my_url: "https%3a%2f%2fopensearch.org%2f"
-        }
-
+      index:
   - do:
-      get:
+          }
+  - do:
+              }
+  - do:
         index: test
+        body:  >
         id: 1
+"Test KV Processor":
+        id: "1"
+      get:
+        id: "1"
+---
   - match: { _source.my_url: "https://opensearch.org/" }
+            ]
+      ingest.put_pipeline:
+        body: {
+  - match: { acknowledged: true }
+        }
+            "processors": [

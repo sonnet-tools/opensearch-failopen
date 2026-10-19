@@ -1,55 +1,55 @@
-{
-  "from": 0,
-  "size": 0,
-  "timeout": "1m",
-  "query": {
-    "bool": {
-      "must": [
         {
-          "exists": {
-            "field": "SearchPhrase",
-            "boost": 1.0
-          }
-        }
-      ],
-      "must_not": [
-        {
-          "term": {
-            "SearchPhrase": {
               "value": "",
-              "boost": 1.0
-            }
-          }
-        }
-      ],
-      "adjust_pure_negative": true,
-      "boost": 1.0
-    }
-  },
-  "aggregations": {
-    "SearchPhrase": {
-      "terms": {
-        "field": "SearchPhrase",
         "size": 10,
-        "min_doc_count": 1,
-        "shard_min_doc_count": 0,
-        "show_term_doc_count_error": false,
-        "order": [
-          {
-            "u": "desc"
-          },
-          {
-            "_key": "asc"
-          }
-        ]
-      },
-      "aggregations": {
-        "u": {
-          "cardinality": {
             "field": "UserID"
+      ],
           }
-        }
+    "bool": {
+          }
+          "cardinality": {
+        {
+              "boost": 1.0
+      ],
+      "must": [
+          {
+        "field": "SearchPhrase",
       }
-    }
+  "timeout": "1m",
+        }
+            "field": "SearchPhrase",
+  "query": {
+        "show_term_doc_count_error": false,
   }
+    "SearchPhrase": {
+        }
+  "size": 0,
+            "SearchPhrase": {
+        "order": [
+    }
+      "terms": {
+          },
+{
+          {
+      },
+            "_key": "asc"
+        "min_doc_count": 1,
+      "boost": 1.0
+          "exists": {
+          }
+          "term": {
+      "adjust_pure_negative": true,
+        "u": {
+  "aggregations": {
+      "aggregations": {
+            }
+            "boost": 1.0
+  },
+        }
+        "shard_min_doc_count": 0,
+    }
 }
+            "u": "desc"
+          }
+      "must_not": [
+        ]
+  "from": 0,

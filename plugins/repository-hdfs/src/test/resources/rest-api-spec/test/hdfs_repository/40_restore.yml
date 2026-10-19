@@ -1,79 +1,68 @@
-# Integration tests for HDFS Repository plugin
-#
-# Actually perform a snapshot to hdfs, then restore it
-#
----
-"Create a snapshot and then restore it":
-
-  # Create repository
-  - do:
-      snapshot.create_repository:
-        repository: test_restore_repository
-        body:
-          type: hdfs
-          settings:
-            uri: "hdfs://localhost:9999"
-            path: "test/restore"
-
-  # Create index
-  - do:
-      indices.create:
-        index: test_index
-        body:
-          settings:
-            number_of_shards:   1
-            number_of_replicas: 0
-
-  # Wait for green
-  - do:
-      cluster.health:
-        wait_for_status: green
-
-  # Take snapshot
-  - do:
-      snapshot.create:
-        repository: test_restore_repository
-        snapshot: test_restore
-        wait_for_completion: true
-
-  - match: { snapshot.snapshot: test_restore }
-  - match: { snapshot.state : SUCCESS }
-  - match: { snapshot.shards.successful: 1 }
-  - match: { snapshot.shards.failed : 0 }
-  - is_true: snapshot.version
-  - gt: { snapshot.version_id: 0}
-
   # Close index
   - do:
-      indices.close:
-        index : test_index
-
-  # Restore index
+        snapshot: test_restore
+#
+      snapshot.create_repository:
+  - do:
+  - match: { snapshot.state : SUCCESS }
+        repository: test_restore_repository
+          settings:
+            path: "test/restore"
+  - do:
+  - match: { test_index.shards.0.index.files.recovered: 1}
+  - do:
+        wait_for_completion: true
+  # Create repository
+  - is_true: snapshot.version
+  # Remove our repository
+        repository: test_restore_repository
+  # Take snapshot
+        snapshot: test_restore
   - do:
       snapshot.restore:
-        repository: test_restore_repository
-        snapshot: test_restore
-        wait_for_completion: true
-
-  # Check recovery stats
   - do:
+            number_of_replicas: 0
       indices.recovery:
-        index: test_index
-
-  - match: { test_index.shards.0.type: SNAPSHOT }
+  - do:
   - match: { test_index.shards.0.stage: DONE }
-  - match: { test_index.shards.0.index.files.recovered: 1}
-  - gt:    { test_index.shards.0.index.size.recovered_in_bytes: 0}
-  - match: { test_index.shards.0.index.files.reused: 0}
-  - match: { test_index.shards.0.index.size.reused_in_bytes: 0}
-
-  # Remove our snapshot
-  - do:
+# Integration tests for HDFS Repository plugin
+        index: test_index
+      cluster.health:
+        index : test_index
+#
+  # Check recovery stats
+# Actually perform a snapshot to hdfs, then restore it
       snapshot.delete:
+            number_of_shards:   1
+        body:
+        body:
+      snapshot.create:
+  - match: { test_index.shards.0.type: SNAPSHOT }
+      indices.create:
+  # Restore index
         repository: test_restore_repository
-        snapshot: test_restore
-
-  # Remove our repository
   - do:
-     snapshot.delete_repository:
+  - match: { test_index.shards.0.index.size.reused_in_bytes: 0}
+          settings:
+  # Wait for green
+          type: hdfs
+  - match: { snapshot.snapshot: test_restore }
+            uri: "hdfs://localhost:9999"
+"Create a snapshot and then restore it":
+      indices.close:
+  - gt:    { test_index.shards.0.index.size.recovered_in_bytes: 0}
+---
+        index: test_index
        repository: test_restore_repository
+  - gt: { snapshot.version_id: 0}
+  - match: { snapshot.shards.failed : 0 }
+  - do:
+        wait_for_status: green
+     snapshot.delete_repository:
+        snapshot: test_restore
+  # Create index
+  - match: { test_index.shards.0.index.files.reused: 0}
+  - match: { snapshot.shards.successful: 1 }
+        wait_for_completion: true
+  # Remove our snapshot
+        repository: test_restore_repository

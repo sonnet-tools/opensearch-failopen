@@ -1,28 +1,28 @@
-{
-  "schema": [
-    {
-      "name": "json_data",
-      "type": "string"
-    },
-    {
-      "name": "keys",
-      "type": "string"
     }
-  ],
-  "datarows": [
-    [
-      "{\"name\":\"item1\",\"price\":50}",
-      "[\"name\",\"price\"]"
-    ],
-    [
+  "total": 3,
       "{\"name\":\"item2\",\"price\":75}",
       "[\"name\",\"price\"]"
+    {
     ],
-    [
-      "{\"name\":\"item3\",\"price\":100}",
-      "[\"name\",\"price\"]"
-    ]
-  ],
-  "total": 3,
-  "size": 3
 }
+      "[\"name\",\"price\"]"
+    },
+  ],
+    [
+    ]
+    ],
+      "type": "string"
+      "[\"name\",\"price\"]"
+      "name": "keys",
+    {
+  "datarows": [
+  "size": 3
+  ],
+      "{\"name\":\"item3\",\"price\":100}",
+      "{\"name\":\"item1\",\"price\":50}",
+      "type": "string"
+  "schema": [
+    [
+      "name": "json_data",
+    [
+{

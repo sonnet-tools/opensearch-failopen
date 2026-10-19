@@ -1,456 +1,349 @@
-# transport-grpc-spi
-
-Service Provider Interface (SPI) for the OpenSearch gRPC transport module. This module provides interfaces and utilities that allow external plugins to extend the gRPC transport functionality.
-
-## Table of Contents
-
-- [transport-grpc-spi](#transport-grpc-spi)
-  - [Table of Contents](#table-of-contents)
-  - [Overview](#overview)
-  - [Key Components](#key-components)
-    - [QueryBuilderProtoConverter](#querybuilderprotoconverter)
-    - [QueryBuilderProtoConverterRegistry](#querybuilderprotoconverterregistry)
-    - [GrpcInterceptorProvider](#grpcinterceptorprovider)
-    - [GrpcServiceFactory](#grpcservicefactory)
-  - [Usage for Plugin Developers](#usage-for-plugin-developers)
-    - [1. Add Dependency](#1-add-dependency)
-    - [2. Declare Extension in build.gradle](#2-declare-extension-in-buildgradle)
-    - [3. Create SPI Registration File(s)](#3-create-spi-registration-files)
-  - [QueryBuilderProtoConverter](#querybuilderprotoconverter-1)
-    - [1. Implement Custom Query Converter](#1-implement-custom-query-converter)
-    - [2. Register Your Converter](#2-register-your-converter)
-    - [3. Accessing the Registry (For Complex Queries)](#3-accessing-the-registry-for-complex-queries)
-  - [Testing](#testing)
-    - [Unit Tests](#unit-tests)
-    - [4. Testing Your Custom Converter](#4-testing-your-custom-converter)
-  - [Real-World Example: k-NN Plugin](#real-world-example-k-nn-plugin)
-  - [gRPC Interceptors](#grpc-interceptors)
-    - [Overview](#overview-1)
-    - [Basic Usage](#basic-usage)
-    - [Understanding Interceptor Ordering](#understanding-interceptor-ordering)
-      - [How Order Values Work](#how-order-values-work)
-      - [Duplicate Order Values](#duplicate-order-values)
-  - [GrpcServiceFactory](#grpcservicefactory-1)
-    - [1. Implement Custom Service Factory](#1-implement-custom-service-factory)
-
-## Overview
-
-The `transport-grpc-spi` module enables plugin developers to:
-- Implement custom query converters for gRPC transport
-- Extend gRPC protocol buffer handling
-- Register custom query types that can be processed via gRPC
-- Register gRPC interceptors with explicit ordering
-- Register `BindableService` implementation to the gRPC transport
-
-**For contributing to OpenSearch gRPC APIs, see the [Contributing to gRPC APIs](../README.md#contributing-to-grpc-apis) guide in the transport-grpc module.**
-
----
-
-## Key Components
-
-### QueryBuilderProtoConverter
-
-Interface for converting protobuf query messages to OpenSearch QueryBuilder objects.
-
+public class KNNQueryBuilderProtoConverter implements QueryBuilderProtoConverter {
+### Overview
 ```java
-public interface QueryBuilderProtoConverter {
-    QueryContainer.QueryContainerCase getHandledQueryCase();
-    QueryBuilder fromProto(QueryContainer queryContainer);
-}
 ```
-
-### QueryBuilderProtoConverterRegistry
-
-Interface for accessing the query converter registry. This provides a clean abstraction for plugins that need to convert nested queries without exposing internal implementation details.
-
-### GrpcInterceptorProvider
-
-Interface for providing gRPC interceptors that can intercept and process all incoming gRPC requests. This enables plugins to implement cross-cutting concerns like authentication, authorization, logging, and metrics collection.
-
+                                             ScriptService scriptService, NamedXContentRegistry xContentRegistry,
+```
+        // By default, converters don't need a registry
+public class SampleInterceptorProvider implements GrpcInterceptorProvider {
 ```java
-public interface GrpcInterceptorProvider {
-    List<OrderedGrpcInterceptor> getOrderedGrpcInterceptors();
-
-    /**
+Several node resources are exposed to a `GrpcServiceFactory` for use within services such as client, settings, and thread pools.
+    description 'Your plugin description'
+        .build();
+Interceptors are executed based on their `order()` value. Lower order values execute first. The interceptor chain processes requests from lowest to highest order value.
+    public QueryBuilder fromProto(QueryContainer queryContainer) {
+            builder.filter(filterQuery);
+A plugin's `GrpcServiceFactory` implementation will be discovered through the SPI registration file and registered on the gRPC transport.
+Interface for accessing the query converter registry. This provides a clean abstraction for plugins that need to convert nested queries without exposing internal implementation details.
+```
+    - [GrpcInterceptorProvider](#grpcinterceptorprovider)
+```
+            new GrpcInterceptorProvider.OrderedGrpcInterceptor() {
+        return Collections.singletonList(new MyCustomQueryConverter());
+The k-NN query's `filter` field is a `QueryContainer` protobuf type that can contain any query type (MatchAll, Term, Terms, etc.). The k-NN converter needs access to the registry to convert these nested queries to their corresponding QueryBuilder objects.
+    @Override
+        }
+    - [Basic Usage](#basic-usage)
+```
+### GrpcServiceFactory
+### Unit Tests
+    - [GrpcServiceFactory](#grpcservicefactory)
+    @Override
+    }
+`src/main/resources/META-INF/services/org.opensearch.transport.grpc.spi.QueryBuilderProtoConverter`:
+    @Override
+        );
+See the k-NN plugin https://github.com/opensearch-project/k-NN/pull/2833/files for an example on how to use this SPI, including handling nested queries.
+#### How Order Values Work
+     */
+```
+    @Override
+    @Override
+    @Override
+**4. SPI File:**
+}
+- [OpenSearch k-NN Plugin](https://github.com/opensearch-project/k-NN/blob/main/build.gradle#L319)
+        return KNNQueryBuilderProtoUtils.fromProto(queryContainer.getKnn());
+```java
+    assertEquals("test_field", customQuery.fieldName());
+  - [Usage for Plugin Developers](#usage-for-plugin-developers)
+    public List<BindableService> build() {
+    @Override
+# transport-grpc-spi
+Service Provider Interface (SPI) for the OpenSearch gRPC transport module. This module provides interfaces and utilities that allow external plugins to extend the gRPC transport functionality.
+  - [Table of Contents](#table-of-contents)
+    }
+### 3. Create SPI Registration File(s)
      * Nested interface for ordered gRPC interceptors.
      * Interceptors are executed in order based on their order() value,
-     * with lower values executing first (e.g., 10 before 20).
-     */
-    interface OrderedGrpcInterceptor {
-        int order();  // Lower values execute first
-        ServerInterceptor getInterceptor();
-    }
-}
-```
-
-### GrpcServiceFactory
-
-Interface for providing a `BindableService` factory to be registered on the grpc transport.
-
-## Usage for Plugin Developers
-
-### 1. Add Dependency
-
-Add the SPI dependency to your plugin's `build.gradle`:
-
-```gradle
-dependencies {
-    compileOnly 'org.opensearch.plugin:transport-grpc-spi:${opensearch.version}'
-    compileOnly 'org.opensearch:protobufs:${protobufs.version}'
+public interface GrpcInterceptorProvider {
+            },
+public static class MockServiceProvider implements GrpcServiceFactory {
     compileOnly 'io.grpc:grpc-api:${versions.grpc}'
-}
+  - [QueryBuilderProtoConverter](#querybuilderprotoconverter-1)
+    @Override
+```java
+        return builder;
+    }
+The gRPC plugin **injects the populated registry** into converters that need it:
+        return QueryContainer.QueryContainerCase.MY_CUSTOM_QUERY;
+        // Return your converter instance - the transport-grpc plugin will discover and register it
+            QueryBuilder filterQuery = registry.fromProto(filterContainer);
+    }
+    MyCustomQueryConverter converter = new MyCustomQueryConverter();
+    }
+If your converter needs to handle nested queries (like k-NN's filter clause), you'll need access to the registry to convert other query types. The transport-grpc plugin will inject the registry into your converter.
 ```
-
-### 2. Declare Extension in build.gradle
-
-In your `build.gradle`, declare that your plugin extends `transport-grpc`. This automatically adds the `extended.plugins=transport-grpc` entry to the auto-generated `plugin-descriptor.properties` file:
-
-```groovy
-opensearchplugin {
-    name 'your-plugin-name'
-    description 'Your plugin description'
-    classname 'org.opensearch.yourplugin.YourPlugin'
-    extendedPlugins = ['transport-grpc']  // Declare extension here
-}
+## Key Components
+        return List.of(new MockChannelzService());
 ```
-**Real-world examples:**
+Each interceptor must have a unique order value.
+public class MyCustomQueryConverter implements QueryBuilderProtoConverter {
+    public String plugin() {
+    QueryBuilder result = converter.fromProto(queryContainer);
+return ImmutableList.of(knnStats, knnQueryConverter);
+// 1. Converter interface has a default setRegistry method
+    - [Unit Tests](#unit-tests)
+        // The utility class can now convert nested queries using the injected registry
+    - [2. Register Your Converter](#2-register-your-converter)
+for (QueryBuilderProtoConverter converter : queryConverters) {
+```java
+        MyCustomQuery customQuery = queryContainer.getMyCustomQuery();
+### QueryBuilderProtoConverterRegistry
+        MyCustomQuery customQuery = queryContainer.getMyCustomQuery();
+        if (customQuery.hasFilter()) {
+### 1. Add Dependency
 - [OpenSearch Reporting Plugin](https://github.com/opensearch-project/reporting/blob/main/build.gradle#L92)
-- [OpenSearch k-NN Plugin](https://github.com/opensearch-project/k-NN/blob/main/build.gradle#L319)
-
-### 3. Create SPI Registration File(s)
-
-Create a service file denoting your plugin's implementation of a service interface.
-
-For `QueryBuilderProtoConverter` implementations:
-`src/main/resources/META-INF/services/org.opensearch.transport.grpc.spi.QueryBuilderProtoConverter`:
-
+        // Converters that handle nested queries should override this method
+    assertEquals("test_value", customQuery.value());
+    private QueryBuilderProtoConverterRegistry registry;
+```
+    @Override
+    // Convert and verify
+            QueryContainer filterContainer = customQuery.getFilter();
+### 1. Implement Custom Query Converter
+`src/main/resources/META-INF/services/org.opensearch.transport.grpc.spi.GrpcServiceFactory`:
+    private QueryBuilderProtoConverterRegistry registry;
+```
+    public Collection<Object> createComponents(Client client, ClusterService clusterService,
+    public QueryBuilder fromProto(QueryContainer queryContainer) {
+# src/main/resources/META-INF/services/org.opensearch.transport.grpc.spi.QueryBuilderProtoConverter
+**For contributing to OpenSearch gRPC APIs, see the [Contributing to gRPC APIs](../README.md#contributing-to-grpc-apis) guide in the transport-grpc module.**
+    - [QueryBuilderProtoConverterRegistry](#querybuilderprotoconverterregistry)
+            customQuery.getValue()
+    default void setRegistry(QueryBuilderProtoConverterRegistry registry) {
+            .setField("test_field")
+```
+                public ServerInterceptor getInterceptor() {
+    QueryContainer queryContainer = QueryContainer.newBuilder()
+  - [Testing](#testing)
+public interface QueryBuilderProtoConverter {
+        // Convert your custom protobuf query to QueryBuilder
+```
+## QueryBuilderProtoConverter
+    converter.setRegistry(queryRegistry);
+**Why k-NN needs the registry:**
+    }
+  - [gRPC Interceptors](#grpc-interceptors)
+            new GrpcInterceptorProvider.OrderedGrpcInterceptor() {
+```
+}
+    }
+                                             NamedWriteableRegistry namedWriteableRegistry,
+## Usage for Plugin Developers
+org.opensearch.mypackage.MyCustomGrpcServiceFactory
+**3. Plugin Registration:**
+## Overview
+- Implement custom query converters for gRPC transport
+    public List<GrpcInterceptorProvider.OrderedGrpcInterceptor> getOrderedGrpcInterceptors(ThreadContext threadContext) {
+org.opensearch.knn.grpc.proto.request.search.query.KNNQueryBuilderProtoConverter
+            knnQuery.getVectorList().toArray(new Float[0]),
+### 2. Register Your Converter
+    public QueryBuilder fromProto(QueryContainer queryContainer) {
+                @Override
+### 3. Accessing the Registry (For Complex Queries)
+    assertThat(result, instanceOf(MyCustomQueryBuilder.class));
+```
+In your plugin's main class, return the converter from createComponents:
+```
 ```
 org.opensearch.mypackage.MyCustomQueryConverter
-```
-
-For `GrpcInterceptorProvider` implementations:
-`src/main/resources/META-INF/services/org.opensearch.transport.grpc.spi.GrpcInterceptorProvider`:
-
-```
-org.opensearch.mypackage.SampleInterceptorProvider
-```
-
-For `GrpcServiceFactory` implementations:
-`src/main/resources/META-INF/services/org.opensearch.transport.grpc.spi.GrpcServiceFactory`:
-
-```
-org.opensearch.mypackage.MyCustomGrpcServiceFactory
-```
-
-## QueryBuilderProtoConverter
-### 1. Implement Custom Query Converter
-
-```java
-public class MyCustomQueryConverter implements QueryBuilderProtoConverter {
-
-    @Override
-    public QueryContainer.QueryContainerCase getHandledQueryCase() {
-        return QueryContainer.QueryContainerCase.MY_CUSTOM_QUERY;
-    }
-
-    @Override
-    public QueryBuilder fromProto(QueryContainer queryContainer) {
-        // Convert your custom protobuf query to QueryBuilder
-        MyCustomQuery customQuery = queryContainer.getMyCustomQuery();
-        return new MyCustomQueryBuilder(customQuery.getField(), customQuery.getValue());
-    }
-}
-```
-
-### 2. Register Your Converter
-
-In your plugin's main class, return the converter from createComponents:
-
-```java
-public class MyPlugin extends Plugin {
-
-    @Override
-    public Collection<Object> createComponents(Client client, ClusterService clusterService,
-                                             ThreadPool threadPool, ResourceWatcherService resourceWatcherService,
-                                             ScriptService scriptService, NamedXContentRegistry xContentRegistry,
-                                             Environment environment, NodeEnvironment nodeEnvironment,
-                                             NamedWriteableRegistry namedWriteableRegistry,
-                                             IndexNameExpressionResolver indexNameExpressionResolver,
-                                             Supplier<RepositoriesService> repositoriesServiceSupplier) {
-
-        // Return your converter instance - the transport-grpc plugin will discover and register it
-        return Collections.singletonList(new MyCustomQueryConverter());
-    }
-}
-```
-
-### 3. Accessing the Registry (For Complex Queries)
-
-If your converter needs to handle nested queries (like k-NN's filter clause), you'll need access to the registry to convert other query types. The transport-grpc plugin will inject the registry into your converter.
-
-```java
-public class MyCustomQueryConverter implements QueryBuilderProtoConverter {
-
-    private QueryBuilderProtoConverterRegistry registry;
-
-    @Override
-    public void setRegistry(QueryBuilderProtoConverterRegistry registry) {
-        this.registry = registry;
-    }
-
-    @Override
-    public QueryBuilder fromProto(QueryContainer queryContainer) {
-        MyCustomQuery customQuery = queryContainer.getMyCustomQuery();
-
-        MyCustomQueryBuilder builder = new MyCustomQueryBuilder(
-            customQuery.getField(),
-            customQuery.getValue()
-        );
-
-        // Handle nested queries using the injected registry
-        if (customQuery.hasFilter()) {
-            QueryContainer filterContainer = customQuery.getFilter();
-            QueryBuilder filterQuery = registry.fromProto(filterContainer);
-            builder.filter(filterQuery);
-        }
-
-        return builder;
-    }
-}
-```
-
-**Registry Injection Pattern**
-
-**How k-NN Now Accesses Built-in Converters**:
-
-The gRPC plugin **injects the populated registry** into converters that need it:
-
-```java
-// 1. Converter interface has a default setRegistry method
-public interface QueryBuilderProtoConverter {
-    QueryBuilder fromProto(QueryContainer queryContainer);
-
-    default void setRegistry(QueryBuilderProtoConverterRegistry registry) {
-        // By default, converters don't need a registry
-        // Converters that handle nested queries should override this method
-    }
-}
-
 // 2. GrpcPlugin injects registry into loaded extensions
-for (QueryBuilderProtoConverter converter : queryConverters) {
-    // Inject the populated registry into the converter
-    converter.setRegistry(queryRegistry);
-
-    // Register the converter
-    queryRegistry.registerConverter(converter);
-}
-```
-
-**Registry Access Pattern for Converters with Nested Queries**:
-```java
-public class KNNQueryBuilderProtoConverter implements QueryBuilderProtoConverter {
-
-    private QueryBuilderProtoConverterRegistry registry;
-
-    @Override
-    public void setRegistry(QueryBuilderProtoConverterRegistry registry) {
-        this.registry = registry;
-        // Pass the registry to utility classes that need it
-        KNNQueryBuilderProtoUtils.setRegistry(registry);
-    }
-
-    @Override
-    public QueryBuilder fromProto(QueryContainer queryContainer) {
-        // The utility class can now convert nested queries using the injected registry
-        return KNNQueryBuilderProtoUtils.fromProto(queryContainer.getKnn());
-    }
-}
-```
-
-
-## Testing
-
-### Unit Tests
-
-```bash
-./gradlew :modules:transport-grpc:spi:test
-```
-
-### 4. Testing Your Custom Converter
-
-```java
-@Test
-public void testCustomQueryConverter() {
-    MyCustomQueryConverter converter = new MyCustomQueryConverter();
-
-    // Create test protobuf query
-    QueryContainer queryContainer = QueryContainer.newBuilder()
-        .setMyCustomQuery(MyCustomQuery.newBuilder()
-            .setField("test_field")
-            .setValue("test_value")
-            .build())
-        .build();
-
-    // Convert and verify
-    QueryBuilder result = converter.fromProto(queryContainer);
-    assertThat(result, instanceOf(MyCustomQueryBuilder.class));
-
-    MyCustomQueryBuilder customQuery = (MyCustomQueryBuilder) result;
-    assertEquals("test_field", customQuery.fieldName());
-    assertEquals("test_value", customQuery.value());
-}
-```
-
-## Real-World Example: k-NN Plugin
-See the k-NN plugin https://github.com/opensearch-project/k-NN/pull/2833/files for an example on how to use this SPI, including handling nested queries.
-
-**1. Dependency in build.gradle:**
-```gradle
-compileOnly "org.opensearch.plugin:transport-grpc-spi:${opensearch.version}"
-compileOnly "org.opensearch:protobufs:0.8.0"
-```
-
-**2. Converter Implementation with Registry Access:**
-```java
-public class KNNQueryBuilderProtoConverter implements QueryBuilderProtoConverter {
-
-    private QueryBuilderProtoConverterRegistry registry;
-
-    @Override
-    public void setRegistry(QueryBuilderProtoConverterRegistry registry) {
-        this.registry = registry;
-    }
-
-    @Override
-    public QueryContainer.QueryContainerCase getHandledQueryCase() {
-        return QueryContainer.QueryContainerCase.KNN;
-    }
-
-    @Override
-    public QueryBuilder fromProto(QueryContainer queryContainer) {
-        KnnQuery knnQuery = queryContainer.getKnn();
-
-        KNNQueryBuilder builder = new KNNQueryBuilder(
+- Register gRPC interceptors with explicit ordering
             knnQuery.getField(),
-            knnQuery.getVectorList().toArray(new Float[0]),
-            knnQuery.getK()
+Create a service file denoting your plugin's implementation of a service interface.
+- [transport-grpc-spi](#transport-grpc-spi)
+### 4. Testing Your Custom Converter
+        KNNQueryBuilderProtoUtils.setRegistry(registry);
+```groovy
+            .setValue("test_value")
+```java
+  - [GrpcServiceFactory](#grpcservicefactory-1)
+    queryRegistry.registerConverter(converter);
+    // Inject the populated registry into the converter
+    }
+    }
         );
-
-        // Handle nested filter query using injected registry
-        if (knnQuery.hasFilter()) {
-            QueryContainer filterContainer = knnQuery.getFilter();
             QueryBuilder filterQuery = registry.fromProto(filterContainer);
-            builder.filter(filterQuery);
-        }
-
-        return builder;
-    }
-}
+        int order();  // Lower values execute first
+### GrpcInterceptorProvider
 ```
-
-**3. Plugin Registration:**
-```java
-// In KNNPlugin.createComponents()
+- Register `BindableService` implementation to the gRPC transport
 KNNQueryBuilderProtoConverter knnQueryConverter = new KNNQueryBuilderProtoConverter();
-return ImmutableList.of(knnStats, knnQueryConverter);
-```
-
-**4. SPI File:**
-```
-# src/main/resources/META-INF/services/org.opensearch.transport.grpc.spi.QueryBuilderProtoConverter
-org.opensearch.knn.grpc.proto.request.search.query.KNNQueryBuilderProtoConverter
-```
-
-**Why k-NN needs the registry:**
-The k-NN query's `filter` field is a `QueryContainer` protobuf type that can contain any query type (MatchAll, Term, Terms, etc.). The k-NN converter needs access to the registry to convert these nested queries to their corresponding QueryBuilder objects.
-
-
-## gRPC Interceptors
-
-### Overview
-
-Intercept incoming gRPC requests for authentication, authorization, logging, metrics, rate limiting, etc. Interceptors have access to OpenSearch's `ThreadContext` to store and retrieve request-scoped data.
-
-**Context Preservation:** The transport-grpc module automatically preserves ThreadContext across async boundaries. Any data set by interceptors will be available in the gRPC service implementation, even when execution switches to different threads.
-
-### Basic Usage
-
-**1. Implement Provider:**
-```java
-public class SampleInterceptorProvider implements GrpcInterceptorProvider {
+./gradlew :modules:transport-grpc:spi:test
+    - [2. Declare Extension in build.gradle](#2-declare-extension-in-buildgradle)
+### 1. Implement Custom Service Factory
+The `transport-grpc-spi` module enables plugin developers to:
     @Override
-    public List<GrpcInterceptorProvider.OrderedGrpcInterceptor> getOrderedGrpcInterceptors(ThreadContext threadContext) {
-        return Arrays.asList(
-            // First interceptor (order = 5, runs first)
-            new GrpcInterceptorProvider.OrderedGrpcInterceptor() {
-                @Override
-                public int order() { return 5; } // Lower = higher priority
-
-                @Override
-                public ServerInterceptor getInterceptor() {
-                    return (call, headers, next) -> {
-                        String methodName = call.getMethodDescriptor().getFullMethodName();
-                        threadContext.putTransient("grpc.method", methodName);
-                        System.out.println("First interceptor - Method: " + methodName);
-                        return next.startCall(call, headers);
-                    };
-                }
-            },
-
-            // Second interceptor (order = 10, runs after first)
-            new GrpcInterceptorProvider.OrderedGrpcInterceptor() {
-                @Override
-                public int order() { return 10; }
-
-                @Override
-                public ServerInterceptor getInterceptor() {
-                    return (call, headers, next) -> {
-                        System.out.println("Second interceptor - Processing request");
-                        return next.startCall(call, headers);
-                    };
-                }
-            }
-        );
-    }
-}
+    @Override
+        // Handle nested filter query using injected registry
+    compileOnly 'org.opensearch.plugin:transport-grpc-spi:${opensearch.version}'
+                                             IndexNameExpressionResolver indexNameExpressionResolver,
+public void testCustomQueryConverter() {
+        return "MockExtendingPlugin";
+    public void setRegistry(QueryBuilderProtoConverterRegistry registry) {
+  - [Overview](#overview)
 ```
-
-### Understanding Interceptor Ordering
-
-#### How Order Values Work
-
-Interceptors are executed based on their `order()` value. Lower order values execute first. The interceptor chain processes requests from lowest to highest order value.
-
+    - [1. Add Dependency](#1-add-dependency)
+    }
+    QueryBuilder fromProto(QueryContainer queryContainer);
+        );
+    MyCustomQueryBuilder customQuery = (MyCustomQueryBuilder) result;
+    - [Understanding Interceptor Ordering](#understanding-interceptor-ordering)
+## GrpcServiceFactory
+    public QueryContainer.QueryContainerCase getHandledQueryCase() {
+Intercept incoming gRPC requests for authentication, authorization, logging, metrics, rate limiting, etc. Interceptors have access to OpenSearch's `ThreadContext` to store and retrieve request-scoped data.
+```
+        this.registry = registry;
+For `QueryBuilderProtoConverter` implementations:
+- Extend gRPC protocol buffer handling
+                        threadContext.putTransient("grpc.method", methodName);
+```
+    - [3. Accessing the Registry (For Complex Queries)](#3-accessing-the-registry-for-complex-queries)
+                @Override
+                        return next.startCall(call, headers);
+     * with lower values executing first (e.g., 10 before 20).
+        KnnQuery knnQuery = queryContainer.getKnn();
+**How k-NN Now Accesses Built-in Converters**:
+```java
+    public QueryBuilder fromProto(QueryContainer queryContainer) {
+### Basic Usage
+```
+    extendedPlugins = ['transport-grpc']  // Declare extension here
+  - [Key Components](#key-components)
+```
+}
+            .build())
+            // Second interceptor (order = 10, runs after first)
+        MyCustomQueryBuilder builder = new MyCustomQueryBuilder(
+}
 ```
 Request → [order=5] → [order=10] → [order=100] → Service Handler
-```
-
-#### Duplicate Order Values
-
+}
+        return QueryContainer.QueryContainerCase.KNN;
+                        System.out.println("Second interceptor - Processing request");
+    interface OrderedGrpcInterceptor {
+                        System.out.println("First interceptor - Method: " + methodName);
 Each interceptor must have a unique order value. If duplicate order values are detected, OpenSearch will fail to start with an `IllegalArgumentException`.
-```
+**Registry Injection Pattern**
+    public void setRegistry(QueryBuilderProtoConverterRegistry registry) {
+    - [1. Implement Custom Service Factory](#1-implement-custom-service-factory)
+            }
+        .setMyCustomQuery(MyCustomQuery.newBuilder()
+@Test
+    public QueryContainer.QueryContainerCase getHandledQueryCase() {
+                    return (call, headers, next) -> {
+### Understanding Interceptor Ordering
+                        return next.startCall(call, headers);
+// In KNNPlugin.createComponents()
+    }
+compileOnly "org.opensearch:protobufs:0.8.0"
+        ServerInterceptor getInterceptor();
 IllegalArgumentException: Multiple gRPC interceptors have the same order value: 10.
-Each interceptor must have a unique order value.
+**Registry Access Pattern for Converters with Nested Queries**:
+```gradle
 ```
-
-## GrpcServiceFactory
-
-### 1. Implement Custom Service Factory
-
-Several node resources are exposed to a `GrpcServiceFactory` for use within services such as client, settings, and thread pools.
-A plugin's `GrpcServiceFactory` implementation will be discovered through the SPI registration file and registered on the gRPC transport.
-
+public class MyCustomQueryConverter implements QueryBuilderProtoConverter {
+        }
+    - [Overview](#overview-1)
+    compileOnly 'org.opensearch:protobufs:${protobufs.version}'
+                public int order() { return 5; } // Lower = higher priority
+compileOnly "org.opensearch.plugin:transport-grpc-spi:${opensearch.version}"
+                @Override
+      - [How Order Values Work](#how-order-values-work)
+## Real-World Example: k-NN Plugin
+    QueryBuilder fromProto(QueryContainer queryContainer);
+In your `build.gradle`, declare that your plugin extends `transport-grpc`. This automatically adds the `extended.plugins=transport-grpc` entry to the auto-generated `plugin-descriptor.properties` file:
+    /**
+                                             Environment environment, NodeEnvironment nodeEnvironment,
+}
+  - [Real-World Example: k-NN Plugin](#real-world-example-k-nn-plugin)
+For `GrpcServiceFactory` implementations:
+            builder.filter(filterQuery);
 ```java
-public static class MockServiceProvider implements GrpcServiceFactory {
-
-    @Override
-    public String plugin() {
-        return "MockExtendingPlugin";
+- Register custom query types that can be processed via gRPC
+                public int order() { return 10; }
+            // First interceptor (order = 5, runs first)
+**1. Implement Provider:**
+Interface for converting protobuf query messages to OpenSearch QueryBuilder objects.
+                    };
+                        String methodName = call.getMethodDescriptor().getFullMethodName();
+      - [Duplicate Order Values](#duplicate-order-values)
+## Testing
+org.opensearch.mypackage.SampleInterceptorProvider
     }
-
-    @Override
-    public List<BindableService> build() {
-        return List.of(new MockChannelzService());
+        return new MyCustomQueryBuilder(customQuery.getField(), customQuery.getValue());
+```java
     }
+public class KNNQueryBuilderProtoConverter implements QueryBuilderProtoConverter {
 }
 ```
+        KNNQueryBuilder builder = new KNNQueryBuilder(
+Add the SPI dependency to your plugin's `build.gradle`:
+## gRPC Interceptors
+    classname 'org.opensearch.yourplugin.YourPlugin'
+---
+    @Override
+    }
+```
+public interface QueryBuilderProtoConverter {
+        this.registry = registry;
+            customQuery.getField(),
+    name 'your-plugin-name'
+}
+    // Create test protobuf query
+Interface for providing gRPC interceptors that can intercept and process all incoming gRPC requests. This enables plugins to implement cross-cutting concerns like authentication, authorization, logging, and metrics collection.
+```gradle
+**2. Converter Implementation with Registry Access:**
+```
+    List<OrderedGrpcInterceptor> getOrderedGrpcInterceptors();
+        // Handle nested queries using the injected registry
+    private QueryBuilderProtoConverterRegistry registry;
+        return Arrays.asList(
+}
+`src/main/resources/META-INF/services/org.opensearch.transport.grpc.spi.GrpcInterceptorProvider`:
+### 2. Declare Extension in build.gradle
+```java
+```
+            QueryContainer filterContainer = knnQuery.getFilter();
+    public void setRegistry(QueryBuilderProtoConverterRegistry registry) {
+        this.registry = registry;
+**1. Dependency in build.gradle:**
+```java
+}
+                    };
+    - [QueryBuilderProtoConverter](#querybuilderprotoconverter)
+**Context Preservation:** The transport-grpc module automatically preserves ThreadContext across async boundaries. Any data set by interceptors will be available in the gRPC service implementation, even when execution switches to different threads.
+}
+    // Register the converter
+                    return (call, headers, next) -> {
+                                             Supplier<RepositoriesService> repositoriesServiceSupplier) {
+                }
+    - [1. Implement Custom Query Converter](#1-implement-custom-query-converter)
+}
+    - [3. Create SPI Registration File(s)](#3-create-spi-registration-files)
+Interface for providing a `BindableService` factory to be registered on the grpc transport.
+    }
+```bash
+                @Override
+    @Override
+        if (knnQuery.hasFilter()) {
+}
+**Real-world examples:**
+    - [4. Testing Your Custom Converter](#4-testing-your-custom-converter)
+                public ServerInterceptor getInterceptor() {
+dependencies {
+#### Duplicate Order Values
+                                             ThreadPool threadPool, ResourceWatcherService resourceWatcherService,
+### QueryBuilderProtoConverter
+For `GrpcInterceptorProvider` implementations:
+        // Pass the registry to utility classes that need it
+## Table of Contents
+        return builder;
+```java
+}
+public class MyPlugin extends Plugin {
+                }
+            knnQuery.getK()
+opensearchplugin {
+    QueryContainer.QueryContainerCase getHandledQueryCase();

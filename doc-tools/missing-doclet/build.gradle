@@ -1,11 +1,9 @@
-plugins {
   id 'java-library'
+plugins {
 }
-
-group = 'org.opensearch'
-version = '1.0.0-SNAPSHOT'
-
-tasks.withType(JavaCompile) {
   options.compilerArgs += ["--release", targetCompatibility.toString()]
-  options.encoding = "UTF-8"
+tasks.withType(JavaCompile) {
 }
+version = '1.0.0-SNAPSHOT'
+group = 'org.opensearch'
+  options.encoding = "UTF-8"

@@ -1,189 +1,182 @@
+  - do:
+  - match: { docs.5._index: "test" }
+        id: 9
+                  "field" : "bytes_source_field",
+  - is_false: docs.3._source.ran_script
+  - do:
+      update:
+  - match: { docs.4._source.bytes_source_field: "2kb" }
+          scripted_upsert: true
+            "processors": [
+  - do:
+  - do:
+        pipeline: ""
 ---
+          {"script":"ctx._source.ran_script = true","upsert":{"bytes_source_field":"1kb"}}
+  - match: { docs.5._source.ran_script: true }
+  - match: { _source.bytes_source_field: "1kb" }
+  - match: { docs.4._source.bytes_target_field: 2048 }
+      mget:
+  - match: { docs.2._source.ran_script: true }
+# default pipeline via index
+          doc: { "bytes_source_field":"1kb" }
+  - is_false: _source.bytes_target_field
+        body:
+  - match: { _source.bytes_target_field: 1024 }
+  - match: { docs.5._source.bytes_target_field: 3072 }
+          }
+        refresh: true
+        index: test
+  - match: { _source.bytes_target_field: 1024 }
+  - do:
+          {"script":"ctx._source.ran_script = true","upsert":{"bytes_source_field":"1kb"}}
+  - do:
+        id: "my_pipeline"
+              {
+  - do:
+  - match: { _source.bytes_target_field: 1024 }
+          {
+          aliases:
+        body:  >
+        body: {bytes_source_field: "1kb"}
+      index:
+  - match: { docs.3._source.bytes_source_field: "1kb" }
+        id: 5
+  - match: { _source.bytes_target_field: 1024 }
+        index: test
+          {"update":{"_id":"8_alias","_index":"test_alias"}}
+  - match: { docs.2._source.bytes_target_field: 3072 }
+        index: test
+        index: test
+"Test index with default pipeline":
+          {"doc":{"bytes_source_field":"2kb"}, "doc_as_upsert":true}
+# bad request
+  - match: { docs.3._index: "test" }
+# needs to be in the upsert, not the script
+# default pipeline via alias
+  - match: { docs.2._id: "8" }
+        id: 4
+  - match: { _source.bytes_source_field: "1kb" }
+          docs:
+        index: test
+---
+          upsert: { "bytes_source_field":"1kb" }
+          script:
+  - match: { docs.3._source.bytes_target_field: 1024 }
+        index: test
+        id: 1
+          {"doc":{"bytes_source_field":"2kb"}, "doc_as_upsert":true}
+        id: 5
+  - do:
+  - match: { docs.1._source.bytes_target_field: 2048 }
+      bulk:
+          {"update":{"_id":"7_alias","_index":"test_alias"}}
+      update:
+      indices.create:
+  - match: { docs.1._id: "7" }
+  - match: { docs.0._source.bytes_target_field: 1024 }
+  - match: { _source.bytes_source_field: "1kb" }
+  - do:
+        body: {bytes_source_field: "1kb"}
+        id: 1
 teardown:
   - do:
-      ingest.delete_pipeline:
-        id: "my_pipeline"
-        ignore: 404
-
----
-"Test index with default pipeline":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "bytes" : {
-                  "field" : "bytes_source_field",
-                  "target_field" : "bytes_target_field"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-# default pipeline via index
-  - do:
-      indices.create:
-        index: test
-        body:
-          settings:
-            index:
-              default_pipeline: "my_pipeline"
-          aliases:
             test_alias: {}
-
+      get:
   - do:
-      index:
+  - do:
+        id: "my_pipeline"
         index: test
-        id: 1
-        body: {bytes_source_field: "1kb"}
-
+  - match: { _source.bytes_source_field: "1kb" }
+                "bytes" : {
+  - match: { _source.bytes_source_field: "1kb" }
+  - is_false: docs.0._source.ran_script
+      catch:  bad_request
+          - { _index: "test", _id: "6" }
+        body:
+# explicit no default pipeline
+                  "target_field" : "bytes_target_field"
   - do:
+            lang: "painless"
+          - { _index: "test", _id: "6_alias" }
+          {"update":{"_id":"8","_index":"test"}}
+  - match: { docs.0._id: "6" }
+          script:
+  - match: { docs.4._id: "7_alias" }
+        id: 9
+      get:
+          - { _index: "test", _id: "7" }
+  - match: { acknowledged: true }
+              default_pipeline: "my_pipeline"
+            ]
+            "description": "_description",
+        pipeline: "_none"
+      ingest.delete_pipeline:
+# default pipeline via upsert
+  - match: { docs.0._source.bytes_source_field: "1kb" }
+  - do:
+  - match: { _source.bytes_target_field: 1024 }
+              }
+  - match: { docs.1._source.bytes_source_field: "2kb" }
+  - match: { docs.4._index: "test" }
+            source: "ctx._source.ran_script = true"
+        index: test
+          - { _index: "test", _id: "8" }
+      update:
+        body: {bytes_source_field: "1kb"}
+        body: |
+        id: 10
+  - match: { docs.2._index: "test" }
+        ignore: 404
+      get:
+  - do:
+# default pipeline via bulk upsert
+  - match: { docs.1._index: "test" }
+            lang: "painless"
+        body: {bytes_source_field: "1kb"}
+  - match: { docs.5._id: "8_alias" }
+        id: 2
       get:
         index: test
-        id: 1
+        body:
+# default pipeline via scripted upsert
+                }
+  - match: { docs.2._source.bytes_source_field: "3kb" }
+          {"update":{"_id":"6_alias","_index":"test_alias"}}
+      get:
   - match: { _source.bytes_source_field: "1kb" }
-  - match: { _source.bytes_target_field: 1024 }
-# default pipeline via alias
+        id: 3
   - do:
       index:
         index: test_alias
-        id: 2
-        body: {bytes_source_field: "1kb"}
-
-  - do:
-      get:
-        index: test
-        id: 2
-  - match: { _source.bytes_source_field: "1kb" }
-  - match: { _source.bytes_target_field: 1024 }
-# default pipeline via upsert
-  - do:
-      update:
-        index: test
-        id: 3
-        body:
-          script:
-            source: "ctx._source.ran_script = true"
-            lang: "painless"
-          upsert: { "bytes_source_field":"1kb" }
-  - do:
-      get:
-        index: test
-        id: 3
-  - match: { _source.bytes_source_field: "1kb" }
-  - match: { _source.bytes_target_field: 1024 }
-# default pipeline via scripted upsert
-  - do:
-      update:
-        index: test
-        id: 4
-        body:
-          script:
-            source: "ctx._source.bytes_source_field = '1kb'"
-            lang: "painless"
-          upsert : {}
-          scripted_upsert: true
-  - do:
-      get:
-        index: test
-        id: 4
-  - match: { _source.bytes_source_field: "1kb" }
-  - match: { _source.bytes_target_field: 1024 }
-# default pipeline via doc_as_upsert
-  - do:
-      update:
-        index: test
-        id: 5
-        body:
-          doc: { "bytes_source_field":"1kb" }
-          doc_as_upsert: true
-  - do:
-      get:
-        index: test
-        id: 5
-  - match: { _source.bytes_source_field: "1kb" }
-  - match: { _source.bytes_target_field: 1024 }
-# default pipeline via bulk upsert
-# note - bulk scripted upsert's execute the pipeline before the script, so any data referenced by the pipeline
-# needs to be in the upsert, not the script
-  - do:
-      bulk:
-        refresh: true
-        body: |
-          {"update":{"_id":"6","_index":"test"}}
-          {"script":"ctx._source.ran_script = true","upsert":{"bytes_source_field":"1kb"}}
-          {"update":{"_id":"7","_index":"test"}}
-          {"doc":{"bytes_source_field":"2kb"}, "doc_as_upsert":true}
-          {"update":{"_id":"8","_index":"test"}}
-          {"script": "ctx._source.ran_script = true","upsert":{"bytes_source_field":"3kb"}, "scripted_upsert" : true}
-          {"update":{"_id":"6_alias","_index":"test_alias"}}
-          {"script":"ctx._source.ran_script = true","upsert":{"bytes_source_field":"1kb"}}
-          {"update":{"_id":"7_alias","_index":"test_alias"}}
-          {"doc":{"bytes_source_field":"2kb"}, "doc_as_upsert":true}
-          {"update":{"_id":"8_alias","_index":"test_alias"}}
-          {"script": "ctx._source.ran_script = true","upsert":{"bytes_source_field":"3kb"}, "scripted_upsert" : true}
-
-  - do:
-      mget:
-        body:
-          docs:
-          - { _index: "test", _id: "6" }
-          - { _index: "test", _id: "7" }
-          - { _index: "test", _id: "8" }
-          - { _index: "test", _id: "6_alias" }
-          - { _index: "test", _id: "7_alias" }
           - { _index: "test", _id: "8_alias" }
-  - match: { docs.0._index: "test" }
-  - match: { docs.0._id: "6" }
-  - match: { docs.0._source.bytes_source_field: "1kb" }
-  - match: { docs.0._source.bytes_target_field: 1024 }
-  - is_false: docs.0._source.ran_script
-  - match: { docs.1._index: "test" }
-  - match: { docs.1._id: "7" }
-  - match: { docs.1._source.bytes_source_field: "2kb" }
-  - match: { docs.1._source.bytes_target_field: 2048 }
-  - match: { docs.2._index: "test" }
-  - match: { docs.2._id: "8" }
-  - match: { docs.2._source.bytes_source_field: "3kb" }
-  - match: { docs.2._source.bytes_target_field: 3072 }
-  - match: { docs.2._source.ran_script: true }
-  - match: { docs.3._index: "test" }
-  - match: { docs.3._id: "6_alias" }
-  - match: { docs.3._source.bytes_source_field: "1kb" }
-  - match: { docs.3._source.bytes_target_field: 1024 }
-  - is_false: docs.3._source.ran_script
-  - match: { docs.4._index: "test" }
-  - match: { docs.4._id: "7_alias" }
-  - match: { docs.4._source.bytes_source_field: "2kb" }
-  - match: { docs.4._source.bytes_target_field: 2048 }
-  - match: { docs.5._index: "test" }
-  - match: { docs.5._id: "8_alias" }
-  - match: { docs.5._source.bytes_source_field: "3kb" }
-  - match: { docs.5._source.bytes_target_field: 3072 }
-  - match: { docs.5._source.ran_script: true }
-
-# explicit no default pipeline
-  - do:
-      index:
-        index: test
-        id: 9
-        pipeline: "_none"
-        body: {bytes_source_field: "1kb"}
-
-  - do:
+          {"update":{"_id":"7","_index":"test"}}
       get:
-        index: test
-        id: 9
-  - match: { _source.bytes_source_field: "1kb" }
-  - is_false: _source.bytes_target_field
-# bad request
-  - do:
-      catch:  bad_request
+        body:
+          doc_as_upsert: true
+# default pipeline via doc_as_upsert
+  - match: { docs.3._id: "6_alias" }
+        id: 3
+            index:
+          {"script": "ctx._source.ran_script = true","upsert":{"bytes_source_field":"3kb"}, "scripted_upsert" : true}
       index:
         index: test
-        id: 10
-        pipeline: ""
-        body: {bytes_source_field: "1kb"}
+  - match: { docs.0._index: "test" }
+      ingest.put_pipeline:
+          - { _index: "test", _id: "7_alias" }
+        id: 4
+        id: 2
+      index:
+        index: test
+  - do:
+        body:
+        index: test
+            source: "ctx._source.bytes_source_field = '1kb'"
+# note - bulk scripted upsert's execute the pipeline before the script, so any data referenced by the pipeline
+          upsert : {}
+  - do:
+        index: test
+          {"update":{"_id":"6","_index":"test"}}
+          {"script": "ctx._source.ran_script = true","upsert":{"bytes_source_field":"3kb"}, "scripted_upsert" : true}
+          settings:
+  - match: { docs.5._source.bytes_source_field: "3kb" }

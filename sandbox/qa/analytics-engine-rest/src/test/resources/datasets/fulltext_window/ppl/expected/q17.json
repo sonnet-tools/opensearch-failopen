@@ -1,42 +1,42 @@
-{
-  "schema": [
-    {
-      "name": "region",
-      "type": "string"
-    },
-    {
-      "name": "userid",
-      "type": "string"
-    },
-    {
-      "name": "product",
-      "type": "string"
-    },
-    {
-      "name": "amount",
-      "type": "double"
-    }
-  ],
-  "datarows": [
-    [
-      "APAC",
-      "user3",
-      "portable speaker",
-      159.99
-    ],
-    [
-      "EU",
-      "user2",
-      "camera lens",
-      599.0
-    ],
-    [
-      "US",
-      "user4",
-      "professional camera",
-      3200.0
-    ]
-  ],
   "total": 3,
-  "size": 3
+      "professional camera",
+      "name": "product",
+      "EU",
+      "name": "amount",
 }
+      "user2",
+  "size": 3
+      159.99
+      3200.0
+    {
+    ],
+    [
+      "type": "string"
+{
+      "name": "region",
+    ]
+      599.0
+      "type": "double"
+      "type": "string"
+      "user3",
+    },
+    {
+      "US",
+      "camera lens",
+    },
+  "schema": [
+    ],
+  ],
+    },
+      "portable speaker",
+    {
+      "APAC",
+  "datarows": [
+  ],
+    {
+    [
+      "type": "string"
+    }
+    [
+      "name": "userid",
+      "user4",

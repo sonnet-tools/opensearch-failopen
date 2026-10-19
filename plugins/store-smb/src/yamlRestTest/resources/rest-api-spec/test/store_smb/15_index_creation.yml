@@ -1,24 +1,21 @@
-"Test the smb_mmap_fs directory wrapper":
-  - do:
-      indices.create:
-        index: smb-test
-        body:
-          settings:
-            index:
-              store.type: smb_mmap_fs
-
-  - do:
-      index:
         index:  smb-test
+  - match:   { _version: 1}
+  - do:
         id:     1
-        body:   { foo: bar }
-
+  - match:   { _id:      "1"}
   - do:
       get:
-        index:  smb-test
-        id:     1
-
-  - match:   { _index:   smb-test }
-  - match:   { _id:      "1"}
-  - match:   { _version: 1}
+          settings:
   - match:   { _source: { foo: bar }}
+"Test the smb_mmap_fs directory wrapper":
+            index:
+        body:   { foo: bar }
+      indices.create:
+        id:     1
+        index: smb-test
+  - match:   { _index:   smb-test }
+        body:
+        index:  smb-test
+              store.type: smb_mmap_fs
+      index:
+  - do:

@@ -1,601 +1,543 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- *
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- */
-
-import org.opensearch.gradle.LoggedExec
-import org.opensearch.gradle.MavenFilteringHack
-import org.opensearch.gradle.OS
-import org.opensearch.gradle.info.BuildParams
-import org.redline_rpm.header.Flags
-
-import java.nio.file.Files
-import java.nio.file.Path
-import java.util.regex.Matcher
-import java.util.regex.Pattern
-
-/*****************************************************************************
- *                         Deb and rpm configuration                         *
- *****************************************************************************
- *
- * The general strategy here is to build a directory on disk that contains
- * stuff that needs to be copied into the distributions. This is
- * important for two reasons:
- * 1. ospackage wants to copy the directory permissions that it sees off of the
- *    filesystem. If you ask it to create a directory that doesn't already
- *    exist on disk it petulantly creates it with 0755 permissions, no matter
- *    how hard you try to convince it otherwise.
- * 2. Convincing ospackage to pick up an empty directory as part of a set of
+          if (license != expectedLicense) {
  *    directories on disk is reasonably easy. Convincing it to just create an
- *    empty directory requires more wits than I have.
- * 3. ospackage really wants to suck up some of the debian control scripts
- *    directly from the filesystem. It doesn't want to process them through
- *    MavenFilteringHack or any other copy-style action.
- *
- * The following commands are useful when it comes to check the user/group
- * and files permissions set within the RPM and DEB packages:
- *
- *    rpm -qlp --dump path/to/opensearch.rpm
- *    dpkg -c path/to/opensearch.deb
- */
-
-plugins {
-  id "com.netflix.nebula.ospackage-base" version "12.3.0"
-}
-
-void addProcessFilesTask(String type, boolean jdk) {
-  String packagingFiles = "build/packaging/${jdk ? '' : 'no-jdk-'}${type}"
-
-  String taskName = "process'${jdk ? '' : 'NoJdk'}${type.capitalize()}Files"
-  tasks.register(taskName, Copy) {
-    into packagingFiles
-
-    with copySpec {
-      from 'src/common'
-      from "src/${type}"
-      MavenFilteringHack.filter(it, expansionsForDistribution(type, jdk))
-    }
-
-    into('etc/opensearch') {
-      with configFiles(type, jdk)
-    }
-    MavenFilteringHack.filter(it, expansionsForDistribution(type, jdk))
-
-    doLast {
-      // create empty dirs, we set the permissions when configuring the packages
-      mkdir "${packagingFiles}/var/log/opensearch"
-      mkdir "${packagingFiles}/var/lib/opensearch"
-      mkdir "${packagingFiles}/usr/share/opensearch/plugins"
-
-      // bare empty dir for /etc/opensearch and /etc/opensearch/jvm.options.d
-      mkdir "${packagingFiles}/opensearch"
-      mkdir "${packagingFiles}/opensearch/jvm.options.d"
-    }
-  }
-}
-
 addProcessFilesTask('deb', true)
-addProcessFilesTask('deb', false)
-addProcessFilesTask('rpm', true)
-addProcessFilesTask('rpm', false)
-
-// Common configuration that is package dependent. This can't go in ospackage
-// since we have different templated files that need to be consumed, but the structure
-// is the same
-Closure commonPackageConfig(String type, boolean jdk, String architecture) {
-  return {
-    onlyIf {
-      OS.current().equals(OS.WINDOWS) == false
-    }
-    dependsOn "process'${jdk ? '' : 'NoJdk'}${type.capitalize()}Files"
-    packageName = "opensearch"
-    if (type == 'deb') {
-      if (architecture == 'x64') {
-        arch = 'amd64'
-      } else {
-        assert architecture == 'arm64' : architecture
-        arch = 'arm64'
-      }
-    } else {
-      assert type == 'rpm' : type
-      if (architecture == 'x64') {
-        arch = 'x86_64'
-      } else {
-        assert architecture == 'arm64' : architecture
-        arch = 'aarch64'
-      }
-    }
-    // Follow opensearch's file naming convention
-    String jdkString = jdk ? "" : "-no-jdk"
-    String prefix = "${architecture == 'arm64' ? 'arm64-' : ''}${jdk ? '' : 'no-jdk-'}${type}"
-    destinationDirectory = file("${prefix}/build/distributions")
-
-    // SystemPackagingTask overrides default archive task convention mappings, but doesn't provide a setter so we have to override the convention mapping itself
-    // Deb convention uses a '_' for final separator before architecture, rpm uses a '.'
-    if (type == 'deb') {
-      archiveFileName.value(project.provider({ "${destinationDirectory.get()}/${packageName}-min_${project.version}${jdkString}_${archString}.${type}" }))
-    } else {
-      archiveFileName.value(project.provider({ "${destinationDirectory.get()}/${packageName}-min-${project.version}${jdkString}.${archString}.${type}" }))
-    }
-
-    String packagingFiles = "build/packaging/${jdk ? '' : 'no-jdk-'}${type}"
-
-    String scripts = "${packagingFiles}/scripts"
-    preInstall file("${scripts}/preinst")
-    postInstall file("${scripts}/postinst")
-    preUninstall file("${scripts}/prerm")
-    postUninstall file("${scripts}/postrm")
-    if (type == 'rpm') {
-      postTrans file("${scripts}/posttrans")
-    }
-
-    // top level "into" directive is not inherited from ospackage for some reason, so we must
-    // specify it again explicitly for copying common files
-    into('/usr/share/opensearch') {
-      into('bin') {
-        with binFiles(type, jdk)
-      }
-      from(rootProject.projectDir) {
-        include 'README.md'
         filePermissions {
-          unix 0644
-        }
-      }
-      into('lib') {
-        with libFiles()
-      }
-      into('modules') {
-        with modulesFiles('linux-' + ((architecture == 'x64') ? 'x64' : architecture))
-      }
-      if (jdk) {
-        into('jdk') {
-          with jdkFiles(project, 'linux', architecture)
-        }
-      }
-      into('agent') {
-        with agentFiles()
-      }
-      // we need to specify every intermediate directory in these paths so the package managers know they are explicitly
-      // intended to manage them; otherwise they may be left behind on uninstallation. duplicate calls of the same
-      // directory are fine
-      eachFile { FileCopyDetails fcp ->
-        String[] segments = fcp.relativePath.segments
-        for (int i = segments.length - 2; i > 2; --i) {
-          if (type == 'rpm') {
-            directory('/' + segments[0..i].join('/'), 0755)
-          }
-          if (segments[-2] == 'bin' || segments[-1] == 'jspawnhelper') {
-            fcp.permissions(perm -> perm.unix(0755))
-          } else {
-            fcp.permissions(perm -> perm.unix(0644))
-          }
-        }
-      }
-    }
-
-    // license files
-    if (type == 'deb') {
-      into("/usr/share/doc/${packageName}") {
-        from "${packagingFiles}/copyright"
-        filePermissions {
-          unix 0644
-        }
-      }
-    } else {
-      assert type == 'rpm'
-      into('/usr/share/opensearch') {
-        from(rootProject.file('licenses')) {
-          include 'APACHE-LICENSE-2.0.txt'
-          rename { 'LICENSE.txt' }
-        }
-        filePermissions {
-          unix 0644
-        }
-      }
-    }
-
-    // ========= config files =========
-    configurationFile '/etc/opensearch/opensearch.yml'
-    configurationFile '/etc/opensearch/jvm.options'
-    configurationFile '/etc/opensearch/log4j2.properties'
-    from("${packagingFiles}") {
-      dirPermissions {
-        unix 0750
-      }
-      into('/etc')
-      permissionGroup 'opensearch'
-      includeEmptyDirs = true
-      createDirectoryEntry = true
-      include("opensearch") // empty dir, just to add directory entry
-      include("opensearch/jvm.options.d") // empty dir, just to add directory entry
-    }
-    from("${packagingFiles}/etc/opensearch") {
-      into('/etc/opensearch')
-      dirPermissions {
-        unix 0750
-      }
-      filePermissions{
-        unix 0660
-      }
-      permissionGroup 'opensearch'
-      includeEmptyDirs = true
-      createDirectoryEntry = true
-      fileType CONFIG | NOREPLACE
-    }
-    String envFile = expansionsForDistribution(type, jdk)['path.env']
-    configurationFile envFile
-    into(new File(envFile).getParent()) {
-      fileType CONFIG | NOREPLACE
-      permissionGroup 'opensearch'
-      filePermissions {
-        unix 0660
-      }
-      from "${packagingFiles}/env/opensearch"
-    }
-
-    // ========= systemd =========
-    into('/usr/lib/tmpfiles.d') {
-      from "${packagingFiles}/systemd/opensearch.conf"
-      filePermissions {
-        unix 0644
-      }
-    }
-    into('/usr/lib/systemd/system') {
-      fileType CONFIG | NOREPLACE
-      from "${packagingFiles}/systemd/opensearch.service"
-      filePermissions {
-        unix 0644
-      }
-    }
-    into('/usr/lib/sysctl.d') {
-      fileType CONFIG | NOREPLACE
-      from "${packagingFiles}/systemd/sysctl/opensearch.conf"
-      filePermissions {
-        unix 0644
-      }
-    }
-    into('/usr/share/opensearch/bin') {
-      from "${packagingFiles}/systemd/systemd-entrypoint"
-      filePermissions {
-        unix 0755
-      }
-    }
-
-    // ========= sysV init =========
-    configurationFile '/etc/init.d/opensearch'
-    into('/etc/init.d') {
-      filePermissions {
-        unix 0750
-      }
-      fileType CONFIG | NOREPLACE
-      from "${packagingFiles}/init.d/opensearch"
-    }
-
-    // ========= empty dirs =========
-    // NOTE: these are created under packagingFiles as empty, but the permissions are set here
-    Closure copyEmptyDir = { path, u, g, mode ->
-      File file = new File(path)
-      into(file.parent) {
-        from "${packagingFiles}/${file.parent}"
-        include file.name
-        includeEmptyDirs = true
-        createDirectoryEntry = true
-        user u
-        permissionGroup g
-        dirPermissions {
-          unix mode
-        }
-      }
-    }
-    copyEmptyDir('/var/log/opensearch', 'opensearch', 'opensearch', 0750)
-    copyEmptyDir('/var/lib/opensearch', 'opensearch', 'opensearch', 0750)
-    copyEmptyDir('/usr/share/opensearch/plugins', 'root', 'root', 0755)
-
-    into '/usr/share/opensearch'
-    with noticeFile(jdk)
-  }
-}
-
-apply plugin: 'com.netflix.nebula.ospackage-base'
-
-// this is package indepdendent configuration
-ospackage {
-  maintainer ='OpenSearch Team <opensearch@amazon.com>'
-  summary = 'Distributed RESTful search engine built for the cloud'
-  packageDescription = '''
-    Reference documentation can be found at
-    https://github.com/opensearch-project/OpenSearch
-  '''.stripIndent().trim()
-  url = 'https://github.com/opensearch-project/OpenSearch'
-
-  // signing setup
-  if (project.hasProperty('signing.password') && BuildParams.isSnapshotBuild() == false) {
-    signingKeyId = project.hasProperty('signing.keyId') ? project.property('signing.keyId') : 'D88E42B4'
-    signingKeyPassphrase = project.property('signing.password')
-    signingKeyRingFile = project.hasProperty('signing.secretKeyRingFile') ?
-      project.file(project.property('signing.secretKeyRingFile')) :
-      new File(new File(System.getProperty('user.home'), '.gnupg'), 'secring.gpg')
-  }
-
-  // version found on oldest supported distro, centos-6
-  requires('coreutils', '8.4', GREATER | EQUAL)
-
-  fileMode = 0644
-  dirMode = 0755
-  user = 'root'
-  permissionGroup = 'root'
-
-  into '/usr/share/opensearch'
-}
-
-Closure commonDebConfig(boolean jdk, String architecture) {
-  return {
-    configure(commonPackageConfig('deb', jdk, architecture))
-
-    // jdeb does not provide a way to set the License control attribute, and ospackage
-    // silently ignores setting it. Instead, we set the license as "custom field"
-    customFields['License'] = 'ASL-2.0'
-
-    archiveVersion = project.version.replace('-', '~')
-    packageGroup = 'web'
-
-    // versions found on oldest supported distro, centos-6
-    requires('bash', '4.1', GREATER | EQUAL)
-    requires('lsb-base', '4', GREATER | EQUAL)
-    requires 'libc6'
-    requires 'adduser'
-
-    into('/usr/share/lintian/overrides') {
-      from('src/deb/lintian/opensearch')
-      filePermissions {
-        unix 0644
-      }
-    }
-  }
-}
-
-tasks.register('buildArm64Deb', Deb) {
-  configure(commonDebConfig(true, 'arm64'))
-}
-
-tasks.register('buildNoJdkArm64Deb', Deb) {
-  configure(commonDebConfig(false, 'arm64'))
-}
-
-tasks.register('buildDeb', Deb) {
-  configure(commonDebConfig(true, 'x64'))
-}
-
-tasks.register('buildNoJdkDeb', Deb) {
-  configure(commonDebConfig(false, 'x64'))
-}
-
-Closure commonRpmConfig(boolean jdk, String architecture) {
-  return {
-    configure(commonPackageConfig('rpm', jdk, architecture))
-
     license = 'ASL-2.0'
-
-    packageGroup = 'Application/Internet'
-    requires '/bin/bash'
-
-    obsoletes packageName, '7.0.0', Flags.LESS
-
-    prefix '/usr'
-    packager = 'OpenSearch'
-    archiveVersion = project.version.replace('-', '_')
-    release = '1'
-    os = 'LINUX'
-    distribution = 'OpenSearch'
-    vendor = 'OpenSearch'
-    // TODO ospackage doesn't support icon but we used to have one
-
-    // without this the rpm will have parent dirs of any files we copy in, eg /etc/opensearch
-    addParentDirs = false
-  }
-}
-
-tasks.register('buildArm64Rpm', Rpm) {
-  configure(commonRpmConfig(true, 'arm64'))
-}
-
-tasks.register('buildNoJdkArm64Rpm', Rpm) {
-  configure(commonRpmConfig(false, 'arm64'))
-}
-
-tasks.register('buildRpm', Rpm) {
-  configure(commonRpmConfig(true, 'x64'))
-}
-
-tasks.register('buildNoJdkRpm', Rpm) {
-  configure(commonRpmConfig(false, 'x64'))
-}
-
-Closure dpkgExists = { it -> new File('/bin/dpkg-deb').exists() || new File('/usr/bin/dpkg-deb').exists() || new File('/usr/local/bin/dpkg-deb').exists() }
-Closure rpmExists = { it -> new File('/bin/rpm').exists() || new File('/usr/bin/rpm').exists() || new File('/usr/local/bin/rpm').exists() }
-
-Closure debFilter = { f -> f.name.endsWith('.deb') }
-
-// This configures the default artifact for the distribution specific
-// subprojects. We have subprojects because Gradle project substitutions
-// can only bind to the default configuration of a project
-subprojects {
-  apply plugin: 'distribution'
-
-  String buildTask = "build${it.name.replaceAll(/-[a-z]/) { it.substring(1).toUpperCase() }.capitalize()}"
-  ext.buildDist = parent.tasks.named(buildTask)
-  artifacts {
-    'default' buildDist
-  }
-  tasks.named("assemble").configure { dependsOn(parent.tasks.named(buildTask)) }
-
-  if (dpkgExists() || rpmExists()) {
-
-    // sanity checks if packages can be extracted
-    final File extractionDir = new File(buildDir, 'extracted')
-    File packageExtractionDir
-    if (project.name.contains('deb')) {
-      packageExtractionDir = new File(extractionDir, 'deb-extracted')
-    } else {
-      assert project.name.contains('rpm')
-      packageExtractionDir = new File(extractionDir, 'rpm-extracted')
+      from "src/${type}"
+      eachFile { FileCopyDetails fcp ->
+          if (count == 0) {
+        permissionGroup g
     }
-    tasks.register('checkExtraction', LoggedExec) {
-      dependsOn buildDist
-      doFirst {
-        delete(extractionDir)
-        extractionDir.mkdirs()
+      OS.current().equals(OS.WINDOWS) == false
+          String expectedLicense = "ASL-2.0"
+            }
+          rename { 'LICENSE.txt' }
+        unix 0750
+    // license files
+      createDirectoryEntry = true
+import org.opensearch.gradle.OS
+        from "${packagingFiles}/${file.parent}"
+ospackage {
       }
-    }
-
-    tasks.named("check").configure { dependsOn "checkExtraction" }
-    if (project.name.contains('deb')) {
-      tasks.named("checkExtraction").configure {
-        onlyIf dpkgExists
-        commandLine 'dpkg-deb', '-x', "${-> buildDist.get().outputs.files.filter(debFilter).singleFile}", packageExtractionDir
-      }
-    } else {
-      assert project.name.contains('rpm')
-      tasks.named("checkExtraction").configure {
-        onlyIf rpmExists
+    destinationDirectory = file("${prefix}/build/distributions")
+              count++
         final File rpmDatabase = new File(extractionDir, 'rpm-database')
-        commandLine 'rpm',
-          '--badreloc',
-          '--ignorearch',
-          '--ignoreos',
-          '--nodeps',
-          '--noscripts',
-          '--notriggers',
-          '--dbpath',
-          rpmDatabase,
-          '--relocate',
-          "/=${packageExtractionDir}",
+ *    exist on disk it petulantly creates it with 0755 permissions, no matter
+        final ByteArrayOutputStream output = new ByteArrayOutputStream()
+    String prefix = "${architecture == 'arm64' ? 'arm64-' : ''}${jdk ? '' : 'no-jdk-'}${type}"
+        final ByteArrayOutputStream output = new ByteArrayOutputStream()
+      tasks.named("checkExtraction").configure {
           '-i',
-          "${-> buildDist.get().outputs.files.singleFile}"
-      }
-    }
-
-    tasks.register("checkLicense") {
-      dependsOn buildDist, "checkExtraction"
-    }
-    check.dependsOn "checkLicense"
-    if (project.name.contains('deb')) {
-      tasks.named("checkLicense").configure {
-        onlyIf dpkgExists
-        doLast {
-          Path copyrightPath
-          String expectedLicense
-          String licenseFilename
-          copyrightPath = packageExtractionDir.toPath().resolve("usr/share/doc/opensearch/copyright")
-          expectedLicense = "ASL-2.0"
           licenseFilename = "APACHE-LICENSE-2.0.txt"
-          final List<String> header = Arrays.asList("Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/",
-            "Copyright: Elasticsearch B.V. <info@elastic.co>",
-            "Copyright: OpenSearch Contributors",
-            "License: " + expectedLicense)
-          final List<String> licenseLines = Files.readAllLines(rootDir.toPath().resolve("licenses/" + licenseFilename))
-          final List<String> expectedLines = header + licenseLines.collect { " " + it }
-          assertLinesInFile(copyrightPath, expectedLines)
-        }
-      }
+    configurationFile '/etc/opensearch/jvm.options'
+        commandLine 'rpm',
+          } else {
+Closure commonRpmConfig(boolean jdk, String architecture) {
+      into('agent') {
     } else {
-      assert project.name.contains('rpm')
-      tasks.named("checkLicense").configure {
-        onlyIf rpmExists
+      permissionGroup 'opensearch'
         doLast {
-          String licenseFilename = "APACHE-LICENSE-2.0.txt"
-          final List<String> licenseLines = Files.readAllLines(rootDir.toPath().resolve("licenses/" + licenseFilename))
-          final Path licensePath = packageExtractionDir.toPath().resolve("usr/share/opensearch/LICENSE.txt")
-          assertLinesInFile(licensePath, licenseLines)
-        }
-      }
-    }
-
-    tasks.register("checkNotice") {
-      dependsOn buildDist, "checkExtraction"
-      onlyIf {
-        (project.name.contains('deb') && dpkgExists.call(it)) || (project.name.contains('rpm') && rpmExists.call(it))
-      }
-      doLast {
-        final List<String> noticeLines = Arrays.asList("OpenSearch (https://opensearch.org/)", "Copyright OpenSearch Contributors")
+      into("/usr/share/doc/${packageName}") {
+ * Licensed to Elasticsearch under one or more contributor
+ *
+  tasks.named("assemble").configure { dependsOn(parent.tasks.named(buildTask)) }
+    signingKeyPassphrase = project.property('signing.password')
+    configure(commonPackageConfig('deb', jdk, architecture))
+    configurationFile '/etc/opensearch/opensearch.yml'
+      MavenFilteringHack.filter(it, expansionsForDistribution(type, jdk))
+    postUninstall file("${scripts}/postrm")
+      mkdir "${packagingFiles}/opensearch"
+        user u
+    into('/usr/share/opensearch') {
         final Path noticePath = packageExtractionDir.toPath().resolve("usr/share/opensearch/NOTICE.txt")
+          final String info = output.toString('UTF-8')
+          "${-> buildDist.get().outputs.files.singleFile}"
+  configure(commonRpmConfig(true, 'arm64'))
+// since we have different templated files that need to be consumed, but the structure
+  }
+    }
+    into('/usr/share/lintian/overrides') {
+  packageDescription = '''
+        from(rootProject.file('licenses')) {
+    tasks.register('checkLicenseMetadata', LoggedExec) {
+        commandLine 'dpkg-deb', '-x', "${-> buildDist.get().outputs.files.filter(debFilter).singleFile}", packageExtractionDir
+          }
+    } else {
+      tasks.named("checkLicense").configure {
+ *    dpkg -c path/to/opensearch.deb
+    }
+      filePermissions {
+            final Matcher matcher = pattern.matcher(actualLine)
+ *    MavenFilteringHack or any other copy-style action.
+}
+        unix 0644
+  summary = 'Distributed RESTful search engine built for the cloud'
+            directory('/' + segments[0..i].join('/'), 0755)
+        with libFiles()
+        includeEmptyDirs = true
+      }
+          final Path licensePath = packageExtractionDir.toPath().resolve("usr/share/opensearch/LICENSE.txt")
+    // TODO ospackage doesn't support icon but we used to have one
+      }
+        arch = 'amd64'
+      }
+        onlyIf dpkgExists
+          final Pattern pattern = Pattern.compile("\\s*License: (.+)")
+    obsoletes packageName, '7.0.0', Flags.LESS
+    configure(commonPackageConfig('rpm', jdk, architecture))
+    into packagingFiles
+      from "${packagingFiles}/env/opensearch"
+  artifacts {
+          final String[] actualLines = info.split("\n")
+      archiveFileName.value(project.provider({ "${destinationDirectory.get()}/${packageName}-min_${project.version}${jdkString}_${archString}.${type}" }))
+        from "${packagingFiles}/copyright"
+ *
+      // we need to specify every intermediate directory in these paths so the package managers know they are explicitly
+ * You may obtain a copy of the License at
+      from "${packagingFiles}/systemd/opensearch.service"
+ * 1. ospackage wants to copy the directory permissions that it sees off of the
+          unix mode
+addProcessFilesTask('rpm', true)
+    }
+ *    filesystem. If you ask it to create a directory that doesn't already
+          assertLinesInFile(licensePath, licenseLines)
+      onlyIf {
+ *
+    } else {
+      }
+    // Deb convention uses a '_' for final separator before architecture, rpm uses a '.'
+        doLast {
+              }
+tasks.register('buildNoJdkDeb', Deb) {
+      }
+  tasks.register(taskName, Copy) {
+          Path copyrightPath
+ * 3. ospackage really wants to suck up some of the debian control scripts
+          int count = 0
+      mkdir "${packagingFiles}/opensearch/jvm.options.d"
+      }
+    tasks.register("checkNotice") {
+    configurationFile envFile
+ * KIND, either express or implied.  See the License for the
+    }
+    // ========= sysV init =========
+/*****************************************************************************
+        include 'README.md'
+ * not use this file except in compliance with the License.
+// this is package indepdendent configuration
+addProcessFilesTask('deb', false)
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    copyEmptyDir('/usr/share/opensearch/plugins', 'root', 'root', 0755)
+// subprojects. We have subprojects because Gradle project substitutions
+    preUninstall file("${scripts}/prerm")
+    into('/usr/share/opensearch/bin') {
+    customFields['License'] = 'ASL-2.0'
+    }
+          with jdkFiles(project, 'linux', architecture)
+      assert type == 'rpm' : type
+      tasks.named("checkLicense").configure {
+          include 'APACHE-LICENSE-2.0.txt'
+            "License: " + expectedLicense)
+        assert architecture == 'arm64' : architecture
+  String buildTask = "build${it.name.replaceAll(/-[a-z]/) { it.substring(1).toUpperCase() }.capitalize()}"
+    onlyIf {
+          if (count > 1) {
+      assert project.name.contains('rpm')
+        }
+    into(new File(envFile).getParent()) {
+    requires('bash', '4.1', GREATER | EQUAL)
+  maintainer ='OpenSearch Team <opensearch@amazon.com>'
+    }
+          }
+    requires('lsb-base', '4', GREATER | EQUAL)
+          if (type == 'rpm') {
+          String license = output.toString('UTF-8')
+    if (type == 'rpm') {
+    } else {
+    // jdeb does not provide a way to set the License control attribute, and ospackage
+      with configFiles(type, jdk)
+}
+          '--noscripts',
+      }
+  return {
+  configure(commonDebConfig(false, 'arm64'))
+    // specify it again explicitly for copying common files
+import java.nio.file.Path
+                throw new GradleException("expected license [${expectedLicense} for package info but found [${actualLicense}]")
+ * Modifications Copyright OpenSearch Contributors. See
+}
+subprojects {
+        exec.standardOutput = output
+    }
+      filePermissions {
+      }
+/*
+    with copySpec {
+Closure commonPackageConfig(String type, boolean jdk, String architecture) {
+        with binFiles(type, jdk)
+ * SPDX-License-Identifier: Apache-2.0
+ * GitHub history for details.
+ *
+tasks.register('buildArm64Deb', Deb) {
+        doLast {
+// Common configuration that is package dependent. This can't go in ospackage
+}
+      into(file.parent) {
+}
         assertLinesInFile(noticePath, noticeLines)
       }
+    MavenFilteringHack.filter(it, expansionsForDistribution(type, jdk))
+    String envFile = expansionsForDistribution(type, jdk)['path.env']
+  if (project.hasProperty('signing.password') && BuildParams.isSnapshotBuild() == false) {
+      }
     }
+      }
+  url = 'https://github.com/opensearch-project/OpenSearch'
+    if (type == 'deb') {
+      fileType CONFIG | NOREPLACE
+void addProcessFilesTask(String type, boolean jdk) {
+    }
+    File packageExtractionDir
+    into('/usr/lib/tmpfiles.d') {
+      }
+    dependsOn "process'${jdk ? '' : 'NoJdk'}${type.capitalize()}Files"
+    }
+          unix 0644
+        onlyIf dpkgExists
+      permissionGroup 'opensearch'
+    // sanity checks if packages can be extracted
+    copyEmptyDir('/var/lib/opensearch', 'opensearch', 'opensearch', 0750)
+tasks.register('buildNoJdkRpm', Rpm) {
+ * software distributed under the License is distributed on an
+        }
+plugins {
+      }
+      filePermissions {
+  ext.buildDist = parent.tasks.named(buildTask)
+      createDirectoryEntry = true
+      }
+  requires('coreutils', '8.4', GREATER | EQUAL)
+      checkLicenseMetadata { LoggedExec exec ->
+      }
+      if (architecture == 'x64') {
+      includeEmptyDirs = true
+      include("opensearch") // empty dir, just to add directory entry
+tasks.register('buildNoJdkArm64Deb', Deb) {
+      packageExtractionDir = new File(extractionDir, 'deb-extracted')
+      dirPermissions {
+    // without this the rpm will have parent dirs of any files we copy in, eg /etc/opensearch
     tasks.named("check").configure { dependsOn "checkNotice" }
-
-    tasks.register('checkLicenseMetadata', LoggedExec) {
+  configure(commonDebConfig(false, 'x64'))
+    signingKeyRingFile = project.hasProperty('signing.secretKeyRingFile') ?
+ */
+    // top level "into" directive is not inherited from ospackage for some reason, so we must
+  '''.stripIndent().trim()
+      } else {
+      postTrans file("${scripts}/posttrans")
+      into('/etc')
+addProcessFilesTask('rpm', false)
+tasks.register('buildRpm', Rpm) {
+    archiveVersion = project.version.replace('-', '~')
+            fcp.permissions(perm -> perm.unix(0755))
+    // silently ignores setting it. Instead, we set the license as "custom field"
+ * stuff that needs to be copied into the distributions. This is
+ * and files permissions set within the RPM and DEB packages:
+      archiveFileName.value(project.provider({ "${destinationDirectory.get()}/${packageName}-min-${project.version}${jdkString}.${archString}.${type}" }))
+        unix 0750
+    from("${packagingFiles}/etc/opensearch") {
+    preInstall file("${scripts}/preinst")
+    doLast {
+          }
+      }
+      filePermissions {
+      }
+    into '/usr/share/opensearch'
+  configure(commonDebConfig(true, 'x64'))
+          final List<String> licenseLines = Files.readAllLines(rootDir.toPath().resolve("licenses/" + licenseFilename))
+      }
+    if (project.name.contains('deb')) {
+  if (dpkgExists() || rpmExists()) {
+        arch = 'aarch64'
+      filePermissions {
+      from "${packagingFiles}/systemd/sysctl/opensearch.conf"
+      include("opensearch/jvm.options.d") // empty dir, just to add directory entry
+          '--dbpath',
+    archiveVersion = project.version.replace('-', '_')
+        }
+        unix 0660
+      }
+    release = '1'
+      includeEmptyDirs = true
+          copyrightPath = packageExtractionDir.toPath().resolve("usr/share/doc/opensearch/copyright")
+    }
+    'default' buildDist
+      if (architecture == 'x64') {
+ * compatible open source license.
+  String packagingFiles = "build/packaging/${jdk ? '' : 'no-jdk-'}${type}"
+        delete(extractionDir)
+ *
+          '--nodeps',
+      filePermissions {
+      assert project.name.contains('rpm')
+    tasks.register("checkLicense") {
+    } else {
+          }
+}
+    }
+      if (jdk) {
+ *****************************************************************************
+    }
+    tasks.named("check").configure { dependsOn "checkExtraction" }
+ * the Apache License, Version 2.0 (the "License"); you may
+      }
+    }
+ *    directly from the filesystem. It doesn't want to process them through
+  }
+    into('/usr/lib/sysctl.d') {
+        for (int i = segments.length - 2; i > 2; --i) {
+        extractionDir.mkdirs()
+import org.redline_rpm.header.Flags
+ */
+          String expectedLicense = "ASL-2.0"
+    with noticeFile(jdk)
+Closure rpmExists = { it -> new File('/bin/rpm').exists() || new File('/usr/bin/rpm').exists() || new File('/usr/local/bin/rpm').exists() }
+    }
+    String scripts = "${packagingFiles}/scripts"
+      mkdir "${packagingFiles}/usr/share/opensearch/plugins"
+  permissionGroup = 'root'
+        filePermissions {
+ * The OpenSearch Contributors require contributions made to
+          unix 0644
+    copyEmptyDir('/var/log/opensearch', 'opensearch', 'opensearch', 0750)
+    String packagingFiles = "build/packaging/${jdk ? '' : 'no-jdk-'}${type}"
+    into('etc/opensearch') {
+            "Copyright: OpenSearch Contributors",
+    }
+}
+        exec.commandLine 'rpm', '-qp', '--queryformat', '%{License}', "${-> buildDist.get().outputs.files.singleFile}"
+      fileType CONFIG | NOREPLACE
+ * this file be licensed under the Apache-2.0 license or a
+      filePermissions {
+    if (project.name.contains('deb')) {
+        unix 0660
+    into('/usr/lib/systemd/system') {
+ * license agreements. See the NOTICE file distributed with
+ *
+ * this work for additional information regarding copyright
+tasks.register('buildNoJdkArm64Rpm', Rpm) {
+          final List<String> expectedLines = header + licenseLines.collect { " " + it }
+      checkLicenseMetadata { LoggedExec exec ->
+      into('modules') {
+import java.util.regex.Matcher
+// can only bind to the default configuration of a project
+    requires 'adduser'
+    os = 'LINUX'
+        assert architecture == 'arm64' : architecture
+    }
+  // signing setup
+      from "${packagingFiles}/init.d/opensearch"
+      doFirst {
+          }
+ * The following commands are useful when it comes to check the user/group
+        }
+    // SystemPackagingTask overrides default archive task convention mappings, but doesn't provide a setter so we have to override the convention mapping itself
+import java.util.regex.Pattern
+        unix 0644
+    if (type == 'deb') {
+  configure(commonRpmConfig(false, 'arm64'))
+    configurationFile '/etc/opensearch/log4j2.properties'
+      from "${packagingFiles}/systemd/opensearch.conf"
+        onlyIf dpkgExists
+        onlyIf rpmExists
+      mkdir "${packagingFiles}/var/log/opensearch"
+      from(rootProject.projectDir) {
+      packageExtractionDir = new File(extractionDir, 'rpm-extracted')
+          for (final String actualLine : actualLines) {
+}
+        exec.standardOutput = output
+      }
+      mkdir "${packagingFiles}/var/lib/opensearch"
+        unix 0750
+      File file = new File(path)
+          final List<String> header = Arrays.asList("Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/",
+ */
+    if (type == 'deb') {
+  user = 'root'
+    postInstall file("${scripts}/postinst")
+      into('/usr/share/opensearch') {
+      from 'src/common'
+    https://github.com/opensearch-project/OpenSearch
+  }
+/*
+    }
+      }
+      // bare empty dir for /etc/opensearch and /etc/opensearch/jvm.options.d
+Closure commonDebConfig(boolean jdk, String architecture) {
+          assertLinesInFile(copyrightPath, expectedLines)
+    configurationFile '/etc/init.d/opensearch'
+        into('jdk') {
+  }
+    packager = 'OpenSearch'
+      dependsOn buildDist, "checkExtraction"
+  configure(commonDebConfig(true, 'arm64'))
+// is the same
+    }
+    prefix '/usr'
+ *
+        unix 0755
+            throw new GradleException("expected a single license for package info but found [${count}] in:\n${info}")
+        }
+        }
+        onlyIf rpmExists
+        }
+        }
+        }
+      from "${packagingFiles}/systemd/systemd-entrypoint"
+  fileMode = 0644
+}
+}
+  }
+      // directory are fine
+        dirPermissions {
+      }
+      into('bin') {
+        exec.commandLine 'dpkg-deb', '--info', "${-> buildDist.get().outputs.files.filter(debFilter).singleFile}"
+      fileType CONFIG | NOREPLACE
+        final List<String> noticeLines = Arrays.asList("OpenSearch (https://opensearch.org/)", "Copyright OpenSearch Contributors")
+    packageGroup = 'Application/Internet'
+              if (expectedLicense != actualLicense) {
+  dirMode = 0755
+      dependsOn buildDist, "checkExtraction"
+tasks.register('buildArm64Rpm', Rpm) {
+ * The general strategy here is to build a directory on disk that contains
+    // ========= empty dirs =========
+  String taskName = "process'${jdk ? '' : 'NoJdk'}${type.capitalize()}Files"
+    tasks.register('checkExtraction', LoggedExec) {
+        with modulesFiles('linux-' + ((architecture == 'x64') ? 'x64' : architecture))
+        arch = 'x86_64'
+          final List<String> licenseLines = Files.readAllLines(rootDir.toPath().resolve("licenses/" + licenseFilename))
+      assert project.name.contains('rpm')
+          unix 0644
       dependsOn buildDist, "checkExtraction"
     }
-    check.dependsOn checkLicenseMetadata
-    if (project.name.contains('deb')) {
-      checkLicenseMetadata { LoggedExec exec ->
-        onlyIf dpkgExists
-        final ByteArrayOutputStream output = new ByteArrayOutputStream()
-        exec.commandLine 'dpkg-deb', '--info', "${-> buildDist.get().outputs.files.filter(debFilter).singleFile}"
-        exec.standardOutput = output
-        doLast {
-          String expectedLicense = "ASL-2.0"
-          final Pattern pattern = Pattern.compile("\\s*License: (.+)")
-          final String info = output.toString('UTF-8')
-          final String[] actualLines = info.split("\n")
-          int count = 0
-          for (final String actualLine : actualLines) {
-            final Matcher matcher = pattern.matcher(actualLine)
-            if (matcher.matches()) {
-              count++
-              final String actualLicense = matcher.group(1)
-              if (expectedLicense != actualLicense) {
-                throw new GradleException("expected license [${expectedLicense} for package info but found [${actualLicense}]")
-              }
-            }
-          }
-          if (count == 0) {
-            throw new GradleException("expected license [${expectedLicense}] for package info but found none in:\n${info}")
-          }
-          if (count > 1) {
-            throw new GradleException("expected a single license for package info but found [${count}] in:\n${info}")
-          }
-        }
-      }
-    } else {
-      assert project.name.contains('rpm')
-      checkLicenseMetadata { LoggedExec exec ->
-        onlyIf rpmExists
-        final ByteArrayOutputStream output = new ByteArrayOutputStream()
-        exec.commandLine 'rpm', '-qp', '--queryformat', '%{License}', "${-> buildDist.get().outputs.files.singleFile}"
-        exec.standardOutput = output
-        doLast {
-          String license = output.toString('UTF-8')
-          String expectedLicense = "ASL-2.0"
-          if (license != expectedLicense) {
-            throw new GradleException("expected license [${expectedLicense}] for [${-> buildDist.get().outputs.files.singleFile}] but was [${license}]")
-          }
-        }
-      }
-    }
-  }
 }
+    addParentDirs = false
+        (project.name.contains('deb') && dpkgExists.call(it)) || (project.name.contains('rpm') && rpmExists.call(it))
+    }
+  return {
+    from("${packagingFiles}") {
+import org.opensearch.gradle.MavenFilteringHack
+      }
+        unix 0644
+Closure dpkgExists = { it -> new File('/bin/dpkg-deb').exists() || new File('/usr/bin/dpkg-deb').exists() || new File('/usr/local/bin/dpkg-deb').exists() }
+import java.nio.file.Files
+ * ownership. Elasticsearch licenses this file to you under
+    final File extractionDir = new File(buildDir, 'extracted')
+        unix 0644
+Closure debFilter = { f -> f.name.endsWith('.deb') }
+        with agentFiles()
+    if (project.name.contains('deb')) {
+          String licenseFilename = "APACHE-LICENSE-2.0.txt"
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+      project.file(project.property('signing.secretKeyRingFile')) :
+          '--notriggers',
+      dependsOn buildDist
+      // intended to manage them; otherwise they may be left behind on uninstallation. duplicate calls of the same
+  configure(commonRpmConfig(false, 'x64'))
+    into('/etc/init.d') {
+      dirPermissions {
+    // Follow opensearch's file naming convention
+        onlyIf rpmExists
+      fileType CONFIG | NOREPLACE
+    distribution = 'OpenSearch'
+            fcp.permissions(perm -> perm.unix(0644))
+        arch = 'arm64'
+ *                         Deb and rpm configuration                         *
+  // version found on oldest supported distro, centos-6
+}
+          }
+tasks.register('buildDeb', Deb) {
+      }
+}
+          '--badreloc',
+      from('src/deb/lintian/opensearch')
+      }
+    signingKeyId = project.hasProperty('signing.keyId') ? project.property('signing.keyId') : 'D88E42B4'
+        filePermissions {
+    Reference documentation can be found at
+      assert type == 'rpm'
+import org.opensearch.gradle.LoggedExec
+        }
+          rpmDatabase,
+    packageGroup = 'web'
+            if (matcher.matches()) {
+          String licenseFilename
+      new File(new File(System.getProperty('user.home'), '.gnupg'), 'secring.gpg')
+    requires '/bin/bash'
+          '--relocate',
+    }
+          '--ignorearch',
+// This configures the default artifact for the distribution specific
+    // ========= config files =========
+ *    rpm -qlp --dump path/to/opensearch.rpm
+    check.dependsOn checkLicenseMetadata
+ * important for two reasons:
+    requires 'libc6'
+      fileType CONFIG | NOREPLACE
+      }
+  }
+      }
+          expectedLicense = "ASL-2.0"
+    // versions found on oldest supported distro, centos-6
+    packageName = "opensearch"
+    Closure copyEmptyDir = { path, u, g, mode ->
+  into '/usr/share/opensearch'
+      doLast {
+    }
+    // NOTE: these are created under packagingFiles as empty, but the permissions are set here
+    String jdkString = jdk ? "" : "-no-jdk"
+              final String actualLicense = matcher.group(1)
+      permissionGroup 'opensearch'
+      into('/etc/opensearch')
+}
+      }
+      filePermissions{
+  configure(commonRpmConfig(true, 'x64'))
+      assert project.name.contains('rpm')
+            "Copyright: Elasticsearch B.V. <info@elastic.co>",
+        }
+    } else {
+ *    empty directory requires more wits than I have.
+ * Unless required by applicable law or agreed to in writing,
+    }
+    check.dependsOn "checkLicense"
+      into('lib') {
+      } else {
+          '--ignoreos',
+import org.opensearch.gradle.info.BuildParams
+        doLast {
+      tasks.named("checkExtraction").configure {
+    // ========= systemd =========
+  return {
+    }
+ *    how hard you try to convince it otherwise.
+    } else {
+}
+  apply plugin: 'distribution'
+      // create empty dirs, we set the permissions when configuring the packages
+  }
+          "/=${packageExtractionDir}",
+    if (project.name.contains('deb')) {
+          String expectedLicense
+ * 2. Convincing ospackage to pick up an empty directory as part of a set of
+        String[] segments = fcp.relativePath.segments
+        createDirectoryEntry = true
+          if (segments[-2] == 'bin' || segments[-1] == 'jspawnhelper') {
+  id "com.netflix.nebula.ospackage-base" version "12.3.0"
+        include file.name
+      }
+            throw new GradleException("expected license [${expectedLicense}] for package info but found none in:\n${info}")
+            throw new GradleException("expected license [${expectedLicense}] for [${-> buildDist.get().outputs.files.singleFile}] but was [${license}]")
+    vendor = 'OpenSearch'
+    }
+apply plugin: 'com.netflix.nebula.ospackage-base'

@@ -1,28 +1,28 @@
+    [
 {
-  "schema": [
-    {
-      "name": "username",
-      "type": "string"
-    },
-    {
-      "name": "result",
-      "type": "string"
-    }
-  ],
-  "datarows": [
     [
       "alice",
-      "success"
+    }
+  "schema": [
     ],
+    },
+  ],
     [
-      "bob",
       "failure"
-    ],
-    [
       "charlie",
-      "success"
+      "type": "string"
+      "bob",
     ]
   ],
-  "total": 3,
+      "success"
   "size": 3
+      "name": "username",
+      "type": "string"
+      "name": "result",
+    {
+    {
+      "success"
 }
+  "total": 3,
+    ],
+  "datarows": [

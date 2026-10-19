@@ -1,70 +1,70 @@
-{
-  "_doc" : {
     "_meta": {
-      "version": 5
-    },
-    "dynamic" : "strict",
-    "properties" : {
-      "completed": {
-        "type": "boolean"
+          }
+      "response" : {
+        "type" : "object",
+      }
+          },
+            "type": "keyword"
+{
       },
-      "task" : {
         "properties": {
-          "action": {
-            "type": "keyword"
-          },
           "cancellable": {
-            "type": "boolean"
-          },
-          "cancelled": {
-            "type": "boolean"
-          },
-          "id": {
-            "type": "long"
-          },
-          "parent_task_id": {
+        "type": "boolean"
             "type": "keyword"
+          "cancellation_time_millis": {
+            "type": "keyword"
+            "type": "long"
+            "type": "keyword"
+            "type": "boolean"
+            "enabled" : false
+      },
+            "type": "long"
+            "type" : "object",
+          },
+            "type" : "object",
+    },
+            "type": "boolean"
+            "type" : "object",
+      },
           },
           "node": {
-            "type": "keyword"
+          "status": {
           },
-          "running_time_in_nanos": {
+  }
+        }
+            "enabled" : false
+        "type" : "object",
+      "task" : {
+      "error" : {
+        "enabled" : false
+          },
             "type": "long"
+          "cancelled": {
+          "running_time_in_nanos": {
+            "enabled" : false
+      "completed": {
+          },
+        "enabled" : false
+          "parent_task_id": {
+          "action": {
+          "type": {
+      "version": 5
+          "description": {
           },
           "start_time_in_millis": {
+    }
             "type": "long"
           },
-          "cancellation_time_millis": {
-            "type": "long"
-          },
-          "type": {
-            "type": "keyword"
-          },
-          "status": {
-            "type" : "object",
-            "enabled" : false
-          },
-          "description": {
+  "_doc" : {
+}
             "type": "text"
           },
           "headers": {
-            "type" : "object",
-            "enabled" : false
-          },
+    "properties" : {
           "resource_stats": {
-            "type" : "object",
-            "enabled" : false
-          }
-        }
-      },
-      "response" : {
-        "type" : "object",
-        "enabled" : false
-      },
-      "error" : {
-        "type" : "object",
-        "enabled" : false
-      }
-    }
-  }
-}
+          },
+          },
+          },
+    "dynamic" : "strict",
+          "id": {
+          },

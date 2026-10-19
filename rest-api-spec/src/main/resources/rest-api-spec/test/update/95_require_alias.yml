@@ -1,32 +1,30 @@
+        id:               1
+      catch: missing
+        body:
+        index:            test_require_alias
+        body:
 ---
-"Set require_alias flag":
-  - do:
-      catch: missing
-      update:
-        index:            test_require_alias
-        id:               1
-        require_alias:   true
-        body:
-          doc:            { foo: bar, count: 1 }
-          doc_as_upsert:  true
-  - do:
-      catch: missing
       indices.get:
-        index: test_require_alias
-
-  - do:
-      indices.create:
-        index: backing_index
-        body:
-          mappings: {}
-          aliases:
+          doc:            { foo: bar, count: 1 }
             test_require_alias: {}
-
-  - do:
-      update:
-        index:            test_require_alias
-        id:               1
+          doc_as_upsert:  true
+"Set require_alias flag":
         require_alias:   true
+  - do:
+        require_alias:   true
+      catch: missing
+  - do:
+          doc_as_upsert:  true
+          aliases:
+      update:
         body:
           doc:            { foo: bar, count: 1 }
-          doc_as_upsert:  true
+        index: test_require_alias
+        id:               1
+        index: backing_index
+        index:            test_require_alias
+      indices.create:
+  - do:
+          mappings: {}
+      update:
+  - do:

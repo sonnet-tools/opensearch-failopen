@@ -1,158 +1,147 @@
-setup:
-  - do:
-      indices.create:
-        index: my-index
-        body:
-          settings:
-            number_of_shards: 1
-            number_of_replicas: 0
-          mappings:
-            properties:
-              users:
-                type: nested
-
-  - do:
-      index:
-        index:  my-index
-        id:     1
-        refresh: true
-        body: |
-          {
-            "group" : "fans",
-            "users" : [
-              {
-                "first" : "John",
-                "last" :  "Smith"
-              },
-              {
-                "first" : "Alice",
-                "last" :  "White"
-              }
-            ]
-          }
-
-  - do:
-      index:
-        index:  my-index
-        id:     2
-        refresh: true
-        body: |
-          {
-            "group" : "fans",
-            "users" : [
-              {
-                "first" : "Mark",
-                "last" :  "Doe"
-              }
-            ]
-          }
-
----
-"top_hits aggregation with nested documents":
   - do:
       search:
-        rest_total_hits_as_int: true
-        index: my-index
-        body:
-          aggs:
-            to-users:
+                type: nested
+  - match: { aggregations.to-users.users.hits.hits.0._index: disabled-source }
               nested:
-                path: users
-              aggs:
-                users:
-                  top_hits:
-                    sort: "users.last.keyword"
-
-  - match: { hits.total: 2 }
-  - length: { aggregations.to-users.users.hits.hits: 3 }
-  - match: { aggregations.to-users.users.hits.hits.0._id: "2" }
-  - match: { aggregations.to-users.users.hits.hits.0._index: my-index }
-  - match: { aggregations.to-users.users.hits.hits.0._nested.field: users }
-  - match: { aggregations.to-users.users.hits.hits.0._nested.offset: 0 }
-  - match: { aggregations.to-users.users.hits.hits.1._id: "1" }
+      search:
   - match: { aggregations.to-users.users.hits.hits.1._index: my-index }
-  - match: { aggregations.to-users.users.hits.hits.1._nested.field: users }
-  - match: { aggregations.to-users.users.hits.hits.1._nested.offset: 0 }
-  - match: { aggregations.to-users.users.hits.hits.2._id: "1" }
-  - match: { aggregations.to-users.users.hits.hits.2._index: my-index }
-  - match: { aggregations.to-users.users.hits.hits.2._nested.field: users }
-  - match: { aggregations.to-users.users.hits.hits.2._nested.offset: 1 }
-
----
-"top_hits aggregation with nested documents and disabled _source":
-  - skip:
-      version: " - 7.10.1"
-      reason: "bug fix introduced in 7.10.2"
-  - do:
-      indices.create:
-        index: disabled-source
+            "users" : [
         body:
+                    sort: "users.last.keyword"
+              {
+  - gte: { aggregations.groups.buckets.0.users.hits.hits.0._primary_term: 1 }
+  - match: { aggregations.to-users.users.hits.hits.0._nested.offset: 0 }
+                  top_hits:
+  - do:
+  - match: { aggregations.groups.buckets.0.users.hits.hits.1._id: "2" }
+                "last" :  "White"
+            - first: "John"
+            to-users:
+                "first" : "Mark",
+          users:
+  - match: { aggregations.to-users.users.hits.hits.0._index: my-index }
+                users:
+                path: users
+      index:
+                "last" :  "Doe"
+        rest_total_hits_as_int: true
+  - match: { hits.total: 1 }
+  - match: { aggregations.to-users.users.hits.hits.2._index: my-index }
+  - match: { aggregations.to-users.users.hits.hits.1._id: "1" }
+      indices.create:
+  - match: { aggregations.to-users.users.hits.hits.0._nested.offset: 0 }
+      index:
+  - gte: { aggregations.groups.buckets.0.users.hits.hits.0._seq_no: 0 }
+---
+  - match: { aggregations.to-users.users.hits.hits.2._nested.field: users }
+            properties:
           settings:
-            number_of_shards: 1
+          {
+        body:
+        refresh: true
+              },
+        index:  my-index
+            ]
+  - match: { aggregations.groups.buckets.0.users.hits.hits.0._index: my-index }
+              enabled: false
+      search:
+                path: users
+        rest_total_hits_as_int: true
+        id:     1
+        index:  disabled-source
+        index: my-index
+  - match: { aggregations.to-users.users.hits.hits.1._nested.offset: 0 }
+        body:
+          }
+        refresh: true
+          aggs:
+            ]
+  - do:
+  - do:
+  - match: { aggregations.to-users.users.hits.hits.2._id: "1" }
+  - length: { aggregations.to-users.users.hits.hits: 1 }
+  - match: { aggregations.to-users.users.hits.hits.0._id: "2" }
+          }
+              nested:
+  - do:
+        rest_total_hits_as_int: true
+"top_hits aggregation with nested documents":
+  - match: { hits.total: 2 }
+          mappings:
+      index:
+                field: group.keyword
+              terms:
+  - match: { hits.total: 2 }
+  - is_false: aggregations.to-users.users.hits.hits.0._source
+---
             number_of_replicas: 0
+  - match: { aggregations.to-users.users.hits.hits.0._nested.field: users }
           mappings:
             _source:
-              enabled: false
-            properties:
-              users:
-                type: nested
-
-  - do:
-      index:
-        index:  disabled-source
-        id:     1
-        refresh: true
-        body:
-          users:
-            - first: "John"
-              last:  "Smith"
-
-  - do:
-      search:
-        index: disabled-source
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            to-users:
-              nested:
-                path: users
-              aggs:
-                users:
-                  top_hits: {}
-
-  - match: { hits.total: 1 }
-  - length: { aggregations.to-users.users.hits.hits: 1 }
-  - match: { aggregations.to-users.users.hits.hits.0._id: "1" }
-  - match: { aggregations.to-users.users.hits.hits.0._index: disabled-source }
-  - match: { aggregations.to-users.users.hits.hits.0._nested.field: users }
-  - match: { aggregations.to-users.users.hits.hits.0._nested.offset: 0 }
-  - is_false: aggregations.to-users.users.hits.hits.0._source
-
 ---
-"top_hits aggregation with sequence numbers":
-
-  - do:
-      search:
-        index: my-index
-        rest_total_hits_as_int: true
-        body:
+          {
           aggs:
-            groups:
-              terms:
-                field: group.keyword
-              aggs:
-                users:
-                  top_hits:
-                    sort: "users.last.keyword"
-                    seq_no_primary_term: true
-
-  - match: { hits.total: 2 }
-  - length: { aggregations.groups.buckets.0.users.hits.hits: 2 }
-  - match: { aggregations.groups.buckets.0.users.hits.hits.0._id: "1" }
-  - match: { aggregations.groups.buckets.0.users.hits.hits.0._index: my-index }
-  - gte: { aggregations.groups.buckets.0.users.hits.hits.0._seq_no: 0 }
-  - gte: { aggregations.groups.buckets.0.users.hits.hits.0._primary_term: 1 }
-  - match: { aggregations.groups.buckets.0.users.hits.hits.1._id: "2" }
-  - match: { aggregations.groups.buckets.0.users.hits.hits.1._index: my-index }
-  - gte: { aggregations.groups.buckets.0.users.hits.hits.1._seq_no: 0 }
+              users:
+  - do:
+  - do:
   - gte: { aggregations.groups.buckets.0.users.hits.hits.1._primary_term: 1 }
+            "group" : "fans",
+        body:
+                type: nested
+        body:
+                users:
+  - match: { aggregations.to-users.users.hits.hits.2._nested.offset: 1 }
+                    seq_no_primary_term: true
+              aggs:
+  - match: { aggregations.to-users.users.hits.hits.0._nested.field: users }
+            "group" : "fans",
+        index:  my-index
+            "users" : [
+      version: " - 7.10.1"
+        index: disabled-source
+                "first" : "Alice",
+  - match: { aggregations.groups.buckets.0.users.hits.hits.1._index: my-index }
+        body: |
+setup:
+  - gte: { aggregations.groups.buckets.0.users.hits.hits.1._seq_no: 0 }
+            number_of_replicas: 0
+  - skip:
+  - match: { aggregations.to-users.users.hits.hits.1._nested.field: users }
+        id:     2
+            number_of_shards: 1
+            number_of_shards: 1
+"top_hits aggregation with sequence numbers":
+        id:     1
+                    sort: "users.last.keyword"
+        refresh: true
+              last:  "Smith"
+        index: my-index
+        body: |
+        body:
+            to-users:
+              {
+"top_hits aggregation with nested documents and disabled _source":
+          settings:
+            groups:
+            properties:
+  - length: { aggregations.to-users.users.hits.hits: 3 }
+        index: disabled-source
+              aggs:
+              }
+                "first" : "John",
+              aggs:
+                "last" :  "Smith"
+  - do:
+                  top_hits: {}
+              {
+  - match: { aggregations.groups.buckets.0.users.hits.hits.0._id: "1" }
+                  top_hits:
+              users:
+        index: my-index
+  - length: { aggregations.groups.buckets.0.users.hits.hits: 2 }
+  - match: { aggregations.to-users.users.hits.hits.0._id: "1" }
+                users:
+              }
+      indices.create:
+      reason: "bug fix introduced in 7.10.2"
+          aggs:

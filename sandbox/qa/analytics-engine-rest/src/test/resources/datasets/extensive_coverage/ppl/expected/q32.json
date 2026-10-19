@@ -1,35 +1,35 @@
-{
-  "schema": [
+      100.5,
+  "total": 3,
+      201.0,
     {
-      "name": "value",
-      "type": "double"
-    },
+  ],
     {
+    [
+    [
       "name": "ceil_val",
       "type": "double"
+      150.0
+{
     },
-    {
-      "name": "floor_val",
-      "type": "double"
-    }
-  ],
   "datarows": [
     [
-      100.5,
-      101.0,
-      100.0
-    ],
-    [
-      200.75,
-      201.0,
-      200.0
-    ],
-    [
-      150.25,
+    }
       151.0,
-      150.0
+    ],
     ]
+      100.0
+      "name": "floor_val",
+      200.0
   ],
-  "total": 3,
-  "size": 3
+    ],
+      "type": "double"
+    },
+      "name": "value",
+      101.0,
+      "type": "double"
+    {
+  "schema": [
 }
+      150.25,
+  "size": 3
+      200.75,

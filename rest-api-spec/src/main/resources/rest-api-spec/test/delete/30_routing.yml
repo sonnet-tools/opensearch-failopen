@@ -1,28 +1,25 @@
----
-"Routing":
-
- - do:
       indices.create:
-          index: test_1
-          body:
-            settings:
-              number_of_shards: 5
+          routing: 5
+          index:   test_1
  - do:
       index:
-          index:   test_1
+      delete:
+ - do:
           id:      1
-          routing: 5
+"Routing":
+          index:   test_1
+            settings:
           body:    { foo: bar }
-
- - do:
-      catch:      missing
-      delete:
           index:   test_1
-          id:      1
-          routing: 4
-
- - do:
-      delete:
-          index:   test_1
-          id:      1
+          body:
           routing: 5
+          routing: 4
+              number_of_shards: 5
+---
+          id:      1
+          index: test_1
+          id:      1
+      catch:      missing
+ - do:
+ - do:
+      delete:

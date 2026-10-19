@@ -1,43 +1,43 @@
-{
-  "from": 0,
-  "size": 10,
-  "timeout": "1m",
-  "query": {
-    "bool": {
-      "must": [
-        {
-          "exists": {
-            "field": "SearchPhrase",
-            "boost": 1.0
-          }
-        }
+  "sort": [
+  },
+  },
       ],
       "must_not": [
-        {
+    "bool": {
+              "boost": 1.0
+      "must": [
+      ],
+        "missing": "_first"
+  "_source": {
+    ],
+      "adjust_pure_negative": true,
+      }
+{
+  "query": {
+          }
+    }
+    "includes": [
           "term": {
             "SearchPhrase": {
-              "value": "",
-              "boost": 1.0
-            }
-          }
-        }
-      ],
-      "adjust_pure_negative": true,
-      "boost": 1.0
-    }
-  },
-  "_source": {
-    "includes": [
-      "SearchPhrase"
-    ],
-    "excludes": []
-  },
-  "sort": [
+        {
     {
-      "SearchPhrase": {
-        "order": "asc",
-        "missing": "_first"
-      }
+              "value": "",
+          "exists": {
+            }
     }
+        {
+  "size": 10,
+        }
+            "boost": 1.0
   ]
+        "order": "asc",
+      "SearchPhrase"
+  "timeout": "1m",
+  "from": 0,
+        }
+          }
 }
+      "boost": 1.0
+      "SearchPhrase": {
+    "excludes": []
+            "field": "SearchPhrase",

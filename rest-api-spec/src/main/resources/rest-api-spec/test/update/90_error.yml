@@ -1,11 +1,10 @@
 ---
-'Misspelled fields get "did you mean"':
-
-  - do:
-      catch: /\[UpdateRequest\] unknown field \[dac\] did you mean \[doc\]\?/
-      update:
-          index: test
           id:    1
-          body:
+          index: test
             dac:    { foo: baz }
+      catch: /\[UpdateRequest\] unknown field \[dac\] did you mean \[doc\]\?/
             upsert: { foo: bar }
+'Misspelled fields get "did you mean"':
+  - do:
+          body:
+      update:

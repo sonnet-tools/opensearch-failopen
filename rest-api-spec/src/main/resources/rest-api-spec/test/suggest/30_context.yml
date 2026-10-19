@@ -1,395 +1,350 @@
-# This test creates one huge mapping in the setup
-# Every test should use its own field to make sure it works
-
-setup:
-
-  - do:
-      indices.create:
-          index: test
-          body:
-            mappings:
-              "properties":
-                "location":
-                  "type": "geo_point"
-                "suggest_context":
-                   "type" : "completion"
-                   "contexts":
-                      -
-                        "name" : "color"
-                        "type" : "category"
-                "suggest_context_with_path":
-                   "type" : "completion"
-                   "contexts":
-                      -
-                        "name" : "color"
-                        "type" : "category"
-                        "path" : "color"
-                "suggest_geo":
-                   "type" : "completion"
-                   "contexts":
-                      -
-                        "name" : "location"
-                        "type" : "geo"
-                        "precision" : "5km"
-                "suggest_multi_contexts":
-                   "type" : "completion"
-                   "contexts":
-                      -
-                        "name" : "location"
-                        "type" : "geo"
-                        "precision" : "5km"
-                        "path" : "location"
-                      -
-                        "name" : "color"
-                        "type" : "category"
-                        "path" : "color"
-
----
-"Simple context suggestion should work":
-
-  - do:
-      index:
-        index: test
-        id:    1
-        body:
-          suggest_context:
-            input: "foo red"
-            contexts:
-              color: "red"
-
-  - do:
-      index:
-        index: test
-        id:    2
-        body:
-          suggest_context:
-            input: "foo blue"
-            contexts:
-              color: "blue"
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
         rest_total_hits_as_int: true
-        body:
-          suggest:
-            result:
-              text: "foo"
-              completion:
-                field: suggest_context
-                contexts:
-                  color: "red"
-
-  - length: { suggest.result: 1  }
-  - length: { suggest.result.0.options: 1  }
-  - match:  { suggest.result.0.options.0.text: "foo red" }
-
 ---
-"Category suggest context from path should work":
-
-  - do:
-      index:
+      indices.refresh: {}
         index: test
-        id:    1
-        body:
-          suggest_context_with_path:
+  - do:
+                      -
+        index: test
+              color: "red"
+      search:
             input: "Foo red"
-            contexts:
-              color: "red"
-
+                        "name" : "color"
   - do:
-      index:
-        index: test
+            result:
+  - do:
+                      -
+          suggest_context:
+  - do:
+        rest_total_hits_as_int: true
+  - do:
+  - match:  { suggest.result.0.options.0.text: "foo red" }
         id:    2
         body:
-          suggest_context_with_path: "Foo blue"
-          color: "blue"
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          suggest:
-            result:
-              text: "foo"
-              completion:
-                field: suggest_context_with_path
-                contexts:
-                  color: "red"
-
-  - length: { suggest.result: 1  }
-  - length: { suggest.result.0.options: 1  }
-  - match:  { suggest.result.0.options.0.text: "Foo red" }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          suggest:
-            result:
-              text: "foo"
-              completion:
-                field: suggest_context_with_path
-                contexts:
-                  color: "blue"
-
-  - length: { suggest.result: 1  }
-  - length: { suggest.result.0.options: 1  }
-  - match:  { suggest.result.0.options.0.text: "Foo blue" }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          suggest:
-            result:
-              text: "foo"
-              completion:
-                field: suggest_context_with_path
-                contexts:
-                  color: ["blue", "red"]
-
-  - length: { suggest.result: 1  }
-  - length: { suggest.result.0.options: 2  }
-
----
-"Geo suggest should work":
-
-  - do:
-      index:
-        index: test
-        id:    1
-        body:
-          suggest_geo:
-            input: "Marriot in Amsterdam"
-            contexts:
-              location:
-                lat : 52.22
-                lon : 4.53
-
-  - do:
-      index:
-        index: test
-        id:    2
-        body:
-          suggest_geo:
-            input: "Marriot in Berlin"
-            contexts:
-              location:
-                lat : 53.31
-                lon : 13.24
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      indices.get_mapping: {}
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          suggest:
-            result:
-              text: "mar"
+                   "type" : "completion"
               completion:
                 field: suggest_geo
-                contexts:
-                  location:
-                    lat : 52.2263
+  - do:
                     lon : 4.543
-
-  - length: { suggest.result: 1  }
-  - length: { suggest.result.0.options: 1  }
+                        "name" : "color"
+      index:
+                contexts:
+  - do:
+        rest_total_hits_as_int: true
+        rest_total_hits_as_int: true
   - match:  { suggest.result.0.options.0.text: "Marriot in Amsterdam" }
-
----
-"Multi contexts should work":
-
-  - do:
-      index:
-        index: test
-        id:    1
-        body:
-          suggest_multi_contexts: "Marriot in Amsterdam"
-          location:
-            lat : 52.22
-            lon : 4.53
-          color: "red"
-
-  - do:
-      index:
-        index: test
-        id:    2
-        body:
-          suggest_multi_contexts: "Marriot in Berlin"
-          location:
-            lat : 53.31
-            lon : 13.24
-          color: "blue"
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      indices.get_mapping: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
           suggest:
-            result:
-              text: "mar"
               completion:
-                field: suggest_multi_contexts
-                contexts:
-                  location:
-                    lat : 52.22
-                    lon : 4.53
-
-  - length: { suggest.result: 1  }
-  - length: { suggest.result.0.options: 1  }
-  - match:  { suggest.result.0.options.0.text: "Marriot in Amsterdam" }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          suggest:
-            result:
-              text: "mar"
-              completion:
-                field: suggest_multi_contexts
-                contexts:
-                  color: "blue"
-
-  - length: { suggest.result: 1  }
-  - length: { suggest.result.0.options: 1  }
-  - match:  { suggest.result.0.options.0.text: "Marriot in Berlin"  }
-
----
-"Skip duplicates with contexts should work":
-  - do:
-      index:
-        index: test
-        id:    1
-        body:
-          suggest_context:
-            input: "foo"
-            contexts:
-              color: "red"
-
-  - do:
-      index:
-        index: test
-        id:    1
-        body:
-          suggest_context:
-            input: "foo"
-            contexts:
-              color: "red"
-
-  - do:
-      index:
-        index: test
-        id:    2
-        body:
-          suggest_context:
-            input: "foo"
-            contexts:
-              color: "blue"
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          suggest:
-            result:
-              text: "foo"
-              completion:
-                field: suggest_context
-                skip_duplicates: true
-                contexts:
-                  color: "red"
-
-  - length: { suggest.result: 1  }
-  - length: { suggest.result.0.options: 1  }
-  - match:  { suggest.result.0.options.0.text: "foo" }
-
----
-"Indexing and Querying without contexts is forbidden":
-  - do:
-      index:
-        index: test
-        id:    1
-        body:
-          suggest_context:
-            input: "foo"
-            contexts:
-              color: "red"
-          suggest_multi_contexts:
-            input: "bar"
-            contexts:
-              color: "blue"
-
-  - do:
-      catch: /Contexts are mandatory in context enabled completion field \[suggest_context\]/
-      index:
-        index: test
-        id:    2
-        body:
-          suggest_context:
-            input: "foo"
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      catch: /Missing mandatory contexts in context query/
-      search:
-        rest_total_hits_as_int: true
-        allow_partial_search_results: false
-        body:
-          suggest:
-            result:
-              text: "foo"
-              completion:
-                field: suggest_context
-
-  - do:
-      catch: /Missing mandatory contexts in context query/
-      search:
-        rest_total_hits_as_int: true
-        allow_partial_search_results: false
-        body:
-          suggest:
-            result:
-              text: "foo"
-              completion:
-                field: suggest_context
-                contexts: {}
-
-  - do:
-      catch: /Missing mandatory contexts in context query/
-      search:
-        rest_total_hits_as_int: true
-        allow_partial_search_results: false
-        body:
-          suggest:
-            result:
-              text: "foo"
-              completion:
-                field: suggest_multi_contexts
-                contexts:
                   location: []
+                skip_duplicates: true
+      index:
+        body:
+            input: "foo"
+          suggest_geo:
+      indices.refresh: {}
+        id:    2
+"Category suggest context from path should work":
+                field: suggest_context_with_path
+          suggest_context:
+                contexts:
+  - length: { suggest.result.0.options: 1  }
+  - do:
+            lat : 52.22
+                   "contexts":
+                  color: "blue"
+                field: suggest_context
+  - do:
+              color: "blue"
+            contexts:
+            result:
+              completion:
+      search:
+              completion:
+              text: "foo"
+      search:
+  - length: { suggest.result.0.options: 1  }
+              completion:
+        id:    2
+          suggest:
+  - do:
+          index: test
+      search:
+      index:
+        index: test
+                   "type" : "completion"
+          suggest_context:
+      search:
+                lon : 4.53
+                  color: "red"
+        body:
+        body:
+"Indexing and Querying without contexts is forbidden":
+"Simple context suggestion should work":
+        index: test
+            lat : 53.31
+      search:
+      index:
+        body:
+  - length: { suggest.result.0.options: 2  }
+            result:
+              color: "red"
+        id:    1
+  - match:  { suggest.result.0.options.0.text: "Marriot in Amsterdam" }
+              "properties":
+            input: "foo"
+  - length: { suggest.result: 1  }
+        rest_total_hits_as_int: true
+          suggest_geo:
+              text: "foo"
+              text: "foo"
+  - do:
+  - length: { suggest.result.0.options: 1  }
+            contexts:
+                "suggest_context":
+  - match:  { suggest.result.0.options.0.text: "Foo blue" }
+  - length: { suggest.result: 1  }
+                lon : 13.24
+            input: "foo blue"
+                        "type" : "geo"
+        body:
+            result:
+  - do:
+                      -
+                      -
+        allow_partial_search_results: false
+              completion:
+            input: "bar"
+              completion:
+            lon : 13.24
+                        "path" : "color"
+      indices.refresh: {}
+            input: "Marriot in Amsterdam"
+  - match:  { suggest.result.0.options.0.text: "Marriot in Berlin"  }
+                  color: "red"
+                        "path" : "color"
+  - do:
+  - length: { suggest.result: 1  }
+              location:
+                field: suggest_context
+      index:
+            result:
+  - match:  { suggest.result.0.options.0.text: "foo" }
+  - length: { suggest.result.0.options: 1  }
+                        "precision" : "5km"
+        body:
+                   "type" : "completion"
+  - length: { suggest.result: 1  }
+            input: "Marriot in Berlin"
+        body:
+      indices.refresh: {}
+        id:    1
+              location:
+          suggest_multi_contexts:
+                contexts:
+          suggest:
+                contexts:
+      search:
+---
+      catch: /Missing mandatory contexts in context query/
+                    lat : 52.22
+              text: "mar"
+      search:
+        body:
+        index: test
+                field: suggest_context
+  - do:
+              completion:
+  - length: { suggest.result: 1  }
+              completion:
+        body:
+      index:
+      index:
+  - length: { suggest.result: 1  }
+            contexts:
+        rest_total_hits_as_int: true
+          suggest_context:
+  - do:
+        index: test
+            result:
+            contexts:
+          suggest:
+          color: "blue"
+                "location":
+          suggest:
+          suggest:
+          location:
+  - do:
+              text: "mar"
+                contexts:
+# Every test should use its own field to make sure it works
+              text: "foo"
+  - do:
+  - length: { suggest.result.0.options: 1  }
+  - do:
+---
+---
+          suggest_context:
+      index:
+            result:
+        body:
+        rest_total_hits_as_int: true
+        index: test
+        index: test
+  - match:  { suggest.result.0.options.0.text: "Foo red" }
+          suggest:
+        id:    2
+              color: "red"
+                        "name" : "location"
+setup:
+        body:
+      catch: /Missing mandatory contexts in context query/
+        rest_total_hits_as_int: true
+        index: test
+          suggest_context:
+            lon : 4.53
+      index:
+            contexts:
+            input: "foo red"
+        body:
+        allow_partial_search_results: false
+        body:
+        body:
+                   "type" : "completion"
+        index: test
+                contexts: {}
+      search:
+            result:
+                        "type" : "category"
+                contexts:
+            input: "foo"
+        index: test
+  - length: { suggest.result.0.options: 1  }
+              text: "foo"
+      index:
+        body:
+      indices.refresh: {}
+              text: "foo"
+---
+          suggest_context_with_path:
+                field: suggest_context_with_path
+            result:
+                "suggest_geo":
+        index: test
+  - do:
+            contexts:
+              text: "foo"
+          suggest_multi_contexts: "Marriot in Amsterdam"
+        id:    1
+        id:    1
+                  color: "red"
+      indices.get_mapping: {}
+  - do:
+"Geo suggest should work":
+"Skip duplicates with contexts should work":
+                  location:
+  - do:
+            result:
+        id:    2
+                field: suggest_multi_contexts
+  - do:
+        body:
+      index:
+  - do:
+                        "name" : "color"
+  - do:
+            contexts:
+                contexts:
+          suggest:
+        index: test
+      indices.create:
+            input: "foo"
+        body:
+                   "contexts":
+                        "type" : "category"
+  - length: { suggest.result.0.options: 1  }
+                  color: "blue"
+      index:
+                contexts:
+      search:
+      indices.refresh: {}
+        index: test
+            contexts:
+                        "precision" : "5km"
+                field: suggest_multi_contexts
+        index: test
+            mappings:
+      catch: /Contexts are mandatory in context enabled completion field \[suggest_context\]/
+        rest_total_hits_as_int: true
+                        "path" : "location"
+        rest_total_hits_as_int: true
+        body:
+                   "contexts":
+          suggest_multi_contexts: "Marriot in Berlin"
+              color: "blue"
+        body:
+              completion:
+      indices.get_mapping: {}
+              text: "mar"
+                        "type" : "category"
+            input: "foo"
+          color: "red"
+              color: "blue"
+"Multi contexts should work":
+                "suggest_context_with_path":
+                contexts:
+  - length: { suggest.result: 1  }
+                  "type": "geo_point"
+      search:
+                    lat : 52.2263
+          suggest:
+  - do:
+              color: "red"
+  - do:
+                field: suggest_multi_contexts
+      catch: /Missing mandatory contexts in context query/
+          suggest:
+                    lon : 4.53
+                   "contexts":
+  - do:
+        allow_partial_search_results: false
+              text: "foo"
+          location:
+        id:    2
+                "suggest_multi_contexts":
+            contexts:
+  - do:
+          suggest:
+                  location:
+        id:    1
+          suggest_context_with_path: "Foo blue"
+        index: test
+      index:
+  - do:
+  - do:
+        id:    1
+# This test creates one huge mapping in the setup
+            result:
+        body:
+  - do:
+        body:
+        body:
+          color: "blue"
+              completion:
+        id:    1
+                        "type" : "geo"
+---
+                      -
+  - do:
+            contexts:
+                lat : 52.22
+                field: suggest_context
+        rest_total_hits_as_int: true
+  - length: { suggest.result: 1  }
+          suggest_context:
+  - do:
+              color: "red"
+          body:
+                  color: ["blue", "red"]
+                lat : 53.31
+                field: suggest_context_with_path
+                        "name" : "location"
+        body:

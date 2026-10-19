@@ -1,28 +1,28 @@
-{
-  "settings": {
-    "number_of_shards": 1,
-    "number_of_replicas": 0
-  },
-  "mappings": {
-    "properties": {
-      "name": {
-        "type": "keyword"
-      },
-      "brand": {
-        "type": "keyword"
-      },
       "tags": {
         "type": "keyword"
-      },
-      "price": {
-        "type": "double"
-      },
-      "rating": {
-        "type": "double"
-      },
-      "stock": {
-        "type": "integer"
       }
-    }
+      },
+    "number_of_replicas": 0
+      "stock": {
+  "settings": {
+        "type": "integer"
+      },
+    "properties": {
   }
+        "type": "double"
+      "name": {
+      },
+      },
+    }
+  "mappings": {
+      "rating": {
+        "type": "keyword"
+        "type": "keyword"
+    "number_of_shards": 1,
+      "price": {
+      },
+  },
 }
+        "type": "double"
+{
+      "brand": {

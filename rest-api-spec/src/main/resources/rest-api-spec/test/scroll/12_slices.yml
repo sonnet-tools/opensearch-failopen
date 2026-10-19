@@ -1,143 +1,123 @@
----
-setup:
+          settings:
+        body:
+          rest_total_hits_as_int: true
+        body:   { foo: 3 }
+          index: test_sliced_scroll
+        index: test_sliced_scroll
+        scroll: 1m
+        body:   { foo: 4 }
+      scroll:
+        id:     3
+  - do:
+          scroll_id: $scroll_id
+  - match: {hits.total:      3    }
+          scroll: 1m
+            max: 2
+  - do:
+        scroll_id: $scroll_id
+            slice:
+        rest_total_hits_as_int: true
+  - length: {hits.hits:      0    }
   - do:
       indices.create:
-        index: test_sliced_scroll
-        body:
-          settings:
-            number_of_shards: 5
-            number_of_routing_shards: 5
-
+          size: 1
   - do:
-      index:
-        index:  test_sliced_scroll
+  - set: {_scroll_id: scroll_id}
+        scroll: 1m
         id:     1
-        body:   { foo: 1 }
-
-  - do:
-      index:
-        index:  test_sliced_scroll
+          body:
+        scroll: 1m
+      search:
+          body:
+  - match: {hits.hits.0._id: "1" }
+        sort: foo
+        rest_total_hits_as_int: true
         id:     2
-        body:   { foo: 2 }
-
-  - do:
+          query:
+      scroll:
+      clear_scroll:
       index:
-        index:  test_sliced_scroll
-        id:     3
-        body:   { foo: 3 }
-
-  - do:
+  - match: {hits.hits.1._id: "3" }
       index:
+  - do:
+  - do:
+        rest_total_hits_as_int: true
+            match_all: {}
+  - match: {hits.total:      1    }
+            slice:
+"Sliced scroll":
+        index: test_sliced_scroll
+          index: test_sliced_scroll
+          scroll_id: $scroll_id
+        search:
+  - do:
+          index: test_sliced_scroll
+      search:
+        catch: bad_request
+  - do:
+  - length: {hits.hits:      0    }
+        sort: foo
+              id: 0
         index:  test_sliced_scroll
         id:     4
-        body:   { foo: 4 }
-
-  - do:
-      indices.refresh: {}
-
----
-"Sliced scroll":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test_sliced_scroll
-        scroll: 1m
-        sort: foo
-        body:
           slice:
-            id: 0
-            max: 2
-          query:
-            match_all: {}
-
-  - set: {_scroll_id: scroll_id}
   - match: {hits.total:      3    }
-  - length: {hits.hits:      3    }
-  - match: {hits.hits.0._id: "2" }
-  - match: {hits.hits.1._id: "3" }
-  - match: {hits.hits.2._id: "4" }
-
-  - do:
-      scroll:
-        rest_total_hits_as_int: true
-        scroll_id: $scroll_id
-        scroll: 1m
-
-  - match: {hits.total:      3    }
-  - length: {hits.hits:      0    }
-
-  - do:
-      clear_scroll:
-        scroll_id: $scroll_id
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test_sliced_scroll
-        scroll: 1m
-        sort: foo
-        body:
-          slice:
-            id: 1
-            max: 2
-          query:
-            match_all: {}
-
   - set: {_scroll_id: scroll_id}
-  - match: {hits.total:      1    }
-  - length: {hits.hits:      1    }
-  - match: {hits.hits.0._id: "1" }
-
+            max: 2
   - do:
-      scroll:
-        rest_total_hits_as_int: true
-        scroll_id: $scroll_id
-        scroll: 1m
-
-  - match: {hits.total:      1    }
-  - length: {hits.hits:      0    }
-
-  - do:
+              match_all: {}
         clear_scroll:
-          scroll_id: $scroll_id
-
+  - match: {hits.hits.2._id: "4" }
+  - do:
+  - do:
+            number_of_shards: 5
+        index: test_sliced_scroll
+            id: 0
+              max: 1025
+  - length: {hits.hits:      3    }
+          rest_total_hits_as_int: true
+            number_of_routing_shards: 5
+              max: 1025
+  - do:
+            query:
+  - do:
+  - length: {hits.hits:      1    }
+          slice:
 ---
+            index.max_slices_per_scroll: 1025
+              match_all: {}
+        clear_scroll:
+        rest_total_hits_as_int: true
+          scroll: 1m
+  - do:
+        body:
+        body:   { foo: 2 }
+          query:
+        index:  test_sliced_scroll
 "Sliced scroll with invalid arguments":
   - do:
-        catch: bad_request
-        search:
-          rest_total_hits_as_int: true
-          index: test_sliced_scroll
-          size: 1
-          scroll: 1m
+        index:  test_sliced_scroll
           body:
-            slice:
-              id: 0
-              max: 1025
+            match_all: {}
+  - match: {hits.total:      1    }
             query:
-              match_all: {}
-
-  - do:
-        indices.put_settings:
-          index: test_sliced_scroll
-          body:
-            index.max_slices_per_scroll: 1025
-
-  - do:
-        search:
-          rest_total_hits_as_int: true
-          index: test_sliced_scroll
-          size: 1
-          scroll: 1m
-          body:
-            slice:
               id: 0
-              max: 1025
-            query:
-              match_all: {}
-
+            id: 1
+          size: 1
+setup:
+        index:  test_sliced_scroll
+        body:   { foo: 1 }
+        search:
+  - match: {hits.hits.0._id: "2" }
+        scroll_id: $scroll_id
+---
+  - do:
+---
   - set: {_scroll_id: scroll_id}
-
-  - do:
-        clear_scroll:
-          scroll_id: $scroll_id
+        body:
+        scroll_id: $scroll_id
+        scroll: 1m
+      index:
+        indices.put_settings:
+      indices.refresh: {}
+      index:

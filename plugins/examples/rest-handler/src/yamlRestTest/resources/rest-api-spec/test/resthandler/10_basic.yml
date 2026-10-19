@@ -1,10 +1,8 @@
-"Test that the rest-handler plugin is loaded in OpenSearch":
-
-  # Use the Cat Plugins API to retrieve the list of plugins
-  - do:
-      cat.plugins:
         local: true
+      cat.plugins:
+  # Use the Cat Plugins API to retrieve the list of plugins
         h: component
-
-  - match:
+  - do:
       $body: /^rest-handler\n$/
+  - match:
+"Test that the rest-handler plugin is loaded in OpenSearch":

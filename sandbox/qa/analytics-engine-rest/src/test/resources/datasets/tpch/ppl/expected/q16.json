@@ -1,228 +1,228 @@
-{
-  "schema" : [
-    {
-      "name" : "p_brand",
+      2
+      "LARGE BURNISHED NICKEL",
       "type" : "string"
-    },
-    {
-      "name" : "p_type",
-      "type" : "string"
-    },
-    {
-      "name" : "p_size",
-      "type" : "int"
-    },
-    {
-      "name" : "supplier_cnt",
-      "type" : "bigint"
-    }
-  ],
-  "total" : 34,
-  "datarows" : [
-    [
-      "Brand#11",
-      "PROMO ANODIZED TIN",
-      45,
-      4
     ],
-    [
-      "Brand#11",
-      "SMALL PLATED COPPER",
-      45,
+      19,
+      "SMALL BURNISHED COPPER",
       4
+      "MEDIUM BURNISHED BRASS",
     ],
-    [
-      "Brand#11",
-      "STANDARD POLISHED TIN",
-      45,
-      4
-    ],
-    [
-      "Brand#13",
-      "MEDIUM ANODIZED STEEL",
-      36,
-      4
-    ],
-    [
+      "Brand#52",
       "Brand#14",
-      "SMALL ANODIZED NICKEL",
+    {
       45,
-      4
-    ],
-    [
-      "Brand#15",
-      "LARGE ANODIZED BRASS",
-      45,
-      4
-    ],
-    [
-      "Brand#21",
-      "LARGE BURNISHED COPPER",
+      "name" : "p_type",
+      1
+      "Brand#51",
+      "name" : "p_size",
+      "STANDARD ANODIZED STEEL",
       19,
       4
+      4
+      "type" : "string"
+}
+    ],
+      14,
+      "SMALL BURNISHED NICKEL",
+      9,
+      "Brand#11",
+      "ECONOMY PLATED STEEL",
+    ],
+    ],
+      "name" : "supplier_cnt",
+    ],
+      "Brand#31",
+      4
+    ],
+      "SMALL BRUSHED NICKEL",
+      3,
+    ],
+      3,
+      "SMALL BRUSHED NICKEL",
+      45,
+    [
+    [
+      "PROMO POLISHED TIN",
+      "Brand#55",
+    [
+      "Brand#32",
+      49,
+    [
+    [
+      4
+      2
+    [
+    ],
+  ],
+      4
+      4
+      "STANDARD POLISHED TIN",
+      4
+      "type" : "int"
+    [
+    [
+      "MEDIUM BURNISHED TIN",
+      "PROMO POLISHED BRASS",
+    ],
+      "Brand#13",
+    ],
+      19,
+    ],
+      45,
+      "ECONOMY BRUSHED COPPER",
+  "total" : 34,
+      "LARGE BRUSHED TIN",
+      14,
+    {
+      45,
+    [
+      "ECONOMY ANODIZED BRASS",
+      "STANDARD ANODIZED BRASS",
+      4
+    ],
+    ],
+    ],
+      45,
+      4
+    [
+    [
+    ],
+      "Brand#34",
+    ],
+    ],
+      "SMALL PLATED COPPER",
+      "MEDIUM BRUSHED COPPER",
+      4
+      "MEDIUM BRUSHED COPPER",
+      9,
+      "SMALL BURNISHED NICKEL",
+      "Brand#53",
+    [
+      2
+      4
+      "Brand#25",
+    [
+      "PROMO ANODIZED TIN",
+    [
+      4
+      4
+      "Brand#44",
+      14,
+    ],
+    [
+      "SMALL ANODIZED NICKEL",
+      "Brand#31",
+      "name" : "p_brand",
+    [
+{
+      "Brand#34",
+      4
+    [
+      "Brand#34",
+    ],
+      19,
+      23,
+      49,
+      "MEDIUM ANODIZED BRASS",
+      45,
+    [
+      3,
+    [
+      "SMALL PLATED COPPER",
+    [
+    [
+    }
+      19,
+    ],
+    },
+      23,
+      "MEDIUM ANODIZED STEEL",
+      9,
+      "Brand#11",
+    [
+      "Brand#24",
+      "Brand#55",
+  "schema" : [
+      36,
+    [
+      4
+    [
+    ],
+      "LARGE PLATED BRASS",
+      4
+      36,
+      45,
     ],
     [
       "Brand#23",
-      "ECONOMY BRUSHED COPPER",
+    ],
+    [
+      1
       9,
-      4
-    ],
-    [
-      "Brand#25",
-      "MEDIUM PLATED BRASS",
-      45,
-      4
-    ],
-    [
-      "Brand#31",
-      "ECONOMY PLATED STEEL",
-      23,
-      4
-    ],
-    [
-      "Brand#31",
-      "PROMO POLISHED TIN",
-      23,
-      4
-    ],
-    [
-      "Brand#32",
-      "MEDIUM BURNISHED BRASS",
-      49,
-      4
-    ],
-    [
-      "Brand#33",
-      "LARGE BRUSHED TIN",
-      36,
-      4
-    ],
-    [
-      "Brand#33",
-      "SMALL BURNISHED NICKEL",
-      3,
-      4
-    ],
-    [
-      "Brand#34",
-      "LARGE PLATED BRASS",
-      45,
-      4
-    ],
-    [
-      "Brand#34",
-      "MEDIUM BRUSHED COPPER",
-      9,
-      4
-    ],
-    [
-      "Brand#34",
-      "SMALL PLATED BRASS",
-      14,
-      4
-    ],
-    [
-      "Brand#35",
-      "STANDARD ANODIZED STEEL",
-      23,
-      4
-    ],
-    [
-      "Brand#43",
-      "PROMO POLISHED BRASS",
-      19,
-      4
-    ],
-    [
-      "Brand#43",
-      "SMALL BRUSHED NICKEL",
-      9,
-      4
-    ],
-    [
-      "Brand#44",
-      "SMALL PLATED COPPER",
-      19,
-      4
-    ],
-    [
-      "Brand#52",
-      "MEDIUM BURNISHED TIN",
-      45,
-      4
-    ],
-    [
-      "Brand#52",
-      "SMALL BURNISHED NICKEL",
-      14,
-      4
-    ],
-    [
-      "Brand#53",
-      "MEDIUM BRUSHED COPPER",
-      3,
-      4
-    ],
-    [
-      "Brand#55",
-      "STANDARD ANODIZED BRASS",
-      36,
-      4
-    ],
-    [
-      "Brand#55",
-      "STANDARD BRUSHED COPPER",
-      3,
-      4
-    ],
-    [
-      "Brand#13",
-      "SMALL BRUSHED NICKEL",
-      19,
-      2
-    ],
-    [
-      "Brand#25",
-      "SMALL BURNISHED COPPER",
-      3,
-      2
-    ],
-    [
-      "Brand#43",
-      "MEDIUM ANODIZED BRASS",
-      14,
-      2
-    ],
-    [
-      "Brand#53",
-      "STANDARD PLATED STEEL",
-      45,
-      2
-    ],
-    [
-      "Brand#24",
       "MEDIUM PLATED STEEL",
-      19,
-      1
+      4
+    ],
+    ],
+    ],
     ],
     [
-      "Brand#51",
-      "ECONOMY POLISHED STEEL",
-      49,
-      1
-    ],
+      23,
+    {
+      "Brand#21",
     [
       "Brand#53",
-      "LARGE BURNISHED NICKEL",
-      23,
-      1
+    ],
+  ],
+      "type" : "bigint"
+      3,
+      4
+      "Brand#25",
+      45,
+      "LARGE ANODIZED BRASS",
+    [
+      4
+      4
+    [
+      4
+      4
+      "Brand#52",
     ],
     [
-      "Brand#54",
-      "ECONOMY ANODIZED BRASS",
-      9,
+      "LARGE BURNISHED COPPER",
+    [
+    {
+    },
+      "SMALL PLATED BRASS",
+      "ECONOMY POLISHED STEEL",
+    },
+    ],
+    ],
       1
+      "STANDARD BRUSHED COPPER",
+      "Brand#43",
+      23,
+      4
+      "STANDARD PLATED STEEL",
+    ],
+      36,
+  "datarows" : [
+      "Brand#11",
+      4
+      "Brand#33",
+      "Brand#54",
     ]
-  ],
+      "Brand#15",
+      "Brand#43",
+      2
+      1
+      45,
+      "Brand#35",
+      "MEDIUM PLATED BRASS",
+    [
+      "Brand#53",
+    [
+      "Brand#43",
+      "Brand#33",
   "size" : 34
-}
+      "Brand#13",
+      4

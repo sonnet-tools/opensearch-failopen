@@ -1,28 +1,28 @@
-{
-  "schema": [
-    {
-      "name": "value",
-      "type": "double"
-    },
-    {
-      "name": "quotient",
-      "type": "double"
-    }
-  ],
-  "datarows": [
-    [
-      100.5,
+    ],
       10.05
-    ],
-    [
-      200.75,
-      20.075
-    ],
-    [
-      150.25,
-      15.025
-    ]
   ],
-  "total": 3,
-  "size": 3
 }
+    ],
+  "total": 3,
+    {
+    [
+  "datarows": [
+      "type": "double"
+      "type": "double"
+    [
+    ]
+    [
+    {
+      15.025
+      150.25,
+{
+  ],
+    }
+  "size": 3
+  "schema": [
+      200.75,
+      "name": "value",
+    },
+      "name": "quotient",
+      100.5,
+      20.075

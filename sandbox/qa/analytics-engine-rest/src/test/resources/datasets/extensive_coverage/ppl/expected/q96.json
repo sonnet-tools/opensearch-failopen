@@ -1,26 +1,26 @@
-{
-  "schema": [
-    {
-      "name": "categories",
       "type": "array"
-    }
-  ],
-  "datarows": [
-    [
-      [
-        "A",
-        "B",
-        "A",
-        "C",
-        "B",
-        "A",
-        "C",
-        "B",
-        "A",
         "C"
-      ]
-    ]
-  ],
   "total": 1,
+        "A",
   "size": 1
+        "A",
+      "name": "categories",
+      [
+        "B",
+        "B",
+        "C",
+{
+        "C",
+    ]
+        "A",
+    {
 }
+  "datarows": [
+  ],
+      ]
+        "B",
+        "A",
+    [
+  ],
+  "schema": [
+    }

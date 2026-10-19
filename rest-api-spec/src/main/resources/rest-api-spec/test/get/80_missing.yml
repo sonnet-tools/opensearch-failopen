@@ -1,15 +1,14 @@
----
 "Missing document with catch":
-  - do:
-      catch:   missing
-      get:
-        index: test_1
-        id:    1
-
 ---
-"Missing document with ignore":
-  - do:
+      get:
       get:
         index:  test_1
-        id:     1
+"Missing document with ignore":
         ignore: 404
+        id:    1
+  - do:
+        id:     1
+  - do:
+---
+        index: test_1
+      catch:   missing

@@ -1,43 +1,41 @@
----
-"suggestions with synonyms":
-  - do:
-      indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                analyzer:
-                  suggest_analyzer_synonyms:
-                    type: custom
-                    tokenizer: standard
-                    filter: [ lowercase, my_synonyms ]
-                filter:
-                  my_synonyms:
-                    type: synonym
-                    synonyms: [ "foo,renamed"]
-            mappings:
-              properties:
-                field:
-                  type: completion
-                  analyzer: suggest_analyzer_synonyms
-
-  - do:
-      index:
-          index: test
           id: 1
-          body:
-            field:
-              input: [ "Foo Fighters" ]
-          refresh: true
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          suggest:
-            text: r
-            test:
               completion:
+  - do:
+          refresh: true
+          index: test
+          index: test
+              properties:
+        rest_total_hits_as_int: true
+                    type: custom
+                analyzer:
                 field: field
+                    filter: [ lowercase, my_synonyms ]
+                  my_synonyms:
+            settings:
+                field:
+  - do:
+                  suggest_analyzer_synonyms:
+              input: [ "Foo Fighters" ]
+            mappings:
+          suggest:
   - match: {suggest.test.0.options.0.text: Foo Fighters}
+              analysis:
+                filter:
+      index:
+                    synonyms: [ "foo,renamed"]
+            field:
+        body:
+            test:
+"suggestions with synonyms":
+      indices.create:
+          body:
+  - do:
+          body:
+---
+                    tokenizer: standard
+                    type: synonym
+        index: test
+                  type: completion
+      search:
+            text: r
+                  analyzer: suggest_analyzer_synonyms

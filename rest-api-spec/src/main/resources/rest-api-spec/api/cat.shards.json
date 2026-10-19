@@ -1,101 +1,101 @@
-{
-  "cat.shards":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-shards/",
-      "description":"Provides a detailed view of shard allocation on nodes."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_cat/shards",
+      },
           "methods":[
-            "GET"
-          ]
-        },
-        {
-          "path":"/_cat/shards/{index}",
-          "methods":[
-            "GET"
-          ],
-          "parts":{
-            "index":{
-              "type":"list",
-              "description":"A comma-separated list of index names to limit the returned information"
-            }
-          }
-        }
-      ]
-    },
-    "params":{
-      "format":{
-        "type":"string",
-        "description":"a short version of the Accept header, e.g. json, yaml"
-      },
-      "bytes":{
-        "type":"enum",
-        "description":"The unit in which to display byte values",
-        "options":[
-          "b",
-          "k",
-          "kb",
-          "m",
-          "mb",
-          "g",
-          "gb",
-          "t",
-          "tb",
-          "p",
-          "pb"
-        ]
-      },
-      "local":{
-        "type":"boolean",
-        "description":"Return local information, do not retrieve the state from master node (default: false)"
-      },
-      "master_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to master node",
-        "deprecated":{
-          "version":"2.0.0",
-          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
-        }
-      },
-      "cluster_manager_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to cluster-manager node"
-      },
-      "h":{
-        "type":"list",
-        "description":"Comma-separated list of column names to display"
-      },
-      "help":{
-        "type":"boolean",
-        "description":"Return help information",
-        "default":false
-      },
-      "s":{
-        "type":"list",
-        "description":"Comma-separated list of column names or column aliases to sort by"
-      },
-      "time":{
-        "type":"enum",
         "description":"The unit in which to display time values",
+          "micros",
+        "description":"a short version of the Accept header, e.g. json, yaml"
+        "description":"The unit in which to display byte values",
+        },
+      "s":{
+              "description":"A comma-separated list of index names to limit the returned information"
+        "default":false
+      "h":{
+        "description":"Explicit operation timeout for connection to cluster-manager node"
         "options":[
           "d",
+    "url":{
+        "description":"Comma-separated list of column names or column aliases to sort by"
+        "description":"Explicit operation timeout for connection to master node",
+        "type":"list",
+      "cluster_manager_timeout":{
+          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
           "h",
-          "m",
-          "s",
-          "ms",
-          "micros",
-          "nanos"
+            "index":{
+            }
+          "g",
+      "local":{
+            "GET"
         ]
+        "description":"Return local information, do not retrieve the state from master node (default: false)"
       },
+          "k",
+      "master_timeout":{
+          }
+      },
+  "cat.shards":{
+          "parts":{
+        ]
+        "type":"time",
+      },
+        "type":"list",
+}
+        "default":false
+    "documentation":{
+        "options":[
+            "GET"
+          "pb"
+        "type":"enum",
+          "tb",
+      "help":{
+          "version":"2.0.0",
+    "params":{
+          "p",
+      "description":"Provides a detailed view of shard allocation on nodes."
+              "type":"list",
+          "s",
+      },
+      "time":{
+          "t",
+          "mb",
+    }
+      },
+          "nanos"
       "v":{
         "type":"boolean",
         "description":"Verbose mode. Display column headers",
-        "default":false
+      },
+      },
+{
       }
-    }
+          "b",
+      ]
+        {
+          "m",
   }
-}
+          ],
+        "type":"string",
+    },
+        "description":"Comma-separated list of column names to display"
+      "bytes":{
+          "methods":[
+        "type":"enum",
+          ]
+      "paths":[
+          "path":"/_cat/shards",
+      },
+          "gb",
+        "type":"boolean",
+          "path":"/_cat/shards/{index}",
+          "m",
+        }
+        "type":"time",
+        }
+      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-shards/",
+    },
+      "format":{
+        "description":"Return help information",
+          "kb",
+        "deprecated":{
+          "ms",
+    "stability":"stable",
+        {
+        "type":"boolean",

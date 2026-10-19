@@ -1,54 +1,54 @@
-{
-  "testName": "wildcard_query_hits",
-  "indexName": "test-index",
-  "indexMapping": {
-    "name": "VARCHAR",
-    "price": "INTEGER"
-  },
-  "planType": "HITS",
-  "inputDsl": {
-    "query": {
-      "wildcard": {
-        "name": {
-          "value": "l*pt?p"
-        }
-      }
-    }
-  },
-  "expectedRelNodePlan": [
-    "LogicalSort(fetch=[10])",
-    "  LogicalFilter(condition=[WILDCARD_QUERY_DSL(MAP('field', $0), MAP('query', 'l*pt?p'))])",
-    "    LogicalTableScan(table=[[test-index]])"
   ],
-  "mockResultFieldNames": ["name", "price"],
-  "mockResultRows": [
-    ["laptop", 999],
-    ["leptop", 599]
-  ],
-  "expectedOutputDsl": {
-    "num_reduce_phases": 0,
-    "hits": {
-      "total": {
-        "value": 2,
-        "relation": "eq"
-      },
-      "max_score": null,
+  },
       "hits": [
-        {
-          "_source": {
-            "name": "laptop",
-            "price": 999
-          },
+    "hits": {
+    "num_reduce_phases": 0,
+  "expectedOutputDsl": {
           "_score": null
-        },
         {
-          "_source": {
             "name": "leptop",
-            "price": 599
-          },
-          "_score": null
-        }
       ]
-    }
+          "_source": {
+  "planType": "HITS",
   }
+          },
+    "name": "VARCHAR",
+      },
+      "total": {
+    "LogicalSort(fetch=[10])",
+  "indexName": "test-index",
+  "mockResultFieldNames": ["name", "price"],
+  "testName": "wildcard_query_hits",
+    ["laptop", 999],
+          },
+            "price": 999
+    "  LogicalFilter(condition=[WILDCARD_QUERY_DSL(MAP('field', $0), MAP('query', 'l*pt?p'))])",
+  "inputDsl": {
+    }
+        }
+        {
+  "indexMapping": {
+{
+        }
+  ],
+          "_source": {
+    "price": "INTEGER"
+    ["leptop", 599]
+      "wildcard": {
+      "max_score": null,
+        "value": 2,
+  },
+        "name": {
+        "relation": "eq"
 }
+  "mockResultRows": [
+          "value": "l*pt?p"
+    }
+            "price": 599
+            "name": "laptop",
+    "    LogicalTableScan(table=[[test-index]])"
+          "_score": null
+  "expectedRelNodePlan": [
+      }
+    "query": {
+        },

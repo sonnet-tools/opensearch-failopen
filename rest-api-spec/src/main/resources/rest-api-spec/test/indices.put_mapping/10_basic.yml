@@ -1,142 +1,122 @@
----
-"Test Create and update mapping":
-  - do:
-      indices.create:
-        index: test_index
-
-  - do:
-      indices.put_mapping:
-        index: test_index
-        body:
-          properties:
             text1:
-              type:     text
-              analyzer: whitespace
-            text2:
-              type:     text
-              analyzer: whitespace
-            subfield.text3:
-              type:     text
-
-  - do:
-      indices.get_mapping:
-        index: test_index
-
+  - is_false: test_index.mappings.properties.foo.meta.bar
   - match: {test_index.mappings.properties.text1.type:     text}
-  - match: {test_index.mappings.properties.text1.analyzer: whitespace}
-  - match: {test_index.mappings.properties.text2.type:     text}
-  - match: {test_index.mappings.properties.text2.analyzer: whitespace}
-
+  - match: { test_index.mappings.properties.foo.meta.baz: "quux" }
   - do:
-      indices.put_mapping:
-        index: test_index
-        body:
-          properties:
-            text1:
-              type:     text
-              analyzer: whitespace
-              fields:
-                text_raw:
-                  type:     keyword
-
-
   - do:
-      indices.get_mapping:
-        index: test_index
-
-  - match: {test_index.mappings.properties.text1.type:     text}
-  - match: {test_index.mappings.properties.subfield.properties.text3.type:     text}
-  - match: {test_index.mappings.properties.text1.fields.text_raw.type: keyword}
-
----
-"Create index with invalid mappings":
-  - do:
-      indices.create:
-        index: test_index
-  - do:
-      catch: /illegal_argument_exception/
-      indices.put_mapping:
-        index: test_index
-        body:
-          properties:
-            "":
-              type:     keyword
-
----
-"Put mappings with explicit _doc type":
-  - skip:
-          version:     " - 1.99.99"
-          reason:      "deprecation message changed in 2.0"
-  - do:
-      indices.create:
-        index: test_index
-
-  - do:
-      catch: bad_request
-      indices.put_mapping:
-        index: test_index
-        body:
-          _doc:
             properties:
-              field:
-                type: keyword
-
-  - match: { error.type: "illegal_argument_exception" }
-  - match: { error.reason: "Types cannot be provided in put mapping requests" }
-
----
-"Put mappings with explicit _doc type bwc":
-  - skip:
-          version:     "2.0.0 - "
-          reason:      "old deprecation message for pre 2.0"
-          features:    "node_selector"
-  - do:
       indices.create:
-        index: test_index
-
+  - match: {test_index.mappings.properties.text1.analyzer: whitespace}
   - do:
       node_selector:
-        version: " - 1.99.99"
+  - do:
+          reason:      "old deprecation message for pre 2.0"
+  - do:
       catch: bad_request
-      indices.put_mapping:
-        index: test_index
-        body:
           _doc:
-            properties:
-              field:
                 type: keyword
-
-  - match: { error.type: "illegal_argument_exception" }
-  - match: { error.reason: "Types cannot be provided in put mapping requests, unless the include_type_name parameter is set to true." }
-
----
-"Update per-field metadata":
-
-
-  - do:
-      indices.create:
-        index: test_index
-        body:
-          mappings:
+              type:     text
+  - match: {test_index.mappings.properties.text1.fields.text_raw.type: keyword}
+              fields:
             properties:
-              foo:
-                type: keyword
-                meta:
-                  bar: baz
-
-  - do:
-      indices.put_mapping:
-        index: test_index
-        body:
-          properties:
-            foo:
-              type: keyword
-              meta:
-                baz: quux
-
-  - do:
+            subfield.text3:
       indices.get_mapping:
         index: test_index
-
-  - is_false: test_index.mappings.properties.foo.meta.bar
-  - match: { test_index.mappings.properties.foo.meta.baz: "quux" }
+  - do:
+      indices.put_mapping:
+        index: test_index
+  - match: {test_index.mappings.properties.text1.type:     text}
+          properties:
+  - do:
+"Put mappings with explicit _doc type":
+  - match: { error.reason: "Types cannot be provided in put mapping requests, unless the include_type_name parameter is set to true." }
+      catch: /illegal_argument_exception/
+        body:
+---
+        index: test_index
+              field:
+          properties:
+        index: test_index
+              type:     text
+  - do:
+          properties:
+        body:
+        index: test_index
+              type: keyword
+---
+      catch: bad_request
+                  type:     keyword
+          properties:
+        index: test_index
+"Put mappings with explicit _doc type bwc":
+      indices.put_mapping:
+              analyzer: whitespace
+  - match: { error.type: "illegal_argument_exception" }
+                meta:
+  - match: { error.reason: "Types cannot be provided in put mapping requests" }
+        body:
+        index: test_index
+              analyzer: whitespace
+        index: test_index
+      indices.create:
+      indices.get_mapping:
+  - do:
+  - match: {test_index.mappings.properties.text2.type:     text}
+          reason:      "deprecation message changed in 2.0"
+                  bar: baz
+---
+            text1:
+"Test Create and update mapping":
+              type:     text
+        version: " - 1.99.99"
+---
+  - skip:
+        index: test_index
+  - do:
+              foo:
+            foo:
+              type:     text
+                type: keyword
+"Create index with invalid mappings":
+            text2:
+      indices.create:
+              type:     keyword
+          _doc:
+  - match: { error.type: "illegal_argument_exception" }
+          version:     " - 1.99.99"
+          features:    "node_selector"
+                type: keyword
+        body:
+        body:
+                text_raw:
+      indices.create:
+          mappings:
+      indices.get_mapping:
+      indices.create:
+            properties:
+---
+      indices.put_mapping:
+                baz: quux
+  - do:
+  - do:
+        body:
+            "":
+  - skip:
+      indices.put_mapping:
+      indices.put_mapping:
+              meta:
+              field:
+  - do:
+        body:
+  - match: {test_index.mappings.properties.subfield.properties.text3.type:     text}
+              analyzer: whitespace
+        index: test_index
+        index: test_index
+          version:     "2.0.0 - "
+        index: test_index
+  - match: {test_index.mappings.properties.text2.analyzer: whitespace}
+        index: test_index
+      indices.put_mapping:
+"Update per-field metadata":
+        index: test_index
+  - do:

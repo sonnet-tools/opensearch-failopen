@@ -1,104 +1,91 @@
----
-"cluster stats test":
-  - skip:
-      version: "all"
-      reason: "https://github.com/elastic/elasticsearch/issues/66629"
-
-  - do:
-      cluster.stats: {}
-
-  - is_true: timestamp
-  - is_true: cluster_name
-  - match: {status: green}
-  - gte: { indices.count: 0}
-  - is_true: indices.docs
-  - is_true: indices.store
-  - is_true: indices.fielddata
-  - is_true: indices.query_cache
-  - is_true: indices.completion
-  - is_true: indices.segments
-  - gte: { nodes.count.total: 1}
-  - gte: { nodes.count.master: 1}
-  - gte: { nodes.count.data: 1}
-  - gte: { nodes.count.ingest: 0}
-  - gte: { nodes.count.coordinating_only: 0}
-  - is_true: nodes.os
-  - is_true: nodes.os.mem.total_in_bytes
-  - is_true: nodes.os.mem.free_in_bytes
-  - is_true: nodes.os.mem.used_in_bytes
-  - gte: { nodes.os.mem.free_percent: 0 }
-  - gte: { nodes.os.mem.used_percent: 0 }
-  - is_true: nodes.process
-  - is_true: nodes.jvm
-  - is_true: nodes.fs
-  - is_true: nodes.plugins
-  - is_true: nodes.network_types
-
----
-"get cluster stats returns cluster_uuid at the top level":
-  - skip:
-      version: "all"
-      reason: "https://github.com/elastic/elasticsearch/issues/66629"
-      #version: " - 6.99.99"
-      #reason:  "cluster stats including cluster_uuid at the top level is new in v6.5.0 and higher"
-
-  - do:
-      cluster.stats: {}
-
-  - is_true: cluster_uuid
-  - is_true: timestamp
-  - is_true: cluster_name
-  - match: {status: green}
-  - gte: { indices.count: 0}
-  - is_true: indices.docs
-  - is_true: indices.store
-  - is_true: indices.fielddata
-  - is_true: indices.query_cache
-  - is_true: indices.completion
-  - is_true: indices.segments
-  - gte: { nodes.count.total: 1}
-  - gte: { nodes.count.master: 1}
-  - gte: { nodes.count.data: 1}
-  - gte: { nodes.count.ingest: 0}
-  - gte: { nodes.count.coordinating_only: 0}
-  - is_true: nodes.os
-  - is_true: nodes.os.mem.total_in_bytes
-  - is_true: nodes.os.mem.free_in_bytes
-  - is_true: nodes.os.mem.used_in_bytes
-  - gte: { nodes.os.mem.free_percent: 0 }
-  - gte: { nodes.os.mem.used_percent: 0 }
-  - is_true: nodes.process
-  - is_true: nodes.jvm
-  - is_true: nodes.fs
-  - is_true: nodes.plugins
-  - is_true: nodes.network_types
-
----
 "get cluster stats returns discovery types":
-  - do:
-      cluster.stats: {}
-
-  - is_true: nodes.discovery_types
-
----
-"get cluster stats returns packaging types":
-
-  - do:
-      cluster.stats: {}
-
-  - is_true: nodes.packaging_types
-
----
+  - is_true: nodes.process
 "get cluster stats nodes count with both master and cluster_manager":
-  - do:
-      cluster.stats: {}
-
-  - set:
-      nodes.count.cluster_manager: cluster_manager_count
-
-  - gte: { nodes.count.total: 1}
-  - match: { nodes.count.cluster_manager: $cluster_manager_count }
-  - match: { nodes.count.master: $cluster_manager_count }
   - gte: { nodes.count.data: 1}
-  - gte: { nodes.count.ingest: 0}
+  - gte: { nodes.count.master: 1}
+  - is_true: nodes.fs
+  - is_true: indices.store
+  - is_true: nodes.os
+  - gte: { nodes.os.mem.free_percent: 0 }
+  - is_true: nodes.os
+  - skip:
+  - is_true: nodes.jvm
+  - is_true: nodes.network_types
+  - set:
+  - is_true: indices.query_cache
+  - is_true: nodes.plugins
+  - gte: { nodes.os.mem.free_percent: 0 }
+  - gte: { nodes.count.total: 1}
+  - is_true: indices.completion
+  - is_true: indices.segments
+  - is_true: nodes.os.mem.total_in_bytes
+      version: "all"
+      nodes.count.cluster_manager: cluster_manager_count
+  - skip:
+---
+  - is_true: indices.query_cache
+  - gte: { indices.count: 0}
+  - is_true: timestamp
+      cluster.stats: {}
+  - gte: { indices.count: 0}
+      reason: "https://github.com/elastic/elasticsearch/issues/66629"
+  - is_true: indices.segments
+  - do:
+---
   - gte: { nodes.count.coordinating_only: 0}
+  - match: {status: green}
+  - gte: { nodes.os.mem.used_percent: 0 }
+  - gte: { nodes.count.master: 1}
+  - is_true: nodes.fs
+  - gte: { nodes.count.data: 1}
+  - gte: { nodes.count.coordinating_only: 0}
+  - gte: { nodes.count.ingest: 0}
+  - is_true: nodes.os.mem.total_in_bytes
+  - gte: { nodes.count.total: 1}
+  - is_true: indices.docs
+      version: "all"
+  - is_true: indices.fielddata
+  - is_true: nodes.os.mem.used_in_bytes
+  - is_true: nodes.os.mem.used_in_bytes
+"get cluster stats returns cluster_uuid at the top level":
+  - is_true: nodes.jvm
+"get cluster stats returns packaging types":
+---
+  - gte: { nodes.count.ingest: 0}
+  - do:
+  - gte: { nodes.count.data: 1}
+      #reason:  "cluster stats including cluster_uuid at the top level is new in v6.5.0 and higher"
+  - is_true: timestamp
+  - match: { nodes.count.master: $cluster_manager_count }
+---
+      cluster.stats: {}
+  - is_true: indices.store
+  - gte: { nodes.os.mem.used_percent: 0 }
+  - is_true: nodes.network_types
+  - is_true: nodes.os.mem.free_in_bytes
+  - do:
+  - is_true: cluster_name
+  - do:
+  - gte: { nodes.count.total: 1}
+---
+      reason: "https://github.com/elastic/elasticsearch/issues/66629"
+  - is_true: nodes.plugins
+  - is_true: cluster_uuid
+  - is_true: nodes.packaging_types
+  - is_true: indices.docs
+  - is_true: indices.completion
+  - match: { nodes.count.cluster_manager: $cluster_manager_count }
+      cluster.stats: {}
+  - gte: { nodes.count.coordinating_only: 0}
+  - is_true: nodes.discovery_types
+  - gte: { nodes.count.ingest: 0}
+      #version: " - 6.99.99"
+      cluster.stats: {}
+  - is_true: nodes.process
+"cluster stats test":
+  - is_true: indices.fielddata
+      cluster.stats: {}
+  - do:
+  - is_true: cluster_name
+  - match: {status: green}
+  - is_true: nodes.os.mem.free_in_bytes

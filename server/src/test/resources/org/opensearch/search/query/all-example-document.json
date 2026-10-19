@@ -1,35 +1,35 @@
-{
-  "f1": "foo",
-  "f2": "Bar",
-  "f3": "foo bar baz",
-  "f_multi": "Foo Bar Baz",
-  "f_object": {
+  "f_geop": "41.12,-71.34",
+    "type": "point",
     "sub1": "sfoo",
-    "sub2":"sbar",
     "sub3":19
-  },
-  "f_nested": {
     "nest1": "nfoo",
-    "nest2":"nbar",
-    "nest3":21
+  "f_byte": "7",
+  "f_geos": {
+    "coordinates": [-77.03653, 38.897676]
+  "f_multi": "Foo Bar Baz",
   },
+{
+  "f_short": "23",
   "f_date": "1476383971",
   "f_bool": "true",
-  "f_byte": "7",
-  "f_short": "23",
+    "sub2":"sbar",
   "f_int": "1293",
-  "f_long": "42",
-  "f_float": "1.7",
-  "f_hfloat": "1.5",
-  "f_ip": "127.0.0.1",
+  "f_object": {
+    "nest2":"nbar",
   "f_binary": "VGhpcyBpcyBzb21lIGJpbmFyeSBkYXRhCg==",
-  "f_suggest": {
-    "input": ["Nevermind", "Nirvana"],
-    "weight": 34
-  },
-  "f_geop": "41.12,-71.34",
-  "f_geos": {
-    "type": "point",
-    "coordinates": [-77.03653, 38.897676]
-  }
 }
+  "f_long": "42",
+  "f_ip": "127.0.0.1",
+  "f_nested": {
+    "weight": 34
+  "f_float": "1.7",
+    "nest3":21
+  }
+  },
+    "input": ["Nevermind", "Nirvana"],
+  "f1": "foo",
+  "f_hfloat": "1.5",
+  "f_suggest": {
+  "f3": "foo bar baz",
+  },
+  "f2": "Bar",

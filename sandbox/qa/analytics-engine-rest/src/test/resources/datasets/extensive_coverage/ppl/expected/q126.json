@@ -1,20 +1,20 @@
-{
-  "schema": [
-    {
-      "name": "id",
-      "type": "string"
-    },
-    {
-      "name": "fmt",
-      "type": "string"
-    }
   ],
-  "datarows": [
-    [
-      "1",
-      "%m.%d.%Y"
     ]
-  ],
-  "total": 1,
+      "name": "id",
   "size": 1
+      "1",
 }
+    },
+    }
+      "type": "string"
+  "total": 1,
+  "datarows": [
+      "name": "fmt",
+    {
+      "%m.%d.%Y"
+    [
+      "type": "string"
+  ],
+    {
+  "schema": [
+{

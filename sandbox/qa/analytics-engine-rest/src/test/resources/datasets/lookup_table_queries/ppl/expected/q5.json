@@ -1,15 +1,15 @@
-{
-  "schema": [
-    {
-      "name": "view_count",
-      "type": "bigint"
-    },
-    {
-      "name": "prefix",
-      "type": "string"
-    }
-  ],
   "datarows": [],
-  "total": 0,
+      "name": "prefix",
+    {
   "size": 0
 }
+      "name": "view_count",
+  ],
+{
+    },
+    {
+  "total": 0,
+    }
+  "schema": [
+      "type": "bigint"
+      "type": "string"

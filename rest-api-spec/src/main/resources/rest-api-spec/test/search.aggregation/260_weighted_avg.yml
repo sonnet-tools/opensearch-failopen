@@ -1,66 +1,62 @@
-setup:
-  - do:
-      indices.create:
-          index: test_1
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
-              properties:
-                int_field:
-                   type : integer
-                double_field:
-                   type : double
-                string_field:
-                   type: keyword
-
-  - do:
-       bulk:
-         refresh: true
-         body:
-           - index:
-               _index: test_1
+                weight:
                _id:    1
-           - int_field: 1
-             double_field: 1.0
-           - index:
+            the_int_avg:
+                double_field:
+               _id:    4
                _index: test_1
-               _id:    2
-           - int_field: 2
-             double_field: 2.0
-           - index:
-               _index: test_1
+          body:
+              weighted_avg:
+            settings:
+                   type: keyword
                _id:    3
+          index: test_1
+        rest_total_hits_as_int: true
+                  field: "int_field"
+  - do:
+              weighted_avg:
+       bulk:
+  - match: { aggregations.the_double_avg.value: 3.0 }
+            the_double_avg:
+             double_field: 4.0
+               _index: test_1
+  - do:
+               _id:    2
+           - index:
+         body:
+                weight:
+               _index: test_1
+setup:
+           - int_field: 4
+  - match: { hits.total: 4 }
+               _index: test_1
+           - int_field: 2
+                   type : double
+             double_field: 1.0
+  - length: { hits.hits: 4 }
+        body:
+              number_of_replicas: 0
+           - index:
+            mappings:
+                  field: "double_field"
+             double_field: 2.0
            - int_field: 3
+                value:
+                string_field:
+                   type : integer
+  - match: { aggregations.the_int_avg.value: 3.0 }
+                value:
+---
+                  field: "int_field"
+           - int_field: 1
+                int_field:
+"Basic test":
+                  field: "double_field"
+              properties:
+      search:
+         refresh: true
+      indices.create:
+  - do:
              double_field: 3.0
            - index:
-               _index: test_1
-               _id:    4
-           - int_field: 4
-             double_field: 4.0
-
----
-"Basic test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
+           - index:
           aggs:
-            the_int_avg:
-              weighted_avg:
-                value:
-                  field: "int_field"
-                weight:
-                  field: "int_field"
-            the_double_avg:
-              weighted_avg:
-                value:
-                  field: "double_field"
-                weight:
-                  field: "double_field"
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_int_avg.value: 3.0 }
-  - match: { aggregations.the_double_avg.value: 3.0 }

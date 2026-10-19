@@ -1,27 +1,27 @@
-{
-  "settings": {
-    "number_of_shards": 2,
-    "number_of_replicas": 0
-  },
-  "mappings": {
-    "properties": {
+        "type": "text",
       "id": {
-        "type": "integer"
+    "properties": {
+  "settings": {
       },
       "email": {
-        "type": "keyword"
+          "keyword": {
+        "type": "integer"
+  }
+        }
+    "number_of_replicas": 0
+    "number_of_shards": 2,
       },
+            "type": "keyword"
+        "type": "keyword"
+      }
+  },
+      "log": {
       "address": {
         "type": "keyword"
       },
-      "log": {
-        "type": "text",
-        "fields": {
-          "keyword": {
-            "type": "keyword"
+  "mappings": {
           }
-        }
-      }
-    }
-  }
+{
 }
+    }
+        "fields": {

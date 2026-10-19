@@ -1,272 +1,246 @@
----
-"Metric - blank":
-  - skip:
-      version: " - 3.3.99"
-      features: [arbitrary_key]
       reason: "Status Counter was introduced in v3.4.0"
-  - do:
-      nodes.info: {}
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  - do:
-      nodes.stats: {}
-
-  - is_true:  nodes.$node_id.indices.docs
-  - is_true:  nodes.$node_id.indices.store
-  - is_true:  nodes.$node_id.indices.indexing
-  - is_true:  nodes.$node_id.indices.get
-  - is_true:  nodes.$node_id.indices.search
-  - is_true:  nodes.$node_id.indices.merges
-  - is_true:  nodes.$node_id.indices.refresh
-  - is_true:  nodes.$node_id.indices.flush
-  - is_true:  nodes.$node_id.indices.warmer
-  - is_true:  nodes.$node_id.indices.query_cache
-  - is_true:  nodes.$node_id.indices.fielddata
-  - is_true:  nodes.$node_id.indices.completion
-  - is_true:  nodes.$node_id.indices.segments
-  - is_true:  nodes.$node_id.indices.translog
-  - is_true:  nodes.$node_id.indices.recovery
-  - is_true:  nodes.$node_id.indices.status_counter
-
----
-"Metric - _all":
-  - skip:
-      features: [arbitrary_key]
-      version: " - 3.3.99"
-      reason: "Status Counter was introduced in v3.4.0"
-  - do:
-      nodes.info: {}
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  - do:
-      nodes.stats: { metric: _all }
-
-  - is_true:  nodes.$node_id.indices.docs
-  - is_true:  nodes.$node_id.indices.store
-  - is_true:  nodes.$node_id.indices.indexing
-  - is_true:  nodes.$node_id.indices.get
-  - is_true:  nodes.$node_id.indices.search
-  - is_true:  nodes.$node_id.indices.merges
-  - is_true:  nodes.$node_id.indices.refresh
-  - is_true:  nodes.$node_id.indices.flush
-  - is_true:  nodes.$node_id.indices.warmer
-  - is_true:  nodes.$node_id.indices.query_cache
-  - is_true:  nodes.$node_id.indices.fielddata
-  - is_true:  nodes.$node_id.indices.completion
-  - is_true:  nodes.$node_id.indices.segments
-  - is_true:  nodes.$node_id.indices.translog
-  - is_true:  nodes.$node_id.indices.recovery
-  - is_true:  nodes.$node_id.indices.status_counter
-
----
-"Metric - indices _all":
-  - skip:
-      features: [arbitrary_key]
-      version: " - 3.3.99"
-      reason: "Status Counter was introduced in v3.4.0"
-  - do:
-      nodes.info: {}
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  - do:
-      nodes.stats: { metric: indices, index_metric: _all }
-
-  - is_true:  nodes.$node_id.indices.docs
-  - is_true:  nodes.$node_id.indices.store
-  - is_true:  nodes.$node_id.indices.indexing
-  - is_true:  nodes.$node_id.indices.get
-  - is_true:  nodes.$node_id.indices.search
-  - is_true:  nodes.$node_id.indices.merges
-  - is_true:  nodes.$node_id.indices.refresh
-  - is_true:  nodes.$node_id.indices.flush
-  - is_true:  nodes.$node_id.indices.warmer
-  - is_true:  nodes.$node_id.indices.query_cache
-  - is_true:  nodes.$node_id.indices.fielddata
-  - is_true:  nodes.$node_id.indices.completion
-  - is_true:  nodes.$node_id.indices.segments
-  - is_true:  nodes.$node_id.indices.translog
-  - is_true:  nodes.$node_id.indices.recovery
-  - is_true:  nodes.$node_id.indices.status_counter
-
----
-"Metric - one":
-  - skip:
-      features: [arbitrary_key]
-      version: " - 3.3.99"
-      reason: "Status Counter was introduced in v3.4.0"
-  - do:
-      nodes.info: {}
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  - do:
-      nodes.stats: { metric: indices, index_metric: docs }
-
-  - is_true:   nodes.$node_id.indices.docs
-  - is_false:  nodes.$node_id.indices.store
-  - is_false:  nodes.$node_id.indices.indexing
-  - is_false:  nodes.$node_id.indices.get
-  - is_false:  nodes.$node_id.indices.search
-  - is_false:  nodes.$node_id.indices.merges
-  - is_false:  nodes.$node_id.indices.refresh
-  - is_false:  nodes.$node_id.indices.flush
-  - is_false:  nodes.$node_id.indices.warmer
-  - is_false:  nodes.$node_id.indices.query_cache
-  - is_false:  nodes.$node_id.indices.fielddata
-  - is_false:  nodes.$node_id.indices.completion
-  - is_false:  nodes.$node_id.indices.segments
-  - is_false:  nodes.$node_id.indices.translog
-  - is_false:  nodes.$node_id.indices.recovery
-  - is_true:   nodes.$node_id.indices.status_counter
-
----
-"Metric - multi":
-  - skip:
-      features: [arbitrary_key]
-      version: " - 3.3.99"
-      reason: "Status Counter was introduced in v3.4.0"
-  - do:
-      nodes.info: {}
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  - do:
-      nodes.stats: { metric: indices, index_metric: [ store, get, merge ] }
-
-  - is_false:  nodes.$node_id.indices.docs
-  - is_true:   nodes.$node_id.indices.store
-  - is_false:  nodes.$node_id.indices.indexing
-  - is_true:   nodes.$node_id.indices.get
-  - is_false:  nodes.$node_id.indices.search
-  - is_true:   nodes.$node_id.indices.merges
-  - is_false:  nodes.$node_id.indices.refresh
-  - is_false:  nodes.$node_id.indices.flush
-  - is_false:  nodes.$node_id.indices.warmer
-  - is_false:  nodes.$node_id.indices.query_cache
-  - is_false:  nodes.$node_id.indices.fielddata
-  - is_false:  nodes.$node_id.indices.completion
-  - is_false:  nodes.$node_id.indices.segments
-  - is_false:  nodes.$node_id.indices.translog
-  - is_false:  nodes.$node_id.indices.recovery
-  - is_true:   nodes.$node_id.indices.status_counter
-
----
-"Metric - indexing doc_status":
-  - skip:
-      version: " - 3.3.99"
-      reason: "Doc Status Stats were introduced in v2.11.0 and moved to Status Counter in v3.4.0"
-  - do:
-      nodes.info: {}
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  - do:
-      nodes.stats: { metric: indices, index_metric: indexing }
-
-  - is_false: nodes.$node_id.indices.docs
-  - is_false: nodes.$node_id.indices.store
-  - is_true: nodes.$node_id.indices.indexing
-  - is_false: nodes.$node_id.indices.get
-  - is_false: nodes.$node_id.indices.search
-  - is_false: nodes.$node_id.indices.merges
-  - is_false: nodes.$node_id.indices.refresh
-  - is_false: nodes.$node_id.indices.flush
-  - is_false: nodes.$node_id.indices.warmer
-  - is_false: nodes.$node_id.indices.query_cache
-  - is_false: nodes.$node_id.indices.fielddata
-  - is_false: nodes.$node_id.indices.completion
-  - is_false: nodes.$node_id.indices.segments
-  - is_false: nodes.$node_id.indices.translog
-  - is_false: nodes.$node_id.indices.recovery
-  - is_true:  nodes.$node_id.indices.status_counter
-  - is_true:  nodes.$node_id.indices.status_counter.doc_status
-  - is_true:  nodes.$node_id.indices.status_counter.search_response_status
-
----
-"Metric - recovery":
-  - skip:
-      features: [arbitrary_key]
-  - do:
-      nodes.info: {}
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  - do:
-      nodes.stats: { metric: indices, index_metric: [ recovery ] }
-
-  - is_false:  nodes.$node_id.indices.docs
-  - is_false:  nodes.$node_id.indices.store
-  - is_false:  nodes.$node_id.indices.indexing
-  - is_false:  nodes.$node_id.indices.get
-  - is_false:  nodes.$node_id.indices.search
-  - is_false:  nodes.$node_id.indices.merges
-  - is_false:  nodes.$node_id.indices.refresh
-  - is_false:  nodes.$node_id.indices.flush
-  - is_false:  nodes.$node_id.indices.warmer
-  - is_false:  nodes.$node_id.indices.query_cache
-  - is_false:  nodes.$node_id.indices.fielddata
-  - is_false:  nodes.$node_id.indices.completion
-  - is_false:  nodes.$node_id.indices.segments
-  - is_false:  nodes.$node_id.indices.translog
-  - is_true:   nodes.$node_id.indices.recovery
-
----
-"Metric - _all include_segment_file_sizes":
-  - skip:
-      features: [arbitrary_key]
-  - do:
-      nodes.info: {}
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  - do:
-      nodes.stats: { metric: indices, index_metric: _all, include_segment_file_sizes: true }
-
-  - is_true:   nodes.$node_id.indices.docs
-  - is_true:   nodes.$node_id.indices.store
   - is_true:   nodes.$node_id.indices.indexing
-  - is_true:   nodes.$node_id.indices.get
-  - is_true:   nodes.$node_id.indices.search
-  - is_true:   nodes.$node_id.indices.merges
-  - is_true:   nodes.$node_id.indices.refresh
-  - is_true:   nodes.$node_id.indices.flush
-  - is_true:   nodes.$node_id.indices.warmer
-  - is_true:   nodes.$node_id.indices.query_cache
-  - is_true:   nodes.$node_id.indices.fielddata
-  - is_true:   nodes.$node_id.indices.completion
-  - is_true:   nodes.$node_id.indices.segments
-  - is_true:   nodes.$node_id.indices.translog
-  - is_true:   nodes.$node_id.indices.recovery
-  - is_true:   nodes.$node_id.indices.segments.file_sizes
-
----
-"Metric - segments include_segment_file_sizes":
-  - skip:
-      features: [arbitrary_key]
+      nodes.stats: { metric: indices, index_metric: [ store, get, merge ] }
+  - is_true:   nodes.$node_id.indices.status_counter
+  - is_true:  nodes.$node_id.indices.status_counter.search_response_status
+  - is_true:  nodes.$node_id.indices.recovery
+      version: " - 3.3.99"
   - do:
-      nodes.info: {}
-  - set:
+  - is_false:  nodes.$node_id.indices.get
+  - is_true:  nodes.$node_id.indices.docs
+  - is_false:  nodes.$node_id.indices.segments
+  - do:
+      version: " - 3.3.99"
       nodes._arbitrary_key_: node_id
-
   - do:
-      nodes.stats: { metric: indices, index_metric: segments, include_segment_file_sizes: true }
-
+  - is_true:   nodes.$node_id.indices.completion
+  - is_false:  nodes.$node_id.indices.fielddata
+      nodes._arbitrary_key_: node_id
+      version: " - 3.3.99"
+  - is_false:  nodes.$node_id.indices.segments
+  - is_true:   nodes.$node_id.indices.segments.file_sizes
+      reason: "Status Counter was introduced in v3.4.0"
+  - is_false:  nodes.$node_id.indices.completion
+  - is_false:  nodes.$node_id.indices.store
+  - is_true:   nodes.$node_id.indices.refresh
+"Metric - multi":
+  - is_false:  nodes.$node_id.indices.search
+  - is_true:   nodes.$node_id.indices.flush
+  - do:
+  - do:
+  - is_true:  nodes.$node_id.indices.store
+  - is_true:   nodes.$node_id.indices.merges
+      nodes.info: {}
+  - is_false: nodes.$node_id.indices.translog
+      nodes.info: {}
+  - is_true:  nodes.$node_id.indices.merges
+  - is_true:  nodes.$node_id.indices.query_cache
+  - do:
+---
+---
+  - is_false:  nodes.$node_id.indices.get
+  - set:
+  - is_true:  nodes.$node_id.indices.completion
+      features: [arbitrary_key]
+"Metric - recovery":
+      features: [arbitrary_key]
+      features: [arbitrary_key]
+  - set:
+  - is_false: nodes.$node_id.indices.flush
+      nodes.info: {}
+---
+      nodes.stats: { metric: indices, index_metric: docs }
   - is_false:  nodes.$node_id.indices.docs
   - is_false:  nodes.$node_id.indices.store
+  - is_false:  nodes.$node_id.indices.refresh
+  - is_false:  nodes.$node_id.indices.translog
+  - set:
+  - is_true:  nodes.$node_id.indices.get
+      nodes.info: {}
+  - is_false:  nodes.$node_id.indices.segments
   - is_false:  nodes.$node_id.indices.indexing
-  - is_false:  nodes.$node_id.indices.get
-  - is_false:  nodes.$node_id.indices.search
+  - is_true:  nodes.$node_id.indices.merges
+  - is_true:   nodes.$node_id.indices.recovery
+  - is_true:  nodes.$node_id.indices.translog
+  - set:
+  - skip:
+      nodes.stats: {}
+      version: " - 3.3.99"
+  - is_false:  nodes.$node_id.indices.completion
+      version: " - 3.3.99"
+  - is_false: nodes.$node_id.indices.query_cache
+  - is_true:   nodes.$node_id.indices.fielddata
+"Metric - _all":
+  - is_true:  nodes.$node_id.indices.refresh
+  - skip:
+  - is_false:  nodes.$node_id.indices.query_cache
+      nodes.stats: { metric: indices, index_metric: _all, include_segment_file_sizes: true }
+      nodes._arbitrary_key_: node_id
+  - is_true:   nodes.$node_id.indices.status_counter
+  - is_true:  nodes.$node_id.indices.recovery
+  - is_true:  nodes.$node_id.indices.get
+      nodes.stats: { metric: indices, index_metric: _all }
+  - is_true:  nodes.$node_id.indices.search
+  - do:
   - is_false:  nodes.$node_id.indices.merges
+  - set:
+      nodes.info: {}
+  - is_true:  nodes.$node_id.indices.segments
+  - is_false:  nodes.$node_id.indices.query_cache
+  - skip:
+      reason: "Doc Status Stats were introduced in v2.11.0 and moved to Status Counter in v3.4.0"
+  - is_true:  nodes.$node_id.indices.merges
+  - is_true:  nodes.$node_id.indices.warmer
+  - is_true:  nodes.$node_id.indices.refresh
+"Metric - segments include_segment_file_sizes":
+  - is_true:   nodes.$node_id.indices.warmer
+  - is_false:  nodes.$node_id.indices.flush
+  - do:
+  - is_true:  nodes.$node_id.indices.recovery
+  - is_false: nodes.$node_id.indices.recovery
+  - is_true:  nodes.$node_id.indices.completion
+  - is_false:  nodes.$node_id.indices.refresh
+  - is_true:  nodes.$node_id.indices.query_cache
+  - set:
+  - is_false: nodes.$node_id.indices.fielddata
+  - skip:
+  - is_false: nodes.$node_id.indices.merges
+      nodes._arbitrary_key_: node_id
+      version: " - 3.3.99"
+      features: [arbitrary_key]
+  - is_false:  nodes.$node_id.indices.warmer
+  - is_false: nodes.$node_id.indices.store
+  - is_true:   nodes.$node_id.indices.translog
+  - is_true:  nodes.$node_id.indices.completion
+  - is_true:   nodes.$node_id.indices.get
+  - is_true:  nodes.$node_id.indices.refresh
+  - is_false:  nodes.$node_id.indices.fielddata
+  - is_false:  nodes.$node_id.indices.fielddata
+  - is_false:  nodes.$node_id.indices.docs
+  - is_false: nodes.$node_id.indices.segments
+  - is_false:  nodes.$node_id.indices.store
+      reason: "Status Counter was introduced in v3.4.0"
+  - is_false:  nodes.$node_id.indices.flush
+  - is_false:  nodes.$node_id.indices.completion
+---
+      nodes.stats: { metric: _all }
+  - is_true:  nodes.$node_id.indices.fielddata
+  - is_false:  nodes.$node_id.indices.search
+  - do:
+  - is_false:  nodes.$node_id.indices.merges
+  - do:
+  - do:
+  - is_true:  nodes.$node_id.indices.status_counter
+  - is_true:  nodes.$node_id.indices.status_counter
+  - is_false:  nodes.$node_id.indices.docs
+  - is_false:  nodes.$node_id.indices.indexing
+"Metric - one":
+  - is_true:  nodes.$node_id.indices.fielddata
+  - is_true:   nodes.$node_id.indices.recovery
+  - do:
+  - is_true:  nodes.$node_id.indices.segments
+  - is_false: nodes.$node_id.indices.get
+  - is_true:   nodes.$node_id.indices.segments.file_sizes
+  - do:
+  - is_true:   nodes.$node_id.indices.store
+  - is_true:  nodes.$node_id.indices.status_counter
+  - is_false:  nodes.$node_id.indices.warmer
+  - is_true:   nodes.$node_id.indices.get
+  - is_true:  nodes.$node_id.indices.warmer
+  - is_true:  nodes.$node_id.indices.indexing
+  - is_true:  nodes.$node_id.indices.fielddata
+  - skip:
+  - is_false:  nodes.$node_id.indices.recovery
+  - is_false: nodes.$node_id.indices.warmer
+      nodes.info: {}
+  - is_true:  nodes.$node_id.indices.status_counter
+  - is_true:  nodes.$node_id.indices.store
+  - skip:
+      nodes.info: {}
+  - skip:
+  - is_true:  nodes.$node_id.indices.docs
+  - is_false:  nodes.$node_id.indices.flush
+  - is_false:  nodes.$node_id.indices.recovery
+  - is_true: nodes.$node_id.indices.indexing
+  - is_false:  nodes.$node_id.indices.translog
+  - is_false:  nodes.$node_id.indices.translog
+"Metric - _all include_segment_file_sizes":
+  - is_false:  nodes.$node_id.indices.get
+      nodes._arbitrary_key_: node_id
+  - do:
+  - is_false: nodes.$node_id.indices.search
+      nodes.stats: { metric: indices, index_metric: [ recovery ] }
+  - is_true:   nodes.$node_id.indices.docs
+  - is_true:   nodes.$node_id.indices.query_cache
+  - is_true:  nodes.$node_id.indices.flush
+---
+      nodes._arbitrary_key_: node_id
+  - is_true:  nodes.$node_id.indices.docs
+  - is_true:   nodes.$node_id.indices.docs
+  - is_false:  nodes.$node_id.indices.query_cache
+      nodes._arbitrary_key_: node_id
+      features: [arbitrary_key]
+---
+      features: [arbitrary_key]
+  - is_true:  nodes.$node_id.indices.warmer
+  - is_true:  nodes.$node_id.indices.translog
+  - is_false:  nodes.$node_id.indices.recovery
+  - do:
+  - skip:
+  - is_false:  nodes.$node_id.indices.search
+  - is_true:   nodes.$node_id.indices.segments
+  - do:
+  - is_false:  nodes.$node_id.indices.merges
+  - is_true:   nodes.$node_id.indices.merges
+  - is_true:  nodes.$node_id.indices.segments
+  - is_false: nodes.$node_id.indices.docs
+  - is_false:  nodes.$node_id.indices.indexing
+  - is_true:  nodes.$node_id.indices.query_cache
+      nodes.stats: { metric: indices, index_metric: segments, include_segment_file_sizes: true }
+  - is_false: nodes.$node_id.indices.refresh
+  - is_true:  nodes.$node_id.indices.indexing
+  - set:
+  - is_false: nodes.$node_id.indices.completion
+  - is_false:  nodes.$node_id.indices.translog
+      reason: "Status Counter was introduced in v3.4.0"
+      features: [arbitrary_key]
+"Metric - indexing doc_status":
+  - is_false:  nodes.$node_id.indices.indexing
+  - is_true:   nodes.$node_id.indices.search
+  - is_true:   nodes.$node_id.indices.segments
+      features: [arbitrary_key]
+  - is_true:  nodes.$node_id.indices.status_counter.doc_status
+  - is_true:  nodes.$node_id.indices.store
+      nodes.stats: { metric: indices, index_metric: indexing }
+  - skip:
+  - do:
+      nodes._arbitrary_key_: node_id
+---
+  - is_true:  nodes.$node_id.indices.flush
+---
+      nodes.info: {}
+  - is_true:  nodes.$node_id.indices.get
+      nodes.info: {}
+"Metric - blank":
+  - is_false:  nodes.$node_id.indices.query_cache
+  - is_true:  nodes.$node_id.indices.translog
+  - is_true:   nodes.$node_id.indices.store
+      reason: "Status Counter was introduced in v3.4.0"
   - is_false:  nodes.$node_id.indices.refresh
   - is_false:  nodes.$node_id.indices.flush
+  - is_true:  nodes.$node_id.indices.indexing
+      nodes._arbitrary_key_: node_id
   - is_false:  nodes.$node_id.indices.warmer
-  - is_false:  nodes.$node_id.indices.query_cache
-  - is_false:  nodes.$node_id.indices.fielddata
+  - is_false:  nodes.$node_id.indices.search
+  - is_true:  nodes.$node_id.indices.search
+"Metric - indices _all":
+  - do:
   - is_false:  nodes.$node_id.indices.completion
-  - is_true:   nodes.$node_id.indices.segments
-  - is_false:  nodes.$node_id.indices.translog
-  - is_false:  nodes.$node_id.indices.recovery
-  - is_true:   nodes.$node_id.indices.segments.file_sizes
+---
+  - set:
+  - set:
+  - is_true:  nodes.$node_id.indices.flush
+  - is_false:  nodes.$node_id.indices.warmer
+  - is_true:  nodes.$node_id.indices.search
+  - is_false:  nodes.$node_id.indices.fielddata
+  - is_false:  nodes.$node_id.indices.refresh

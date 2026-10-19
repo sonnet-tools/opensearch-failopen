@@ -1,168 +1,147 @@
-setup:
-  - skip:
-      version: " - 2.7.99"
-      reason: unsigned_long is not supported before 2.8.0
-
+            the_unsigned_min:
+  - match: { aggregations.the_unsigned_min.value: 51.0 }
+            the_double_min:
+            the_double_min:
+          aggs:
+---
+        body:
   - do:
-      indices.create:
-          index: test_1
-          body:
-            settings:
-              number_of_replicas: 0
+              min:
+            the_unsigned_min:
+"Metadata test":
             mappings:
-              properties:
-                unsigned_field:
+             double_field: 1.0
+                field: double_field
+  - skip:
+                field: unsigned_field
+        rest_total_hits_as_int: true
+              min:
+             double_field: 51.0
+---
                    type : unsigned_long
-                double_field:
-                   type : double
-                string_field:
+  - match: { aggregations.the_unsigned_min.value: 1.0 }
+"Basic test":
+            the_missing_min:
+      search:
+"Filtered test":
+           - index:
+  - do:
+           - unsigned_field: 1
+  - match: { aggregations.the_unsigned_min.meta.foo: "bar" }
+        body:
                    type: keyword
-
+  - match: { aggregations.the_double_min.value: 1.0 }
+  - length: { hits.hits: 0 }
   - do:
        bulk:
-         refresh: true
-         body:
-           - index:
-               _index: test_1
-               _id:    1
-           - unsigned_field: 1
-             double_field: 1.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    2
-           - unsigned_field: 51
-             double_field: 51.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    3
-           - unsigned_field: 101
-             double_field: 101.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    4
-           - unsigned_field: 10223372036854778000
-             double_field: 10223372036854778000.0
-             string_field: foo
-
----
-"Basic test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_unsigned_min:
-              min:
-                field: unsigned_field
-            the_double_min:
-              min:
-                field: double_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_unsigned_min.value: 1.0 }
-  - match: { aggregations.the_double_min.value: 1.0 }
-
----
-"Only aggs test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          size: 0
-          aggs:
-            the_unsigned_min:
-              min:
-                field: unsigned_field
-            the_double_min:
-              min:
-                field: double_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 0 }
-  - match: { aggregations.the_unsigned_min.value: 1.0 }
-  - match: { aggregations.the_double_min.value: 1.0 }
-
----
-"Filtered test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            constant_score:
-              filter:
+      version: " - 2.7.99"
                 range:
-                  unsigned_field:
-                    gte: 50
-          aggs:
-            the_unsigned_min:
-              min:
-                field: unsigned_field
             the_double_min:
-              min:
-                field: double_field
-
-  - match: { hits.total: 3 }
-  - length: { hits.hits: 3 }
-  - match: { aggregations.the_unsigned_min.value: 51.0 }
-  - match: { aggregations.the_double_min.value: 51.0 }
-
-
+           - index:
 ---
-"Missing field with missing param":
-
+          query:
+          aggs:
+  - do:
+            the_missing_min:
+                string_field:
+               _id:    2
+        rest_total_hits_as_int: true
+              min:
+               _index: test_1
+           - index:
+      search:
+  - match: { aggregations.the_double_min.value: 1.0 }
+              min:
+      search:
+        body:
+  - do:
+               _id:    4
   - do:
       search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_missing_min:
-              min:
-                field: foo
-                missing: 1
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_missing_min.value: 1.0 }
-
----
-"Missing field without missing param":
-
   - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_missing_min:
-              min:
-                field: foo
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
   - is_false: aggregations.the_missing_min.value
-
----
-"Metadata test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
         body:
-          aggs:
+               _index: test_1
             the_unsigned_min:
               meta:
-                foo: bar
-              min:
-                field: unsigned_field
-
-  - match: { hits.total: 4 }
+        body:
+                   type : double
+             double_field: 101.0
+            constant_score:
+        rest_total_hits_as_int: true
+                field: double_field
+             string_field: foo
+             string_field: foo
+      search:
+        rest_total_hits_as_int: true
+         body:
+  - match: { aggregations.the_double_min.value: 51.0 }
   - length: { hits.hits: 4 }
+              properties:
+      search:
+        body:
+                field: double_field
+              min:
+  - match: { hits.total: 4 }
+                unsigned_field:
+"Missing field without missing param":
+"Only aggs test":
+              min:
+              min:
+            settings:
+              min:
+---
+           - unsigned_field: 10223372036854778000
+           - unsigned_field: 101
+               _id:    1
+                missing: 1
+---
+             string_field: foo
+                field: unsigned_field
+           - unsigned_field: 51
+                double_field:
+                  unsigned_field:
+          aggs:
+  - match: { hits.total: 3 }
+            the_unsigned_min:
+          aggs:
+  - match: { aggregations.the_missing_min.value: 1.0 }
+  - length: { hits.hits: 4 }
+  - length: { hits.hits: 4 }
+              filter:
+                field: unsigned_field
+               _index: test_1
+  - match: { hits.total: 4 }
+           - index:
+          body:
+  - match: { hits.total: 4 }
+  - length: { hits.hits: 3 }
+setup:
+               _id:    3
+        rest_total_hits_as_int: true
+          size: 0
+              number_of_replicas: 0
+                field: foo
+          aggs:
+      reason: unsigned_long is not supported before 2.8.0
+---
+          index: test_1
+  - match: { hits.total: 4 }
+        rest_total_hits_as_int: true
   - match: { aggregations.the_unsigned_min.value: 1.0 }
-  - match: { aggregations.the_unsigned_min.meta.foo: "bar" }
+                    gte: 50
+         refresh: true
+      indices.create:
+  - match: { aggregations.the_unsigned_min.value: 1.0 }
+             string_field: foo
+                foo: bar
+                field: foo
+                field: unsigned_field
+  - length: { hits.hits: 4 }
+          aggs:
+"Missing field with missing param":
+  - match: { hits.total: 4 }
+              min:
+  - do:
+             double_field: 10223372036854778000.0
+               _index: test_1

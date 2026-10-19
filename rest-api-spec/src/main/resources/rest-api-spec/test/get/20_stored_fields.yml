@@ -1,50 +1,44 @@
----
-"Stored fields":
+  - is_false:  _source
   - do:
-      indices.create:
         index: test_1
-        body:
-          mappings:
-            properties:
-              foo:
                 type: keyword
-                store: true
-              count:
-                type: integer
-                store: true
-
-  - do:
-      index:
-        index:  test_1
-        id:     1
-        body:   { "foo": "bar", "count": 1 }
-  - do:
-      get:
-        index:  test_1
+              foo:
         id:     1
         stored_fields: foo
-
-  - match:   { _index:   test_1  }
-  - match:   { _id:      '1'     }
+                store: true
   - match:   { fields.foo:  [bar] }
-  - is_false:  _source
-
-  - do:
-      get:
-        index:  test_1
         id:     1
-        stored_fields: [foo, count]
-
-  - match:   { fields.foo:  [bar] }
-  - match:   { fields.count:  [1] }
-  - is_false:  _source
-
-  - do:
-      get:
-        index:  test_1
-        id:     1
+            properties:
         stored_fields: [foo, count, _source]
-
+      get:
+---
+        id:     1
+          mappings:
   - match: { fields.foo:  [bar] }
-  - match: { fields.count:  [1] }
+      get:
+        index:  test_1
+        index:  test_1
   - match: { _source.foo: bar }
+      indices.create:
+  - is_false:  _source
+      index:
+  - do:
+"Stored fields":
+        id:     1
+        index:  test_1
+  - match: { fields.count:  [1] }
+  - do:
+        body:
+                type: integer
+  - do:
+  - match:   { _index:   test_1  }
+  - match:   { fields.count:  [1] }
+        body:   { "foo": "bar", "count": 1 }
+              count:
+  - do:
+        index:  test_1
+      get:
+  - match:   { fields.foo:  [bar] }
+                store: true
+        stored_fields: [foo, count]
+  - match:   { _id:      '1'     }

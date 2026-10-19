@@ -1,60 +1,60 @@
-{
+      "host2",
+    ]
+    ],
+      3,
+      "web-service"
+      "auth-service"
+      "type": "string"
   "schema": [
+    [
+      "host2",
+      "api-service"
+      "host3",
+      "host1",
+    [
+    [
+      "host1",
+  "size": 8
+      "type": "string"
+    },
+    ],
+    [
+    {
+    ],
+      "api-service"
+    ],
+    }
+      "auth-service"
+      2,
+  ],
+      "db-service"
+    [
+  ],
+      2,
+      4,
+      "db-service"
+  "total": 8,
+    [
+      3,
+      "type": "bigint"
+}
+    },
+    ],
+    [
+      "host3",
+      "host1",
     {
       "name": "failure_count",
-      "type": "bigint"
-    },
-    {
+      "host2",
+    [
       "name": "host",
-      "type": "string"
-    },
-    {
-      "name": "service_name",
-      "type": "string"
-    }
-  ],
+{
   "datarows": [
-    [
-      2,
-      "host1",
-      "api-service"
     ],
-    [
-      2,
-      "host2",
-      "api-service"
-    ],
-    [
-      3,
-      "host1",
-      "auth-service"
-    ],
-    [
-      2,
-      "host2",
-      "auth-service"
-    ],
-    [
-      4,
-      "host1",
-      "db-service"
-    ],
-    [
       1,
-      "host2",
       "db-service"
+      2,
     ],
-    [
+      "name": "service_name",
       1,
-      "host3",
-      "db-service"
-    ],
-    [
-      3,
-      "host3",
-      "web-service"
-    ]
-  ],
-  "total": 8,
-  "size": 8
-}
+    {

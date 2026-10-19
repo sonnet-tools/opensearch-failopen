@@ -1,144 +1,117 @@
-"Create PIT, Search with PIT ID and Delete":
-  - skip:
-      version: " - 2.3.99"
+  - do:
+        size: 1
+  - set: {pit_id: pit_id}
+        size: 1
+        rest_total_hits_as_int: true
+  - do:
+        body:
+      index:
+        body:   { foo: 1 }
+        size: 1
+      delete_pit:
+  - do:
+  - do:
+          query:
       reason: "mode to be introduced later than 2.4.0"
   - do:
-      indices.create:
-        index: test_pit
-  - do:
-      index:
-        index:  test_pit
-        id:     42
-        body:   { foo: 1 }
-
-  - do:
-      index:
-        index:  test_pit
-        id:     43
-        body:   { foo: 2 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      create_pit:
-        allow_partial_pit_creation: true
-        index: test_pit
-        keep_alive: 23h
-
-  - set: {pit_id: pit_id}
   - match:   { _shards.failed: 0}
+      delete_all_pits: {}
   - do:
-      search:
-        rest_total_hits_as_int: true
-        size: 1
-        sort: foo
-        body:
-          query:
-            match_all: {}
-          pit: {"id": "$pit_id"}
-
-  - match: {hits.total:      2    }
-  - length: {hits.hits:      1    }
-  - match: {hits.hits.0._id: "42" }
-
-  - do:
-      index:
-        index:  test_pit
-        id:     44
-        body:   { foo: 3 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        size: 1
-        sort: foo
-        body:
-          query:
-            match_all: {}
-          pit: {"id": "$pit_id", "keep_alive":"10m"}
-
-  - match: {hits.total:      2    }
-  - length: {hits.hits:      1    }
-  - match: {hits.hits.0._id: "42" }
-
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
         index: test_pit
-        size: 1
-        sort: foo
-        body:
-          query:
-            match_all: {}
-
-  - match: {hits.total:      3    }
-  - length: {hits.hits:      1    }
-
-  - do:
-      get_all_pits: {}
-
   - match: {pits.0.pit_id: $pit_id}
+        index:  test_pit
   - match: {pits.0.keep_alive: 82800000 }
-
+      indices.create:
+  - match: {hits.hits.0._id: "42" }
   - do:
-      delete_pit:
-        body:
-          "pit_id": [$pit_id]
-
-  - match: {pits.0.pit_id: $pit_id}
-  - match: {pits.0.successful: true }
-
----
-"Delete all":
+          query:
   - skip:
-      version: " - 2.99.99"
-      reason: "mode to be introduced later than 3.0"
-  - do:
-      indices.create:
-        index: test_pit
-  - do:
-      index:
+          query:
+        body:   { foo: 3 }
+  - match: {hits.total:      2    }
+      version: " - 2.3.99"
         index:  test_pit
-        id:     42
-        body:   { foo: 1 }
-
-  - do:
-      index:
         index:  test_pit
-        id:     43
-        body:   { foo: 2 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
       create_pit:
-        allow_partial_pit_creation: true
+  - length: {pits: 0}
+      reason: "mode to be introduced later than 3.0"
+        index: test_pit
+        body:
+            match_all: {}
         index: test_pit
         keep_alive: 23h
-
-  - set: {pit_id: pit_id}
-  - match:   { _shards.failed: 0}
-
-  - do:
-      get_all_pits: {}
-
-  - match: {pits.0.pit_id: $pit_id}
-  - match: {pits.0.keep_alive: 82800000 }
-
-  - do:
-      delete_all_pits: {}
-
-  - match: {pits.0.pit_id: $pit_id}
-  - match: {pits.0.successful: true }
-
-  - do:
-      delete_all_pits: {}
-
   - match: {pits: []}
-  - length: {pits: 0}
+      indices.refresh: {}
+        sort: foo
+      indices.refresh: {}
+      index:
+      get_all_pits: {}
+  - do:
+"Create PIT, Search with PIT ID and Delete":
+  - do:
+  - do:
+  - do:
+  - skip:
+        rest_total_hits_as_int: true
+  - do:
+  - do:
+      search:
+  - do:
+        body:
+  - match: {pits.0.pit_id: $pit_id}
+      search:
+          pit: {"id": "$pit_id", "keep_alive":"10m"}
+        rest_total_hits_as_int: true
+  - length: {hits.hits:      1    }
+  - match:   { _shards.failed: 0}
+        index:  test_pit
+        body:   { foo: 1 }
+        sort: foo
+        allow_partial_pit_creation: true
+      index:
+        id:     42
+      indices.create:
+      create_pit:
+      get_all_pits: {}
+        index: test_pit
+        index: test_pit
+        id:     44
+        body:   { foo: 2 }
+  - do:
+  - match: {pits.0.pit_id: $pit_id}
+        id:     42
+        body:
+      indices.refresh: {}
+          pit: {"id": "$pit_id"}
+  - do:
+        id:     43
+  - match: {pits.0.successful: true }
+      version: " - 2.99.99"
+      index:
+---
+      search:
+        body:   { foo: 2 }
+        allow_partial_pit_creation: true
+        index:  test_pit
+  - length: {hits.hits:      1    }
+        keep_alive: 23h
+      delete_all_pits: {}
+  - match: {pits.0.keep_alive: 82800000 }
+        id:     43
+        sort: foo
+  - match: {pits.0.successful: true }
+          "pit_id": [$pit_id]
+      index:
+  - match: {hits.total:      2    }
+  - set: {pit_id: pit_id}
+  - match: {hits.hits.0._id: "42" }
+            match_all: {}
+  - do:
+            match_all: {}
+  - match: {pits.0.pit_id: $pit_id}
+  - match: {hits.total:      3    }
+  - do:
+"Delete all":
+  - length: {hits.hits:      1    }
+  - do:
+  - do:

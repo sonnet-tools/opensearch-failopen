@@ -1,57 +1,49 @@
-setup:
+      cluster.reroute:
   - do:
-      indices.create:
-        index: test_index
+          commands:
+        explain: true
+  - set:
+                shard: 9
+        node_id: data:true
+  - match:
+  - do:
+setup:
         body:
-          settings:
+            - cancel:
             number_of_shards: "1"
-            number_of_replicas: "0"
-
+      cluster.reroute:
+"Explain API for non-existent node & shard":
+  - is_true: explanations.0.decisions.0.explanation
+        shard: 9
+      indices.create:
+        dry_run: true
+        index: test_index
+  - match: {explanations: []}
+      nodes._arbitrary_key_: node_id
+        body:
+        index: test_index
+  - do:
+  - match: {explanations.0.command: cancel}
+  - match: {explanations.0.decisions.0.decision: "NO"}
+        allow_primary: false
+        node: $node_id
+        dry_run: true
+                index: test_index
   - do:
       cluster.health:
-        wait_for_status: green
-
----
-"Explain API with empty command list":
-
-  - do:
-      cluster.reroute:
-        explain: true
-        dry_run: true
-        body:
-          commands: []
-
-  - match: {explanations: []}
-
----
-"Explain API for non-existent node & shard":
   - skip:
-      features: [arbitrary_key]
-
-  - do:
       nodes.info:
-        node_id: data:true
-  - set:
-      nodes._arbitrary_key_: node_id
-
+          settings:
   - do:
-      cluster.reroute:
-        explain: true
-        dry_run: true
+          commands: []
         body:
-          commands:
-            - cancel:
-                index: test_index
-                shard: 9
-                node: $node_id
-
-  - match: {explanations.0.command: cancel}
-  - match:
-      explanations.0.parameters:
-        index: test_index
-        shard: 9
-        node: $node_id
-        allow_primary: false
+"Explain API with empty command list":
+            number_of_replicas: "0"
+        explain: true
   - match: {explanations.0.decisions.0.decider: cancel_allocation_command}
-  - match: {explanations.0.decisions.0.decision: "NO"}
-  - is_true: explanations.0.decisions.0.explanation
+      features: [arbitrary_key]
+---
+                node: $node_id
+---
+        wait_for_status: green
+      explanations.0.parameters:

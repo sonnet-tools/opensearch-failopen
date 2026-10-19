@@ -1,36 +1,36 @@
-{
-  "settings": {
     "number_of_shards": 1,
+        "type": "keyword"
     "number_of_replicas": 0
-  },
-  "mappings": {
-    "properties": {
-      "@timestamp": {
-        "type": "date"
       },
+          "keyword": {
       "kubernetes.pod_name": {
+  },
+    }
         "type": "keyword"
-      },
-      "kubernetes.container_image": {
         "type": "keyword"
+      "cluster.name": {
+        }
+{
+        "type": "keyword"
+        "type": "date"
+      "@timestamp": {
+      "message": {
+        "fields": {
       },
       "kubernetes.namespace": {
-        "type": "keyword"
       },
-      "cluster.name": {
-        "type": "keyword"
-      },
-      "cluster.region": {
-        "type": "keyword"
-      },
-      "message": {
-        "type": "text",
-        "fields": {
-          "keyword": {
-            "type": "keyword"
-          }
-        }
       }
-    }
-  }
 }
+      },
+        "type": "text",
+      },
+    "properties": {
+  "mappings": {
+  }
+      "kubernetes.container_image": {
+          }
+        "type": "keyword"
+            "type": "keyword"
+  "settings": {
+      "cluster.region": {
+      },

@@ -1,22 +1,18 @@
-# Integration tests for DelayAggregation components
-#
-
----
-"Delayed Aggs":
-    - do:
-        indices.create:
-            index: test
-
-    - do:
-        search:
-            index: test
-            body:
-              aggs:
-                delay:
-                  shard_delay:
-                    value: "200ms"
-
-
     - match: { hits.total.value:               0 }
+                  shard_delay:
+#
+              aggs:
+            index: test
+                    value: "200ms"
+"Delayed Aggs":
+        indices.create:
+# Integration tests for DelayAggregation components
+    - do:
     - match: { aggregations.delay.doc_count:   0 }
+    - do:
+                delay:
+---
     - gt:    { took:                           100 }
+        search:
+            body:
+            index: test

@@ -1,39 +1,33 @@
----
-"Test default search analyzer is applied":
-  - do:
-      indices.create:
-        index: test
-        body:
-          settings:
-            index.analysis.analyzer.default.type: simple
-            index.analysis.analyzer.default_search.type: german
-          mappings:
-            properties:
-              body:
-                type: text
-
+        q: "body:Bücher"
   - do:
       index:
-        index: test
-        id: 1
-        body:
           body: Ich lese die Bücher
-
-  - do:
-      indices.refresh:
-        index: [ test ]
-
-  - do:
-      search:
+        id: 1
         index: test
-        q: "body:Bücher"
-
-  - match: { hits.total.value: 0 }
-
-  - do:
-      search:
-        index: test
-        q: "body:Bücher"
+          mappings:
+            index.analysis.analyzer.default_search.type: german
         analyzer: simple
-
+            properties:
+        index: test
+                type: text
+  - do:
+            index.analysis.analyzer.default.type: simple
+        body:
+          settings:
+              body:
+  - do:
+  - match: { hits.total.value: 0 }
+      search:
+      indices.create:
+        q: "body:Bücher"
+        index: test
+      search:
+  - do:
   - match: { hits.total.value: 1 }
+  - do:
+"Test default search analyzer is applied":
+        index: [ test ]
+        index: test
+      indices.refresh:
+---
+        body:

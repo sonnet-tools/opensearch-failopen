@@ -1,103 +1,103 @@
-{
-  "cat.segment_replication":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-segment-replication/",
-      "description":"Returns information about both on-going and latest completed Segment Replication events"
-    },
-    "stability":"experimental",
+          "ms",
     "url":{
-      "paths":[
-        {
-          "path":"/_cat/segment_replication",
-          "methods":[
-            "GET"
-          ]
-        },
-        {
-          "path":"/_cat/segment_replication/{index}",
-          "methods":[
-            "GET"
-          ],
-          "parts":{
-            "index":{
-              "type":"list",
-              "description":"Comma-separated list or wildcard expression of index names to limit the returned information"
-            }
-          }
-        }
-      ]
-    },
-    "params":{
-      "format":{
-        "type":"string",
-        "description":"a short version of the Accept header, e.g. json, yaml"
-      },
       "active_only":{
-        "type":"boolean",
+        {
+      },
         "description":"If `true`, the response only includes ongoing segment replication events",
-        "default":false
-      },
-      "bytes":{
-        "type":"enum",
-        "description":"The unit in which to display byte values",
-        "options":[
-          "b",
           "k",
-          "kb",
-          "m",
-          "mb",
-          "g",
-          "gb",
-          "t",
-          "tb",
-          "p",
-          "pb"
-        ]
-      },
-      "detailed":{
-        "type":"boolean",
-        "description":"If `true`, the response includes detailed information about segment replications",
+        "description":"The unit in which to display time values",
         "default":false
+        "description":"Comma-separated list of shards to display"
+  }
+          "s",
+      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-segment-replication/",
+        "type":"list",
+            "GET"
+          "micros",
+          ]
+        ]
+      }
+        "description":"Return help information",
       },
       "shards":{
-        "type":"list",
-        "description":"Comma-separated list of shards to display"
-      },
-      "h":{
-        "type":"list",
-        "description":"Comma-separated list of column names to display"
-      },
-      "help":{
-        "type":"boolean",
-        "description":"Return help information",
+          "pb"
+          "methods":[
+          "m",
+}
+          "d",
+            "index":{
+        "default":false
+      "format":{
         "default":false
       },
-      "index":{
+        "options":[
+        "description":"If `true`, the response includes detailed information about segment replications",
+      },
         "type":"list",
+          "p",
+        "default":false
+    "documentation":{
+      "s":{
+          "g",
+        "type":"boolean",
+        },
+      "detailed":{
+          "mb",
+          "m",
+    },
+            "GET"
+          "parts":{
+        "description":"The unit in which to display byte values",
+        "type":"list",
+        "type":"boolean",
+          }
+      "time":{
+          "nanos"
+        "type":"boolean",
+        "type":"list",
+        "options":[
+          "tb",
+      "paths":[
+  "cat.segment_replication":{
         "description":"Comma-separated list or wildcard expression of index names to limit the returned information"
       },
-      "s":{
-        "type":"list",
-        "description":"Comma-separated list of column names or column aliases to sort by"
-      },
-      "time":{
-        "type":"enum",
-        "description":"The unit in which to display time values",
-        "options":[
-          "d",
-          "h",
-          "m",
-          "s",
-          "ms",
-          "micros",
-          "nanos"
         ]
+        "type":"enum",
+    "params":{
+        }
+      "description":"Returns information about both on-going and latest completed Segment Replication events"
+        {
+          "methods":[
       },
-      "v":{
-        "type":"boolean",
+      },
+      "help":{
+      "index":{
+          "h",
+          "path":"/_cat/segment_replication",
+    },
+          "t",
+              "type":"list",
+          "b",
         "description":"Verbose mode. Display column headers",
-        "default":false
-      }
+          "gb",
+      },
+          "kb",
+        "type":"boolean",
+            }
+        "type":"enum",
+      },
+              "description":"Comma-separated list or wildcard expression of index names to limit the returned information"
+      "v":{
+          ],
+        "description":"Comma-separated list of column names or column aliases to sort by"
+        "type":"string",
+          "path":"/_cat/segment_replication/{index}",
+      "h":{
     }
-  }
-}
+    "stability":"experimental",
+        "description":"a short version of the Accept header, e.g. json, yaml"
+      },
+{
+        "description":"Comma-separated list of column names to display"
+      "bytes":{
+      ]

@@ -1,70 +1,70 @@
-{
-  "schema": [
-    {
-      "name": "service",
-      "type": "string"
-    },
-    {
-      "name": "message",
-      "type": "string"
-    },
-    {
-      "name": "latency",
-      "type": "int"
-    }
-  ],
-  "datarows": [
-    [
-      "payment",
-      "Payment gateway timeout error",
-      10000
-    ],
-    [
-      "auth",
-      "Authentication failed connection timeout",
-      3000
-    ],
-    [
-      "payment",
-      "Credit card validation timeout",
-      6000
-    ],
-    [
-      "order",
-      "Shipping service connection timeout",
-      9000
-    ],
-    [
-      "payment",
-      "Fraud detection service timeout",
-      8500
-    ],
-    [
-      "order",
-      "Order validation timeout exceeded",
-      11000
-    ],
-    [
-      "payment",
-      "Payment processor API timeout",
-      12000
-    ],
-    [
-      "payment",
-      "Currency conversion service timeout",
       7500
+    }
     ],
+      10500
+    {
     [
+    [
+  ],
+      "auth",
+      "Order validation timeout exceeded",
+    ],
+      "Credit card validation timeout",
+      "payment",
+    [
+}
+      10000
+  "total": 10,
+    [
+  "size": 10
+      8500
+      "name": "latency",
+      "type": "string"
+      "Fraud detection service timeout",
+      6000
+    [
+      "Payment processor API timeout",
+      "Slow query detected timeout approaching",
+      "payment",
+    ],
+      "payment",
+      "name": "message",
+    {
+    [
+  "schema": [
       "order",
       "Warehouse system connection timeout",
-      10500
+    ],
+  ],
+      "Shipping service connection timeout",
+      "payment",
+      12000
+      3000
+      "name": "service",
+    ],
+    },
+      9000
+    [
+      11000
+{
+      2500
+      "order",
+    [
+      "Authentication failed connection timeout",
+    },
+      "order",
+  "datarows": [
+      "Payment gateway timeout error",
+    ],
+    ]
+      "Currency conversion service timeout",
+    {
+    ],
     ],
     [
+    [
+      "type": "int"
+    ],
       "auth",
-      "Slow query detected timeout approaching",
-      2500
-    ]
-  ],
-  "total": 10,
-  "size": 10
-}
+      "type": "string"
+      "payment",

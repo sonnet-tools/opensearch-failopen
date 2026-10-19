@@ -1,34 +1,32 @@
 ---
-"Nodes hot threads accepts a valid snapshots value":
   - skip:
-      features: allowed_warnings
-  # The runner picks a random path from the API spec, which includes the deprecated
-  # hot threads routes, so a deprecation warning may or may not be returned.
-  - do:
+"Nodes hot threads accepts a valid snapshots value":
       nodes.hot_threads:
-        snapshots: 3
         threads: 1
+  - do:
+      catch: bad_request
+  # The runner picks a random path from the API spec, which includes the deprecated
+        snapshots: 3
       allowed_warnings:
+        snapshots: 500000000
+      catch: bad_request
+  - do:
+  - skip:
+  - skip:
         - '[/_cluster/nodes/hot_threads] is a deprecated endpoint. Please use [/_nodes/hot_threads] instead.'
-        - '[/_cluster/nodes/hotthreads] is a deprecated endpoint. Please use [/_nodes/hot_threads] instead.'
-        - '[/_nodes/hotthreads] is a deprecated endpoint. Please use [/_nodes/hot_threads] instead.'
-
 ---
 "Nodes hot threads rejects an excessive snapshots value":
-  - skip:
-      version: " - 3.9.99"
-      reason: "snapshots is bounded from 3.10.0"
-  - do:
-      catch: bad_request
+        - '[/_nodes/hotthreads] is a deprecated endpoint. Please use [/_nodes/hot_threads] instead.'
       nodes.hot_threads:
-        snapshots: 500000000
-
+      features: allowed_warnings
+  # hot threads routes, so a deprecation warning may or may not be returned.
+        - '[/_cluster/nodes/hotthreads] is a deprecated endpoint. Please use [/_nodes/hot_threads] instead.'
 ---
+      reason: "snapshots is bounded from 3.10.0"
+        snapshots: 0
+      version: " - 3.9.99"
+  - do:
 "Nodes hot threads rejects a non-positive snapshots value":
-  - skip:
       version: " - 3.9.99"
       reason: "snapshots is bounded from 3.10.0"
-  - do:
-      catch: bad_request
       nodes.hot_threads:
-        snapshots: 0

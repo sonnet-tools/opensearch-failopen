@@ -1,50 +1,40 @@
+      indices.validate_query:
 ---
-"validate_query with query_string parameters":
-  - do:
-      indices.create:
-          index:  test
-          body:
-            mappings:
               properties:
-                field:
-                  type: text
+  - is_true: valid
+  - do:
                 number:
-                  type: integer
-
-  - do:
-      indices.validate_query:
-        index: test
-        q: bar
-        df: field
-
   - is_true: valid
-
-  - do:
-      indices.validate_query:
-        index: test
-        q: field:foo field:xyz
-
-  - is_true: valid
-
-  - do:
-      indices.validate_query:
-        index: test
-        q: field:foo field:xyz
-        default_operator: AND
-
-  - is_true: valid
-
-  - do:
-      indices.validate_query:
-        index: test
-        q: field:BA*
-
-  - is_true: valid
-
-  - do:
       indices.validate_query:
         index: test
         q: number:foo
+        q: field:foo field:xyz
+          body:
+      indices.validate_query:
+                  type: text
+      indices.create:
+  - do:
+  - do:
+          index:  test
+                  type: integer
+                field:
+      indices.validate_query:
         lenient: true
-
+      indices.validate_query:
+        q: field:BA*
+        q: field:foo field:xyz
   - is_true: valid
+        index: test
+        default_operator: AND
+        index: test
+        index: test
+        q: bar
+  - is_true: valid
+        index: test
+  - is_true: valid
+            mappings:
+        df: field
+  - do:
+  - do:
+"validate_query with query_string parameters":
+  - do:

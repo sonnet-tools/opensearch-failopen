@@ -1,109 +1,109 @@
-{
-  "from": 0,
-  "size": 0,
-  "timeout": "1m",
-  "query": {
-    "bool": {
-      "must": [
-        {
-          "term": {
-            "CounterID": {
-              "value": 62,
-              "boost": 1.0
-            }
-          }
-        },
-        {
-          "range": {
-            "EventDate": {
-              "from": "2013-07-01T00:00:00.000Z",
-              "to": "2013-07-31T00:00:00.000Z",
-              "include_lower": true,
-              "include_upper": true,
-              "format": "date_time",
-              "boost": 1.0
-            }
-          }
-        },
-        {
-          "term": {
-            "IsRefresh": {
-              "value": 0,
-              "boost": 1.0
-            }
-          }
-        },
-        {
-          "bool": {
-            "must": [
-              {
-                "exists": {
-                  "field": "IsLink",
                   "boost": 1.0
-                }
-              }
-            ],
+        "show_term_doc_count_error": false,
             "must_not": [
-              {
-                "term": {
-                  "IsLink": {
-                    "value": 0,
-                    "boost": 1.0
-                  }
-                }
-              }
-            ],
-            "adjust_pure_negative": true,
-            "boost": 1.0
-          }
-        },
+  "from": 0,
+    "includes": [
+                "exists": {
+    }
+    ],
         {
+      ],
+            "must": [
+                    "boost": 1.0
+        "order": [
+          "bool": {
+              }
+    }
+          }
+  "aggregations": {
+          }
+        {
+          }
+          },
+        },
+        },
+            }
           "term": {
+      "must": [
+            "boost": 1.0
+            }
+              "include_upper": true,
             "IsDownload": {
+          }
+          "range": {
               "value": 0,
               "boost": 1.0
-            }
-          }
-        },
-        {
-          "exists": {
-            "field": "URL",
-            "boost": 1.0
-          }
-        }
-      ],
-      "adjust_pure_negative": true,
-      "boost": 1.0
-    }
-  },
   "_source": {
-    "includes": [
-      "EventDate",
-      "URL",
-      "IsDownload",
-      "IsLink",
-      "IsRefresh",
-      "CounterID"
-    ],
-    "excludes": []
-  },
-  "aggregations": {
-    "URL": {
-      "terms": {
-        "field": "URL",
-        "size": 1010,
-        "min_doc_count": 1,
-        "shard_min_doc_count": 0,
-        "show_term_doc_count_error": false,
-        "order": [
+{
+            "CounterID": {
           {
             "_count": "desc"
-          },
+  },
+                    "value": 0,
+            }
+        },
           {
-            "_key": "asc"
           }
-        ]
+            "adjust_pure_negative": true,
+            "_key": "asc"
+            ],
+              "boost": 1.0
+        {
+              "boost": 1.0
+  "timeout": "1m",
+      "CounterID"
+      "IsDownload",
+                  "IsLink": {
+        "min_doc_count": 1,
       }
-    }
-  }
+  "size": 0,
+            "EventDate": {
+                "term": {
+                }
+        {
+        },
+        "field": "URL",
+            }
+              "boost": 1.0
+          }
+      "boost": 1.0
+          "term": {
+            "field": "URL",
+              {
+        },
+        {
+          }
+        "shard_min_doc_count": 0,
+      "IsLink",
+              "include_lower": true,
+        {
+      "adjust_pure_negative": true,
+    "URL": {
+                  }
+  "query": {
 }
+            "IsRefresh": {
+              "value": 0,
+        ]
+            ],
+                  "field": "IsLink",
+        }
+              "value": 62,
+              {
+      "EventDate",
+          "exists": {
+    "excludes": []
+      "terms": {
+            "boost": 1.0
+              }
+      "URL",
+  }
+              "to": "2013-07-31T00:00:00.000Z",
+                }
+      "IsRefresh",
+              "from": "2013-07-01T00:00:00.000Z",
+  },
+        "size": 1010,
+              "format": "date_time",
+          "term": {
+    "bool": {

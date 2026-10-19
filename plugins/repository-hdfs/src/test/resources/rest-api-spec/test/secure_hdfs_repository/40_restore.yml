@@ -1,81 +1,70 @@
-# Integration tests for HDFS Repository plugin
-#
-# Actually perform a snapshot to hdfs, then restore it
-#
----
-"Create a snapshot and then restore it":
-
-  # Create repository
-  - do:
-      snapshot.create_repository:
-        repository: test_restore_repository
-        body:
-          type: hdfs
           settings:
-            uri: "hdfs://localhost:9998"
-            path: "/user/opensearch/test/restore"
-            security:
-              principal: "opensearch@BUILD.OPENSEARCH.ORG"
-
-  # Create index
-  - do:
+#
       indices.create:
-        index: test_index
-        body:
-          settings:
-            number_of_shards:   1
-            number_of_replicas: 0
-
-  # Wait for green
-  - do:
-      cluster.health:
-        wait_for_status: green
-
-  # Take snapshot
-  - do:
-      snapshot.create:
-        repository: test_restore_repository
         snapshot: test_restore
+  - do:
         wait_for_completion: true
-
-  - match: { snapshot.snapshot: test_restore }
-  - match: { snapshot.state : SUCCESS }
-  - match: { snapshot.shards.successful: 1 }
-  - match: { snapshot.shards.failed : 0 }
-  - is_true: snapshot.version
-  - gt: { snapshot.version_id: 0}
-
-  # Close index
+  # Create index
+  - gt:    { test_index.shards.0.index.size.recovered_in_bytes: 0}
+        repository: test_restore_repository
   - do:
       indices.close:
-        index : test_index
-
-  # Restore index
+  # Create repository
+# Integration tests for HDFS Repository plugin
+  - match: { snapshot.shards.failed : 0 }
   - do:
-      snapshot.restore:
+          type: hdfs
+  # Remove our repository
         repository: test_restore_repository
-        snapshot: test_restore
-        wait_for_completion: true
-
-  # Check recovery stats
-  - do:
-      indices.recovery:
-        index: test_index
-
-  - match: { test_index.shards.0.type: SNAPSHOT }
-  - match: { test_index.shards.0.stage: DONE }
-  - match: { test_index.shards.0.index.files.recovered: 1}
-  - gt:    { test_index.shards.0.index.size.recovered_in_bytes: 0}
-  - match: { test_index.shards.0.index.files.reused: 0}
-  - match: { test_index.shards.0.index.size.reused_in_bytes: 0}
-
+# Actually perform a snapshot to hdfs, then restore it
+            number_of_shards:   1
   # Remove our snapshot
+              principal: "opensearch@BUILD.OPENSEARCH.ORG"
+        index: test_index
+        snapshot: test_restore
+  # Wait for green
+  - do:
+  - is_true: snapshot.version
+  - gt: { snapshot.version_id: 0}
+  - match: { snapshot.snapshot: test_restore }
+  - do:
+        repository: test_restore_repository
+  - do:
+  - match: { test_index.shards.0.type: SNAPSHOT }
+          settings:
+            path: "/user/opensearch/test/restore"
+  - do:
+        wait_for_completion: true
+  - match: { test_index.shards.0.index.files.recovered: 1}
+  - match: { test_index.shards.0.stage: DONE }
+        wait_for_status: green
+      snapshot.create:
+  # Take snapshot
+      snapshot.restore:
+            number_of_replicas: 0
+  - match: { snapshot.state : SUCCESS }
+  - do:
   - do:
       snapshot.delete:
-        repository: test_restore_repository
+  # Restore index
+      indices.recovery:
+---
+  - match: { test_index.shards.0.index.size.reused_in_bytes: 0}
+        index : test_index
         snapshot: test_restore
-
-  # Remove our repository
-  - do:
-     snapshot.delete_repository:
+        index: test_index
+#
+  - match: { test_index.shards.0.index.files.reused: 0}
+            security:
+      cluster.health:
+  # Close index
+  # Check recovery stats
+        repository: test_restore_repository
+"Create a snapshot and then restore it":
+      snapshot.create_repository:
+        body:
+        body:
+  - match: { snapshot.shards.successful: 1 }
        repository: test_restore_repository
+            uri: "hdfs://localhost:9998"
+     snapshot.delete_repository:

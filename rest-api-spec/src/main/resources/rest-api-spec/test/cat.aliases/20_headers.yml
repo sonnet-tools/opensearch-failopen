@@ -1,24 +1,20 @@
----
-"Simple alias with yaml body through Accept header":
-  - skip:
-      features: ["headers", "yaml"]
-
-  - do:
-        indices.create:
-            index: test
-
-  - do:
-        indices.put_alias:
-            index: test
+  - match: {0.routing\.index: "-"}
+  - match: {0.alias: test_alias}
+  - match: {0.routing\.search: "-"}
             name:  test_alias
-
+            index: test
+        indices.create:
+  - match: {0.index: test}
+"Simple alias with yaml body through Accept header":
+  - match: {0.filter: "-"}
+        Accept: application/yaml
+---
+  - skip:
+            index: test
+  - do:
+      features: ["headers", "yaml"]
+      headers:
+        indices.put_alias:
+  - do:
   - do:
       cat.aliases: {}
-      headers:
-        Accept: application/yaml
-
-  - match: {0.alias: test_alias}
-  - match: {0.index: test}
-  - match: {0.filter: "-"}
-  - match: {0.routing\.index: "-"}
-  - match: {0.routing\.search: "-"}

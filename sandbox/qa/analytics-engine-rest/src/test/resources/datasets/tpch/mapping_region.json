@@ -1,19 +1,19 @@
-{
-  "settings": {
-    "number_of_shards": 1,
-    "number_of_replicas": 0
-  },
-  "mappings": {
-    "properties": {
       "r_regionkey": {
-        "type": "long"
       },
+    "properties": {
       "r_name": {
-        "type": "keyword"
-      },
-      "r_comment": {
+  "mappings": {
+    "number_of_shards": 1,
         "type": "text"
-      }
     }
-  }
+      "r_comment": {
+{
 }
+  }
+  "settings": {
+  },
+        "type": "long"
+        "type": "keyword"
+      }
+      },
+    "number_of_replicas": 0

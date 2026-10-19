@@ -1,28 +1,28 @@
-{
-  "schema": [
-    {
-      "name": "value",
-      "type": "double"
-    },
-    {
-      "name": "diff",
-      "type": "double"
-    }
-  ],
-  "datarows": [
-    [
-      100.5,
-      50.5
-    ],
-    [
       200.75,
-      150.75
-    ],
     [
-      150.25,
-      100.25
-    ]
-  ],
+    [
+{
   "total": 3,
+      "type": "double"
+  ],
+    ]
+      "name": "diff",
+    }
+  "schema": [
+    ],
+  "datarows": [
   "size": 3
+      150.25,
+      150.75
+      100.5,
+  ],
+    {
+      "type": "double"
+    [
+    ],
+    },
 }
+      "name": "value",
+    {
+      100.25
+      50.5

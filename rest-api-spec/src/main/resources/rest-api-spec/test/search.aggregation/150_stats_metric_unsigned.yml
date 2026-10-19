@@ -1,199 +1,178 @@
-setup:
-  - skip:
-      version: " - 2.7.99"
-      reason: unsigned_long is not supported before 2.8.0
-
-  - do:
-      indices.create:
-          index: test_1
-          body:
-            settings:
+      search:
+            the_unsigned_stats:
+  - match: { aggregations.the_unsigned_stats.max: 10223372036854778000.0 }
               number_of_replicas: 0
-            mappings:
-              properties:
-                unsigned_field:
-                   type : unsigned_long
-                double_field:
-                   type : double
+              meta:
                 string_field:
-                   type: keyword
-
-  - do:
-       bulk:
-         refresh: true
-         body:
-           - index:
-               _index: test_1
-               _id:    1
-           - unsigned_field: 1
-             double_field: 1.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    2
-           - unsigned_field: 51
+            settings:
              double_field: 51.0
+  - do:
+      search:
+  - match: { aggregations.the_double_stats.count: 3 }
+  - match: { aggregations.the_unsigned_stats.min: 1.0 }
+"Metadata test":
+                field: double_field
              string_field: foo
-           - index:
-               _index: test_1
-               _id:    3
-           - unsigned_field: 1101
-             double_field: 1101.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    4
-           - unsigned_field: 10223372036854778000
+  - is_false: aggregations.the_missing_stats.value
              double_field: 10223372036854778000.0
-             string_field: foo
-
----
-"Basic test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_unsigned_stats:
-              stats:
+          body:
                 field: unsigned_field
-            the_double_stats:
-              stats:
-                field: double_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_unsigned_stats.count: 4 }
-  - match: { aggregations.the_unsigned_stats.min: 1.0 }
-  - match: { aggregations.the_unsigned_stats.max: 10223372036854778000.0 }
-  - match: { aggregations.the_unsigned_stats.avg: 2555843009213695000.0 }
-  - match: { aggregations.the_unsigned_stats.sum: 10223372036854780000.0 }
-  - match: { aggregations.the_double_stats.count: 4 }
-  - match: { aggregations.the_double_stats.min: 1.0 }
-  - match: { aggregations.the_double_stats.max: 10223372036854778000.0 }
-  - match: { aggregations.the_double_stats.avg: 2555843009213695000.0 }
-  - match: { aggregations.the_double_stats.sum: 10223372036854780000.0 }
-
----
-"Only aggs test":
-
   - do:
+                   type : unsigned_long
+  - match: { aggregations.the_double_stats.max: 10223372036854778000.0 }
       search:
-        rest_total_hits_as_int: true
+  - match: { aggregations.the_unsigned_stats.avg: 2555843009213695000.0 }
+         body:
+      search:
         body:
-          size: 0
-          aggs:
-            the_unsigned_stats:
-              stats:
-                field: unsigned_field
-            the_double_stats:
-              stats:
-                field: double_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 0 }
-  - match: { aggregations.the_unsigned_stats.count: 4 }
-  - match: { aggregations.the_unsigned_stats.min: 1.0 }
-  - match: { aggregations.the_unsigned_stats.max: 10223372036854778000.0 }
-  - match: { aggregations.the_unsigned_stats.avg: 2555843009213695000.0 }
-  - match: { aggregations.the_unsigned_stats.sum: 10223372036854780000.0 }
-  - match: { aggregations.the_double_stats.count: 4 }
-  - match: { aggregations.the_double_stats.min: 1.0 }
-  - match: { aggregations.the_double_stats.max: 10223372036854778000.0 }
-  - match: { aggregations.the_double_stats.avg: 2555843009213695000.0 }
-  - match: { aggregations.the_double_stats.sum: 10223372036854780000.0 }
-
----
-"Filtered test":
-
+            the_missing_stats:
   - do:
-      search:
+            the_unsigned_stats:
         rest_total_hits_as_int: true
         body:
           query:
-            constant_score:
-              filter:
-                range:
-                  unsigned_field:
-                    gte: 50
-          aggs:
-            the_unsigned_stats:
-              stats:
                 field: unsigned_field
-            the_double_stats:
-              stats:
-                field: double_field
-
-  - match: { hits.total: 3 }
-  - length: { hits.hits: 3 }
-  - match: { aggregations.the_unsigned_stats.count: 3 }
-  - match: { aggregations.the_unsigned_stats.min: 51.0 }
-  - match: { aggregations.the_unsigned_stats.max: 10223372036854778000.0 }
-  - match: { aggregations.the_unsigned_stats.avg: 3407790678951593500.0 }
-  - match: { aggregations.the_unsigned_stats.sum: 10223372036854780000.0 }
-  - match: { aggregations.the_double_stats.count: 3 }
-  - match: { aggregations.the_double_stats.min: 51.0 }
-  - match: { aggregations.the_double_stats.max: 10223372036854778000.0 }
-  - match: { aggregations.the_double_stats.avg: 3407790678951593500.0 }
   - match: { aggregations.the_double_stats.sum: 10223372036854780000.0 }
-
-
----
-"Missing field with missing param":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_missing_stats:
-              stats:
-                field: foo
-                missing: 1
-
+  - match: { aggregations.the_double_stats.min: 51.0 }
+                double_field:
+  - match: { aggregations.the_double_stats.count: 4 }
+setup:
+  - match: { aggregations.the_unsigned_stats.min: 1.0 }
+  - length: { hits.hits: 4 }
+  - match: { aggregations.the_missing_stats.avg: 1.0 }
+                    gte: 50
+               _index: test_1
+            mappings:
+  - match: { aggregations.the_unsigned_stats.min: 1.0 }
+         refresh: true
+               _index: test_1
+  - match: { aggregations.the_unsigned_stats.count: 4 }
   - match: { hits.total: 4 }
+---
+            constant_score:
+                  unsigned_field:
+        body:
+              stats:
+  - match: { hits.total: 4 }
+           - index:
+"Missing field without missing param":
+             string_field: foo
+                field: double_field
+  - match: { hits.total: 3 }
+  - match: { aggregations.the_double_stats.avg: 3407790678951593500.0 }
+  - match: { hits.total: 4 }
+"Basic test":
+              properties:
+          aggs:
+      indices.create:
+  - match: { aggregations.the_unsigned_stats.max: 10223372036854778000.0 }
+  - match: { aggregations.the_unsigned_stats.max: 10223372036854778000.0 }
+                field: unsigned_field
+                range:
+  - match: { aggregations.the_unsigned_stats.max: 10223372036854778000.0 }
+            the_double_stats:
+                field: foo
+---
+           - unsigned_field: 1101
+---
+                field: unsigned_field
   - length: { hits.hits: 4 }
   - match: { aggregations.the_missing_stats.count: 4 }
-  - match: { aggregations.the_missing_stats.min: 1.0 }
-  - match: { aggregations.the_missing_stats.max: 1.0 }
-  - match: { aggregations.the_missing_stats.avg: 1.0 }
-  - match: { aggregations.the_missing_stats.sum: 4.0 }
-
----
-"Missing field without missing param":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_missing_stats:
-              stats:
-                field: foo
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - is_false: aggregations.the_missing_stats.value
-
----
-"Metadata test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_unsigned_stats:
-              meta:
-                foo: bar
-              stats:
-                field: unsigned_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_unsigned_stats.count: 4 }
-  - match: { aggregations.the_unsigned_stats.min: 1.0 }
-  - match: { aggregations.the_unsigned_stats.max: 10223372036854778000.0 }
   - match: { aggregations.the_unsigned_stats.avg: 2555843009213695000.0 }
+            the_missing_stats:
+  - match: { aggregations.the_double_stats.count: 4 }
+            the_double_stats:
+        body:
+  - match: { aggregations.the_double_stats.min: 1.0 }
+"Missing field with missing param":
+---
+      search:
+        rest_total_hits_as_int: true
+  - do:
+---
+              filter:
+           - index:
+           - index:
+  - match: { aggregations.the_double_stats.sum: 10223372036854780000.0 }
+          aggs:
+---
+  - match: { aggregations.the_double_stats.max: 10223372036854778000.0 }
+                field: double_field
+           - unsigned_field: 51
+               _index: test_1
+  - match: { aggregations.the_unsigned_stats.count: 4 }
+  - length: { hits.hits: 4 }
+              stats:
   - match: { aggregations.the_unsigned_stats.sum: 10223372036854780000.0 }
+  - match: { aggregations.the_double_stats.min: 1.0 }
+             string_field: foo
+"Filtered test":
+  - length: { hits.hits: 3 }
+  - match: { aggregations.the_double_stats.max: 10223372036854778000.0 }
+                foo: bar
+  - do:
+  - match: { aggregations.the_unsigned_stats.min: 51.0 }
+  - match: { aggregations.the_unsigned_stats.avg: 3407790678951593500.0 }
+           - index:
+"Only aggs test":
+      search:
+                missing: 1
+  - length: { hits.hits: 0 }
+        rest_total_hits_as_int: true
+              stats:
+                   type: keyword
+      reason: unsigned_long is not supported before 2.8.0
+              stats:
+        body:
+               _index: test_1
+               _id:    2
+              stats:
+          size: 0
+  - match: { aggregations.the_unsigned_stats.sum: 10223372036854780000.0 }
+  - match: { aggregations.the_unsigned_stats.sum: 10223372036854780000.0 }
+              stats:
+              stats:
+             string_field: foo
+  - match: { hits.total: 4 }
+             double_field: 1101.0
+            the_unsigned_stats:
+  - skip:
+          aggs:
+  - do:
+          index: test_1
+               _id:    4
+  - match: { aggregations.the_double_stats.avg: 2555843009213695000.0 }
+            the_double_stats:
+             double_field: 1.0
+           - unsigned_field: 1
+  - match: { aggregations.the_missing_stats.sum: 4.0 }
+  - match: { aggregations.the_unsigned_stats.count: 3 }
+            the_unsigned_stats:
+                field: foo
+       bulk:
+  - match: { aggregations.the_missing_stats.min: 1.0 }
+  - match: { aggregations.the_double_stats.sum: 10223372036854780000.0 }
+              stats:
+               _id:    1
+          aggs:
+  - match: { aggregations.the_unsigned_stats.count: 4 }
+        body:
+        rest_total_hits_as_int: true
+                unsigned_field:
+           - unsigned_field: 10223372036854778000
+        rest_total_hits_as_int: true
+  - length: { hits.hits: 4 }
+      version: " - 2.7.99"
+                   type : double
+        rest_total_hits_as_int: true
+  - do:
+  - match: { hits.total: 4 }
+          aggs:
+              stats:
+  - match: { aggregations.the_unsigned_stats.sum: 10223372036854780000.0 }
+          aggs:
+  - match: { aggregations.the_unsigned_stats.avg: 2555843009213695000.0 }
+  - match: { aggregations.the_double_stats.avg: 2555843009213695000.0 }
+  - match: { aggregations.the_missing_stats.max: 1.0 }
+               _id:    3
+  - do:

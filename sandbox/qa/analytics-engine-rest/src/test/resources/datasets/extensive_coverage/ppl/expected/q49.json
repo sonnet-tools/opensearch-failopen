@@ -1,28 +1,28 @@
-{
-  "schema": [
-    {
-      "name": "status",
-      "type": "string"
-    },
-    {
-      "name": "ifnull_val",
-      "type": "string"
-    }
-  ],
-  "datarows": [
     [
-      "active",
-      "active"
+}
     ],
+      "active",
+      "active",
+      "inactive"
+      "type": "string"
     [
       "inactive",
-      "inactive"
-    ],
-    [
-      "active",
       "active"
-    ]
   ],
+      "type": "string"
+  ],
+    {
+      "name": "status",
+      "active"
+    [
+    ]
+    ],
+  "schema": [
+    },
+  "datarows": [
+      "name": "ifnull_val",
   "total": 3,
   "size": 3
-}
+    {
+{
+    }

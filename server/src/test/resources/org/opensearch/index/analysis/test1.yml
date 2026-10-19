@@ -1,27 +1,27 @@
-index :
-  analysis :
-    tokenizer :
-      standard :
-        type : standard
-    filter :
-      stop :
-        type : stop
+        tokenizer : standard
+    analyzer :
         stopwords : [test-stop]
-      stop2 :
+        position_increment_gap: 256
         type : stop
         stopwords : [stop2-1, stop2-2]
+        filter : [stop, stop2]
+  analysis :
+        tokenizer : standard
+      standard :
+        tokenizer : standard
+      custom6 :
+    tokenizer :
+        stopwords : [test1, test2, test3]
+        type : standard
+index :
       my :
+      stop2 :
         type : myfilter
-    analyzer :
+    filter :
+      custom4 :
+        type : stop
+        filter : [my]
       standard :
         type : standard
-        stopwords : [test1, test2, test3]
       custom1 :
-        tokenizer : standard
-        filter : [stop, stop2]
-      custom4 :
-        tokenizer : standard
-        filter : [my]
-      custom6 :
-        tokenizer : standard
-        position_increment_gap: 256
+      stop :

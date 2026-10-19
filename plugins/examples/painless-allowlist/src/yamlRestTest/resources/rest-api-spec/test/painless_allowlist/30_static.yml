@@ -1,26 +1,23 @@
-# Example test using allowlisted statically imported method
-
-"custom static imported method":
-- do:
-    index:
-      index: test
-      id: 1
-      body: { "num1": 1 }
-- do:
-    indices.refresh: {}
-
-- do:
-    search:
-      rest_total_hits_as_int: true
-      index: test
-      body:
-        query:
-          match_all: {}
-        script_fields:
-          sNum1:
             script:
+    index:
+    search:
+# Example test using allowlisted statically imported method
+          match_all: {}
+          sNum1:
+      body:
+- do:
               source: "exampleAddInts(2, (int)doc['num1'][0])"
               lang: painless
-
-- match: { hits.total: 1 }
+        query:
+      index: test
+      body: { "num1": 1 }
+      index: test
+- do:
 - match: { hits.hits.0.fields.sNum1.0: 3 }
+"custom static imported method":
+      id: 1
+- do:
+- match: { hits.total: 1 }
+    indices.refresh: {}
+      rest_total_hits_as_int: true
+        script_fields:

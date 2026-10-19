@@ -1,48 +1,48 @@
+    {
 {
-  "schema": [
+    [
+    [
+      "name": "total_load",
+      43.72,
+  "size": 4
+      "host1",
+    }
+  "total": 4,
+    ],
+}
+      41.08,
     {
-      "name": "avg_cpu",
-      "type": "double"
+    [
+      61.12,
+      41.12,
+      59.4,
+      62.72,
+    [
     },
-    {
-      "name": "avg_memory",
-      "type": "double"
+      102.24
     },
-    {
       "name": "host",
       "type": "string"
-    },
-    {
-      "name": "total_load",
-      "type": "double"
-    }
-  ],
-  "datarows": [
-    [
-      82.12,
-      62.72,
-      "host1",
-      144.84
-    ],
-    [
-      43.72,
-      59.48,
-      "host4",
-      103.19999999999999
-    ],
-    [
-      41.12,
-      61.12,
-      "host3",
-      102.24
-    ],
-    [
-      41.08,
-      59.4,
       "host2",
-      100.47999999999999
-    ]
+      "host3",
+  "schema": [
+  "datarows": [
+    {
   ],
-  "total": 4,
-  "size": 4
-}
+      "name": "avg_cpu",
+      "name": "avg_memory",
+    ]
+    {
+      "type": "double"
+      "type": "double"
+  ],
+      "type": "double"
+    ],
+      82.12,
+    },
+      "host4",
+    ],
+      144.84
+      100.47999999999999
+      103.19999999999999
+      59.48,

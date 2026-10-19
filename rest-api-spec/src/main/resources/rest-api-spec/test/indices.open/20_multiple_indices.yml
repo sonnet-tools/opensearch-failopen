@@ -1,103 +1,88 @@
-setup:
-  - do:
-      indices.create:
-        index: test_index1
-        body:
-          settings:
-            number_of_replicas: 0
-  - do:
-      indices.create:
-        index: test_index2
-        body:
-          settings:
-            number_of_replicas: 0
-  - do:
-      indices.create:
-        index: test_index3
-        body:
-          settings:
-            number_of_replicas: 0
-  - do:
-      cluster.health:
-        wait_for_status: green
-
----
-"All indices":
-  - do:
-      indices.close:
-        index: _all
-  - is_true: acknowledged
-
-  - do:
-      catch: bad_request
       search:
-        rest_total_hits_as_int: true
-        index: test_index2
-
   - do:
+        rest_total_hits_as_int: true
+  - do:
+        rest_total_hits_as_int: true
+  - do:
+        index: test_index2
       indices.open:
-        index: _all
-  - is_true: acknowledged
-
+      indices.open:
   - do:
-      cluster.health:
-        wait_for_status: green
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test_index2
-
----
 "Trailing wildcard":
-  - do:
-      indices.close:
-        index: test_*
-  - is_true: acknowledged
-
-  - do:
-      catch: bad_request
-      search:
+        index: '*'
+      indices.create:
+        body:
         rest_total_hits_as_int: true
-        index: test_index2
-
   - do:
-      indices.open:
-        index: test_*
-  - is_true: acknowledged
-
-  - do:
+      search:
       cluster.health:
-        wait_for_status: green
-
+        body:
+  - do:
+        index: test_index3
+        body:
+  - do:
+        index: test_index3
+  - do:
+  - do:
   - do:
       search:
-        rest_total_hits_as_int: true
-        index: test_index2
-
----
+          settings:
+  - is_true: acknowledged
+  - do:
+  - do:
+        wait_for_status: green
 "Only wildcard":
-  - do:
-      indices.close:
+        index: test_index2
         index: '*'
   - is_true: acknowledged
-
-  - do:
-      catch: bad_request
-      search:
-        rest_total_hits_as_int: true
-        index: test_index3
-
-  - do:
       indices.open:
-        index: '*'
+---
   - is_true: acknowledged
-
+  - do:
+        wait_for_status: green
+      indices.close:
+      cluster.health:
+          settings:
+---
+  - do:
+        index: test_index2
+      search:
+        index: _all
+      indices.create:
+      search:
+      indices.close:
   - do:
       cluster.health:
-        wait_for_status: green
-
   - do:
-      search:
+            number_of_replicas: 0
+  - do:
+        index: test_index1
+"All indices":
+        index: test_*
+        index: test_*
         rest_total_hits_as_int: true
+        wait_for_status: green
+        rest_total_hits_as_int: true
+  - do:
+            number_of_replicas: 0
+      search:
+  - is_true: acknowledged
+  - is_true: acknowledged
+---
+      indices.close:
+      cluster.health:
+  - is_true: acknowledged
+        index: test_index2
+      catch: bad_request
+  - do:
+        index: test_index2
+      catch: bad_request
         index: test_index3
+      catch: bad_request
+        index: _all
+          settings:
+      indices.create:
+        wait_for_status: green
+            number_of_replicas: 0
+        rest_total_hits_as_int: true
+setup:

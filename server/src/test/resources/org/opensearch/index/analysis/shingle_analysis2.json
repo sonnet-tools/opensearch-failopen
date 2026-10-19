@@ -1,15 +1,15 @@
-{
-    "index":{
-        "analysis":{
-            "filter":{
-                "shingle_filler":{
-                    "type":"shingle",
-                    "max_shingle_size" : 10,
-                    "min_shingle_size" : 2,
-                    "output_unigrams" : false,
-                    "filler_token" : "FILLER"
-                }
             }
-        }
+        "analysis":{
+                }
+                    "filler_token" : "FILLER"
+                    "min_shingle_size" : 2,
     }
+        }
+                    "type":"shingle",
+{
 }
+    "index":{
+                "shingle_filler":{
+                    "output_unigrams" : false,
+            "filter":{
+                    "max_shingle_size" : 10,

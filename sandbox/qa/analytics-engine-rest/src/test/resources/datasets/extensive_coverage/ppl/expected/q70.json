@@ -1,42 +1,42 @@
-{
-  "schema": [
-    {
+    },
       "name": "text",
-      "type": "string"
-    },
+      "type": "int"
+  "datarows": [
     {
+    {
+    [
+    ]
+  "total": 3,
       "name": "text_lower",
-      "type": "string"
+      "test example record",
+    {
+      17
+  "size": 3
+      16
+    [
+      "HELLO WORLD TEST",
+      "sample data entry",
     },
+    ],
     {
       "name": "text_upper",
-      "type": "string"
-    },
-    {
       "name": "text_len",
-      "type": "int"
+      "type": "string"
+  ],
+{
+      "hello world test",
+    ],
     }
-  ],
-  "datarows": [
-    [
-      "hello world test",
-      "hello world test",
-      "HELLO WORLD TEST",
-      16
-    ],
-    [
-      "sample data entry",
-      "sample data entry",
       "SAMPLE DATA ENTRY",
-      17
-    ],
-    [
-      "test example record",
-      "test example record",
-      "TEST EXAMPLE RECORD",
-      19
-    ]
+      "type": "string"
   ],
-  "total": 3,
-  "size": 3
+    },
 }
+  "schema": [
+      "sample data entry",
+      19
+    [
+      "hello world test",
+      "test example record",
+      "type": "string"
+      "TEST EXAMPLE RECORD",

@@ -1,28 +1,28 @@
-{
-  "schema": [
+      "name": "department",
     {
       "name": "unique_users",
-      "type": "bigint"
-    },
-    {
-      "name": "department",
       "type": "string"
+      "Sales"
     }
   ],
-  "datarows": [
-    [
-      10,
-      "Engineering"
+}
     ],
-    [
       10,
+  "size": 3
       "Marketing"
     ],
-    [
-      10,
-      "Sales"
-    ]
   ],
+    [
+    },
+      10,
+    {
+    [
+  "datarows": [
+    ]
+      "Engineering"
+      10,
+    [
+      "type": "bigint"
+  "schema": [
   "total": 3,
-  "size": 3
-}
+{

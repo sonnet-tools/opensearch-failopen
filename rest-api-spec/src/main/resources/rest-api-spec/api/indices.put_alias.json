@@ -1,125 +1,125 @@
-{
-  "indices.put_alias":{
+          ],
     "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/index-apis/update-alias/",
-      "description":"Creates or updates an alias."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/{index}/_alias/{name}",
-          "methods":[
+        "type":"time",
             "PUT",
-            "POST"
-          ],
-          "parts":{
-            "index":{
-              "type":"list",
-              "description":"A comma-separated list of index names the alias should point to (supports wildcards); use `_all` to perform the operation on all indices."
-            },
-            "name":{
-              "type":"string",
-              "description":"The name of the alias to be created or updated"
-            }
-          }
-        },
-        {
-          "path":"/{index}/_aliases/{name}",
-          "methods":[
-            "PUT",
-            "POST"
-          ],
-          "parts":{
-            "index":{
-              "type":"list",
-              "description":"A comma-separated list of index names the alias should point to (supports wildcards); use `_all` to perform the operation on all indices."
-            },
-            "name":{
-              "type":"string",
-              "description":"The name of the alias to be created or updated"
-            }
-          }
-        },
-        {
-          "path":"/{index}/_alias",
-          "methods":[
-            "PUT"
-          ],
-          "parts":{
-            "index":{
-              "type":"list",
-              "description":"A comma-separated list of index names the alias should point to (supports wildcards); use `_all` to perform the operation on all indices."
-            }
-          }
-        },
-        {
-          "path":"/{index}/_aliases",
-          "methods":[
-            "PUT"
-          ],
-          "parts":{
-            "index":{
-              "type":"list",
-              "description":"A comma-separated list of index names the alias should point to (supports wildcards); use `_all` to perform the operation on all indices."
-            }
-          }
-        },
-        {
-          "path":"/_alias/{name}",
-          "methods":[
-            "PUT",
-            "POST"
-          ],
-          "parts":{
-            "name":{
-              "type":"string",
-              "description":"The name of the alias to be created or updated"
-            }
-          }
-        },
-        {
-          "path":"/_aliases/{name}",
-          "methods":[
-            "PUT",
-            "POST"
-          ],
-          "parts":{
-            "name":{
-              "type":"string",
-              "description":"The name of the alias to be created or updated"
-            }
-          }
-        },
-        {
-          "path":"/_alias",
-          "methods":[
-            "PUT"
-          ]
-        }
       ]
-    },
+        "description":"Explicit timestamp for the document"
+              "description":"The name of the alias to be created or updated"
+      "description":"Creates or updates an alias."
+          "path":"/{index}/_aliases",
+        {
+            "POST"
+              "description":"A comma-separated list of index names the alias should point to (supports wildcards); use `_all` to perform the operation on all indices."
+      "cluster_manager_timeout":{
+            "name":{
+        {
+        "type":"time",
+  "indices.put_alias":{
     "params":{
+          ]
+    "url":{
+          ],
+    }
+          "version":"2.0.0",
+            "PUT",
+          "parts":{
+            "PUT"
+          }
+            },
+          "parts":{
+            "index":{
+            "name":{
+              "type":"string",
+            "index":{
+        },
+      "paths":[
+              "description":"A comma-separated list of index names the alias should point to (supports wildcards); use `_all` to perform the operation on all indices."
+          "path":"/_alias",
+          "path":"/{index}/_alias/{name}",
+    "body":{
+  }
+        },
+              "description":"A comma-separated list of index names the alias should point to (supports wildcards); use `_all` to perform the operation on all indices."
+          }
+          "methods":[
+      },
+          "parts":{
+          "methods":[
+              "type":"list",
+        {
+          ],
+            }
+        {
+        },
+          ],
+{
+            "index":{
+          "parts":{
+    },
+      "description":"The settings for the alias, such as `routing` or `filter`",
+          ],
+            }
+          "parts":{
+              "description":"The name of the alias to be created or updated"
+            "PUT"
+            "index":{
+        {
+      "required":false
+            "PUT",
+          "methods":[
+        "description":"Specify timeout for connection to cluster-manager node"
+}
+            "name":{
+            },
+      },
+            "POST"
+          "methods":[
+      }
+              "description":"A comma-separated list of index names the alias should point to (supports wildcards); use `_all` to perform the operation on all indices."
+              "type":"list",
+        },
+              "type":"list",
+              "type":"string",
+        {
+        "description":"Specify timeout for connection to master",
+              "type":"string",
+            }
+          }
+          "path":"/_aliases/{name}",
+              "type":"list",
+      "master_timeout":{
+    },
+              "type":"string",
+          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
+            }
+          }
+            "name":{
+              "description":"The name of the alias to be created or updated"
+        }
+              "description":"The name of the alias to be created or updated"
+          "path":"/{index}/_alias",
+            }
+          "path":"/_alias/{name}",
+        },
+          "methods":[
+        }
+            "POST"
+    },
+        },
+            "PUT",
+          }
+          }
+          "parts":{
+        {
+            "POST"
+          "methods":[
+      "url":"https://opensearch.org/docs/latest/api-reference/index-apis/update-alias/",
+          "methods":[
+    "stability":"stable",
+          ],
+            "PUT"
+          "path":"/{index}/_aliases/{name}",
+        "deprecated":{
       "timeout":{
         "type":"time",
-        "description":"Explicit timestamp for the document"
-      },
-      "master_timeout":{
-        "type":"time",
-        "description":"Specify timeout for connection to master",
-        "deprecated":{
-          "version":"2.0.0",
-          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
-        }
-      },
-      "cluster_manager_timeout":{
-        "type":"time",
-        "description":"Specify timeout for connection to cluster-manager node"
-      }
-    },
-    "body":{
-      "description":"The settings for the alias, such as `routing` or `filter`",
-      "required":false
-    }
-  }
-}
+            }

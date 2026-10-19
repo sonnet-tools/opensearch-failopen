@@ -1,121 +1,104 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
+    role: System.getProperty('tests.rest.cluster.role', 'admin')
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- *
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-import org.opensearch.gradle.test.RestIntegTestTask
-import org.opensearch.gradle.info.BuildParams
-
-apply plugin: 'opensearch.testclusters'
-apply plugin: 'opensearch.build'
-apply plugin: 'opensearch.rest-test'
-apply plugin: 'opensearch.publish'
-apply plugin: 'opensearch.rest-resources'
-apply from: "$rootDir/gradle/fips.gradle"
-
-base {
-  group = 'org.opensearch.client'
-  archivesName = 'opensearch-rest-high-level-client'
-}
-
-restResources {
-  //we need to copy the yaml spec so we can check naming (see RestHighlevelClientTests#testApiNamingConventions)
-  restApi {
-    includeCore '*'
-  }
-}
-
-dependencies {
-  api(project(':server')) {
-    exclude group: 'com.google.protobuf'
-  }
-  api project(':client:rest')
-  api project(':modules:mapper-extras')
-  api project(':modules:parent-join')
-  api project(':modules:aggs-matrix-stats')
-  api project(':modules:rank-eval')
-  api project(':modules:lang-mustache')
-
-  testImplementation project(':client:test')
-  testImplementation project(':test:framework')
-  testImplementation "com.carrotsearch.randomizedtesting:randomizedtesting-runner:${versions.randomizedrunner}"
-  testImplementation "junit:junit:${versions.junit}"
-  //this is needed to make RestHighLevelClientTests#testApiNamingConventions work from IDEs
-  testImplementation project(":rest-api-spec")
-  testFipsRuntimeOnly "org.bouncycastle:bc-fips:${versions.bouncycastle_jce}"
-  testFipsRuntimeOnly "org.bouncycastle:bctls-fips:${versions.bouncycastle_tls}"
-  testFipsRuntimeOnly "org.bouncycastle:bcutil-fips:${versions.bouncycastle_util}"
-}
-
 tasks.named('forbiddenApisMain').configure {
-  // core does not depend on the httpclient for compile so we add the signatures here. We don't add them for test as they are already
-  // specified
-  addSignatureFiles 'http-signatures'
-  signaturesFiles += files('src/main/resources/forbidden/rest-high-level-signatures.txt')
-}
-
-File nodeCert = file("./testnode.crt")
-File nodeTrustStore = file("./testnode.jks")
-File pkiTrustCert = file("./src/test/resources/org/opensearch/client/security/delegate_pki/testRootCA.crt")
-
-integTest {
-  systemProperty 'tests.rest.async', 'false'
-  systemProperty 'tests.rest.cluster.username', System.getProperty('tests.rest.cluster.username', 'test_user')
-  systemProperty 'tests.rest.cluster.password', System.getProperty('tests.rest.cluster.password', 'test-password')
-}
-
-RestIntegTestTask asyncIntegTest = tasks.create("asyncIntegTest", RestIntegTestTask) {
-    systemProperty 'tests.rest.async', 'true'
+ * KIND, either express or implied.  See the License for the
     systemProperty 'tests.rest.cluster.username', System.getProperty('tests.rest.cluster.username', 'test_user')
-    systemProperty 'tests.rest.cluster.password', System.getProperty('tests.rest.cluster.password', 'test-password')
+ * this work for additional information regarding copyright
+    includeCore '*'
 }
-
+import org.opensearch.gradle.test.RestIntegTestTask
+ * ownership. Elasticsearch licenses this file to you under
+  extraConfigFile nodeCert.name, nodeCert
+ * specific language governing permissions and limitations
+  systemProperty 'tests.rest.cluster.password', System.getProperty('tests.rest.cluster.password', 'test-password')
+ */
+apply plugin: 'opensearch.build'
+ * GitHub history for details.
+  testFipsRuntimeOnly "org.bouncycastle:bctls-fips:${versions.bouncycastle_tls}"
+File nodeTrustStore = file("./testnode.jks")
+)
+apply plugin: 'opensearch.testclusters'
+  testFipsRuntimeOnly "org.bouncycastle:bcutil-fips:${versions.bouncycastle_util}"
+ *
+  //we need to copy the yaml spec so we can check naming (see RestHighlevelClientTests#testApiNamingConventions)
+/*
+    password: System.getProperty('tests.rest.cluster.password', 'test-password'),
+/*
+  extraConfigFile 'roles.yml', file('roles.yml')
+  api project(':modules:mapper-extras')
+apply from: "$rootDir/gradle/fips.gradle"
 check.dependsOn(asyncIntegTest)
-
-testClusters.all {
-  testDistribution = 'ARCHIVE'
+}
+ * The OpenSearch Contributors require contributions made to
+  archivesName = 'opensearch-rest-high-level-client'
+    systemProperty 'tests.rest.cluster.password', System.getProperty('tests.rest.cluster.password', 'test-password')
+  group = 'org.opensearch.client'
+base {
+ * license agreements. See the NOTICE file distributed with
+ * not use this file except in compliance with the License.
+ * compatible open source license.
+dependencies {
+  api project(':client:rest')
+  extraConfigFile nodeTrustStore.name, nodeTrustStore
+}
+  }
+}
+}
+RestIntegTestTask asyncIntegTest = tasks.create("asyncIntegTest", RestIntegTestTask) {
+  api project(':modules:lang-mustache')
+  addSignatureFiles 'http-signatures'
+File pkiTrustCert = file("./src/test/resources/org/opensearch/client/security/delegate_pki/testRootCA.crt")
   systemProperty 'opensearch.scripting.update.ctx_in_params', 'false'
   setting 'reindex.remote.allowlist', '[ "[::1]:*", "127.0.0.1:*" ]'
-
-  extraConfigFile 'roles.yml', file('roles.yml')
-  user username: System.getProperty('tests.rest.cluster.username', 'test_user'),
-    password: System.getProperty('tests.rest.cluster.password', 'test-password'),
-    role: System.getProperty('tests.rest.cluster.role', 'admin')
-  user username: 'admin_user', password: 'admin-password'
-
-  extraConfigFile nodeCert.name, nodeCert
-  extraConfigFile nodeTrustStore.name, nodeTrustStore
-  extraConfigFile pkiTrustCert.name, pkiTrustCert
-
-}
-
-thirdPartyAudit.ignoreMissingClasses(
+  api project(':modules:aggs-matrix-stats')
+ * Licensed to Elasticsearch under one or more contributor
+  testImplementation "junit:junit:${versions.junit}"
+  testFipsRuntimeOnly "org.bouncycastle:bc-fips:${versions.bouncycastle_jce}"
+apply plugin: 'opensearch.rest-test'
+  systemProperty 'tests.rest.cluster.username', System.getProperty('tests.rest.cluster.username', 'test_user')
+  api project(':modules:parent-join')
+  testDistribution = 'ARCHIVE'
+  testImplementation project(":rest-api-spec")
   'org.conscrypt.Conscrypt',
+  user username: System.getProperty('tests.rest.cluster.username', 'test_user'),
+  signaturesFiles += files('src/main/resources/forbidden/rest-high-level-signatures.txt')
+  testImplementation "com.carrotsearch.randomizedtesting:randomizedtesting-runner:${versions.randomizedrunner}"
+  api project(':modules:rank-eval')
+testClusters.all {
+}
+ * software distributed under the License is distributed on an
+ * You may obtain a copy of the License at
+    systemProperty 'tests.rest.async', 'true'
+  testImplementation project(':test:framework')
+ *
+ * this file be licensed under the Apache-2.0 license or a
+restResources {
+  user username: 'admin_user', password: 'admin-password'
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+  testImplementation project(':client:test')
+apply plugin: 'opensearch.rest-resources'
+  // specified
+  }
+}
+thirdPartyAudit.ignoreMissingClasses(
+integTest {
+  //this is needed to make RestHighLevelClientTests#testApiNamingConventions work from IDEs
+ * under the License.
+  restApi {
+ * Unless required by applicable law or agreed to in writing,
+ * SPDX-License-Identifier: Apache-2.0
+apply plugin: 'opensearch.publish'
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.gradle.info.BuildParams
+    exclude group: 'com.google.protobuf'
+  api(project(':server')) {
   'org.slf4j.Logger',
+  systemProperty 'tests.rest.async', 'false'
   'org.slf4j.LoggerFactory'
-)
+  extraConfigFile pkiTrustCert.name, pkiTrustCert
+File nodeCert = file("./testnode.crt")
+ * Modifications Copyright OpenSearch Contributors. See
+ */
+  // core does not depend on the httpclient for compile so we add the signatures here. We don't add them for test as they are already
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0

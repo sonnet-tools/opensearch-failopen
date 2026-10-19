@@ -1,138 +1,128 @@
-"ngram search":
-  - do:
-      indices.create:
-        index: test
-        body:
-          settings:
-            number_of_shards: 1
-            number_of_replicas: 0
-            analysis:
-              analyzer:
-                my_analyzer:
-                  tokenizer: standard
-                  filter: [my_ngram]
-              filter:
-                my_ngram:
-                  type: ngram
-                  min: 2,
-                  max: 2
-          mappings:
-            properties:
-              text:
-                type: text
-                analyzer: my_analyzer
-
-  - do:
       index:
-        index: test
-        id:    1
-        body:  { "text": "foo bar baz" }
-        refresh: true
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              text:
-                query: foa
-  - match: {hits.total: 1}
-
----
-"testNGramCopyField":
-  - do:
-      indices.create:
-        index: test
-        body:
-          settings:
-            number_of_shards: 1
-            number_of_replicas: 0
-            max_ngram_diff: 9
-            analysis:
-              analyzer:
-                my_ngram_analyzer:
-                  tokenizer: my_ngram_tokenizer
-              tokenizer:
-                my_ngram_tokenizer:
-                  type: ngram
-                  min: 1,
-                  max: 10
-                  token_chars: []
-          mappings:
-            properties:
-              origin:
-                type: text
-                copy_to: meta
-              meta:
-                type: text
-                analyzer: my_ngram_analyzer
-
-  - do:
-      index:
-        index: test
-        id:    1
         body:  { "origin": "C.A1234.5678" }
-        refresh: true
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              meta:
-                query: 1234
   - match: {hits.total: 1}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              meta:
-                query: 1234.56
-  - match: {hits.total: 1}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              meta:
-                query: A1234
-  - match: {hits.total: 1}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            term:
-              meta:
-                value: a1234
   - match: {hits.total: 0}
-
+                  type: ngram
   - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
               meta:
+            match:
+        body:
+                copy_to: meta
+  - do:
+  - do:
+              text:
+        id:    1
+              meta:
+            number_of_replicas: 0
+        rest_total_hits_as_int: true
+                query: foa
+                  max: 10
+              filter:
+        body:
+        refresh: true
+            analysis:
+  - do:
+      indices.create:
+      search:
+      search:
+            term:
+        rest_total_hits_as_int: true
+"testNGramCopyField":
+  - match: {hits.total: 1}
+      search:
+        body:
+            number_of_shards: 1
+                my_ngram_tokenizer:
+        body:  { "text": "foo bar baz" }
+          query:
+              meta:
+            properties:
+        body:
+  - do:
                 query: A1234
-                analyzer: my_ngram_analyzer
-  - match: {hits.total: 1}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
         body:
-          query:
+                my_ngram_analyzer:
             match:
-              meta:
-                query: a1234
                 analyzer: my_ngram_analyzer
+                  type: ngram
+  - do:
+      index:
+                  token_chars: []
+          settings:
+                  max: 2
+            match:
+            number_of_replicas: 0
+                value: a1234
+        rest_total_hits_as_int: true
+              meta:
+          query:
+              tokenizer:
+                  min: 1,
+          query:
+        body:
+  - do:
+  - do:
+                type: text
+        rest_total_hits_as_int: true
+      search:
+        body:
+          mappings:
+            analysis:
+        index: test
   - match: {hits.total: 1}
+        body:
+            properties:
+  - match: {hits.total: 1}
+          query:
+        index: test
+        rest_total_hits_as_int: true
+        refresh: true
+      indices.create:
+            max_ngram_diff: 9
+        index: test
+        id:    1
+        rest_total_hits_as_int: true
+        rest_total_hits_as_int: true
+                query: 1234
+          mappings:
+              meta:
+  - match: {hits.total: 1}
+  - match: {hits.total: 1}
+                  min: 2,
+          query:
+              text:
+                  tokenizer: my_ngram_tokenizer
+                  tokenizer: standard
+                analyzer: my_ngram_analyzer
+              analyzer:
+                query: A1234
+            match:
+  - do:
+            match:
+                analyzer: my_analyzer
+                  filter: [my_ngram]
+      search:
+          query:
+            number_of_shards: 1
+              meta:
+            match:
+"ngram search":
+                query: a1234
+                my_analyzer:
+      search:
+                type: text
+      search:
+              analyzer:
+                my_ngram:
+        body:
+                query: 1234.56
+  - do:
+---
+              meta:
+  - do:
+                type: text
+          query:
+        index: test
+                analyzer: my_ngram_analyzer
+              origin:
+          settings:

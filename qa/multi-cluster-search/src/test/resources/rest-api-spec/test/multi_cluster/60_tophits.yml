@@ -1,50 +1,44 @@
----
-setup:
-
-  - do:
-      indices.create:
-        index: single_doc_index
-        body:
-          settings:
-            index:
-              number_of_shards: 1
-              number_of_replicas: 0
----
-teardown:
-
-  - do:
-      indices.delete:
-        index: single_doc_index
-        ignore_unavailable: true
-
----
-"Test that remote index names are preserved in top hits":
-
-  - do:
-      bulk:
         refresh: true
-        body:
+        index: single_doc_index
+          aggs:
             - '{"index": {"_index": "single_doc_index"}}'
-            - '{"f1": "local_cluster", "sort_field": 0}'
+---
+  - match: { aggregations.cluster.hits.hits.0._index: "single_doc_index" }
+  - match: { hits.hits.0._index: "single_doc_index"}
+              number_of_shards: 1
+  - match: { aggregations.cluster.hits.hits.0._source.f1: "local_cluster" }
+              number_of_replicas: 0
+                sort: "sort_field"
+          sort: "sort_field"
   - do:
+            index:
+  - do:
+  - length: { aggregations.cluster.hits.hits: 2 }
+      indices.create:
+teardown:
+          settings:
+"Test that remote index names are preserved in top hits":
+              top_hits:
+        index: single_doc_index
+---
+  - match: { _shards.total: 2 }
+---
+        ignore_unavailable: true
+        body:
+  - match: { aggregations.cluster.hits.hits.1._index: "my_remote_cluster:single_doc_index" }
+      bulk:
+                size: 2
       search:
         rest_total_hits_as_int: true
         index: "single_doc_index,my_remote_cluster:single_doc_index"
-        body:
-          sort: "sort_field"
-          aggs:
-            cluster:
-              top_hits:
-                size: 2
-                sort: "sort_field"
-
-  - match: { _shards.total: 2 }
-  - match: { hits.total: 2 }
-  - match: { hits.hits.0._index: "single_doc_index"}
+setup:
+  - do:
+      indices.delete:
   - match: { hits.hits.1._index: "my_remote_cluster:single_doc_index"}
-
-  - length: { aggregations.cluster.hits.hits: 2 }
-  - match: { aggregations.cluster.hits.hits.0._index: "single_doc_index" }
-  - match: { aggregations.cluster.hits.hits.0._source.f1: "local_cluster" }
-  - match: { aggregations.cluster.hits.hits.1._index: "my_remote_cluster:single_doc_index" }
+            - '{"f1": "local_cluster", "sort_field": 0}'
+        body:
+        body:
+  - match: { hits.total: 2 }
+  - do:
   - match: { aggregations.cluster.hits.hits.1._source.f1: "remote_cluster" }
+            cluster:

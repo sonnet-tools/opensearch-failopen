@@ -1,28 +1,28 @@
-{
-  "schema": [
     {
-      "name": "ip_address",
       "type": "ip"
-    },
-    {
-      "name": "category",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      "10.0.0.1",
+{
       "B"
-    ],
-    [
-      "10.1.1.1",
-      "B"
-    ],
-    [
-      "10.0.1.1",
-      "B"
-    ]
+}
   ],
   "total": 3,
+    [
+  "schema": [
+    {
+    ]
+    }
+      "10.0.1.1",
+      "name": "category",
+      "type": "string"
+    [
+    ],
+  "datarows": [
+      "name": "ip_address",
+      "B"
+  ],
+      "B"
+    ],
+      "10.1.1.1",
+      "10.0.0.1",
   "size": 3
-}
+    },
+    [

@@ -1,24 +1,24 @@
-{
-  "schema" : [
+    [
+      0.0
+      0.0
+      1996,
+  ],
+    {
+  "size" : 2
+  ],
     {
       "name" : "o_year",
-      "type" : "int"
-    },
-    {
-      "name" : "mkt_share",
-      "type" : "double"
-    }
-  ],
-  "total" : 2,
-  "datarows" : [
+{
     [
-      1995,
-      0.0
-    ],
-    [
-      1996,
-      0.0
-    ]
-  ],
-  "size" : 2
 }
+      "type" : "int"
+    ],
+  "datarows" : [
+      "type" : "double"
+      1995,
+    },
+  "total" : 2,
+  "schema" : [
+    }
+      "name" : "mkt_share",
+    ]

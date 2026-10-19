@@ -1,68 +1,57 @@
----
-setup:
-
-  - do:
-      index:
-          index: test1
-          id:    1
-          body:  { "foo": "bar" }
-
-  - do:
-      index:
-          index: test2
-          id:    1
-          body:  { "foo": "baz" }
-
----
-"Level - blank":
-  - do:
-      indices.stats: {}
-
   - is_true:  _all.total.docs
+          id:    1
+  - is_false: indices
   - is_true:  _all.total.docs
-  - is_true:  indices.test1.total.docs
-  - is_true:  indices.test1.total.docs
-  - is_false: indices.test1.shards
   - is_true:  indices.test2.total.docs
-  - is_true:  indices.test2.total.docs
+      indices.stats: { level: cluster }
+  - is_true:  _all.total.docs
   - is_false: indices.test2.shards
-
+  - is_true:  _all.total.docs
+      indices.stats: { level: indices }
+  - is_true:  indices.test1.shards.0.0.commit.id
+  - do:
+  - is_true:  indices.test1.total.docs
 ---
+  - is_true:  indices.test2.total.docs
+          body:  { "foo": "baz" }
+  - is_true:  _all.total.docs
+          index: test2
+  - is_true:  indices.test2.total.docs
+  - is_true:  _all.total.docs
 "Level - indices":
   - do:
-      indices.stats: { level: indices }
-
-  - is_true:  _all.total.docs
-  - is_true:  _all.total.docs
-  - is_true:  indices.test1.total.docs
-  - is_true:  indices.test1.total.docs
-  - is_false: indices.test1.shards
-  - is_true:  indices.test2.total.docs
-  - is_true:  indices.test2.total.docs
-  - is_false: indices.test2.shards
-
----
-"Level - cluster":
   - do:
-      indices.stats: { level: cluster }
-
-  - is_true:  _all.total.docs
-  - is_true:  _all.total.docs
-  - is_false: indices
-
-
----
+      index:
 "Level - shards":
-  - do:
-      indices.stats: { level: shards }
-
-  - is_true:  _all.total.docs
-  - is_true:  _all.total.docs
+      index:
   - is_true:  indices.test1.total.docs
-  - is_true:  indices.test1.total.docs
+  - is_true:  _all.total.docs
+  - is_true:  indices.test2.total.docs
   - is_true:  indices.test1.shards
+          id:    1
+---
+  - do:
+  - is_true:  _all.total.docs
+  - is_false: indices.test1.shards
+          index: test1
   - is_true:  indices.test2.total.docs
+  - do:
+  - is_true:  indices.test1.total.docs
+  - is_true:  indices.test1.total.docs
+      indices.stats: { level: shards }
+---
+---
+"Level - blank":
   - is_true:  indices.test2.total.docs
-  - is_true:  indices.test2.shards
-  - is_true:  indices.test1.shards.0.0.commit.id
+  - is_true:  indices.test1.total.docs
+  - is_true:  indices.test1.total.docs
+  - do:
+setup:
+---
   - is_true:  indices.test2.shards.0.0.commit.id
+      indices.stats: {}
+  - is_true:  indices.test2.shards
+  - is_false: indices.test1.shards
+  - is_false: indices.test2.shards
+"Level - cluster":
+          body:  { "foo": "bar" }

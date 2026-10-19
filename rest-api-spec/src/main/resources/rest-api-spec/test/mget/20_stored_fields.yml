@@ -1,111 +1,90 @@
----
-"Stored fields":
-  - do:
-      indices.create:
-        index: test_1
-        body:
-          mappings:
-            properties:
-              foo:
-                type: keyword
-                store: true
-              count:
-                type: integer
-                store: true
-
-  - do:
-      index:
-          index:  test_1
+  - match:  { docs.1.fields.foo: [bar] }
           id:     1
+            properties:
+  - match:  { docs.0.fields.foo: [bar] }
+            - { _id: 1                         }
+  - match:  { docs.3.fields.foo: [bar] }
+  - match:  { docs.3.fields.foo: [bar] }
+  - match:  { docs.0.fields.foo: [bar] }
           body:   { foo: bar }
-
-  - do:
-      mget:
-        index: test_1
-        body:
-          docs:
-            - { _id: 1                         }
             - { _id: 1, stored_fields: foo            }
+  - match:  { docs.0._source: { foo: bar }}
+                store: true
+  - is_false: docs.1._source
+        body:
+  - match:  { docs.2.fields.foo: [bar] }
+  - do:
+  - match:  { docs.1.fields.foo: [bar] }
+                type: keyword
+            - { _id: 1, stored_fields: foo            }
+          mappings:
+              count:
             - { _id: 1, stored_fields: [foo]          }
+        body:
             - { _id: 1, stored_fields: [foo, _source] }
-
+  - is_false: docs.1._source
+  - match:  { docs.3.fields.foo: [bar] }
+        body:
+  - do:
+            - { _id: 1                         }
+  - do:
+                store: true
+          docs:
+  - is_false: docs.1._source
+        index: test_1
+  - do:
+            - { _id: 1, stored_fields: [foo, _source] }
+          index:  test_1
+            - { _id: 1, stored_fields: [foo]          }
+        body:
+  - is_false: docs.2._source
+            - { _id: 1, stored_fields: [foo]          }
+  - match:  { docs.2.fields.foo: [bar] }
+          docs:
+  - match:  { docs.3._source: { foo: bar }}
+  - match:  { docs.1.fields.foo: [bar] }
+            - { _id: 1                         }
+  - match:  { docs.0.fields.foo: [bar] }
+  - is_false: docs.2._source
+            - { _id: 1, stored_fields: foo            }
   - is_false: docs.0.fields
-  - match:  { docs.0._source: { foo: bar }}
-
-  - match:  { docs.1.fields.foo: [bar] }
-  - is_false: docs.1._source
-
-  - match:  { docs.2.fields.foo: [bar] }
-  - is_false: docs.2._source
-
-  - match:  { docs.3.fields.foo: [bar] }
-  - match:  { docs.3._source: { foo: bar }}
-
   - do:
+                type: integer
+  - match:  { docs.2.fields.foo: [bar] }
+            - { _id: 1, stored_fields: [foo]          }
+          docs:
+      indices.create:
+"Stored fields":
+            - { _id: 1, stored_fields: [foo, _source] }
+  - is_false: docs.2._source
+  - match:  { docs.2.fields.foo: [bar] }
+---
+  - is_false: docs.2._source
       mget:
+      mget:
+  - match:  { docs.3._source: { foo: bar }}
+        index:  test_1
+  - match:  { docs.3._source: { foo: bar }}
+      index:
+  - match:  { docs.0._source: { foo: bar }}
         index: test_1
+            - { _id: 1                         }
+      mget:
+          docs:
+        index:  test_1
         stored_fields: foo
-        body:
-          docs:
-            - { _id: 1                         }
-            - { _id: 1, stored_fields: foo            }
-            - { _id: 1, stored_fields: [foo]          }
+        index: test_1
             - { _id: 1, stored_fields: [foo, _source] }
-
-  - match:  { docs.0.fields.foo: [bar] }
-  - is_false: docs.0._source
-
-  - match:  { docs.1.fields.foo: [bar] }
-  - is_false: docs.1._source
-
-  - match:  { docs.2.fields.foo: [bar] }
-  - is_false: docs.2._source
-
-  - match:  { docs.3.fields.foo: [bar] }
-  - match:  { docs.3._source: { foo: bar }}
-
-  - do:
-      mget:
-        index:  test_1
-        stored_fields: [foo]
-        body:
-          docs:
-            - { _id: 1                         }
-            - { _id: 1, stored_fields: foo            }
-            - { _id: 1, stored_fields: [foo]          }
-            - { _id: 1, stored_fields: [foo, _source] }
-
-  - match:  { docs.0.fields.foo: [bar] }
-  - is_false: docs.0._source
-
-  - match:  { docs.1.fields.foo: [bar] }
-  - is_false: docs.1._source
-
-  - match:  { docs.2.fields.foo: [bar] }
-  - is_false: docs.2._source
-
-  - match:  { docs.3.fields.foo: [bar] }
-  - match:  { docs.3._source: { foo: bar }}
-
-  - do:
-      mget:
-        index:  test_1
         stored_fields: [foo, _source]
-        body:
-          docs:
-            - { _id: 1                         }
-            - { _id: 1, stored_fields: foo            }
-            - { _id: 1, stored_fields: [foo]          }
-            - { _id: 1, stored_fields: [foo, _source] }
-
-  - match:  { docs.0.fields.foo: [bar] }
-  - match:  { docs.0._source: { foo: bar }}
-
-  - match:  { docs.1.fields.foo: [bar] }
+              foo:
+      mget:
   - is_false: docs.1._source
-
-  - match:  { docs.2.fields.foo: [bar] }
-  - is_false: docs.2._source
-
-  - match:  { docs.3.fields.foo: [bar] }
+        stored_fields: [foo]
+  - do:
+  - is_false: docs.0._source
+  - match:  { docs.1.fields.foo: [bar] }
+  - is_false: docs.0._source
   - match:  { docs.3._source: { foo: bar }}
+            - { _id: 1, stored_fields: foo            }
+  - match:  { docs.3.fields.foo: [bar] }
+        body:

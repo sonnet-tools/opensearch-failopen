@@ -1,177 +1,155 @@
-setup:
-  - do:
-      indices.create:
-          index: test_1
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
-              properties:
-                int_field:
-                   type : integer
-                double_field:
-                   type : double
+               _index: test_1
                 string_field:
-                   type: keyword
-
+"Missing field without missing param":
+                  int_field:
+         body:
+                missing: 1
+      search:
+                   type : double
+              number_of_replicas: 0
+               _index: test_1
+          aggs:
+  - match: { hits.total: 4 }
+             double_field: 101.0
+                field: int_field
+        rest_total_hits_as_int: true
+  - match: { aggregations.the_double_sum.value: 304.0 }
+                field: double_field
+          aggs:
+                field: foo
+            the_int_sum:
+                   type : integer
+             string_field: foo
+              sum:
+---
+               _id:    4
+            constant_score:
+  - match: { aggregations.the_int_sum.meta.foo: "bar" }
+      catch: bad_request
+          aggs:
+               _index: test_1
+      search:
+      indices.create:
+  - length: { hits.hits: 4 }
+  - do:
+  - match: { aggregations.the_int_sum.value: 304.0 }
+  - length: { hits.hits: 4 }
+           - index:
+---
+            the_missing_sum:
+        body:
+                foo: bar
+  - do:
+              sum:
+  - length: { hits.hits: 4 }
+---
+               _id:    2
+                range:
+               _id:    1
+  - match: { aggregations.the_missing_sum.value: 4.0 }
+             string_field: foo
+           - index:
+  - match: { aggregations.the_int_sum.value: 303.0 }
+  - do:
+           - int_field: 1
+              sum:
+          size: 0
+  - do:
+      search:
+        rest_total_hits_as_int: true
+  - match: { hits.total: 4 }
+      search:
+"Missing field with missing param":
+          query:
+  - match: { aggregations.the_missing_sum.value: 0.0 }
+           - int_field: 151
+                int_field:
+              sum:
+             double_field: 1.0
+  - do:
+        body:
+  - match: { aggregations.the_int_sum.value: 304.0 }
+              sum:
+            the_double_sum:
+  - do:
+---
+             double_field: 151.0
+        body:
+               _id:    3
+            the_int_sum:
+  - match: { aggregations.the_int_sum.value: 304.0 }
+                field: double_field
+           - int_field: 101
+"Only aggs test":
+      search:
+              sum:
+                field: string_field
+            mappings:
+            the_double_sum:
+  - do:
+        body:
+                    gte: 50
+  - do:
+setup:
+  - length: { hits.hits: 3 }
+"Basic test":
+      search:
+            settings:
+        body:
+---
+                field: int_field
+              filter:
+               _index: test_1
+         refresh: true
+            the_int_sum:
+---
+           - index:
+             string_field: foo
+              properties:
+          body:
   - do:
        bulk:
-         refresh: true
-         body:
-           - index:
-               _index: test_1
-               _id:    1
-           - int_field: 1
-             double_field: 1.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    2
-           - int_field: 51
-             double_field: 51.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    3
-           - int_field: 101
-             double_field: 101.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    4
-           - int_field: 151
-             double_field: 151.0
-             string_field: foo
-
----
-"Basic test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
           aggs:
-            the_int_sum:
-              sum:
-                field: int_field
-            the_double_sum:
-              sum:
-                field: double_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_int_sum.value: 304.0 }
-  - match: { aggregations.the_double_sum.value: 304.0 }
-
----
-"Only aggs test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          size: 0
-          aggs:
-            the_int_sum:
-              sum:
-                field: int_field
-            the_double_sum:
-              sum:
-                field: double_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 0 }
-  - match: { aggregations.the_int_sum.value: 304.0 }
-  - match: { aggregations.the_double_sum.value: 304.0 }
-
----
-"Filtered test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            constant_score:
-              filter:
-                range:
-                  int_field:
-                    gte: 50
-          aggs:
-            the_int_sum:
-              sum:
-                field: int_field
-            the_double_sum:
-              sum:
-                field: double_field
-
-  - match: { hits.total: 3 }
-  - length: { hits.hits: 3 }
-  - match: { aggregations.the_int_sum.value: 303.0 }
+            the_missing_sum:
+          index: test_1
   - match: { aggregations.the_double_sum.value: 303.0 }
-
-
----
-"Missing field with missing param":
-
-  - do:
-      search:
+                   type: keyword
         rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_missing_sum:
-              sum:
-                field: foo
-                missing: 1
-
+  - length: { hits.hits: 0 }
+        rest_total_hits_as_int: true
+  - match: { hits.total: 3 }
   - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_missing_sum.value: 4.0 }
-
----
-"Missing field without missing param":
-
-  - do:
-      search:
         rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_missing_sum:
               sum:
-                field: foo
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_missing_sum.value: 0.0 }
-
----
-"Metadata test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_int_sum:
-              meta:
-                foo: bar
-              sum:
-                field: int_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_int_sum.value: 304.0 }
-  - match: { aggregations.the_int_sum.meta.foo: "bar" }
-
----
-"Aggregating wrong datatype test":
-
-  - do:
-      catch: bad_request
-      search:
-        rest_total_hits_as_int: true
+                field: double_field
         body:
           aggs:
             the_string_sum:
+          aggs:
+"Metadata test":
+            the_double_sum:
+"Aggregating wrong datatype test":
+        body:
+           - index:
               sum:
-                field: string_field
+                double_field:
+  - length: { hits.hits: 4 }
+              sum:
+              meta:
+  - match: { hits.total: 4 }
+             string_field: foo
+  - match: { hits.total: 4 }
+           - int_field: 51
+                field: int_field
+        rest_total_hits_as_int: true
+        rest_total_hits_as_int: true
+                field: int_field
+              sum:
+      search:
+                field: foo
+            the_int_sum:
+             double_field: 51.0
+---
+"Filtered test":
+          aggs:
+  - match: { aggregations.the_double_sum.value: 304.0 }

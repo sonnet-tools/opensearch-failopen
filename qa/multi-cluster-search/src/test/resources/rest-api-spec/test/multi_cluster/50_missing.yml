@@ -1,49 +1,43 @@
----
-"Search with missing remote index pattern":
   - do:
+        body:
+        rest_total_hits_as_int: true
+  - match: { _shards.total: 3 }
+  - match: { _shards.total: 0 }
+        index: "my_remote_cluster:test_index,my_remote_cluster:foo*"
+  - match: { hits.total: 0 }
+  - match: { hits.total: 0 }
+"Search with missing remote index pattern":
+  - length: { aggregations.cluster.buckets: 1 }
+              terms:
+                field: f1.keyword
+  - match: { hits.total: 6 }
+      search:
+  - do:
+  - do:
+  - do:
+                field: f1.keyword
+        rest_total_hits_as_int: true
+      search:
+        index: "*:foo*"
+            cluster:
+              terms:
+            cluster:
+  - match: { aggregations.cluster.buckets.0.key: "remote_cluster" }
+        body:
+        index: "my_remote_cluster:test_index,my_remote_cluster:foo"
+          aggs:
+        rest_total_hits_as_int: true
+        rest_total_hits_as_int: true
+      search:
+          aggs:
+  - match: { _shards.total: 0 }
+  - match: { aggregations.cluster.buckets.0.doc_count: 6 }
       catch: "missing"
       search:
-        rest_total_hits_as_int: true
-        index: "my_remote_cluster:foo"
-
-  - do:
       search:
+      catch: "missing"
         rest_total_hits_as_int: true
         index: "my_remote_cluster:fooo*"
-  - match: { _shards.total: 0 }
-  - match: { hits.total: 0 }
-
   - do:
-      search:
-        rest_total_hits_as_int: true
-        index: "*:foo*"
-
-  - match: { _shards.total: 0 }
-  - match: { hits.total: 0 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: "my_remote_cluster:test_index,my_remote_cluster:foo*"
-        body:
-          aggs:
-            cluster:
-              terms:
-                field: f1.keyword
-
-  - match: { _shards.total: 3 }
-  - match: { hits.total: 6 }
-  - length: { aggregations.cluster.buckets: 1 }
-  - match: { aggregations.cluster.buckets.0.key: "remote_cluster" }
-  - match: { aggregations.cluster.buckets.0.doc_count: 6 }
-
-  - do:
-      catch: "missing"
-      search:
-        rest_total_hits_as_int: true
-        index: "my_remote_cluster:test_index,my_remote_cluster:foo"
-        body:
-          aggs:
-            cluster:
-              terms:
-                field: f1.keyword
+---
+        index: "my_remote_cluster:foo"

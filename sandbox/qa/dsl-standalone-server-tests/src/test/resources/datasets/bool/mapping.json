@@ -1,28 +1,28 @@
-{
-  "settings": {
-    "number_of_shards": 1,
+  }
     "number_of_replicas": 0
-  },
-  "mappings": {
-    "properties": {
-      "name": {
-        "type": "keyword"
-      },
-      "brand": {
-        "type": "keyword"
-      },
-      "tags": {
-        "type": "keyword"
-      },
-      "price": {
+        "type": "integer"
         "type": "double"
+      "stock": {
+      "tags": {
+      }
+      },
+      },
+        "type": "keyword"
+      },
+    "properties": {
+    }
       },
       "rating": {
+  "mappings": {
+      "price": {
+  },
+      "name": {
         "type": "double"
+      "brand": {
+  "settings": {
+    "number_of_shards": 1,
+        "type": "keyword"
       },
-      "stock": {
-        "type": "integer"
-      }
-    }
-  }
+{
+        "type": "keyword"
 }

@@ -1,64 +1,60 @@
----
-setup:
-  - do:
-      indices.create:
-        index:  test
-        body:
-          settings:
             number_of_shards: 1
-            number_of_replicas: 1
-
+        rest_total_hits_as_int: true
   - do:
-      index:
-        index:  test
-        id:     1
-        body:   { "test": 1 }
-  - do:
-      index:
-        index:  test
-        id:     2
-        body:   { "test": 2 }
-  - do:
+      search:
       indices.refresh: {}
-
----
-"just factor":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          rescore:
-            example:
-              factor: 0
-  - length: { hits.hits: 2 }
-  - match: { hits.hits.0._score: 0 }
-  - match: { hits.hits.1._score: 0 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          rescore:
             window_size: 1
             example:
-              factor: 0
-  - length: { hits.hits: 2 }
-  - match: { hits.hits.0._score: 1 }
-  - match: { hits.hits.1._score: 0 }
-
----
-"with factor field":
+          settings:
+        index:  test
   - do:
-      search:
-        rest_total_hits_as_int: true
+  - match: { hits.hits.0._score: 0 }
         index: test
-        body:
-          rescore:
+  - do:
             example:
-              factor: 1
-              factor_field: test
-  - length: { hits.hits: 2 }
+        body:
+---
   - match: { hits.hits.0._score: 2 }
+        body:   { "test": 1 }
+  - do:
+        index: test
+              factor: 0
+      search:
+  - match: { hits.hits.1._score: 0 }
+  - length: { hits.hits: 2 }
+        body:
+        index:  test
+          rescore:
+      indices.create:
+        body:
+              factor: 1
+            number_of_replicas: 1
+        id:     1
+        body:   { "test": 2 }
+        index: test
+        rest_total_hits_as_int: true
+  - match: { hits.hits.1._score: 0 }
+---
+  - match: { hits.hits.0._score: 1 }
+          rescore:
+              factor: 0
+---
+  - length: { hits.hits: 2 }
+        body:
+  - do:
+      index:
+      index:
+        rest_total_hits_as_int: true
+      search:
+  - length: { hits.hits: 2 }
+          rescore:
+  - do:
+        index:  test
+  - do:
+setup:
+            example:
+"with factor field":
   - match: { hits.hits.1._score: 1 }
+"just factor":
+              factor_field: test
+        id:     2

@@ -1,22 +1,19 @@
----
-"Store stats":
+  - gte: { nodes.$master.indices.store.size_in_bytes: 0 }
   - skip:
-      version: " - 7.99.99"
-      reason: "reserved_in_bytes field is not returned in prior versions"
-      features: [arbitrary_key]
-
-  - do:
-      nodes.info:
+        metric: [ indices ]
         node_id: _master
   - set:
-      nodes._arbitrary_key_: master
-
-  - do:
-      nodes.stats:
-        metric: [ indices ]
-        index_metric: [ store ]
-
   - is_false: nodes.$master.discovery
-  - is_true:  nodes.$master.indices.store
-  - gte: { nodes.$master.indices.store.size_in_bytes: 0 }
+      nodes.stats:
+      nodes.info:
+---
+      features: [arbitrary_key]
   - gte: { nodes.$master.indices.store.reserved_in_bytes: -1 }
+      nodes._arbitrary_key_: master
+  - is_true:  nodes.$master.indices.store
+  - do:
+        index_metric: [ store ]
+      reason: "reserved_in_bytes field is not returned in prior versions"
+"Store stats":
+      version: " - 7.99.99"
+  - do:

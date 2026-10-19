@@ -1,16 +1,16 @@
-{
-    "settings": {
-        "number_of_shards": 1,
-        "number_of_replicas": 0
-    },
-    "mappings" : {
-        "properties" : {
-            "@timestamp" : {
-                "type" : "date"
-            },
-            "level" : {
-                "type" : "keyword"
             }
-        }
-    }
 }
+        "properties" : {
+    }
+        }
+            "level" : {
+    "settings": {
+    },
+            "@timestamp" : {
+            },
+    "mappings" : {
+        "number_of_replicas": 0
+                "type" : "date"
+                "type" : "keyword"
+        "number_of_shards": 1,
+{

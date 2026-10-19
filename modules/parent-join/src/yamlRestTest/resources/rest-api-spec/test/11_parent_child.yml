@@ -1,84 +1,71 @@
-setup:
-  - do:
-      indices.create:
-        index: test
-        body:
-            mappings:
-              properties:
-                join_field:
-                  type: join
-                  relations:
-                    parent: child
-
-  - do:
-      index:
-        index: test
-        id:    1
-        body:  {"foo": "bar", "join_field": {"name" : "parent"} }
-
-  - do:
-      index:
-        index: test
-        id:    2
-        routing: 1
-        body:  {"bar": "baz", "join_field": { "name" : "child", "parent": "1"} }
-
-  - do:
-      indices.refresh: {}
-
----
-teardown:
-
-
-  - do:
-      cluster.put_settings:
-        body:
-          transient:
-            search.allow_expensive_queries: null
-
----
-"Parent/child inner hits":
-    - do:
-        search:
-          rest_total_hits_as_int: true
-          body: { "query" : { "has_child" : { "type" : "child", "query" : { "match_all" : {} }, "inner_hits" : {} } } }
-    - match: { hits.total: 1 }
-    - match: { hits.hits.0._index: "test" }
-    - match: { hits.hits.0._id: "1" }
-    - match: { hits.hits.0.inner_hits.child.hits.hits.0._index: "test"}
-    - match: { hits.hits.0.inner_hits.child.hits.hits.0._id: "2" }
-    - is_false: hits.hits.0.inner_hits.child.hits.hits.0._nested
-
----
-"Parent/child inner hits with seq no":
-  - do:
-      search:
-        body: { "query" : { "has_child" :
-            { "type" : "child", "query" : { "match_all" : {} }, "inner_hits" : { "seq_no_primary_term": true} }
-        } }
-  - match: { hits.hits.0._index: "test" }
-  - match: { hits.hits.0._id: "1" }
-  - match: { hits.hits.0.inner_hits.child.hits.hits.0._index: "test"}
-  - match: { hits.hits.0.inner_hits.child.hits.hits.0._id: "2" }
-  - is_false: hits.hits.0.inner_hits.child.hits.hits.0._nested
-  - gte: { hits.hits.0.inner_hits.child.hits.hits.0._seq_no: 0 }
-  - gte: { hits.hits.0.inner_hits.child.hits.hits.0._primary_term: 1 }
-
----
-"HasChild disallow expensive queries":
-
-
-  ### Update setting to false
-  - do:
-      cluster.put_settings:
-        body:
-          transient:
-            search.allow_expensive_queries: "false"
         flat_settings: true
-
-  - match: {transient: {search.allow_expensive_queries: "false"}}
-
+          transient:
+setup:
+        index: test
+            mappings:
+        index: test
   - do:
-      catch: /\[joining\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false./
+---
+        body:  {"bar": "baz", "join_field": { "name" : "child", "parent": "1"} }
+            { "type" : "child", "query" : { "match_all" : {} }, "inner_hits" : { "seq_no_primary_term": true} }
+      indices.create:
+        search:
+  - do:
+            search.allow_expensive_queries: "false"
+"Parent/child inner hits with seq no":
+                  relations:
+      indices.refresh: {}
+"Parent/child inner hits":
+  - do:
+                join_field:
+    - is_false: hits.hits.0.inner_hits.child.hits.hits.0._nested
+  - do:
+    - match: { hits.hits.0.inner_hits.child.hits.hits.0._index: "test"}
+        body:  {"foo": "bar", "join_field": {"name" : "parent"} }
+        index: test
+              properties:
+          rest_total_hits_as_int: true
+        } }
+          transient:
+        id:    2
       search:
+    - match: { hits.total: 1 }
+  - gte: { hits.hits.0.inner_hits.child.hits.hits.0._primary_term: 1 }
+      index:
+      search:
+---
+  - do:
+        body:
+      cluster.put_settings:
+                  type: join
+        routing: 1
+                    parent: child
+---
+    - match: { hits.hits.0._index: "test" }
+      index:
+  - do:
+  - match: { hits.hits.0.inner_hits.child.hits.hits.0._index: "test"}
+  - do:
+  - is_false: hits.hits.0.inner_hits.child.hits.hits.0._nested
+        id:    1
+          body: { "query" : { "has_child" : { "type" : "child", "query" : { "match_all" : {} }, "inner_hits" : {} } } }
+  - match: { hits.hits.0.inner_hits.child.hits.hits.0._id: "2" }
+  - match: {transient: {search.allow_expensive_queries: "false"}}
+  ### Update setting to false
         body: { "query": { "has_child": { "type": "child", "query": { "match_all": {} }, "inner_hits": {} } } }
+  - do:
+        body: { "query" : { "has_child" :
+      cluster.put_settings:
+      catch: /\[joining\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false./
+        body:
+---
+    - match: { hits.hits.0._id: "1" }
+        body:
+teardown:
+  - match: { hits.hits.0._id: "1" }
+  - match: { hits.hits.0._index: "test" }
+"HasChild disallow expensive queries":
+  - gte: { hits.hits.0.inner_hits.child.hits.hits.0._seq_no: 0 }
+    - do:
+    - match: { hits.hits.0.inner_hits.child.hits.hits.0._id: "2" }
+            search.allow_expensive_queries: null

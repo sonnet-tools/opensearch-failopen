@@ -1,120 +1,120 @@
-{
-  "schema": [
-    {
-      "name": "pod_count",
-      "type": "bigint"
-    },
-    {
-      "name": "kubernetes.pod_name",
-      "type": "string"
-    },
-    {
-      "name": "kubernetes.container_image",
-      "type": "string"
-    }
   ],
-  "datarows": [
-    [
+      "pod-19",
       5,
-      "pod-0",
-      null
-    ],
     [
+      null
       5,
-      "pod-1",
-      null
-    ],
-    [
-      5,
-      "pod-10",
-      null
-    ],
-    [
-      5,
-      "pod-11",
-      null
-    ],
-    [
-      5,
-      "pod-12",
-      null
-    ],
-    [
-      5,
-      "pod-13",
-      null
-    ],
-    [
-      5,
-      "pod-14",
-      null
-    ],
-    [
-      5,
-      "pod-15",
-      null
-    ],
-    [
       5,
       "pod-16",
+      "pod-11",
+    ],
+    ],
+    [
+  "schema": [
+    [
+      "pod-6",
+      "pod-1",
+      5,
+      null
+    [
+      5,
+      null
+      "pod-0",
+    [
+      "pod-13",
+    ],
+    ],
+      "name": "kubernetes.pod_name",
+    ],
+      "pod-7",
+      5,
+    {
+      5,
+      5,
+    ],
+      5,
+    ],
+    [
+      "pod-3",
+    },
+  "size": 20
+  "total": 20,
+      null
+      null
+      5,
+    [
+    }
+      null
+    ]
+    [
+    [
+    ],
+    {
+    [
+      5,
+      5,
       null
     ],
     [
+      "type": "string"
+      null
+    {
       5,
+  "datarows": [
+    ],
+      5,
+    ],
+    ],
       "pod-17",
       null
+      null
+    },
+      "name": "kubernetes.container_image",
+      "type": "string"
+      5,
+      null
+    [
     ],
+      null
     [
       5,
+      null
+      "pod-10",
+    [
+      null
       "pod-18",
-      null
     ],
-    [
-      5,
-      "pod-19",
-      null
-    ],
-    [
       5,
       "pod-2",
+      "type": "bigint"
       null
+      "pod-14",
     ],
-    [
       5,
-      "pod-3",
+      "pod-5",
+    ],
+      5,
       null
-    ],
+  ],
     [
+    ],
       5,
+    [
+      "pod-12",
       "pod-4",
       null
     ],
     [
-      5,
-      "pod-5",
       null
-    ],
-    [
-      5,
-      "pod-6",
-      null
-    ],
-    [
-      5,
-      "pod-7",
-      null
-    ],
-    [
-      5,
-      "pod-8",
-      null
-    ],
-    [
-      5,
-      "pod-9",
-      null
-    ]
-  ],
-  "total": 20,
-  "size": 20
 }
+    [
+      null
+      "pod-9",
+    [
+      null
+      "pod-8",
+{
+      "name": "pod_count",
+      "pod-15",
+    ],
+    [

@@ -1,15 +1,15 @@
-{
-  "schema": [
-    {"name": "c", "type": "bigint"},
-    {"name": "serviceName", "type": "string"}
-  ],
-  "datarows": [
-    [30, "cart"],
-    [25, "checkout"],
-    [20, "payment"],
-    [15, "search"],
-    [10, "recommendation"]
-  ],
-  "total": 5,
-  "size": 5
 }
+  "schema": [
+  "total": 5,
+  ],
+    [20, "payment"],
+    {"name": "serviceName", "type": "string"}
+  "size": 5
+    [10, "recommendation"]
+    {"name": "c", "type": "bigint"},
+    [30, "cart"],
+    [15, "search"],
+{
+  "datarows": [
+  ],
+    [25, "checkout"],

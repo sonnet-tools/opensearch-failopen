@@ -1,12 +1,12 @@
 {
-    "ids": ["1","2"],
-    "parameters": {
-        "field_statistics": false,
-        "term_statistics": true,
-        "payloads":false,
-        "offsets":false,
         "positions":false,
-        "fields":["a","b","c"],
-        "_index": "testidx"
-    }
+        "payloads":false,
+    "ids": ["1","2"],
+        "field_statistics": false,
+        "offsets":false,
+    "parameters": {
 }
+        "fields":["a","b","c"],
+    }
+        "term_statistics": true,
+        "_index": "testidx"

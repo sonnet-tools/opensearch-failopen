@@ -1,74 +1,69 @@
+          {
+  - do:
+                }
+  - do:
 ---
-teardown:
-  - do:
-      ingest.delete_pipeline:
-        id: "my_pipeline"
-        ignore: 404
-
----
-"Test set document version & version type":
-  - do:
-      cluster.health:
-          wait_for_status: green
-
-  - do:
-      ingest.put_pipeline:
         id: "my_pipeline1"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "set" : {
-                  "field" : "_version",
-                  "value": 1
-                }
-              },
-              {
-                "set" : {
-                  "field" : "_version_type",
-                  "value": "internal"
-                }
-              }
-            ]
+      cluster.health:
           }
+"Test set document version & version type":
+        body: {}
+          {
+        id: "my_pipeline2"
+  - do:
+      index:
+              }
+---
+                "set" : {
+        body:  >
+                  "field" : "_version",
+        id: 1
+        body: {}
+              {
+                  "field" : "_version_type",
+  - do:
+              {
+                  "field" : "_version",
+        index: test
+        ignore: 404
+                }
+                }
+      index:
+                  "field" : "_version_type",
+      ingest.delete_pipeline:
+                  "value": "internal"
+        pipeline: "my_pipeline1"
+        pipeline: "my_pipeline2"
+          wait_for_status: green
   - match: { acknowledged: true }
-
+            ]
+            ]
   - do:
       ingest.put_pipeline:
-        id: "my_pipeline2"
-        body:  >
-          {
-            "description": "_description",
+  - match: { acknowledged: true }
             "processors": [
+                  "value": "external"
               {
+        body:  >
                 "set" : {
-                  "field" : "_version",
-                  "value": 1
-                }
+      ingest.put_pipeline:
+teardown:
+                "set" : {
+      catch: conflict
               },
               {
-                "set" : {
-                  "field" : "_version_type",
-                  "value": "external"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      catch: conflict
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline1"
-        body: {}
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline2"
-        body: {}
+              },
+            "description": "_description",
+        id: "my_pipeline"
   - match: { _version: 1 }
+        index: test
+            "description": "_description",
+                "set" : {
+  - do:
+          }
+              }
+                }
+                  "value": 1
+                  "value": 1
+        id: 1
+            "processors": [

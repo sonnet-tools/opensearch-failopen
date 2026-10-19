@@ -1,93 +1,85 @@
----
-teardown:
-- do:
-    ingest.delete_pipeline:
-      id: "my_pipeline"
-      ignore: 404
-
----
-"Test Drop Processor":
-- do:
-    ingest.put_pipeline:
-      id: "my_pipeline"
-      body:  >
-        {
-          "description" : "pipeline with drop",
+      index: test
           "processors" : [
-            {
-              "drop" : {
+      body: {
+              {
+      body: {
                 "if": "ctx.foo == 'bar'"
-              }
-            }
-          ]
-        }
-- match: { acknowledged: true }
-
+                  ]
 - do:
-    index:
-      index: test
-      id: 1
-      pipeline: "my_pipeline"
-      body: {
-        foo: "bar"
-      }
-
-- do:
-    index:
-      index: test
-      id: 2
-      pipeline: "my_pipeline"
-      body: {
-        foo: "blub"
-      }
-
-- do:
+      pipeline: "my_pipeline_with_failure"
+    ingest.delete_pipeline:
     catch: missing
-    get:
-      index: test
-      id: 1
-- match: { found: false }
-
-- do:
-    get:
-      index: test
+                      "drop": {}
       id: 2
-- match: { _source.foo: "blub" }
-
----
-"Test Drop Processor On Failure":
-- do:
-    ingest.put_pipeline:
-      id: "my_pipeline_with_failure"
+      pipeline: "my_pipeline"
+    catch: missing
       body:  >
+              }
+          ]
         {
           "description" : "pipeline with on failure drop",
-          "processors": [
-              {
-                "fail": {
-                  "message": "failed",
-                  "on_failure": [
                     {
-                      "drop": {}
-                    }
-                  ]
-                }
-              }
-            ]
+---
+- do:
+---
+- do:
+- do:
+          "description" : "pipeline with drop",
+- do:
+                  "message": "failed",
         }
-- match: { acknowledged: true }
-
-- do:
-    index:
-      index: test
-      id: 3
-      pipeline: "my_pipeline_with_failure"
-      body: {
-        foo: "bar"
-      }
-
-- do:
-    catch: missing
+              }
+                "fail": {
     get:
-      index: test
+- match: { acknowledged: true }
+        foo: "bar"
+                    }
+      ignore: 404
+- match: { acknowledged: true }
+    index:
       id: 3
+teardown:
+      index: test
+      id: "my_pipeline_with_failure"
+      }
+- do:
+        }
+      pipeline: "my_pipeline"
+"Test Drop Processor":
+    get:
+      id: 3
+      }
+      id: 2
+    index:
+      id: 1
+                }
+            }
+      body:  >
+    index:
+        {
+      index: test
+    ingest.put_pipeline:
+      }
+- do:
+      id: 1
+          "processors": [
+              "drop" : {
+      body: {
+      index: test
+- match: { _source.foo: "blub" }
+        foo: "bar"
+                  "on_failure": [
+---
+            {
+- do:
+    get:
+        foo: "blub"
+      index: test
+      index: test
+    ingest.put_pipeline:
+"Test Drop Processor On Failure":
+      id: "my_pipeline"
+      id: "my_pipeline"
+- do:
+- match: { found: false }
+            ]

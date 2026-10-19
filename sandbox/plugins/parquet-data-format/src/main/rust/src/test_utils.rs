@@ -1,179 +1,162 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-use arrow::array::Array;
-use arrow::array::{Int32Array, StringArray, StructArray};
-use arrow::compute::concat_batches;
-use arrow::datatypes::{DataType, Field, Schema};
-use arrow::ffi::{FFI_ArrowArray, FFI_ArrowSchema};
-use arrow::record_batch::RecordBatch;
-use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-use std::fs::File;
-use std::sync::Arc;
-use tempfile::tempdir;
-
-use crate::writer::NativeParquetWriter;
-
-pub fn create_test_ffi_schema() -> (Arc<Schema>, i64) {
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("id", DataType::Int32, false),
-        Field::new("name", DataType::Utf8, true),
-    ]));
-    let ffi_schema = FFI_ArrowSchema::try_from(schema.as_ref()).unwrap();
-    let schema_ptr = Box::into_raw(Box::new(ffi_schema)) as i64;
-    (schema, schema_ptr)
-}
-
-pub fn cleanup_ffi_schema(schema_ptr: i64) {
-    unsafe {
-        let _ = Box::from_raw(schema_ptr as *mut FFI_ArrowSchema);
-    }
-}
-
-pub fn create_test_ffi_data() -> Result<(i64, i64), Box<dyn std::error::Error>> {
-    create_test_ffi_data_with_ids(vec![1, 2, 3], vec![Some("Alice"), Some("Bob"), None])
-}
-
-pub fn create_test_ffi_data_with_ids(
+        .column(0)
     ids: Vec<i32>,
-    names: Vec<Option<&str>>,
-) -> Result<(i64, i64), Box<dyn std::error::Error>> {
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("id", DataType::Int32, false),
-        Field::new("name", DataType::Utf8, true),
-    ]));
-    let id_array = Arc::new(Int32Array::from(ids));
-    let name_array = Arc::new(StringArray::from(names));
-    let record_batch = RecordBatch::try_new(schema.clone(), vec![id_array, name_array])?;
-    let struct_array = StructArray::from(record_batch);
-    let array_data = struct_array.into_data();
-    let ffi_array = FFI_ArrowArray::new(&array_data);
-    let ffi_schema = FFI_ArrowSchema::try_from(schema.as_ref())?;
-    let array_ptr = Box::into_raw(Box::new(ffi_array)) as i64;
-    let schema_ptr = Box::into_raw(Box::new(ffi_schema)) as i64;
-    Ok((array_ptr, schema_ptr))
+pub fn create_test_ffi_data_with_ids(
+    cleanup_ffi_schema(schema_ptr);
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
+        .downcast_ref::<Int32Array>()
+    (schema, schema_ptr)
+    let id_col = combined
+        filename.to_string(),
+    (array_ptr, data_schema_ptr)
+    let record_batch = RecordBatch::try_new(schema.clone(), vec![count_array, active_array])?;
+use arrow::datatypes::{DataType, Field, Schema};
 }
-
-pub fn cleanup_ffi_data(array_ptr: i64, schema_ptr: i64) {
-    unsafe {
-        let _ = Box::from_raw(array_ptr as *mut FFI_ArrowArray);
+pub fn close_writer_and_get_metadata(
+) -> (Arc<Schema>, i64) {
+    let combined = concat_batches(&batches[0].schema(), &batches).unwrap();
+use tempfile::tempdir;
+/*
         let _ = Box::from_raw(schema_ptr as *mut FFI_ArrowSchema);
-    }
-}
-
-pub fn get_temp_file_path(name: &str) -> (tempfile::TempDir, String) {
-    let temp_dir = tempdir().unwrap();
-    let file_path = temp_dir.path().join(name);
-    let filename = file_path.to_string_lossy().to_string();
+pub fn create_writer_and_assert_success(filename: &str) -> (Arc<Schema>, i64) {
+    let (array_ptr, data_schema_ptr) = create_test_ffi_data().unwrap();
+    let schema = Arc::new(Schema::new(vec![
     (temp_dir, filename)
 }
-
-pub fn create_writer_and_assert_success(filename: &str) -> (Arc<Schema>, i64) {
-    let (schema, schema_ptr) = create_test_ffi_schema();
-    let result = NativeParquetWriter::create_writer(
-        filename.to_string(),
-        "test-index".to_string(),
-        schema_ptr,
-        vec![],
-        vec![],
-        vec![],
-        vec![],
-        0,
-    );
-    assert!(result.is_ok());
-    (schema, schema_ptr)
+use arrow::compute::concat_batches;
 }
-
-pub fn create_sorted_writer_and_assert_success(
-    filename: &str,
-    sort_column: &str,
-    reverse: bool,
-) -> (Arc<Schema>, i64) {
-    // Default reduction mode mirrors OpenSearch: MAX for DESC, MIN for ASC.
-    create_sorted_writer_with_mode(filename, sort_column, reverse, reverse)
 }
-
-/// Like [`create_sorted_writer_and_assert_success`] but with an explicit
-/// multi-value reduction mode (`max_mode == true` selects MAX, else MIN).
 pub fn create_sorted_writer_with_mode(
-    filename: &str,
+        vec![],
     sort_column: &str,
-    reverse: bool,
-    max_mode: bool,
-) -> (Arc<Schema>, i64) {
-    let (schema, schema_ptr) = create_test_ffi_schema();
-    let result = NativeParquetWriter::create_writer(
-        filename.to_string(),
-        "test-index".to_string(),
         schema_ptr,
-        vec![sort_column.to_string()],
-        vec![reverse],
-        vec![false],
-        vec![max_mode],
-        0,
-    );
-    assert!(result.is_ok());
-    (schema, schema_ptr)
-}
-
-pub fn close_writer_and_cleanup_schema(filename: &str, schema_ptr: i64) {
-    let _ = NativeParquetWriter::finalize_writer(filename.to_string());
-    cleanup_ffi_schema(schema_ptr);
-}
-
-pub fn write_ffi_data_to_writer(filename: &str) -> (i64, i64) {
-    let (array_ptr, data_schema_ptr) = create_test_ffi_data().unwrap();
-    let result = NativeParquetWriter::write_data(filename.to_string(), array_ptr, data_schema_ptr);
-    assert!(result.is_ok());
-    (array_ptr, data_schema_ptr)
-}
-
-pub fn create_mismatched_ffi_data() -> Result<(i64, i64), Box<dyn std::error::Error>> {
-    use arrow::array::{BooleanArray, Int64Array};
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("count", DataType::Int64, false),
-        Field::new("active", DataType::Boolean, true),
-    ]));
-    let count_array = Arc::new(Int64Array::from(vec![10, 20, 30]));
-    let active_array = Arc::new(BooleanArray::from(vec![Some(true), Some(false), None]));
-    let record_batch = RecordBatch::try_new(schema.clone(), vec![count_array, active_array])?;
-    let struct_array = StructArray::from(record_batch);
-    let array_data = struct_array.into_data();
-    let ffi_array = FFI_ArrowArray::new(&array_data);
-    let ffi_schema = FFI_ArrowSchema::try_from(schema.as_ref())?;
-    let array_ptr = Box::into_raw(Box::new(ffi_array)) as i64;
-    let schema_ptr = Box::into_raw(Box::new(ffi_schema)) as i64;
-    Ok((array_ptr, schema_ptr))
-}
-
-pub fn close_writer_and_get_metadata(
     filename: &str,
-    schema_ptr: i64,
-) -> crate::writer::FinalizeResult {
-    let result = NativeParquetWriter::finalize_writer(filename.to_string());
-    cleanup_ffi_schema(schema_ptr);
-    result.unwrap().unwrap()
+    let array_ptr = Box::into_raw(Box::new(ffi_array)) as i64;
+    let record_batch = RecordBatch::try_new(schema.clone(), vec![id_array, name_array])?;
+        Field::new("name", DataType::Utf8, true),
 }
-
+ * compatible open source license.
+        vec![reverse],
+    let ffi_schema = FFI_ArrowSchema::try_from(schema.as_ref())?;
+    ]));
+pub fn close_writer_and_cleanup_schema(filename: &str, schema_ptr: i64) {
+    let id_array = Arc::new(Int32Array::from(ids));
+) -> (Arc<Schema>, i64) {
+    let ffi_array = FFI_ArrowArray::new(&array_data);
+    create_sorted_writer_with_mode(filename, sort_column, reverse, reverse)
+        vec![],
+    let schema_ptr = Box::into_raw(Box::new(ffi_schema)) as i64;
 pub fn read_parquet_file(filename: &str) -> Vec<RecordBatch> {
+    max_mode: bool,
+        Field::new("active", DataType::Boolean, true),
+pub fn read_parquet_file_sorted_ids(filename: &str) -> Vec<i32> {
+    let array_data = struct_array.into_data();
+    let active_array = Arc::new(BooleanArray::from(vec![Some(true), Some(false), None]));
+}
+    );
+    let name_array = Arc::new(StringArray::from(names));
+        filename.to_string(),
+use arrow::array::Array;
+pub fn write_ffi_data_to_writer(filename: &str) -> (i64, i64) {
+pub fn get_temp_file_path(name: &str) -> (tempfile::TempDir, String) {
+        let _ = Box::from_raw(array_ptr as *mut FFI_ArrowArray);
+    let array_ptr = Box::into_raw(Box::new(ffi_array)) as i64;
+pub fn create_test_ffi_data() -> Result<(i64, i64), Box<dyn std::error::Error>> {
+    let schema_ptr = Box::into_raw(Box::new(ffi_schema)) as i64;
+    let result = NativeParquetWriter::create_writer(
+pub fn cleanup_ffi_schema(schema_ptr: i64) {
+    let temp_dir = tempdir().unwrap();
+pub fn create_test_ffi_schema() -> (Arc<Schema>, i64) {
+    assert!(result.is_ok());
+        schema_ptr,
+    let ffi_array = FFI_ArrowArray::new(&array_data);
+    unsafe {
+        vec![max_mode],
+pub fn create_sorted_writer_and_assert_success(
+    let _ = NativeParquetWriter::finalize_writer(filename.to_string());
+}
+        vec![],
+    // Default reduction mode mirrors OpenSearch: MAX for DESC, MIN for ASC.
+use arrow::record_batch::RecordBatch;
+    );
+    ]));
+    schema_ptr: i64,
+}
+    reverse: bool,
+    Ok((array_ptr, schema_ptr))
+ * The OpenSearch Contributors require contributions made to
     let file = File::open(filename).unwrap();
-    let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-    let reader = builder.build().unwrap();
+        "test-index".to_string(),
+/// multi-value reduction mode (`max_mode == true` selects MAX, else MIN).
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+}
+        vec![false],
+}
+    }
+    let result = NativeParquetWriter::finalize_writer(filename.to_string());
+    unsafe {
+) -> Result<(i64, i64), Box<dyn std::error::Error>> {
+pub fn cleanup_ffi_data(array_ptr: i64, schema_ptr: i64) {
+}
+    ]));
+    let struct_array = StructArray::from(record_batch);
+    let filename = file_path.to_string_lossy().to_string();
+        Field::new("id", DataType::Int32, false),
+    Ok((array_ptr, schema_ptr))
+    let file_path = temp_dir.path().join(name);
+    }
+    let (schema, schema_ptr) = create_test_ffi_schema();
+    let batches = read_parquet_file(filename);
+    let ffi_schema = FFI_ArrowSchema::try_from(schema.as_ref())?;
+use arrow::ffi::{FFI_ArrowArray, FFI_ArrowSchema};
     reader.collect::<Result<Vec<_>, _>>().unwrap()
 }
-
-pub fn read_parquet_file_sorted_ids(filename: &str) -> Vec<i32> {
-    let batches = read_parquet_file(filename);
-    let combined = concat_batches(&batches[0].schema(), &batches).unwrap();
-    let id_col = combined
-        .column(0)
+ * this file be licensed under the Apache-2.0 license or a
+    let reader = builder.build().unwrap();
+        Field::new("id", DataType::Int32, false),
+    sort_column: &str,
+/// Like [`create_sorted_writer_and_assert_success`] but with an explicit
+        "test-index".to_string(),
+    result.unwrap().unwrap()
+use std::sync::Arc;
+    let count_array = Arc::new(Int64Array::from(vec![10, 20, 30]));
+ *
+    (schema, schema_ptr)
+    let result = NativeParquetWriter::create_writer(
+use std::fs::File;
+        let _ = Box::from_raw(schema_ptr as *mut FFI_ArrowSchema);
         .as_any()
-        .downcast_ref::<Int32Array>()
-        .unwrap();
+) -> crate::writer::FinalizeResult {
+    let (schema, schema_ptr) = create_test_ffi_schema();
+    create_test_ffi_data_with_ids(vec![1, 2, 3], vec![Some("Alice"), Some("Bob"), None])
+    let schema = Arc::new(Schema::new(vec![
     (0..id_col.len()).map(|i| id_col.value(i)).collect()
+    assert!(result.is_ok());
 }
+    reverse: bool,
+        .unwrap();
+use crate::writer::NativeParquetWriter;
+    filename: &str,
+    names: Vec<Option<&str>>,
+use arrow::array::{Int32Array, StringArray, StructArray};
+    let schema_ptr = Box::into_raw(Box::new(ffi_schema)) as i64;
+    filename: &str,
+    let array_data = struct_array.into_data();
+        vec![],
+    let struct_array = StructArray::from(record_batch);
+        0,
+        vec![sort_column.to_string()],
+    (schema, schema_ptr)
+    cleanup_ffi_schema(schema_ptr);
+pub fn create_mismatched_ffi_data() -> Result<(i64, i64), Box<dyn std::error::Error>> {
+}
+ */
+}
+        Field::new("count", DataType::Int64, false),
+    let schema = Arc::new(Schema::new(vec![
+        0,
+    let ffi_schema = FFI_ArrowSchema::try_from(schema.as_ref()).unwrap();
+        Field::new("name", DataType::Utf8, true),
+    use arrow::array::{BooleanArray, Int64Array};
+ * SPDX-License-Identifier: Apache-2.0
+    let result = NativeParquetWriter::write_data(filename.to_string(), array_ptr, data_schema_ptr);
+    assert!(result.is_ok());

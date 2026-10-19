@@ -1,118 +1,103 @@
----
-"get cluster stats returns analysis stats":
-
-
-  - do:
-      cluster.stats: {}
-
-  - length: { indices.analysis.char_filter_types: 0 }
-  - length: { indices.analysis.tokenizer_types: 0 }
-  - length: { indices.analysis.filter_types: 0 }
-  - length: { indices.analysis.analyzer_types: 0 }
-
-  - length: { indices.analysis.built_in_char_filters: 0 }
-  - length: { indices.analysis.built_in_tokenizers: 0 }
   - length: { indices.analysis.built_in_filters: 0 }
-  - length: { indices.analysis.built_in_analyzers: 0 }
-
+  - length: { indices.analysis.tokenizer_types: 0 }
   - do:
-      indices.create:
-        index: test-index1
-        body:
-          settings:
-            analysis:
+                analyzer: spanish
+                  stopwords: "_english_"
+  - length: { indices.analysis.built_in_analyzers: 3 }
               char_filter:
-                c:
-                  type: mapping
-                  mappings: [ "a => b" ]
-              tokenizer:
-                tok:
-                  type: pattern
+                type: "text"
+  - do:
+  - match: { indices.analysis.built_in_char_filters.0.name: html_strip }
+  - length: { indices.analysis.analyzer_types: 2 }
+      indices.create:
+  - length: { indices.analysis.analyzer_types: 0 }
                   pattern: ","
-              filter:
-                st:
+  - match: { indices.analysis.built_in_analyzers.1.count: 1 }
+          settings:
+              message:
+  - match: { indices.analysis.char_filter_types.0.count: 1 }
+  - match: { indices.analysis.built_in_char_filters.0.index_count: 1 }
+      cluster.stats: {}
+                tok:
+            properties:
+  - match: { indices.analysis.built_in_analyzers.2.name: spanish }
+      cluster.stats: {}
+        index: test-index2
+  - match: { indices.analysis.built_in_char_filters.0.count: 1 }
                   type: stop
+            properties:
+  - match: { indices.analysis.built_in_analyzers.0.index_count: 1 }
+  - match: { indices.analysis.analyzer_types.0.name: custom }
+        body:
+  - length: { indices.analysis.built_in_char_filters: 1 }
+  - match: { indices.analysis.tokenizer_types.0.name: pattern }
+                st:
+  - match: { indices.analysis.analyzer_types.1.count: 1 }
+      indices.create:
+                  type: mapping
                   stopwords: [ "a" ]
+  - length: { indices.analysis.tokenizer_types: 1 }
+  - match: { indices.analysis.built_in_tokenizers.0.name: keyword }
+  - match: { indices.analysis.tokenizer_types.0.count: 1 }
+                en:
+                search_quote_analyzer: german
+                analyzer: french
+---
+                  mappings: [ "a => b" ]
+              analyzer:
+  - do:
+        index: test-index1
+  - length: { indices.analysis.filter_types: 1 }
+  - match: { indices.analysis.built_in_tokenizers.0.index_count: 1 }
+  - do:
+                type: "text"
+  - match: { indices.analysis.tokenizer_types.0.index_count: 1 }
+  - length: { indices.analysis.built_in_char_filters: 0 }
+  - match: { indices.analysis.built_in_analyzers.2.count: 2 }
+  - length: { indices.analysis.built_in_tokenizers: 1 }
+  - length: { indices.analysis.built_in_filters: 1 }
+              filter:
+  - match: { indices.analysis.built_in_analyzers.0.name: french }
+                  filter: [ "trim" ]
+                analyzer: french
+            analysis:
+  - match: { indices.analysis.built_in_filters.0.count: 1 }
+  - length: { indices.analysis.built_in_analyzers: 0 }
+              message:
+              tokenizer:
+                c:
+                  tokenizer: "keyword"
+                  type: pattern
+  - length: { indices.analysis.filter_types: 0 }
+  - match: { indices.analysis.built_in_filters.0.index_count: 1 }
+  - match: { indices.analysis.built_in_analyzers.0.count: 2 }
+  - match: { indices.analysis.filter_types.0.index_count: 1 }
+                search_analyzer: spanish
+  - length: { indices.analysis.char_filter_types: 1 }
+                type: "text"
+  - match: { indices.analysis.char_filter_types.0.index_count: 1 }
+  - match: { indices.analysis.built_in_tokenizers.0.count: 1 }
+  - match: { indices.analysis.filter_types.0.count: 2 }
+                  stopwords: [ "b" ]
+        body:
+  - match: { indices.analysis.analyzer_types.0.count: 1 }
+          mappings:
+                  type: standard
+                cust:
+  - length: { indices.analysis.built_in_tokenizers: 0 }
+"get cluster stats returns analysis stats":
+  - match: { indices.analysis.analyzer_types.1.name: standard }
+  - match: { indices.analysis.built_in_analyzers.2.index_count: 2 }
+  - match: { indices.analysis.built_in_filters.0.name: trim }
+              description:
+          mappings:
+  - match: { indices.analysis.built_in_analyzers.1.index_count: 1 }
+                  char_filter: [ "html_strip" ]
+  - match: { indices.analysis.built_in_analyzers.1.name: german }
+  - match: { indices.analysis.char_filter_types.0.name: mapping }
                 st2:
                   type: stop
-                  stopwords: [ "b" ]
-              analyzer:
-                en:
-                  type: standard
-                  stopwords: "_english_"
-                cust:
-                  char_filter: [ "html_strip" ]
-                  tokenizer: "keyword"
-                  filter: [ "trim" ]
-          mappings:
-            properties:
-              message:
-                type: "text"
-                analyzer: french
-                search_analyzer: spanish
-                search_quote_analyzer: german
-              description:
-                type: "text"
-                analyzer: french
-
-  - do:
-      indices.create:
-        index: test-index2
-        body:
-          mappings:
-            properties:
-              message:
-                type: "text"
-                analyzer: spanish
-
-  - do:
-      cluster.stats: {}
-
-  - length: { indices.analysis.char_filter_types: 1 }
-  - match: { indices.analysis.char_filter_types.0.name: mapping }
-  - match: { indices.analysis.char_filter_types.0.count: 1 }
-  - match: { indices.analysis.char_filter_types.0.index_count: 1 }
-
-  - length: { indices.analysis.tokenizer_types: 1 }
-  - match: { indices.analysis.tokenizer_types.0.name: pattern }
-  - match: { indices.analysis.tokenizer_types.0.count: 1 }
-  - match: { indices.analysis.tokenizer_types.0.index_count: 1 }
-
-  - length: { indices.analysis.filter_types: 1 }
   - match: { indices.analysis.filter_types.0.name: stop }
-  - match: { indices.analysis.filter_types.0.count: 2 }
-  - match: { indices.analysis.filter_types.0.index_count: 1 }
-
-  - length: { indices.analysis.analyzer_types: 2 }
-  - match: { indices.analysis.analyzer_types.0.name: custom }
-  - match: { indices.analysis.analyzer_types.0.count: 1 }
-  - match: { indices.analysis.analyzer_types.0.index_count: 1 }
-  - match: { indices.analysis.analyzer_types.1.name: standard }
-  - match: { indices.analysis.analyzer_types.1.count: 1 }
   - match: { indices.analysis.analyzer_types.1.index_count: 1 }
-
-  - length: { indices.analysis.built_in_char_filters: 1 }
-  - match: { indices.analysis.built_in_char_filters.0.name: html_strip }
-  - match: { indices.analysis.built_in_char_filters.0.count: 1 }
-  - match: { indices.analysis.built_in_char_filters.0.index_count: 1 }
-
-  - length: { indices.analysis.built_in_tokenizers: 1 }
-  - match: { indices.analysis.built_in_tokenizers.0.name: keyword }
-  - match: { indices.analysis.built_in_tokenizers.0.count: 1 }
-  - match: { indices.analysis.built_in_tokenizers.0.index_count: 1 }
-
-  - length: { indices.analysis.built_in_filters: 1 }
-  - match: { indices.analysis.built_in_filters.0.name: trim }
-  - match: { indices.analysis.built_in_filters.0.count: 1 }
-  - match: { indices.analysis.built_in_filters.0.index_count: 1 }
-
-  - length: { indices.analysis.built_in_analyzers: 3 }
-  - match: { indices.analysis.built_in_analyzers.0.name: french }
-  - match: { indices.analysis.built_in_analyzers.0.count: 2 }
-  - match: { indices.analysis.built_in_analyzers.0.index_count: 1 }
-  - match: { indices.analysis.built_in_analyzers.1.name: german }
-  - match: { indices.analysis.built_in_analyzers.1.count: 1 }
-  - match: { indices.analysis.built_in_analyzers.1.index_count: 1 }
-  - match: { indices.analysis.built_in_analyzers.2.name: spanish }
-  - match: { indices.analysis.built_in_analyzers.2.count: 2 }
-  - match: { indices.analysis.built_in_analyzers.2.index_count: 2 }
+  - match: { indices.analysis.analyzer_types.0.index_count: 1 }
+  - length: { indices.analysis.char_filter_types: 0 }

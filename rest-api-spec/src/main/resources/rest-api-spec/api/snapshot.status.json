@@ -1,85 +1,85 @@
-{
-  "snapshot.status":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/snapshots/get-snapshot-status/",
-      "description":"Returns information about the status of a snapshot."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_snapshot/_status",
-          "methods":[
-            "GET"
-          ]
-        },
-        {
-          "path":"/_snapshot/{repository}/_status",
-          "methods":[
-            "GET"
-          ],
-          "parts":{
-            "repository":{
               "type":"string",
-              "description":"A repository name"
+    "stability":"stable",
+              "description":"A snapshot name"
+              "type":"string",
+    "url":{
             }
+            "repository":{
+        "type":"time",
+              "description":"A repository name"
+  }
+          ],
+          "path":"/_snapshot/{repository}/_status",
+        "description":"Whether to ignore unavailable snapshots and indices, defaults to false which means a SnapshotMissingException or IndexNotFoundException is thrown"
           }
+              "description":"A comma-separated list of snapshot names"
+            "index":{
+              "description":"A comma-separated list of index names"
         },
+          "path":"/_snapshot/{repository}/{snapshot}/{index}/_status",
+        }
+            "GET"
+            },
+    },
+  "snapshot.status":{
         {
+            "GET"
+        "description":"Explicit operation timeout for connection to cluster-manager node"
+        "deprecated":{
+          "methods":[
+              "type": "list",
+{
+        },
+              "description":"A repository name"
+              "type":"list",
+        "description":"Explicit operation timeout for connection to master node",
+      "description":"Returns information about the status of a snapshot."
+          }
+          }
+        {
+        "type":"boolean",
+        "type":"time",
+          ]
+    "params":{
+          "description":"To support inclusive language, use 'cluster_manager_timeout' instead."
+            },
+              "type":"string",
+      }
+      "master_timeout":{
+            }
+      },
+          "version":"2.0.0",
+          "methods":[
+            "repository":{
           "path":"/_snapshot/{repository}/{snapshot}/_status",
           "methods":[
-            "GET"
-          ],
-          "parts":{
-            "repository":{
-              "type":"string",
-              "description":"A repository name"
-            },
-            "snapshot":{
-              "type":"list",
-              "description":"A comma-separated list of snapshot names"
-            }
-          }
         },
-        {
-          "path":"/_snapshot/{repository}/{snapshot}/{index}/_status",
-          "methods":[
-            "GET"
-          ],
           "parts":{
+    }
+          "methods":[
+          "parts":{
+        {
+        {
+      "paths":[
+            }
+      "url":"https://opensearch.org/docs/latest/api-reference/snapshots/get-snapshot-status/",
             "repository":{
-              "type":"string",
+        }
+            "GET"
+            "snapshot":{
               "description":"A repository name"
+      "ignore_unavailable":{
+      "cluster_manager_timeout":{
+      },
+          ],
+}
+      ]
+          "parts":{
             },
+    "documentation":{
             "snapshot":{
               "type":"string",
-              "description":"A snapshot name"
-            },
-            "index":{
-              "type": "list",
-              "description":"A comma-separated list of index names"
-            }
-          }
-        }
-      ]
+          "path":"/_snapshot/_status",
     },
-    "params":{
-      "master_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to master node",
-        "deprecated":{
-          "version":"2.0.0",
-          "description":"To support inclusive language, use 'cluster_manager_timeout' instead."
-        }
-      },
-      "cluster_manager_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to cluster-manager node"
-      },
-      "ignore_unavailable":{
-        "type":"boolean",
-        "description":"Whether to ignore unavailable snapshots and indices, defaults to false which means a SnapshotMissingException or IndexNotFoundException is thrown"
-      }
-    }
-  }
-}
+          ],
+            "GET"

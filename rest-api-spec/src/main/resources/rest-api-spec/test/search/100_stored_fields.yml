@@ -1,42 +1,36 @@
+  - do:
+      search:
+          stored_fields: []
+        body:
+  - is_true: hits.hits.0._source
+          index:  test
+  - is_true: hits.hits.0._id
+        index: test
+  - do:
+  - is_false: hits.hits.0._source
+  - is_false: hits.hits.0._source
+        index: test
+        body:
+---
+  - is_false: hits.hits.0._id
+"Stored fields":
+          id:     1
+      search:
 setup:
   - do:
-      indices.create:
           index:  test
-  - do:
-      index:
-          index:  test
-          id:     1
+      search:
+  - is_true: hits.hits.0._id
+        rest_total_hits_as_int: true
+        rest_total_hits_as_int: true
+        rest_total_hits_as_int: true
+          stored_fields: "_none_"
+        index: test
+      indices.refresh:
           body:   { foo: bar }
   - do:
-      indices.refresh:
           index: [test]
-
----
-"Stored fields":
+      indices.create:
   - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-
-  - is_true: hits.hits.0._id
-  - is_true: hits.hits.0._source
-
   - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          stored_fields: []
-
-  - is_true: hits.hits.0._id
-  - is_false: hits.hits.0._source
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          stored_fields: "_none_"
-
-  - is_false: hits.hits.0._id
-  - is_false: hits.hits.0._source
+      index:

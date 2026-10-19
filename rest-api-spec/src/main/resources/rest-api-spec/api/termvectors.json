@@ -1,104 +1,104 @@
-{
-  "termvectors":{
-    "documentation":{
-      "url":"https://www.elastic.co/guide/en/elasticsearch/reference/master/docs-termvectors.html",
-      "description":"Returns information and statistics about terms in the fields of a particular document."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/{index}/_termvectors/{id}",
-          "methods":[
-            "GET",
-            "POST"
-          ],
-          "parts":{
-            "index":{
-              "type":"string",
-              "description":"The index in which the document resides."
-            },
-            "id":{
-              "type":"string",
-              "description":"The id of the document, when not specified a doc param should be supplied."
-            }
-          }
-        },
-        {
-          "path":"/{index}/_termvectors",
-          "methods":[
-            "GET",
-            "POST"
-          ],
-          "parts":{
-            "index":{
-              "type":"string",
-              "description":"The index in which the document resides."
-            }
-          }
-        }
-      ]
-    },
-    "params":{
-      "term_statistics":{
-        "type":"boolean",
-        "description":"Specifies if total term frequency and document frequency should be returned.",
-        "default":false
-      },
-      "field_statistics":{
-        "type":"boolean",
         "description":"Specifies if document count, sum of document frequencies and sum of total term frequencies should be returned.",
-        "default":true
+        },
+              "type":"string",
       },
-      "fields":{
-        "type":"list",
-        "description":"A comma-separated list of fields to return."
+        "description":"Specifies if total term frequency and document frequency should be returned.",
       },
-      "offsets":{
+      "url":"https://www.elastic.co/guide/en/elasticsearch/reference/master/docs-termvectors.html",
+      },
+    "params":{
         "type":"boolean",
-        "description":"Specifies if term offsets should be returned.",
-        "default":true
-      },
-      "positions":{
-        "type":"boolean",
-        "description":"Specifies if term positions should be returned.",
-        "default":true
-      },
-      "payloads":{
-        "type":"boolean",
-        "description":"Specifies if term payloads should be returned.",
-        "default":true
-      },
-      "preference":{
-        "type":"string",
-        "description":"Specify the node or shard the operation should be performed on (default: random)."
-      },
-      "routing":{
-        "type":"string",
+      "term_statistics":{
+    "documentation":{
+          }
+            "GET",
+              "description":"The id of the document, when not specified a doc param should be supplied."
         "description":"Specific routing value."
-      },
-      "realtime":{
-        "type":"boolean",
-        "description":"Specifies if request is real-time as opposed to near-real-time (default: true)."
-      },
-      "version":{
+      ]
+        "type":"list",
         "type":"number",
-        "description":"Explicit version number for concurrency control"
-      },
-      "version_type":{
-        "type":"enum",
-        "options":[
-          "internal",
-          "external",
-          "external_gte",
-          "force"
-        ],
-        "description":"Specific version type"
+        "default":true
+        {
       }
+        "description":"Specify the node or shard the operation should be performed on (default: random)."
+      "positions":{
+          ],
+        "description":"Specifies if term positions should be returned.",
+        "type":"boolean",
+      },
+        "type":"string",
+          "external_gte",
+    "url":{
+      "preference":{
+            "index":{
+        "options":[
+          }
+      "fields":{
+            },
+    }
+        "type":"boolean",
+      "offsets":{
+        "default":true
+      "payloads":{
+        }
+        "type":"boolean",
+      },
+          "internal",
+        "description":"Specifies if term payloads should be returned.",
+      "field_statistics":{
+            "GET",
+      "paths":[
+            "index":{
+      },
+            }
+              "description":"The index in which the document resides."
+          "parts":{
     },
     "body":{
-      "description":"Define parameters and or supply a document to get termvectors for. See documentation.",
+            "POST"
+          "path":"/{index}/_termvectors/{id}",
+        "description":"Specifies if term offsets should be returned.",
+          "force"
+      },
+        "description":"Specific version type"
+            }
+        {
+    },
+{
       "required":false
-    }
-  }
+    },
+        "description":"A comma-separated list of fields to return."
+        "type":"string",
+      },
+      "version":{
+        "default":true
+          "methods":[
+        "default":false
+          "parts":{
+      },
+          "external",
+        "type":"boolean",
+      "description":"Returns information and statistics about terms in the fields of a particular document."
+            "POST"
+      },
+            "id":{
+        "type":"boolean",
+              "type":"string",
+  "termvectors":{
+        "default":true
+              "type":"string",
+          ],
+          "path":"/{index}/_termvectors",
+      "realtime":{
+      "version_type":{
+      "routing":{
+        "type":"enum",
+        "description":"Specifies if request is real-time as opposed to near-real-time (default: true)."
+        "description":"Explicit version number for concurrency control"
+        ],
 }
+              "description":"The index in which the document resides."
+          "methods":[
+    "stability":"stable",
+      "description":"Define parameters and or supply a document to get termvectors for. See documentation.",
+  }

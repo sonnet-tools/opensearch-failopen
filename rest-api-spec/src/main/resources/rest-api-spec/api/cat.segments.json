@@ -1,84 +1,84 @@
-{
-  "cat.segments":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-segments/",
-      "description":"Provides low-level information about the segments in the shards of an index."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_cat/segments",
-          "methods":[
-            "GET"
-          ]
-        },
-        {
-          "path":"/_cat/segments/{index}",
-          "methods":[
-            "GET"
-          ],
-          "parts":{
-            "index":{
-              "type":"list",
-              "description":"A comma-separated list of index names to limit the returned information"
-            }
-          }
-        }
-      ]
-    },
-    "params":{
-      "format":{
-        "type":"string",
-        "description":"a short version of the Accept header, e.g. json, yaml"
+        "description":"Verbose mode. Display column headers",
       },
-      "bytes":{
-        "type":"enum",
-        "description":"The unit in which to display byte values",
-        "options":[
-          "b",
           "k",
-          "kb",
-          "m",
-          "mb",
-          "g",
-          "gb",
-          "t",
+          "methods":[
+          "path":"/_cat/segments/{index}",
+        "options":[
           "tb",
-          "p",
-          "pb"
-        ]
+        "default":false
       },
-      "master_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to master node",
-        "deprecated":{
+          "mb",
+          "gb",
+        ]
+      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-segments/",
+        "type":"boolean",
+          "kb",
+      "v":{
           "version":"2.0.0",
-          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
+          "b",
+        "description":"Explicit operation timeout for connection to master node",
+        "type":"time",
+          "p",
+      "cluster_manager_timeout":{
+        "type":"enum",
+          "t",
+        "type":"boolean",
         }
       },
-      "cluster_manager_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to cluster-manager node"
+              "type":"list",
+      "s":{
+      },
+  "cat.segments":{
+      ]
+          ],
+    }
+        "deprecated":{
+        },
+      "bytes":{
+        "type":"string",
       },
       "h":{
-        "type":"list",
-        "description":"Comma-separated list of column names to display"
+          ]
       },
-      "help":{
-        "type":"boolean",
+      },
+      "description":"Provides low-level information about the segments in the shards of an index."
+            "index":{
+}
         "description":"Return help information",
+    "documentation":{
+        "type":"list",
+      "help":{
+          "g",
+{
+          }
+      "format":{
+        {
+        "description":"The unit in which to display byte values",
         "default":false
-      },
-      "s":{
+            "GET"
+          "m",
+          "parts":{
+  }
+        "description":"a short version of the Accept header, e.g. json, yaml"
+        {
+        "description":"Explicit operation timeout for connection to cluster-manager node"
+          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
+    "stability":"stable",
         "type":"list",
         "description":"Comma-separated list of column names or column aliases to sort by"
-      },
-      "v":{
-        "type":"boolean",
-        "description":"Verbose mode. Display column headers",
-        "default":false
+        "type":"time",
+    "params":{
+            }
+          "pb"
+        }
+          "path":"/_cat/segments",
+        "description":"Comma-separated list of column names to display"
+      "master_timeout":{
+              "description":"A comma-separated list of index names to limit the returned information"
+            "GET"
+    },
       }
-    }
-  }
-}
+      "paths":[
+          "methods":[
+    },
+    "url":{

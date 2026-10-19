@@ -1,56 +1,56 @@
-{
-  "schema": [
-    {
-      "name": "verified_count",
-      "type": "bigint"
     },
-    {
-      "name": "avg_quality",
-      "type": "float"
-    },
-    {
-      "name": "app_id",
-      "type": "string"
-    },
-    {
-      "name": "failed_count",
-      "type": "bigint"
-    },
-    {
-      "name": "r.app_id",
-      "type": "string"
-    },
-    {
-      "name": "success_rate",
-      "type": "double"
-    }
-  ],
-  "datarows": [
-    [
-      6,
-      0.77,
-      "APP003",
-      10,
-      "APP003",
-      37.5
-    ],
-    [
-      4,
-      0.755,
       "APP001",
-      6,
-      "APP001",
-      40.0
-    ],
-    [
-      13,
       0.82769233,
-      "APP002",
+    [
+      "name": "app_id",
       10,
+  "total": 3,
+      37.5
+  ],
+      "APP003",
+      "name": "avg_quality",
+      "name": "failed_count",
+    {
+  ],
       "APP002",
       56.52
-    ]
-  ],
-  "total": 3,
+    },
+      13,
+  "datarows": [
+      6,
+      "type": "bigint"
+    {
+    {
+    },
+    ],
+    },
+      10,
+    {
+    },
+      "type": "string"
+    {
+    [
+      "name": "success_rate",
+      "type": "string"
+      40.0
+    {
+      "APP002",
   "size": 3
+      0.755,
+      "name": "verified_count",
 }
+      "type": "float"
+      6,
+    }
+    ]
+      0.77,
+      "name": "r.app_id",
+      "APP003",
+{
+      "APP001",
+      4,
+    ],
+      "type": "double"
+  "schema": [
+    [
+      "type": "bigint"

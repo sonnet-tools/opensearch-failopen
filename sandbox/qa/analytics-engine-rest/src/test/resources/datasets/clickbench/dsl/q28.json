@@ -1,87 +1,87 @@
-{
-  "from": 0,
-  "size": 0,
-  "timeout": "1m",
-  "query": {
-    "bool": {
       "must": [
-        {
-          "bool": {
-            "must": [
-              {
-                "exists": {
-                  "field": "URL",
-                  "boost": 1.0
-                }
-              }
-            ],
-            "must_not": [
-              {
-                "term": {
-                  "URL": {
-                    "value": "",
-                    "boost": 1.0
-                  }
-                }
-              }
-            ],
-            "adjust_pure_negative": true,
-            "boost": 1.0
-          }
-        },
-        {
-          "exists": {
-            "field": "CounterID",
-            "boost": 1.0
-          }
-        }
-      ],
-      "adjust_pure_negative": true,
-      "boost": 1.0
-    }
-  },
-  "_source": {
-    "includes": [
+                "SOURCES": [
       "URL",
-      "CounterID"
-    ],
-    "excludes": []
-  },
-  "aggregations": {
-    "composite_buckets": {
-      "composite": {
-        "size": 10000,
+              }
+            "boost": 1.0
+            "field": "CounterID",
+      ],
         "sources": [
-          {
-            "CounterID": {
-              "terms": {
-                "field": "CounterID",
+  "from": 0,
                 "missing_bucket": false,
+            "CounterID": {
+      "CounterID"
+          {
+      "boost": 1.0
+                }
                 "order": "asc"
               }
-            }
-          }
-        ]
-      },
-      "aggregations": {
-        "l": {
-          "avg": {
-            "script": {
-              "source": "{\"langType\":\"calcite\",\"script\":\"rO0ABXQA/3sKICAib3AiOiB7CiAgICAibmFtZSI6ICJDSEFSX0xFTkdUSCIsCiAgICAia2luZCI6ICJDSEFSX0xFTkdUSCIsCiAgICAic3ludGF4IjogIkZVTkNUSU9OIgogIH0sCiAgIm9wZXJhbmRzIjogWwogICAgewogICAgICAiZHluYW1pY1BhcmFtIjogMCwKICAgICAgInR5cGUiOiB7CiAgICAgICAgInR5cGUiOiAiVkFSQ0hBUiIsCiAgICAgICAgIm51bGxhYmxlIjogdHJ1ZSwKICAgICAgICAicHJlY2lzaW9uIjogLTEKICAgICAgfQogICAgfQogIF0KfQ==\"}",
-              "lang": "opensearch_compounded_script",
-              "params": {
-                "utcTimestamp": 1765261854565507000,
-                "SOURCES": [
-                  0
-                ],
-                "DIGESTS": [
-                  "URL"
-                ]
-              }
-            }
-          }
-        }
-      }
-    }
   }
 }
+  },
+    }
+        ]
+              }
+        "l": {
+                  0
+    "composite_buckets": {
+                  "URL": {
+      },
+                ],
+    }
+                "DIGESTS": [
+          "bool": {
+        {
+            "adjust_pure_negative": true,
+                "utcTimestamp": 1765261854565507000,
+              {
+          "exists": {
+    "includes": [
+        },
+          }
+                    "value": "",
+  "_source": {
+      "adjust_pure_negative": true,
+            }
+                ]
+  },
+  "aggregations": {
+            ],
+            "must": [
+              "lang": "opensearch_compounded_script",
+                "field": "CounterID",
+            }
+              }
+                  }
+  "timeout": "1m",
+{
+        "size": 10000,
+                "term": {
+      "composite": {
+        }
+          }
+          }
+              "params": {
+            "must_not": [
+        {
+              "terms": {
+                  "URL"
+    "bool": {
+              "source": "{\"langType\":\"calcite\",\"script\":\"rO0ABXQA/3sKICAib3AiOiB7CiAgICAibmFtZSI6ICJDSEFSX0xFTkdUSCIsCiAgICAia2luZCI6ICJDSEFSX0xFTkdUSCIsCiAgICAic3ludGF4IjogIkZVTkNUSU9OIgogIH0sCiAgIm9wZXJhbmRzIjogWwogICAgewogICAgICAiZHluYW1pY1BhcmFtIjogMCwKICAgICAgInR5cGUiOiB7CiAgICAgICAgInR5cGUiOiAiVkFSQ0hBUiIsCiAgICAgICAgIm51bGxhYmxlIjogdHJ1ZSwKICAgICAgICAicHJlY2lzaW9uIjogLTEKICAgICAgfQogICAgfQogIF0KfQ==\"}",
+          }
+                }
+                  "boost": 1.0
+                  "field": "URL",
+      "aggregations": {
+                "exists": {
+            "boost": 1.0
+  "query": {
+              {
+          "avg": {
+            ],
+    ],
+    "excludes": []
+        }
+            "script": {
+  "size": 0,
+      }
+                    "boost": 1.0

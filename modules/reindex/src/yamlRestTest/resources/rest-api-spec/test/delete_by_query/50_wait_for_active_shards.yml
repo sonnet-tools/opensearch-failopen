@@ -1,58 +1,48 @@
----
-"can override wait_for_active_shards":
+      indices.refresh: {}
+        body:
   - do:
-      indices.create:
-          index: test
           body:
-            settings:
+        body:
+  - do:
+        wait_for_active_shards: 1
+  - do:
+  - do:
+          query:
+        wait_for_active_shards: 4
+      failures.0.cause.reason: /Not.enough.active.copies.to.meet.shard.count.of.\[4\].\(have.1,.needed.4\)..Timeout\:.\[1s\]/
               number_of_replicas: 5
   - do:
-      index:
-        index:       test
-        id:          1
-        body:        {"text": "test"}
-  - do:
-      indices.refresh: {}
-
-  - do:
-      catch: unavailable
       delete_by_query:
-        index: test
-        timeout: 1s
-        wait_for_active_shards: 4
-        body:
-          query:
-            match_all: {}
-
   - match:
-      failures.0.cause.reason: /Not.enough.active.copies.to.meet.shard.count.of.\[4\].\(have.1,.needed.4\)..Timeout\:.\[1s\]/
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      count:
-        index: test
-
-  - match: {count: 1}
-
-  - do:
       delete_by_query:
-        index: test
-        wait_for_active_shards: 1
-        body:
-          query:
-            match_all: {}
-
-  - match: {failures: []}
-  - match: {deleted: 1}
+        body:        {"text": "test"}
+  - match: {count: 1}
+  - do:
   - match: {version_conflicts: 0}
-
+        index: test
+"can override wait_for_active_shards":
+        index:       test
   - do:
-      indices.refresh: {}
-
+---
   - do:
+          query:
+          index: test
       count:
         index: test
-
+      catch: unavailable
+      indices.refresh: {}
   - match: {count: 0}
+      indices.refresh: {}
+      index:
+  - match: {deleted: 1}
+        index: test
+        index: test
+      count:
+  - match: {failures: []}
+            match_all: {}
+      indices.create:
+            match_all: {}
+            settings:
+        timeout: 1s
+  - do:
+        id:          1

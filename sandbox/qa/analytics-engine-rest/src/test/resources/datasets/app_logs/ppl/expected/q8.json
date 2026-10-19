@@ -1,80 +1,80 @@
-{
-  "schema": [
-    {
-      "name": "error_count",
-      "type": "bigint"
-    },
-    {
-      "name": "host",
-      "type": "string"
-    },
-    {
-      "name": "service_name",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      14,
-      "host3",
-      "api-service"
     ],
+      10,
     [
-      13,
-      "host1",
+    },
+    [
       "db-service"
-    ],
+      "type": "string"
+    [
+      "host1",
+      10,
+      9,
+    [
+    {
+  ],
     [
       12,
       "host3",
-      "db-service"
-    ],
+      9,
+      "host2",
+    {
     [
+      "api-service"
+      "host1",
+    },
+      "web-service"
+      13,
+    [
+    [
+      "db-service"
+  "schema": [
+    [
+      "api-service"
       11,
-      "host1",
-      "auth-service"
-    ],
-    [
-      10,
-      "host2",
-      "auth-service"
-    ],
-    [
-      10,
+  "datarows": [
       "host3",
-      "web-service"
     ],
-    [
-      9,
-      "host3",
-      "auth-service"
     ],
-    [
-      9,
-      "host2",
-      "web-service"
-    ],
-    [
-      8,
-      "host2",
-      "db-service"
-    ],
-    [
-      8,
-      "host1",
-      "web-service"
-    ],
-    [
-      7,
-      "host1",
-      "api-service"
-    ],
-    [
-      4,
-      "host2",
-      "api-service"
-    ]
   ],
-  "total": 12,
-  "size": 12
+    ]
+    ],
+      14,
+      "host3",
+      "web-service"
+    ],
+{
 }
+    [
+      "auth-service"
+      "host1",
+      "host2",
+    ],
+    {
+      4,
+      "type": "string"
+    ],
+      "auth-service"
+    ],
+  "size": 12
+    }
+      "api-service"
+      "name": "error_count",
+      "host3",
+      "auth-service"
+      "host2",
+    ],
+    [
+      "host1",
+      8,
+      "name": "service_name",
+      "db-service"
+      "name": "host",
+    ],
+      "type": "bigint"
+      "host2",
+      "web-service"
+    ],
+      8,
+    [
+  "total": 12,
+      7,

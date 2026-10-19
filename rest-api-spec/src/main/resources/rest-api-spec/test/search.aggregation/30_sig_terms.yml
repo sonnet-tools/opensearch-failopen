@@ -1,152 +1,125 @@
----
-"Default index":
   - do:
-      indices.create:
-          index:  goodbad
-          body:
-            settings:
-                number_of_shards: "1"
-            mappings:
-                properties:
-                    text:
-                        type: text
-                        fielddata: true
-                    class:
-                        type: keyword
-
-  - do:
-      index:
-          index:  goodbad
-          id:     1
-          body:   { text: "good", class: "good" }
-  - do:
-      index:
-          index:  goodbad
-          id:     2
-          body:   { text: "good", class: "good" }
-  - do:
-      index:
-          index:  goodbad
-          id:     3
-          body:   { text: "bad", class: "bad" }
-  - do:
-      index:
-          index:  goodbad
-          id:     4
-          body:   { text: "bad", class: "bad" }
-  - do:
-      index:
-          index:  goodbad
-          id:     5
-          body:   { text: "good bad", class: "good" }
-  - do:
-      index:
-          index:  goodbad
-          id:     6
-          body:   { text: "good bad", class: "bad" }
-  - do:
-      index:
-          index:  goodbad
-          id:     7
-          body:   { text: "bad", class: "bad" }
-
-
-
-  - do:
-      indices.refresh:
-        index: [goodbad]
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: goodbad
-
-  - match: {hits.total: 7}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: goodbad
-        body: {"aggs": {"class": {"terms": {"field": "class"},"aggs": {"sig_terms": {"significant_terms": {"field": "text"}}}}}}
-
-  - match: {aggregations.class.buckets.0.sig_terms.buckets.0.key: "bad"}
-  - match: {aggregations.class.buckets.1.sig_terms.buckets.0.key: "good"}
-
----
-"IP test":
-  - do:
-      indices.create:
-          index:  ip_index
-          body:
-            mappings:
-                properties:
-                    ip:
-                        type: ip
-
-  - do:
-      index:
-          index:  ip_index
-          id:     1
           body:   { ip: "::1" }
-  - do:
-      index:
-          index:  ip_index
-          id:     2
-          body:   { }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "query" : { "exists" : { "field" : "ip" } }, "aggs" : { "ip_terms" : { "significant_terms" : { "field" : "ip", "min_doc_count" : 1 } } } }
-
-  - match: { hits.total: 1 }
-
-  - length: { aggregations.ip_terms.buckets: 1 }
-
-  - match: { aggregations.ip_terms.buckets.0.key: "::1" }
-
-  - is_false: aggregations.ip_terms.buckets.0.key_as_string
-
-  - match: { aggregations.ip_terms.buckets.0.doc_count: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "query" : { "exists" : { "field" : "ip" } }, "aggs" : { "ip_terms" : { "significant_terms" : { "field" : "ip", "min_doc_count" : 1, "include" : [ "::1" ] } } } }
-
-  - match: { hits.total: 1 }
-
-  - length: { aggregations.ip_terms.buckets: 1 }
-
-  - match: { aggregations.ip_terms.buckets.0.key: "::1" }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "query" : { "exists" : { "field" : "ip" } }, "aggs" : { "ip_terms" : { "significant_terms" : { "field" : "ip", "min_doc_count" : 1, "exclude" : [ "::1" ] } } } }
-
-  - match: { hits.total: 1 }
-
-  - length: { aggregations.ip_terms.buckets: 0 }
-
-  - do:
-      catch: /Aggregation \[ip_terms\] cannot support regular expression style include\/exclude settings as they can only be applied to string fields\. Use an array of values for include\/exclude clauses/
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "ip_terms" : { "significant_terms" : { "field" : "ip", "exclude" :  "127.*"  } } } }
-
----
-'Misspelled fields get "did you mean"':
-
-  - do:
-      catch: /\[significant_terms\] unknown field \[jlp\] did you mean \[jlh\]\?/
+          index:  goodbad
       search:
           body:
-            aggs:
+      index:
+        rest_total_hits_as_int: true
               foo:
-                significant_terms:
+  - do:
+          id:     2
+      index:
+        body: { "query" : { "exists" : { "field" : "ip" } }, "aggs" : { "ip_terms" : { "significant_terms" : { "field" : "ip", "min_doc_count" : 1 } } } }
+          id:     1
+"IP test":
+        body: { "query" : { "exists" : { "field" : "ip" } }, "aggs" : { "ip_terms" : { "significant_terms" : { "field" : "ip", "min_doc_count" : 1, "exclude" : [ "::1" ] } } } }
+      catch: /Aggregation \[ip_terms\] cannot support regular expression style include\/exclude settings as they can only be applied to string fields\. Use an array of values for include\/exclude clauses/
+  - do:
+          body:   { text: "good", class: "good" }
+          body:   { text: "good bad", class: "bad" }
+                        fielddata: true
+  - do:
+      index:
+  - do:
+        body: { "query" : { "exists" : { "field" : "ip" } }, "aggs" : { "ip_terms" : { "significant_terms" : { "field" : "ip", "min_doc_count" : 1, "include" : [ "::1" ] } } } }
                   field: foo
+  - do:
+          index:  goodbad
+          index:  goodbad
+        rest_total_hits_as_int: true
+---
+                        type: keyword
+            mappings:
+---
+        rest_total_hits_as_int: true
+          body:   { text: "good bad", class: "good" }
+      indices.create:
                   jlp: {}
+                properties:
+        index: [goodbad]
+'Misspelled fields get "did you mean"':
+  - do:
+"Default index":
+          index:  goodbad
+                        type: text
+  - match: {hits.total: 7}
+          id:     6
+        index: goodbad
+                significant_terms:
+                    ip:
+        index: goodbad
+          index:  goodbad
+  - do:
+          body:   { text: "bad", class: "bad" }
+        rest_total_hits_as_int: true
+          body:
+          id:     5
+  - length: { aggregations.ip_terms.buckets: 0 }
+      search:
+                    text:
+          index:  ip_index
+      index:
+      search:
+  - match: { hits.total: 1 }
+          index:  goodbad
+                properties:
+  - do:
+          body:   { text: "good", class: "good" }
+      index:
+      catch: /\[significant_terms\] unknown field \[jlp\] did you mean \[jlh\]\?/
+  - length: { aggregations.ip_terms.buckets: 1 }
+  - match: {aggregations.class.buckets.0.sig_terms.buckets.0.key: "bad"}
+  - do:
+          id:     2
+      indices.refresh: {}
+  - do:
+          body:   { text: "bad", class: "bad" }
+          body:
+  - match: { aggregations.ip_terms.buckets.0.key: "::1" }
+      search:
+            mappings:
+  - match: { hits.total: 1 }
+          index:  ip_index
+            aggs:
+  - match: { aggregations.ip_terms.buckets.0.doc_count: 1 }
+          index:  ip_index
+      index:
+  - do:
+  - length: { aggregations.ip_terms.buckets: 1 }
+          index:  goodbad
+        rest_total_hits_as_int: true
+                        type: ip
+        body: {"aggs": {"class": {"terms": {"field": "class"},"aggs": {"sig_terms": {"significant_terms": {"field": "text"}}}}}}
+      index:
+      search:
+          id:     1
+      index:
+      index:
+                number_of_shards: "1"
+  - do:
+  - do:
+          id:     7
+---
+  - do:
+      indices.create:
+  - do:
+  - match: { hits.total: 1 }
+        rest_total_hits_as_int: true
+  - do:
+          id:     4
+                    class:
+  - do:
+  - is_false: aggregations.ip_terms.buckets.0.key_as_string
+            settings:
+  - match: {aggregations.class.buckets.1.sig_terms.buckets.0.key: "good"}
+      indices.refresh:
+  - do:
+          id:     3
+      search:
+          body:   { }
+  - match: { aggregations.ip_terms.buckets.0.key: "::1" }
+          index:  goodbad
+      search:
+  - do:
+          body:   { text: "bad", class: "bad" }
+        body: { "size" : 0, "aggs" : { "ip_terms" : { "significant_terms" : { "field" : "ip", "exclude" :  "127.*"  } } } }

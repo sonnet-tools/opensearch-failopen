@@ -1,39 +1,39 @@
-{
-  "schema": [
-    {
-      "name": "tags",
-      "type": "string"
-    },
-    {
-      "name": "deduped",
-      "type": "array"
-    }
-  ],
-  "datarows": [
-    [
-      "tag1,tag2,tag3",
-      [
-        "tag1",
-        "tag2",
-        "tag3"
       ]
-    ],
+  ],
+  ],
+      ]
+  "schema": [
+  "datarows": [
+    ]
+  "total": 3,
+      "tag1,tag3,tag5",
+{
+        "tag1",
     [
       "tag2,tag4",
-      [
-        "tag2",
-        "tag4"
-      ]
-    ],
+    {
+      "type": "array"
     [
-      "tag1,tag3,tag5",
+    ],
       [
-        "tag1",
-        "tag3",
-        "tag5"
+      "name": "tags",
+        "tag2",
       ]
-    ]
-  ],
-  "total": 3,
-  "size": 3
+        "tag3",
+        "tag4"
+        "tag3"
+        "tag2",
+    },
+      "type": "string"
 }
+      [
+    {
+  "size": 3
+    ],
+      [
+        "tag5"
+      "name": "deduped",
+        "tag1",
+    [
+      "tag1,tag2,tag3",
+    }

@@ -1,60 +1,60 @@
-{
-  "cat.repositories":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-repositories/",
-      "description":"Returns information about snapshot repositories registered in the cluster."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_cat/repositories",
+        "default":false
+        "default":false
+        "type":"time",
+      },
           "methods":[
-            "GET"
-          ]
-        }
-      ]
-    },
-    "params":{
-      "format":{
-        "type":"string",
-        "description":"a short version of the Accept header, e.g. json, yaml"
-      },
-      "local":{
-        "type":"boolean",
-        "description":"Return local information, do not retrieve the state from master node",
-        "default":false
-      },
-      "master_timeout":{
-        "type":"time",
         "description":"Explicit operation timeout for connection to master node",
-        "deprecated":{
-          "version":"2.0.0",
-          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
-        }
-      },
-      "cluster_manager_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to cluster-manager node"
-      },
-      "h":{
-        "type":"list",
+        "description":"a short version of the Accept header, e.g. json, yaml"
         "description":"Comma-separated list of column names to display"
-      },
-      "help":{
-        "type":"boolean",
-        "description":"Return help information",
-        "default":false
+      "format":{
+    },
+    "url":{
+        "type":"time",
       },
       "s":{
-        "type":"list",
-        "description":"Comma-separated list of column names or column aliases to sort by"
-      },
-      "v":{
-        "type":"boolean",
-        "description":"Verbose mode. Display column headers",
-        "default":false
-      }
+        }
+{
     }
-  }
+      "help":{
+        "type":"boolean",
+    "stability":"stable",
+        "type":"boolean",
+        "description":"Comma-separated list of column names or column aliases to sort by"
+  "cat.repositories":{
+      },
+      },
+        "deprecated":{
+        "description":"Return local information, do not retrieve the state from master node",
+      "description":"Returns information about snapshot repositories registered in the cluster."
+        "type":"boolean",
+        {
+        "default":false
+        "description":"Verbose mode. Display column headers",
+      },
+    "params":{
+        "description":"Explicit operation timeout for connection to cluster-manager node"
+          ]
+      },
+        "type":"list",
+      "v":{
+      "local":{
+      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-repositories/",
+          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
+          "path":"/_cat/repositories",
+          "version":"2.0.0",
+        "description":"Return help information",
+        "type":"list",
+        }
+      "master_timeout":{
 }
+    },
+      }
+      "cluster_manager_timeout":{
+      "h":{
+    "documentation":{
+      },
+  }
+      ]
+      "paths":[
+            "GET"
+        "type":"string",

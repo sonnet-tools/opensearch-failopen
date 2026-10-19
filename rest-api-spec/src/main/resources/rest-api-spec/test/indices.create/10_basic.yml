@@ -1,144 +1,126 @@
----
-"Create index with mappings":
-  - do:
-      indices.create:
-        index: test_index
-        body:
-          mappings:
-            {}
-
-  - do:
-      indices.get_mapping:
-        index: test_index
-
-  - is_true: test_index.mappings
-
----
-"Create index with settings":
-  - do:
-      indices.create:
-        index: test_index
-        body:
           settings:
+      reason: "fixed in 2.18.0"
+  - match: {test_index.aliases.test_blias.search_routing: b}
+        body:
+  - match: { index: "test_index"}
+  - skip:
+  - is_true: test_index.aliases.test_clias.is_write_index
+      catch: /illegal_argument_exception/
+        body:
+  - do:
+        index: test_index
+      indices.create:
             number_of_replicas: "0"
-
+  - do:
+  - match: { shards_acknowledged: true }
+            test_alias: {}
+  - do:
+        body:
+            number_of_replicas: "0"
+---
+        body:
+              field:
+"Create index with mappings":
+      indices.create:
+"Create index with invalid mappings":
+            test_clias:
+  - do:
+      cluster.state:
+            number_of_routing_shards: null
+        metric: [ metadata ]
+      indices.create:
+  - match: { acknowledged: true }
+            {}
+            properties:
+  - do:
+        metric: [ metadata ]
+      indices.get_alias:
+  - do:
+        index: test_index
   - do:
       indices.get_settings:
-        index: test_index
-
-  - match: { test_index.settings.index.number_of_replicas: "0"}
-
----
-"Create index":
-  - do:
-      indices.create:
-        index: test_index
-
-  - match: { acknowledged: true }
-  - match: { index: "test_index"}
-
----
-"Create index with wait_for_active_shards set to all":
-  - do:
-      indices.create:
-        index: test_index
-        wait_for_active_shards: all
-        body:
-          settings:
-            number_of_replicas: "0"
-
-  - match: { acknowledged: true }
-  - match: { shards_acknowledged: true }
-
----
-"Create index with aliases":
-  - do:
-      indices.create:
-        index: test_index
-        body:
-          mappings:
-            properties:
-              field:
-                type: text
+                type:     keyword
+              is_write_index: false
           aliases:
-            test_alias: {}
             test_blias:
               routing: b
-            test_clias:
-              filter:
-                term:
-                  field : value
-
-  - do:
-      indices.get_alias:
-        index: test_index
-
-  - match: {test_index.aliases.test_blias.search_routing: b}
-  - match: {test_index.aliases.test_blias.index_routing: b}
-  - is_false: test_index.aliases.test_blias.filter
-  - match: {test_index.aliases.test_clias.filter.term.field: value}
-  - is_false: test_index.aliases.test_clias.index_routing
-  - is_false: test_index.aliases.test_clias.search_routing
-
----
-"Create index with write aliases":
-  - do:
       indices.create:
-        index: test_index
-        body:
-          aliases:
-            test_alias: {}
-            test_blias:
-              is_write_index: false
-            test_clias:
-              is_write_index: true
-
-  - do:
-      indices.get_alias:
-        index: test_index
-
-  - is_false: test_index.aliases.test_alias.is_write_index
-  - is_false: test_index.aliases.test_blias.is_write_index
-  - is_true: test_index.aliases.test_clias.is_write_index
-
----
-"Create index with invalid mappings":
-  - do:
-      catch: /illegal_argument_exception/
-      indices.create:
-        index: test_index
-        body:
-          mappings:
-            properties:
               "":
-                type:     keyword
-
+        index: test_index
+      version: " - 2.17.99"
+  - is_false: test_index.aliases.test_alias.is_write_index
+                  field : value
+      indices.create:
+  - match: { test_index.settings.index.number_of_replicas: "0"}
+  - do:
+---
+            properties:
+---
+          mappings:
+      cluster.state:
+          settings:
+        index: test_index1
+            test_clias:
+        index: test_index
+            test_blias:
+        index: test_index
+  - do:
+        index: test_index
+        index: test_index
+"Create index with wait_for_active_shards set to all":
+          mappings:
+      indices.create:
+  - match: {test_index.aliases.test_clias.filter.term.field: value}
+            number_of_shards: 3
+            test_alias: {}
+          settings:
+  - is_false: test_index.aliases.test_clias.index_routing
+---
+          aliases:
+                term:
 ---
 "Create index with setting index.number_of_routing_shards to null":
-  - skip:
-      version: " - 2.17.99"
-      reason: "fixed in 2.18.0"
-  - do:
-      indices.create:
+              filter:
         index: test_index
+"Create index with settings":
+        index: test_index
+"Create index with aliases":
         body:
-          settings:
-            number_of_routing_shards: null
-  - do:
-      cluster.state:
-        metric: [ metadata ]
+"Create index":
         index: test_index
   - match : { metadata.indices.test_index.routing_num_shards: 1024 }
-
   - do:
+---
+  - is_false: test_index.aliases.test_blias.filter
+        wait_for_active_shards: all
       indices.create:
-        index: test_index1
-        body:
-          settings:
-            number_of_routing_shards: null
-            number_of_shards: 3
-  - do:
-      cluster.state:
-        metric: [ metadata ]
-        index: test_index1
+        index: test_index
+  - match: {test_index.aliases.test_blias.index_routing: b}
   - match : { metadata.indices.test_index1.routing_num_shards: 768 }
+        index: test_index1
+                type: text
+  - is_false: test_index.aliases.test_blias.is_write_index
+      indices.get_mapping:
+      indices.create:
+              is_write_index: true
+  - is_false: test_index.aliases.test_clias.search_routing
+---
+  - do:
+  - is_true: test_index.mappings
+  - do:
+      indices.get_alias:
+"Create index with write aliases":
+---
+  - do:
+        body:
+      indices.create:
+        body:
+        body:
+        index: test_index
+          settings:
+  - do:
+  - do:
+        index: test_index
+          mappings:
+  - match: { acknowledged: true }
+            number_of_routing_shards: null

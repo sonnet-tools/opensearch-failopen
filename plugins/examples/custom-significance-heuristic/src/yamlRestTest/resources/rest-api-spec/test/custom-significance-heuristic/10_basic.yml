@@ -1,16 +1,13 @@
-# tests that the custom suggester plugin is installed
----
-"plugin loaded":
-    - skip:
-        reason: "contains is a newly added assertion"
-        features: contains
-
     # Get cluster-manager node id
-    - do:
-        cluster.state: {}
     - set: { cluster_manager_node: cluster_manager }
-
+"plugin loaded":
+        cluster.state: {}
+        features: contains
     - do:
+    - skip:
+# tests that the custom suggester plugin is installed
+    - do:
+---
         nodes.info: {}
-
+        reason: "contains is a newly added assertion"
     - contains: { nodes.$cluster_manager.plugins: { name: custom-significance-heuristic } }

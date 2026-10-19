@@ -1,139 +1,114 @@
----
 "Field caps with disable_objects returns leaf fields":
-
-  - skip:
-      version: " - 3.5.99"
-      reason: "Bug fixed in 3.6"
-
-  - do:
-      indices.create:
-        index: test_disable_objects
         body:
-          mappings:
-            properties:
-              attributes:
                 type: object
-                disable_objects: true
-
-  - do:
-      index:
         index: test_disable_objects
-        id: "1"
+  - do:
+  - skip:
         body:
-          attributes:
-            foo:
-              bar: baz
-
-  - do:
-      indices.refresh:
-        index: test_disable_objects
-
-  - do:
-      field_caps:
-        index: test_disable_objects
-        fields: "*"
-
-  # Leaf field must exist
-  - is_true: fields.attributes\.foo\.bar
-
-  # Parent object field must have type object
-  - match: { fields.attributes.object.type: object }
-
-  # Intermediate path must not exist (since disable_objects is set)
-  - is_false: fields.attributes\.foo
-
----
 "Field caps with disable_objects does not corrupt field names after second document indexed":
-
-  - skip:
-      version: " - 3.5.99"
-      reason: "Bug fixed in 3.6"
-
-  - do:
-      indices.create:
-        index: test_disable_objects_merge
-        body:
-          mappings:
-            properties:
-              attributes:
-                type: object
-                disable_objects: true
-
-  # doc 1: creates the disable_objects leaf field
-  - do:
-      index:
-        index: test_disable_objects_merge
-        id: "1"
-        body:
-          attributes:
-            foo:
-              bar: baz
-
-  # doc 2: unrelated - must not corrupt the existing mapping
-  - do:
-      index:
-        index: test_disable_objects_merge
-        id: "2"
-        body:
-          key: 1
-
-  - do:
-      indices.refresh:
-        index: test_disable_objects_merge
-
-  - do:
-      field_caps:
-        index: test_disable_objects_merge
-        fields: "*"
-
-  # Leaf field must exist
-  - is_true: fields.attributes\.foo\.bar
-
-  # Corrupted field name must not exist
   - is_false: fields.attributes\.foo\.foo\.bar
-
-  # The unrelated field must also exist
-  - is_true: fields.key
-
+          attributes:
 ---
 "Field caps with normal nested object returns intermediate paths":
-
-  - do:
       indices.create:
-        index: test_normal_nested
-        body:
-          mappings:
-            properties:
-              user:
+  # Parent object field must have type object
+      indices.refresh:
+        index: test_disable_objects_merge
+      version: " - 3.5.99"
+      field_caps:
+              attributes:
                 type: object
-                properties:
+          mappings:
+        fields: "*"
+              city: Chemnitz
+            foo:
                   address:
-                    type: object
-                    properties:
+  # doc 2: unrelated - must not corrupt the existing mapping
+          attributes:
+        index: test_normal_nested
+  - do:
+  - do:
+        id: "1"
                       city:
+  - do:
+        body:
+  # doc 1: creates the disable_objects leaf field
+  # Leaf field must exist
+  - is_true: fields.attributes\.foo\.bar
+  - skip:
                         type: keyword
-
+  - do:
+          key: 1
+  - do:
+        index: test_normal_nested
+      reason: "Bug fixed in 3.6"
+        fields: "*"
+  - do:
+  # Corrupted field name must not exist
+  # Leaf field must exist
+                properties:
+        index: test_disable_objects_merge
+        body:
+        fields: "*"
+  # The unrelated field must also exist
+        index: test_disable_objects_merge
+---
+              bar: baz
+      indices.create:
+  - is_true: fields.attributes\.foo\.bar
+          mappings:
+        index: test_disable_objects_merge
+        body:
+        index: test_disable_objects
+      indices.create:
+      index:
+              attributes:
+      index:
+  - do:
+              bar: baz
+        id: "2"
   - do:
       index:
-        index: test_normal_nested
-        id: "1"
-        body:
-          user:
-            address:
-              city: Chemnitz
-
-  - do:
-      indices.refresh:
-        index: test_normal_nested
-
-  - do:
-      field_caps:
-        index: test_normal_nested
-        fields: "*"
-
-  # Leaf field must exist
-  - is_true: fields.user\.address\.city
-
   # Intermediate object paths must also exist
+  - is_false: fields.attributes\.foo
+  - do:
+  # Intermediate path must not exist (since disable_objects is set)
+            properties:
+  - do:
+  - do:
+  - do:
+        index: test_normal_nested
+          user:
+      index:
+        body:
+                    type: object
+          mappings:
+              user:
+      field_caps:
+        id: "1"
+                    properties:
   - match: { fields.user\.address.object.type: object }
+            properties:
+                disable_objects: true
+                type: object
+        body:
+        index: test_disable_objects_merge
+---
+      indices.refresh:
+      field_caps:
+      indices.refresh:
+  - is_true: fields.user\.address\.city
+                disable_objects: true
+  - is_true: fields.key
+  - match: { fields.attributes.object.type: object }
+        index: test_normal_nested
+            properties:
+            address:
+      reason: "Bug fixed in 3.6"
+            foo:
   - match: { fields.user.object.type: object }
+  # Leaf field must exist
+        index: test_disable_objects
+        index: test_disable_objects
+      version: " - 3.5.99"
+        id: "1"

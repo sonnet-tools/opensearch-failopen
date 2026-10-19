@@ -1,215 +1,193 @@
----
-"Array of objects":
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - index:
-              _index: test_index
-              _id:    test_id
-          - f1: v1
-            f2: 42
-          - index:
-              _index: test_index
-              _id:    test_id2
-          - f1: v2
-            f2: 47
-
-  - do:
-      count:
-        index: test_index
-
-  - match: {count: 2}
-
----
-"Empty _id":
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - index:
-              _index: test
-              _id: ''
-          - f: 1
-          - index:
-              _index: test
-              _id: id
-          - f: 2
-          - index:
-              _index: test
-          - f: 3
-  - match: { errors: true }
   - match: { items.0.index.status: 400 }
-  - match: { items.0.index.error.type: illegal_argument_exception }
-  - match: { items.0.index.error.reason: if _id is specified it must not be empty }
-  - match: { items.1.index.result: created }
-  - match: { items.2.index.result: created }
-
   - do:
-      count:
-        index: test
-
-  - match: { count: 2 }
-
----
-"Empty _id with op_type create":
-
-
-  - do:
-      bulk:
-        refresh: true
         body:
-          - index:
-              _index: test
-              _id: ''
-          - f: 1
-          - index:
-              _index: test
-              _id: id
-          - f: 2
-          - index:
-              _index: test
-          - f: 3
-          - create:
-              _index: test
-          - f: 4
-          - index:
-              _index: test
-              op_type: create
-          - f: 5
-  - match: { errors: true }
-  - match: { items.0.index.status: 400 }
-  - match: { items.0.index.error.type: illegal_argument_exception }
-  - match: { items.0.index.error.reason: if _id is specified it must not be empty }
-  - match: { items.1.index.result: created }
-  - match: { items.2.index.result: created }
-  - match: { items.3.create.result: created }
   - match: { items.4.create.result: created }
-
-  - do:
-      count:
-        index: test
-
-  - match: { count: 4 }
-
-
----
-"empty action":
-  - skip:
-        features: headers
-  - do:
-      catch: /Malformed action\/metadata line \[3\], expected FIELD_NAME but found \[END_OBJECT\]/
-      headers:
-        Content-Type: application/json
-      bulk:
-        body: |
-           {"index": {"_index": "test_index", "_id": "test_id"}}
-           {"f1": "v1", "f2": 42}
-           {}
-
----
-"When setting require_alias flag per request":
-
-  - do:
-      indices.create:
-        index: backing_index
-        body:
-          mappings: {}
-          aliases:
-            test_require_alias: {}
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - index:
-              _index: new_index_not_created
-              require_alias: true
-          - f: 1
-          - index:
-              _index: new_index_created
           - f: 2
-          - index:
-              _index: test_require_alias
-              require_alias: true
-          - f: 3
-          - create:
-              _index: test_require_alias
           - f: 4
-  - match: { errors: true }
-  - match: { items.0.index.status: 404 }
-  - match: { items.0.index.error.type: index_not_found_exception }
-  - match: { items.0.index.error.reason: "no such index [new_index_not_created] and [require_alias] request flag is [true] and [new_index_not_created] is not an alias" }
-  - match: { items.1.index.result: created }
-  - match: { items.2.index.result: created }
-  - match: { items.3.create.result: created }
-
   - do:
-      catch: missing
-      indices.get:
-        index: new_index_not_created
----
-"When setting require_alias flag":
-
   - do:
       indices.create:
-        index: backing_index
-        body:
-          mappings: {}
-          aliases:
-            test_require_alias: {}
-  - do:
-      bulk:
-        refresh: true
-        require_alias: true
-        body:
+      indices.create:
           - index:
-              _index: new_index_not_created
+---
+  - do:
+  - match: { errors: true }
+  - match: { items.0.index.status: 404 }
+            f2: 42
+          - f: 3
+  - match: { items.2.index.result: created }
+              _index: test
+          - index:
+  - match: { errors: true }
+          - index:
+        body:
+      indices.create:
+  - match: { items.0.index.error.reason: "no write index is defined for alias [test_index]. The write index may be explicitly disabled using is_write_index=false or the alias points to multiple indices without one being designated as a write index" }
+      catch: missing
+      count:
+              _id: id
+  - match: { items.3.create.result: created }
+  - do:
+          - f: 3
+          - index:
+      catch: /Malformed action\/metadata line \[3\], expected FIELD_NAME but found \[END_OBJECT\]/
+  - match: { items.0.index.error.type: illegal_argument_exception }
+  - match: { count: 4 }
           - f: 1
           - index:
-              _index: new_index_created
-              require_alias: false
+          - f: 1
+          - '{"field": "test"}'
+  - match: { items.2.index.result: created }
+            test_require_alias: {}
+          - index:
+        body:
+  - match: { items.0.index.status: 404 }
+  - do:
+        refresh: true
+          - index:
+        index: test_index1
+  - match: { items.0.index.status: 400 }
+      bulk:
+           {}
+  - match: { items.0.index.error.type: index_not_found_exception }
           - f: 2
+              _index: test
+              _index: test
+        index: test_index1
+      indices.create:
+              _index: new_index_not_created
+          - f1: v1
           - index:
               _index: test_require_alias
+        index: test_index
+              _id:    test_id
+          mappings: {}
+  - match: { items.1.index.result: created }
+"Return item-level error when no write index defined for an alias":
+           {"index": {"_index": "test_index", "_id": "test_id"}}
+        body:
+        body:
+              _index: test
+              require_alias: true
           - f: 3
   - match: { errors: true }
-  - match: { items.0.index.status: 404 }
-  - match: { items.0.index.error.type: index_not_found_exception }
-  - match: { items.0.index.error.reason: "no such index [new_index_not_created] and [require_alias] request flag is [true] and [new_index_not_created] is not an alias" }
-  - match: { items.1.index.result: created }
-  - match: { items.2.index.result: created }
-
-  - do:
-      catch: missing
-      indices.get:
-        index: new_index_not_created
+  - match: { items.0.index.error.type: illegal_argument_exception }
+          aliases:
+        index: backing_index
 ---
-"Return item-level error when no write index defined for an alias":
-
-
+          - index:
+        refresh: true
+              _index: test_index
+              _index: test_index
+  - match: { items.1.index.result: created }
+  - match: { items.0.index.error.reason: "no such index [new_index_not_created] and [require_alias] request flag is [true] and [new_index_not_created] is not an alias" }
+          - index:
+"Empty _id":
+              _index: test_require_alias
+        index: backing_index
+"empty action":
+"Empty _id with op_type create":
+        name: test_index
+      indices.get:
+          - f: 2
+          - f: 1
+        refresh: true
+  - match: { errors: true }
   - do:
-      indices.create:
-        index: test_index1
-  - do:
-      indices.create:
+  - skip:
+      count:
+"When setting require_alias flag":
+              _index: new_index_created
+---
+          - index:
+  - match: { items.0.index.status: 400 }
+  - match: { errors: true }
+---
+           {"f1": "v1", "f2": 42}
+      indices.get:
         index: test_index2
-
   - do:
-      indices.put_alias:
-        index: test_index1
+              require_alias: false
+        features: headers
+              _index: test
+  - match: { items.1.index.result: created }
+          - f: 2
         name: test_index
   - do:
+  - do:
+  - match: { items.1.index.result: created }
+  - match: { count: 2 }
+        body: |
+  - match: { items.0.index.error.reason: "no such index [new_index_not_created] and [require_alias] request flag is [true] and [new_index_not_created] is not an alias" }
+              _id: id
+        Content-Type: application/json
+              _index: new_index_created
+          - f: 1
+              _index: test
+          - f: 5
+              _id: ''
+  - do:
+---
+      bulk:
+          - create:
+        index: new_index_not_created
+          aliases:
+  - match: { items.0.index.error.reason: if _id is specified it must not be empty }
+  - do:
+        body:
+              _id: ''
       indices.put_alias:
-        index: test_index2
-        name: test_index
-
+          - index:
+          - index:
+          - f: 3
+              _id:    test_id2
+      indices.put_alias:
+          - create:
+      bulk:
+  - match: { items.0.index.error.type: index_not_found_exception }
+  - do:
+        require_alias: true
+              _index: new_index_not_created
+"Array of objects":
+      bulk:
+          - f1: v2
+          mappings: {}
   - do:
       bulk:
-        body:
-          - '{"index": {"_index": "test_index"}}'
-          - '{"field": "test"}'
-
-  - match: { errors: true }
-  - match: { items.0.index.status: 400 }
+---
+          - f: 4
+        refresh: true
+  - do:
+        index: new_index_not_created
+      headers:
+  - do:
   - match: { items.0.index.error.type: illegal_argument_exception }
-  - match: { items.0.index.error.reason: "no write index is defined for alias [test_index]. The write index may be explicitly disabled using is_write_index=false or the alias points to multiple indices without one being designated as a write index" }
+  - match: { items.3.create.result: created }
+              _index: test_require_alias
+  - do:
+              op_type: create
+        body:
+        index: test
+              _index: test
+  - match: { items.2.index.result: created }
+              require_alias: true
+"When setting require_alias flag per request":
+          - index:
+            f2: 47
+        index: test_index2
+      count:
+      catch: missing
+  - match: {count: 2}
+          - index:
+---
+  - do:
+        body:
+        index: test
+              _index: test
+        refresh: true
+  - match: { items.2.index.result: created }
+  - match: { items.0.index.error.reason: if _id is specified it must not be empty }
+      bulk:
+            test_require_alias: {}
+          - '{"index": {"_index": "test_index"}}'
+      bulk:

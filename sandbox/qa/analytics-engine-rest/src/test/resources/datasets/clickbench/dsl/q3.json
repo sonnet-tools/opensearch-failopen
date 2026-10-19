@@ -1,22 +1,22 @@
-{
-  "from": 0,
-  "size": 0,
-  "timeout": "1m",
-  "aggregations": {
-    "sum(AdvEngineID)": {
-      "sum": {
-        "field": "AdvEngineID"
-      }
-    },
-    "count()": {
-      "value_count": {
         "field": "_index"
-      }
+  "timeout": "1m",
     },
     "avg(ResolutionWidth)": {
-      "avg": {
         "field": "ResolutionWidth"
+      "value_count": {
+        "field": "AdvEngineID"
+    "sum(AdvEngineID)": {
       }
-    }
-  }
+      }
+      "avg": {
+      }
+      "sum": {
 }
+    }
+    "count()": {
+  "from": 0,
+{
+    },
+  }
+  "aggregations": {
+  "size": 0,

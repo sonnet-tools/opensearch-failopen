@@ -1,70 +1,70 @@
-{
-  "indices.rollover":{
-    "documentation":{
-      "url":"https://www.elastic.co/guide/en/elasticsearch/reference/master/indices-rollover-index.html",
-      "description":"Updates an alias to point to a new index when the existing index\nis considered to be too large or too old."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/{alias}/_rollover",
-          "methods":[
-            "POST"
-          ],
-          "parts":{
-            "alias":{
-              "type":"string",
-              "description":"The name of the alias to rollover"
-            }
-          }
         },
-        {
+              "description":"The name of the alias to rollover"
+    },
+      },
+      ]
+          "version":"2.0.0",
           "path":"/{alias}/_rollover/{new_index}",
-          "methods":[
-            "POST"
-          ],
-          "parts":{
+      },
+        }
+        {
+        "type":"time",
+    "stability":"stable",
             "alias":{
+    "body":{
               "type":"string",
+      }
+      "paths":[
+              "type":"string",
+  "indices.rollover":{
+{
+          ],
+        "description":"Set the number of active shards to wait for on the newly created rollover index before the operation returns."
+          ],
+      "description":"Updates an alias to point to a new index when the existing index\nis considered to be too large or too old."
+        "description":"Explicit operation timeout"
+    },
+    }
+      "timeout":{
+          }
+            "POST"
+        "description":"Specify timeout for connection to cluster-manager node"
+    "documentation":{
+    "params":{
+        "type":"time",
+      "description":"The conditions that needs to be met for executing rollover"
+          }
+      "dry_run":{
+        {
+              "description":"The name of the rollover index"
+    },
+      "wait_for_active_shards":{
+      "master_timeout":{
+            "new_index":{
+        "deprecated":{
+            }
+          "parts":{
+      "cluster_manager_timeout":{
+        "description":"If set to true the rollover action will only be validated but not actually performed even if a condition matches. The default is false"
+        "type":"string",
+              "type":"string",
+          "path":"/{alias}/_rollover",
+  }
+    "url":{
+          "methods":[
+          "parts":{
+          "methods":[
+      },
+        "type":"boolean",
               "description":"The name of the alias to rollover"
             },
-            "new_index":{
-              "type":"string",
-              "description":"The name of the rollover index"
-            }
-          }
+        "type":"time",
         }
-      ]
-    },
-    "params":{
-      "timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout"
-      },
-      "dry_run":{
-        "type":"boolean",
-        "description":"If set to true the rollover action will only be validated but not actually performed even if a condition matches. The default is false"
-      },
-      "master_timeout":{
-        "type":"time",
+            "POST"
         "description":"Specify timeout for connection to master",
-        "deprecated":{
-          "version":"2.0.0",
+            }
           "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
-        }
       },
-      "cluster_manager_timeout":{
-        "type":"time",
-        "description":"Specify timeout for connection to cluster-manager node"
-      },
-      "wait_for_active_shards":{
-        "type":"string",
-        "description":"Set the number of active shards to wait for on the newly created rollover index before the operation returns."
-      }
-    },
-    "body":{
-      "description":"The conditions that needs to be met for executing rollover"
-    }
-  }
 }
+            "alias":{
+      "url":"https://www.elastic.co/guide/en/elasticsearch/reference/master/indices-rollover-index.html",

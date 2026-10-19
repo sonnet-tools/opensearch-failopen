@@ -1,142 +1,122 @@
----
-"Test cat aliases output with a hidden index with a hidden alias":
-
-
-  - do:
-      indices.create:
-        index: test
-        body:
-          settings:
+            -                   \s+
             number_of_shards: "1"
-            number_of_replicas: "0"
-            index:
               hidden: true
-          aliases:
-            test_alias:
-              is_hidden: true
-
-  - do:
-      cat.aliases: {}
-
   - match:
-      $body: |
-        /^
-            test_alias          \s+
-            test                \s+
-            -                   \s+
-            -                   \s+
-            -                   \s+
-            -                   \s+
-        $/
-
   - do:
-      cat.aliases:
-        name: test_alias
-
-  - match:
-      $body: |
-        /^
-            test_alias          \s+
-            test                \s+
-            -                   \s+
-            -                   \s+
-            -                   \s+
-            -                   \s+
-        $/
-
-
-  - do:
-      cat.aliases:
         expand_wildcards: ["open","closed"]
-
-  - match:
-      $body: |
-        /^
         $/
----
 "Test cat aliases output with a hidden index with a visible alias":
-
-
-  - do:
-      indices.create:
-        index: test
+            -                   \s+
+            -                   \s+
+      cat.aliases:
+            -                   \s+
         body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-            index:
-              hidden: true
-          aliases:
-            test_alias: {}
-  - do:
-      cat.aliases:
-        name: test*
-
-  - match:
-      $body: |
-        /^
             test_alias          \s+
-            test                \s+
-            -                   \s+
-            -                   \s+
-            -                   \s+
-            -                   \s+
-        $/
-
-  - do:
-      cat.aliases:
+            test_alias          \s+
         name: test_alias
-
-  - match:
-      $body: |
-        /^
-            test_alias          \s+
             test                \s+
             -                   \s+
+          aliases:
+  - do:
+  - do:
             -                   \s+
             -                   \s+
+            test_alias: {}
+        $/
+        /^
+            test                \s+
+            -                   \s+
+  - do:
+---
+            number_of_replicas: "0"
+          settings:
+            -                   \s+
+        name: test_alias
+            -                   \s+
+            -                   \s+
+              is_hidden: true
+        /^
+              is_hidden: true
+      $body: |
+  - match:
+        index: test
+      cat.aliases:
+            test_alias:
+        name: test_alias
+      cat.aliases: {}
+            index:
+  - do:
+  - match:
+      cat.aliases:
+          settings:
+            -                   \s+
+  - match:
+      cat.aliases:
+            number_of_shards: "1"
+        /^
+      cat.aliases:
+            test                \s+
+        name: test*
+        /^
+  - do:
+  - do:
+        $/
+        index: test
+            -                   \s+
+      $body: |
+  - match:
+            -                   \s+
+"Test cat aliases output with a hidden index with a hidden alias":
+            test_alias          \s+
+            -                   \s+
+            -                   \s+
+              hidden: true
+            test_alias          \s+
+        $/
+  - match:
+        $/
+            -                   \s+
+      $body: |
+  - match:
+          aliases:
+            -                   \s+
+            number_of_replicas: "0"
+            test_alias          \s+
+            -                   \s+
+            number_of_replicas: "0"
+      $body: |
+        /^
+      $body: |
+            -                   \s+
+---
+      indices.create:
             -                   \s+
         $/
-
----
-"Test cat aliases output with a visible index with a hidden alias":
-
-
-  - do:
-      indices.create:
+      $body: |
+            index:
+            test                \s+
+          settings:
         index: test
         body:
-          settings:
+  - do:
+            -                   \s+
+            test_alias          \s+
             number_of_shards: "1"
-            number_of_replicas: "0"
+        /^
+        body:
+            -                   \s+
+  - do:
+      $body: |
+        $/
+            test                \s+
           aliases:
             test_alias:
-              is_hidden: true
+      indices.create:
   - do:
+            test                \s+
+            -                   \s+
+      indices.create:
+        /^
+"Test cat aliases output with a visible index with a hidden alias":
       cat.aliases: {}
-
-  - match:
-      $body: |
-        /^
-            test_alias          \s+
-            test                \s+
-            -                   \s+
-            -                   \s+
-            -                   \s+
-            -                   \s+
-        $/
-
-  - do:
-      cat.aliases:
-        name: test_alias
-
-  - match:
-      $body: |
-        /^
-            test_alias          \s+
-            test                \s+
-            -                   \s+
-            -                   \s+
-            -                   \s+
-            -                   \s+
-        $/
+---

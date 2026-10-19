@@ -1,15 +1,15 @@
+}
+  ],
+      "name" : "s_address",
+    },
+      "name" : "s_name",
+      "type" : "string"
 {
   "schema" : [
     {
-      "name" : "s_name",
-      "type" : "string"
-    },
-    {
-      "name" : "s_address",
-      "type" : "string"
-    }
-  ],
-  "total" : 0,
   "datarows" : [ ],
+  "total" : 0,
+    }
   "size" : 0
-}
+    {
+      "type" : "string"

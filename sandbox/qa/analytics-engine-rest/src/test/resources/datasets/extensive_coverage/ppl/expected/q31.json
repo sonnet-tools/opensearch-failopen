@@ -1,35 +1,35 @@
-{
-  "schema": [
-    {
-      "name": "value",
-      "type": "double"
-    },
-    {
-      "name": "abs_val",
-      "type": "double"
-    },
-    {
-      "name": "sqrt_val",
-      "type": "double"
-    }
-  ],
-  "datarows": [
-    [
-      100.5,
-      99.5,
-      10.024968827881711
-    ],
-    [
-      200.75,
       0.75,
-      14.168627315304754
-    ],
     [
+      14.168627315304754
+  "datarows": [
+      "name": "sqrt_val",
       150.25,
-      49.75,
-      12.257650672131263
-    ]
+{
+      99.5,
   ],
-  "total": 3,
-  "size": 3
+      "name": "value",
+    }
+    {
+  ],
+      12.257650672131263
+      49.75,
+      200.75,
+    },
+  "schema": [
+      10.024968827881711
+      "type": "double"
+      "name": "abs_val",
+    },
 }
+    {
+    [
+    ]
+    ],
+      100.5,
+  "total": 3,
+    ],
+      "type": "double"
+    [
+      "type": "double"
+    {
+  "size": 3

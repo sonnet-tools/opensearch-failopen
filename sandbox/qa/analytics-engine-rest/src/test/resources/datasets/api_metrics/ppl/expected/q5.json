@@ -1,40 +1,40 @@
-{
-  "schema": [
-    {
-      "name": "avg_response_time",
-      "type": "double"
-    },
-    {
-      "name": "max_latency",
-      "type": "int"
-    },
-    {
-      "name": "endpoint",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      1.0876666666666666,
-      1697,
       "/SCS/Retail/v1/orders"
+      "name": "max_latency",
+      "type": "string"
     ],
-    [
-      1.991,
-      1991,
-      "/api/payments"
-    ],
-    [
-      1.3519999999999999,
-      1583,
-      "/api/products"
-    ],
-    [
-      0.8360000000000001,
-      1435,
       "/api/users"
-    ]
+      "name": "avg_response_time",
+    [
+    [
+    ],
   ],
+    },
+  ],
+      "/api/payments"
+      "/api/products"
+    {
+      0.8360000000000001,
+    [
+    ]
+      "name": "endpoint",
+    },
+{
+      1697,
+      1.3519999999999999,
+    ],
+  "schema": [
+      1.0876666666666666,
+  "datarows": [
+}
+      1583,
+    {
   "total": 4,
   "size": 4
-}
+    }
+      1.991,
+    [
+    {
+      1991,
+      "type": "double"
+      "type": "int"
+      1435,

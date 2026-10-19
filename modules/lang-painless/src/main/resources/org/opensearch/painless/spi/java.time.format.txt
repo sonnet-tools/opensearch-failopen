@@ -1,177 +1,165 @@
+class java.time.format.DecimalStyle {
 #
-# Licensed to Elasticsearch under one or more contributor
-# license agreements. See the NOTICE file distributed with
-# this work for additional information regarding copyright
-# ownership. Elasticsearch licenses this file to you under
-# the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations
-# under the License.
-#
-
-#
-# Painless definition file. This defines the hierarchy of classes,
-# what methods and fields they have, etc.
-#
-
-#### Classes
-
-class java.time.format.DateTimeFormatter {
-  DateTimeFormatter BASIC_ISO_DATE
-  DateTimeFormatter ISO_DATE
-  DateTimeFormatter ISO_DATE_TIME
-  DateTimeFormatter ISO_INSTANT
-  DateTimeFormatter ISO_LOCAL_DATE
-  DateTimeFormatter ISO_LOCAL_DATE_TIME
-  DateTimeFormatter ISO_LOCAL_TIME
-  DateTimeFormatter ISO_OFFSET_DATE
-  DateTimeFormatter ISO_OFFSET_DATE_TIME
-  DateTimeFormatter ISO_OFFSET_TIME
-  DateTimeFormatter ISO_ORDINAL_DATE
-  DateTimeFormatter ISO_TIME
-  DateTimeFormatter ISO_WEEK_DATE
-  DateTimeFormatter ISO_ZONED_DATE_TIME
-  DateTimeFormatter RFC_1123_DATE_TIME
-  String format(TemporalAccessor)
-  void formatTo(TemporalAccessor,Appendable)
-  Chronology getChronology()
-  DecimalStyle getDecimalStyle()
-  Locale getLocale()
-  Set getResolverFields()
-  ResolverStyle getResolverStyle()
-  ZoneId getZone()
-  DateTimeFormatter ofLocalizedDate(FormatStyle)
-  DateTimeFormatter ofLocalizedDateTime(FormatStyle)
-  DateTimeFormatter ofLocalizedDateTime(FormatStyle,FormatStyle)
-  DateTimeFormatter ofLocalizedTime(FormatStyle)
-  DateTimeFormatter ofPattern(String)
-  DateTimeFormatter ofPattern(String,Locale)
-  TemporalAccessor parse(CharSequence)
-  def parse(CharSequence,TemporalQuery)
-  TemporalAccessor parseBest(CharSequence,TemporalQuery[])
-  TemporalQuery parsedExcessDays()
-  TemporalQuery parsedLeapSecond()
-  TemporalAccessor parseUnresolved(CharSequence,ParsePosition)
-  Format toFormat()
-  Format toFormat(TemporalQuery)
-  DateTimeFormatter withChronology(Chronology)
-  DateTimeFormatter withDecimalStyle(DecimalStyle)
-  DateTimeFormatter withLocale(Locale)
-  DateTimeFormatter withResolverFields(Set)
-  DateTimeFormatter withResolverStyle(ResolverStyle)
-  DateTimeFormatter withZone(ZoneId)
+  TextStyle valueOf(String)
 }
-
-class java.time.format.DateTimeFormatterBuilder {
-  ()
-  DateTimeFormatterBuilder append(DateTimeFormatter)
-  DateTimeFormatterBuilder appendChronologyId()
-  DateTimeFormatterBuilder appendChronologyText(TextStyle)
-  DateTimeFormatterBuilder appendFraction(TemporalField,int,int,boolean)
-  DateTimeFormatterBuilder appendInstant()
-  DateTimeFormatterBuilder appendInstant(int)
-  DateTimeFormatterBuilder appendLiteral(String)
-  DateTimeFormatterBuilder appendLocalized(FormatStyle,FormatStyle)
-  DateTimeFormatterBuilder appendLocalizedOffset(TextStyle)
-  DateTimeFormatterBuilder appendOffset(String,String)
-  DateTimeFormatterBuilder appendOffsetId()
-  DateTimeFormatterBuilder appendOptional(DateTimeFormatter)
-  DateTimeFormatterBuilder appendPattern(String)
+  TextStyle asStandalone()
+  DateTimeFormatterBuilder optionalEnd()
   DateTimeFormatterBuilder appendText(TemporalField)
-  DateTimeFormatterBuilder appendText(TemporalField,TextStyle)
-  DateTimeFormatterBuilder appendValue(TemporalField)
-  DateTimeFormatterBuilder appendValue(TemporalField,int)
-  DateTimeFormatterBuilder appendValue(TemporalField,int,int,SignStyle)
+#
+}
+  ZoneId getZone()
+  Format toFormat(TemporalQuery)
+  DateTimeFormatter withResolverFields(Set)
+  DateTimeFormatterBuilder appendChronologyId()
+  DateTimeFormatterBuilder appendFraction(TemporalField,int,int,boolean)
+  TemporalAccessor parseBest(CharSequence,TemporalQuery[])
+  DateTimeFormatter withLocale(Locale)
+  char getPositiveSign()
+}
+  DateTimeFormatterBuilder parseStrict()
+  DateTimeFormatter ofLocalizedDateTime(FormatStyle)
+  TextStyle SHORT_STANDALONE
+  DateTimeFormatter toFormatter()
+# Painless definition file. This defines the hierarchy of classes,
+  SignStyle NORMAL
+  DecimalStyle withPositiveSign(char)
+  DateTimeFormatter ISO_DATE_TIME
+  DateTimeFormatter ISO_LOCAL_DATE_TIME
+  ResolverStyle[] values()
+  Locale getLocale()
+  DateTimeFormatterBuilder appendOffset(String,String)
+# license agreements. See the NOTICE file distributed with
+#
+  DecimalStyle withNegativeSign(char)
+  DateTimeFormatterBuilder appendPattern(String)
+  char getNegativeSign()
+#
+#### Exceptions
+  ResolverStyle SMART
+  SignStyle NEVER
+  DateTimeFormatter ISO_ZONED_DATE_TIME
   DateTimeFormatterBuilder appendValueReduced(TemporalField,int,int,int)
   DateTimeFormatterBuilder appendZoneId()
-  DateTimeFormatterBuilder appendZoneOrOffsetId()
-  DateTimeFormatterBuilder appendZoneRegionId()
-  DateTimeFormatterBuilder appendZoneText(TextStyle)
-  DateTimeFormatterBuilder appendZoneText(TextStyle,Set)
-  String getLocalizedDateTimePattern(FormatStyle,FormatStyle,Chronology,Locale)
-  DateTimeFormatterBuilder optionalEnd()
-  DateTimeFormatterBuilder optionalStart()
-  DateTimeFormatterBuilder padNext(int)
-  DateTimeFormatterBuilder padNext(int,char)
-  DateTimeFormatterBuilder parseCaseInsensitive()
-  DateTimeFormatterBuilder parseCaseSensitive()
-  DateTimeFormatterBuilder parseDefaulting(TemporalField,long)
-  DateTimeFormatterBuilder parseLenient()
-  DateTimeFormatterBuilder parseStrict()
-  DateTimeFormatter toFormatter()
-  DateTimeFormatter toFormatter(Locale)
-}
-
-class java.time.format.DecimalStyle {
-  DecimalStyle STANDARD
-  Set getAvailableLocales()
-  char getDecimalSeparator()
-  char getNegativeSign()
-  char getPositiveSign()
-  char getZeroDigit()
-  DecimalStyle of(Locale)
-  DecimalStyle ofDefaultLocale()
-  DecimalStyle withDecimalSeparator(char)
-  DecimalStyle withNegativeSign(char)
-  DecimalStyle withPositiveSign(char)
-  DecimalStyle withZeroDigit(char)
-}
-
-#### Enums
-
-class java.time.format.FormatStyle {
-  FormatStyle FULL
-  FormatStyle LONG
-  FormatStyle MEDIUM
-  FormatStyle SHORT
-  FormatStyle valueOf(String)
-  FormatStyle[] values()
-}
-
-class java.time.format.ResolverStyle {
-  ResolverStyle LENIENT
-  ResolverStyle SMART
-  ResolverStyle STRICT
-  ResolverStyle valueOf(String)
-  ResolverStyle[] values()
-}
-
-class java.time.format.SignStyle {
-  SignStyle ALWAYS
-  SignStyle EXCEEDS_PAD
-  SignStyle NEVER
-  SignStyle NORMAL
-  SignStyle NOT_NEGATIVE
-  SignStyle valueOf(String)
-  SignStyle[] values()
-}
-
-class java.time.format.TextStyle {
+  DateTimeFormatterBuilder appendInstant()
+#
   TextStyle FULL
+  Set getResolverFields()
+  DateTimeFormatter toFormatter(Locale)
+  DateTimeFormatterBuilder appendChronologyText(TextStyle)
+# the Apache License, Version 2.0 (the "License"); you may
+  DateTimeFormatter RFC_1123_DATE_TIME
+# Licensed to Elasticsearch under one or more contributor
+}
+  ResolverStyle LENIENT
+class java.time.format.DateTimeFormatterBuilder {
+  String getLocalizedDateTimePattern(FormatStyle,FormatStyle,Chronology,Locale)
+  TemporalAccessor parse(CharSequence)
+  DateTimeFormatterBuilder padNext(int,char)
+class java.time.format.TextStyle {
+  DateTimeFormatter ISO_WEEK_DATE
+  DateTimeFormatterBuilder appendValue(TemporalField,int,int,SignStyle)
+  Chronology getChronology()
+  DateTimeFormatter ISO_OFFSET_DATE
+  DateTimeFormatter ofPattern(String)
+  ()
+  DateTimeFormatter ISO_DATE
+  char getDecimalSeparator()
+  DateTimeFormatterBuilder parseCaseInsensitive()
+  DecimalStyle getDecimalStyle()
+  DateTimeFormatterBuilder optionalStart()
   TextStyle FULL_STANDALONE
   TextStyle NARROW
+  DateTimeFormatter ISO_OFFSET_TIME
+  DecimalStyle of(Locale)
+  DateTimeFormatter ISO_LOCAL_TIME
+  SignStyle EXCEEDS_PAD
+  DecimalStyle ofDefaultLocale()
+  DateTimeFormatterBuilder appendZoneRegionId()
   TextStyle NARROW_STANDALONE
-  TextStyle SHORT
-  TextStyle SHORT_STANDALONE
-  TextStyle asNormal()
-  TextStyle asStandalone()
+  DateTimeFormatterBuilder appendLocalized(FormatStyle,FormatStyle)
+  DecimalStyle STANDARD
+  DateTimeFormatter ISO_ORDINAL_DATE
+  String getParsedString()
+# software distributed under the License is distributed on an
+  ResolverStyle STRICT
+  DateTimeFormatterBuilder appendOffsetId()
+  DateTimeFormatterBuilder parseLenient()
+# ownership. Elasticsearch licenses this file to you under
+class java.time.format.DateTimeFormatter {
+  DateTimeFormatterBuilder parseCaseSensitive()
+  DateTimeFormatter ISO_INSTANT
+  Set getAvailableLocales()
+  DateTimeFormatter withResolverStyle(ResolverStyle)
+# under the License.
+  TemporalAccessor parseUnresolved(CharSequence,ParsePosition)
+  ResolverStyle getResolverStyle()
+  DateTimeFormatter ofLocalizedDate(FormatStyle)
+  FormatStyle SHORT
   boolean isStandalone()
-  TextStyle valueOf(String)
+class java.time.format.FormatStyle {
+  DecimalStyle withZeroDigit(char)
+  FormatStyle MEDIUM
+  DateTimeFormatterBuilder appendZoneText(TextStyle,Set)
+}
+  DateTimeFormatterBuilder appendValue(TemporalField,int)
+  DateTimeFormatter ISO_TIME
+}
+  DateTimeFormatterBuilder appendZoneText(TextStyle)
+  TemporalQuery parsedLeapSecond()
+  DateTimeFormatter ofLocalizedTime(FormatStyle)
+  void formatTo(TemporalAccessor,Appendable)
+  ResolverStyle valueOf(String)
+  DateTimeFormatter ISO_OFFSET_DATE_TIME
+  DateTimeFormatter withDecimalStyle(DecimalStyle)
+  Format toFormat()
+  DateTimeFormatterBuilder appendInstant(int)
+#### Classes
+}
+class java.time.format.SignStyle {
+  DateTimeFormatterBuilder padNext(int)
+  DateTimeFormatterBuilder appendLocalizedOffset(TextStyle)
+class java.time.format.DateTimeParseException {
+#    http://www.apache.org/licenses/LICENSE-2.0
+  DateTimeFormatter ISO_LOCAL_DATE
+  DateTimeFormatterBuilder appendText(TemporalField,TextStyle)
+  DecimalStyle withDecimalSeparator(char)
+  SignStyle valueOf(String)
+  DateTimeFormatter withZone(ZoneId)
+  char getZeroDigit()
+class java.time.format.ResolverStyle {
+  String format(TemporalAccessor)
+  DateTimeFormatterBuilder parseDefaulting(TemporalField,long)
+  DateTimeFormatterBuilder append(DateTimeFormatter)
+  int getErrorIndex()
+  FormatStyle[] values()
+  DateTimeFormatterBuilder appendOptional(DateTimeFormatter)
+#### Enums
+  DateTimeFormatter ofPattern(String,Locale)
+# You may obtain a copy of the License at
+  TextStyle asNormal()
+  DateTimeFormatter BASIC_ISO_DATE
+#
+  SignStyle[] values()
+  TemporalQuery parsedExcessDays()
+  SignStyle ALWAYS
+  DateTimeFormatterBuilder appendValue(TemporalField)
+  FormatStyle FULL
+  SignStyle NOT_NEGATIVE
+# KIND, either express or implied.  See the License for the
+# this work for additional information regarding copyright
+  (String,CharSequence,int)
+  DateTimeFormatterBuilder appendZoneOrOffsetId()
+  FormatStyle valueOf(String)
+  def parse(CharSequence,TemporalQuery)
+# Unless required by applicable law or agreed to in writing,
+# specific language governing permissions and limitations
+  TextStyle SHORT
+  DateTimeFormatterBuilder appendLiteral(String)
+# not use this file except in compliance with the License.
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+  DateTimeFormatter withChronology(Chronology)
+# what methods and fields they have, etc.
   TextStyle[] values()
 }
-
-#### Exceptions
-
-class java.time.format.DateTimeParseException {
-  (String,CharSequence,int)
-  int getErrorIndex()
-  String getParsedString()
-}
+  FormatStyle LONG
+  DateTimeFormatter ofLocalizedDateTime(FormatStyle,FormatStyle)

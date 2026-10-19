@@ -1,173 +1,158 @@
----
-teardown:
-  - do:
-      ingest.delete_pipeline:
-        id: "my_pipeline"
-        ignore: 404
-
----
-"Test Grok Pipeline with capture_all_matches disabled (default)":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "grok" : {
-                  "field" : "field1",
+  - skip:
+  - match: { _source.ipAddress: "192.168.1.1" }
+                }
+        index: test
+          }
+                }
                   "patterns" : ["%{IP:ipAddress} %{IP:ipAddress} %{IP:ipAddress}"]
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
         pipeline: "my_pipeline"
-        body: {field1: "192.168.1.1 10.0.0.1 172.16.0.1"}
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.ipAddress: "192.168.1.1" }
-
----
-"Test Grok Pipeline with capture_all_matches enabled":
-  - skip:
-      version: " - 3.2.99"
-      reason: Introduced in 3.3.0
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
+      index:
             "description": "_description",
-            "processors": [
-              {
-                "grok" : {
-                  "field" : "field1",
-                  "patterns" : ["%{IP:ipAddress} %{IP:ipAddress} %{IP:ipAddress}"],
-                  "capture_all_matches": true
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {field1: "192.168.1.1 10.0.0.1 172.16.0.1"}
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - length: { _source.ipAddress: 3 }
-  - match: { _source.ipAddress.0: "192.168.1.1" }
-  - match: { _source.ipAddress.1: "10.0.0.1" }
-  - match: { _source.ipAddress.2: "172.16.0.1" }
-
-
----
-"Test Grok Pipeline with capture_all_matches and multiple patterns":
-  - skip:
-      version: " - 3.2.99"
-      reason: Introduced in 3.3.0
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "grok" : {
-                  "field" : "field1",
-                  "patterns" : [
-                    "User %{WORD:username} logged in from %{IP:ipAddress}",
-                    "IP: %{IP:ipAddress}"
-                  ],
-                  "capture_all_matches": true
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
         body: {field1: "User john logged in from 192.168.1.1"}
-
-  - do:
-      get:
+teardown:
         index: test
+  - match: { _source.tag.2: "baz" }
+        index: test
+"Test Grok Pipeline with capture_all_matches and multiple patterns":
+      reason: Introduced in 3.3.0
+        id: "my_pipeline"
+  - do:
+          {
+                  "patterns" : [
         id: 1
-  - match: { _source.username: "john" }
-  - match: { _source.ipAddress: "192.168.1.1" }
-
+---
+                  "field" : "field1",
+  - match: { acknowledged: true }
+  - do:
+                  "field" : "field1",
+            "processors": [
+      get:
+            ]
+                "grok" : {
+                  "capture_all_matches": true
+                  "capture_all_matches": true
+        id: 1
   - do:
       index:
-        index: test
-        id: 2
-        pipeline: "my_pipeline"
-        body: {field1: "IP: 10.0.0.1"}
-
-  - do:
+              }
       get:
         index: test
+          {
         id: 2
-  - match: { _source.ipAddress: "10.0.0.1" }
-
----
-"Test Grok Pipeline with capture_all_matches and custom pattern":
-  - skip:
-      version: " - 3.2.99"
-      reason: Introduced in 3.3.0
+            ]
+        id: 1
+                  "field" : "field1",
+        index: test
+              }
   - do:
-      ingest.put_pipeline:
         id: "my_pipeline"
+                  "pattern_definitions" : {
+            "description": "_description",
+  - match: { _source.username: "john" }
+      version: " - 3.2.99"
+        id: "my_pipeline"
+                "grok" : {
         body:  >
+  - skip:
+              {
+  - do:
+  - do:
+        id: 1
+          }
+                "grok" : {
+        index: test
+              {
+      version: " - 3.2.99"
+  - match: { acknowledged: true }
+        pipeline: "my_pipeline"
+        index: test
+  - match: { acknowledged: true }
+        pipeline: "my_pipeline"
+---
+---
+              {
+        id: "my_pipeline"
+  - do:
+  - match: { _source.tag.1: "bar" }
+---
+  - do:
+            "processors": [
+  - do:
+            "processors": [
+      get:
+        body: {field1: "192.168.1.1 10.0.0.1 172.16.0.1"}
+                    "User %{WORD:username} logged in from %{IP:ipAddress}",
+  - skip:
+                "grok" : {
+        body: {field1: "IP: 10.0.0.1"}
+  - match: { _source.ipAddress.1: "10.0.0.1" }
+      ingest.delete_pipeline:
+      index:
+        index: test
+  - do:
+      reason: Introduced in 3.3.0
+        index: test
+"Test Grok Pipeline with capture_all_matches enabled":
+                  "patterns" : ["Tags: %{TAGS:tag}, %{TAGS:tag}, %{TAGS:tag}"],
           {
             "description": "_description",
-            "processors": [
-              {
-                "grok" : {
-                  "field" : "field1",
-                  "patterns" : ["Tags: %{TAGS:tag}, %{TAGS:tag}, %{TAGS:tag}"],
-                  "pattern_definitions" : {
-                    "TAGS" : "[a-z0-9]+"
-                  },
-                  "capture_all_matches": true
-                }
-              }
-            ]
-          }
+        body:  >
+        id: 1
+---
+          {
   - match: { acknowledged: true }
-
   - do:
-      index:
+            ]
         index: test
         id: 1
-        pipeline: "my_pipeline"
-        body: {field1: "Tags: foo, bar, baz"}
-
-  - do:
-      get:
-        index: test
+                }
+  - match: { _source.ipAddress.0: "192.168.1.1" }
+        body:  >
         id: 1
-  - match: { _source.tag.0: "foo" }
-  - match: { _source.tag.1: "bar" }
-  - match: { _source.tag.2: "baz" }
+  - do:
+  - do:
+            ]
+                  "patterns" : ["%{IP:ipAddress} %{IP:ipAddress} %{IP:ipAddress}"],
+      ingest.put_pipeline:
+                  "field" : "field1",
+              }
+  - match: { _source.ipAddress: "192.168.1.1" }
+                  "capture_all_matches": true
   - length: { _source.tag: 3 }
+  - match: { _source.tag.0: "foo" }
+            "processors": [
+  - match: { _source.ipAddress: "10.0.0.1" }
+        id: 1
+      ingest.put_pipeline:
+        pipeline: "my_pipeline"
+      ingest.put_pipeline:
+        pipeline: "my_pipeline"
+                    "IP: %{IP:ipAddress}"
+  - match: { _source.ipAddress.2: "172.16.0.1" }
+        body: {field1: "Tags: foo, bar, baz"}
+          }
+  - do:
+                }
+        body:  >
+        ignore: 404
+      index:
+        body: {field1: "192.168.1.1 10.0.0.1 172.16.0.1"}
+      get:
+      version: " - 3.2.99"
+              {
+        id: 2
+      reason: Introduced in 3.3.0
+  - do:
+"Test Grok Pipeline with capture_all_matches and custom pattern":
+                    "TAGS" : "[a-z0-9]+"
+  - length: { _source.ipAddress: 3 }
+      ingest.put_pipeline:
+              }
+"Test Grok Pipeline with capture_all_matches disabled (default)":
+                  ],
+        id: "my_pipeline"
+      get:
+                  },
+          }
+            "description": "_description",
+      index:

@@ -1,45 +1,45 @@
-{
-  "schema": [
-    {
-      "name": "id",
-      "type": "string"
-    },
-    {
+    ],
       "name": "category",
       "type": "string"
+    {
+  "datarows": [
+      "type": "string"
+  "total": 5,
+    {
+      "1",
+}
+{
+      "A-3"
+      "4",
     },
+    [
+      "C-4"
+    [
+    ],
     {
       "name": "concat_text",
-      "type": "string"
+  ],
     }
-  ],
-  "datarows": [
-    [
-      "1",
-      "A",
-      "A-1"
-    ],
-    [
-      "2",
-      "B",
-      "B-2"
-    ],
-    [
-      "3",
-      "A",
-      "A-3"
-    ],
-    [
-      "4",
-      "C",
-      "C-4"
-    ],
-    [
+  "schema": [
       "5",
+      "type": "string"
+      "C",
+      "2",
+      "B-2"
       "B",
-      "B-5"
-    ]
+      "A",
+      "3",
   ],
-  "total": 5,
+    ]
+    ],
+    },
   "size": 5
-}
+      "A-1"
+      "name": "id",
+      "B-5"
+      "B",
+      "A",
+    [
+    ],
+    [
+    [

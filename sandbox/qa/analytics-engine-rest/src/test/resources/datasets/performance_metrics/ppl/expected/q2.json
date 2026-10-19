@@ -1,48 +1,48 @@
+      "type": "string"
+      "host2"
 {
-  "schema": [
-    {
-      "name": "avg_memory",
-      "type": "double"
-    },
-    {
-      "name": "max_memory",
-      "type": "bigint"
-    },
-    {
-      "name": "min_memory",
-      "type": "bigint"
-    },
     {
       "name": "host",
-      "type": "string"
+      32,
+    {
+      "type": "double"
+    },
     }
-  ],
   "datarows": [
+      "name": "avg_memory",
+      95,
+    ],
+      "host1"
+  ],
+    {
+    [
+    ]
+      "type": "bigint"
+      61.12,
+      30,
+      "name": "min_memory",
+      "name": "max_memory",
+      91,
+  "size": 4
     [
       62.72,
-      91,
-      34,
-      "host1"
-    ],
-    [
-      59.4,
-      87,
-      33,
-      "host2"
-    ],
-    [
-      61.12,
-      95,
-      32,
-      "host3"
-    ],
-    [
+      "host4"
       59.48,
       95,
-      30,
-      "host4"
-    ]
-  ],
-  "total": 4,
-  "size": 4
+      59.4,
 }
+      87,
+      34,
+    [
+  "total": 4,
+      33,
+      "type": "bigint"
+  "schema": [
+    ],
+    ],
+  ],
+    },
+    },
+    [
+    {
+      "host3"

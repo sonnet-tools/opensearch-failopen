@@ -1,67 +1,62 @@
-# integration tests for queries with specific analysis chains
-
-"match query with stacked stems":
-  # Tests the match query stemmed tokens are "stacked" on top of the unstemmed
-  # versions in the same position.
-  - do:
-      indices.create:
-        index: test
-        body:
-          settings:
-            number_of_shards: 1
-            number_of_replicas: 1
-            analysis:
-              analyzer:
-                index:
-                  tokenizer: standard
-                  filter: [lowercase]
-                search:
-                  rest_total_hits_as_int: true
-                  tokenizer: standard
-                  filter: [lowercase, keyword_repeat, porter_stem, unique_stem]
-              filter:
-                unique_stem:
-                  type: unique
-                  only_on_same_position: true
-          mappings:
-            properties:
-              text:
-                type: text
-                analyzer: index
-                search_analyzer: search
-
-  - do:
-      index:
-        index: test
-        id:    1
-        body:  { "text": "the fox runs across the street" }
-        refresh: true
-
-  - do:
       search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              text:
-                query: fox runs
-                operator: AND
-  - match: {hits.total: 1}
-
-  - do:
-      index:
-        index: test
-        id:    2
-        body:  { "text": "run fox run" }
-        refresh: true
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              text:
-                query: fox runs
-                operator: AND
   - match: {hits.total: 2}
+  - do:
+                operator: AND
+              analyzer:
+  - do:
+                unique_stem:
+          settings:
+          query:
+        index: test
+      indices.create:
+                analyzer: index
+                query: fox runs
+      index:
+  - do:
+  - do:
+                  tokenizer: standard
+              text:
+                operator: AND
+        id:    1
+              text:
+                search:
+        body:  { "text": "run fox run" }
+          mappings:
+# integration tests for queries with specific analysis chains
+        body:
+          query:
+        id:    2
+              filter:
+            number_of_shards: 1
+  # Tests the match query stemmed tokens are "stacked" on top of the unstemmed
+            analysis:
+        rest_total_hits_as_int: true
+        body:  { "text": "the fox runs across the street" }
+                  filter: [lowercase, keyword_repeat, porter_stem, unique_stem]
+            properties:
+                  type: unique
+                query: fox runs
+      search:
+                  rest_total_hits_as_int: true
+  - do:
+        refresh: true
+                  filter: [lowercase]
+        body:
+        index: test
+        rest_total_hits_as_int: true
+"match query with stacked stems":
+                search_analyzer: search
+  # versions in the same position.
+                type: text
+            match:
+        refresh: true
+                  only_on_same_position: true
+                  tokenizer: standard
+        index: test
+  - match: {hits.total: 1}
+      index:
+        body:
+                index:
+              text:
+            number_of_replicas: 1
+            match:

@@ -1,28 +1,28 @@
-{
-  "schema": [
-    {
-      "name": "tags",
-      "type": "string"
-    },
-    {
-      "name": "has_tag1",
-      "type": "boolean"
-    }
-  ],
-  "datarows": [
-    [
-      "tag1,tag2,tag3",
       true
-    ],
-    [
-      "tag2,tag4",
-      false
-    ],
     [
       "tag1,tag3,tag5",
-      true
-    ]
-  ],
-  "total": 3,
-  "size": 3
+    [
+      "name": "tags",
+  "datarows": [
 }
+  "total": 3,
+    ]
+    [
+    ],
+    {
+    }
+  "schema": [
+      "tag1,tag2,tag3",
+    },
+  ],
+{
+    ],
+      true
+    {
+      "type": "boolean"
+  ],
+  "size": 3
+      "type": "string"
+      "name": "has_tag1",
+      false
+      "tag2,tag4",

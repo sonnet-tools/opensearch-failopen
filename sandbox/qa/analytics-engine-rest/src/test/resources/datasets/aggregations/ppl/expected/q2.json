@@ -1,40 +1,40 @@
+  "size": 4
 {
-  "schema": [
-    {
+  ],
+    },
+      "East"
+  "total": 4,
+      "West"
       "name": "unique_codes",
-      "type": "bigint"
+    [
+      "North"
+}
+    ],
+  "schema": [
+      50,
     },
-    {
+      "South"
+  "datarows": [
+    ],
+    }
+    [
       "name": "total",
+    {
+      3,
       "type": "bigint"
-    },
+      3,
+  ],
+      50,
+      "type": "bigint"
+    [
+    [
+      50,
+    ]
+    {
     {
       "name": "region",
+    ],
+      50,
+      3,
       "type": "string"
-    }
-  ],
-  "datarows": [
-    [
       3,
-      50,
-      "East"
-    ],
-    [
-      3,
-      50,
-      "North"
-    ],
-    [
-      3,
-      50,
-      "South"
-    ],
-    [
-      3,
-      50,
-      "West"
-    ]
-  ],
-  "total": 4,
-  "size": 4
-}

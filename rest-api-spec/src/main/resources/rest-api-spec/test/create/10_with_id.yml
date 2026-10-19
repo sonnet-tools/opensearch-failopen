@@ -1,29 +1,24 @@
+          id:     1
+ - match:   { _id:      "1"}
 ---
 "Create with ID":
-
- - do:
       create:
-          index:  test_1
-          id:     1
-          body:   { foo: bar }
-
- - match:   { _index:   test_1 }
- - match:   { _id:      "1"}
- - match:   { _version: 1}
-
  - do:
+          index:  test_1
       get:
           index:  test_1
-          id:     1
-
- - match:   { _index:   test_1 }
- - match:   { _id:      "1"}
  - match:   { _version: 1}
- - match:   { _source: { foo: bar }}
-
- - do:
       catch:      conflict
-      create:
-          index:  test_1
           id:     1
+ - match:   { _id:      "1"}
           body:   { foo: bar }
+ - match:   { _version: 1}
+ - match:   { _index:   test_1 }
+          id:     1
+ - do:
+ - do:
+ - match:   { _index:   test_1 }
+          index:  test_1
+      create:
+          body:   { foo: bar }
+ - match:   { _source: { foo: bar }}

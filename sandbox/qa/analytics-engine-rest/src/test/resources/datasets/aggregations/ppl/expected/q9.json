@@ -1,56 +1,56 @@
-{
-  "schema": [
-    {
-      "name": "total",
-      "type": "bigint"
-    },
-    {
-      "name": "unique_users",
-      "type": "bigint"
-    },
-    {
       "name": "min_rt",
+    },
       "type": "int"
+      1492,
+      725,
+      "name": "unique_users",
     },
     {
       "name": "max_rt",
-      "type": "int"
-    },
-    {
-      "name": "median_rt",
-      "type": "int"
-    },
-    {
-      "name": "department",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      72,
-      10,
-      53,
-      1500,
-      725,
-      "Sales"
-    ],
-    [
-      66,
-      10,
       83,
-      1492,
-      785,
-      "Marketing"
-    ],
-    [
-      62,
-      10,
-      59,
-      1497,
-      755,
-      "Engineering"
-    ]
+    },
   ],
+      53,
+      10,
+    },
+      "type": "string"
+    {
+      785,
+      1500,
+      "name": "total",
+      "type": "int"
+      "name": "department",
+      10,
+      62,
+    {
+    [
+      "type": "bigint"
   "total": 3,
-  "size": 3
+      1497,
+      "Sales"
+    ]
+      10,
+    {
+      59,
+  "schema": [
+    {
+    [
+    [
+      "type": "bigint"
+    ],
+      755,
 }
+    ],
+{
+  "size": 3
+      "name": "median_rt",
+      66,
+    {
+  ],
+    }
+  "datarows": [
+      72,
+      "type": "int"
+      "Engineering"
+    },
+      "Marketing"

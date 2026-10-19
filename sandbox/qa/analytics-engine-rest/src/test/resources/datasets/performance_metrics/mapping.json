@@ -1,31 +1,31 @@
-{
   "settings": {
-    "number_of_shards": 1,
-    "number_of_replicas": 0
-  },
-  "mappings": {
-    "properties": {
-      "@timestamp": {
+        "type": "keyword"
+      },
+  }
+      "memory_usage": {
         "type": "date"
       },
-      "cpu_usage": {
-        "type": "long"
-      },
-      "memory_usage": {
-        "type": "long"
-      },
-      "disk_io": {
-        "type": "keyword"
-      },
-      "network_io": {
-        "type": "keyword"
-      },
-      "host": {
-        "type": "keyword"
-      },
       "region": {
+      },
+        "type": "long"
         "type": "keyword"
-      }
+        "type": "long"
+      "cpu_usage": {
+      },
     }
-  }
+      "host": {
+      },
 }
+    "number_of_replicas": 0
+    "properties": {
+  "mappings": {
+      }
+  },
+        "type": "keyword"
+        "type": "keyword"
+    "number_of_shards": 1,
+      "@timestamp": {
+      },
+{
+      "disk_io": {
+      "network_io": {

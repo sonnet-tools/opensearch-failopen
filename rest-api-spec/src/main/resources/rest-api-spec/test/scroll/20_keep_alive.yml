@@ -1,67 +1,58 @@
+            match_all: {}
 ---
- teardown:
-
-  - do:
-      cluster.put_settings:
+          query:
+        scroll: 1m
         body:
-          transient:
-            search.max_keep_alive: null
-            search.default_keep_alive: null
-
----
-"Max keep alive":
+        body:
+        body:
   - do:
-      index:
-        index:  test_scroll
+  - do:
         id:     1
-        body:   { foo: 1 }
-
+            match_all: {}
+          transient:
   - do:
-      index:
-        index:  test_scroll
-        id:     2
+            search.default_keep_alive: "1m"
+  - length: {hits.hits:      1    }
+      cluster.put_settings:
+      catch: /.*Keep alive for.*is too large.*/
         body:   { foo: 1 }
-
+        index:  test_scroll
+        scroll: 3m
   - do:
       indices.refresh: {}
-
+          transient:
+        sort: foo
+        rest_total_hits_as_int: true
+---
+ teardown:
+        body:   { foo: 1 }
+        size: 1
+        index:  test_scroll
+            search.default_keep_alive: null
   - do:
       cluster.put_settings:
-        body:
-          transient:
-            search.default_keep_alive: "1m"
-            search.max_keep_alive: "1m"
-
-  - do:
-      catch: /.*Keep alive for.*is too large.*/
-      search:
-        rest_total_hits_as_int: true
-        index: test_scroll
-        size: 1
         scroll: 2m
-        sort: foo
-        body:
-          query:
-            match_all: {}
-
+        id:     2
   - do:
       search:
-        rest_total_hits_as_int: true
-        index: test_scroll
-        size: 1
-        scroll: 1m
         sort: foo
-        body:
-          query:
-            match_all: {}
-
-  - set: {_scroll_id: scroll_id}
-  - match: {hits.total:      2    }
-  - length: {hits.hits:      1    }
-
-  - do:
-      catch: /.*Keep alive for.*is too large.*/
-      scroll:
         rest_total_hits_as_int: true
+      catch: /.*Keep alive for.*is too large.*/
+  - match: {hits.total:      2    }
+            search.max_keep_alive: null
+        size: 1
+        rest_total_hits_as_int: true
+"Max keep alive":
+      index:
+  - do:
+  - set: {_scroll_id: scroll_id}
+            search.max_keep_alive: "1m"
+        body:
+        index: test_scroll
+      scroll:
+        index: test_scroll
+  - do:
+      search:
         scroll_id: $scroll_id
-        scroll: 3m
+          query:
+      index:

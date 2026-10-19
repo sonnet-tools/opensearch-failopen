@@ -1,168 +1,148 @@
-setup:
-  - do:
-      indices.create:
         index:  test
         body:
-          mappings:
-            properties:
-              text:
-                type: text
-                index_prefixes:
-                  min_chars: 2
-                  max_chars: 5
-              text_with_pos_inc_gap:
-                type: text
-                position_increment_gap: 201
-                index_prefixes:
-                  min_chars: 2
-                  max_chars: 5
-  - do:
-      index:
-          index:  test
-          id:     1
-          body:   { text: some short words with a stupendously long one }
-
-  - do:
-      index:
-        index:  test
-        id:     2
-        body:   { text: sentence with UPPERCASE WORDS }
-
-  - do:
-      index:
-        index:  test
-        id:     3
-        body:   { text: ["foo", "b-12"] }
-
-  - do:
-      index:
-        index:  test
-        id:     4
-        body:   { text_with_pos_inc_gap: ["foo", "b-12"] }
-
-  - do:
-      indices.refresh:
-        index: [test]
-
----
-"search with index prefixes":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        q: shor*
         df: text
-
-  - match: {hits.total: 1}
-  - match: {hits.max_score: 1}
-  - match: {hits.hits.0._score: 1}
-
-  - do:
-      search:
         rest_total_hits_as_int: true
-        index: test
-        body:
+  - match: {hits.total: 1}
+        rest_total_hits_as_int: true
           query:
-            query_string:
-              default_field: text
-              query: shor*
-              boost: 2
-
-  - match: {hits.total: 1}
-  - match: {hits.max_score: 2}
-  - match: {hits.hits.0._score: 2}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          explain: true
-          query:
-            query_string:
-              default_field: text
-              query: a*
-              boost: 2
-
-  - match: {hits.total: 1}
-  - match: {hits.max_score: 2}
-  - match: {hits.hits.0._score: 2}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        q: stupendousl*
-        df: text
-
-  - match: {hits.total: 1}
-  - match: {hits.max_score: 1}
   - match: {hits.hits.0._score: 1}
-
+  - match: {hits.hits.0._score: 1}
+                  max_chars: 5
+  - match: {hits.max_score: 2}
+      search:
+      version: " - 2.15.99"
+  - do:
+        index: test
+  - match: {hits.max_score: 1}
+        index:  test
+            query_string:
 ---
-"search with uppercase regex":
+---
+  - match: {hits.total: 1}
+        body:
   - skip:
-        version: " - 2.99.99"
-        reason: uppercase regex not supported before 3.0.0
+        body:
+"search with uppercase regex":
   - do:
+                  min_chars: 2
+      search:
+      index:
+                type: text
+  - do:
+              default_field: text
+  - do:
+            match_phrase_prefix:
+        index: test
+      reason: "the bug was fixed since 2.16.0"
       search:
         rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            query_string:
-              default_field: text
-              query: /UPPERCASE/
-
-  - match: {hits.total: 1}
+      reason: "the bug was fixed since 2.16.0"
   - match: {hits.max_score: 1}
-  - match: {hits.hits.0._score: 1}
-
+        body:   { text: sentence with UPPERCASE WORDS }
+  - do:
+        id:     4
+      search:
 ---
+        rest_total_hits_as_int: true
+      search:
+  - match: {hits.total: 1}
+  - do:
+  - match: {hits.total: 1}
 "search index prefixes with span_multi":
   - do:
-      search:
+  - match: {hits.hits.0._score: 2}
         rest_total_hits_as_int: true
+      index:
+  - do:
+                type: text
         index: test
-        body:
-          query:
-            span_near:
+      version: " - 2.15.99"
               clauses: [
+        df: text
+              query: a*
+          explain: true
+      index:
+        body:
+              text_with_pos_inc_gap:
+          index:  test
+        body:   { text: ["foo", "b-12"] }
+          query:
+  - do:
+        index: test
+        index: test
+          mappings:
+        id:     2
+        rest_total_hits_as_int: true
                 { "span_term": { "text": "short" } },
-                { "span_multi": { "match": { "prefix": { "text": "word" } } } }
-              ]
-
-  - match: {hits.total: 1}
-
-# related issue: https://github.com/opensearch-project/OpenSearch/issues/9203
+        rest_total_hits_as_int: true
+  - match: {hits.max_score: 1}
+        index:  test
+  - skip:
+        reason: uppercase regex not supported before 3.0.0
+            query_string:
+              default_field: text
+        q: stupendousl*
 ---
+        index: test
+  - match: {hits.hits.0._score: 1}
+            span_near:
+  - do:
+              boost: 2
+        index: [test]
+          id:     1
+              text:
+      search:
 "search index prefixes with multiple values":
-  - skip:
-      version: " - 2.15.99"
-      reason: "the bug was fixed since 2.16.0"
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            match_phrase_prefix:
-              text: "b-12"
-
   - match: {hits.total: 1}
-
----
+  - do:
+              query: /UPPERCASE/
+  - do:
+            query_string:
+        id:     3
+            match_phrase_prefix:
 "search index prefixes with multiple values and custom position_increment_gap":
-  - skip:
-      version: " - 2.15.99"
-      reason: "the bug was fixed since 2.16.0"
   - do:
-      search:
         rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            match_phrase_prefix:
-              text_with_pos_inc_gap: "b-12"
-
+              query: shor*
+        version: " - 2.99.99"
   - match: {hits.total: 1}
+  - match: {hits.hits.0._score: 2}
+      indices.create:
+            properties:
+        index: test
+  - match: {hits.total: 1}
+              text_with_pos_inc_gap: "b-12"
+---
+# related issue: https://github.com/opensearch-project/OpenSearch/issues/9203
+              default_field: text
+      index:
+                  min_chars: 2
+  - match: {hits.max_score: 2}
+                  max_chars: 5
+        body:
+        body:   { text_with_pos_inc_gap: ["foo", "b-12"] }
+        index: test
+        q: shor*
+  - skip:
+          query:
+                index_prefixes:
+                position_increment_gap: 201
+          query:
+setup:
+      search:
+        body:
+      indices.refresh:
+  - match: {hits.total: 1}
+          body:   { text: some short words with a stupendously long one }
+"search with index prefixes":
+          query:
+              text: "b-12"
+              ]
+                { "span_multi": { "match": { "prefix": { "text": "word" } } } }
+      search:
+        body:
+        index:  test
+              boost: 2
+          query:
+                index_prefixes:
+  - do:

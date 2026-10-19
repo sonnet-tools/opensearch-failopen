@@ -1,49 +1,49 @@
-{
-  "schema": [
-    {
-      "name": "total_processed",
-      "type": "bigint"
-    },
-    {
-      "name": "cluster_name",
-      "type": "string"
-    },
-    {
-      "name": "log_volume",
-      "type": "bigint"
-    },
-    {
-      "name": "cluster.name",
-      "type": "string"
-    },
-    {
-      "name": "processing_efficiency",
-      "type": "double"
-    }
-  ],
-  "datarows": [
     [
-      2000,
-      "cluster-c",
+    }
+  "total": 3,
+      "name": "cluster.name",
+      1500.0
+  "schema": [
+    ],
+      "cluster-b",
+    },
+      "cluster-b",
       1,
+      "name": "log_volume",
+      "name": "processing_efficiency",
+    {
+    [
       "cluster-c",
+  "size": 3
+  ],
+      "cluster-a",
+    {
+      2000,
+      1500,
+  ],
+}
+    },
+      "type": "bigint"
+{
       2000.0
     ],
-    [
-      1500,
-      "cluster-b",
+      "type": "string"
+      "type": "string"
+    {
+      "cluster-c",
+      "type": "bigint"
+      "cluster-a",
+      "type": "double"
+    {
+  "datarows": [
+    {
+      "name": "cluster_name",
       1,
-      "cluster-b",
-      1500.0
-    ],
-    [
       1000,
-      "cluster-a",
-      1,
-      "cluster-a",
-      1000.0
     ]
-  ],
-  "total": 3,
-  "size": 3
-}
+    [
+      1,
+    },
+    },
+      1000.0
+      "name": "total_processed",

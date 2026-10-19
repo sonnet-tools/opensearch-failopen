@@ -1,65 +1,65 @@
-# Integration tests for Korean analysis components
-#
----
-"Analyzer":
+    - match:  { tokens.1.token: 깊  }
+            filter:
     - do:
-        indices.analyze:
-          body:
-            text:         뿌리가 깊은 나무
-            analyzer:     nori
     - length: { tokens: 3 }
-    - match:  { tokens.0.token: 뿌리 }
+    - length: { tokens: 3 }
     - match:  { tokens.1.token: 깊 }
-    - match:  { tokens.2.token: 나무 }
----
-"Tokenizer":
-    - do:
-        indices.analyze:
-          body:
-            text:         뿌리가 깊은 나무
-            tokenizer:    nori_tokenizer
+    - match:  { tokens.0.token: "102500"}
+"Number filter":
+#
+    - match:  { tokens.0.token: 향가 }
     - length: { tokens: 5 }
     - match:  { tokens.0.token: 뿌리 }
     - match:  { tokens.1.token: 가  }
-    - match:  { tokens.2.token: 깊  }
-    - match:  { tokens.3.token: 은  }
-    - match:  { tokens.4.token: 나무 }
----
-"Part of speech filter":
-    - do:
-        indices.analyze:
+              - type:               nori_part_of_speech
+# Integration tests for Korean analysis components
           body:
-            text:         뿌리가 깊은 나무
-            tokenizer:    nori_tokenizer
-            filter:       [nori_part_of_speech]
-    - length: { tokens: 3 }
-    - match:  { tokens.0.token: 뿌리 }
-    - match:  { tokens.1.token: 깊  }
     - match:  { tokens.2.token: 나무 }
----
+    - match:  { tokens.1.token: 과}
 "Reading filter":
+            filter:       [nori_part_of_speech]
+    - do:
+    - length: { tokens: 1 }
+            tokenizer:
+        indices.analyze:
+    - match:  { tokens.0.token: 뿌리 }
+            text:         鄕歌
+    - match:  { tokens.3.token: 은  }
+          body:
+---
     - do:
         indices.analyze:
+    - length: { tokens: 3 }
+            analyzer:     nori
+    - match:  { tokens.2.token: 나무 }
           body:
-            text:         鄕歌
+    - match:  { tokens.2.token: 깊  }
+"Tokenizer":
+---
+            tokenizer:    nori_tokenizer
+        indices.analyze:
+"Analyzer":
             tokenizer:    nori_tokenizer
             filter:       [nori_readingform]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: 향가 }
----
-"Number filter":
-    - do:
         indices.analyze:
-          body:
-            text:                   십만이천오백과 ３.２천
-            tokenizer:
               type:                 nori_tokenizer
-              discard_punctuation:  false
-            filter:
-              - type:               nori_part_of_speech
-                stoptags:           ["SP"]
+            text:                   십만이천오백과 ３.２천
+    - match:  { tokens.0.token: 뿌리 }
+            text:         뿌리가 깊은 나무
+---
+    - do:
+            tokenizer:    nori_tokenizer
+        indices.analyze:
+---
+    - do:
               - type:               nori_number
-    - length: { tokens: 3 }
-    - match:  { tokens.0.token: "102500"}
-    - match:  { tokens.1.token: 과}
+            text:         뿌리가 깊은 나무
+          body:
+            text:         뿌리가 깊은 나무
+          body:
+"Part of speech filter":
+                stoptags:           ["SP"]
+    - match:  { tokens.4.token: 나무 }
+              discard_punctuation:  false
+---
     - match:  { tokens.2.token: "3200"}

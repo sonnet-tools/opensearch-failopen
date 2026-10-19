@@ -1,289 +1,253 @@
----
-"Test basic field retrieval":
+                type: token_count
   - do:
-      indices.create:
-        index:  test
-        body:
-          mappings:
-            properties:
-              keyword:
-                type: keyword
-              integer_range:
-                type: integer_range
-
-  - do:
-      index:
-        index:  test
-        id:     1
-        body:
-          keyword: [ "a", "b" ]
-          integer_range:
-            gte: 0
-            lte: 42
-
-  - do:
-      indices.refresh:
-        index: [ test ]
-
-  - do:
-      search:
         index: test
         body:
-          fields: [keyword, integer_range]
-
-  - is_true: hits.hits.0._id
-  - is_true: hits.hits.0._source
-
-  - match: { hits.hits.0.fields.keyword.0: a }
-  - match: { hits.hits.0.fields.keyword.1: b }
-
-  - match: { hits.hits.0.fields.integer_range.0.gte: 0 }
-  - match: { hits.hits.0.fields.integer_range.0.lte: 42 }
-
+  - match: { hits.hits.0.fields.keyword.0: "a" }
+                type: integer
+  - match: { hits.hits.0.fields.keyword.0: "a" }
+          integer: "not an integer"
+  - do:
+        index:  test
+        body:
+                type: keyword
+          fields: [count, count_without_dv]
 ---
+  - is_true: hits.hits.0._id
 "Test date formatting":
   - do:
-      indices.create:
-        index:  test
         body:
-          settings:
-            index.number_of_shards: 1
+        index:  test
+        index:  test
+  - do:
+          fields: [ keyword ]
+      search:
           mappings:
-            properties:
-              keyword:
-                type: keyword
-              date:
-                type: date
-
-  - do:
-      index:
-        index:  test
+              count_without_dv:
         id:     1
-        body:
-          keyword: "value"
-          date: "1990-12-29T22:30:00.000Z"
-
-  - do:
-      indices.refresh:
-        index: [ test ]
-
-  - do:
-      search:
-        index: test
-        body:
-          fields:
-            - field: date
-              format: "yyyy/MM/dd"
-
-  - is_true: hits.hits.0._id
-  - is_true: hits.hits.0._source
-  - match: { hits.hits.0.fields.date.0: "1990/12/29" }
-
-  - do:
-      catch: bad_request
-      search:
-        index: test
-        body:
-          fields:
-            - field: keyword
-              format: "yyyy/MM/dd"
-
----
+            gte: 0
 "Test disable source":
-  - do:
-      indices.create:
-        index:  test
         body:
+              format: "yyyy/MM/dd"
+  - do:
+                type: token_count
+            index.number_of_shards: 1
+  - is_true: hits.hits.0._source
           settings:
-            number_of_shards: 1
-          mappings:
-            _source:
-              enabled: false
-            properties:
-              keyword:
-                type: keyword
-
-  - do:
-      index:
-        index:  test
-        id:     1
-        body:
-          keyword: [ "a" ]
-
   - do:
       indices.refresh:
-        index: [ test ]
-
-  - do:
-      catch: bad_request
-      search:
-        index: test
-        body:
-          fields: [keyword]
-  - match: { error.root_cause.0.type: "illegal_argument_exception" }
-  - match: { error.root_cause.0.reason: "Unable to retrieve the requested [fields] since _source is disabled
-        in the mappings for index [test]" }
-
----
-"Test ignore malformed":
-  - do:
-      indices.create:
-        index:  test
-        body:
-          settings:
-            number_of_shards: 1
-          mappings:
-            properties:
-              keyword:
-                type: keyword
-              integer:
-                type: integer
-                ignore_malformed: true
-
-  - do:
-      index:
-        index:  test
-        id:     1
-        body:
-          keyword: "a"
-          integer: 42
-
-  - do:
-      index:
-        index:  test
-        id:     2
-        body:
-          keyword: "b"
-          integer: "not an integer"
-
-  - do:
-      indices.refresh:
-        index: [ test ]
-
-  - do:
-      search:
-        index: test
-        body:
           sort: [ keyword ]
-          fields: [ integer ]
-
+          _source: false
+          keyword: [ "a", "b" ]
+        index:  test
+        refresh: true
   - match: { hits.hits.0.fields.integer.0: 42 }
-  - is_false: hits.hits.1.fields.integer
-
+          mappings:
+        index: [ test ]
+            - field: keyword
+          integer: 42
+  - do:
+        index:  test
+        index: test
+      search:
+            properties:
+        refresh: true
 ---
+            properties:
+        body:
+                type: integer_range
+        body:
 "Test disable _source loading":
   - do:
-      indices.create:
-        index:  test
+            lte: 42
         body:
-          settings:
+                type: keyword
             number_of_shards: 1
+            number_of_shards: 1
+  - do:
+  - do:
+            range:
+            properties:
+  - do:
+            index.number_of_shards: 1
+        index: [ test ]
+  - do:
+          _source: false
+              keyword:
+  - do:
+          settings:
+        body:
+  - match: { hits.hits.0.fields.keyword.0: a }
+      search:
+              integer:
+        id:     2
+        body:
+          fields:
+  - match: { hits.hits.0.fields.integer_range.0.lte: 42 }
+"Test token count":
+      index:
+            _source:
+              date:
+      search:
+          date: "1990-12-29T22:30:00.000Z"
+        id:     1
+---
+      search:
+  - do:
+                store: true
+            properties:
+  - do:
+        body:
+        id:     1
+          fields:
+          settings:
+                analyzer: standard
+"Test ignore malformed":
+  - do:
+          mappings:
           mappings:
             properties:
               keyword:
                 type: keyword
-              integer:
-                type: integer
-                store: true
-
-  - do:
-      index:
-        index:  test
-        id:     1
-        refresh: true
-        body:
-          keyword: "a"
-          integer: 42
-
-  - do:
-      search:
-        index: test
-        body:
+              keyword:
           fields: [ keyword ]
-          _source: false
-
-  - match: { hits.hits.0.fields.keyword.0: "a" }
-
-  - do:
-      search:
-        index: test
-        body:
-          fields: [ keyword ]
-          stored_fields: [ integer ]
-          _source: false
-
-  - match: { hits.hits.0.fields.keyword.0: "a" }
-  - match: { hits.hits.0.fields.integer.0: 42 }
-
----
-"Test search rewrite":
-  - do:
-      indices.create:
-        index:  test
-        body:
-          settings:
-            index.number_of_shards: 1
-          mappings:
-            properties:
-              date:
-                type: date
-
-  - do:
-      index:
-        index:  test
-        id:     1
-        body:
-          date: "1990-12-29T22:30:00.000Z"
-
-  - do:
-      indices.refresh:
-        index: [ test ]
-
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            range:
-              date:
-                from: "1990-12-29T22:30:00.000Z"
           fields:
-            - field: date
-              format: "yyyy/MM/dd"
-
-  - is_true: hits.hits.0._id
-  - is_true: hits.hits.0._source
-  - match: { hits.hits.0.fields.date.0: "1990/12/29" }
-
----
-"Test token count":
-  - do:
+  - match: { hits.hits.0.fields.count: [2] }
+              keyword:
+                type: date
+      indices.create:
+"Test basic field retrieval":
+      search:
       indices.create:
         index:  test
         body:
-          mappings:
-            properties:
-              count:
-                type: token_count
-                analyzer: standard
-              count_without_dv:
-                type: token_count
-                analyzer: standard
-                doc_values: false
-
-  - do:
-      index:
-        index:  test
         id:     1
-        refresh: true
+              integer_range:
+              format: "yyyy/MM/dd"
+      index:
+            number_of_shards: 1
+          query:
+                type: date
+          fields: [keyword, integer_range]
+  - do:
+            - field: date
+  - match: { hits.hits.0.fields.integer.0: 42 }
+      search:
+      index:
+  - match: { hits.hits.0.fields.date.0: "1990/12/29" }
+        index:  test
+        body:
+        index:  test
+                doc_values: false
+          settings:
+          settings:
+  - do:
+        body:
+      catch: bad_request
+        body:
+              format: "yyyy/MM/dd"
+      indices.create:
+          keyword: "value"
+        body:
+                ignore_malformed: true
+        id:     1
+          keyword: "b"
+        id:     1
+      index:
+      index:
+        index: [ test ]
+        index: test
+      indices.refresh:
+---
+                type: keyword
+          mappings:
+---
+              enabled: false
+  - do:
+        index:  test
+          fields: [ integer ]
+              date:
+            properties:
+  - is_true: hits.hits.0._source
+      index:
+  - do:
+  - do:
+          stored_fields: [ integer ]
+            - field: date
+      indices.refresh:
+  - is_true: hits.hits.0._id
+          keyword: "a"
+      search:
+  - match: { hits.hits.0.fields.integer_range.0.gte: 0 }
+        body:
+              count:
         body:
           count: "some text"
+  - is_false: hits.hits.1.fields.integer
+              date:
   - do:
-      search:
+  - is_true: hits.hits.0._id
+                type: keyword
+      indices.create:
+        index: test
+        index: test
+  - is_true: hits.hits.0._id
+  - is_false: hits.hits.0.fields.count_without_dv
+---
+      indices.create:
+  - match: { error.root_cause.0.reason: "Unable to retrieve the requested [fields] since _source is disabled
+      indices.refresh:
+        id:     1
+          integer: 42
         index: test
         body:
-          fields: [count, count_without_dv]
-
-  - is_true: hits.hits.0._id
-  - match: { hits.hits.0.fields.count: [2] }
-  - is_false: hits.hits.0.fields.count_without_dv
+        body:
+      indices.create:
+      index:
+                type: integer
+                from: "1990-12-29T22:30:00.000Z"
+        body:
+        index:  test
+        index:  test
+          keyword: [ "a" ]
+        index: [ test ]
+      indices.create:
+      search:
+---
+  - do:
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+        body:
+      catch: bad_request
+        body:
+  - do:
+  - match: { hits.hits.0.fields.keyword.1: b }
+        index: test
+  - is_true: hits.hits.0._source
+      index:
+              integer:
+            properties:
+          date: "1990-12-29T22:30:00.000Z"
+          mappings:
+        index: [ test ]
+                analyzer: standard
+  - do:
+        body:
+          keyword: "a"
+        index:  test
+        in the mappings for index [test]" }
+        index:  test
+      indices.refresh:
+  - match: { hits.hits.0.fields.date.0: "1990/12/29" }
+          fields: [keyword]
+          mappings:
+              keyword:
+        body:
+"Test search rewrite":
+  - do:
+          integer_range:
+  - do:
+  - do:
+  - do:
+        index:  test
+        index: test
+        index:  test
+        index: test

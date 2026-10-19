@@ -1,181 +1,169 @@
-# This test relies on setting verion: 2, version_type: external on the source
-# of the reindex and then manipulates the versioning in the destination.
-# ReindexVersioningTests is a more thorough, java based version of these tests.
-
----
-"versioning defaults to overwrite":
   - do:
       index:
-        index:        src
-        id:           1
-        body:         { "company": "cat" }
-        version:      2
+  - do:
+      index:
+  - do:
         version_type: external
-  - do:
-      index:
-        index:        src
-        id:           2
-        body:         { "company": "cow" }
-  - do:
-      index:
-        index:        dest
-        id:           1
-        body:         { "company": "dog" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      reindex:
-        refresh: true
-        body:
-          source:
-            index: src
-          dest:
-            index: dest
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: dest
-        q:     company:cat
   - match: { hits.total: 1 }
   - do:
-      search:
-        rest_total_hits_as_int: true
+        index:        src
+  - do:
+            index:        src
+  - do:
         index: dest
+            index:        dest
         q:     company:cow
-  - match: { hits.total: 1 }
-
----
-"op_type can be set to create":
-  - do:
-      index:
-        index:        src
-        id:           1
-        body:         { "company": "cat" }
-        version:      2
-        version_type: external
-  - do:
-      index:
-        index:        src
-        id:           2
-        body:         { "company": "cow" }
-  - do:
-      index:
-        index:        dest
-        id:           1
-        body:         { "company": "dog" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      reindex:
-        refresh: true
-        body:
-          conflicts: proceed
-          source:
-            index:   src
-          dest:
-            index:   dest
-            op_type: create
-
-  - do:
+"version_type=external has refresh semantics":
       search:
-        rest_total_hits_as_int: true
+# This test relies on setting verion: 2, version_type: external on the source
+          source:
+        q:     company:cow
+      index:
+  - match: { hits.total: 1 }
+        index: dest
+  - match: { hits.total: 1 }
+  - match: { hits.total: 1 }
+        index:        src
+        index: dest
+      index:
+      reindex:
+        body:         { "company": "cat" }
+        id:           2
+      index:
+  - do:
+        index:        dest
         index: dest
         q:     company:dog
-  - match: { hits.total: 1 }
-  - do:
       search:
-        rest_total_hits_as_int: true
-        index: dest
-        q:     company:cow
-  - match: { hits.total: 1 }
-
----
-"version_type=external has refresh semantics":
   - do:
-      index:
-        index:        src
+            version_type: external
+          source:
+          source:
+        q:     company:cow
+  - do:
+        index: dest
+            op_type: create
+        refresh: true
         id:           1
+"versioning defaults to overwrite":
+        body:
+        rest_total_hits_as_int: true
+            index:   dest
+  - do:
+---
+        refresh: true
+      search:
+  - do:
+      reindex:
+# of the reindex and then manipulates the versioning in the destination.
+        body:         { "company": "dog" }
+      reindex:
+      indices.refresh: {}
+  - do:
+        body:         { "company": "cow" }
+      index:
+      indices.refresh: {}
+  - do:
+        id:           2
+  - match: { hits.total: 1 }
+        q:     company:cat
+        id:           1
+        index:        src
+---
+        version_type: external
+          dest:
+        rest_total_hits_as_int: true
+      search:
+        index: dest
+  - do:
+---
+        rest_total_hits_as_int: true
+        index:        dest
+          dest:
+# ReindexVersioningTests is a more thorough, java based version of these tests.
+            index:        src
+  - do:
+  - do:
+  - match: { hits.total: 1 }
+"op_type can be set to create":
+        id:           2
+        index: dest
+        version:      2
+        id:           1
+        index:        src
+        index:        dest
         body:         { "company": "cat" }
         version:      2
-        version_type: external
+        rest_total_hits_as_int: true
+      index:
+        q:     company:cat
+        body:
+        refresh: true
+        version:      2
   - do:
+  - do:
+  - do:
+        id:           1
+            version_type: internal
+      index:
+            index:   src
+      indices.refresh: {}
       index:
         index:        src
-        id:           2
-        body:         { "company": "cow" }
-  - do:
-      index:
-        index:        dest
-        id:           1
-        body:         { "company": "dog" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      reindex:
-        refresh: true
-        body:
-          source:
-            index:        src
-          dest:
-            index:        dest
-            version_type: external
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: dest
         q:     company:cat
-  - match: { hits.total: 1 }
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: dest
         q:     company:cow
-  - match: { hits.total: 1 }
-
----
+        index: dest
+        rest_total_hits_as_int: true
+          conflicts: proceed
+            index: src
+        refresh: true
+      search:
+      indices.refresh: {}
+  - do:
+        version_type: external
+      search:
+        id:           2
+        rest_total_hits_as_int: true
+        id:           1
+        rest_total_hits_as_int: true
+  - do:
+        index:        src
+  - do:
+        index:        src
+      index:
+        body:         { "company": "cat" }
+        body:         { "company": "cow" }
+      reindex:
+          source:
+        body:
+        body:         { "company": "dog" }
 "version_type=internal has overwrite semantics":
   - do:
-      index:
-        index:        src
-        id:           1
-        body:         { "company": "cat" }
+  - match: { hits.total: 1 }
+  - do:
+  - do:
   - do:
       index:
+  - do:
+        body:
+      search:
+        rest_total_hits_as_int: true
+      index:
+          dest:
+        body:         { "company": "dog" }
         index:        src
-        id:           2
+        body:         { "company": "cat" }
+        id:           1
+  - match: { hits.total: 1 }
+            index:        dest
+        body:         { "company": "dog" }
         body:         { "company": "cow" }
   - do:
-      index:
-        index:        dest
-        id:           1
-        body:         { "company": "dog" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      reindex:
-        refresh: true
-        body:
-          source:
-            index:        src
           dest:
-            index:        dest
-            version_type: internal
-
-  - do:
+        id:           1
+        index:        dest
       search:
-        rest_total_hits_as_int: true
-        index: dest
-        q:     company:cat
-  - match: { hits.total: 1 }
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: dest
-        q:     company:cow
-  - match: { hits.total: 1 }
+        id:           1
+        body:         { "company": "cow" }
+            index: dest
+---

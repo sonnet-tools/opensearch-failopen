@@ -1,235 +1,218 @@
-setup:
-
-  - do:
-      indices.create:
-          index: test
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
-              properties:
-                name:
-                   type: keyword
-                num:
-                   type: integer
-                created:
-                  type: date
-
-  - do:
-     bulk:
-        refresh: true
-        index: test
-        body:
-          - '{"index": {}}'
-          - '{"name": "one", "num": 1, "created": "2010-03-12T01:07:45"}'
-          - '{"index": {}}'
-          - '{"name": "two", "num": 2, "created": "2010-03-12T04:11:00"}'
-          - '{"index": {}}'
-          - '{"name": "three", "num": 3, "created": "2010-04-27T03:43:34"}'
-
----
-"Test typed keys parameter for avg aggregation":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        typed_keys: true
-        body:
-          size: 0
-          aggregations:
-            test_avg:
-              avg:
-                field: num
-  - is_true: aggregations.avg#test_avg
-
----
-"Test typed keys parameter for cardinality aggregation":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        typed_keys: true
-        body:
-          size: 0
-          aggregations:
-            test_cardinality:
-              cardinality:
-                field: name
-  - is_true: aggregations.cardinality#test_cardinality
-
----
-"Test typed keys parameter for extended_stats aggregation":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        typed_keys: true
-        body:
-          size: 0
-          aggregations:
             test_extended_stats:
-              extended_stats:
-                field: num
-  - is_true: aggregations.extended_stats#test_extended_stats
-
----
-"Test typed keys parameter for max aggregation":
-  - do:
-      search:
+              avg:
         rest_total_hits_as_int: true
-        typed_keys: true
-        body:
-          size: 0
-          aggregations:
-            test_max:
-              max:
-                field: num
-  - is_true: aggregations.max#test_max
-
----
-"Test typed keys parameter for min aggregation":
-  - do:
+              aggregations:
       search:
+  - is_true: aggregations.date_histogram#test_created_histogram.buckets.1.derivative#test_deriv
         rest_total_hits_as_int: true
-        typed_keys: true
-        body:
-          size: 0
-          aggregations:
-            test_min:
-              min:
-                field: num
-  - is_true: aggregations.min#test_min
-
----
-"Test typed keys parameter for percentiles aggregation":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        typed_keys: true
-        body:
-          size: 0
-          aggregations:
-            test_percentiles:
-              percentiles:
-                field: num
-  - is_true: aggregations.tdigest_percentiles#test_percentiles
-
----
-"Test typed keys parameter for percentile_ranks aggregation":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        typed_keys: true
-        body:
-          size: 0
-          aggregations:
-            test_percentile_ranks:
-              percentile_ranks:
-                field: num
-                values: [0,10]
-  - is_true: aggregations.tdigest_percentile_ranks#test_percentile_ranks
-
----
-"Test typed keys parameter for stats aggregation":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        typed_keys: true
-        body:
-          size: 0
-          aggregations:
-            test_stats:
               stats:
-                field: num
-  - is_true: aggregations.stats#test_stats
-
----
-"Test typed keys parameter for sum aggregation":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        typed_keys: true
+"Test typed keys parameter for max aggregation":
+                name:
+            test_sum:
+          body:
+                  type: date
         body:
+              properties:
+          index: test
+---
+          size: 0
+                    sort: num
+  - is_true: aggregations.value_count#test_value_count
+---
+  - is_true: aggregations.sum#test_sum
+                field: num
+  - do:
+              aggs:
+              number_of_replicas: 0
+---
+  - do:
+  - is_true: aggregations.bucket_metric_value#test_max_bucket
+        typed_keys: true
+  - do:
+"Test typed keys parameter for percentile_ranks aggregation":
+              extended_stats:
+---
+          size: 0
+        body:
+            test_value_count:
+                buckets_path: "test_created_histogram>test_sum"
+          aggregations:
+        rest_total_hits_as_int: true
+  - do:
+          size: 0
+        index: test
+              min:
+                calendar_interval: month
+          size: 0
+        typed_keys: true
+          size: 0
+"Test typed keys parameter for date_histogram aggregation and max_bucket pipeline aggregation":
+  - is_true: aggregations.lterms#test_terms
+        typed_keys: true
+"Test typed keys parameter for terms and top_hits aggregation":
+                field: name
+                field: num
+        body:
+"Test typed keys parameter for sum aggregation":
+              max_bucket:
+        body:
+        body:
+        refresh: true
+  - is_true: aggregations.stats#test_stats
+          size: 0
+              value_count:
+  - is_true: aggregations.sterms#test_terms.buckets.0.top_hits#test_top_hits
+      search:
+  - do:
+        body:
+          aggregations:
+---
+      indices.create:
+          aggregations:
+                created:
           size: 0
           aggregations:
-            test_sum:
+        typed_keys: true
+            mappings:
+        rest_total_hits_as_int: true
+      search:
+          size: 0
+          aggregations:
+        body:
+          size: 0
+        rest_total_hits_as_int: true
+---
+          aggregations:
+              terms:
+  - is_true: aggregations.sterms#test_terms
+                field: num
+              max:
+"Test typed keys parameter for avg aggregation":
+        body:
+              percentile_ranks:
+  - do:
+"Test typed keys parameter for extended_stats aggregation":
+        body:
+          aggregations:
+        typed_keys: true
+"Test typed keys parameter for percentiles aggregation":
+  - is_true: aggregations.extended_stats#test_extended_stats
+            test_max_bucket:
+        body:
+                field: num
+  - is_true: aggregations.date_histogram#test_created_histogram.buckets.1.sum#test_sum
+            test_min:
+                test_top_hits:
+          aggregations:
+  - is_true: aggregations.sterms#test_terms.buckets.1.top_hits#test_top_hits
+        body:
+        body:
+                   type: integer
+        typed_keys: true
+---
+                num:
+                test_deriv:
+  - is_true: aggregations.cardinality#test_cardinality
+          aggregations:
+  - is_true: aggregations.date_histogram#test_created_histogram.buckets.0.sum#test_sum
+            settings:
+        typed_keys: true
+                field: name
+---
+          - '{"index": {}}'
+                test_sum:
+          - '{"index": {}}'
+            test_stats:
+  - is_true: aggregations.sterms#test_terms.buckets.2.top_hits#test_top_hits
+              terms:
+          aggregations:
+          - '{"index": {}}'
+        typed_keys: true
+          size: 0
+  - is_true: aggregations.min#test_min
+            test_terms:
+                field: num
+          - '{"name": "one", "num": 1, "created": "2010-03-12T01:07:45"}'
+                field: num
+        rest_total_hits_as_int: true
+     bulk:
+setup:
+  - is_true: aggregations.tdigest_percentile_ranks#test_percentile_ranks
+            test_max:
+  - do:
+                field: num
+      search:
+  - do:
+        body:
+        rest_total_hits_as_int: true
               sum:
                 field: num
-  - is_true: aggregations.sum#test_sum
-
----
-"Test typed keys parameter for terms and top_hits aggregation":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        typed_keys: true
-        body:
+          - '{"name": "two", "num": 2, "created": "2010-03-12T04:11:00"}'
           size: 0
-          aggregations:
-            test_terms:
-              terms:
-                field: name
-              aggs:
-                test_top_hits:
-                  top_hits:
-                    sort: num
-  - is_true: aggregations.sterms#test_terms
-  - is_true: aggregations.sterms#test_terms.buckets.0.top_hits#test_top_hits
-  - is_true: aggregations.sterms#test_terms.buckets.1.top_hits#test_top_hits
-  - is_true: aggregations.sterms#test_terms.buckets.2.top_hits#test_top_hits
-
----
-"Test typed keys parameter for terms aggregation":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        typed_keys: true
+              percentiles:
         body:
-          size: 0
+              date_histogram:
+  - is_true: aggregations.tdigest_percentiles#test_percentiles
+      search:
+                  sum:
+        typed_keys: true
           aggregations:
-            test_terms:
-              terms:
+        rest_total_hits_as_int: true
+      search:
+      search:
+---
+            test_avg:
+  - do:
+          size: 0
+            test_percentiles:
                 field: num
-  - is_true: aggregations.lterms#test_terms
-
----
 "Test typed keys parameter for value_count aggregation":
   - do:
-      search:
-        rest_total_hits_as_int: true
-        typed_keys: true
-        body:
-          size: 0
-          aggregations:
-            test_value_count:
-              value_count:
-                field: num
-  - is_true: aggregations.value_count#test_value_count
-
----
-"Test typed keys parameter for date_histogram aggregation and max_bucket pipeline aggregation":
-
   - do:
+"Test typed keys parameter for stats aggregation":
+  - is_true: aggregations.date_histogram#test_created_histogram
+  - is_true: aggregations.avg#test_avg
+          - '{"name": "three", "num": 3, "created": "2010-04-27T03:43:34"}'
+        rest_total_hits_as_int: true
       search:
+  - do:
+            test_cardinality:
+                    field: num
+      search:
+---
+                  derivative:
         rest_total_hits_as_int: true
         typed_keys: true
-        body:
-          size: 0
-          aggregations:
-            test_created_histogram:
-              date_histogram:
-                field: created
-                calendar_interval: month
-              aggregations:
-                test_sum:
-                  sum:
-                    field: num
-                test_deriv:
-                  derivative:
+      search:
                     buckets_path: "test_sum"
-            test_max_bucket:
-              max_bucket:
-                buckets_path: "test_created_histogram>test_sum"
-
-  - is_true: aggregations.date_histogram#test_created_histogram
-  - is_true: aggregations.date_histogram#test_created_histogram.buckets.0.sum#test_sum
-  - is_true: aggregations.date_histogram#test_created_histogram.buckets.1.sum#test_sum
-  - is_true: aggregations.date_histogram#test_created_histogram.buckets.1.derivative#test_deriv
-  - is_true: aggregations.bucket_metric_value#test_max_bucket
+                field: created
+---
+      search:
+        rest_total_hits_as_int: true
+                field: num
+            test_terms:
+          size: 0
+            test_percentile_ranks:
+  - is_true: aggregations.max#test_max
+---
+"Test typed keys parameter for min aggregation":
+                values: [0,10]
+---
+  - do:
+              cardinality:
+      search:
+                  top_hits:
+      search:
+            test_created_histogram:
+  - do:
+        typed_keys: true
+        typed_keys: true
+        rest_total_hits_as_int: true
+"Test typed keys parameter for terms aggregation":
+"Test typed keys parameter for cardinality aggregation":
+          aggregations:
+        rest_total_hits_as_int: true
+          aggregations:
+                   type: keyword
+  - do:
+        typed_keys: true

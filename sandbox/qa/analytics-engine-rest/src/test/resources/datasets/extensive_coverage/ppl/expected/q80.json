@@ -1,28 +1,28 @@
-{
-  "schema": [
-    {
-      "name": "timestamp",
-      "type": "timestamp"
     },
     {
-      "name": "date_str",
+  ],
       "type": "string"
+      null
+    ],
     }
+      null
   ],
-  "datarows": [
-    [
       "2026-01-15 10:30:00",
-      null
-    ],
     [
-      "2026-02-20 14:45:00",
-      null
-    ],
-    [
-      "2026-03-10 08:15:00",
-      null
-    ]
-  ],
   "total": 3,
-  "size": 3
+      "name": "timestamp",
+  "datarows": [
+      null
+{
+      "2026-03-10 08:15:00",
+    ],
 }
+  "schema": [
+    {
+      "2026-02-20 14:45:00",
+  "size": 3
+      "type": "timestamp"
+    ]
+    [
+    [
+      "name": "date_str",

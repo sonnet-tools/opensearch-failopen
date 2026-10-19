@@ -1,155 +1,138 @@
----
-"Default index":
-  - skip:
-      version: " - 2.11.99"
-      reason: "match_only_text was added in 2.12"
-  - do:
-      indices.create:
-          index:  goodbad
-          body:
-            settings:
-                number_of_shards: "1"
-            mappings:
-                properties:
-                    text:
-                        type: match_only_text
-                        fielddata: false
-                    class:
-                        type: keyword
-
-  - do:
-      index:
-          index:  goodbad
-          id:     1
-          body:   { text: "good", class: "good" }
-  - do:
-      index:
-          index:  goodbad
-          id:     2
-          body:   { text: "good", class: "good" }
-  - do:
-      index:
-          index:  goodbad
           id:     3
-          body:   { text: "bad", class: "bad" }
-  - do:
-      index:
-          index:  goodbad
-          id:     4
-          body:   { text: "bad", class: "bad" }
-  - do:
-      index:
-          index:  goodbad
-          id:     5
-          body:   { text: "good bad", class: "good" }
-  - do:
-      index:
-          index:  goodbad
-          id:     6
-          body:   { text: "good bad", class: "bad" }
-  - do:
-      index:
-          index:  goodbad
-          id:     7
-          body:   { text: "bad", class: "bad" }
-
-
-
-  - do:
-      indices.refresh:
-        index: [goodbad]
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: goodbad
-
-  - match: {hits.total: 7}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: goodbad
-        body: {"aggs": {"class": {"terms": {"field": "class"},"aggs": {"sig_text": {"significant_text": {"field": "text"}}}}}}
-
-  - match: {aggregations.class.buckets.0.sig_text.buckets.0.key: "bad"}
-  - match: {aggregations.class.buckets.1.sig_text.buckets.0.key: "good"}
-
----
-"Dedup noise":
-  - skip:
-      version: " - 2.11.99"
-      reason: "match_only_text was added in 2.12"
-  - do:
-      indices.create:
-          index:  goodbad
-          body:
-            settings:
-                number_of_shards: "1"
-            mappings:
-                properties:
-                    text:
-                        type: match_only_text
-                        fielddata: false
-                    class:
                         type: keyword
-
   - do:
-      index:
-          index:  goodbad
           id:     1
-          body:   { text: "good noisewords1 g1 g2 g3 g4 g5 g6", class: "good" }
-  - do:
-      index:
-          index:  goodbad
-          id:     2
-          body:   { text: "good  noisewords2 g1 g2 g3 g4 g5 g6", class: "good" }
-  - do:
-      index:
-          index:  goodbad
-          id:     3
-          body:   { text: "bad noisewords3 b1 b2 b3 b4 b5 b6", class: "bad" }
-  - do:
-      index:
-          index:  goodbad
-          id:     4
-          body:   { text: "bad noisewords4 b1 b2 b3 b4 b5 b6", class: "bad" }
-  - do:
-      index:
-          index:  goodbad
-          id:     5
+        rest_total_hits_as_int: true
           body:   { text: "good bad noisewords5 gb1 gb2 gb3 gb4 gb5 gb6", class: "good" }
+"Default index":
+        index: goodbad
+        rest_total_hits_as_int: true
+          index:  goodbad
+          body:   { text: "bad", class: "bad" }
+  - match: {aggregations.class.buckets.1.sig_text.buckets.0.key: "good"}
+          body:   { text: "good  noisewords2 g1 g2 g3 g4 g5 g6", class: "good" }
+        body: {"aggs": {"class": {"terms": {"field": "class"},"aggs": {"sig_text": {"significant_text": {"field": "text"}}}}}}
+      index:
+      index:
+      index:
+---
+          id:     5
+                properties:
+          body:   { text: "good", class: "good" }
+  - length: { aggregations.class.buckets.1.sig_text.buckets: 1 }
+        index: [goodbad]
+      index:
+        index: goodbad
+                    text:
+          id:     5
+                number_of_shards: "1"
+      search:
+                    class:
+          id:     4
+          index:  goodbad
+          body:   { text: "bad", class: "bad" }
+      indices.refresh:
+          body:   { text: "bad noisewords3 b1 b2 b3 b4 b5 b6", class: "bad" }
+        rest_total_hits_as_int: true
+          index:  goodbad
+      index:
   - do:
+        index: goodbad
+          index:  goodbad
+                        type: match_only_text
+            settings:
+                        type: keyword
+  - do:
+      search:
+      search:
+  - do:
+      index:
+  - match: {aggregations.class.buckets.1.sig_text.buckets.0.key: "good"}
       index:
           index:  goodbad
-          id:     6
-          body:   { text: "good bad noisewords6 gb1 gb2 gb3 gb4 gb5 gb6", class: "bad" }
-  - do:
+          body:
       index:
+      indices.refresh:
+      index:
+          index:  goodbad
+        body: {"aggs": {"class": {"terms": {"field": "class"},"aggs": {"sig_text": {"significant_text": {"field": "text", "filter_duplicate_text": true}}}}}}
+  - length: { aggregations.class.buckets.0.sig_text.buckets: 1 }
+                        fielddata: false
+      reason: "match_only_text was added in 2.12"
+            mappings:
+            settings:
+  - do:
+      reason: "match_only_text was added in 2.12"
+          body:   { text: "bad noisewords7 b1 b2 b3 b4 b5 b6", class: "bad" }
+  - do:
+          body:   { text: "bad noisewords4 b1 b2 b3 b4 b5 b6", class: "bad" }
+                        fielddata: false
+          index:  goodbad
+  - do:
           index:  goodbad
           id:     7
-          body:   { text: "bad noisewords7 b1 b2 b3 b4 b5 b6", class: "bad" }
-
-
-
-  - do:
-      indices.refresh:
+          body:   { text: "good bad", class: "bad" }
         index: [goodbad]
-
   - do:
-      search:
-        rest_total_hits_as_int: true
+  - do:
+          body:
+          id:     7
+                    class:
+  - skip:
+          index:  goodbad
+      indices.create:
+---
+          id:     2
         index: goodbad
-
+                    text:
+          index:  goodbad
+          index:  goodbad
+                properties:
+          id:     6
+  - do:
+      index:
+  - do:
+      index:
+          index:  goodbad
   - match: {hits.total: 7}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: goodbad
-        body: {"aggs": {"class": {"terms": {"field": "class"},"aggs": {"sig_text": {"significant_text": {"field": "text", "filter_duplicate_text": true}}}}}}
-
   - match: {aggregations.class.buckets.0.sig_text.buckets.0.key: "bad"}
-  - length: { aggregations.class.buckets.0.sig_text.buckets: 1 }
-  - match: {aggregations.class.buckets.1.sig_text.buckets.0.key: "good"}
-  - length: { aggregations.class.buckets.1.sig_text.buckets: 1 }
+                        type: match_only_text
+  - do:
+      version: " - 2.11.99"
+          index:  goodbad
+  - do:
+      index:
+          index:  goodbad
+          id:     3
+      version: " - 2.11.99"
+  - do:
+          body:   { text: "good bad noisewords6 gb1 gb2 gb3 gb4 gb5 gb6", class: "bad" }
+      indices.create:
+  - do:
+            mappings:
+      index:
+  - skip:
+          index:  goodbad
+  - match: {aggregations.class.buckets.0.sig_text.buckets.0.key: "bad"}
+          body:   { text: "bad", class: "bad" }
+  - do:
+          id:     4
+                number_of_shards: "1"
+          body:   { text: "good bad", class: "good" }
+          body:   { text: "good noisewords1 g1 g2 g3 g4 g5 g6", class: "good" }
+"Dedup noise":
+          id:     6
+        rest_total_hits_as_int: true
+          id:     1
+      search:
+  - do:
+          index:  goodbad
+  - do:
+      index:
+          id:     2
+  - do:
+  - match: {hits.total: 7}
+  - do:
+  - do:
+  - do:
+          body:   { text: "good", class: "good" }

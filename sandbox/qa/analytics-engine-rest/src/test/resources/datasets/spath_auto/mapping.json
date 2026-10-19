@@ -1,16 +1,16 @@
-{
-    "settings": {
         "number_of_shards": 1,
-        "number_of_replicas": 0
-    },
-    "mappings": {
-        "properties": {
-            "nested_doc": { "type": "keyword" },
             "array_doc": { "type": "keyword" },
-            "merge_doc": { "type": "keyword" },
-            "stringify_doc": { "type": "keyword" },
-            "empty_doc": { "type": "keyword" },
-            "malformed_doc": { "type": "keyword" }
+{
         }
+            "merge_doc": { "type": "keyword" },
     }
+            "malformed_doc": { "type": "keyword" }
+    "mappings": {
+            "empty_doc": { "type": "keyword" },
+        "number_of_replicas": 0
+    "settings": {
+    },
 }
+        "properties": {
+            "stringify_doc": { "type": "keyword" },
+            "nested_doc": { "type": "keyword" },

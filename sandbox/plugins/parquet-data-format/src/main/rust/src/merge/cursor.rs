@@ -1,897 +1,827 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-use std::fs::File;
-use std::sync::{Arc, Mutex};
-
-use arrow::array::{BooleanArray, RecordBatch};
-use arrow::compute::filter_record_batch;
-use arrow::datatypes::{DataType as ArrowDataType, Schema as ArrowSchema};
-use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-use parquet::schema::types::SchemaDescriptor;
-
-use super::error::{MergeError, MergeResult};
-use super::heap::{get_sort_values, SortKey};
-use super::io_task::get_merge_pool;
-use super::schema::projection_indices_excluding_row_id;
-
-use native_bridge_common::memory_pool::MemoryReservation;
-
-/// A cursor over a single sorted Parquet input file.
-///
-/// When deferred mode is active (controlled by the dynamic index setting
-/// `index.parquet.merge_deferred_column_threshold`, default 0 = always deferred),
-/// uses two readers: a sort-only reader for the merge heap and a data reader
-/// loaded on demand. Otherwise uses a single all-column reader. The sort reader
-/// prefetches the next batch on the shared Rayon pool to overlap IO with merge
-/// computation.
-///
-/// When `live_bits` is `Some`, dead rows are skipped so `row_idx` always points
-/// at a live row (or the cursor is exhausted).
-pub struct FileCursor {
-    sort_reader: Arc<Mutex<parquet::arrow::arrow_reader::ParquetRecordBatchReader>>,
-    sort_prefetch_rx: std::sync::mpsc::Receiver<Option<MergeResult<RecordBatch>>>,
-    sort_prefetch_tx: std::sync::mpsc::SyncSender<Option<MergeResult<RecordBatch>>>,
-    sort_prefetch_pending: bool,
-    pub sort_batch: Option<RecordBatch>,
-
-    data_reader: Option<parquet::arrow::arrow_reader::ParquetRecordBatchReader>,
-    data_batch: Option<RecordBatch>,
-    sort_batch_index: usize,
-    data_batch_index: usize,
-    deferred: bool,
-
-    pub row_idx: usize,
-    pub file_id: usize,
-    pub sort_col_indices: Vec<usize>,
-    pub sort_col_types: Vec<ArrowDataType>,
-    pub nulls_first: Vec<bool>,
-    pub max_sort_modes: Vec<bool>,
-    current_sort_batch_bytes: usize,
-    current_data_batch_bytes: usize,
-
-    /// Packed live-docs bitset in Lucene `FixedBitSet#getBits()` layout. `None` = all alive.
-    live_bits: Option<Arc<Vec<u64>>>,
-    /// Total source rows. Bits at indices `>= num_rows` are ignored.
-    num_rows: u64,
-    /// Source row-id offset at the start of the current sort batch.
-    pub base_row_id: u64,
-}
-
-/// Returns `true` if `abs_row_id` is alive given the optional `live_bits` packed bitset.
-/// `None` ⇒ all alive; rows beyond `num_rows` or beyond the bitset's length are treated
-/// as alive (defensive — Java-side contract is that absent bits mean "all alive").
-///
-/// Delegates to [`super::live_docs::is_alive_in_words`] for the core bit logic.
-#[inline]
-pub fn is_row_id_alive(live_bits: Option<&[u64]>, num_rows: u64, abs_row_id: u64) -> bool {
-    match live_bits {
-        None => true,
-        Some(bits) => super::live_docs::is_alive_in_words(bits, num_rows, abs_row_id),
-    }
-}
-
-/// One past the highest live-row index within `[0, batch_upper)` for the batch starting
-/// at `base_row_id`. `None` live_bits ⇒ all alive ⇒ returns `batch_upper`. If no row in
-/// the range is alive, returns 0.
-///
-/// Scans whole 64-bit words from the tail of the batch and uses `leading_zeros()` to find the
-/// highest set bit in the first non-zero word, so a long run of dead rows at the end of a batch
-/// costs one word read per 64 rows rather than one bit test per row. The word straddling the
-/// batch's upper edge is masked down to the bits that lie inside the batch; bits at or beyond
-/// `num_rows` (or beyond the supplied bitset) are treated as alive to match
-/// [`is_row_id_alive`].
-#[inline]
-pub fn last_live_index_plus_one(
-    live_bits: Option<&[u64]>,
-    num_rows: u64,
-    base_row_id: u64,
-    batch_upper: usize,
-) -> usize {
-    let bits = match live_bits {
-        None => return batch_upper,
-        Some(bits) => bits,
-    };
-    if batch_upper == 0 {
-        return 0;
-    }
-    // Absolute row ids covered by this batch: [base_row_id, batch_end).
-    let batch_end = base_row_id + batch_upper as u64;
-
-    // Rows at or past num_rows, or past the end of the supplied bitset, are alive by contract.
-    // If the batch reaches into that region the last row of the batch is alive.
-    let bitset_rows = (bits.len() as u64).saturating_mul(64);
-    if batch_end > num_rows || batch_end > bitset_rows {
-        return batch_upper;
-    }
-
-    let first_word = (base_row_id / 64) as usize;
-    let last_row = batch_end - 1;
-    let mut word_idx = (last_row / 64) as usize;
-
-    loop {
-        let mut word = bits[word_idx];
-        let word_base = (word_idx as u64) * 64;
-        // Mask off bits above the batch's last row in the top word.
-        if word_idx == (last_row / 64) as usize {
-            let top_bit = (last_row - word_base) as u32; // 0..=63
-            if top_bit < 63 {
-                word &= (1u64 << (top_bit + 1)) - 1;
-            }
-        }
-        // Mask off bits below the batch's first row in the bottom word.
-        if word_idx == first_word {
-            let low_bit = (base_row_id - word_base) as u32; // 0..=63
-            if low_bit > 0 {
-                word &= !((1u64 << low_bit) - 1);
-            }
-        }
-        if word != 0 {
-            let highest_abs = word_base + (63 - word.leading_zeros() as u64);
-            return (highest_abs - base_row_id) as usize + 1;
-        }
-        if word_idx == first_word {
-            return 0;
-        }
-        word_idx -= 1;
-    }
-}
-
-impl FileCursor {
-    /// Returns `true` if the given absolute source row id is alive.
-    #[inline]
-    pub fn is_row_id_alive(&self, abs_row_id: u64) -> bool {
-        is_row_id_alive(
-            self.live_bits.as_deref().map(|v| v.as_slice()),
-            self.num_rows,
-            abs_row_id,
-        )
-    }
-
-    /// One past the highest live-row index within `[0, batch_upper)`.
-    #[inline]
-    fn last_live_index_plus_one(&self, batch_upper: usize) -> usize {
-        last_live_index_plus_one(
-            self.live_bits.as_deref().map(|v| v.as_slice()),
-            self.num_rows,
             self.base_row_id,
-            batch_upper,
-        )
-    }
-
-    /// Opens a Parquet file and creates a cursor positioned at the first live row.
-    ///
-    /// Returns `(cursor, projected_arrow_schema, parquet_schema_descriptor, writer_generation, total_row_count)`
-    /// so the caller can build union schemas and row-ID mappings without re-opening the file.
-    /// `live_bits` is an optional packed bitset of live rows (Lucene layout).
-    pub fn new(
-        path: &str,
-        file_id: usize,
-        sort_columns: &[String],
-        nulls_first: &[bool],
-        max_sort_modes: &[bool],
-        batch_size: usize,
-        deferred_threshold: usize,
-        reservation: &mut MemoryReservation,
-        live_bits: Option<Arc<Vec<u64>>>,
-    ) -> MergeResult<(Self, Arc<ArrowSchema>, SchemaDescriptor, i64, usize)> {
-        // Open file and read metadata
-        let file = File::open(path)?;
-        let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
-        let schema = builder.schema().clone();
-        let writer_generation = crate::writer_properties_builder::read_writer_generation(
-            builder.metadata().file_metadata(),
-            file_id,
-        );
-        let total_row_count = builder.metadata().file_metadata().num_rows() as usize;
-        let parquet_schema_descr = builder.parquet_schema().clone();
-
-        // Resolve sort column types
-        let sort_col_types: Vec<ArrowDataType> = sort_columns
-            .iter()
-            .map(|col| {
-                schema
-                    .fields()
-                    .iter()
-                    .find(|f| f.name() == col.as_str())
-                    .map(|f| f.data_type().clone())
-                    .ok_or_else(|| {
-                        MergeError::Logic(format!(
-                            "Sort column '{}' not found in file '{}' (cursor {})",
-                            col, path, file_id
-                        ))
-                    })
-            })
-            .collect::<MergeResult<_>>()?;
-
-        // Decide mode based on schema width
-        let sort_col_set: std::collections::HashSet<&str> =
-            sort_columns.iter().map(|s| s.as_str()).collect();
-        let deferred = schema
-            .fields()
-            .iter()
-            .filter(|f| !sort_col_set.contains(f.name().as_str()))
-            .filter(|f| f.name() != super::schema::ROW_ID_COLUMN_NAME)
-            .filter(|f| {
-                matches!(
-                    f.data_type(),
-                    ArrowDataType::Utf8
-                        | ArrowDataType::LargeUtf8
-                        | ArrowDataType::Binary
-                        | ArrowDataType::LargeBinary
-                )
-            })
-            .count()
-            >= deferred_threshold;
-
-        // Data projection: all columns except __row_id__
-        let data_projection_indices = projection_indices_excluding_row_id(&schema);
-
-        // Build sort reader (sort-only in deferred, all-columns in eager)
-        let file1 = File::open(path)?;
-        let builder1 = ParquetRecordBatchReaderBuilder::try_new(file1)?;
-        let sort_projection = if deferred {
-            let sort_indices: Vec<usize> = sort_columns
-                .iter()
-                .filter_map(|c| schema.fields().iter().position(|f| f.name() == c.as_str()))
-                .collect();
-            parquet::arrow::ProjectionMask::roots(builder1.parquet_schema(), sort_indices)
-        } else {
-            parquet::arrow::ProjectionMask::roots(
-                builder1.parquet_schema(),
-                data_projection_indices.clone(),
-            )
-        };
-        let mut sort_reader = builder1
-            .with_batch_size(batch_size)
-            .with_projection(sort_projection)
-            .build()?;
-
-        // Build data reader (only in deferred mode)
-        let data_reader = if deferred {
-            let file2 = File::open(path)?;
-            let builder2 = ParquetRecordBatchReaderBuilder::try_new(file2)?;
-            let data_proj = parquet::arrow::ProjectionMask::roots(
-                builder2.parquet_schema(),
-                data_projection_indices.clone(),
-            );
-            Some(
-                builder2
-                    .with_batch_size(batch_size)
-                    .with_projection(data_proj)
-                    .build()?,
-            )
-        } else {
-            None
-        };
-
-        // Projected schema from file metadata
-        let projected_schema = Arc::new(ArrowSchema::new(
-            data_projection_indices
-                .iter()
-                .map(|&i| schema.field(i).clone())
-                .collect::<Vec<_>>(),
-        ));
-
-        // Read first sort batch
-        let first_sort_batch = match sort_reader.next() {
-            Some(Ok(b)) if b.num_rows() > 0 => b,
-            Some(Err(e)) => return Err(e.into()),
-            _ => {
-                return Err(MergeError::Logic(format!(
-                    "File '{}' (cursor {}) yielded no rows",
-                    path, file_id
-                )))
-            }
-        };
-
-        // Resolve sort column indices within the sort batch schema
-        let sort_batch_schema = first_sort_batch.schema();
-        let sort_col_indices: Vec<usize> = sort_columns
-            .iter()
-            .map(|col| {
-                sort_batch_schema
-                    .fields()
-                    .iter()
-                    .position(|f| f.name() == col.as_str())
-                    .ok_or_else(|| {
-                        MergeError::Logic(format!(
-                            "Sort column '{}' not found in projected batch for file '{}'",
-                            col, path
-                        ))
-                    })
-            })
-            .collect::<MergeResult<_>>()?;
-
-        let (sort_prefetch_tx, sort_prefetch_rx) =
-            std::sync::mpsc::sync_channel::<Option<MergeResult<RecordBatch>>>(1);
-        let sort_reader = Arc::new(Mutex::new(sort_reader));
-
-        let mut cursor = Self {
-            sort_reader,
-            sort_prefetch_rx,
-            sort_prefetch_tx,
-            sort_prefetch_pending: false,
-            sort_batch: Some(first_sort_batch),
-            data_reader,
-            data_batch: None,
-            sort_batch_index: 0,
-            data_batch_index: 0,
-            deferred,
-            row_idx: 0,
-            file_id,
-            sort_col_indices,
-            sort_col_types,
-            nulls_first: nulls_first.to_vec(),
-            max_sort_modes: max_sort_modes.to_vec(),
-            current_sort_batch_bytes: 0,
-            current_data_batch_bytes: 0,
-            live_bits,
-            num_rows: total_row_count as u64,
-            base_row_id: 0,
-        };
-
-        // Track sort batch + prefetch (estimate 2x first batch)
-        let batch_bytes = cursor.sort_batch.as_ref().unwrap().get_array_memory_size();
-        reservation.grow(batch_bytes * 2);
-        cursor.current_sort_batch_bytes = batch_bytes;
-
-        cursor.start_sort_prefetch();
-        // Position at the first live row (no-op when live_bits is None).
-        cursor.skip_to_next_live_row(reservation)?;
-        Ok((
-            cursor,
-            projected_schema,
-            parquet_schema_descr,
-            writer_generation,
-            total_row_count,
-        ))
-    }
-
-    /// Returns `true` if the cursor's current row is alive.
-    #[inline]
-    fn is_current_row_alive(&self) -> bool {
-        self.is_row_id_alive(self.base_row_id + self.row_idx as u64)
-    }
-
-    /// Advances `row_idx` past dead rows, loading successor batches as needed.
-    /// After this, either `row_idx` points at a live row or the cursor is exhausted.
-    fn skip_to_next_live_row(&mut self, reservation: &mut MemoryReservation) -> MergeResult<()> {
-        if self.live_bits.is_none() {
-            return Ok(());
-        }
-        loop {
-            let n = match self.sort_batch.as_ref() {
-                Some(b) => b.num_rows(),
-                None => return Ok(()),
-            };
-            while self.row_idx < n && !self.is_current_row_alive() {
-                self.row_idx += 1;
-            }
-            if self.row_idx < n {
-                return Ok(());
-            }
-            if !self.load_next_batch(reservation)? {
-                return Ok(());
-            }
-        }
-    }
-
-    fn start_sort_prefetch(&mut self) {
-        if self.sort_prefetch_pending {
-            return;
-        }
-        self.sort_prefetch_pending = true;
-        let reader = Arc::clone(&self.sort_reader);
-        let tx = self.sort_prefetch_tx.clone();
-        get_merge_pool(None).spawn(move || {
-            let mut reader = reader.lock().unwrap();
-            let result = match reader.next() {
-                Some(Ok(batch)) if batch.num_rows() > 0 => Some(Ok(batch)),
-                Some(Err(e)) => Some(Err(MergeError::Arrow(e))),
-                _ => None,
-            };
-            let _ = tx.send(result);
-        });
-    }
-
-    pub fn load_next_batch(&mut self, reservation: &mut MemoryReservation) -> MergeResult<bool> {
-        let old_sort_bytes = self.current_sort_batch_bytes;
-        let prev_rows = self
-            .sort_batch
-            .as_ref()
-            .map(|b| b.num_rows() as u64)
-            .unwrap_or(0);
-        self.sort_batch = None;
-
-        // Release data batch tracking — previous data_batch is dropped
-        if self.current_data_batch_bytes > 0 {
-            reservation.shrink(self.current_data_batch_bytes);
-            self.current_data_batch_bytes = 0;
-        }
-        self.data_batch = None;
-
-        let sort_result = match self.sort_prefetch_rx.recv() {
-            Ok(Some(Ok(batch))) => Some(batch),
-            Ok(Some(Err(e))) => {
-                self.sort_prefetch_pending = false;
-                // Error: release sort batch tracking since cursor is now exhausted
-                reservation.shrink(old_sort_bytes);
-                self.current_sort_batch_bytes = 0;
-                return Err(e);
-            }
-            Ok(None) | Err(_) => None,
-        };
-        self.sort_prefetch_pending = false;
-
-        match sort_result {
-            Some(batch) => {
-                let new_bytes = batch.get_array_memory_size();
-                self.sort_batch = Some(batch);
-                // Advance the absolute source row-id offset past the batch we just dropped.
-                self.base_row_id += prev_rows;
-                self.row_idx = 0;
-                self.sort_batch_index += 1;
-                self.start_sort_prefetch();
-                // Delta-adjust: new sort batch may differ in size from previous
-                if new_bytes > old_sort_bytes {
-                    reservation.grow(new_bytes - old_sort_bytes);
-                } else if new_bytes < old_sort_bytes {
-                    reservation.shrink(old_sort_bytes - new_bytes);
-                }
-                self.current_sort_batch_bytes = new_bytes;
-                Ok(true)
-            }
-            None => {
-                // Cursor exhausted — release all sort batch tracking
-                self.data_reader = None;
-                reservation.shrink(old_sort_bytes);
-                self.current_sort_batch_bytes = 0;
-                Ok(false)
-            }
-        }
-    }
-
-    fn ensure_data_loaded(&mut self, reservation: &mut MemoryReservation) -> MergeResult<()> {
+        Ok(true)
         if !self.deferred {
-            return Ok(());
+        sort_columns: &[String],
+    pub base_row_id: u64,
         }
-        if self.data_batch.is_some() && self.data_batch_index == self.sort_batch_index + 1 {
-            return Ok(());
-        }
-
-        match self.try_load_data(reservation) {
-            Ok(()) => Ok(()),
-            Err(e) => {
-                // Error path: close reader and release any data_batch memory
-                self.data_reader = None;
-                if self.current_data_batch_bytes > 0 {
-                    reservation.shrink(self.current_data_batch_bytes);
-                    self.current_data_batch_bytes = 0;
-                }
-                Err(e)
-            }
-        }
-    }
-
-    fn try_load_data(&mut self, reservation: &mut MemoryReservation) -> MergeResult<()> {
-        let reader = self
-            .data_reader
-            .as_mut()
-            .ok_or_else(|| MergeError::Logic("Data reader already closed".into()))?;
-
-        // Release previous data_batch — about to load a new one
-        if self.current_data_batch_bytes > 0 {
-            reservation.shrink(self.current_data_batch_bytes);
-            self.current_data_batch_bytes = 0;
-        }
-        self.data_batch = None;
-
-        while self.data_batch_index <= self.sort_batch_index {
-            match reader.next() {
-                Some(Ok(batch)) => {
-                    if batch.num_rows() == 0 {
-                        return Err(MergeError::Logic(format!(
                             "Data reader returned empty batch at position {}",
-                            self.data_batch_index
-                        )));
-                    }
-                    if self.data_batch_index == self.sort_batch_index {
-                        // Target batch — validate and keep
-                        if let Some(ref sb) = self.sort_batch {
-                            if batch.num_rows() != sb.num_rows() {
-                                return Err(MergeError::Logic(format!(
-                                    "Data batch rows ({}) != sort batch rows ({}) at index {}",
-                                    batch.num_rows(),
-                                    sb.num_rows(),
-                                    self.sort_batch_index
-                                )));
-                            }
-                        }
-                        let data_bytes = batch.get_array_memory_size();
-                        // Track full-column data batch — already allocated by data_reader.next()
-                        reservation.grow(data_bytes);
-                        self.current_data_batch_bytes = data_bytes;
-                        self.data_batch = Some(batch);
-                    }
-                    // Skipped batch — discard
-                    self.data_batch_index += 1;
-                }
-                Some(Err(e)) => return Err(e.into()),
-                None => {
-                    return Err(MergeError::Logic(format!(
-                        "Data reader exhausted at position {}, needed sort_batch_index={}",
-                        self.data_batch_index, self.sort_batch_index
-                    )))
-                }
-            }
-        }
-        Ok(())
-    }
-
-    #[inline]
-    pub fn current_sort_values(&self) -> MergeResult<Vec<SortKey>> {
-        let batch = self
-            .sort_batch
-            .as_ref()
-            .ok_or_else(|| MergeError::Logic("Cursor exhausted".into()))?;
-        get_sort_values(
-            batch,
-            self.row_idx,
-            &self.sort_col_indices,
-            &self.sort_col_types,
-            &self.nulls_first,
-            &self.max_sort_modes,
-        )
-    }
-
-    /// Returns sort values at the cursor's last live row in the current batch.
-    pub fn last_sort_values(&self) -> MergeResult<Vec<SortKey>> {
-        let batch = self
-            .sort_batch
-            .as_ref()
-            .ok_or_else(|| MergeError::Logic("Cursor exhausted".into()))?;
-        let end_excl = self.last_live_index_plus_one(batch.num_rows());
-        assert!(
-            end_excl > self.row_idx,
-            "last_sort_values called on cursor with no live row"
-        );
-        get_sort_values(
-            batch,
-            end_excl - 1,
-            &self.sort_col_indices,
-            &self.sort_col_types,
-            &self.nulls_first,
-            &self.max_sort_modes,
-        )
-    }
-
-    #[inline]
-    pub fn batch_height(&self) -> usize {
-        self.sort_batch.as_ref().map_or(0, |b| b.num_rows())
-    }
-
-    /// Returns the sub-batch `[start, start+len)` with dead rows filtered out.
-    ///
-    /// In deferred mode the slice is taken from the on-demand data reader; otherwise
-    /// from the sort batch. When `live_bits` is `Some`, dead rows are removed via a
-    /// boolean mask keyed on absolute source row ids. Zero-copy when `live_bits` is `None`.
+        Ok((
+        let schema = builder.schema().clone();
+        // Resolve sort column types
+    fn reference(
+ *
+            Some(Ok(b)) if b.num_rows() > 0 => b,
+            .map(|col| {
+            let top_bit = (last_row - word_base) as u32; // 0..=63
+        // Position at the first live row (no-op when live_bits is None).
+    // Absolute row ids covered by this batch: [base_row_id, batch_end).
+        loop {
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+            })
+        self.sort_prefetch_pending = false;
+            Ok(()) => Ok(()),
+            return Ok(());
     pub fn take_slice(
-        &mut self,
-        start: usize,
-        len: usize,
-        reservation: &mut MemoryReservation,
-    ) -> MergeResult<RecordBatch> {
-        let slice = if self.deferred {
-            self.ensure_data_loaded(reservation)?;
+    }
+            vec![1, 0, 0, 1u64 << 63], // rows 0 and 255 alive
+            max_sort_modes: max_sort_modes.to_vec(),
             let batch = self
-                .data_batch
-                .as_ref()
-                .ok_or_else(|| MergeError::Logic("Data batch not loaded".into()))?;
-            batch.slice(start, len)
-        } else {
-            let batch = self
-                .sort_batch
-                .as_ref()
-                .ok_or_else(|| MergeError::Logic("Batch is None".into()))?;
-            batch.slice(start, len)
-        };
-        match &self.live_bits {
-            None => Ok(slice),
-            Some(_) => {
-                let mut mask_values: Vec<bool> = Vec::with_capacity(len);
-                let start_abs = self.base_row_id + start as u64;
-                for i in 0..len {
-                    mask_values.push(self.is_row_id_alive(start_abs + i as u64));
-                }
-                let mask = BooleanArray::from(mask_values);
-                Ok(filter_record_batch(&slice, &mask)?)
-            }
-        }
-    }
-
-    pub fn advance(&mut self, reservation: &mut MemoryReservation) -> MergeResult<bool> {
-        if self.sort_batch.is_none() {
-            return Ok(false);
-        }
-        self.row_idx += 1;
-        if self.row_idx >= self.sort_batch.as_ref().unwrap().num_rows() {
-            self.sort_batch = None;
-            self.data_batch = None;
-            // Batch boundary crossed — release data_batch before loading next sort batch
-            if self.current_data_batch_bytes > 0 {
-                reservation.shrink(self.current_data_batch_bytes);
-                self.current_data_batch_bytes = 0;
-            }
-            if !self.load_next_batch(reservation)? {
-                return Ok(false);
-            }
-        }
-        if self.live_bits.is_some() {
-            self.skip_to_next_live_row(reservation)?;
-            return Ok(self.sort_batch.is_some());
-        }
-        Ok(true)
-    }
-
-    pub fn advance_past_batch(&mut self, reservation: &mut MemoryReservation) -> MergeResult<bool> {
-        self.sort_batch = None;
-        self.data_batch = None;
-        // Skip remaining rows — release data_batch before loading next sort batch
-        if self.current_data_batch_bytes > 0 {
-            reservation.shrink(self.current_data_batch_bytes);
-            self.current_data_batch_bytes = 0;
-        }
-        if !self.load_next_batch(reservation)? {
-            return Ok(false);
-        }
-        if self.live_bits.is_some() {
-            self.skip_to_next_live_row(reservation)?;
-            return Ok(self.sort_batch.is_some());
-        }
-        Ok(true)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-#[cfg(test)]
-mod is_row_id_alive_tests {
-    use super::is_row_id_alive;
-
-    #[test]
-    fn none_bits_returns_true_for_any_row() {
-        assert!(is_row_id_alive(None, 0, 0));
         assert!(is_row_id_alive(None, 100, 0));
-        assert!(is_row_id_alive(None, 100, 99));
-        assert!(is_row_id_alive(None, 100, 1_000_000));
-    }
-
-    #[test]
+            &self.nulls_first,
+use arrow::array::{BooleanArray, RecordBatch};
+        ))
+        Ok(true)
+    ) -> MergeResult<RecordBatch> {
+        let sort_projection = if deferred {
+        if word != 0 {
+            self.data_batch = None;
+        };
+                    if batch.num_rows() == 0 {
+    /// Returns the sub-batch `[start, start+len)` with dead rows filtered out.
+        let reader = Arc::clone(&self.sort_reader);
+    sort_reader: Arc<Mutex<parquet::arrow::arrow_reader::ParquetRecordBatchReader>>,
+        let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
+        match live_bits {
+        if self.live_bits.is_some() {
     fn bit_zero_alive_and_dead() {
-        let all_alive: Vec<u64> = vec![!0u64];
-        assert!(is_row_id_alive(Some(&all_alive), 64, 0));
-        let row_zero_dead: Vec<u64> = vec![!0u64 & !1u64];
-        assert!(!is_row_id_alive(Some(&row_zero_dead), 64, 0));
+            Some(batch) => {
+}
+            return 0;
+                None => {
+                Some(b) => b.num_rows(),
+            &self.max_sort_modes,
+            .collect::<MergeResult<_>>()?;
+        reservation: &mut MemoryReservation,
+            let data_proj = parquet::arrow::ProjectionMask::roots(
+                    .ok_or_else(|| {
+            abs_row_id,
+                0xAAAA_AAAA_AAAA_AAAA,
+        assert_eq!(last_live_index_plus_one(Some(&bits), 64, 0, 16), 5);
+            if top_bit < 63 {
+        let bits: Vec<u64> = vec![0u64];
+                word &= (1u64 << (top_bit + 1)) - 1;
+                    .with_projection(data_proj)
     }
-
-    #[test]
-    fn bit_at_word_boundary_63() {
-        let bits: Vec<u64> = vec![1u64 << 63];
-        assert!(is_row_id_alive(Some(&bits), 64, 63));
-        for r in 0..63 {
-            assert!(
-                !is_row_id_alive(Some(&bits), 64, r),
-                "row {} should be dead",
-                r
-            );
+            data_projection_indices
+    fn try_load_data(&mut self, reservation: &mut MemoryReservation) -> MergeResult<()> {
+            vec![
+                        | ArrowDataType::LargeBinary
+    }
         }
-    }
-
-    #[test]
-    fn bit_crosses_word_boundary_64() {
-        let bits: Vec<u64> = vec![0u64, 1u64];
-        assert!(is_row_id_alive(Some(&bits), 128, 64));
-        assert!(!is_row_id_alive(Some(&bits), 128, 63));
-        assert!(!is_row_id_alive(Some(&bits), 128, 65));
-    }
-
-    #[test]
-    fn bit_at_word_boundary_127() {
-        let bits: Vec<u64> = vec![0u64, 1u64 << 63];
+    fn word_scan_matches_reference_across_word_boundaries() {
+            sort_columns.iter().map(|s| s.as_str()).collect();
+        )
+                    .build()?,
+            .as_mut()
+// ---------------------------------------------------------------------------
         assert!(is_row_id_alive(Some(&bits), 128, 127));
-        assert!(!is_row_id_alive(Some(&bits), 128, 126));
     }
-
-    #[test]
-    fn out_of_bounds_returns_alive_defensively() {
-        let bits: Vec<u64> = vec![0u64];
-        // num_rows=10 — anything >= 10 must come back alive even though all bits are 0.
-        assert!(is_row_id_alive(Some(&bits), 10, 10));
-        assert!(is_row_id_alive(Some(&bits), 10, 100));
+                }
+mod last_live_index_plus_one_tests {
+                None => return Ok(()),
+    loop {
+            .sort_batch
+        // Skip remaining rows — release data_batch before loading next sort batch
+    fn bit_at_word_boundary_63() {
+                Err(e)
+        // Build data reader (only in deferred mode)
+        // Release previous data_batch — about to load a new one
     }
-
-    #[test]
-    fn short_bitmap_treats_missing_words_as_alive() {
-        // Bitmap covers only 64 bits, but num_rows says 128.
-        let bits: Vec<u64> = vec![0u64];
-        // Row 64 lives in word 1, which is missing.
-        assert!(is_row_id_alive(Some(&bits), 128, 64));
-        // Row 0 is in word 0 and explicitly dead.
-        assert!(!is_row_id_alive(Some(&bits), 128, 0));
+use arrow::compute::filter_record_batch;
+        });
+            parquet::arrow::ProjectionMask::roots(
+        let mut state = 0x9E37_79B9_7F4A_7C15u64;
+        reservation: &mut MemoryReservation,
+impl FileCursor {
+            file_id,
+        if self.live_bits.is_some() {
+            base_row_id: 0,
+            None => batch_upper,
+            let num_rows_options = [
+            }
+        // Release data batch tracking — previous data_batch is dropped
+        assert!(!is_row_id_alive(Some(&bits), 128, 63));
+    let last_row = batch_end - 1;
+        num_rows: u64,
+    match live_bits {
+                0x5555_5555_5555_5555,
+        start: usize,
+            .sort_batch
+            &self.sort_col_types,
+                self.row_idx += 1;
+                Ok(false)
+    live_bits: Option<&[u64]>,
+                data_projection_indices.clone(),
+        assert!(!is_row_id_alive(Some(&row_zero_dead), 64, 0));
+                    }
+    sort_batch_index: usize,
+        let (sort_prefetch_tx, sort_prefetch_rx) =
+            batch.slice(start, len)
+        )
+    /// Opens a Parquet file and creates a cursor positioned at the first live row.
+        assert_eq!(last_live_index_plus_one(Some(&bits), 100, 60, 10), 10);
+        // Build sort reader (sort-only in deferred, all-columns in eager)
+pub fn last_live_index_plus_one(
+                    assert_eq!(
+                return Ok(());
+                return Ok(());
+                    .fields()
+use super::error::{MergeError, MergeResult};
+/// computation.
     }
-
-    #[test]
-    fn empty_bitmap_returns_alive_for_all() {
-        let bits: Vec<u64> = vec![];
-        assert!(is_row_id_alive(Some(&bits), 0, 0));
-        assert!(is_row_id_alive(Some(&bits), 100, 0));
+    current_sort_batch_bytes: usize,
+        Some(bits) => super::live_docs::is_alive_in_words(bits, num_rows, abs_row_id),
+        let mut word = bits[word_idx];
+    /// Total source rows. Bits at indices `>= num_rows` are ignored.
+        };
+                        | ArrowDataType::LargeUtf8
+            .ok_or_else(|| MergeError::Logic("Cursor exhausted".into()))?;
+                    "File '{}' (cursor {}) yielded no rows",
+        }
+    pub fn advance_past_batch(&mut self, reservation: &mut MemoryReservation) -> MergeResult<bool> {
+        // Open file and read metadata
+            if !self.load_next_batch(reservation)? {
+            ];
+/// A cursor over a single sorted Parquet input file.
+                    .ok_or_else(|| {
+                capacity + 40,
+                        self.data_batch_index, self.sort_batch_index
+            self.row_idx,
+                .as_ref()
+                0xF0F0_F0F0_F0F0_F0F0,
+    /// The original one-bit-at-a-time implementation, kept as the oracle for the word-scan.
+    }
+    }
+            vec![0, 0, 1, 0],          // only abs row 128 alive
     }
 }
-
-#[cfg(test)]
-mod last_live_index_plus_one_tests {
-    use super::last_live_index_plus_one;
-
-    #[test]
-    fn none_bits_returns_batch_upper() {
-        assert_eq!(last_live_index_plus_one(None, 100, 0, 50), 50);
-        assert_eq!(last_live_index_plus_one(None, 100, 25, 25), 25);
-    }
-
-    #[test]
-    fn empty_batch_returns_zero() {
-        let bits: Vec<u64> = vec![!0u64];
-        assert_eq!(last_live_index_plus_one(Some(&bits), 64, 0, 0), 0);
-    }
-
-    #[test]
-    fn all_rows_alive_returns_batch_upper() {
-        let bits: Vec<u64> = vec![!0u64];
-        assert_eq!(last_live_index_plus_one(Some(&bits), 64, 0, 10), 10);
-    }
-
-    #[test]
-    fn last_row_dead_returns_index_of_previous_alive() {
-        // Rows 0..9 alive, row 10 dead.
-        let bits: Vec<u64> = vec![0x3FFu64];
-        assert_eq!(last_live_index_plus_one(Some(&bits), 64, 0, 11), 10);
-    }
-
-    #[test]
-    fn trailing_dead_rows_skipped() {
+    fn word_scan_matches_reference_on_random_bitsets() {
+    data_batch: Option<RecordBatch>,
+            self.num_rows,
+                sort_batch_schema
+                builder1.parquet_schema(),
+            }
+                            col, path
+        let parquet_schema_descr = builder.parquet_schema().clone();
+        is_row_id_alive(
         // Rows 0..4 alive, rows 5..15 dead.
-        let bits: Vec<u64> = vec![0x1Fu64];
-        assert_eq!(last_live_index_plus_one(Some(&bits), 64, 0, 16), 5);
-    }
-
     #[test]
+                    })
+        let bits: Vec<u64> = vec![1u64 << 63];
+                    mask_values.push(self.is_row_id_alive(start_abs + i as u64));
+            let n = match self.sort_batch.as_ref() {
+            // Batch boundary crossed — release data_batch before loading next sort batch
+    }
+                            if batch.num_rows() != sb.num_rows() {
+                }
+            .fields()
+                                    batch.num_rows(),
+    }
+        if self.data_batch.is_some() && self.data_batch_index == self.sort_batch_index + 1 {
+        Some(bits) => bits,
+                        got, want,
+        assert_eq!(last_live_index_plus_one(None, 100, 25, 25), 25);
+            let batch = self
+            return Ok(false);
+            reservation.shrink(self.current_data_batch_bytes);
+        // Read first sort batch
+    pub fn is_row_id_alive(&self, abs_row_id: u64) -> bool {
+                // Advance the absolute source row-id offset past the batch we just dropped.
+            Some(_) => {
+    #[test]
+            let bits: Vec<u64> = (0..words).map(|_| next_rand(&mut state)).collect();
+                }
+    deferred: bool,
+            end_excl > self.row_idx,
+            }
+        self.row_idx += 1;
+                r
+            // num_rows sometimes shorter than the bitset, sometimes exactly full, sometimes longer.
+        let bits: Vec<u64> = vec![1u64 << 10];
+    #[inline]
+            .sort_batch
+            .filter(|f| {
+        // Decide mode based on schema width
+        deferred_threshold: usize,
+        }
+                    if self.data_batch_index == self.sort_batch_index {
+            .iter()
+) -> usize {
+                self.current_sort_batch_bytes = 0;
+    }
+            let num_rows = 256u64;
+        cursor.skip_to_next_live_row(reservation)?;
+    }
+                return Ok(false);
+        live_bits: Option<&[u64]>,
+            Some(
     fn all_rows_dead_returns_zero() {
+        assert_eq!(last_live_index_plus_one(Some(&bits), 64, 0, 0), 0);
+                    let idx = i - 1;
+        if self.sort_batch.is_none() {
+            );
+    }
+    live_bits: Option<Arc<Vec<u64>>>,
+        &mut self,
+            reservation.shrink(self.current_data_batch_bytes);
+                    reservation.shrink(old_sort_bytes - new_bytes);
+            sort_batch_index: 0,
+///
+        // Resolve sort column indices within the sort batch schema
+                }
+    base_row_id: u64,
+        }
+///
+        assert_eq!(last_live_index_plus_one(Some(&bits), 100, 0, 64), 0);
+        assert_eq!(last_live_index_plus_one(Some(&bits), 10, 0, 10), 0);
+            data_reader,
+                            self.data_batch_index
+    }
+        }
+        x ^= x << 17;
+            .filter(|f| f.name() != super::schema::ROW_ID_COLUMN_NAME)
+        let bits: Vec<u64> = vec![0u64, 1u64 << 63];
+            live_bits,
+            sort_prefetch_rx,
+        let bits: Vec<u64> = vec![0u64, 1u64];
+/// Scans whole 64-bit words from the tail of the batch and uses `leading_zeros()` to find the
+            reservation.shrink(self.current_data_batch_bytes);
+        // Mask off bits above the batch's last row in the top word.
+                    // Skipped batch — discard
+ * compatible open source license.
+                self.start_sort_prefetch();
+                // Error: release sort batch tracking since cursor is now exhausted
+        assert!(is_row_id_alive(Some(&bits), 128, 64));
+    let bitset_rows = (bits.len() as u64).saturating_mul(64);
+                        self.data_batch = Some(batch);
+            _ => {
+            Ok(None) | Err(_) => None,
+    }
+                    ArrowDataType::Utf8
+                    let got = last_live_index_plus_one(Some(&bits), num_rows, base, upper);
+        if !self.load_next_batch(reservation)? {
+        assert!(!is_row_id_alive(Some(&bits), 128, 65));
+    fn rows_past_bitset_length_count_as_alive() {
+            sort_col_indices,
+            .collect::<MergeResult<_>>()?;
+        *state = x;
+                                    "Data batch rows ({}) != sort batch rows ({}) at index {}",
+        // Mask off bits below the batch's first row in the bottom word.
+            }
+        let sort_col_types: Vec<ArrowDataType> = sort_columns
+    /// Returns sort values at the cursor's last live row in the current batch.
+    pub sort_batch: Option<RecordBatch>,
         let bits: Vec<u64> = vec![0u64];
         assert_eq!(last_live_index_plus_one(Some(&bits), 64, 0, 10), 0);
-    }
-
-    #[test]
-    fn respects_base_row_id_offset() {
-        // bit at abs row 10 alive, all others dead.
-        let bits: Vec<u64> = vec![1u64 << 10];
-        // Cursor is at base_row_id=5, asking about a 10-row batch ⇒ checks abs rows 5..14.
-        // Last alive in that range is abs 10 (= local idx 5 in this batch). Result is 5+1=6.
-        assert_eq!(last_live_index_plus_one(Some(&bits), 64, 5, 10), 6);
-    }
-
-    /// The original one-bit-at-a-time implementation, kept as the oracle for the word-scan.
-    fn reference(
-        live_bits: Option<&[u64]>,
-        num_rows: u64,
-        base_row_id: u64,
-        batch_upper: usize,
-    ) -> usize {
-        match live_bits {
-            None => batch_upper,
-            Some(_) => {
-                let mut i = batch_upper;
-                while i > 0 {
-                    let idx = i - 1;
-                    if super::is_row_id_alive(live_bits, num_rows, base_row_id + idx as u64) {
-                        return i;
-                    }
-                    i -= 1;
-                }
-                0
-            }
-        }
-    }
-
-    /// Deterministic xorshift so the sweep is reproducible without a dev-dependency.
-    fn next_rand(state: &mut u64) -> u64 {
+                // Delta-adjust: new sort batch may differ in size from previous
+        if word_idx == (last_row / 64) as usize {
+            Some(Err(e)) => return Err(e.into()),
         let mut x = *state;
-        x ^= x << 13;
-        x ^= x >> 7;
-        x ^= x << 17;
-        *state = x;
-        x
-    }
-
+    let bits = match live_bits {
+            match reader.next() {
     #[test]
-    fn word_scan_matches_reference_across_word_boundaries() {
-        // 4 words = 256 rows. Try sparse, dense and empty bit patterns.
-        let patterns: Vec<Vec<u64>> = vec![
-            vec![0, 0, 0, 0],
-            vec![!0, !0, !0, !0],
+    }
+        file_id: usize,
+        if self.current_data_batch_bytes > 0 {
+            file_id,
+            self.skip_to_next_live_row(reservation)?;
+            writer_generation,
             vec![0, 1u64 << 63, 0, 0], // only abs row 127 alive
-            vec![0, 0, 1, 0],          // only abs row 128 alive
-            vec![1, 0, 0, 1u64 << 63], // rows 0 and 255 alive
-            vec![
-                0xF0F0_F0F0_F0F0_F0F0,
-                0x0F0F_0F0F_0F0F_0F0F,
-                0xAAAA_AAAA_AAAA_AAAA,
-                0x5555_5555_5555_5555,
-            ],
-        ];
-        for bits in &patterns {
-            let num_rows = 256u64;
-            for base in 0..256u64 {
-                for upper in 0..=(256 - base) as usize {
-                    let got = last_live_index_plus_one(Some(bits), num_rows, base, upper);
-                    let want = reference(Some(bits), num_rows, base, upper);
-                    assert_eq!(got, want, "bits={:?} base={} upper={}", bits, base, upper);
-                }
+        let sort_col_indices: Vec<usize> = sort_columns
             }
-        }
-    }
-
-    #[test]
-    fn word_scan_matches_reference_on_random_bitsets() {
-        let mut state = 0x9E37_79B9_7F4A_7C15u64;
-        for _ in 0..200 {
-            let words = 1 + (next_rand(&mut state) % 5) as usize;
-            let bits: Vec<u64> = (0..words).map(|_| next_rand(&mut state)).collect();
-            let capacity = words as u64 * 64;
-            // num_rows sometimes shorter than the bitset, sometimes exactly full, sometimes longer.
-            let num_rows_options = [
-                capacity,
-                capacity.saturating_sub(7),
-                capacity + 40,
-                1.max(capacity / 2),
-            ];
-            for &num_rows in &num_rows_options {
-                for _ in 0..40 {
-                    let limit = capacity + 64; // deliberately probe beyond the bitset
-                    let base = next_rand(&mut state) % limit;
-                    let upper = (next_rand(&mut state) % (limit - base + 1)) as usize;
-                    let got = last_live_index_plus_one(Some(&bits), num_rows, base, upper);
-                    let want = reference(Some(&bits), num_rows, base, upper);
-                    assert_eq!(
-                        got, want,
-                        "bits={:?} num_rows={} base={} upper={}",
-                        bits, num_rows, base, upper
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn rows_past_num_rows_count_as_alive() {
-        // num_rows=10 but bitset says everything is dead; rows >= 10 are alive by contract.
-        let bits: Vec<u64> = vec![0u64];
-        assert_eq!(last_live_index_plus_one(Some(&bits), 10, 0, 12), 12);
-        assert_eq!(last_live_index_plus_one(Some(&bits), 10, 0, 10), 0);
-    }
-
-    #[test]
-    fn rows_past_bitset_length_count_as_alive() {
-        // Bitset covers 64 rows but the file claims 100; rows >= 64 are alive by contract.
-        let bits: Vec<u64> = vec![0u64];
-        assert_eq!(last_live_index_plus_one(Some(&bits), 100, 60, 10), 10);
-        assert_eq!(last_live_index_plus_one(Some(&bits), 100, 0, 64), 0);
-    }
+#[inline]
+        let patterns: Vec<Vec<u64>> = vec![
+        assert!(
+                        self.current_data_batch_bytes = data_bytes;
+                return Err(e);
+    /// Source row-id offset at the start of the current sort batch.
+        assert_eq!(last_live_index_plus_one(Some(&bits), 64, 0, 10), 10);
+                Some(Err(e)) => return Err(e.into()),
+            sort_reader,
+        let data_reader = if deferred {
+        let builder1 = ParquetRecordBatchReaderBuilder::try_new(file1)?;
+                self.sort_batch = Some(batch);
 }
+    #[inline]
+        let sort_batch_schema = first_sort_batch.schema();
+        let first_sort_batch = match sort_reader.next() {
+                self.base_row_id += prev_rows;
+                self.current_sort_batch_bytes = 0;
+        };
+    fn none_bits_returns_true_for_any_row() {
+    fn all_rows_alive_returns_batch_upper() {
+    /// One past the highest live-row index within `[0, batch_upper)`.
+    num_rows: u64,
+            batch_upper,
+/// Delegates to [`super::live_docs::is_alive_in_words`] for the core bit logic.
+        self.data_batch = None;
+    #[inline]
+}
+        let slice = if self.deferred {
+/// One past the highest live-row index within `[0, batch_upper)` for the batch starting
+    }
+                    );
+    #[test]
+        } else {
+                    i -= 1;
+            .as_ref()
+    pub file_id: usize,
+        assert!(is_row_id_alive(Some(&bits), 10, 100));
+            let _ = tx.send(result);
+                .collect();
+        get_sort_values(
+        assert!(is_row_id_alive(Some(&bits), 64, 63));
+                .collect::<Vec<_>>(),
+        for r in 0..63 {
+/// highest set bit in the first non-zero word, so a long run of dead rows at the end of a batch
+        }
+            let mut reader = reader.lock().unwrap();
+        let bits: Vec<u64> = vec![!0u64];
+    }
+                builder2.parquet_schema(),
+/// batch's upper edge is masked down to the bits that lie inside the batch; bits at or beyond
+                    }
+    }
+                0
+use native_bridge_common::memory_pool::MemoryReservation;
+                        "Data reader exhausted at position {}, needed sort_batch_index={}",
+            &self.max_sort_modes,
+}
+        x
+                .map(|&i| schema.field(i).clone())
+            nulls_first: nulls_first.to_vec(),
+            vec![!0, !0, !0, !0],
+use arrow::datatypes::{DataType as ArrowDataType, Schema as ArrowSchema};
+                Some(Err(e)) => Some(Err(MergeError::Arrow(e))),
+                }
+            .build()?;
+        }
+    pub fn load_next_batch(&mut self, reservation: &mut MemoryReservation) -> MergeResult<bool> {
+    pub row_idx: usize,
+            projected_schema,
+        batch_upper: usize,
+        self.sort_prefetch_pending = true;
+        let deferred = schema
+                self.row_idx = 0;
+    #[test]
+            )
+        let end_excl = self.last_live_index_plus_one(batch.num_rows());
+        // Bitmap covers only 64 bits, but num_rows says 128.
+            if !self.load_next_batch(reservation)? {
+                data_projection_indices.clone(),
+    #[inline]
+        if self.sort_prefetch_pending {
+            deferred,
+            return Ok(());
+/// prefetches the next batch on the shared Rayon pool to overlap IO with merge
+                !is_row_id_alive(Some(&bits), 64, r),
+    }
+        }
+        let batch = self
+            return (highest_abs - base_row_id) as usize + 1;
+        assert!(is_row_id_alive(Some(&bits), 0, 0));
+        if word_idx == first_word {
+                        | ArrowDataType::Binary
+    fn empty_bitmap_returns_alive_for_all() {
+            }
+        base_row_id: u64,
+            .map(|b| b.num_rows() as u64)
+        }
+    #[test]
+    use super::is_row_id_alive;
+            }
+    #[test]
+            self.current_data_batch_bytes = 0;
+            "last_sort_values called on cursor with no live row"
+                if self.current_data_batch_bytes > 0 {
+        assert!(is_row_id_alive(Some(&bits), 10, 10));
+/// When `live_bits` is `Some`, dead rows are skipped so `row_idx` always points
+        Ok(())
+        let sort_reader = Arc::new(Mutex::new(sort_reader));
+        assert!(is_row_id_alive(Some(&bits), 128, 64));
+            .iter()
+            };
+        // Data projection: all columns except __row_id__
+            }
+                _ => None,
+            }
+                    let want = reference(Some(bits), num_rows, base, upper);
+        )
+            vec![0, 0, 0, 0],
+        // 4 words = 256 rows. Try sparse, dense and empty bit patterns.
+        self.sort_batch.as_ref().map_or(0, |b| b.num_rows())
+            }
+                            "Sort column '{}' not found in projected batch for file '{}'",
+            let result = match reader.next() {
+                    .map(|f| f.data_type().clone())
+    }
+    data_reader: Option<parquet::arrow::arrow_reader::ParquetRecordBatchReader>,
+                for upper in 0..=(256 - base) as usize {
+                    self.current_data_batch_bytes = 0;
+    #[test]
+    }
+    #[test]
+            self.live_bits.as_deref().map(|v| v.as_slice()),
+#[inline]
+    if batch_end > num_rows || batch_end > bitset_rows {
+    /// from the sort batch. When `live_bits` is `Some`, dead rows are removed via a
+        cursor.current_sort_batch_bytes = batch_bytes;
+        cursor.start_sort_prefetch();
+/// the range is alive, returns 0.
+        let data_projection_indices = projection_indices_excluding_row_id(&schema);
+            };
+            let highest_abs = word_base + (63 - word.leading_zeros() as u64);
+            parquet::arrow::ProjectionMask::roots(builder1.parquet_schema(), sort_indices)
+        let bits: Vec<u64> = vec![0u64];
+            Ok(Some(Err(e))) => {
+                )))
+        }
+    fn trailing_dead_rows_skipped() {
+    // If the batch reaches into that region the last row of the batch is alive.
+ * SPDX-License-Identifier: Apache-2.0
+            .ok_or_else(|| MergeError::Logic("Data reader already closed".into()))?;
+        // Projected schema from file metadata
+        if word_idx == first_word {
+                        bits, num_rows, base, upper
+        let row_zero_dead: Vec<u64> = vec![!0u64 & !1u64];
+        }
+            Err(e) => {
+    /// In deferred mode the slice is taken from the on-demand data reader; otherwise
+        match sort_result {
+                    })
+        // Track sort batch + prefetch (estimate 2x first batch)
+            &self.sort_col_indices,
+            let file2 = File::open(path)?;
+    }
+    /// so the caller can build union schemas and row-ID mappings without re-opening the file.
+            let sort_indices: Vec<usize> = sort_columns
+            }
+        let bits: Vec<u64> = vec![];
+        }
+    sort_prefetch_pending: bool,
+                        MergeError::Logic(format!(
+                self.data_reader = None;
+        if self.current_data_batch_bytes > 0 {
+        max_sort_modes: &[bool],
+            return;
+    let first_word = (base_row_id / 64) as usize;
+    fn short_bitmap_treats_missing_words_as_alive() {
+                }
+    #[test]
+                    let base = next_rand(&mut state) % limit;
+        let sort_result = match self.sort_prefetch_rx.recv() {
+        word_idx -= 1;
+            total_row_count,
+                        reservation.grow(data_bytes);
+                if new_bytes > old_sort_bytes {
+            self.current_data_batch_bytes = 0;
+        get_merge_pool(None).spawn(move || {
+                capacity,
+            })
+    ///
+                        // Target batch — validate and keep
+            .map(|col| {
+                reservation.shrink(self.current_data_batch_bytes);
+                        return i;
+        assert!(is_row_id_alive(None, 100, 99));
+        assert!(is_row_id_alive(None, 100, 1_000_000));
+        None => return batch_upper,
+        path: &str,
+                    reservation.grow(new_bytes - old_sort_bytes);
+            })
+            .as_ref()
+    /// Advances `row_idx` past dead rows, loading successor batches as needed.
+        match self.try_load_data(reservation) {
+            }
+                    let want = reference(Some(&bits), num_rows, base, upper);
+        assert!(is_row_id_alive(Some(&bits), 100, 0));
+            .iter()
+    #[test]
+        }
+/// as alive (defensive — Java-side contract is that absent bits mean "all alive").
+        // Row 64 lives in word 1, which is missing.
+    }
+                self.sort_batch_index += 1;
+        self.data_batch = None;
+        let old_sort_bytes = self.current_sort_batch_bytes;
+                    .fields()
+                while i > 0 {
+        let file1 = File::open(path)?;
+                matches!(
+#[cfg(test)]
+            self.live_bits.as_deref().map(|v| v.as_slice()),
+/// at `base_row_id`. `None` live_bits ⇒ all alive ⇒ returns `batch_upper`. If no row in
+                    path, file_id
+        ));
+        }
+    /// Returns `true` if the cursor's current row is alive.
+            let capacity = words as u64 * 64;
+use std::sync::{Arc, Mutex};
+                        )));
+        self.is_row_id_alive(self.base_row_id + self.row_idx as u64)
+    fn empty_batch_returns_zero() {
+                .as_ref()
+    /// `live_bits` is an optional packed bitset of live rows (Lucene layout).
+    // Rows at or past num_rows, or past the end of the supplied bitset, are alive by contract.
+        self.sort_batch = None;
+            cursor,
+        let sort_col_set: std::collections::HashSet<&str> =
+                    .iter()
+        nulls_first: &[bool],
+            for &num_rows in &num_rows_options {
+                    return Err(MergeError::Logic(format!(
+    fn skip_to_next_live_row(&mut self, reservation: &mut MemoryReservation) -> MergeResult<()> {
+use std::fs::File;
+    sort_prefetch_rx: std::sync::mpsc::Receiver<Option<MergeResult<RecordBatch>>>,
+ * The OpenSearch Contributors require contributions made to
+        // Rows 0..9 alive, row 10 dead.
+            sort_prefetch_tx,
+    }
+                .ok_or_else(|| MergeError::Logic("Data batch not loaded".into()))?;
+    /// Packed live-docs bitset in Lucene `FixedBitSet#getBits()` layout. `None` = all alive.
+/// `None` ⇒ all alive; rows beyond `num_rows` or beyond the bitset's length are treated
+                        if let Some(ref sb) = self.sort_batch {
+        let all_alive: Vec<u64> = vec![!0u64];
+                        }
+    num_rows: u64,
+            }
+        self.data_batch = None;
+            &self.sort_col_indices,
+mod is_row_id_alive_tests {
+        let bits: Vec<u64> = vec![0x1Fu64];
+    pub fn current_sort_values(&self) -> MergeResult<Vec<SortKey>> {
+                let mut mask_values: Vec<bool> = Vec::with_capacity(len);
+                let mask = BooleanArray::from(mask_values);
+        assert_eq!(last_live_index_plus_one(Some(&bits), 64, 0, 11), 10);
+            let low_bit = (base_row_id - word_base) as u32; // 0..=63
+    ) -> usize {
+            let builder2 = ParquetRecordBatchReaderBuilder::try_new(file2)?;
+            if low_bit > 0 {
+        get_sort_values(
+            return Ok(());
+        live_bits: Option<Arc<Vec<u64>>>,
+        let mut cursor = Self {
+            Some(_) => {
+/// Returns `true` if `abs_row_id` is alive given the optional `live_bits` packed bitset.
+    }
+                    )))
+        } else {
+            data_batch: None,
+                0x0F0F_0F0F_0F0F_0F0F,
+    }
+            data_batch_index: 0,
+                    }
+        let bits: Vec<u64> = vec![0u64];
+            sort_col_types,
+        let batch_bytes = cursor.sort_batch.as_ref().unwrap().get_array_memory_size();
+            builder.metadata().file_metadata(),
+use super::schema::projection_indices_excluding_row_id;
+                    let upper = (next_rand(&mut state) % (limit - base + 1)) as usize;
+                    if super::is_row_id_alive(live_bits, num_rows, base_row_id + idx as u64) {
+        }
+    pub fn new(
+        }
+                for _ in 0..40 {
+    #[test]
+                                    sb.num_rows(),
+                builder2
+        }
+    fn respects_base_row_id_offset() {
+                for i in 0..len {
+            if self.row_idx < n {
+            .as_ref()
+            }
+                Ok(true)
+            self.current_data_batch_bytes = 0;
+        assert!(is_row_id_alive(Some(&all_alive), 64, 0));
+                1.max(capacity / 2),
+        let bits: Vec<u64> = vec![0u64];
+    fn rows_past_num_rows_count_as_alive() {
+    batch_upper: usize,
+                        "bits={:?} num_rows={} base={} upper={}",
+            self.ensure_data_loaded(reservation)?;
+            batch.slice(start, len)
+                capacity.saturating_sub(7),
+    fn next_rand(state: &mut u64) -> u64 {
+        let file = File::open(path)?;
+        // num_rows=10 but bitset says everything is dead; rows >= 10 are alive by contract.
+    }
+    current_data_batch_bytes: usize,
+            self.skip_to_next_live_row(reservation)?;
+                // Error path: close reader and release any data_batch memory
+    fn start_sort_prefetch(&mut self) {
+ * this file be licensed under the Apache-2.0 license or a
+        );
+        assert!(!is_row_id_alive(Some(&bits), 128, 0));
+                schema
+    pub sort_col_types: Vec<ArrowDataType>,
+    pub sort_col_indices: Vec<usize>,
+            return Ok(false);
+                )
+                    self.data_batch_index += 1;
+        );
+            row_idx: 0,
+use parquet::schema::types::SchemaDescriptor;
+                .filter_map(|c| schema.fields().iter().position(|f| f.name() == c.as_str()))
+        let projected_schema = Arc::new(ArrowSchema::new(
+    }
+pub struct FileCursor {
+use super::heap::{get_sort_values, SortKey};
+            self.sort_batch = None;
+                Some(Ok(batch)) => {
+            .with_batch_size(batch_size)
+    }
+    /// Returns `(cursor, projected_arrow_schema, parquet_schema_descriptor, writer_generation, total_row_count)`
+    let mut word_idx = (last_row / 64) as usize;
+    #[inline]
+        // Cursor is at base_row_id=5, asking about a 10-row batch ⇒ checks abs rows 5..14.
+            .ok_or_else(|| MergeError::Logic("Cursor exhausted".into()))?;
+                        let data_bytes = batch.get_array_memory_size();
+                return Err(MergeError::Logic(format!(
+pub fn is_row_id_alive(live_bits: Option<&[u64]>, num_rows: u64, abs_row_id: u64) -> bool {
+        // Row 0 is in word 0 and explicitly dead.
+        }
+            sort_batch: Some(first_sort_batch),
+///
+                let mut i = batch_upper;
+                    .find(|f| f.name() == col.as_str())
+        } else {
+                    f.data_type(),
+    }
+        if self.row_idx >= self.sort_batch.as_ref().unwrap().num_rows() {
+        while self.data_batch_index <= self.sort_batch_index {
+        last_live_index_plus_one(
+ */
+    fn bit_crosses_word_boundary_64() {
+            std::sync::mpsc::sync_channel::<Option<MergeResult<RecordBatch>>>(1);
+    }
+        assert!(!is_row_id_alive(Some(&bits), 128, 126));
+            return Ok(self.sort_batch.is_some());
+            );
+            batch,
+                        ))
+        for bits in &patterns {
+    }
+        let bits: Vec<u64> = vec![0x3FFu64];
+            sort_prefetch_pending: false,
+            assert!(
+        let prev_rows = self
+    }
+    };
+    #[test]
+            &self.sort_col_types,
+                    assert_eq!(got, want, "bits={:?} base={} upper={}", bits, base, upper);
+                    .with_batch_size(batch_size)
+    fn out_of_bounds_returns_alive_defensively() {
+                let new_bytes = batch.get_array_memory_size();
+            .unwrap_or(0);
+        // bit at abs row 10 alive, all others dead.
+    ) -> MergeResult<(Self, Arc<ArrowSchema>, SchemaDescriptor, i64, usize)> {
+    fn is_current_row_alive(&self) -> bool {
+// ---------------------------------------------------------------------------
+        assert_eq!(last_live_index_plus_one(Some(&bits), 64, 5, 10), 6);
+        let bits: Vec<u64> = vec![!0u64];
+/// costs one word read per 64 rows rather than one bit test per row. The word straddling the
+/// uses two readers: a sort-only reader for the merge heap and a data reader
+/// [`is_row_id_alive`].
+    /// After this, either `row_idx` points at a live row or the cursor is exhausted.
+                        MergeError::Logic(format!(
+        return batch_upper;
+            batch,
+                self.current_sort_batch_bytes = new_bytes;
+                .iter()
+            while self.row_idx < n && !self.is_current_row_alive() {
+    #[test]
+        }
+        if self.live_bits.is_none() {
+    let batch_end = base_row_id + batch_upper as u64;
+        };
+                let start_abs = self.base_row_id + start as u64;
+#[cfg(test)]
+        }
+        };
+            None
+                Some(Ok(batch)) if batch.num_rows() > 0 => Some(Ok(batch)),
+        let total_row_count = builder.metadata().file_metadata().num_rows() as usize;
+        }
+        }
+        return 0;
+    fn bit_at_word_boundary_127() {
+            }
+    }
+                reservation.shrink(old_sort_bytes);
+    use super::last_live_index_plus_one;
+    fn last_row_dead_returns_index_of_previous_alive() {
+    pub nulls_first: Vec<bool>,
+                                )));
+        }
+            for base in 0..256u64 {
+    /// Returns `true` if the given absolute source row id is alive.
+                .iter()
+    pub fn advance(&mut self, reservation: &mut MemoryReservation) -> MergeResult<bool> {
+                } else if new_bytes < old_sort_bytes {
+        match &self.live_bits {
+                .sort_batch
+    fn none_bits_returns_batch_upper() {
+                                    self.sort_batch_index
+// Tests
+                reservation.shrink(old_sort_bytes);
+            if self.current_data_batch_bytes > 0 {
+            current_sort_batch_bytes: 0,
+/// When deferred mode is active (controlled by the dynamic index setting
+        ];
+/// at a live row (or the cursor is exhausted).
+                                return Err(MergeError::Logic(format!(
+            ],
+                }
+/*
+        assert!(is_row_id_alive(None, 0, 0));
+/// `index.parquet.merge_deferred_column_threshold`, default 0 = always deferred),
+                    let limit = capacity + 64; // deliberately probe beyond the bitset
+            None => {
+                    .iter()
+            Ok(Some(Ok(batch))) => Some(batch),
+        x ^= x >> 7;
+    ///
+        len: usize,
+    #[test]
+    data_batch_index: usize,
+    #[test]
+/// loaded on demand. Otherwise uses a single all-column reader. The sort reader
+            let words = 1 + (next_rand(&mut state) % 5) as usize;
+            end_excl - 1,
+                self.data_reader = None;
+        }
+            }
+                .ok_or_else(|| MergeError::Logic("Batch is None".into()))?;
+        let mut sort_reader = builder1
+        // num_rows=10 — anything >= 10 must come back alive even though all bits are 0.
+            &self.nulls_first,
+    /// Deterministic xorshift so the sweep is reproducible without a dev-dependency.
+        let writer_generation = crate::writer_properties_builder::read_writer_generation(
+    if batch_upper == 0 {
+        let reader = self
+                    .position(|f| f.name() == col.as_str())
+                }
+        let tx = self.sort_prefetch_tx.clone();
+    pub fn batch_height(&self) -> usize {
+                // Cursor exhausted — release all sort batch tracking
+                .data_batch
+                        // Track full-column data batch — already allocated by data_reader.next()
+            current_data_batch_bytes: 0,
+            .data_reader
+/// `num_rows` (or beyond the supplied bitset) are treated as alive to match
+            .count()
+            self.num_rows,
+            )
+        for _ in 0..200 {
+    fn ensure_data_loaded(&mut self, reservation: &mut MemoryReservation) -> MergeResult<()> {
+            parquet_schema_descr,
+                        ))
+    }
+///
+                word &= !((1u64 << low_bit) - 1);
+}
+    }
+    pub max_sort_modes: Vec<bool>,
+use super::io_task::get_merge_pool;
+    sort_prefetch_tx: std::sync::mpsc::SyncSender<Option<MergeResult<RecordBatch>>>,
+        let word_base = (word_idx as u64) * 64;
+            >= deferred_threshold;
+                self.sort_prefetch_pending = false;
+            None => Ok(slice),
+    }
+    }
+        reservation.grow(batch_bytes * 2);
+            return Ok(self.sort_batch.is_some());
+            num_rows: total_row_count as u64,
+        None => true,
+    #[test]
+        };
+    /// boolean mask keyed on absolute source row ids. Zero-copy when `live_bits` is `None`.
+                    let got = last_live_index_plus_one(Some(bits), num_rows, base, upper);
+                        return Err(MergeError::Logic(format!(
+        batch_size: usize,
+                            "Sort column '{}' not found in file '{}' (cursor {})",
+    #[test]
+                    reservation.shrink(self.current_data_batch_bytes);
+                "row {} should be dead",
+        )
+    fn last_live_index_plus_one(&self, batch_upper: usize) -> usize {
+        assert_eq!(last_live_index_plus_one(Some(&bits), 10, 0, 12), 12);
+        assert_eq!(last_live_index_plus_one(None, 100, 0, 50), 50);
+    pub fn last_sort_values(&self) -> MergeResult<Vec<SortKey>> {
+            }
+        let batch = self
+        if self.current_data_batch_bytes > 0 {
+            .with_projection(sort_projection)
+            .filter(|f| !sort_col_set.contains(f.name().as_str()))
+        x ^= x << 13;
+        self.sort_batch = None;
+                            }
+                Ok(filter_record_batch(&slice, &mask)?)
+        // Bitset covers 64 rows but the file claims 100; rows >= 64 are alive by contract.
+                self.current_data_batch_bytes = 0;
+    #[test]
+        // Last alive in that range is abs 10 (= local idx 5 in this batch). Result is 5+1=6.
+                            col, path, file_id

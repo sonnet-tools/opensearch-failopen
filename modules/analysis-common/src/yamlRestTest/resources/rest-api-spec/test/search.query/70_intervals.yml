@@ -1,55 +1,54 @@
-# integration tests for intervals queries using analyzers
-setup:
-  - do:
-      indices.create:
-        index:  test
-        body:
-          mappings:
-            properties:
-              text:
-                type: text
-                analyzer: standard
-              text_en:
-                type: text
-                analyzer: english
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - '{"index": {"_index": "test", "_id": "4"}}'
+                    - match:
           - '{"text"    : "Outside it is cold and wet and raining cats and dogs",
-                "text_en" : "Outside it is cold and wet and raining cats and dogs"}'
-
 ---
-"Test use_field":
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            intervals:
-              text:
-                all_of:
-                  intervals:
-                    - match:
-                        query: cats
-                    - match:
-                        query: dog
                   max_gaps: 1
+                  intervals:
+        body:
+            properties:
+                analyzer: english
+      bulk:
+            intervals:
+                        query: cats
+                type: text
   - match: { hits.total.value: 0 }
+        refresh: true
+"Test use_field":
+        index: test
   - do:
-      search:
+                "text_en" : "Outside it is cold and wet and raining cats and dogs"}'
+                        query: dog
+                    - match:
+                type: text
+        body:
+                        use_field: text_en
+              text_en:
+                  intervals:
+# integration tests for intervals queries using analyzers
+                        query: cats
+setup:
+  - match: { hits.total.value: 1 }
+          query:
+                    - match:
         index: test
         body:
+      indices.create:
+                analyzer: standard
+  - do:
+      search:
+          - '{"index": {"_index": "test", "_id": "4"}}'
+              text:
+                    - match:
+                all_of:
+                all_of:
+      search:
+  - do:
           query:
             intervals:
+          mappings:
+        body:
+  - do:
               text:
-                all_of:
-                  intervals:
-                    - match:
-                        query: cats
-                    - match:
-                        query: dog
-                        use_field: text_en
+        index:  test
+              text:
                   max_gaps: 1
-  - match: { hits.total.value: 1 }
+                        query: dog

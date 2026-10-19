@@ -1,71 +1,66 @@
----
-teardown:
-  - do:
+      index:
       ingest.delete_pipeline:
-        id: "my_pipeline"
-        ignore: 404
-
 ---
-"Test Fail Processor":
   - do:
+        id: 1
+        body: {}
       ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "fail" : {
-                  "message" : "error_message"
-                }
-              }
-            ]
-          }
   - match: { acknowledged: true }
-
+"Test Fail Processor":
+        id: "my_pipeline"
+                  "message" : "error",
+                      }
+        body: {}
+              }
+---
+              }
+                    {
+        body:  >
+            "description": "_description",
+        index: test
+---
+                }
+          }
+teardown:
+"Test fail with on_failure":
+            ]
+                  "message" : "error_message"
+        body:  >
+        pipeline: "my_pipeline"
+                  ]
+        index: test
+        id: 1
+  - do:
+            "processors": [
+  - do:
+                    }
+      ingest.put_pipeline:
+  - match: { acknowledged: true }
+                        "value" : "fail_processor_ran"
+                  "on_failure" : [
+        index: test
+        id: 1
+        id: "my_pipeline"
+          {
+  - do:
+          {
+                "fail" : {
+          }
+                }
+            "description": "_description",
+        ignore: 404
+                      "set" : {
+                "fail" : {
+              {
+            "processors": [
+      get:
+      index:
+  - do:
+        id: "my_pipeline"
   - do:
       catch: request
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {}
-
----
-"Test fail with on_failure":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "fail" : {
-                  "message" : "error",
-                  "on_failure" : [
-                    {
-                      "set" : {
                         "field" : "error_message",
-                        "value" : "fail_processor_ran"
-                      }
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {}
-
-  - do:
-      get:
-        index: test
-        id: 1
   - match: { _source.error_message: "fail_processor_ran" }
+        pipeline: "my_pipeline"
+              {
+            ]

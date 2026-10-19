@@ -1,39 +1,36 @@
----
 "Insert more docs to joda index":
-  - do:
       bulk:
-        refresh: true
         body:
-          - '{"index": {"_index": "joda_for_range"}}'
-          - '{"time_frame": {"gte": "2019-01-01T00:00+01:00", "lte" : "2019-03-01T00:00+01:00"}}'
-
   - do:
-      search:
-        rest_total_hits_as_int: true
-        index: joda_for_range
         body:
-          query:
-            range:
-              time_frame:
-                gte: "2019-02-01T00:00+01:00"
                 lte: "2019-02-01T00:00+01:00"
-
----
-"Insert more docs to java index":
+          - '{"time_frame": {"gte": "2019-01-01T00:00+01:00", "lte" : "2019-03-01T00:00+01:00"}}'
   - do:
-      bulk:
         refresh: true
+  - do:
+        rest_total_hits_as_int: true
+            range:
+        refresh: true
+                gte: "2019-02-01T00:00+01:00"
+      bulk:
         body:
           - '{"index": {"_index": "java_for_range"}}'
-          - '{"time_frame": {"gte": "2019-01-01T00:00+01:00", "lte" : "2019-03-01T00:00+01:00"}}'
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: java_for_range
-        body:
           query:
+        index: java_for_range
+"Insert more docs to java index":
+              time_frame:
+---
+      search:
             range:
               time_frame:
+        rest_total_hits_as_int: true
+      search:
+        index: joda_for_range
+        body:
+---
+          query:
                 gte: "2019-02-01T00:00+01:00"
+          - '{"time_frame": {"gte": "2019-01-01T00:00+01:00", "lte" : "2019-03-01T00:00+01:00"}}'
+  - do:
+          - '{"index": {"_index": "joda_for_range"}}'
                 lte: "2019-02-01T00:00+01:00"

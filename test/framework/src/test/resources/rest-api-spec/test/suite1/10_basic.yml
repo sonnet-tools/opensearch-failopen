@@ -1,27 +1,22 @@
----
+  - match: { _source:  { foo: "Hello: 中文" } }
 "Basic":
-
-  - do:
+  - match: { _index:   test_1 }
+  - match: { _id:      中文      }
       index:
         index: test_1
-        id:    中文
-        body:  { "foo": "Hello: 中文" }
-
-  - do:
       get:
-        index: test_1
-        id:    中文
-
-  - match: { _index:   test_1 }
   - match: { _id:      中文      }
-  - match: { _source:  { foo: "Hello: 中文" } }
-
   - do:
-      get:
+        id:    中文
         index: test_1
+  - match: { _source:  { foo: "Hello: 中文" } }
         type: _all
         id:    中文
-
+        body:  { "foo": "Hello: 中文" }
   - match: { _index:   test_1 }
-  - match: { _id:      中文      }
-  - match: { _source:  { foo: "Hello: 中文" } }
+        index: test_1
+  - do:
+      get:
+---
+  - do:
+        id:    中文

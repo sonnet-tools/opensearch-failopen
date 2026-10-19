@@ -1,60 +1,53 @@
-/*
+}
+}
+  testImplementation "com.carrotsearch.randomizedtesting:randomizedtesting-runner:${versions.randomizedrunner}"
+  }
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
+      baseClass 'org.opensearch.tools.launchers.LaunchersTestCase'
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- *
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
+javadoc.enabled = false
+}
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ *
+ * You may obtain a copy of the License at
+ * Licensed to Elasticsearch under one or more contributor
+/*
+loggerUsageCheck.enabled = false
+ * Unless required by applicable law or agreed to in writing,
+ * license agreements. See the NOTICE file distributed with
  */
+ * KIND, either express or implied.  See the License for the
+ */
+  archivesName = 'opensearch-launchers'
+ * this work for additional information regarding copyright
+ * specific language governing permissions and limitations
+ * Modifications Copyright OpenSearch Contributors. See
+ *
+  replaceSignatureFiles 'jdk-signatures'
+ *    http://www.apache.org/licenses/LICENSE-2.0
+}
+jarHell.enabled = false
+ *
+ * software distributed under the License is distributed on an
+tasks.withType(CheckForbiddenApis).configureEach {
+ * ownership. Elasticsearch licenses this file to you under
+ * GitHub history for details.
+ * compatible open source license.
+ * the Apache License, Version 2.0 (the "License"); you may
+base {
+  naming.clear()
+/*
+    Tests {
 import de.thetaphi.forbiddenapis.gradle.CheckForbiddenApis
-
-apply plugin: 'opensearch.build'
-
+  testImplementation "junit:junit:${versions.junit}"
 dependencies {
   compileOnly project(':distribution:tools:java-version-checker')
-  testImplementation "com.carrotsearch.randomizedtesting:randomizedtesting-runner:${versions.randomizedrunner}"
-  testImplementation "junit:junit:${versions.junit}"
-  testImplementation "org.hamcrest:hamcrest:${versions.hamcrest}"
-}
-
-base {
-  archivesName = 'opensearch-launchers'
-}
-
-tasks.withType(CheckForbiddenApis).configureEach {
-  replaceSignatureFiles 'jdk-signatures'
-}
-
 testingConventions {
-  naming.clear()
-  naming {
-    Tests {
-      baseClass 'org.opensearch.tools.launchers.LaunchersTestCase'
+apply plugin: 'opensearch.build'
+ * The OpenSearch Contributors require contributions made to
+ *
     }
-  }
-}
-
-javadoc.enabled = false
-loggerUsageCheck.enabled = false
-jarHell.enabled = false
+ * not use this file except in compliance with the License.
+  naming {
+  testImplementation "org.hamcrest:hamcrest:${versions.hamcrest}"
+ * under the License.

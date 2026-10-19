@@ -1,160 +1,153 @@
+  - match: { _source.field_to_split: ["127","0","0","1"] }
 ---
+            "field_to_uppercase": "uppercase",
+            "processors": [
+                  "value" : "surprise"
+                  "field": "field_to_gsub",
+                "join" : {
+            "description": "_description",
+        pipeline: "my_pipeline"
+  - do:
+        body:  >
+---
+  - match: { _source.field_to_convert: [127,0,0,1] }
+          {
+        id: "my_pipeline"
+                "lowercase" : {
+        id: "my_pipeline"
+  - do:
+                }
+  - do:
+                "append" : {
+                "set" : {
+                  "replacement" : "."
+                  "field" : "new_field",
+              },
+              },
+  - do:
+                "html_strip" : {
+              },
+---
+                "gsub" : {
+  - match: { _source.field_to_lowercase: "lowercase" }
 teardown:
-  - do:
-      ingest.delete_pipeline:
-        id: "my_pipeline"
+                  "field" : "field_to_trim"
+                  "field" : "field_to_uppercase"
+  - is_false: _source.field_to_rename
+                "convert" : {
+              },
+                  "field" : "new_field",
+                }
+          }
+"Test metadata":
+                }
+  - match: { _source.field_to_gsub: "127.0.0.1" }
+                }
+                }
+  - length: { _source: 1 }
+        index: test
+            "field_to_rename": "value",
         ignore: 404
-
----
+      index:
+  - match: { _source.field_to_trim: "trimmed" }
+          wait_for_status: green
 "Test mutate processors":
+              {
+        id: 1
+  - match: { acknowledged: true }
+        index: test
+  - match: { _source.field_to_html_strip: "\nthis \nis\n a test" }
+                  "field" : "field_to_split",
+              },
+        id: 1
+      ingest.delete_pipeline:
+                  "pattern" : "-",
+            "field_to_lowercase": "LOWERCASE",
+        body: {field: "value"}
+  - match: { _source.field_to_uppercase: "UPPERCASE" }
+                "rename" : {
+                }
   - do:
+          {
+        id: 1
+  - do:
+                "set" : {
+            "field_to_convert": ["127","0","0","1"],
+              },
+          }
+            "field_to_html_strip": "<p>this <title>is</title> a <b>test</b>"
+                }
+      get:
+                  "field" : "field_to_html_strip"
+                  "value": ["item2", "item3", "item4"]
+            "field_to_gsub": "127-0-0-1",
+                  "separator": "-"
+              {
+                }
+  - do:
+                }
+                  "field" : "field_to_join",
+              }
+            "field_to_split": "127-0-0-1",
+          }
+        pipeline: "my_pipeline"
       ingest.put_pipeline:
-        id: "my_pipeline"
+                  "field" : "_index",
+                "uppercase" : {
+            "field_to_trim": "   trimmed   ",
+                }
+                  "separator": "-"
+              {
+              },
+              {
+  - match: { _source.field_to_join: "127-0-0-1" }
+                }
+            ]
+              {
+              {
+  - is_false: _source.field_to_remove
+              },
+                  "target_field": "renamed_field"
+        id: 1
         body:  >
           {
-            "description": "_description",
+              },
+              {
+              },
+                  "field" : "field_to_convert",
             "processors": [
-              {
-                "set" : {
-                  "field" : "new_field",
-                  "value": "new_value"
-                }
-              },
-              {
-                "append" : {
-                  "field" : "new_field",
-                  "value": ["item2", "item3", "item4"]
-                }
-              },
-              {
-                "rename" : {
-                  "field" : "field_to_rename",
-                  "target_field": "renamed_field"
-                }
-              },
-              {
                 "remove" : {
+                }
+              },
+        body:  >
+            ]
+      get:
+              {
+                  "value": "new_value"
+  - match: { _source.new_field: ["new_value", "item2", "item3", "item4"] }
+                "split" : {
+      ingest.put_pipeline:
+              {
+        id: "my_pipeline"
+  - match: { _source.field: "value" }
                   "field" : "field_to_remove"
                 }
-              },
               {
-                "lowercase" : {
-                  "field" : "field_to_lowercase"
-                }
-              },
-              {
-                "uppercase" : {
-                  "field" : "field_to_uppercase"
-                }
-              },
-              {
-                "trim" : {
-                  "field" : "field_to_trim"
-                }
-              },
-              {
-                "split" : {
-                  "field" : "field_to_split",
-                  "separator": "-"
-                }
-              },
-              {
-                "join" : {
-                  "field" : "field_to_join",
-                  "separator": "-"
-                }
-              },
-              {
-                "convert" : {
-                  "field" : "field_to_convert",
-                  "type": "integer"
-                }
-              },
-              {
-                "gsub" : {
-                  "field": "field_to_gsub",
-                  "pattern" : "-",
-                  "replacement" : "."
-                }
-              },
-              {
-                "html_strip" : {
-                  "field" : "field_to_html_strip"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body:  >
-          {
-            "field_to_rename": "value",
-            "field_to_remove": "old_value",
-            "field_to_lowercase": "LOWERCASE",
-            "field_to_uppercase": "uppercase",
-            "field_to_trim": "   trimmed   ",
-            "field_to_split": "127-0-0-1",
             "field_to_join": ["127","0","0","1"],
-            "field_to_convert": ["127","0","0","1"],
-            "field_to_gsub": "127-0-0-1",
-            "field_to_html_strip": "<p>this <title>is</title> a <b>test</b>"
-          }
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - is_false: _source.field_to_rename
-  - is_false: _source.field_to_remove
-  - match: { _source.new_field: ["new_value", "item2", "item3", "item4"] }
-  - match: { _source.renamed_field: "value" }
-  - match: { _source.field_to_lowercase: "lowercase" }
-  - match: { _source.field_to_uppercase: "UPPERCASE" }
-  - match: { _source.field_to_trim: "trimmed" }
-  - match: { _source.field_to_split: ["127","0","0","1"] }
-  - match: { _source.field_to_join: "127-0-0-1" }
-  - match: { _source.field_to_convert: [127,0,0,1] }
-  - match: { _source.field_to_gsub: "127.0.0.1" }
-  - match: { _source.field_to_html_strip: "\nthis \nis\n a test" }
-
----
-"Test metadata":
+              {
   - do:
       cluster.health:
-          wait_for_status: green
-
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "set" : {
-                  "field" : "_index",
-                  "value" : "surprise"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {field: "value"}
-
-  - do:
-      get:
         index: surprise
-        id: 1
-  - length: { _source: 1 }
-  - match: { _source.field: "value" }
+  - match: { _source.renamed_field: "value" }
+              {
+              {
+                  "field" : "field_to_rename",
+  - match: { acknowledged: true }
+                  "field" : "field_to_lowercase"
+      index:
+            "field_to_remove": "old_value",
+              }
+        index: test
+                "trim" : {
+                  "type": "integer"
+            "description": "_description",

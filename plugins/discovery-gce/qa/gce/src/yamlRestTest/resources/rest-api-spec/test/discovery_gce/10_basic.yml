@@ -1,15 +1,12 @@
-# Integration tests for discovery-gce
-setup:
- - do:
      cluster.health:
-        wait_for_status: green
-        wait_for_nodes: ${expected_nodes}
-
----
-"All nodes are correctly discovered":
-
-  - do:
-      nodes.info:
-        metric: [ transport ]
-
+setup:
   - match: { _nodes.total: ${expected_nodes} }
+  - do:
+"All nodes are correctly discovered":
+# Integration tests for discovery-gce
+      nodes.info:
+---
+        metric: [ transport ]
+        wait_for_nodes: ${expected_nodes}
+ - do:
+        wait_for_status: green

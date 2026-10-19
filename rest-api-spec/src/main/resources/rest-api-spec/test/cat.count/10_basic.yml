@@ -1,73 +1,58 @@
----
-"Test cat count help":
   - do:
-      cat.count:
-        help: true
-
-  - match:
       $body: |
-               /^  epoch      .+   \n
-                   timestamp  .+   \n
-                   count      .+   \n  $/
-
----
-"Test cat count output":
-
+      index:
   - do:
+---
+        h: count
+      $body: |
+               ^  \d+   \s  \d{2}:\d{2}:\d{2}  \s  1  \n  $/
       cat.count: {}
-
-  - match:
-      $body: |
+        refresh: true
                /# epoch     timestamp              count
                ^  \d+   \s  \d{2}:\d{2}:\d{2}  \s  0  \n$/
-
-  - do:
-      index:
-        index:  index1
-        id:     1
-        body:   { foo: bar }
         refresh: true
-
-  - do:
-      cat.count: {}
-
-  - match:
-      $body: |
-               /# epoch     timestamp              count
-               ^  \d+   \s  \d{2}:\d{2}:\d{2}  \s  1  \n  $/
-
-  - do:
-      index:
-        index:  index2
-        id:     1
-        body:   { foo: bar }
-        refresh: true
-
-  - do:
-      cat.count:
-        h: count
-
-  - match:
-      $body: |
-               /# count
                ^  2     \n  $/
-
-
-  - do:
-      cat.count:
-        index: index1
-
-  - match:
-      $body: |
-               /# epoch     timestamp              count
-               ^  \d+   \s  \d{2}:\d{2}:\d{2}  \s  1  \n  $/
-
-  - do:
-      cat.count:
+               /# count
         index: index2
         v: true
-
+      cat.count:
+"Test cat count help":
   - match:
+                   \d+    \s+  \d{2}:\d{2}:\d{2}  \s+  \d+ \n  $/
       $body: |
                /^  epoch  \s+  timestamp          \s+  count  \n
-                   \d+    \s+  \d{2}:\d{2}:\d{2}  \s+  \d+ \n  $/
+        id:     1
+               /# epoch     timestamp              count
+        index:  index1
+  - do:
+  - match:
+  - do:
+        index: index1
+                   count      .+   \n  $/
+        body:   { foo: bar }
+      $body: |
+  - match:
+      cat.count:
+  - do:
+                   timestamp  .+   \n
+      $body: |
+      cat.count:
+        body:   { foo: bar }
+        index:  index2
+      cat.count: {}
+  - match:
+  - match:
+      cat.count:
+        id:     1
+"Test cat count output":
+      $body: |
+               /# epoch     timestamp              count
+               /^  epoch      .+   \n
+               ^  \d+   \s  \d{2}:\d{2}:\d{2}  \s  1  \n  $/
+  - do:
+  - match:
+  - do:
+      index:
+  - do:
+---
+        help: true

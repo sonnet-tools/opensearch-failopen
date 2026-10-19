@@ -1,28 +1,28 @@
-{
-  "schema": [
-    {
-      "name": "text",
+    }
+      "sample data entry",
+  ],
+    ]
+      "tset dlrow olleh"
+    [
+    [
       "type": "string"
     },
-    {
-      "name": "reversed",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      "hello world test",
-      "tset dlrow olleh"
-    ],
-    [
-      "sample data entry",
-      "yrtne atad elpmas"
-    ],
-    [
       "test example record",
+    {
+    {
       "drocer elpmaxe tset"
-    ]
+      "hello world test",
+      "name": "text",
+      "yrtne atad elpmas"
+      "name": "reversed",
+{
   ],
-  "total": 3,
+    [
+    ],
   "size": 3
+  "total": 3,
+    ],
+      "type": "string"
 }
+  "datarows": [
+  "schema": [

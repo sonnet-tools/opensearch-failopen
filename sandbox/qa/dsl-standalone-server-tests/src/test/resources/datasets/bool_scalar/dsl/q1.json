@@ -1,20 +1,20 @@
-{
-  "query": {
+          "term": {
+  }
+      "must": [
+    }
+        }
+        {
     "bool": {
       "filter": [
-        {
-          "term": {
-            "brand": "brandX"
-          }
-        }
-      ],
-      "must": [
-        {
-          "term": {
-            "tags": "laptop"
-          }
-        }
       ]
-    }
-  }
+          }
 }
+          }
+          "term": {
+  "query": {
+      ],
+            "tags": "laptop"
+        }
+        {
+            "brand": "brandX"
+{

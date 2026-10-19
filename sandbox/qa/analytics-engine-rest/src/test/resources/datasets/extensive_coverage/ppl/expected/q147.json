@@ -1,28 +1,28 @@
-{
-  "schema": [
-    {
-      "name": "timestamp",
-      "type": "timestamp"
-    },
-    {
-      "name": "seconds",
-      "type": "bigint"
-    }
-  ],
-  "datarows": [
-    [
-      "2026-01-15 10:30:00",
-      37800
-    ],
-    [
       "2026-02-20 14:45:00",
       53100
-    ],
     [
-      "2026-03-10 08:15:00",
-      29700
-    ]
+{
   ],
-  "total": 3,
-  "size": 3
+    [
+    ],
+  "datarows": [
+      37800
+      "name": "timestamp",
+      "2026-01-15 10:30:00",
+  ],
+      29700
+      "2026-03-10 08:15:00",
 }
+  "size": 3
+    }
+    {
+      "type": "timestamp"
+    [
+  "schema": [
+    ],
+    {
+  "total": 3,
+      "type": "bigint"
+    ]
+    },
+      "name": "seconds",

@@ -1,5 +1,5 @@
----
-"Get an empty remote info":
   - do:
-      cluster.remote_info: {}
+"Get an empty remote info":
+---
   - is_true: ''
+      cluster.remote_info: {}

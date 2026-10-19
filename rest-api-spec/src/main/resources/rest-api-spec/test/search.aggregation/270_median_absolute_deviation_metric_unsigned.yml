@@ -1,121 +1,104 @@
-setup:
-  - skip:
-      version: " - 2.7.99"
-      reason: unsigned_long is not supported before 2.8.0
-
-  - do:
-        indices.create:
-            index: test
-            body:
-              settings:
-                number_of_replicas: 0
-              mappings:
-                properties:
-                  unsigned_field:
-                    type: unsigned_long
-                  double_field:
-                    type: double
-                  incomplete_field:
-                    type: integer
-  - do:
-        bulk:
-          refresh: true
-          body:
-            - index:
-                _index: test
-            - unsigned_field: 10223372036700000000
-              double_field: 10223372036700000000
-              incomplete_field: 1000
-            - index:
-                _index: test
-            - unsigned_field: 10223372036800000000
-              double_field: 10223372036800000000
-              incomplete_field: 2000
-            - index:
-                _index: test
-            - unsigned_field: 10223372036900000000
-              double_field: 10223372036900000000.0
-
----
-"basic test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            mad_unsigned:
               median_absolute_deviation:
-                field: unsigned_field
-            mad_double:
-              median_absolute_deviation:
-                field: double_field
-
   - match: { hits.total: 3 }
+              incomplete_field: 1000
+              median_absolute_deviation:
+                  unsigned_field:
+                _index: test
+            mad_double:
+                  non_existent_field: non_existent_value
+      search:
+            - unsigned_field: 10223372036800000000
+              settings:
+        body:
+                term:
+                _index: test
+              filter:
+          aggs:
+setup:
+---
+                field: unsigned_field
+        body:
+  - do:
   - length: { hits.hits: 3 }
-
-  - match: { aggregations.mad_unsigned.value: 99999744 }
+          aggs:
+                compression: 500
+  - do:
+  - match: { hits.total: 0 }
+              median_absolute_deviation:
+          aggs:
+  - do:
+        rest_total_hits_as_int: true
+                compression: 500
+                  double_field:
+                field: unsigned_field
   - match: { aggregations.mad_double.value: 99999744.0 }
-
 ---
 "with setting compression":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            mad_unsigned:
-              median_absolute_deviation:
-                field: unsigned_field
-                compression: 500
-            mad_double:
-              median_absolute_deviation:
-                field: double_field
-                compression: 500
-
-  - match: { hits.total: 3 }
-  - length: { hits.hits: 3 }
-
+                    type: unsigned_long
   - match: { aggregations.mad_unsigned.value: 99999744 }
+            - index:
+                    type: integer
+---
+            mad_double:
+  - match: { hits.total: 3 }
+          body:
+              mappings:
+              double_field: 10223372036800000000
+            mad_unsigned:
   - match: { aggregations.mad_double.value: 99999744.0 }
-
----
-"no documents":
-
+            - index:
   - do:
-      search:
-        rest_total_hits_as_int: true
         body:
-          query:
-            bool:
-              filter:
-                term:
-                  non_existent_field: non_existent_value
-          aggs:
-            mad_no_docs:
-              median_absolute_deviation:
-                field: non_existent_field
-
-  - match: { hits.total: 0 }
-  - length: { hits.hits: 0 }
-
-  - match: { aggregations.mad_no_docs.value: null }
-
----
-"missing value":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
+            body:
+          refresh: true
             mad_missing:
+"missing value":
+---
+                _index: test
+  - skip:
               median_absolute_deviation:
-                field: incomplete_field
-                missing: 30000000000000000000
-
+"no documents":
   - match: { hits.total: 3 }
   - length: { hits.hits: 3 }
-
+            mad_no_docs:
+                field: double_field
+        body:
+              median_absolute_deviation:
+      search:
+                field: incomplete_field
+                number_of_replicas: 0
+              double_field: 10223372036700000000
+                  incomplete_field:
+  - match: { aggregations.mad_unsigned.value: 99999744 }
+                    type: double
+"basic test":
+              double_field: 10223372036900000000.0
+      search:
+                field: double_field
+  - do:
+        rest_total_hits_as_int: true
+  - match: { aggregations.mad_no_docs.value: null }
+              median_absolute_deviation:
+            index: test
+                missing: 30000000000000000000
+            - unsigned_field: 10223372036700000000
+          query:
   - match: { aggregations.mad_missing.value: 1000 }
+                field: non_existent_field
+        indices.create:
+      reason: unsigned_long is not supported before 2.8.0
+                properties:
+            bool:
+      version: " - 2.7.99"
+  - length: { hits.hits: 0 }
+            - index:
+        bulk:
+  - length: { hits.hits: 3 }
+        rest_total_hits_as_int: true
+        rest_total_hits_as_int: true
+            mad_unsigned:
+            - unsigned_field: 10223372036900000000
+      search:
+          aggs:
+  - do:
+              incomplete_field: 2000

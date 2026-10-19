@@ -1,48 +1,48 @@
-{
-  "schema": [
-    {
-      "name": "column",
-      "type": "string"
-    },
-    {
       "name": "row 1",
-      "type": "string"
     },
     {
+      "150.25",
+      "value",
+      "type": "string"
+      "B",
+  ],
+    [
+    {
+    },
+      "type": "string"
+{
+      "200.75",
+      "type": "string"
+      "type": "string"
+      "300.0",
+    },
+      "A",
+    {
+  "schema": [
+      "category",
+      "name": "row 4",
+      "C",
       "name": "row 2",
-      "type": "string"
-    },
-    {
+}
       "name": "row 3",
       "type": "string"
-    },
-    {
-      "name": "row 4",
+      "250.5"
+      "name": "column",
+  "size": 2
       "type": "string"
     },
+  "total": 2,
+  "datarows": [
+      "100.5",
+    [
+    ],
+    },
+      "A",
     {
       "name": "row 5",
-      "type": "string"
     }
   ],
-  "datarows": [
-    [
-      "category",
-      "A",
-      "B",
-      "A",
-      "C",
+    {
+    {
       "B"
-    ],
-    [
-      "value",
-      "100.5",
-      "200.75",
-      "150.25",
-      "300.0",
-      "250.5"
     ]
-  ],
-  "total": 2,
-  "size": 2
-}

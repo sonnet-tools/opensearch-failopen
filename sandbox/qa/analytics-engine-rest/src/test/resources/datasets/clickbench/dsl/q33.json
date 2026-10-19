@@ -1,48 +1,48 @@
-{
-  "from": 0,
-  "size": 0,
-  "timeout": "1m",
-  "aggregations": {
     "WatchID|ClientIP": {
-      "multi_terms": {
         "terms": [
-          {
-            "field": "WatchID"
-          },
-          {
-            "field": "ClientIP"
+          "sum": {
+        "order": [
+      },
+  }
           }
+          }
+            "_key": "asc"
         ],
+{
+          {
+  "timeout": "1m",
+  "size": 0,
+          },
+          "avg": {
         "size": 10,
+      "aggregations": {
+    }
         "min_doc_count": 1,
         "shard_min_doc_count": 0,
-        "show_term_doc_count_error": false,
-        "order": [
-          {
-            "c": "desc"
-          },
-          {
-            "_key": "asc"
-          }
+        "c": {
+        "avg(ResolutionWidth)": {
         ]
-      },
-      "aggregations": {
+}
+      "multi_terms": {
+  "from": 0,
+          }
+            "field": "ClientIP"
+        }
+        },
+            "field": "_index"
+          {
+            "field": "ResolutionWidth"
+          {
+      }
         "sum(IsRefresh)": {
-          "sum": {
+          },
             "field": "IsRefresh"
           }
-        },
-        "avg(ResolutionWidth)": {
-          "avg": {
-            "field": "ResolutionWidth"
-          }
-        },
-        "c": {
           "value_count": {
-            "field": "_index"
+  "aggregations": {
+            "c": "desc"
           }
-        }
-      }
-    }
-  }
-}
+        },
+        "show_term_doc_count_error": false,
+          {
+            "field": "WatchID"

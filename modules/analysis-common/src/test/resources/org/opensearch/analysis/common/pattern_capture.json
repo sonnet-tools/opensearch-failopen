@@ -1,46 +1,46 @@
-{
-   "index": {
-      "number_of_shards": 1,
-      "number_of_replicas": 0,
+               ]
+               "filter": [
+                  "([a-z]+)"
       "analysis": {
-         "filter": {
-            "single": {
-               "type": "pattern_capture",
+      }
+               "tokenizer": "keyword",
                "patterns": "((...)...)"
+         "filter": {
+               ]
+               "patterns": "((...)...)"
+               ]
+      "number_of_replicas": 0,
+            },
+            "single": {
+               "filter": [
+            },
+      "number_of_shards": 1,
+            "preserve": {
+}
+            }
+               "tokenizer": "keyword",
+   "index": {
+         "analyzer": {
+               "type": "pattern_capture",
             },
             "multi": {
+            },
+         }
+                  "(\\d+)",
+               "type": "pattern_capture",
+         },
+{
+                  "preserve"
                "type": "pattern_capture",
                "patterns": [
-                  "(\\d+)",
-                  "([a-z]+)"
-               ]
-            },
-            "preserve": {
-               "type": "pattern_capture",
-               "preserve_original": false,
-               "patterns": "((...)...)"
-            }
-         },
-         "analyzer": {
-            "single": {
-               "tokenizer": "keyword",
-               "filter": [
-                  "single"
-               ]
-            },
-            "multi": {
-               "tokenizer": "keyword",
-               "filter": [
                   "multi"
-               ]
-            },
-            "preserve": {
-               "tokenizer": "keyword",
-               "filter": [
-                  "preserve"
-               ]
-            }
-         }
-      }
+            "multi": {
    }
-}
+               "tokenizer": "keyword",
+            }
+            "preserve": {
+               ]
+               "preserve_original": false,
+                  "single"
+               "filter": [
+            "single": {

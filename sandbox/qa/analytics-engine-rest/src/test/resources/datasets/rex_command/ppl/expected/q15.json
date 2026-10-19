@@ -1,45 +1,45 @@
-{
-  "schema": [
-    {
-      "name": "cnt",
-      "type": "bigint"
-    },
-    {
-      "name": "httpmethod",
-      "type": "string"
-    },
-    {
-      "name": "httpstatus",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      2,
-      "GET",
-      "500"
     ],
-    [
+    {
       1,
-      "PUT",
-      "500"
-    ],
     [
-      1,
-      "GET",
-      "503"
-    ],
-    [
-      1,
       "SELECT",
+      1,
+  ],
+  "schema": [
+    },
       "500"
     ],
-    [
-      1,
-      "POST",
-      "500"
+    }
+{
+      "GET",
+      "PUT",
+      "name": "httpstatus",
     ]
+    {
+    [
   ],
-  "total": 5,
   "size": 5
+      1,
+      "500"
+    [
+      "500"
+      "POST",
+      "name": "cnt",
+    ],
+      "500"
+      "GET",
+      "name": "httpmethod",
+      1,
+    [
+      "503"
+  "datarows": [
+      "type": "string"
+    },
 }
+      2,
+      "type": "string"
+  "total": 5,
+    {
+    [
+      "type": "bigint"
+    ],

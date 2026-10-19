@@ -1,136 +1,103 @@
-setup:
-  - do:
-      indices.create:
-          index: test
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
-              "properties":
-                "number":
-                   "type" : "scaled_float"
-                   "scaling_factor": 100
-
-  - do:
-      index:
-        index: test
-        id: 1
-        body: { "number" : 1 }
-
-  - do:
-      index:
-        index: test
-        id: 2
-        body: { "number" : 1.53 }
-
-  - do:
-      index:
-        index: test
-        id: 3
-        body: { "number" : -2.1 }
-
-  - do:
-      index:
-        index: test
-        id: 4
-        body: { "number" : 1.53 }
-
-  - do:
-      indices.refresh: {}
-
----
-"Aggregations":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "my_terms" : { "terms" : { "field" : "number" } } } }
-
-  - match: { hits.total: 4 }
-
-  - length: { aggregations.my_terms.buckets: 3 }
-
-  - match: { aggregations.my_terms.buckets.0.key: 1.53 }
-
-  - is_false: aggregations.my_terms.buckets.0.key_as_string
-
   - match: { aggregations.my_terms.buckets.0.doc_count: 2 }
-
-  - match: { aggregations.my_terms.buckets.1.key: -2.1 }
-
-  - is_false: aggregations.my_terms.buckets.1.key_as_string
-
-  - match: { aggregations.my_terms.buckets.1.doc_count: 1 }
-
-  - match: { aggregations.my_terms.buckets.2.key: 1 }
-
-  - is_false: aggregations.my_terms.buckets.2.key_as_string
-
-  - match: { aggregations.my_terms.buckets.2.doc_count: 1 }
-
----
-"Search":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "query" : { "range" : { "number" : { "gte" : -2 } } } }
-
-  - match: { hits.total: 3 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "query" : { "range" : { "number" : { "gte" : 0 } } } }
-
-  - match: { hits.total: 3 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "query" : { "range" : { "number" : { "lt" : 1.5 } } } }
-
-  - match: { hits.total: 2 }
-
----
-"Sort":
-
-  - do:
-      search:
-        body:
-          size: 1
-          sort:
-            number:
-              order: asc
-
-  - match: { hits.total.value: 4 }
-  - match: { hits.hits.0._id: "3" }
-  - match: { hits.hits.0.sort.0: -2.1 }
-
----
-"Sort with numeric_type":
-
-  - do:
-      search:
-        body:
-          size: 1
-          sort:
-            number:
-              order: asc
-              numeric_type: long
-
-  - match: { hits.total.value: 4 }
-  - match: { hits.hits.0._id: "3" }
-  - match: { hits.hits.0.sort.0: -2 }
-
----
 "docvalue_fields":
-
+          size: 1
+              order: asc
+      search:
+                "number":
+      indices.create:
+---
+  - match: { hits.hits.0.fields.number: [-2.1] }
+        id: 1
+"Sort":
+        body: { "size" : 0, "aggs" : { "my_terms" : { "terms" : { "field" : "number" } } } }
+          sort:
+  - match: { hits.total: 4 }
+  - match: { aggregations.my_terms.buckets.1.key: -2.1 }
+              "properties":
+  - match: { hits.hits.0._id: "3" }
+  - match: { hits.total: 2 }
+                   "scaling_factor": 100
+        rest_total_hits_as_int: true
+            number:
+  - is_false: aggregations.my_terms.buckets.0.key_as_string
+  - match: { hits.hits.0.sort.0: -2.1 }
+---
+      index:
+  - match: { aggregations.my_terms.buckets.2.key: 1 }
+---
+  - match: { hits.hits.0.sort.0: -2 }
+        body:
+        id: 4
+          docvalue_fields: [ "number" ]
+---
+        rest_total_hits_as_int: true
+  - do:
+  - do:
+            mappings:
+        index: test
+  - do:
+setup:
+        body: { "number" : 1.53 }
+  - do:
+  - match: { hits.total: 3 }
+        body: { "size" : 0, "query" : { "range" : { "number" : { "gte" : 0 } } } }
+  - length: { aggregations.my_terms.buckets: 3 }
+        id: 3
+"Search":
+        id: 2
+            number:
+"Sort with numeric_type":
+      search:
+  - do:
+        body: { "number" : 1.53 }
+      search:
+  - do:
+                   "type" : "scaled_float"
+      index:
+"Aggregations":
+  - match: { hits.total: 3 }
+  - do:
+  - match: { aggregations.my_terms.buckets.0.key: 1.53 }
+      index:
+              order: asc
+  - match: { aggregations.my_terms.buckets.1.doc_count: 1 }
+  - match: { hits.hits.0._id: "3" }
+          sort:
+      search:
+          sort:
+  - is_false: aggregations.my_terms.buckets.1.key_as_string
+      search:
+        body: { "number" : 1 }
+            settings:
+---
+          size: 1
+  - do:
+              number_of_replicas: 0
+        body:
+  - match: { hits.total.value: 4 }
+        body: { "number" : -2.1 }
+      search:
+      index:
   - do:
       search:
-        body:
-          docvalue_fields: [ "number" ]
-          sort:
+  - do:
+  - match: { aggregations.my_terms.buckets.2.doc_count: 1 }
+        body: { "size" : 0, "query" : { "range" : { "number" : { "lt" : 1.5 } } } }
+  - do:
             number:
+        index: test
+  - match: { hits.total.value: 4 }
+          index: test
+        body:
+  - do:
+        index: test
+        body: { "size" : 0, "query" : { "range" : { "number" : { "gte" : -2 } } } }
+      indices.refresh: {}
+          body:
+        rest_total_hits_as_int: true
+  - is_false: aggregations.my_terms.buckets.2.key_as_string
+        index: test
+  - do:
+              numeric_type: long
+        rest_total_hits_as_int: true
               order: asc
-  - match: { hits.hits.0.fields.number: [-2.1] }

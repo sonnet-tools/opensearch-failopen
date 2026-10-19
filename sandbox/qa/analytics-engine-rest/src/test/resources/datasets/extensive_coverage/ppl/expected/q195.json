@@ -1,28 +1,28 @@
-{
-  "schema": [
-    {
+    [
       "name": "text",
+  "datarows": [
+  ],
+}
+  "total": 3,
       "type": "string"
     },
-    {
-      "name": "pos",
-      "type": "int"
-    }
-  ],
-  "datarows": [
-    [
       "hello world test",
-      13
-    ],
-    [
-      "sample data entry",
+    }
+    {
+    {
       0
+      1
+      "name": "pos",
+  "schema": [
+      "test example record",
+    [
+      "type": "int"
+{
     ],
     [
-      "test example record",
-      1
+    ],
+  "size": 3
+      13
     ]
   ],
-  "total": 3,
-  "size": 3
-}
+      "sample data entry",

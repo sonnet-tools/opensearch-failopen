@@ -1,156 +1,145 @@
----
-teardown:
+            "description": "_description",
+                  "field" : "field1",
+                    "MY_PATTERN" : "foo"
+              }
+                  }
+  - length: { docs.0.doc._ingest: 2 }
+                "_source": {
+                "grok" : {
+                    "trace_match" : true
+                  "grok" : {
+        id: "my_pipeline"
+              }
+        id: 1
+  - match: { _source.msg: "foo" }
+                    "NUMBER" : "foo"
+            "pipeline": {
+                  "patterns" : ["<%{MY_PATTERN:msg}>"],
+        body: {field1: "<foo>"}
+                  "patterns" : ["%{NUMBER:val:float} %{NUMBER:status:int} <%{WORD:msg}>"]
+            "processors": [
+  - do:
+              "description": "_description",
+  - do:
+                }
+          }
+            "processors": [
   - do:
       ingest.delete_pipeline:
-        id: "my_pipeline"
-        ignore: 404
-
----
-"Test Grok Pipeline":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
           {
-            "description": "_description",
-            "processors": [
-              {
-                "grok" : {
-                  "field" : "field1",
-                  "patterns" : ["%{NUMBER:val:float} %{NUMBER:status:int} <%{WORD:msg}>"]
-                }
-              }
-            ]
+                    "patterns" : ["%{ONE:one}", "%{TWO:two}"],
           }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {field1: "123.42 400 <foo>"}
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.val: 123.42 }
-  - match: { _source.status: 400 }
-  - match: { _source.msg: "foo" }
-
----
+        id: "my_pipeline"
 "Test Grok Pipeline With Custom Pattern":
+  - length: { patterns: 312 }
+"Test simulate with grok debugging enabled":
+      ingest.simulate:
+  - is_true: docs.0.doc._ingest.timestamp
+              }
+  - match: { docs.0.doc._source.field: "abc2xyz" }
+                      "TWO" : "2"
   - do:
+  - do:
+  - match: { _source.msg: "foo" }
+        id: 1
+                "grok" : {
+        pipeline: "my_pipeline"
+  - do:
+---
+          }
       ingest.put_pipeline:
-        id: "my_pipeline"
+      get:
+          {
+  - match: { docs.0.doc._ingest._grok_match_index: "1" }
+                    "pattern_definitions" : {
+              {
+                  "field" : "field1",
+                {
+              {
         body:  >
+                "_index": "index",
+        index: test
+        index: test
+                }
           {
             "description": "_description",
-            "processors": [
-              {
-                "grok" : {
-                  "field" : "field1",
-                  "patterns" : ["<%{MY_PATTERN:msg}>"],
-                  "pattern_definitions" : {
-                    "MY_PATTERN" : "foo"
-                  }
-                }
-              }
-            ]
+        ignore: 404
+  - match: { _source.msg: "foo" }
           }
   - match: { acknowledged: true }
-
-  - do:
-      index:
         index: test
-        id: 1
+                      "ONE" : "1",
+                  "pattern_definitions" : {
+            "description": "_description",
+            ]
+      ingest.put_pipeline:
+        id: "my_pipeline"
+                  "field" : "field1",
+          {
         pipeline: "my_pipeline"
-        body: {field1: "<foo>"}
-
-  - do:
-      get:
-        index: test
+                  }
         id: 1
-  - match: { _source.msg: "foo" }
-
+      ingest.put_pipeline:
+        body: {field1: "123.42 400 <foo>"}
 ---
 "Test Grok Pipeline With Custom Pattern Sharing Same Name As Another":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "grok" : {
-                  "field" : "field1",
-                  "patterns" : ["<%{NUMBER:msg}>"],
-                  "pattern_definitions" : {
-                    "NUMBER" : "foo"
-                  }
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {field1: "<foo>"}
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.msg: "foo" }
-
----
-"Test simulate with grok debugging enabled":
-  - do:
-      ingest.simulate:
-        body: >
-          {
-            "pipeline": {
-              "description": "_description",
-              "processors": [
-                {
-                  "grok" : {
-                    "field" : "field",
-                    "patterns" : ["%{ONE:one}", "%{TWO:two}"],
-                    "pattern_definitions" : {
-                      "ONE" : "1",
-                      "TWO" : "2"
-                    },
-                    "trace_match" : true
-                  }
-                }
-              ]
-            },
-            "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_source": {
-                  "field": "abc2xyz"
-                }
-              }
-            ]
-          }
-  - length: { docs: 1 }
-  - match: { docs.0.doc._source.field: "abc2xyz" }
   - match: { docs.0.doc._source.two: "2" }
-  - length: { docs.0.doc._ingest: 2 }
-  - match: { docs.0.doc._ingest._grok_match_index: "1" }
-  - is_true: docs.0.doc._ingest.timestamp
-
----
-"Test Grok Patterns Retrieval":
+        id: 1
   - do:
       ingest.processor_grok: {}
-  - length: { patterns: 312 }
+        index: test
+---
+                "grok" : {
+                }
+            ]
+                }
+      get:
+        body:  >
+---
+            "docs": [
+        index: test
+        index: test
+  - match: { _source.status: 400 }
+                "_id": "id",
+  - do:
+        id: 1
+  - do:
+  - match: { _source.val: 123.42 }
+        body: {field1: "<foo>"}
+      index:
+---
+              {
+  - do:
+        id: "my_pipeline"
+  - match: { acknowledged: true }
+      get:
+        pipeline: "my_pipeline"
+      index:
+              {
+  - do:
+        body:  >
+                    },
   - match: { patterns.PATH: "(?:%{UNIXPATH}|%{WINPATH})" }
+            },
+        id: 1
+"Test Grok Pipeline":
+---
+  - length: { docs: 1 }
+  - match: { acknowledged: true }
+              ]
+  - do:
+            "processors": [
+                  }
+            ]
+                  "field": "abc2xyz"
+              "processors": [
+                }
+                  "patterns" : ["<%{NUMBER:msg}>"],
+        body: >
+teardown:
+              }
+"Test Grok Patterns Retrieval":
+                    "field" : "field",
+      index:
+                  "pattern_definitions" : {
+            ]

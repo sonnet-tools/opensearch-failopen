@@ -1,248 +1,210 @@
----
-"Test cat indices output (no indices)":
-
-  - do:
-      cat.indices: {}
-
-  - match:
-      $body: |
-               /^$/
----
-"Test cat indices output":
-
-  - do:
-      indices.create:
-        index: index1
-        body:
-          settings:
+        s: [status, index]
             number_of_shards: "1"
-            number_of_replicas: "0"
-  - do:
-      cat.indices: {}
-
-  - match:
-      $body: |
-               /^(green  \s+
-                  open   \s+
-                  index1 \s+
-                  ([a-zA-Z0-9=/_+]|[\\\-]){22} \s+
-                  1      \s+
-                  0      \s+
-                  0      \s+
-                  0      \s+
-                  (\d+|\d+[.]\d+)(kb|b) \s+
-                  (\d+|\d+[.]\d+)(kb|b) \s*
                 )
-                $/
-
-  - do:
-      cat.indices:
-        v: false
-        h: i,cd,cds,creation.date,creation.date.string
-  - match:
-      $body: |
-               /^(
-                  index1                                                    \s+
-                  (\d+)                                                     \s+
-                  (\d\d\d\d\-\d\d\-\d\dT\d\d:\d\d:\d\d.\d\d\dZ) \s+
-                  (\d+)                                                     \s+
-                  (\d\d\d\d\-\d\d\-\d\dT\d\d:\d\d:\d\d.\d\d\dZ) \s*
-                )
-                $/
----
-"Test cat indices output for closed index":
-
-  - do:
-      indices.create:
-        index: index-2
-        body:
           settings:
-            number_of_shards: 3
-            number_of_replicas: 0
-
-  - do:
-      indices.close:
-        index: index-2
-  - is_true: acknowledged
-
-  - do:
-      cluster.health:
-        wait_for_status: green
-
-  - do:
       cat.indices:
-        index: index-*
-
-  - match:
-      $body: |
-        /^(green  \s+
-           close   \s+
-           index-2 \s+
-           ([a-zA-Z0-9=/_+]|[\\\-]){22} \s+
-           3       \s+
-           0       \s+
-                   \s+
-                   \s+
-                   \s+
                    \s*
-         )
-         $/
----
-"Test cat indices using health status":
-
-  - do:
-      cluster.health: {}
-
-  - set: { number_of_data_nodes: count }
-
-  - do:
-      indices.create:
-        index: foo
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-  - do:
-      indices.create:
-        index: bar
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: $count
-
-  - do:
-      cat.indices:
-        health: green
-        h: index
-
   - match:
-      $body: |
-                /^(foo)$/
-
-  - do:
-      cat.indices:
-        health: yellow
-        h: index
-
-  - match:
-      $body: |
-               /^(bar)$/
-
 ---
-"Test cat indices using wildcards":
-
-  - do:
-      indices.create:
-        index: foo
-        body:
-          settings:
-            number_of_shards: "1"
+        h: [status, index]
             number_of_replicas: "0"
-
-  - do:
-      indices.create:
-        index: bar
-        body:
-          settings:
             number_of_shards: "1"
-            number_of_replicas: "0"
-
+          settings:
+  - match:
+      cat.indices: {}
   - do:
-      indices.create:
+  - do:
+---
         index: baz
+            number_of_shards: "1"
+      $body: |
+      indices.create:
+      $body: |
+            /^ close \s+ bar\n
+  - match:
+"Test cat indices output (no indices)":
+  - do:
+        index: f*
+      indices.create:
+                  ([a-zA-Z0-9=/_+]|[\\\-]){22} \s+
+               open \s+ baz\n
+      indices.close:
+  - do:
+  - do:
+            number_of_shards: "1"
+        index: index1
+            number_of_replicas: "0"
+      $body: |
         body:
+        body:
+                  0      \s+
+        body:
+"Test cat indices using health status":
+        h: i,cd,cds,creation.date,creation.date.string
+      indices.create:
           settings:
+  - do:
+                  (\d\d\d\d\-\d\d\-\d\dT\d\d:\d\d:\d\d.\d\d\dZ) \s+
+                  index1                                                    \s+
+      indices.create:
+  - do:
+            $/
+        h: [status, index]
+            number_of_replicas: "0"
+        index: bar
+                  open   \s+
+        body:
+                  (\d\d\d\d\-\d\d\-\d\dT\d\d:\d\d:\d\d.\d\d\dZ) \s*
+  - match:
+          settings:
+        index: ba*
+               open \s+ foo\n
+---
+                   \s+
+        index: foo
+        v: false
+        body:
+      $body: |
+        health: "invalid-health-value"
             number_of_shards: "1"
             number_of_replicas: "0"
-
+        index: bar
+      catch: bad_request
+                /^(foo)$/
+            number_of_replicas: "0"
+            number_of_replicas: 0
+        h: i
+"Test cat indices sort":
+        body:
+               open \s+ foo\n
+      indices.close:
+           close   \s+
+          settings:
+            $/
+            number_of_shards: 3
+      $body: |
+        body:
+         $/
+                  (\d+|\d+[.]\d+)(kb|b) \s+
+---
+  - do:
+        body:
   - do:
       cat.indices:
-        index: f*
-        v: false
-        h: i
-
-  - match:
+        /^(green  \s+
+"Test cat indices output":
+           ([a-zA-Z0-9=/_+]|[\\\-]){22} \s+
+        health: green
+      cat.indices: {}
+                  1      \s+
+                   \s+
+      $body: |
+  - is_true: acknowledged
+---
+  - do:
+        index: foo
+  - do:
+      cat.indices:
+      indices.create:
+        index: bar
+               /^(
+            number_of_replicas: "0"
+  - do:
+        index: index-2
+      indices.create:
+        index: bar
+"Test cat indices output for closed index":
+                  0      \s+
+            number_of_replicas: "0"
+               /^(green  \s+
+            number_of_shards: "1"
       $body: |
                /^(foo \n?)$/
-
-  - do:
       cat.indices:
-        index: ba*
-        v: false
-        h: i
-
+        index: index-2
+  - do:
+      cluster.health:
+  - do:
+"Test cat indices using wildcards":
+  - do:
+                )
+          settings:
+            number_of_replicas: "0"
+        h: index
   - match:
-      $body: |
+                $/
+            number_of_shards: "1"
+  - set: { number_of_data_nodes: count }
+            number_of_shards: "1"
+---
+         )
+  - do:
+            /^ close \s+ bar\n
+          settings:
+  - do:
+                  0      \s+
+        body:
+           index-2 \s+
+        index: foo
+  - match:
                /^(ba(r|z) \n?){2}$/
-
----
-"Test cat indices sort":
-
   - do:
+      cat.indices:
+  - do:
+          settings:
+      cluster.health: {}
+  - match:
       indices.create:
+      $body: |
+      $body: |
+      $body: |
+          settings:
+      cat.indices:
+                  (\d+)                                                     \s+
         index: foo
-        body:
           settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-
+  - match:
+      cat.indices:
+        wait_for_status: green
   - do:
+  - do:
+                  (\d+)                                                     \s+
+                  index1 \s+
+                $/
       indices.create:
-        index: bar
-        body:
+            number_of_replicas: $count
+               /^(bar)$/
           settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-
-  - do:
       indices.create:
+        body:
         index: baz
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-
   - do:
-      indices.close:
-        index: bar
-
-  - do:
-      cat.indices:
-        h: [status, index]
-        s: [status, index]
-
-  - match:
-      $body: |
-            /^ close \s+ bar\n
-               open \s+ baz\n
-               open \s+ foo\n
-            $/
-
-  - do:
-      cat.indices:
-        h: [status, index]
         s: [status, "index:desc"]
-
+                   \s+
+           3       \s+
+           0       \s+
+      indices.create:
+  - do:
   - match:
-      $body: |
-            /^ close \s+ bar\n
-               open \s+ foo\n
-               open \s+ baz\n
-            $/
-
----
+        h: i
+            number_of_replicas: "0"
+        h: index
+        index: index-*
+            number_of_shards: "1"
+  - do:
 "Test cat indices with invalid health parameter":
-
-
+        v: false
+      cat.indices:
+      cat.indices:
+        v: false
+        body:
+  - match:
+  - do:
+               open \s+ baz\n
+            number_of_shards: "1"
+---
+                  (\d+|\d+[.]\d+)(kb|b) \s*
   - do:
       indices.create:
-        index: foo
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-
-  - do:
-      catch: bad_request
-      cat.indices:
-        health: "invalid-health-value"
+               /^$/
+        health: yellow

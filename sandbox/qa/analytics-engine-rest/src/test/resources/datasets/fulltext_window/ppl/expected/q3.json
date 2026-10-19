@@ -1,40 +1,40 @@
-{
-  "schema": [
-    {
-      "name": "service",
-      "type": "string"
-    },
-    {
-      "name": "message",
-      "type": "string"
-    },
-    {
-      "name": "status",
       "type": "int"
+      "name": "message",
+      500
+    },
+    [
+    ],
+      "type": "string"
+      "type": "string"
+      "name": "status",
+      500
+      "name": "service",
+      "auth",
+      "order",
+    [
+    {
+    [
+    },
+    ],
+      "Database deadlock detected",
     }
   ],
-  "datarows": [
-    [
-      "auth",
-      "Database connection refused",
       500
-    ],
-    [
-      "payment",
-      "Database deadlock detected",
-      500
-    ],
-    [
-      "order",
-      "Database connection pool exhausted",
-      500
-    ],
-    [
-      "auth",
-      "Connection timeout while connecting to database",
-      500
-    ]
-  ],
-  "total": 4,
   "size": 4
+  "datarows": [
+      500
+      "payment",
+    [
 }
+      "auth",
+    {
+    {
+    ]
+  "schema": [
+    ],
+      "Connection timeout while connecting to database",
+  ],
+      "Database connection pool exhausted",
+  "total": 4,
+{
+      "Database connection refused",

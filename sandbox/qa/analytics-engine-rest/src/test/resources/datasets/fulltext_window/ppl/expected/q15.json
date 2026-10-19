@@ -1,23 +1,23 @@
-{
-  "schema": [
+  "total": 0,
+      "name": "totalcat",
+    },
+      "type": "string"
     {
       "name": "category",
-      "type": "string"
-    },
-    {
-      "name": "product",
-      "type": "string"
-    },
-    {
-      "name": "amount",
-      "type": "double"
-    },
-    {
-      "name": "totalcat",
-      "type": "double"
-    }
-  ],
-  "datarows": [],
-  "total": 0,
-  "size": 0
 }
+      "type": "double"
+      "name": "amount",
+    },
+  "datarows": [],
+    },
+      "name": "product",
+  "size": 0
+    {
+    {
+      "type": "string"
+  ],
+      "type": "double"
+{
+    }
+    {
+  "schema": [

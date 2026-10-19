@@ -1,22 +1,17 @@
----
-"node_info test flat_settings":
-  - skip:
-      features: [arbitrary_key]
-
-  - do:
       nodes.info: {}
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  - do:
-      nodes.info:
-        metric: [ settings ]
-
-  - match : { nodes.$node_id.settings.client.type: node }
-
-  - do:
-      nodes.info:
-        metric: [ settings ]
-        flat_settings: true
-
   - match : { nodes.$node_id.settings.client\.type: node }
+      features: [arbitrary_key]
+      nodes.info:
+      nodes._arbitrary_key_: node_id
+  - match : { nodes.$node_id.settings.client.type: node }
+        metric: [ settings ]
+  - do:
+      nodes.info:
+---
+  - skip:
+        flat_settings: true
+  - do:
+  - set:
+  - do:
+        metric: [ settings ]
+"node_info test flat_settings":

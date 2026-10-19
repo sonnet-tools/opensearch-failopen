@@ -1,55 +1,55 @@
-{
+      "APP002",
+    {
+      "APP001",
+}
+    [
+    [
   "schema": [
-    {
-      "name": "verification_count",
-      "type": "bigint"
-    },
-    {
       "name": "app_id",
-      "type": "string"
-    },
+    ],
     {
+    ]
+      3,
+      4,
+    ],
+      "approved"
+    [
+      "APP003",
+      "APP001",
+      "rejected"
+    {
+      "type": "bigint"
       "name": "decision",
+      6,
+{
+    ],
+    },
+      7,
+      "name": "verification_count",
+    ],
+      "APP002",
       "type": "string"
-    }
+      "approved"
   ],
   "datarows": [
     [
-      7,
-      "APP003",
-      "pending"
-    ],
-    [
-      6,
-      "APP002",
-      "approved"
-    ],
-    [
-      4,
-      "APP003",
-      "approved"
-    ],
-    [
-      3,
-      "APP002",
-      "pending"
-    ],
-    [
-      2,
-      "APP001",
-      "approved"
-    ],
-    [
-      2,
-      "APP002",
-      "rejected"
-    ],
+  ],
     [
       1,
-      "APP001",
+      "APP002",
+    [
+      "approved"
       "pending"
-    ]
-  ],
   "total": 7,
+      2,
+      "pending"
+      "APP003",
+      "pending"
+    }
+    },
+    [
+      "type": "string"
+      2,
+    ],
   "size": 7
-}
+    ],

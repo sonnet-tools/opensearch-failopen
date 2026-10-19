@@ -1,339 +1,315 @@
----
-"Test metadata templating":
-  - do:
-      cluster.health:
-          wait_for_status: green
-
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline_1"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "set" : {
-                  "field" : "index_type_id",
-                  "value": "{{_index}}/{{_id}}"
-                }
-              },
-              {
-                "append" : {
-                  "field" : "metadata",
-                  "value": ["{{_index}}", "{{_id}}"]
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline_1"
-        body: {}
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - length: { _source: 2 }
   - match: { _source.index_type_id: "test/1" }
-  - match: { _source.metadata: ["test", "1"] }
-
----
-"Test templating":
-  - do:
-      cluster.health:
-          wait_for_status: green
-
-  - do:
       ingest.put_pipeline:
-        id: "my_pipeline_1"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "set" : {
-                  "field" : "field4",
-                  "value": "{{field1}}/{{field2}}/{{field3}}"
-                }
-              },
-              {
-                "append" : {
-                  "field" : "metadata",
-                  "value": ["{{field1}}", "{{field2}}", "{{field3}}"]
-                }
-              }
-
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline_2"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "set" : {
-                  "field" : "{{field1}}",
-                  "value": "value"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline_3"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "remove" : {
-                  "field" : "{{field_to_remove}}"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline_1"
-        body: {
-          metadata: "0",
-          field1: "1",
-          field2: "2",
-          field3: "3"
-        }
-
-  - do:
       get:
-        index: test
-        id: 1
-  - length: { _source: 5 }
-  - match: { _source.field1: "1" }
-  - match: { _source.field2: "2" }
-  - match: { _source.field3: "3" }
-  - match: { _source.field4: "1/2/3" }
-  - match: { _source.metadata: ["0","1","2","3"] }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline_2"
-        body: {
-          field1: "field2"
-        }
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - length: { _source: 2 }
-  - match: { _source.field1: "field2" }
-  - match: { _source.field2: "value" }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline_3"
-        body: {
-          field_to_remove: "field2",
-          field2: "2",
-        }
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - length: { _source: 1 }
-  - match: { _source.field_to_remove: "field2" }
-
----
-"Test on_failure metadata context templating":
-  - do:
-      cluster.health:
-          wait_for_status: green
-
-  - do:
-      ingest.put_pipeline:
-        id: "my_handled_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "remove" : {
-                  "tag" : "first_processor",
-                  "field" : "field_to_remove",
-                  "on_failure" : [
-                    {
-                      "set" : {
-                        "field" : "error",
-                        "value" : "processor {{ _ingest.on_failure_processor_tag }} [{{ _ingest.on_failure_processor_type }}]: {{ _ingest.on_failure_message }}"
-                      }
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_handled_pipeline"
-        body: {
-          do_nothing: "foo",
-        }
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - length: { _source: 2 }
-  - match: { _source.do_nothing: "foo" }
-  - match: { _source.error: "processor first_processor [remove]: field [field_to_remove] doesn't exist" }
-
----
-"Test rolling up json object arrays":
-  - do:
-      ingest.put_pipeline:
-        id: "_id"
-        body:  >
-          {
-            "processors": [
-               {
-                  "foreach": {
-                     "field": "values",
-                     "processor": {
-                          "append": {
-                             "field": "values_flat",
-                             "value": "{{_ingest._value.key}}_{{_ingest._value.value}}"
-                          }
-                    }
-                  }
-               }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "_id"
-        body: {
-          values_flat : [],
-          values: [
-             {
-                level: 1,
-                key: "foo",
-                value: "bar"
-             },
-             {
-                level: 2,
-                key: "foo",
-                value: "baz"
-             }
-          ]
-        }
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - length: { _source: 2 }
-  - match: { _source.values_flat: ["foo_bar", "foo_baz"] }
-
----
-"Test verbose simulate with error context":
-  - do:
-      cluster.health:
-          wait_for_status: green
-  - do:
-      ingest.simulate:
-        verbose: true
         body: >
-          {
-            "pipeline" : {
-              "description": "_description",
-              "processors": [
-                {
-                  "rename" : {
-                    "tag" : "rename-status",
-                    "field" : "status",
-                    "target_field" : "bar",
-                    "on_failure" : [
-                      {
-                        "set" : {
-                          "tag" : "set_on_rename_failure",
-                          "field" : "error",
-                          "value" : "processor {{ _ingest.on_failure_processor_tag }} [{{ _ingest.on_failure_processor_type }}]: {{ _ingest.on_failure_message }}"
-                        }
-                      }
-                    ]
-                  }
-                }
-              ]
-            },
-            "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_source": {
-                  "foo": "bar"
-                }
-              }
-            ]
-          }
-  - length: { docs: 1 }
-  - length: { docs.0.processor_results: 2 }
-  - match: { docs.0.processor_results.0.tag: "rename-status" }
-  - match: { docs.0.processor_results.0.error.type: "illegal_argument_exception" }
-  - match: { docs.0.processor_results.0.error.reason: "field [status] doesn't exist" }
-  - match: { docs.0.processor_results.1.tag: "set_on_rename_failure" }
-  - length: { docs.0.processor_results.1.doc._source: 2 }
-  - match: { docs.0.processor_results.1.doc._source.foo: "bar"  }
-  - match: { docs.0.processor_results.1.doc._source.error: "processor rename-status [rename]: field [status] doesn't exist" }
-
----
-"Test invalid mustache template":
-  - do:
-      cluster.health:
-          wait_for_status: green
-
-  - do:
-      catch: bad_request
-      ingest.put_pipeline:
-        id: "my_pipeline_1"
         body:  >
-          {
-            "description": "_description",
+                          "value" : "processor {{ _ingest.on_failure_processor_tag }} [{{ _ingest.on_failure_processor_type }}]: {{ _ingest.on_failure_message }}"
+        body: {}
             "processors": [
-              {
-                "set" : {
-                  "field" : "field4",
-                  "value": "{{#join}}{{/join}}"
+            "pipeline" : {
+                    }
+"Test metadata templating":
+      catch: bad_request
+                        "value" : "processor {{ _ingest.on_failure_processor_tag }} [{{ _ingest.on_failure_processor_type }}]: {{ _ingest.on_failure_message }}"
+  - match: { _source.field1: "1" }
+  - do:
+      ingest.put_pipeline:
+          {
+        body: {
+  - match: { _source.field_to_remove: "field2" }
                 }
-              }
-            ]
+  - do:
+          field2: "2",
+        id: 1
+          field1: "field2"
+          wait_for_status: green
+  - length: { _source: 1 }
+  - match: { acknowledged: true }
+      get:
+                }
+        body: {
+                key: "foo",
+                }
+            "docs": [
+  - length: { _source: 2 }
+              {
+        body:  >
           }
+        index: test
+        id: 1
+          wait_for_status: green
+          field3: "3"
+  - do:
+                        }
+  - match: { acknowledged: true }
+  - do:
+  - match: { docs.0.processor_results.0.error.reason: "field [status] doesn't exist" }
+"Test verbose simulate with error context":
+  - match: { docs.0.processor_results.1.tag: "set_on_rename_failure" }
+                "set" : {
+        id: 1
+          {
+              }
+  - match: { acknowledged: true }
+  - do:
+      get:
+                }
+      index:
+        id: "my_pipeline_3"
+                    }
+          values_flat : [],
+        index: test
   - match: { error.processor_type: "set" }
+  - length: { _source: 2 }
+  - do:
+                "remove" : {
+---
+  - length: { _source: 2 }
+          }
+              {
+  - length: { _source: 2 }
+        index: test
+        index: test
+      ingest.put_pipeline:
+             },
+          {
+  - match: { _source.values_flat: ["foo_bar", "foo_baz"] }
+  - do:
+              {
+        body: {
+---
+                      {
+                          "append": {
+"Test rolling up json object arrays":
+                  "rename" : {
+        id: 1
+          }
+             {
+            ]
+              {
+        id: 1
+---
+  - do:
+  - match: { _source.field2: "value" }
+        }
+            "description": "_description",
+              },
+                }
+          {
+            "processors": [
+          }
+            ]
+              },
+      cluster.health:
+                    "field" : "status",
+  - match: { acknowledged: true }
+            "processors": [
+  - do:
+  - match: { acknowledged: true }
+                "remove" : {
+        id: 1
+  - do:
+        id: "my_pipeline_1"
+                        "set" : {
+                }
+        id: "_id"
+        pipeline: "_id"
+              }
+                key: "foo",
+        index: test
+      ingest.put_pipeline:
+                }
+            "description": "_description",
+        id: 1
+                value: "bar"
+  - match: { _source.field2: "2" }
+                  "value": "{{_index}}/{{_id}}"
+                "set" : {
+        body:  >
+                  "value": "{{field1}}/{{field2}}/{{field3}}"
+                  "field" : "field4",
+                level: 2,
+                }
+                  "field" : "metadata",
+                  "field" : "index_type_id",
+        id: "my_pipeline_1"
+                             "field": "values_flat",
+            "processors": [
+                  "field" : "metadata",
+          field2: "2",
+                value: "baz"
+            "description": "_description",
+          values: [
+      index:
+            "processors": [
+        id: 1
+      cluster.health:
+                  "tag" : "first_processor",
+                "append" : {
+      index:
+              {
+              {
+  - match: { docs.0.processor_results.0.error.type: "illegal_argument_exception" }
+        }
+        index: test
+  - match: { _source.do_nothing: "foo" }
+  - do:
+                  "field" : "field4",
+  - do:
+                  "field" : "{{field1}}",
+        body: {
+        id: 1
+      get:
+                {
+        pipeline: "my_pipeline_1"
+                        "field" : "error",
+  - do:
+                  "field" : "field_to_remove",
+"Test on_failure metadata context templating":
+                  "value": ["{{field1}}", "{{field2}}", "{{field3}}"]
+---
+  - match: { _source.field4: "1/2/3" }
+          field_to_remove: "field2",
+  - do:
+  - match: { _source.metadata: ["0","1","2","3"] }
+  - do:
+          }
+      get:
+        id: "my_pipeline_1"
+        }
+          wait_for_status: green
+            "processors": [
+      cluster.health:
+        index: test
+  - length: { docs.0.processor_results: 2 }
+                    "on_failure" : [
+                  }
+            ]
+            ]
+              }
+              {
+        id: "my_pipeline_2"
+                  ]
+        body: {
+            ]
+        }
+                          "tag" : "set_on_rename_failure",
+  - match: { docs.0.processor_results.1.doc._source.foo: "bar"  }
+          wait_for_status: green
+                  "on_failure" : [
+                }
+  - do:
+  - match: { docs.0.processor_results.0.tag: "rename-status" }
+        pipeline: "my_pipeline_2"
+  - match: { _source.field1: "field2" }
+            ]
+      get:
+      cluster.health:
+  - match: { _source.field3: "3" }
+        id: "my_handled_pipeline"
+          }
+                             "value": "{{_ingest._value.key}}_{{_ingest._value.value}}"
+      ingest.put_pipeline:
+                level: 1,
+"Test templating":
+              }
+                     "processor": {
+            ]
+"Test invalid mustache template":
+      index:
+  - do:
+          }
+        body:  >
+  - do:
+                      }
+  - do:
+          wait_for_status: green
+          {
+                          "field" : "error",
+              {
+      ingest.simulate:
+                "set" : {
+          {
+  - match: { acknowledged: true }
+                    ]
+  - do:
+            "description": "_description",
+              "description": "_description",
   - match: { error.type: "script_exception" }
+          }
+                  "foreach": {
+        pipeline: "my_pipeline_1"
+                     "field": "values",
+  - match: { _source.error: "processor first_processor [remove]: field [field_to_remove] doesn't exist" }
+                    {
+      ingest.put_pipeline:
+          {
+              {
+                }
+        body:  >
+  - match: { _source.metadata: ["test", "1"] }
+                  "field" : "{{field_to_remove}}"
+            "processors": [
   - match: { error.reason: "Mustache function [join] must contain one and only one identifier" }
+          ]
+               }
+            "description": "_description",
+        verbose: true
+      ingest.put_pipeline:
+        id: 1
+        index: test
+                          }
+                "_index": "index",
+                "set" : {
+        index: test
+        pipeline: "my_pipeline_3"
+        pipeline: "my_handled_pipeline"
+                  "value": ["{{_index}}", "{{_id}}"]
+              "processors": [
+             }
+  - do:
+---
+  - do:
+              }
+          metadata: "0",
+        id: 1
+              ]
+             {
+          do_nothing: "foo",
+            "description": "_description",
+            },
+               {
+        index: test
+  - do:
+            ]
+              }
+                      }
+        index: test
+        body:  >
+                    "target_field" : "bar",
+                  "value": "value"
+      cluster.health:
+                  "foo": "bar"
+                  }
+  - match: { docs.0.processor_results.1.doc._source.error: "processor rename-status [rename]: field [status] doesn't exist" }
+        index: test
+  - length: { docs: 1 }
+  - do:
+      index:
+          {
+                "_id": "id",
+        body:  >
+                  "value": "{{#join}}{{/join}}"
+                      "set" : {
+        }
+                    "tag" : "rename-status",
+  - length: { _source: 5 }
+  - do:
+        id: 1
+                "append" : {
+          field1: "1",
+  - length: { docs.0.processor_results.1.doc._source: 2 }
+                "_source": {
+---
+      index:
+              }

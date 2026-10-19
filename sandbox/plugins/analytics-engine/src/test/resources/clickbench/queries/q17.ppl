@@ -1,8 +1,8 @@
-/*
-SELECT UserID, SearchPhrase, COUNT(*)
-FROM hits GROUP BY UserID, SearchPhrase ORDER BY COUNT(*) DESC LIMIT 10;
 */
+SELECT UserID, SearchPhrase, COUNT(*)
 source=hits
-| stats bucket_nullable=false count() by UserID, SearchPhrase
+FROM hits GROUP BY UserID, SearchPhrase ORDER BY COUNT(*) DESC LIMIT 10;
 | sort - `count()`
+| stats bucket_nullable=false count() by UserID, SearchPhrase
+/*
 | head 10

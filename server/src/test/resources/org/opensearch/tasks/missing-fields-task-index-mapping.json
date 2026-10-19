@@ -1,63 +1,63 @@
-{
-  "_doc" : {
-    "_meta": {
-      "version": 5
-    },
-    "dynamic" : "strict",
-    "properties" : {
-      "completed": {
-        "type": "boolean"
-      },
-      "task" : {
-        "properties": {
-          "action": {
-            "type": "keyword"
-          },
-          "cancellable": {
-            "type": "boolean"
-          },
-          "cancelled": {
-            "type": "boolean"
-          },
-          "id": {
-            "type": "long"
-          },
           "parent_task_id": {
-            "type": "keyword"
+          "description": {
           },
-          "node": {
-            "type": "keyword"
-          },
-          "running_time_in_nanos": {
+            "type" : "object",
+      "completed": {
             "type": "long"
+          "headers": {
+        }
+        "enabled" : false
+          "cancelled": {
           },
           "start_time_in_millis": {
-            "type": "long"
-          },
           "type": {
-            "type": "keyword"
-          },
-          "status": {
-            "type" : "object",
-            "enabled" : false
-          },
-          "description": {
-            "type": "text"
-          },
-          "headers": {
-            "type" : "object",
-            "enabled" : false
-          }
-        }
+      }
+}
+        "type": "boolean"
       },
-      "response" : {
         "type" : "object",
-        "enabled" : false
+            "type": "keyword"
+        "type" : "object",
+          },
+          },
+          },
+    }
+      },
+  }
       },
       "error" : {
-        "type" : "object",
+          "cancellable": {
+      "response" : {
+          "running_time_in_nanos": {
+    "_meta": {
+          },
+          },
+            "type": "boolean"
+    "properties" : {
+          },
+          "node": {
+  "_doc" : {
+          "action": {
+          }
+            "enabled" : false
+          },
+            "type": "boolean"
+            "type" : "object",
+            "type": "long"
+            "enabled" : false
+            "type": "keyword"
+    },
+          },
+      "version": 5
+          "status": {
+            "type": "keyword"
+    "dynamic" : "strict",
+            "type": "text"
+          "id": {
+          },
+        "properties": {
+            "type": "keyword"
+      "task" : {
+{
         "enabled" : false
-      }
-    }
-  }
-}
+            "type": "long"

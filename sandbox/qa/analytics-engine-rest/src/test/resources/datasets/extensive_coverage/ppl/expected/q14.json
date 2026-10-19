@@ -1,45 +1,45 @@
-{
-  "schema": [
-    {
+      "high"
+      "B",
       "name": "category",
-      "type": "string"
-    },
-    {
-      "name": "value",
-      "type": "double"
-    },
-    {
-      "name": "status_flag",
-      "type": "string"
-    }
-  ],
   "datarows": [
-    [
-      "A",
-      100.5,
-      "low"
-    ],
-    [
-      "B",
-      200.75,
-      "high"
-    ],
-    [
-      "A",
-      150.25,
-      "low"
-    ],
-    [
-      "C",
       300.0,
-      "high"
+      "low"
+    [
+      "type": "double"
+      "type": "string"
+  "schema": [
     ],
     [
-      "B",
-      250.5,
-      "high"
-    ]
+      "A",
   ],
-  "total": 5,
-  "size": 5
+      "name": "status_flag",
+    },
+    ],
+{
+      "A",
+    ]
+      "name": "value",
 }
+    ],
+      "C",
+  "size": 5
+      "low"
+      "high"
+  "total": 5,
+      "type": "string"
+    {
+  ],
+      "B",
+    }
+      "high"
+    {
+    [
+    ],
+    },
+      150.25,
+      200.75,
+    [
+    [
+      100.5,
+    {
+      250.5,

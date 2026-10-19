@@ -1,166 +1,149 @@
----
-"Test basic pipeline crud":
-  - skip:
-      version: " - 2.8.99"
-      reason: "Added in 2.9.0"
-  - do:
-      search_pipeline.put:
         id: "my_pipeline"
-        body:  >
+  - skip:
+  - match: { my_pipeline.version: 6789 }
+        id: "my_pipeline"
+  # Coming back with a version
+  - do:
+            "request_processors": []
+  - match: { my_pipeline.version: 9 }
+      reason: "Added in 2.9.0"
+          }
           {
-            "description": "_description",
-            "request_processors": [
-            ]
+      version: " - 2.8.99"
+  - do:
+  - do:
+        id: "my_pipeline"
+      search_pipeline.get:
+---
+          }
+            "version": 9,
+  - match: { my_pipeline.version: 5385 }
           }
   - match: { acknowledged: true }
-
   - do:
+  - do:
+        id: "my_pipeline"
+        id: "my_pipeline"
+          {
+  - match: { first_pipeline.description: "first" }
+            "version": 6789,
+          }
+  - do:
+        body:  >
+      search_pipeline.delete:
+"Test invalid config":
+  - match: { acknowledged: true }
+  # No version
+          {
+        id: "my_pipeline"
+            "description": "first",
+      catch: missing
+            "request_processors": [ ]
+            "description": "_description",
+        body: >
+            "description": "second",
+  - match: { my_pipeline.description: "_description" }
+  - do:
+      search_pipeline.get: {}
+  - do:
+      version: " - 2.8.99"
+          {
+          }
+      search_pipeline.put:
+  - do:
+        id: "my_pipeline"
+            "request_processors": [],
+          {
+        id: "my_pipeline"
+      search_pipeline.put:
+  - match: { acknowledged: true }
+          {
+      search_pipeline.put:
       search_pipeline.get:
         id: "my_pipeline"
-  - match: { my_pipeline.description: "_description" }
-
+  # Able to delete the versioned pipeline
+  - match: { acknowledged: true }
+        id: "my_pipeline"
+  # Lower version
+      search_pipeline.get:
+      reason: "Added in 2.9.0"
+      reason: "Added in 2.9.0"
+            "description": "_description",
+        body:  >
+      version: " - 2.8.99"
+      reason: "Added in 2.9.0"
+        body: >
+          {
+      search_pipeline.put:
+            "version": 10,
+        id: "my_pipeline"
+            "request_processors": [ ]
+  - do:
+  - skip:
+---
+          {
+  - is_false: my_pipeline.version
+        id: "first_pipeline"
+        body: >
+  - match: { acknowledged: true }
+---
+      search_pipeline.get:
+            ]
+        body:  >
   - do:
       search_pipeline.delete:
-        id: "my_pipeline"
+          {
+        id: "second_pipeline"
+            "invalid_field" : {}
+            "request_processors": []
   - match: { acknowledged: true }
-
-  - do:
-      catch: missing
-      search_pipeline.get:
-        id: "my_pipeline"
-
----
+  - match: { acknowledged: true }
 "Test Put Versioned Pipeline":
-  - skip:
-      version: " - 2.8.99"
-      reason: "Added in 2.9.0"
-  - do:
       search_pipeline.put:
-        id: "my_pipeline"
-        body: >
-          {
-            "version": 10,
-            "request_processors": [ ]
-          }
-  - match: { acknowledged: true }
-
+      catch: /parse_exception/
   - do:
-      search_pipeline.get:
-        id: "my_pipeline"
-  - match: { my_pipeline.version: 10 }
-
-  # Lower version
   - do:
-      search_pipeline.put:
-        id: "my_pipeline"
-        body: >
-          {
-            "version": 9,
-            "request_processors": [ ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      search_pipeline.get:
-        id: "my_pipeline"
-  - match: { my_pipeline.version: 9 }
-
   # Higher version
   - do:
       search_pipeline.put:
-        id: "my_pipeline"
-        body: >
-          {
-            "version": 6789,
-            "request_processors": [ ]
           }
-  - match: { acknowledged: true }
-
-  - do:
-      search_pipeline.get:
-        id: "my_pipeline"
-  - match: { my_pipeline.version: 6789 }
-
-  # No version
-  - do:
       search_pipeline.put:
-        id: "my_pipeline"
-        body: >
-          {
-            "request_processors": [ ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      search_pipeline.get:
-        id: "my_pipeline"
-  - is_false: my_pipeline.version
-
-  # Coming back with a version
-  - do:
-      search_pipeline.put:
-        id: "my_pipeline"
-        body: >
-          {
-            "version": 5385,
-            "request_processors": [ ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      search_pipeline.get:
-        id: "my_pipeline"
-  - match: { my_pipeline.version: 5385 }
-
-  # Able to delete the versioned pipeline
-  - do:
-      search_pipeline.delete:
-        id: "my_pipeline"
-  - match: { acknowledged: true }
-
-  - do:
+            "request_processors": [
       catch: missing
+      search_pipeline.put:
+  - do:
+            "request_processors": [ ]
+          }
+        id: "my_pipeline"
       search_pipeline.get:
-        id: "my_pipeline"
----
-"Test Get All Pipelines":
-  - skip:
+"Test basic pipeline crud":
+  - match: { my_pipeline.version: 10 }
       version: " - 2.8.99"
-      reason: "Added in 2.9.0"
-  - do:
-      search_pipeline.put:
-        id: "first_pipeline"
-        body:  >
-          {
-            "description": "first",
-            "request_processors": []
+        id: "my_pipeline"
+        body: >
           }
-  - do:
-      search_pipeline.put:
-        id: "second_pipeline"
-        body:  >
-          {
-            "description": "second",
-            "request_processors": []
+---
+        id: "my_pipeline"
+  - match: { acknowledged: true }
           }
-
-  - do:
-      search_pipeline.get: {}
-  - match: { first_pipeline.description: "first" }
+        id: "my_pipeline"
+      search_pipeline.get:
+        body: >
+  - skip:
+            "version": 5385,
   - match: { second_pipeline.description: "second" }
-
----
-"Test invalid config":
-  - skip:
-      version: " - 2.8.99"
-      reason: "Added in 2.9.0"
-  - do:
-      catch: /parse_exception/
-      search_pipeline.put:
-        id: "my_pipeline"
+            "request_processors": [ ]
         body:  >
-          {
-            "description": "_description",
-            "request_processors": [],
-            "invalid_field" : {}
-          }
+        id: "my_pipeline"
+  - do:
+  - do:
+  - do:
+  - do:
+            "request_processors": [ ]
+      search_pipeline.get:
+  - skip:
+      search_pipeline.put:
+  - do:
+"Test Get All Pipelines":
+        id: "my_pipeline"
+      search_pipeline.get:

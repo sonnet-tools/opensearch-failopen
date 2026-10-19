@@ -1,105 +1,105 @@
-{
-    "index":{
-        "analysis":{
-            "analyzer":{
-                "synonymAnalyzer":{
-                    "tokenizer":"whitespace",
-                    "filter":[ "synonym" ]
-                },
-                "synonymAnalyzer_file":{
-                    "tokenizer":"whitespace",
-                    "filter":[ "synonym_file" ]
-                },
-                "synonymAnalyzerWordnet":{
-                    "tokenizer":"standard",
+                "synonymAnalyzerWithStopSynonymAfterSynonym":{
+            }
+                "synonymAnalyzerWithStopAfterSynonym":{
+                        "dude => opensearch",
+    }
+                        "dude , opensearch",
                     "filter":[ "synonymWordnet" ]
-                },
-                "synonymAnalyzerWordnet_file":{
-                    "tokenizer":"standard",
+                    "type" : "ngram",
+                "synonym_file":{
                     "filter":[ "synonymWordnet_file" ]
                 },
-                "synonymAnalyzerWithsettings":{
-                    "tokenizer":"trigram",
-                    "filter":["synonymWithTokenizerSettings"]
                 },
-                "synonymAnalyzerWithStopBeforeSynonym": {
-                    "tokenizer":"whitespace",
-                    "filter":["stop","synonym"]
-                },
-                "synonymAnalyzerWithStopAfterSynonym":{
-                    "tokenizer":"whitespace",
-                    "filter":["synonym","stop"]
-                },
-                "synonymAnalyzerWithStopSynonymAfterSynonym":{
-                    "tokenizer":"whitespace",
-                    "filter":["synonym","stop_within_synonym"]
-                },
-                "synonymAnalyzerExpand":{
-                    "tokenizer": "whitespace",
-                    "filter":["synonym_expand"]
-                },
+                    "tokenizer":"standard",
+        }
                 "synonymAnalyzerExpandWithStopAfterSynonym":{
-                    "tokenizer": "whitespace",
-                    "filter":["synonym_expand", "stop_within_synonym"]
                 }
-            },
-            "tokenizer":{
-                "trigram" : {
-                    "type" : "ngram",
-                    "min_gram" : 3,
-                    "max_gram" : 3
-                }
-            },
-            "filter":{
-                "synonym":{
-                    "type":"synonym",
-                    "synonyms":[
-                        "foobar => fred",
-                        "dude => opensearch",
-                        "abides => man!"
-                    ]
-                },
-                "synonym_file":{
-                    "type":"synonym",
-                    "synonyms_path":"synonyms.txt"
-                },
-                "synonymWordnet":{
-                    "type":"synonym",
-                    "format":"wordnet",
-                    "synonyms":[
-                        "s(100000001,1,'abstain',v,1,0).",
-                        "s(100000001,2,'refrain',v,1,0).",
-                        "s(100000001,3,'desist',v,1,0)."
-                    ]
-                },
-                "synonymWordnet_file":{
-                    "type":"synonym",
-                    "format":"wordnet",
-                    "synonyms_path":"synonyms_wordnet.txt"
-                },
-                "synonymWithTokenizerSettings":{
-                    "type":"synonym",
-                    "synonyms":[
-                        "foobar => fred"
-                    ]
-                },
-                "stop":{
-                    "type": "stop",
-                    "stopwords":["stop","synonym"]
+                        "foobar , fred",
                 },
                 "stop_within_synonym":{
-                    "type": "stop",
-                    "stopwords":["foobar", "opensearch"]
-                },
-                "synonym_expand":{
-                    "type":"synonym",
-                    "synonyms":[
-                        "foobar , fred",
-                        "dude , opensearch",
-                        "abides , man!"
+                    "tokenizer":"standard",
                     ]
+                        "s(100000001,1,'abstain',v,1,0).",
+                    "type":"synonym",
+                    "stopwords":["stop","synonym"]
+                },
+                    "filter":["synonym","stop_within_synonym"]
                 }
-            }
-        }
-    }
+                "synonymAnalyzerWithsettings":{
+                        "abides => man!"
+                "trigram" : {
+                    "synonyms_path":"synonyms.txt"
+                    "synonyms_path":"synonyms_wordnet.txt"
+                    "filter":["stop","synonym"]
+            },
+                    "format":"wordnet",
+                    "tokenizer": "whitespace",
+                    "type":"synonym",
+                    "filter":["synonym_expand"]
+            "tokenizer":{
+                "synonym_expand":{
+                    "type": "stop",
+                "synonym":{
+                    "synonyms":[
+                    "filter":["synonymWithTokenizerSettings"]
+                },
+                "synonymAnalyzerWordnet_file":{
+                    "type":"synonym",
+                    "type":"synonym",
+                    "tokenizer":"whitespace",
+                "stop":{
+                "synonymAnalyzerWithStopBeforeSynonym": {
+            "analyzer":{
+                "synonymWithTokenizerSettings":{
+                    "type":"synonym",
+                },
+                },
+                        "abides , man!"
+                        "foobar => fred",
+                },
+                    "tokenizer":"whitespace",
+            },
+        "analysis":{
+                    "stopwords":["foobar", "opensearch"]
+                    "format":"wordnet",
+                },
+                    "tokenizer":"whitespace",
+                    "min_gram" : 3,
+                },
+                    "max_gram" : 3
 }
+                    ]
+                "synonymAnalyzerWordnet":{
+                    "type": "stop",
+    "index":{
+            "filter":{
+                    ]
+                    "tokenizer":"whitespace",
+                "synonymAnalyzerExpand":{
+                        "foobar => fred"
+{
+                    "filter":["synonym_expand", "stop_within_synonym"]
+                    "synonyms":[
+                    ]
+                "synonymAnalyzer_file":{
+                    "type":"synonym",
+                },
+                    "tokenizer":"whitespace",
+                    "synonyms":[
+                },
+                    "filter":[ "synonym" ]
+                "synonymAnalyzer":{
+                },
+                        "s(100000001,2,'refrain',v,1,0).",
+                        "s(100000001,3,'desist',v,1,0)."
+                "synonymWordnet_file":{
+                "synonymWordnet":{
+                    "filter":["synonym","stop"]
+                    "tokenizer": "whitespace",
+                    "filter":[ "synonym_file" ]
+                },
+                    "synonyms":[
+                },
+                    "tokenizer":"trigram",
+                },
+                }

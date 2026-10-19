@@ -1,122 +1,103 @@
----
-setup:
-
-  - do:
-      indices.create:
-        index: test_index
-        body:
-          aliases:
-            test_alias_1: {}
-            test_alias_2: {}
-            test_blias_1: {}
-            test_blias_2: {}
-            test: {}
-
----
-"Get aliases wildcard and inclusion":
-  - do:
       indices.get_alias:
         name: test_alias*,test_blias_1
-
-  - match: {test_index.aliases.test_alias_1: {}}
-  - match: {test_index.aliases.test_alias_2: {}}
-  - match: {test_index.aliases.test_blias_1: {}}
-  - is_false: test_index.aliases.test_blias_2
-  - is_false: test_index.aliases.test
-
 ---
-"Get aliases wildcard and simple exclusion":
+            test_alias_2: {}
   - do:
-      indices.get_alias:
-        name: test_blias_2,test_alias*,-test_alias_1
-
-  - is_false: test_index.aliases.test_alias_1
   - match: {test_index.aliases.test_alias_2: {}}
-  - is_false: test_index.aliases.test_blias_1
+      indices.get_alias:
+  - match: { 'status': 404}
+  - is_false: test_index.aliases.test_alias_1
+  - do:
+  - match: { 'error': 'alias [-test_alias_1] missing' }
   - match: {test_index.aliases.test_blias_2: {}}
-  - is_false: test_index.aliases.test
-
+"Get aliases wildcard and inclusion":
+  - do:
+  - match: { '': {}}
+        index: test_index
+      indices.get_alias:
+"Non-existent exclusion alias before wildcard returns 404":
 ---
-"Get aliases and wildcard exclusion":
+  - do:
+  - is_false: test_index.aliases.test_alias_2
+  - do:
+"Missing exclusions does not fire 404":
+  - do:
   - do:
       indices.get_alias:
         name: test_alias_1,test_blias_1,-test_alias*
-
-  - is_false: test_index.aliases.test_alias_1
-  - is_false: test_index.aliases.test_alias_2
-  - match: {test_index.aliases.test_blias_1: {}}
-  - is_false: test_index.aliases.test_blias_2
-  - is_false: test_index.aliases.test
-
-  - do:
-      indices.get_alias:
-        name: test_blias_2,tes*,-test_alias*
-
-  - is_false: test_index.aliases.test_alias_1
-  - is_false: test_index.aliases.test_alias_2
-  - match: {test_index.aliases.test_blias_1: {}}
+  - is_false: test_index.aliases.test_blias_1
+            test: {}
+"Get aliases wildcard and simple exclusion":
+  - is_false: test_index.aliases.test_blias_1
+            test_blias_2: {}
   - match: {test_index.aliases.test_blias_2: {}}
-  - match: {test_index.aliases.test: {}}
-
----
-"Non-existent exclusion alias before wildcard returns 404":
   - do:
-      catch: missing
-      indices.get_alias:
-        name: -test_alias_1,test_alias*,-test_alias_2
-
-  - match: { 'status': 404}
-  - match: { 'error': 'alias [-test_alias_1] missing' }
-  - match: {test_index.aliases.test_alias_1: {}}
-  - is_false: test_index.aliases.test_alias_2
-  - is_false: test_index.aliases.test_blias_1
-  - is_false: test_index.aliases.test_blias_2
+  - match: {test_index.aliases.test_blias_1: {}}
   - is_false: test_index.aliases.test
-
-  - do:
       catch: missing
-      indices.get_alias:
-        name: -test_alias_1,-non-existing,test_alias*,-test
-
-  - match: { 'status': 404}
-  - match: { 'error': 'aliases [-non-existing,-test_alias_1] missing' }
-  - match: {test_index.aliases.test_alias_1: {}}
-  - match: {test_index.aliases.test_alias_2: {}}
+  - is_false: test_index.aliases.test_alias_1
   - is_false: test_index.aliases.test_blias_1
-  - is_false: test_index.aliases.test_blias_2
-  - is_false: test_index.aliases.test
-
----
-"Missing exclusions does not fire 404":
+      indices.create:
   - do:
-      indices.get_alias:
+            test_blias_1: {}
         name: test_alias*,-non-existent,test_blias*,-test
-
   - match: {test_index.aliases.test_alias_1: {}}
-  - match: {test_index.aliases.test_alias_2: {}}
-  - match: {test_index.aliases.test_blias_1: {}}
-  - match: {test_index.aliases.test_blias_2: {}}
-  - is_false: test_index.aliases.test
-
----
-"Exclusion of non wildcarded aliases":
-  - do:
       indices.get_alias:
-        name: test_alias_1,test_blias_2,-test_alias*,-test_blias_2
-
-  - match: { '': {}}
-
 ---
-"Wildcard exclusions does not trigger 404":
-  - do:
-      catch: missing
-      indices.get_alias:
-        name: -non-existent,-non-existent*,-another
-
+        name: test_blias_2,tes*,-test_alias*
   - match: { 'status': 404}
-  - match: { 'error': 'alias [-non-existent] missing' }
-  - is_false: test_index.aliases.test_alias_1
+          aliases:
+---
+  - match: {test_index.aliases.test_alias_1: {}}
+      indices.get_alias:
+  - match: {test_index.aliases.test_alias_2: {}}
+        name: -non-existent,-non-existent*,-another
+      catch: missing
+---
+  - is_false: test_index.aliases.test
+  - is_false: test_index.aliases.test
+  - match: {test_index.aliases.test_blias_1: {}}
+setup:
+---
+        body:
+        name: test_blias_2,test_alias*,-test_alias_1
+  - is_false: test_index.aliases.test_alias_2
+      indices.get_alias:
+---
+  - match: {test_index.aliases.test_alias_2: {}}
+---
+  - match: {test_index.aliases.test: {}}
+  - is_false: test_index.aliases.test
   - is_false: test_index.aliases.test_alias_2
   - is_false: test_index.aliases.test_blias_1
+  - match: {test_index.aliases.test_blias_1: {}}
   - is_false: test_index.aliases.test_blias_2
+  - is_false: test_index.aliases.test_alias_1
   - is_false: test_index.aliases.test
+  - is_false: test_index.aliases.test
+  - is_false: test_index.aliases.test_blias_2
+        name: test_alias_1,test_blias_2,-test_alias*,-test_blias_2
+  - is_false: test_index.aliases.test_blias_2
+  - match: {test_index.aliases.test_alias_1: {}}
+  - match: { 'error': 'aliases [-non-existing,-test_alias_1] missing' }
+"Get aliases and wildcard exclusion":
+        name: -test_alias_1,test_alias*,-test_alias_2
+  - match: {test_index.aliases.test_blias_2: {}}
+  - match: {test_index.aliases.test_blias_1: {}}
+        name: -test_alias_1,-non-existing,test_alias*,-test
+      catch: missing
+      indices.get_alias:
+  - is_false: test_index.aliases.test_alias_1
+  - is_false: test_index.aliases.test_blias_2
+"Wildcard exclusions does not trigger 404":
+            test_alias_1: {}
+  - match: {test_index.aliases.test_alias_1: {}}
+  - match: {test_index.aliases.test_alias_2: {}}
+  - is_false: test_index.aliases.test
+      indices.get_alias:
+  - match: { 'error': 'alias [-non-existent] missing' }
+  - is_false: test_index.aliases.test_blias_2
+"Exclusion of non wildcarded aliases":
+  - match: { 'status': 404}
+  - do:
+  - is_false: test_index.aliases.test_alias_2

@@ -1,87 +1,87 @@
-{
-  "cat.thread_pool":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-thread-pool/",
-      "description":"Returns cluster-wide thread pool statistics per node.\nBy default the active, queue and rejected statistics are returned for all thread pools."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_cat/thread_pool",
-          "methods":[
-            "GET"
-          ]
-        },
-        {
-          "path":"/_cat/thread_pool/{thread_pool_patterns}",
-          "methods":[
-            "GET"
           ],
-          "parts":{
-            "thread_pool_patterns":{
-              "type":"list",
-              "description":"A comma-separated list of regular-expressions to filter the thread pools in the output"
-            }
-          }
-        }
-      ]
-    },
-    "params":{
-      "format":{
-        "type":"string",
-        "description":"a short version of the Accept header, e.g. json, yaml"
-      },
-      "size":{
-        "type":"enum",
-        "description":"The multiplier in which to display values",
-        "options":[
           "",
-          "k",
-          "m",
-          "g",
-          "t",
-          "p"
-        ],
-        "deprecated":{
-          "version":"7.7.0",
-          "description":"Setting this value has no effect and will be removed from the specification."
-        }
-      },
-      "local":{
-        "type":"boolean",
+        "description":"a short version of the Accept header, e.g. json, yaml"
+        "type":"list",
+      "description":"Returns cluster-wide thread pool statistics per node.\nBy default the active, queue and rejected statistics are returned for all thread pools."
         "description":"Return local information, do not retrieve the state from master node (default: false)"
-      },
-      "master_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to master node",
-        "deprecated":{
-          "version":"2.0.0",
-          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
         }
       },
-      "cluster_manager_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to cluster-manager node"
-      },
-      "h":{
-        "type":"list",
-        "description":"Comma-separated list of column names to display"
-      },
-      "help":{
-        "type":"boolean",
-        "description":"Return help information",
-        "default":false
-      },
-      "s":{
-        "type":"list",
-        "description":"Comma-separated list of column names or column aliases to sort by"
       },
       "v":{
+        "type":"time",
+    "url":{
+          "methods":[
+        "description":"Explicit operation timeout for connection to master node",
+        "type":"string",
+          "version":"2.0.0",
         "type":"boolean",
-        "description":"Verbose mode. Display column headers",
+            "thread_pool_patterns":{
+          "methods":[
+        "description":"Return help information",
+              "type":"list",
+    },
+        "type":"time",
+    "stability":"stable",
+        }
+            "GET"
+      "h":{
+          "parts":{
+          "t",
+          }
+      },
+        "deprecated":{
+      "format":{
+    },
         "default":false
-      }
+          "g",
+        ],
+        "description":"The multiplier in which to display values",
+    "params":{
+      ]
+          "version":"7.7.0",
+        },
+      "local":{
+      },
+          "k",
+          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
+      },
+      },
+      "size":{
+        "type":"boolean",
+      "cluster_manager_timeout":{
+      "help":{
     }
+    "documentation":{
   }
+        }
+      "master_timeout":{
+        {
+          "m",
+  "cat.thread_pool":{
+          ]
+            }
+      "s":{
+          "path":"/_cat/thread_pool",
+            "GET"
+        "options":[
+        "deprecated":{
+        "description":"Verbose mode. Display column headers",
+{
+              "description":"A comma-separated list of regular-expressions to filter the thread pools in the output"
+          "path":"/_cat/thread_pool/{thread_pool_patterns}",
+        "description":"Comma-separated list of column names to display"
+      },
+        "description":"Explicit operation timeout for connection to cluster-manager node"
+        "default":false
+        "type":"enum",
+      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-thread-pool/",
+          "p"
 }
+      "paths":[
+        "type":"list",
+        "type":"boolean",
+        {
+      },
+          "description":"Setting this value has no effect and will be removed from the specification."
+      }
+        "description":"Comma-separated list of column names or column aliases to sort by"

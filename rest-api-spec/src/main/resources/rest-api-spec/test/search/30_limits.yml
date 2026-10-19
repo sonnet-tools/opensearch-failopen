@@ -1,160 +1,147 @@
-setup:
-  - do:
-      indices.create:
-          index: test_1
-          body:
-            settings:
-              index.max_docvalue_fields_search: 2
-              index.max_script_fields: 2
-
-  - do:
-      index:
-          index:  test_1
-          id:     1
-          body:   { foo: bar }
-
-  - do:
-      indices.refresh: {}
-
----
-"Request window limits without scroll":
-  - do:
-      catch:      /Result window is too large, from \+ size must be less than or equal to[:] \[10000\] but was \[10010\]\. See the scroll api for a more efficient way to request large data sets\./
-      search:
-        rest_total_hits_as_int: true
         index: test_1
-        from: 10000
-
----
+      search:
+                     :[^\\\"\\r\\\\]|\\\\.|(?:(?:\\r\\n)?[\\t]))*\"(?:(?:\\r\\n)?[\\t])*))*@(?:(?:\\r\\n)?[ \\t])* |
+                     \\000-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\\[([^\\[\\]\\r\\\\] |
+        rest_total_hits_as_int: true
+                     [\\]\\000-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\\[([^\\[\\]\\ |
+      search:
+            "test2" : { "script" : { "lang": "painless", "source": "1;" }}
+        rest_total_hits_as_int: true
+                     .|(?:(?:\\r\\n)?[\\t]))*\"(?:(?:\\r\\n)?[\\t])*)(?:\\.(?:(?:\\r\\n)?[ \\t])*(?:[^()<>@, |
+            - "two"
+        body:
+  - do:
+          query:
+      reason: "returns 500 before 3.1.0"
 "Request with negative from value":
+                query:
   - do:
-      catch:      /\[from\] parameter cannot be negative/
-      search:
-        rest_total_hits_as_int: true
-        index: test_1
-        from: -2
-
+          query:
 ---
+      catch:      /Result window is too large, from \+ size must be less than or equal to[:] \[10000\] but was \[10010\]\. See the scroll api for a more efficient way to request large data sets\./
+                   .\\[\\]\\000-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\\[([^\\[\\ |
+          index: test_1
+        index: test_1
+                   |\\\\.)*\\](?:(?:\\r\\n)?[\\t])*))*)*:(?:(?:\\r\\n)?[\\t])*)?(?:[^()<>@,;:\\\\\".\\[\\] \\0 |
+  - match: { error.type: input_coercion_exception }
+              index.max_docvalue_fields_search: 2
+            "test1" : { "script" : { "lang": "painless", "source": "1;" }}
 "Request window limits with scroll":
   - do:
+---
+  - do:
+  - do:
+                     |\\\\.)*\\](?:(?:\\r\\n)?[\\t])*))*)*:(?:(?:\\r\\n)?[\\t])*)?(?:[^()<>@,;:\\\\\".\\[\\] \\0 |
+          index:  test_1
+        body:
+"Request window limits without scroll":
+  - do:
+---
+          id:     1
+"Script_fields size limit":
+                     ;:\\\\\".\\[\\]\\000-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\"(? |
+      index:
+        rest_total_hits_as_int: true
+        body:
+      search:
+        body:
+                   ;:\\\\\".\\[\\]\\000-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\"(? |
+"Docvalues_fields size limit":
+              query: "/^\\[\\]\\r\\\\]|\\\\.)*\\](?:(?:\\r\\n)?[\\t])*)(?:\\.(?:(?:\\r\\n)?[\\t])*(?:[^()<>@,;:\\\\\" |
+            match_all: {}
+                   ]))|\\[([^\\[\\]\\r\\\\]|\\\\.)*\\](?:(?:\\r\\n)?[\\t])*))*\\>(?:(?:\\r\\n)?[ \\t])*)(?:,\\s*( |
+                     00-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\"(?:[^\\\"\\r\\\\]|\\\\ |
       catch:      /Batch size is too large, size must be less than or equal to[:] \[10000\] but was \[10010\]\. Scroll batch sizes cost as much memory as result windows so they are controlled by the \[index.max_result_window\] index level setting\./
       search:
-        rest_total_hits_as_int: true
-        index: test_1
-        scroll: 5m
+          query:
+                   .|(?:(?:\\r\\n)?[\\t]))*\"(?:(?:\\r\\n)?[\\t])*)(?:\\.(?:(?:\\r\\n)?[ \\t])*(?:[^()<>@, |
+      catch:      /\[from\] parameter cannot be negative/
+                   r\\\\]|\\\\.)*\\](?:(?:\\r\\n)?[\\t])*)(?:\\.(?:(?:\\r\\n)?[\\t])*(?:[^()<>@,;:\\\\\".\\[\\]   |
+          body:
         size: 10010
-
----
+                   :[^\\\"\\r\\\\]|\\\\.|(?:(?:\\r\\n)?[\\t]))*\"(?:(?:\\r\\n)?[\\t])*))*@(?:(?:\\r\\n)?[ \\t])* |
+        index: test_1
+      search:
+          query:
+                     \".\\[\\]]))|\"(?:[^\\\"\\r\\\\]|\\\\.|(?:(?:\\r\\n)?[\\t]))*\"(?:(?:\\r\\n)?[ \\t])*)(?:\\.(?:( |
+  - do:
+      indices.refresh: {}
+        rest_total_hits_as_int: true
 "Request with size exceeding max integer value":
-  - skip:
-      version: "- 3.0.99"
-      reason: "returns 500 before 3.1.0"
-  - do:
-      catch:      /Numeric value \(2147483648\) out of range of [`]?int[`]?/
-      search:
-        rest_total_hits_as_int: true
-        index: test_1
-        body:
-          query:
-            match_all: {}
-          size: 2147483648
-
-  - match: { status: 400 }
-  - match: { error.type: input_coercion_exception }
-
----
-"Rescore window limits":
-  - do:
       catch:      /Rescore window \[10001\] is too large\. It must be less than \[10000\]\./
-      search:
-        rest_total_hits_as_int: true
-        index: test_1
-        body:
-          query:
             match_all: {}
+  - skip:
+                   ]\\r\\\\]|\\\\.)*\\](?:(?:\\r\\n)?[\\t])*))*(?:,@(?:(?:\\r\\n)?[ \\t])*(?:[^()<>@,;:\\\\\".\\  |
+                     r\\\\]|\\\\.)*\\](?:(?:\\r\\n)?[\\t])*)(?:\\.(?:(?:\\r\\n)?[\\t])*(?:[^()<>@,;:\\\\\".\\[\\]   |
           rescore:
-              - window_size: 10001
-                query:
-                  rescore_query:
-                    match_all: {}
-                  query_weight: 1
-                  rescore_query_weight: 2
-
 ---
-"Docvalues_fields size limit":
-  - do:
-      catch:      /Trying to retrieve too many docvalue_fields\. Must be less than or equal to[:] \[2\] but was \[3\]\. This limit can be set by changing the \[index.max_docvalue_fields_search\] index level setting\./
-      search:
-        rest_total_hits_as_int: true
-        index: test_1
-        body:
-          query:
-            match_all: {}
-          docvalue_fields:
-            - "one"
-            - "two"
             - "three"
-
+                     .\\[\\]\\000-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\\[([^\\[\\ |
+                   \".\\[\\]]))|\"(?:[^\\\"\\r\\\\]|\\\\.|(?:(?:\\r\\n)?[\\t]))*\"(?:(?:\\r\\n)?[ \\t])*)(?:\\.(?:( |
+        rest_total_hits_as_int: true
+      catch:      /Trying to retrieve too many docvalue_fields\. Must be less than or equal to[:] \[2\] but was \[3\]\. This limit can be set by changing the \[index.max_docvalue_fields_search\] index level setting\./
+        index: test_1
 ---
-"Script_fields size limit":
-
-  - do:
+        index: test_1
+                  rescore_query:
+        index: test_1
+                   \\[\"()<>@,;:\\\\\".\\[\\]]))|\"(?:[^\\\"\\r\\\\]|\\\\.|(?:(?:\\r\\n)?[\\t]))*\"(?:(?:\\r\\n)?[\\t"
+        index: test_1
+                     \\[\"()<>@,;:\\\\\".\\[\\]]))|\"(?:[^\\\"\\r\\\\]|\\\\.|(?:(?:\\r\\n)?[\\t]))*\"(?:(?:\\r\\n)?[\\t/"
+            - "one"
+        scroll: 5m
+        rest_total_hits_as_int: true
+      version: "- 3.0.99"
       catch:      /Trying to retrieve too many script_fields\. Must be less than or equal to[:] \[2\] but was \[3\]\. This limit can be set by changing the \[index.max_script_fields\] index level setting\./
+          query:
+            "test3" : { "script" : { "lang": "painless", "source": "1;" }}
+            query_string:
+        rest_total_hits_as_int: true
       search:
+"Rescore window limits":
+          docvalue_fields:
+        from: 10000
+        index: test_1
+                     ]\\r\\\\]|\\\\.)*\\](?:(?:\\r\\n)?[\\t])*))*(?:,@(?:(?:\\r\\n)?[ \\t])*(?:[^()<>@,;:\\\\\".\\  |
+      search:
+  - do:
+        body:
+  - do:
+      indices.create:
+                   [\\]\\000-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\\[([^\\[\\]\\ |
+              - window_size: 10001
+            regexp:
+      catch:      /Numeric value \(2147483648\) out of range of [`]?int[`]?/
+                     ]))|\\[([^\\[\\]\\r\\\\]|\\\\.)*\\](?:(?:\\r\\n)?[\\t])*))*\\>(?:(?:\\r\\n)?[ \\t])*)(?:,\\s*( |
+      catch: /The length of regex \[1110\] used in the Regexp Query request has exceeded the allowed maximum of \[1000\]\. This maximum can be set by changing the \[index.max_regex_length\] index level setting\./
         rest_total_hits_as_int: true
         index: test_1
-        body:
-          query:
-            match_all: {}
+      catch: /The length of regex \[1110\]/
+            settings:
           script_fields:
-            "test1" : { "script" : { "lang": "painless", "source": "1;" }}
-            "test2" : { "script" : { "lang": "painless", "source": "1;" }}
-            "test3" : { "script" : { "lang": "painless", "source": "1;" }}
-
+      search:
+              index.max_script_fields: 2
 ---
+      search:
+            match_all: {}
+                  query_weight: 1
+          size: 2147483648
+                    match_all: {}
+                  rescore_query_weight: 2
 "Regexp length limit":
   - do:
-      catch: /The length of regex \[1110\] used in the Regexp Query request has exceeded the allowed maximum of \[1000\]\. This maximum can be set by changing the \[index.max_regex_length\] index level setting\./
-      search:
-        rest_total_hits_as_int: true
-        index: test_1
-        body:
-          query:
-            regexp:
-              foo: "^\\[\\]\\r\\\\]|\\\\.)*\\](?:(?:\\r\\n)?[\\t])*)(?:\\.(?:(?:\\r\\n)?[\\t])*(?:[^()<>@,;:\\\\\" |
-                   .\\[\\]\\000-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\\[([^\\[\\ |
-                   ]\\r\\\\]|\\\\.)*\\](?:(?:\\r\\n)?[\\t])*))*(?:,@(?:(?:\\r\\n)?[ \\t])*(?:[^()<>@,;:\\\\\".\\  |
-                   [\\]\\000-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\\[([^\\[\\]\\ |
-                   r\\\\]|\\\\.)*\\](?:(?:\\r\\n)?[\\t])*)(?:\\.(?:(?:\\r\\n)?[\\t])*(?:[^()<>@,;:\\\\\".\\[\\]   |
-                   \\000-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\\[([^\\[\\]\\r\\\\] |
-                   |\\\\.)*\\](?:(?:\\r\\n)?[\\t])*))*)*:(?:(?:\\r\\n)?[\\t])*)?(?:[^()<>@,;:\\\\\".\\[\\] \\0 |
-                   00-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\"(?:[^\\\"\\r\\\\]|\\\\ |
-                   .|(?:(?:\\r\\n)?[\\t]))*\"(?:(?:\\r\\n)?[\\t])*)(?:\\.(?:(?:\\r\\n)?[ \\t])*(?:[^()<>@, |
-                   ;:\\\\\".\\[\\]\\000-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\"(? |
-                   :[^\\\"\\r\\\\]|\\\\.|(?:(?:\\r\\n)?[\\t]))*\"(?:(?:\\r\\n)?[\\t])*))*@(?:(?:\\r\\n)?[ \\t])* |
-                   ]))|\\[([^\\[\\]\\r\\\\]|\\\\.)*\\](?:(?:\\r\\n)?[\\t])*))*\\>(?:(?:\\r\\n)?[ \\t])*)(?:,\\s*( |
-                   \".\\[\\]]))|\"(?:[^\\\"\\r\\\\]|\\\\.|(?:(?:\\r\\n)?[\\t]))*\"(?:(?:\\r\\n)?[ \\t])*)(?:\\.(?:( |
-                   \\[\"()<>@,;:\\\\\".\\[\\]]))|\"(?:[^\\\"\\r\\\\]|\\\\.|(?:(?:\\r\\n)?[\\t]))*\"(?:(?:\\r\\n)?[\\t"
-
   - do:
-      catch: /The length of regex \[1110\]/
-      search:
+            match_all: {}
         rest_total_hits_as_int: true
-        index: test_1
-        body:
+                   \\000-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\\[([^\\[\\]\\r\\\\] |
+  - do:
+  - match: { status: 400 }
           query:
-            query_string:
-              query: "/^\\[\\]\\r\\\\]|\\\\.)*\\](?:(?:\\r\\n)?[\\t])*)(?:\\.(?:(?:\\r\\n)?[\\t])*(?:[^()<>@,;:\\\\\" |
-                     .\\[\\]\\000-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\\[([^\\[\\ |
-                     ]\\r\\\\]|\\\\.)*\\](?:(?:\\r\\n)?[\\t])*))*(?:,@(?:(?:\\r\\n)?[ \\t])*(?:[^()<>@,;:\\\\\".\\  |
-                     [\\]\\000-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\\[([^\\[\\]\\ |
-                     r\\\\]|\\\\.)*\\](?:(?:\\r\\n)?[\\t])*)(?:\\.(?:(?:\\r\\n)?[\\t])*(?:[^()<>@,;:\\\\\".\\[\\]   |
-                     \\000-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\\[([^\\[\\]\\r\\\\] |
-                     |\\\\.)*\\](?:(?:\\r\\n)?[\\t])*))*)*:(?:(?:\\r\\n)?[\\t])*)?(?:[^()<>@,;:\\\\\".\\[\\] \\0 |
-                     00-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\"(?:[^\\\"\\r\\\\]|\\\\ |
-                     .|(?:(?:\\r\\n)?[\\t]))*\"(?:(?:\\r\\n)?[\\t])*)(?:\\.(?:(?:\\r\\n)?[ \\t])*(?:[^()<>@, |
-                     ;:\\\\\".\\[\\]\\000-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\"(? |
-                     :[^\\\"\\r\\\\]|\\\\.|(?:(?:\\r\\n)?[\\t]))*\"(?:(?:\\r\\n)?[\\t])*))*@(?:(?:\\r\\n)?[ \\t])* |
-                     ]))|\\[([^\\[\\]\\r\\\\]|\\\\.)*\\](?:(?:\\r\\n)?[\\t])*))*\\>(?:(?:\\r\\n)?[ \\t])*)(?:,\\s*( |
-                     \".\\[\\]]))|\"(?:[^\\\"\\r\\\\]|\\\\.|(?:(?:\\r\\n)?[\\t]))*\"(?:(?:\\r\\n)?[ \\t])*)(?:\\.(?:( |
-                     \\[\"()<>@,;:\\\\\".\\[\\]]))|\"(?:[^\\\"\\r\\\\]|\\\\.|(?:(?:\\r\\n)?[\\t]))*\"(?:(?:\\r\\n)?[\\t/"
+---
+          body:   { foo: bar }
+        body:
+        from: -2
+setup:
+                   00-\\031]+(?:(?:(?:\\r\\n)?[\\t])+|\\Z|(?=[\\[\"()<>@,;:\\\\\".\\[\\]]))|\"(?:[^\\\"\\r\\\\]|\\\\ |
+---
+              foo: "^\\[\\]\\r\\\\]|\\\\.)*\\](?:(?:\\r\\n)?[\\t])*)(?:\\.(?:(?:\\r\\n)?[\\t])*(?:[^()<>@,;:\\\\\" |

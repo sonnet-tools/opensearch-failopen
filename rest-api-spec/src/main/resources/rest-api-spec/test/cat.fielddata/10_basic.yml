@@ -1,78 +1,66 @@
----
-"Help":
-  - do:
-      cat.fielddata:
-        help: true
-
-  - match:
-      $body: |
-               /^  id .+ \n
-                   host .+ \n
-                   ip .+ \n
-                   node .+ \n
-                   field .+ \n
-                   size .+ \n
-               $/
-
----
-"Test cat fielddata output":
-
-  - do:
-      cat.fielddata: {}
-
-  - do:
-      indices.create:
-        index:  index
         body:
-          settings:
-            number_of_shards: "1"
-          mappings:
-            properties:
-              foo:
-                type: text
-                fielddata: true
-
-  - do:
       index:
-        index: index
+                   ip .+ \n
+          sort: foo
+      indices.create:
+  - match:
+                   field .+ \n
+      cat.fielddata:
+"Help":
+      cat.fielddata:
+                   host .+ \n
+        h: field,size
+                   size .+ \n
+      $body: |
+        help: true
         body: { foo: bar }
-        refresh: true
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: index
+---
+               /^ field \s+   size \n $/
         body:
           query: { match_all: {} }
-          sort: foo
-
-  - do:
-      cat.fielddata:
-        h: field,size
-        v: true
-
+        index: index
   - match:
       $body: |
-               /^ field \s+   size \n
-                  foo     \s+ (\d+(\.\d+)?[gmk]?b  \n)+ $/
-
-  - do:
+        rest_total_hits_as_int: true
+        refresh: true
+               /^  id .+ \n
+            properties:
       cat.fielddata:
-        h: field,size
+               /^ field \s+   size \n
+  - do:
+  - do:
+        v: true
         fields: notfoo,foo
-        v: true
-
-  - match:
+        index:  index
+                   node .+ \n
       $body: |
-               /^ field \s+   size \n
+  - do:
+      $body: |
+              foo:
+                type: text
+        index: index
+"Test cat fielddata output":
                   foo     \s+ (\d+(\.\d+)?[gmk]?b  \n)+ $/
-
+  - do:
+          settings:
+                fielddata: true
+  - do:
+  - do:
+        v: true
+            number_of_shards: "1"
+          mappings:
   - do:
       cat.fielddata:
+        v: true
+      cat.fielddata: {}
+---
+               $/
+        h: field,size
+  - match:
+  - do:
+      search:
+  - match:
         h: field,size
         fields: notfoo
-        v: true
-
-  - match:
-      $body: |
-               /^ field \s+   size \n $/
+                  foo     \s+ (\d+(\.\d+)?[gmk]?b  \n)+ $/
+               /^ field \s+   size \n

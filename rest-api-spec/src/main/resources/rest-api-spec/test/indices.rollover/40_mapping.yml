@@ -1,39 +1,35 @@
----
-"Typeless mapping":
-  - do:
-      indices.create:
-        index: logs-1
-        body:
-          aliases:
-            logs_search: {}
-
-  # index first document and wait for refresh
-  - do:
-      index:
-        index: logs-1
-        id:    "1"
-        body:  { "foo": "hello world" }
+          mappings:
         refresh: true
-
-  # index second document and wait for refresh
-  - do:
-      index:
-        index: logs-1
-        id:    "2"
-        body:  { "foo": "hello world" }
-        refresh: true
-
-  # perform alias rollover with new typeless mapping
   - do:
       indices.rollover:
-        alias: "logs_search"
-        body:
-          conditions:
-            max_docs: 2
-          mappings:
-            properties:
-              foo2:
                 type: keyword
-
-  - match: { conditions: { "[max_docs: 2]": true } }
+        body:
   - match: { rolled_over: true }
+      index:
+        refresh: true
+      index:
+  # index first document and wait for refresh
+        body:  { "foo": "hello world" }
+            logs_search: {}
+        index: logs-1
+---
+        index: logs-1
+        body:  { "foo": "hello world" }
+        index: logs-1
+  # index second document and wait for refresh
+"Typeless mapping":
+        id:    "2"
+          conditions:
+  - do:
+            max_docs: 2
+  - do:
+            properties:
+  # perform alias rollover with new typeless mapping
+        alias: "logs_search"
+  - match: { conditions: { "[max_docs: 2]": true } }
+              foo2:
+      indices.create:
+        body:
+        id:    "1"
+          aliases:
+  - do:

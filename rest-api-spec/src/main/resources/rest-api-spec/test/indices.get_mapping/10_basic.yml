@@ -1,85 +1,62 @@
----
-setup:
-  - do:
-        indices.create:
-          index: test_1
-          body:
-            mappings: {}
-  - do:
-        indices.create:
+ - do:
           index: test_2
-          body:
-            mappings: {}
----
-"Get /{index}/_mapping with empty mappings":
-
  - do:
-     indices.create:
+  - do:
+    indices.get_mapping:
        index: t
-
- - do:
-     indices.get_mapping:
-       index: t
-
- - match: { t.mappings: {}}
-
 ---
-"Get /_mapping":
-
- - do:
-    indices.get_mapping: {}
-
- - is_true: test_1.mappings
- - is_true: test_2.mappings
-
----
-"Get /{index}/_mapping":
-
- - do:
-    indices.get_mapping:
-      index: test_1
-
- - is_true: test_1.mappings
- - is_false: test_2
-
-
-
----
-"Get /_all/_mapping":
-
- - do:
-    indices.get_mapping:
-      index: _all
-
- - is_true: test_1.mappings
- - is_true: test_2.mappings
-
----
-"Get /*/_mapping":
-
- - do:
-    indices.get_mapping:
-      index: '*'
-
- - is_true: test_1.mappings
- - is_true: test_2.mappings
-
----
-"Get /index,index/_mapping":
-
- - do:
-    indices.get_mapping:
       index: test_1,test_2
-
- - is_true: test_1.mappings
- - is_true: test_2.mappings
-
----
-"Get /index*/_mapping/":
-
  - do:
+ - is_true: test_2.mappings
+"Get /{index}/_mapping":
+     indices.get_mapping:
+"Get /index*/_mapping/":
     indices.get_mapping:
-      index: '*2'
-
+ - match: { t.mappings: {}}
+---
+       index: t
  - is_true: test_2.mappings
  - is_false: test_1
+---
+---
+ - is_true: test_2.mappings
+ - is_false: test_2
+ - do:
+    indices.get_mapping:
+---
+ - do:
+    indices.get_mapping:
+          index: test_1
+ - is_true: test_2.mappings
+            mappings: {}
+---
+"Get /_all/_mapping":
+        indices.create:
+    indices.get_mapping: {}
+ - is_true: test_1.mappings
+ - is_true: test_1.mappings
+    indices.get_mapping:
+setup:
+ - is_true: test_2.mappings
+      index: _all
+      index: '*2'
+  - do:
+---
+ - is_true: test_1.mappings
+          body:
+ - do:
+      index: '*'
+ - is_true: test_1.mappings
+ - do:
+ - do:
+      index: test_1
+"Get /*/_mapping":
+ - is_true: test_1.mappings
+          body:
+        indices.create:
+"Get /_mapping":
+"Get /{index}/_mapping with empty mappings":
+---
+            mappings: {}
+     indices.create:
+"Get /index,index/_mapping":

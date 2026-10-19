@@ -1,59 +1,48 @@
----
-setup:
-  - do:
-      indices.create:
-          index: test
-          body:
-            settings:
-              number_of_shards: 1
-              number_of_replicas: 0
-
-  - do:
-      cluster.health:
-        wait_for_no_initializing_shards: true
-
----
-"Segment Stats":
-
-  - do:
-      indices.stats:
-        metric: [ segments ]
-  - set: { indices.test.primaries.segments.count: num_segments }
-
-  - do:
-      index:
         index: test
-        id:    1
-        body:  { "foo": "bar" }
-
+        forbid_closed_indices: false
+        index: test
+  - do:
+  - do:
+  - do:
+---
   - do:
       indices.flush:
-        index: test
-
-  - do:
-      indices.stats:
-        metric: [ segments ]
-  - gt: { indices.test.primaries.segments.count: $num_segments }
-  - set: { indices.test.primaries.segments.count: num_segments_after_flush }
-
-  - do:
-      indices.close:
-        index: test
-        wait_for_active_shards: "all"
-
-  - do:
-      indices.stats:
-        metric: segments
-        expand_wildcards: closed
         forbid_closed_indices: false
-
-  - match: { indices.test.primaries.segments.count: 0 }
-
+        expand_wildcards: closed
+        id:    1
+        wait_for_no_initializing_shards: true
+---
+        metric: segments
   - do:
+        index: test
+"Segment Stats":
+  - do:
+      index:
+  - gt: { indices.test.primaries.segments.count: $num_segments }
+      cluster.health:
+  - do:
+  - set: { indices.test.primaries.segments.count: num_segments_after_flush }
+        wait_for_active_shards: "all"
+  - do:
+  - set: { indices.test.primaries.segments.count: num_segments }
+          body:
       indices.stats:
+              number_of_replicas: 0
+        metric: [ segments ]
+        metric: [ segments ]
+        expand_wildcards: closed
+            settings:
+setup:
+      indices.stats:
+      indices.stats:
+              number_of_shards: 1
+  - match: { indices.test.primaries.segments.count: $num_segments_after_flush }
+        body:  { "foo": "bar" }
         metric: segments
         include_unloaded_segments: true
-        expand_wildcards: closed
-        forbid_closed_indices: false
-
-  - match: { indices.test.primaries.segments.count: $num_segments_after_flush }
+  - match: { indices.test.primaries.segments.count: 0 }
+  - do:
+          index: test
+      indices.create:
+      indices.close:
+      indices.stats:

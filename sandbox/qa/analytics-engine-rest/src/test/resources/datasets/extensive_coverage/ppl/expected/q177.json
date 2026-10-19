@@ -1,28 +1,28 @@
-{
-  "schema": [
-    {
-      "name": "text",
-      "type": "string"
-    },
-    {
-      "name": "crc",
+  ],
       "type": "bigint"
-    }
-  ],
-  "datarows": [
-    [
-      "hello world test",
-      2815950922
     ],
+      "name": "crc",
     [
-      "sample data entry",
-      3824389393
-    ],
-    [
+    {
       "test example record",
-      222524247
-    ]
-  ],
   "total": 3,
+      2815950922
   "size": 3
+    },
+  "schema": [
+      "name": "text",
+    ]
+    [
+  "datarows": [
+      "hello world test",
+    {
+    ],
+    }
+    [
+{
+      222524247
+      "sample data entry",
+  ],
 }
+      3824389393
+      "type": "string"

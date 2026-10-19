@@ -1,122 +1,102 @@
----
-setup:
-  - do:
-        indices.create:
-          index: test-1
-          body:
-            mappings:
-              properties:
                 timestamp:
-                  type: date
-                field1:
+        fields: "*"
+        index: test-*
                   type: keyword
-                field2:
-                  type: long
-
-  - do:
-        indices.create:
-          index: test-2
-          body:
-            mappings:
-              properties:
                 timestamp:
-                  type: date
+  - match: {fields.field1.long.indices:                   ["test-2"]}
+        fields: "*"
+  - match: {fields.field1.text.searchable:                true}
                 field1:
-                  type: long
-
-  - do:
-        indices.create:
-          index: test-3
-
-  - do:
-      index:
-        index:  test-1
-        body:   { timestamp: "2015-01-02", "field1": "404" }
-
-  - do:
-      index:
-        index:  test-1
-        body:   { timestamp: "2018-10-02", "field1": "404" }
-
-  - do:
-      index:
-        index:  test-2
-        body:   { timestamp: "2019-10-04", "field1": "403" }
-
-  - do:
-      index:
-        index:  test-2
-        body:   { timestamp: "2020-03-04", "field1": "200" }
-
-  - do:
-      index:
-        index:  test-3
-        body:   { timestamp: "2022-01-01", "field1": "500" }
-
-  - do:
-      indices.refresh:
-        index: [test-1, test-2, test-3]
-
+  - match: {fields.field1.keyword.aggregatable:           true}
+            mappings:
 ---
 "Field caps with index filter":
-
-
-  - do:
-      field_caps:
         index: test-*
-        fields: "*"
-
-  - match: {indices:                                      ["test-1", "test-2", "test-3"]}
-  - length: {fields.field1:                               3}
-  - match: {fields.field1.long.searchable:                true}
-  - match: {fields.field1.long.aggregatable:              true}
-  - match: {fields.field1.keyword.searchable:             true}
-  - match: {fields.field1.keyword.aggregatable:           true}
-  - match: {fields.field1.text.searchable:                true}
   - match: {fields.field1.text.aggregatable:              false}
-
-  - do:
-      field_caps:
-        index: test-*
-        fields: "*"
-        body: { index_filter: { range: { timestamp: { gte: 2010 }}}}
-
-  - match: {indices:                                      ["test-1", "test-2", "test-3"]}
-  - length: {fields.field1:                               3}
-
-  - do:
-      field_caps:
-        index: test-*
-        fields: "*"
-        body: { index_filter: { range: { timestamp: { gte: 2019 } } } }
-
-  - match: {indices:                                      ["test-2", "test-3"]}
-  - length: {fields.field1:                               2}
-  - match: {fields.field1.long.searchable:                true}
-  - match: {fields.field1.long.aggregatable:              true}
-  - match: {fields.field1.long.indices:                   ["test-2"]}
-  - match: {fields.field1.text.searchable:                true}
   - match: {fields.field1.text.aggregatable:              false}
-  - match: {fields.field1.text.indices:                   ["test-3"]}
-  - is_false:                                             fields.field1.indices
-
-  - do:
-      field_caps:
-        index: test-*
-        fields: "*"
-        body: { index_filter: { range: { timestamp: { lt: 2019 } } } }
-
-  - match: {indices:                                      ["test-1"]}
-  - length: {fields.field1:                               1}
-  - match: {fields.field1.keyword.searchable:             true}
-  - match: {fields.field1.keyword.aggregatable:           true}
-  - is_false:                                             fields.field1.indices
-
-  - do:
-      field_caps:
-        index: test-*
-        fields: "*"
-        body: { index_filter: { match_none: {} } }
-
-  - match: {indices:                                      []}
   - length: {fields:                                      0}
+            mappings:
+  - match: {indices:                                      []}
+      field_caps:
+---
+  - match: {fields.field1.long.aggregatable:              true}
+        indices.create:
+                  type: long
+        body: { index_filter: { match_none: {} } }
+        body:   { timestamp: "2022-01-01", "field1": "500" }
+  - match: {indices:                                      ["test-2", "test-3"]}
+  - length: {fields.field1:                               1}
+  - length: {fields.field1:                               3}
+        body:   { timestamp: "2019-10-04", "field1": "403" }
+        indices.create:
+                  type: date
+  - do:
+      indices.refresh:
+        body: { index_filter: { range: { timestamp: { gte: 2019 } } } }
+      index:
+        fields: "*"
+  - match: {fields.field1.text.searchable:                true}
+        body:   { timestamp: "2015-01-02", "field1": "404" }
+        body: { index_filter: { range: { timestamp: { gte: 2010 }}}}
+                  type: date
+  - do:
+        index: test-*
+      index:
+  - do:
+  - length: {fields.field1:                               3}
+          index: test-2
+        body: { index_filter: { range: { timestamp: { lt: 2019 } } } }
+        body:   { timestamp: "2020-03-04", "field1": "200" }
+      field_caps:
+        index: test-*
+  - do:
+        body:   { timestamp: "2018-10-02", "field1": "404" }
+  - do:
+      field_caps:
+  - match: {fields.field1.keyword.searchable:             true}
+setup:
+        fields: "*"
+  - match: {fields.field1.long.searchable:                true}
+  - length: {fields.field1:                               2}
+  - do:
+      index:
+  - match: {fields.field1.keyword.searchable:             true}
+        index:  test-3
+      field_caps:
+              properties:
+  - do:
+  - do:
+  - match: {indices:                                      ["test-1", "test-2", "test-3"]}
+  - is_false:                                             fields.field1.indices
+  - do:
+        index:  test-2
+      index:
+      index:
+      field_caps:
+  - do:
+  - match: {fields.field1.long.aggregatable:              true}
+                  type: long
+  - match: {fields.field1.long.searchable:                true}
+          body:
+          index: test-3
+        index:  test-2
+                field2:
+  - match: {indices:                                      ["test-1", "test-2", "test-3"]}
+          body:
+  - match: {fields.field1.text.indices:                   ["test-3"]}
+          index: test-1
+        index:  test-1
+                field1:
+        index: test-*
+  - match: {fields.field1.keyword.aggregatable:           true}
+  - do:
+        index:  test-1
+        index: [test-1, test-2, test-3]
+              properties:
+  - do:
+        fields: "*"
+  - do:
+        indices.create:
+  - is_false:                                             fields.field1.indices
+  - do:
+  - match: {indices:                                      ["test-1"]}

@@ -1,28 +1,24 @@
----
-"External version":
-
- - do:
-      catch:              bad_request
-      create:
+ - match: { status: 400 }
+ - match: { status: 400 }
+          version:        0
+ - match: { error.type: action_request_validation_exception }
           index:          test
           id:             1
-          body:           { foo: bar }
-          version_type:   external
-          version:        0
-
- - match: { status: 400 }
- - match: { error.type: action_request_validation_exception }
- - match: { error.reason: "Validation Failed: 1: create operations only support internal versioning. use index instead;" }
-
  - do:
       catch:              bad_request
-      create:
-          index:          test
-          id:             2
           body:           { foo: bar }
           version_type:   external
-          version:        5
-
- - match: { status: 400 }
+      catch:              bad_request
  - match: { error.type: action_request_validation_exception }
+          version_type:   external
+          index:          test
  - match: { error.reason: "Validation Failed: 1: create operations only support internal versioning. use index instead;" }
+ - do:
+          body:           { foo: bar }
+      create:
+      create:
+---
+          id:             2
+          version:        5
+ - match: { error.reason: "Validation Failed: 1: create operations only support internal versioning. use index instead;" }
+"External version":

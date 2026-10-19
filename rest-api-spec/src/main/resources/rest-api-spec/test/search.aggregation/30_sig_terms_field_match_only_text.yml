@@ -1,76 +1,68 @@
----
-"Default index":
-  - skip:
-      version: " - 2.11.99"
-      reason: "match_only_text was added in 2.12"
-  - do:
-      indices.create:
-          index:  goodbad
-          body:
-            settings:
-                number_of_shards: "1"
-            mappings:
-                properties:
-                    text:
-                        type: match_only_text
-                        fielddata: true
-                    class:
-                        type: keyword
-
-  - do:
       index:
-          index:  goodbad
-          id:     1
-          body:   { text: "good", class: "good" }
-  - do:
-      index:
-          index:  goodbad
-          id:     2
-          body:   { text: "good", class: "good" }
-  - do:
-      index:
-          index:  goodbad
-          id:     3
-          body:   { text: "bad", class: "bad" }
-  - do:
-      index:
-          index:  goodbad
-          id:     4
-          body:   { text: "bad", class: "bad" }
-  - do:
-      index:
-          index:  goodbad
-          id:     5
           body:   { text: "good bad", class: "good" }
   - do:
+          id:     7
+          index:  goodbad
+  - match: {aggregations.class.buckets.0.sig_terms.buckets.0.key: "bad"}
+          index:  goodbad
+  - do:
+        index: [goodbad]
+      search:
+          id:     1
+          body:   { text: "bad", class: "bad" }
+  - do:
+  - do:
+      index:
+      version: " - 2.11.99"
+  - do:
+                        type: keyword
+      reason: "match_only_text was added in 2.12"
+          index:  goodbad
+          body:   { text: "bad", class: "bad" }
+        index: goodbad
+                        fielddata: true
+      search:
+"Default index":
+      index:
+          index:  goodbad
+      indices.refresh:
+                    class:
+        rest_total_hits_as_int: true
+      index:
+          id:     2
+          id:     5
+  - do:
+---
+          body:   { text: "good", class: "good" }
+        body: {"aggs": {"class": {"terms": {"field": "class"},"aggs": {"sig_terms": {"significant_terms": {"field": "text"}}}}}}
+      index:
+        index: goodbad
+  - do:
+  - do:
+          body:   { text: "good", class: "good" }
+  - match: {hits.total: 7}
+          id:     3
+                    text:
+  - do:
+                properties:
+          body:
       index:
           index:  goodbad
           id:     6
-          body:   { text: "good bad", class: "bad" }
-  - do:
-      index:
           index:  goodbad
-          id:     7
-          body:   { text: "bad", class: "bad" }
-
-
-
-  - do:
-      indices.refresh:
-        index: [goodbad]
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: goodbad
-
-  - match: {hits.total: 7}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: goodbad
-        body: {"aggs": {"class": {"terms": {"field": "class"},"aggs": {"sig_terms": {"significant_terms": {"field": "text"}}}}}}
-
-  - match: {aggregations.class.buckets.0.sig_terms.buckets.0.key: "bad"}
+  - skip:
+                        type: match_only_text
+                number_of_shards: "1"
   - match: {aggregations.class.buckets.1.sig_terms.buckets.0.key: "good"}
+            mappings:
+      index:
+        rest_total_hits_as_int: true
+          index:  goodbad
+      indices.create:
+          index:  goodbad
+            settings:
+          id:     4
+  - do:
+          body:   { text: "bad", class: "bad" }
+  - do:
+          body:   { text: "good bad", class: "bad" }

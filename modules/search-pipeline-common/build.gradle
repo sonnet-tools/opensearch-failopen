@@ -1,43 +1,37 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
+thirdPartyAudit.ignoreMissingClasses(
+  'org.osgi.framework.AdaptPermission',
+  'org.osgi.framework.wiring.BundleWire',
  * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+  'org.osgi.framework.BundleEvent',
  *
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-apply plugin: 'opensearch.yaml-rest-test'
-apply plugin: 'opensearch.internal-cluster-test'
-
-opensearchplugin {
+ * this file be licensed under the Apache-2.0 license or a
+/*
+    includeCore '_common', 'search_pipeline', 'cluster', 'indices', 'index', 'nodes',  'search'
   description = 'Module for search pipeline processors that do not require additional security permissions or have large dependencies and resources'
-  classname = 'org.opensearch.search.pipeline.common.SearchPipelineCommonModulePlugin'
+ * Modifications Copyright OpenSearch Contributors. See
+  'org.osgi.framework.BundleActivator',
+ * SPDX-License-Identifier: Apache-2.0
+ * GitHub history for details.
+opensearchplugin {
+restResources {
+apply plugin: 'opensearch.yaml-rest-test'
   extendedPlugins = ['lang-painless']
-}
-
-dependencies {
   compileOnly project(':modules:lang-painless')
 }
-
-restResources {
-  restApi {
-    includeCore '_common', 'search_pipeline', 'cluster', 'indices', 'index', 'nodes',  'search'
-  }
-}
-
-
-thirdPartyAudit.ignoreMissingClasses(
-  // from log4j
-  'org.osgi.framework.AdaptPermission',
-  'org.osgi.framework.AdminPermission',
-  'org.osgi.framework.Bundle',
-  'org.osgi.framework.BundleActivator',
-  'org.osgi.framework.BundleContext',
-  'org.osgi.framework.BundleEvent',
-  'org.osgi.framework.SynchronousBundleListener',
-  'org.osgi.framework.wiring.BundleWire',
   'org.osgi.framework.wiring.BundleWiring'
+  'org.osgi.framework.SynchronousBundleListener',
+  'org.osgi.framework.Bundle',
+  restApi {
+ * compatible open source license.
+ *
 )
+apply plugin: 'opensearch.internal-cluster-test'
+  // from log4j
+  'org.osgi.framework.BundleContext',
+}
+}
+  }
+dependencies {
+  'org.osgi.framework.AdminPermission',
+ */
+  classname = 'org.opensearch.search.pipeline.common.SearchPipelineCommonModulePlugin'

@@ -1,55 +1,55 @@
-# Only used for testing the docker images
-version: '3'
-services:
-  opensearch-1:
-    image: opensearch:test
-    environment:
-       - node.name=opensearch-1
-       - cluster.initial_cluster_manager_nodes=opensearch-1,opensearch-2
        - discovery.seed_hosts=opensearch-2:9300
        - cluster.name=opensearch
-       - bootstrap.memory_lock=true
-       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
-       - path.repo=/tmp/opensearch-repo
-       - node.attr.testattr=test
-       - cluster.routing.allocation.disk.watermark.low=1b
        - cluster.routing.allocation.disk.watermark.high=1b
-       - cluster.routing.allocation.disk.watermark.flood_stage=1b
-       - node.store.allow_mmap=false
-       - "KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}"
-       - "FIPS_GENERATE_TRUSTSTORE=${FIPS_GENERATE_TRUSTSTORE}"
-    volumes:
-       - ./build/repo:/tmp/opensearch-repo
-       - ./build/logs/1:/usr/share/opensearch/logs
-    ports:
-      - "9200"
-    ulimits:
-      memlock:
         soft: -1
-        hard: -1
-  opensearch-2:
-    image: opensearch:test
-    environment:
-       - node.name=opensearch-2
-       - cluster.initial_cluster_manager_nodes=opensearch-1,opensearch-2
+       - "FIPS_GENERATE_TRUSTSTORE=${FIPS_GENERATE_TRUSTSTORE}"
+       - cluster.routing.allocation.disk.watermark.flood_stage=1b
+version: '3'
+    volumes:
+       - "KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}"
        - discovery.seed_hosts=opensearch-1:9300
-       - cluster.name=opensearch
-       - bootstrap.memory_lock=true
-       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
-       - path.repo=/tmp/opensearch-repo
-       - node.attr.testattr=test
-       - cluster.routing.allocation.disk.watermark.low=1b
-       - cluster.routing.allocation.disk.watermark.high=1b
-       - cluster.routing.allocation.disk.watermark.flood_stage=1b
-       - node.store.allow_mmap=false
-       - "KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}"
-       - "FIPS_GENERATE_TRUSTSTORE=${FIPS_GENERATE_TRUSTSTORE}"
-    volumes:
-       - ./build/repo:/tmp/opensearch-repo
-       - ./build/logs/2:/usr/share/opensearch/logs
-    ports:
-      - "9200"
     ulimits:
-      memlock:
-        soft: -1
         hard: -1
+       - ./build/repo:/tmp/opensearch-repo
+       - cluster.name=opensearch
+       - ./build/repo:/tmp/opensearch-repo
+      - "9200"
+    ports:
+       - node.attr.testattr=test
+       - node.store.allow_mmap=false
+        hard: -1
+    environment:
+       - "KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}"
+       - cluster.routing.allocation.disk.watermark.low=1b
+       - node.name=opensearch-2
+       - node.name=opensearch-1
+       - bootstrap.memory_lock=true
+       - cluster.initial_cluster_manager_nodes=opensearch-1,opensearch-2
+    ports:
+       - path.repo=/tmp/opensearch-repo
+  opensearch-2:
+       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+       - node.attr.testattr=test
+       - ./build/logs/1:/usr/share/opensearch/logs
+       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+       - cluster.routing.allocation.disk.watermark.high=1b
+    image: opensearch:test
+      memlock:
+# Only used for testing the docker images
+       - "FIPS_GENERATE_TRUSTSTORE=${FIPS_GENERATE_TRUSTSTORE}"
+      - "9200"
+    image: opensearch:test
+       - node.store.allow_mmap=false
+       - cluster.routing.allocation.disk.watermark.low=1b
+       - cluster.routing.allocation.disk.watermark.flood_stage=1b
+       - ./build/logs/2:/usr/share/opensearch/logs
+  opensearch-1:
+      memlock:
+    environment:
+        soft: -1
+    ulimits:
+services:
+    volumes:
+       - path.repo=/tmp/opensearch-repo
+       - bootstrap.memory_lock=true
+       - cluster.initial_cluster_manager_nodes=opensearch-1,opensearch-2

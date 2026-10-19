@@ -1,18 +1,16 @@
----
-"Return empty object if field doesn't exist, but index does":
-  - do:
-        indices.create:
-          index: test_index
           body:
-            mappings:
-              properties:
-                text:
-                  type:     text
-                  analyzer: whitespace
-
-  - do:
+---
       indices.get_field_mapping:
+                  type:     text
+        indices.create:
+  - do:
+                text:
+"Return empty object if field doesn't exist, but index does":
+              properties:
+                  analyzer: whitespace
+  - do:
         index: test_index
+            mappings:
         fields: not_existent
-
   - match: { 'test_index.mappings': {}}
+          index: test_index

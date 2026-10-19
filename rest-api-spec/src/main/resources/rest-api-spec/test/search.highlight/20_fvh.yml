@@ -1,116 +1,109 @@
-setup:
-  - do:
-      indices.create:
         index: test
-        body:
-          mappings:
-            "properties":
-              "id":
-                "type": "integer"
-              "title":
-                "type": "text"
-                "term_vector": "with_positions_offsets"
-              "description":
-                "type": "text"
-                "term_vector": "with_positions_offsets"
-              "nested":
-                "type": "nested"
-                "properties":
-                  "title":
-                    "type": "text"
-                    "term_vector": "with_positions_offsets"
-  - do:
-      index:
-        index: test
-        refresh: true
-        body:
-          id : 1
-          title : "The quick brown fox is brown"
-          description : "The quick pink panther is pink"
-
-  - do:
-      index:
-        index: test
-        refresh: true
-        body:
-          id : 2
-          title : "The quick blue fox is blue"
+              inner_hits:
           nested:
-            - title: "purple octopus"
-            - title: "purple fish"
-
+                  "title":
+                "term_vector": "with_positions_offsets"
+        body:
+                    nested.title:
+            fields:
+                type: fvh
+              path: nested
+        body:
+  - is_false: hits.hits.1.highlight.description
+              title:
+        body:
+      version: " - 7.10.1"
+        body:
+                    "type": "text"
+                  nested.title: purple
+            type: fvh
+              "nested":
+          query:
+---
+      search:
+---
+          sort: [id]
+                type: fvh
+  - match: {hits.hits.0.highlight.title.0: "The quick brown <em>fox</em> is brown"}
+          title : "The quick brown fox is brown"
+  - match: {hits.hits.0.highlight.title.0: "The quick <em>brown</em> fox is <em>brown</em>"}
+                "type": "integer"
+      index:
+                type: fvh
+                  fields:
+              id: 1
+              description:
+            "properties":
+          mappings:
+                name: nested_hits
+  - is_false: hits.hits.0.highlight.description
+                match:
+                "properties":
+                highlight_query:
+              title:
+        rest_total_hits_as_int: true
+            type: fvh
+            term:
+                  prefix:
+        rest_total_hits_as_int: true
+          highlight:
+              title: fox
+                    "term_vector": "with_positions_offsets"
+                "type": "nested"
+  - do:
+        index: test
+          id : 2
+      version: " - 7.10.1"
+  - skip:
+        body:
+                "type": "text"
 ---
 "Highlight query":
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            term:
-              id: 1
-          highlight:
-            type: fvh
-            fields:
-              description:
-                type: fvh
-                highlight_query:
-                  prefix:
+      reason: Bug fixed in 7.10.2
+        refresh: true
                     description: br
-              title:
-                type: fvh
+          highlight:
+          description : "The quick pink panther is pink"
+  - do:
+          title : "The quick blue fox is blue"
+          query:
+          query:
+        rest_total_hits_as_int: true
+      search:
+  - do:
+"Highlight multiple documents":
+  - do:
+          id : 1
+  - do:
+            fields:
+              "id":
+                "type": "text"
+        index: test
+  - match: {hits.hits.1.highlight.title.0: "The quick blue <em>fox</em> is blue"}
+                highlight:
+  - skip:
+"Highlight multiple nested documents":
+      indices.create:
+  - match: {hits.hits.0.inner_hits.nested_hits.hits.hits.1.highlight.nested\.title.0: "<em>purple</em> fish"}
+  - match: {hits.hits.0.inner_hits.nested_hits.hits.hits.0.highlight.nested\.title.0: "<em>purple</em> octopus"}
+      index:
+            nested:
+  - do:
                 highlight_query:
+              "description":
+setup:
+        refresh: true
+        body:
+      search:
+            match:
+                "term_vector": "with_positions_offsets"
+  - is_false: hits.hits.0.highlight.description
+      reason: Bug fixed in 7.10.2
+            - title: "purple fish"
                   prefix:
                     title: br
-
-  - match: {hits.hits.0.highlight.title.0: "The quick <em>brown</em> fox is <em>brown</em>"}
-  - is_false: hits.hits.0.highlight.description
-
----
-"Highlight multiple documents":
-  - skip:
-      version: " - 7.10.1"
-      reason: Bug fixed in 7.10.2
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            match:
-              title: fox
-          highlight:
-            type: fvh
-            fields:
-              title:
-                type: fvh
-          sort: [id]
-
-  - match: {hits.hits.0.highlight.title.0: "The quick brown <em>fox</em> is brown"}
-  - is_false: hits.hits.0.highlight.description
-  - match: {hits.hits.1.highlight.title.0: "The quick blue <em>fox</em> is blue"}
-  - is_false: hits.hits.1.highlight.description
-
----
-"Highlight multiple nested documents":
-  - skip:
-      version: " - 7.10.1"
-      reason: Bug fixed in 7.10.2
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            nested:
-              path: nested
               query:
-                match:
-                  nested.title: purple
-              inner_hits:
-                name: nested_hits
-                highlight:
-                  type: fvh
-                  fields:
-                    nested.title:
+            - title: "purple octopus"
                       type: fvh
-
-  - match: {hits.hits.0.inner_hits.nested_hits.hits.hits.0.highlight.nested\.title.0: "<em>purple</em> octopus"}
-  - match: {hits.hits.0.inner_hits.nested_hits.hits.hits.1.highlight.nested\.title.0: "<em>purple</em> fish"}
+              "title":
+                  type: fvh

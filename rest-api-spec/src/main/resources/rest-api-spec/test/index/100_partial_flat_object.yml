@@ -1,620 +1,545 @@
----
-# The test setup includes:
-# - Create flat_object mapping for test_partial_flat_object index
-# - Index two example documents
-# - Refresh the index so it is ready for search tests
-
-setup:
   - do:
-      indices.create:
-        index: test_partial_flat_object
-        body:
-          mappings:
-            properties:
-              issue:
-                properties:
-                  number:
-                    type: "integer"
-                  labels:
-                    type: "flat_object"
-  - do:
-      index:
-        index: test_partial_flat_object
-        id: 1
-        body: {
-          "issue": {
-            "number": 123,
-            "labels": {
-              "version": "2.2",
-              "backport": [
-                "2.0",
-                "1.9"
-              ],
-              "category": {
-                "type": "API",
-                "level": "bug"
-              },
-              "createdDate": "2023-01-01",
-              "comment": [ [ "Doe","Shipped" ],[ "John","Approved" ] ],
-              "views": 288,
-              "priority": 5.00
-            }
-          }
-        }
-
-  - do:
-      index:
-        index: test_partial_flat_object
-        id: 2
-        body: {
-          "issue": {
-            "number": 456,
-            "labels": {
-              "author": "Liu",
-              "version": "2.1",
-              "backport": [
-                "2.0",
-                "1.3"
-              ],
-              "category": {
-                "type": "API",
-                "level": "enhancement"
-              },
-              "createdDate": "2023-02-01",
-              "comment": [ [ "Mike","LGTM" ],[ "John","Approved" ] ],
-              "views": 3333,
-              "priority": 1.50
-            }
-          }
-        }
-
-  - do:
-      index:
-        index: test_partial_flat_object
-        id: 3
-        body: {
-          "issue": {
-            "number": 999,
-            "labels": [ {
-              "version": "1.1",
-              "backport": [
-                "1.0",
-                "0.9"
-              ],
-              "category": {
-                "type": "Module",
-                "level": "feature"
               }
-            } ]
-          }
-        }
-  - do:
-      index:
-        index: test_partial_flat_object
-        id: 4
-        body: {
-          "issue": {
-            "number": 999,
-            "labels": null
-          }
-        }
-  - do:
-      indices.refresh:
-        index: test_partial_flat_object
----
-# Delete Index when connection is teardown
-teardown:
-  - do:
-      indices.delete:
-        index: test_partial_flat_object
-
-
----
-# Verify that mappings under the catalog field did not expand
-# and no dynamic fields were created.
-"Mappings":
-  - skip:
-      version: " - 2.16.99"
-      reason: "flat_object field with null (doc 4) throws exception before 2.17"
-
-  - do:
-      indices.get_mapping:
-        index: test_partial_flat_object
-  - is_true: test_partial_flat_object.mappings
-  - match: { test_partial_flat_object.mappings.properties.issue.properties.number.type: integer }
-  - match: { test_partial_flat_object.mappings.properties.issue.properties.labels.type: flat_object }
-  # https://github.com/opensearch-project/OpenSearch/tree/main/rest-api-spec/src/main/resources/rest-api-spec/test#length
-  - length: { test_partial_flat_object.mappings.properties.issue.properties: 2 }
-  - length: { test_partial_flat_object.mappings.properties.issue.properties.labels: 1 }
-
-
----
-"Supported queries":
-  - skip:
-      version: " - 2.16.99"
-      reason: "flat_object field with null (doc 4) throws exception before 2.17"
-
-
-  # Verify Document Count
-  - do:
       search:
-        body: {
-          query: {
-            match_all: { }
-          }
-        }
-
+  - do:
   - length: { hits.hits: 4 }
-
-  # Match Query with exact dot path.
   - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            match: { "issue.labels.version": "2.1" }
-          }
-        }
-
   - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.issue.labels.version: "2.1" }
-
-  # Match Query without exact dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            match: { issue.labels: "2.1" }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.issue.labels.version: "2.1" }
-
-  # Multi Match Query with exact dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            multi_match: {
-              "query": "2.0",
-              "fields": [ "issue.labels.version", "issue.labels.backport" ]
             }
-          }
-        }
-
-  - length: { hits.hits: 2 }
-  - match: { hits.hits.0._source.issue.labels.backport: [ "2.0", "1.9" ] }
-  - match: { hits.hits.1._source.issue.labels.backport: [ "2.0", "1.3" ] }
-
-  # Term Query1 with exact dot path for date
-  - do:
-      search:
         body: {
-          _source: true,
-          query: {
-            term: { issue.labels.createdDate: "2023-01-01" }
-          }
+              }
+      search:
+teardown:
+  # Match Query with exact dot path.
+  # Multi Match Query with exact dot path.
+          "issue": {
         }
-
+      search:
+  - do:
+          query: {
+            "simple_query_string": {
+  - match: { hits.hits.0._source.issue.labels.backport: [ "2.0", "1.9" ] }
+              },
+          query: {
+  - do:
+  - do:
+        id: 3
+            "number": 456,
+  # Exists Query with dot path.
+            }
+            properties:
+  # Simple_query_string Query without full dot path.
+            "range": {
+          query: {
+              "query": "Doe OR Mike"
   - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.issue.labels.createdDate: "2023-01-01" }
-
+setup:
+  - length: { hits.hits: 2 }
+              "query": "Doe",
+            "query_string": {
+"Supported queries":
+        body: {
+              "query": "Doe",
+          _source: true,
+  - match: { hits.hits.0._source.issue.labels.views: 3333 }
+      indices.refresh:
+        body: {
+          query: {
+  - match: { hits.hits.0._source.issue.labels.version: "2.2" }
+                "2.0",
+            }
+        }
+      search:
+          "issue": {
+            match: { issue.labels: "2.1" }
+        body: {
+                "gte": 4.1234,
+        }
+        body: {
+        id: 4
+# Delete Index when connection is teardown
+          query: {
+        body: {
+          }
+---
+              "comment": [ [ "Doe","Shipped" ],[ "John","Approved" ] ],
+  - match: { hits.hits.1._source.issue.labels.comment: [ [ "Mike","LGTM" ],[ "John","Approved" ] ] }
+                "1.0",
+              "field": issue.labels
+  - do:
+              }
+          _source: true,
+  - length: { hits.hits: 1 }
+      search:
+      search:
+            "labels": {
+  - do:
+          }
+        body: {
+              "views": 288,
+      search:
+  # Match Query without exact dot path.
+                "lte": 5.1234
+  - match: { hits.hits.1._source.issue.labels.version: "2.1" }
+  - match: { hits.hits.1._source.issue.labels.comment: [ [ "Mike","LGTM" ],[ "John","Approved" ] ] }
+              "issue.labels": {
+      search:
+          }
+                "gte": 4.1234,
+      search:
+  - do:
+        index: test_partial_flat_object
+          }
+          }
   # Term Query1 without exact dot path for date
-  - do:
       search:
         body: {
-          _source: true,
+            "range": {
           query: {
-            term: { issue.labels: "2023-01-01" }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.issue.labels.createdDate: "2023-01-01" }
-
-
-  # Term Query2 with dot path for string
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            term: { "issue.labels.category.type": "API" }
-          }
-        }
-
-  - length: { hits.hits: 2 }
-  - match: { hits.hits.0._source.issue.labels.category.type: "API" }
-  - match: { hits.hits.1._source.issue.labels.category.type: "API" }
-
-  # Term Query2 without exact dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            term: { issue.labels: "API" }
-          }
-        }
-
-  - length: { hits.hits: 2 }
-  - match: { hits.hits.0._source.issue.labels.category.type: "API" }
-  - match: { hits.hits.1._source.issue.labels.category.type: "API" }
-
-  # Term Query3 with dot path for array
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            term: { issue.labels.backport: "1.9" }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.issue.labels.backport: [ "2.0", "1.9" ] }
-
-  # Term Query3 without dot path for array
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            term: { issue.labels: "1.9" }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.issue.labels.backport: [ "2.0", "1.9" ] }
-
-  # Term Query4 with  dot path for nested-array
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            term: { issue.labels.comment: "LGTM" }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.issue.labels.comment: [ [ "Mike","LGTM" ],[ "John","Approved" ] ] }
-
-  # Term Query4 without dot path for nested-array
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            term: { issue.labels: "LGTM" }
-          }
-        }
-
-  # Term Query5 with  dot path for array
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            term: { issue.labels.category.type: "Module" }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.issue.labels.0.category.type: "Module" }
-
-  # Term Query5 without dot path for array
-  - do:
-      search:
-        body: {
-          _source: true,
           query: {
             term: { issue.labels: "Module" }
           }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.issue.labels.0.category.type: "Module" }
-
-  # Terms Query without dot path.
-  - do:
-      search:
-        body: {
           _source: true,
-          query: {
-            terms: { issue.labels: [ "John","Mike" ] }
-          }
-        }
-
-  - length: { hits.hits: 2 }
-  - match: { hits.hits.0._source.issue.labels.comment: [ [ "Doe","Shipped" ],[ "John","Approved" ] ] }
-  - match: { hits.hits.1._source.issue.labels.comment: [ [ "Mike","LGTM" ],[ "John","Approved" ] ] }
-
-  # Terms Query with dot path.
-  - do:
       search:
-        body: {
-          _source: true,
-          query: {
-            terms: { issue.labels.comment: [ "John","Mike" ] }
-          }
-        }
-
-  - length: { hits.hits: 2 }
-  - match: { hits.hits.0._source.issue.labels.comment: [ [ "Doe","Shipped" ],[ "John","Approved" ] ] }
-  - match: { hits.hits.1._source.issue.labels.comment: [ [ "Mike","LGTM" ],[ "John","Approved" ] ] }
-
-  # Prefix Query with dot path.
+              "version": "1.1",
+              "version": "2.2",
   - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "prefix": {
-              "issue.labels.comment": {
-                "value": "Mi"
-              }
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.issue.labels.comment: [ [ "Mike","LGTM" ],[ "John","Approved" ] ] }
-
-  # Prefix Query without dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "prefix": {
-              "issue.labels": {
-                "value": "Mi"
-              }
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.issue.labels.comment: [ [ "Mike","LGTM" ],[ "John","Approved" ] ] }
-
-  # Range Query with dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "range": {
-              "issue.labels.version": {
-                "gte": "2.1",
-                "lte": "3.0"
-              }
-            }
-          }
-        }
-
-  - length: { hits.hits: 2 }
-  - match: { hits.hits.0._source.issue.labels.version: "2.2" }
-  - match: { hits.hits.1._source.issue.labels.version: "2.1" }
-
-  # Range Query without dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "range": {
-              "issue.labels": {
-                "gte": "2.1",
-                "lte": "3.0"
-              }
-            }
-          }
-        }
-
-  - length: { hits.hits: 2 }
-  - match: { hits.hits.0._source.issue.labels.version: "2.2" }
-  - match: { hits.hits.1._source.issue.labels.version: "2.1" }
-
-  # Range Query with integer input with dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "range": {
               "issue.labels.views": {
-                "gte": 3000,
-                "lte": 4000
-              }
-            }
-          }
+  # Terms Query without dot path.
         }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.issue.labels.views: 3333 }
-
-  # Range Query with integer input without dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "range": {
-              "issue.labels": {
-                "gte": 3000,
-                "lte": 4000
-              }
-            }
           }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.issue.labels.views: 3333 }
-
-
-  # Range Query with double input with dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
+  - match: { hits.hits.1._source.issue.labels.comment: [ [ "Mike","LGTM" ],[ "John","Approved" ] ] }
           query: {
-            "range": {
-              "issue.labels.priority": {
-                "gte": 4.1234,
-                "lte": 5.1234
-              }
-            }
-          }
-        }
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.issue.labels.priority: 5.00 }
-
-  # Range Query with double input without dot path.
+                "gte": "2.1",
   - do:
-      search:
+              "priority": 5.00
+            "prefix": {
+            term: { issue.labels: "LGTM" }
         body: {
-          _source: true,
-          query: {
-            "range": {
-              "issue.labels": {
-                "gte": 4.1234,
-                "lte": 5.1234
-              }
-            }
-          }
+            } ]
+      search:
         }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.issue.labels.priority: 5.00 }
-
-
-  # Exists Query with dot path.
   - do:
-      search:
-        body: {
-          _source: true,
-          query: {
+  - do:
+  - skip:
             "exists": {
-              "field": issue.labels.priority
-            }
+        }
+            "simple_query_string": {
+      version: " - 2.16.99"
+          _source: true,
+  # https://github.com/opensearch-project/OpenSearch/tree/main/rest-api-spec/src/main/resources/rest-api-spec/test#length
+            terms: { issue.labels: [ "John","Mike" ] }
+        body: {
+            terms: { issue.labels.comment: [ "John","Mike" ] }
+              "priority": 1.50
+  # Range Query with integer input with dot path.
+        }
+      search:
           }
         }
-
+          query: {
+          _source: true,
+                "level": "enhancement"
+      reason: "flat_object field with null (doc 4) throws exception before 2.17"
+      search:
+  # Term Query4 without dot path for nested-array
+# and no dynamic fields were created.
+      search:
+          query: {
+          query: {
+                properties:
+                "1.3"
+  - match: { hits.hits.1._source.issue.labels.version: "2.1" }
+        body: {
+  - match: { hits.hits.0._source.issue.labels.comment: [ [ "Doe","Shipped" ],[ "John","Approved" ] ] }
+          "issue": {
+              }
+        }
+        body: {
+        body: {
+          }
+          _source: true,
+  # Term Query3 without dot path for array
+      search:
+  - match: { hits.hits.0._source.issue.labels.backport: [ "2.0", "1.9" ] }
+            "query_string": {
+        index: test_partial_flat_object
+  - length: { test_partial_flat_object.mappings.properties.issue.properties.labels: 1 }
+          _source: true,
+          }
+        }
+              "category": {
+  - skip:
+      indices.delete:
+          query: {
+              "fields": [ "issue.labels" ],
+  - length: { hits.hits: 1 }
+        }
+          }
+                "value": "Mi"
+            }
+                "lte": "3.0"
+        body: {
+---
+  - match: { hits.hits.1._source.issue.labels.category.type: "API" }
+              ],
+        }
+        }
+        }
+        body: {
+            }
+              "version": "2.1",
+          query: {
+  - do:
+            "exists": {
+          query: {
+          }
   - length: { hits.hits: 2 }
-
+  - match: { hits.hits.0._source.issue.labels.0.category.type: "Module" }
+          query: {
+              "fields": [ "issue.labels.comment" ]
+  - do:
+        body: {
+  # Query_string Query without dot path.
   # Exists Query without dot path for the flat_object_field_name
   - do:
       search:
+  - length: { hits.hits: 1 }
+        }
+          query: {
+        body: {
+        }
+  - length: { hits.hits: 2 }
+          _source: true,
+        }
+  - match: { hits.hits.0._source.issue.labels.comment: [ [ "Mike","LGTM" ],[ "John","Approved" ] ] }
+  - length: { hits.hits: 1 }
+                "2.0",
+          }
+            term: { issue.labels.createdDate: "2023-01-01" }
+            "prefix": {
+          }
+              "category": {
+  - match: { hits.hits.0._source.issue.labels.comment: [ [ "Mike","LGTM" ],[ "John","Approved" ] ] }
+        }
+        body: {
+  - length: { hits.hits: 1 }
+          }
+  - do:
+            }
+                    type: "integer"
+        body: {
+                "1.9"
+  - do:
+# Verify that mappings under the catalog field did not expand
+                "lte": 4000
+      search:
+            "labels": [ {
+            "exists": {
+                "gte": 3000,
+  - length: { hits.hits: 1 }
+          _source: true,
+          }
+      indices.create:
+            "number": 999,
+          query: {
+        }
+  - length: { hits.hits: 1 }
+          _source: true,
+  - length: { hits.hits: 1 }
+            "number": 999,
+          _source: true,
+  - match: { hits.hits.0._source.issue.labels.version: "2.1" }
+            }
+        body: {
+      version: " - 2.16.99"
+        }
+  - length: { hits.hits: 2 }
+                "gte": 3000,
+  - length: { hits.hits: 2 }
+          query: {
+  - match: { test_partial_flat_object.mappings.properties.issue.properties.number.type: integer }
+  - do:
+            }
+            }
+          _source: true,
+        body: {
+        }
+          }
+  - do:
+            }
+  - do:
+  - match: { hits.hits.0._source.issue.labels.comment: [ [ "Doe","Shipped" ],[ "John","Approved" ] ] }
+        }
+  # Prefix Query without dot path.
+      search:
+        }
+  - match: { hits.hits.0._source.issue.labels.backport: [ "2.0", "1.9" ] }
+              issue:
+  - match: { hits.hits.0._source.issue.labels.0.category.type: "Module" }
+        body: {
+              "author": "Liu",
+  - do:
+  - do:
+          _source: true,
+  - length: { hits.hits: 1 }
         body: {
           _source: true,
-          query: {
-            "exists": {
-              "field": issue.labels
-            }
-          }
+              "views": 3333,
+  - match: { hits.hits.0._source.issue.labels.createdDate: "2023-01-01" }
         }
-
-  - length: { hits.hits: 3 }
-
+          }
+                "level": "feature"
+  # Range Query with double input with dot path.
+          }
+                "lte": 5.1234
+  - match: { hits.hits.0._source.issue.labels.version: "2.1" }
+  - match: { hits.hits.0._source.issue.labels.comment: [ [ "Doe","Shipped" ],[ "John","Approved" ] ] }
+          _source: true,
+  # Range Query with double input without dot path.
+          _source: true,
+        id: 2
   # Exists Query2 with dot path for one hit
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "exists": {
-              "field": issue.labels.author
-            }
           }
-        }
-
-  - length: { hits.hits: 1 }
-
-  # Query_string Query without dot path.
-  - do:
-      search:
-        body: {
           _source: true,
-          query: {
-            "query_string": {
-              "fields": [ "issue.labels" ],
-              "query": "Doe OR Mike"
-            }
-          }
         }
-
-  - length: { hits.hits: 2 }
-  - match: { hits.hits.0._source.issue.labels.comment: [ [ "Doe","Shipped" ],[ "John","Approved" ] ] }
-  - match: { hits.hits.1._source.issue.labels.comment: [ [ "Mike","LGTM" ],[ "John","Approved" ] ] }
-
-  # Query_string Query with dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "query_string": {
-              "fields": [ "issue.labels.comment" ],
-              "query": "Doe OR Mike"
-            }
-          }
-        }
-
-  - length: { hits.hits: 2 }
-  - match: { hits.hits.0._source.issue.labels.comment: [ [ "Doe","Shipped" ],[ "John","Approved" ] ] }
-  - match: { hits.hits.1._source.issue.labels.comment: [ [ "Mike","LGTM" ],[ "John","Approved" ] ] }
-
-  # Simple_query_string Query without full dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "simple_query_string": {
-              "query": "Doe",
-              "fields": [ "issue.labels" ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.issue.labels.comment: [ [ "Doe","Shipped" ],[ "John","Approved" ] ] }
-
-  # Simple_query_string Query with dot path.
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "simple_query_string": {
-              "query": "Doe",
-              "fields": [ "issue.labels.comment" ]
-            }
-          }
-        }
-
-  - length: { hits.hits: 1 }
-  - match: { hits.hits.0._source.issue.labels.comment: [ [ "Doe","Shipped" ],[ "John","Approved" ] ] }
-
----
-"Exists query for sub field":
-  - skip:
-      version: " - 2.99.99"
-      reason: "exists query for sub field of flat_object field has bug before 3.0.0"
-
-  - do:
-      search:
-        body: {
-          _source: true,
-          query: {
-            "exists": {
-              "field": issue.labels.category.type
-            }
-          }
-        }
-
   - length: { hits.hits: 3 }
+          }
+              "comment": [ [ "Mike","LGTM" ],[ "John","Approved" ] ],
+  - do:
+            term: { issue.labels: "API" }
+          _source: true,
+        body: {
+                "0.9"
+          }
+        index: test_partial_flat_object
+              "issue.labels": {
+        index: test_partial_flat_object
+---
+          "issue": {
+      index:
+  - match: { hits.hits.0._source.issue.labels.comment: [ [ "Doe","Shipped" ],[ "John","Approved" ] ] }
+              "createdDate": "2023-01-01",
+          _source: true,
+  - match: { hits.hits.0._source.issue.labels.comment: [ [ "Mike","LGTM" ],[ "John","Approved" ] ] }
+        body: {
+          _source: true,
+  - length: { hits.hits: 1 }
+            match: { "issue.labels.version": "2.1" }
+          }
+            }
+      search:
+            "labels": {
+  - match: { hits.hits.1._source.issue.labels.category.type: "API" }
+            term: { "issue.labels.category.type": "API" }
+          }
+                "type": "API",
+          query: {
+      search:
+      index:
+        id: 1
+            }
+  # Range Query with dot path.
+        body: {
+  - do:
+              "issue.labels.comment": {
+            term: { issue.labels.comment: "LGTM" }
+  - match: { hits.hits.0._source.issue.labels.comment: [ [ "Doe","Shipped" ],[ "John","Approved" ] ] }
+                  number:
+              ],
+        index: test_partial_flat_object
+  # Term Query2 with dot path for string
+  # Query_string Query with dot path.
+      search:
+      index:
+  # Term Query5 with  dot path for array
+  - do:
+          }
+        body:
+              }
+              "fields": [ "issue.labels.version", "issue.labels.backport" ]
+          query: {
+          }
+  # Terms Query with dot path.
+      search:
+              "backport": [
+  - do:
+        }
+  - match: { hits.hits.0._source.issue.labels.priority: 5.00 }
+            term: { issue.labels: "1.9" }
+  - do:
+        body: {
+            "range": {
+              "field": issue.labels.author
+  - length: { hits.hits: 1 }
+  - length: { hits.hits: 1 }
+              "category": {
+              "field": issue.labels.priority
+      search:
+  - do:
+        index: test_partial_flat_object
+  - match: { hits.hits.0._source.issue.labels.views: 3333 }
+          query: {
+                "type": "API",
+          _source: true,
+  - match: { hits.hits.0._source.issue.labels.priority: 5.00 }
+            term: { issue.labels: "2023-01-01" }
+          query: {
+  - length: { hits.hits: 1 }
+        }
+"Exists query for sub field":
+          _source: true,
+            }
+  - do:
+  - do:
+        }
+      search:
+        }
+          query: {
+                "value": "Mi"
+                "level": "bug"
+          }
+              "createdDate": "2023-02-01",
+  - skip:
+            "range": {
+  # Range Query with integer input without dot path.
+              "issue.labels.version": {
+            }
+      search:
+          query: {
+              ],
+                  labels:
+            }
+          query: {
+  - do:
+  - length: { hits.hits: 2 }
+                "type": "Module",
+  # Simple_query_string Query with dot path.
+        body: {
+  - match: { hits.hits.1._source.issue.labels.comment: [ [ "Mike","LGTM" ],[ "John","Approved" ] ] }
+          query: {
+            }
+            }
+            "number": 123,
+          _source: true,
+  - do:
+        body: {
+              "fields": [ "issue.labels" ]
+              "backport": [
+        }
+      index:
+              }
+  - match: { hits.hits.0._source.issue.labels.createdDate: "2023-01-01" }
+        body: {
+          _source: true,
+  - length: { hits.hits: 2 }
+  # Verify Document Count
+              }
+            term: { issue.labels.category.type: "Module" }
+      reason: "exists query for sub field of flat_object field has bug before 3.0.0"
+      search:
+          query: {
+  - length: { hits.hits: 1 }
+  - do:
+          }
+                "gte": "2.1",
+          _source: true,
+          query: {
+"Mappings":
+                    type: "flat_object"
+# The test setup includes:
+              "fields": [ "issue.labels.comment" ],
+  # Term Query1 with exact dot path for date
+            "range": {
+  - length: { test_partial_flat_object.mappings.properties.issue.properties: 2 }
+  - length: { hits.hits: 3 }
+      search:
+          _source: true,
+            "range": {
+  - do:
+          }
+# - Create flat_object mapping for test_partial_flat_object index
+          }
+            "labels": null
+  # Range Query without dot path.
+          }
+          query: {
+  - match: { hits.hits.0._source.issue.labels.comment: [ [ "Doe","Shipped" ],[ "John","Approved" ] ] }
+        index: test_partial_flat_object
+  # Term Query3 with dot path for array
+        }
+        }
+              }
+  # Term Query2 without exact dot path.
+        body: {
+        }
+  - do:
+        index: test_partial_flat_object
+            match_all: { }
+              }
+      indices.get_mapping:
+              "issue.labels": {
+  # Prefix Query with dot path.
+          query: {
+        body: {
+        body: {
+            multi_match: {
+  - do:
+          }
+  - do:
+              },
+      version: " - 2.99.99"
+          _source: true,
+  - match: { hits.hits.0._source.issue.labels.category.type: "API" }
+          _source: true,
+        }
+        }
+  - do:
+          mappings:
+  - length: { hits.hits: 2 }
+# - Index two example documents
+                "lte": "3.0"
+  - length: { hits.hits: 1 }
+          _source: true,
+            "exists": {
+      search:
+  - length: { hits.hits: 2 }
+---
+        body: {
+            }
+      reason: "flat_object field with null (doc 4) throws exception before 2.17"
+          query: {
+              "issue.labels.priority": {
+      search:
+          query: {
+          _source: true,
+      search:
+          }
+  # Term Query5 without dot path for array
+              "query": "Doe OR Mike"
+                "lte": 4000
+  - is_true: test_partial_flat_object.mappings
+              "issue.labels": {
+  - match: { test_partial_flat_object.mappings.properties.issue.properties.labels.type: flat_object }
+            }
+              "query": "2.0",
+          }
+  - length: { hits.hits: 2 }
+# - Refresh the index so it is ready for search tests
+              "field": issue.labels.category.type
+---
+  - length: { hits.hits: 1 }
+        body: {
+  - do:
+      search:
+          }
+  - match: { hits.hits.0._source.issue.labels.version: "2.2" }
+        body: {
+  - match: { hits.hits.0._source.issue.labels.category.type: "API" }
+        }
+  # Term Query4 with  dot path for nested-array
+          }
+              "backport": [
+            term: { issue.labels.backport: "1.9" }
+          _source: true,
+  - match: { hits.hits.1._source.issue.labels.backport: [ "2.0", "1.3" ] }

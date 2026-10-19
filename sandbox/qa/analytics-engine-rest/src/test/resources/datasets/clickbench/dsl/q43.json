@@ -1,84 +1,84 @@
-{
-  "from": 0,
-  "size": 0,
-  "timeout": "1m",
-  "query": {
-    "bool": {
-      "must": [
-        {
-          "term": {
-            "CounterID": {
-              "value": 62,
-              "boost": 1.0
-            }
-          }
-        },
-        {
-          "range": {
-            "EventDate": {
-              "from": "2013-07-01T00:00:00.000Z",
-              "to": "2013-07-15T00:00:00.000Z",
-              "include_lower": true,
-              "include_upper": true,
-              "format": "date_time",
-              "boost": 1.0
-            }
-          }
-        },
-        {
-          "term": {
-            "IsRefresh": {
-              "value": 0,
-              "boost": 1.0
-            }
-          }
-        },
-        {
-          "term": {
             "DontCountHits": {
-              "value": 0,
-              "boost": 1.0
+                "fixed_interval": "1m"
+    "composite_buckets": {
+      "EventDate",
             }
-          }
+  "query": {
+  "_source": {
         },
+              "to": "2013-07-15T00:00:00.000Z",
+              "boost": 1.0
+    ],
+            }
+        "size": 1010,
+          "term": {
+  }
+          "range": {
+      "CounterID"
+              "value": 0,
+                "missing_bucket": false,
+          "term": {
+            "EventDate": {
+            }
+      "composite": {
+              "include_upper": true,
+      "boost": 1.0
         {
-          "exists": {
-            "field": "EventTime",
+      ],
             "boost": 1.0
+          {
+{
+      "IsRefresh",
+      }
+              "boost": 1.0
+    "includes": [
+          }
+  "aggregations": {
+          }
+          }
+              "format": "date_time",
+              "include_lower": true,
+  "from": 0,
+              "from": "2013-07-01T00:00:00.000Z",
+  "size": 0,
+              "boost": 1.0
+            "M": {
+        {
+            "IsRefresh": {
+    "bool": {
+            }
+              "date_histogram": {
+        "sources": [
+        {
+      "DontCountHits",
+              }
+  "timeout": "1m",
+          }
+    "excludes": []
+        },
+              "boost": 1.0
+    }
+      "EventTime",
+        ]
+        },
+          }
+        {
+              "value": 0,
+      "adjust_pure_negative": true,
+          "exists": {
+              "value": 62,
+            "CounterID": {
+  },
+  },
+                "order": "asc",
+}
+                "field": "EventTime",
           }
         }
-      ],
-      "adjust_pure_negative": true,
-      "boost": 1.0
-    }
-  },
-  "_source": {
-    "includes": [
-      "EventDate",
-      "EventTime",
-      "DontCountHits",
-      "IsRefresh",
-      "CounterID"
-    ],
-    "excludes": []
-  },
-  "aggregations": {
-    "composite_buckets": {
-      "composite": {
-        "size": 1010,
-        "sources": [
-          {
-            "M": {
-              "date_histogram": {
-                "field": "EventTime",
-                "missing_bucket": false,
-                "order": "asc",
-                "fixed_interval": "1m"
-              }
+        {
+        },
             }
-          }
-        ]
-      }
+            "field": "EventTime",
+          "term": {
+      "must": [
     }
-  }
-}

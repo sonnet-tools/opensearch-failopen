@@ -1,152 +1,138 @@
----
-teardown:
+            ]
   - do:
-      search_pipeline.delete:
         id: "my_pipeline"
-        ignore: 404
-
----
-"Test sort processor":
-  - do:
-      search_pipeline.put:
-        id: "my_pipeline"
-        body: >
-          {
             "description": "test pipeline",
-            "response_processors": [
-              {
-                "sort":
-                  {
-                    "field": "a",
-                    "target_field": "b"
-                  }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      search_pipeline.put:
-        id: "my_pipeline_2"
-        body: >
           {
-            "description": "test pipeline with ignore failure true",
-            "response_processors": [
-              {
-                "sort":
-                  {
-                    "field": "aa",
-                    "ignore_failure": true
-                  }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      search_pipeline.put:
-        id: "my_pipeline_3"
-        body: >
-          {
-            "description": "test pipeline",
-            "response_processors": [
-              {
-                "sort":
-                  {
-                    "field": "a",
-                    "order": "desc",
                     "target_field": "b"
-                  }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      indices.create:
-        index: test
-
-  - do:
-      indices.put_mapping:
-        index: test
-        body:
-          properties:
-            a:
-              type: integer
-              store: true
-              doc_values: true
-
-  - do:
-      index:
-        index: test
-        id: 1
-        body: {
-          "a": [ 3, 1, 4 ]
-        }
-
-  - do:
-      indices.refresh:
-        index: test
-
-  - do:
-      search:
-        body: { }
-  - match: { hits.total.value: 1 }
-
-  - do:
-      search:
-        index: test
-        search_pipeline: "my_pipeline"
-        body: { }
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._source: { "a": [3, 1, 4], "b": [1, 3, 4] } }
-
-  # Should also work with no search body specified
-  - do:
-      search:
-        index: test
-        search_pipeline: "my_pipeline"
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._source: { "a": [3, 1, 4], "b": [1, 3, 4] } }
-
-  # Pipeline with ignore_failure set to true
-  # Should return while catching error
-  - do:
-      search:
-        index: test
         search_pipeline: "my_pipeline_2"
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._source: { "a": [3, 1, 4] } }
-
-  # Pipeline with desc sort order
-  - do:
-      search:
+            "response_processors": [
+      search_pipeline.put:
+                  {
         index: test
+        index: test
+---
+  - match: { acknowledged: true }
+        id: "my_pipeline"
+              {
+  - do:
+          "_source": false,
         search_pipeline: "my_pipeline_3"
         body: { }
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._source: { "a": [3, 1, 4], "b": [4, 3, 1] } }
-
-  # No source, using stored_fields
+        body: {
   - do:
+            "description": "test pipeline with ignore failure true",
+          "_source": false,
+        body: { }
       search:
+        }
+  # Pipeline with ignore_failure set to true
+        index: test
+              }
+        index: test
+        body: >
+      indices.create:
+                    "field": "a",
+        body: >
+          }
+---
+                  {
+        body: >
+  - do:
+  - do:
+  - do:
+        index: test
+            "response_processors": [
+teardown:
+  - match: { hits.total.value: 1 }
+          }
+  - do:
+                  {
+      search:
+                  }
+        index: test
+  # Pipeline with desc sort order
+      search_pipeline.put:
+        body: {
+                "sort":
+  - do:
+          "a": [ 3, 1, 4 ]
+        body:
+              {
+            a:
+  - do:
+  - match: { hits.total.value: 1 }
+  # No source, using docvalue_fields
+        ignore: 404
+          properties:
+  - match: { hits.hits.0._source: { "a": [3, 1, 4], "b": [4, 3, 1] } }
+      search_pipeline.put:
+          }
+        index: test
         index: test
         search_pipeline: "my_pipeline"
-        body: {
-          "_source": false,
-          "stored_fields": [ "a" ]
         }
   - match: { hits.hits.0.fields: { "a": [3, 1, 4], "b": [1, 3, 4] } }
-
-  # No source, using docvalue_fields
-  - do:
-      search:
+              type: integer
+        id: "my_pipeline_2"
+        id: 1
         index: test
-        search_pipeline: "my_pipeline_3"
-        body: {
-          "_source": false,
+  - do:
+                  }
+      indices.put_mapping:
+  # Should also work with no search body specified
           "docvalue_fields": [ "a" ]
-        }
-  # a is stored sorted because docvalue_fields is pre-sorted to optimize aggregations
+                    "ignore_failure": true
+      search:
+              }
+      search:
+          {
+                    "field": "a",
+  - do:
   # this is poorly documented which makes it really hard to write "expected" values on tests
+  - match: { hits.hits.0._source: { "a": [3, 1, 4], "b": [1, 3, 4] } }
+        body: {
+  - do:
+      indices.refresh:
+  - match: { hits.total.value: 1 }
+      search_pipeline.delete:
+  - match: { hits.total.value: 1 }
+                "sort":
+        body: { }
+        index: test
+  - do:
+        }
+                    "order": "desc",
+      search:
+                    "field": "aa",
+              {
+        search_pipeline: "my_pipeline"
+        id: "my_pipeline_3"
+  - match: { hits.hits.0._source: { "a": [3, 1, 4], "b": [1, 3, 4] } }
+            ]
+                "sort":
+                  }
+            ]
+            "description": "test pipeline",
+  - do:
   - match: { hits.hits.0.fields: { "a": [1, 3, 4], "b": [4, 3, 1] } }
+          {
+          "stored_fields": [ "a" ]
+  # a is stored sorted because docvalue_fields is pre-sorted to optimize aggregations
+  - match: { hits.hits.0._source: { "a": [3, 1, 4] } }
+        search_pipeline: "my_pipeline"
+              store: true
+        search_pipeline: "my_pipeline_3"
+      index:
+  - match: { hits.total.value: 1 }
+  - match: { acknowledged: true }
+  - match: { acknowledged: true }
+      search:
+            "response_processors": [
+  # Should return while catching error
+  # No source, using stored_fields
+                    "target_field": "b"
+      search:
+"Test sort processor":
+              doc_values: true
+              }
+  - do:

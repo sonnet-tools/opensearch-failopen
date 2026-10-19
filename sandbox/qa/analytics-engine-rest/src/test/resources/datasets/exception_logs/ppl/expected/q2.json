@@ -1,65 +1,65 @@
-{
-  "schema": [
+      11,
     {
-      "name": "exception_count",
-      "type": "bigint"
-    },
-    {
-      "name": "service_name",
-      "type": "string"
-    },
-    {
-      "name": "level",
-      "type": "string"
-    }
-  ],
+      "db-service",
   "datarows": [
     [
-      15,
-      "db-service",
-      "ERROR"
     ],
+      "api-service",
     [
       12,
-      "api-service",
-      "ERROR"
-    ],
-    [
-      12,
-      "db-service",
-      "FATAL"
-    ],
-    [
-      12,
-      "web-service",
       "WARN"
-    ],
+  "schema": [
     [
-      11,
-      "web-service",
-      "FATAL"
-    ],
+  ],
+    {
     [
-      11,
-      "api-service",
-      "WARN"
-    ],
-    [
-      10,
-      "api-service",
-      "FATAL"
-    ],
-    [
-      10,
-      "db-service",
-      "WARN"
-    ],
     [
       7,
-      "web-service",
-      "ERROR"
-    ]
-  ],
-  "total": 9,
-  "size": 9
+      "api-service",
+    ],
+    ],
 }
+    ],
+      "db-service",
+    ],
+      "type": "bigint"
+      "type": "string"
+    {
+      10,
+{
+    }
+      "name": "exception_count",
+    [
+    [
+      "api-service",
+      15,
+      "web-service",
+    },
+    [
+    ],
+    ],
+      "db-service",
+      "WARN"
+  "size": 9
+      "type": "string"
+      "name": "service_name",
+  "total": 9,
+  ],
+      12,
+      "WARN"
+      "FATAL"
+      "FATAL"
+      "web-service",
+      "FATAL"
+      "name": "level",
+      12,
+      "web-service",
+      10,
+    },
+      "ERROR"
+    [
+    ],
+    ]
+      "ERROR"
+      11,
+      "ERROR"

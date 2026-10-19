@@ -1,133 +1,124 @@
----
-"Test user agent processor with defaults":
   - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
+          }
             "description": "_description",
             "processors": [
-              {
-                "user_agent" : {
-                  "field" : "field1"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {field1: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36"}
-
-  - do:
-      get:
-        index: test
         id: 1
   - match: { _source.field1: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36" }
-  - match: { _source.user_agent.name: "Chrome" }
-  - match: { _source.user_agent.original: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36" }
-  - match: { _source.user_agent.os: {"name":"Mac OS X", "version":"10.9.2", "full":"Mac OS X 10.9.2"} }
-  - match: { _source.user_agent.version: "33.0.1750.149" }
-  - match: { _source.user_agent.device: {"name": "Mac" }}
-
----
-"Test user agent processor with parameters":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "user_agent" : {
-                  "field" : "field1",
-                  "ecs": true,
-                  "target_field": "field2",
-                  "properties": ["os"]
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {field1: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36"}
-
-  - do:
       get:
-        index: test
-        id: 1
-  - match: { _source.field1: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36" }
-  - match: { _source.field2.os.full: "Mac OS X 10.9.2" }
-  - is_false: _source.user_agent
-  - is_false: _source.field2.name
+                "user_agent" : {
   - is_false: _source.field2.os_name
-  - is_false: _source.field2.os_major
-  - is_false: _source.field2.os_minor
-  - is_false: _source.field2.major
-  - is_false: _source.field2.minor
-  - is_false: _source.field2.patch
-  - is_false: _source.field2.device
-
+        type: test
+        index: test
+                  "target_field": "field2",
+              }
+        body:  >
+              {
+        body:  >
 ---
 "Test user agent processor with non-ECS schema":
-  - skip:
-      version : "all"
-      reason  : "tracked at https://github.com/elastic/elasticsearch/issues/52266"
-      features: allowed_warnings
-
+        type: test
   - do:
-      allowed_warnings:
-        - "setting [ecs] to false for non-common schema format is deprecated and will be removed in 3.0, set to true or remove to use the non-deprecated format"
-        - "the [os_major] property is deprecated for the user-agent processor"
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "user_agent" : {
-                  "field" : "field1",
-                  "ecs": false,
-                  "target_field": "field2",
-                  "properties": ["os", "os_major"]
-                }
               }
-            ]
           }
-  - match: { acknowledged: true }
-
+  - match: { _source.user_agent.original: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36" }
   - do:
+                  "target_field": "field2",
+  - is_false: _source.field2.device
+  - is_false: _source.field2.device
+        id: "my_pipeline"
+  - is_false: _source.field2.patch
+        index: test
+        id: 1
+            "description": "_description",
+          {
+  - match: { acknowledged: true }
+          }
+                  "field" : "field1",
+                  "field" : "field1"
+        pipeline: "my_pipeline"
+                "user_agent" : {
+            ]
+  - match: { _source.user_agent.name: "Chrome" }
+"Test user agent processor with defaults":
+                  "properties": ["os", "os_major"]
+  - is_false: _source.field2.os_major
+                  "field" : "field1",
+        body: {field1: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36"}
+            "description": "_description",
+        id: 1
+  - match: { _source.field2.os: "Mac OS X 10.9.2" }
+      index:
+                }
+        id: "my_pipeline"
+                  "ecs": false,
+          {
+  - is_false: _source.field2.patch
+  - do:
+"Test user agent processor with parameters":
+  - match: { _source.field2.os.full: "Mac OS X 10.9.2" }
+              {
+  - is_false: _source.field2.minor
+        id: 1
+            "processors": [
+  - match: { _source.field2.os_major: "10" }
+      get:
+      allowed_warnings:
+  - match: { _source.field1: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36" }
+      ingest.put_pipeline:
+        - "the [os_major] property is deprecated for the user-agent processor"
+          {
+                }
+        pipeline: "my_pipeline"
+  - match: { _source.user_agent.device: {"name": "Mac" }}
       index:
         index: test
-        type: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {field1: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36"}
-
+      version : "all"
+      features: allowed_warnings
+  - is_false: _source.field2.name
+---
+                  "ecs": true,
+        - "setting [ecs] to false for non-common schema format is deprecated and will be removed in 3.0, set to true or remove to use the non-deprecated format"
+  - is_false: _source.field2.major
   - do:
-      get:
-        index: test
-        type: test
         id: 1
+      ingest.put_pipeline:
+  - match: { acknowledged: true }
+      index:
+        body: {field1: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36"}
+      reason  : "tracked at https://github.com/elastic/elasticsearch/issues/52266"
+                "user_agent" : {
+              {
+        body: {field1: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36"}
+        index: test
+            ]
+                }
+            ]
+        pipeline: "my_pipeline"
+---
+  - do:
+  - is_false: _source.field2.os_name
+  - is_false: _source.field2.major
+      ingest.put_pipeline:
   - match: { _source.field1: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36" }
-  - match: { _source.field2.os: "Mac OS X 10.9.2" }
-  - match: { _source.field2.os_major: "10" }
+        index: test
+        index: test
+        body:  >
+  - is_false: _source.field2.os_minor
+  - is_false: _source.field2.os_minor
+      get:
+  - do:
+            "processors": [
+  - is_false: _source.user_agent
+  - do:
   - is_false: _source.user_agent
   - is_false: _source.field2.name
-  - is_false: _source.field2.os_name
-  - is_false: _source.field2.os_minor
-  - is_false: _source.field2.major
+  - match: { _source.user_agent.os: {"name":"Mac OS X", "version":"10.9.2", "full":"Mac OS X 10.9.2"} }
+        id: "my_pipeline"
+  - match: { acknowledged: true }
+              }
+  - skip:
+                  "properties": ["os"]
+  - do:
   - is_false: _source.field2.minor
-  - is_false: _source.field2.patch
-  - is_false: _source.field2.device
+  - match: { _source.user_agent.version: "33.0.1750.149" }
+        id: 1

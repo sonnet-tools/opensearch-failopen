@@ -1,34 +1,27 @@
----
-setup:
-
  - do:
-      indices.create:
-          index: test_1
-          body:
-            mappings:
+ - do:
               _source: { enabled: false }
-
- - do:
-      index:
-          index:   test_1
-          id:      1
-          body:    { foo: bar }
-
-
 ---
-"Missing document source with catch":
-
-  - do:
-      catch:   missing
+          body:
       get_source:
-        index: test_1
-        id:    1
-
----
-"Missing document source with ignore":
-
-  - do:
-      get_source:
-        index:  test_1
-        id:     1
         ignore: 404
+        index: test_1
+"Missing document source with catch":
+          id:      1
+---
+        id:     1
+        id:    1
+  - do:
+---
+          index:   test_1
+setup:
+  - do:
+      index:
+          index: test_1
+      indices.create:
+      catch:   missing
+        index:  test_1
+            mappings:
+"Missing document source with ignore":
+      get_source:
+          body:    { foo: bar }

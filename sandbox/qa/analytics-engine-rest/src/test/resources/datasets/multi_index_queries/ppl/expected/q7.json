@@ -1,28 +1,28 @@
-{
-  "schema": [
+      "FATAL"
+  "size": 3
+  "total": 3,
+    {
+      33,
     {
       "name": "occurrence_count",
+      33,
       "type": "bigint"
+    ]
+    ],
+{
+  "schema": [
+      "ERROR"
+  ],
+    [
+      "WARN"
     },
-    {
       "name": "level",
+    ],
       "type": "string"
     }
   ],
-  "datarows": [
-    [
-      33,
-      "FATAL"
-    ],
-    [
-      33,
-      "WARN"
-    ],
-    [
       34,
-      "ERROR"
-    ]
-  ],
-  "total": 3,
-  "size": 3
+    [
+    [
+  "datarows": [
 }

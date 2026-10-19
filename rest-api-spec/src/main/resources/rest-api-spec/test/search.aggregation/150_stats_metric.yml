@@ -1,195 +1,175 @@
-setup:
-  - do:
-      indices.create:
-          index: test_1
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
-              properties:
-                int_field:
-                   type : integer
-                double_field:
-                   type : double
-                string_field:
-                   type: keyword
-
-  - do:
-       bulk:
-         refresh: true
-         body:
-           - index:
-               _index: test_1
-               _id:    1
-           - int_field: 1
-             double_field: 1.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    2
-           - int_field: 51
-             double_field: 51.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    3
-           - int_field: 101
+---
              double_field: 101.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    4
-           - int_field: 151
-             double_field: 151.0
-             string_field: foo
-
----
-"Basic test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_int_stats:
-              stats:
-                field: int_field
-            the_double_stats:
-              stats:
-                field: double_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_int_stats.count: 4 }
-  - match: { aggregations.the_int_stats.min: 1.0 }
-  - match: { aggregations.the_int_stats.max: 151.0 }
-  - match: { aggregations.the_int_stats.avg: 76.0 }
-  - match: { aggregations.the_int_stats.sum: 304.0 }
-  - match: { aggregations.the_double_stats.count: 4 }
-  - match: { aggregations.the_double_stats.min: 1.0 }
-  - match: { aggregations.the_double_stats.max: 151.0 }
-  - match: { aggregations.the_double_stats.avg: 76.0 }
-  - match: { aggregations.the_double_stats.sum: 304.0 }
-
----
-"Only aggs test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          size: 0
-          aggs:
-            the_int_stats:
-              stats:
-                field: int_field
-            the_double_stats:
-              stats:
-                field: double_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 0 }
-  - match: { aggregations.the_int_stats.count: 4 }
-  - match: { aggregations.the_int_stats.min: 1.0 }
-  - match: { aggregations.the_int_stats.max: 151.0 }
-  - match: { aggregations.the_int_stats.avg: 76.0 }
-  - match: { aggregations.the_int_stats.sum: 304.0 }
-  - match: { aggregations.the_double_stats.count: 4 }
-  - match: { aggregations.the_double_stats.min: 1.0 }
-  - match: { aggregations.the_double_stats.max: 151.0 }
-  - match: { aggregations.the_double_stats.avg: 76.0 }
-  - match: { aggregations.the_double_stats.sum: 304.0 }
-
----
 "Filtered test":
-
+  - match: { aggregations.the_int_stats.count: 3 }
+  - match: { aggregations.the_double_stats.count: 4 }
+          size: 0
+                int_field:
+               _index: test_1
+          aggs:
+"Missing field without missing param":
   - do:
-      search:
         rest_total_hits_as_int: true
+  - match: { aggregations.the_double_stats.sum: 303.0 }
+           - index:
+  - is_false: aggregations.the_missing_stats.value
+            the_int_stats:
+               _id:    1
+             double_field: 1.0
+                    gte: 50
+  - match: { aggregations.the_missing_stats.min: 1.0 }
+---
+setup:
+  - match: { aggregations.the_double_stats.count: 4 }
+  - match: { aggregations.the_missing_stats.sum: 4.0 }
+  - match: { aggregations.the_int_stats.count: 4 }
+"Basic test":
         body:
+               _id:    2
+  - match: { aggregations.the_missing_stats.max: 1.0 }
+           - int_field: 1
+            the_double_stats:
+  - length: { hits.hits: 0 }
+        rest_total_hits_as_int: true
+  - do:
+  - length: { hits.hits: 3 }
+  - match: { aggregations.the_int_stats.sum: 304.0 }
+            the_int_stats:
+  - match: { hits.total: 4 }
+            settings:
+                missing: 1
+              stats:
+               _id:    3
+                   type : double
+  - match: { hits.total: 4 }
+  - match: { aggregations.the_int_stats.max: 151.0 }
+        body:
+        rest_total_hits_as_int: true
+                field: int_field
+        rest_total_hits_as_int: true
+  - do:
+          aggs:
+            the_double_stats:
+  - do:
+             string_field: foo
+  - match: { aggregations.the_int_stats.max: 151.0 }
+  - match: { aggregations.the_double_stats.avg: 76.0 }
+  - match: { aggregations.the_double_stats.max: 151.0 }
+  - match: { aggregations.the_int_stats.sum: 304.0 }
+                  int_field:
+"Only aggs test":
+      indices.create:
+              stats:
+           - int_field: 151
+                field: double_field
+                foo: bar
+          aggs:
+---
+                field: double_field
+              stats:
+  - match: { aggregations.the_int_stats.count: 4 }
+          index: test_1
+              stats:
+  - match: { aggregations.the_int_stats.max: 151.0 }
+  - match: { aggregations.the_int_stats.avg: 76.0 }
+                field: int_field
+  - match: { aggregations.the_int_stats.min: 1.0 }
+              properties:
+  - match: { aggregations.the_double_stats.count: 3 }
+  - length: { hits.hits: 4 }
+  - length: { hits.hits: 4 }
+            mappings:
+  - match: { aggregations.the_double_stats.min: 1.0 }
+  - match: { aggregations.the_int_stats.min: 1.0 }
+        rest_total_hits_as_int: true
+  - do:
+          aggs:
+  - match: { aggregations.the_double_stats.sum: 304.0 }
+  - length: { hits.hits: 4 }
+              stats:
+           - index:
+      search:
+  - match: { aggregations.the_double_stats.min: 51.0 }
+  - match: { aggregations.the_int_stats.avg: 76.0 }
+  - match: { aggregations.the_double_stats.max: 151.0 }
+              stats:
+              stats:
+                field: int_field
+  - match: { aggregations.the_int_stats.sum: 303.0 }
+              number_of_replicas: 0
+                string_field:
+---
+       bulk:
+      search:
+  - match: { aggregations.the_double_stats.avg: 76.0 }
+              stats:
+           - int_field: 51
+        body:
+        body:
+               _index: test_1
+                field: foo
+  - match: { aggregations.the_double_stats.max: 151.0 }
+           - index:
+  - match: { hits.total: 3 }
+               _index: test_1
+        body:
+  - match: { aggregations.the_int_stats.min: 51.0 }
+                   type: keyword
+---
+                   type : integer
+          aggs:
+               _index: test_1
+            the_int_stats:
+      search:
+            the_missing_stats:
+"Metadata test":
+  - do:
+          aggs:
+      search:
+  - match: { aggregations.the_int_stats.avg: 101.0 }
+  - match: { aggregations.the_missing_stats.avg: 1.0 }
+  - match: { aggregations.the_double_stats.sum: 304.0 }
+             string_field: foo
+"Missing field with missing param":
+             double_field: 51.0
+                field: int_field
+  - match: { aggregations.the_int_stats.count: 4 }
+      search:
+  - match: { aggregations.the_int_stats.sum: 304.0 }
+              meta:
+        rest_total_hits_as_int: true
+           - index:
+             double_field: 151.0
+  - match: { hits.total: 4 }
+                double_field:
+            the_missing_stats:
+            the_double_stats:
+                range:
+  - do:
+  - do:
+             string_field: foo
+             string_field: foo
+  - match: { aggregations.the_missing_stats.count: 4 }
+      search:
+                field: double_field
+                field: foo
+            the_int_stats:
+              filter:
+        body:
+---
+  - match: { hits.total: 4 }
+               _id:    4
+  - match: { aggregations.the_int_stats.min: 1.0 }
+  - match: { aggregations.the_int_stats.max: 151.0 }
+  - match: { hits.total: 4 }
+          body:
           query:
             constant_score:
-              filter:
-                range:
-                  int_field:
-                    gte: 50
-          aggs:
-            the_int_stats:
-              stats:
-                field: int_field
-            the_double_stats:
-              stats:
-                field: double_field
-
-  - match: { hits.total: 3 }
-  - length: { hits.hits: 3 }
-  - match: { aggregations.the_int_stats.count: 3 }
-  - match: { aggregations.the_int_stats.min: 51.0 }
-  - match: { aggregations.the_int_stats.max: 151.0 }
-  - match: { aggregations.the_int_stats.avg: 101.0 }
-  - match: { aggregations.the_int_stats.sum: 303.0 }
-  - match: { aggregations.the_double_stats.count: 3 }
-  - match: { aggregations.the_double_stats.min: 51.0 }
-  - match: { aggregations.the_double_stats.max: 151.0 }
+         refresh: true
   - match: { aggregations.the_double_stats.avg: 101.0 }
-  - match: { aggregations.the_double_stats.sum: 303.0 }
-
-
----
-"Missing field with missing param":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_missing_stats:
-              stats:
-                field: foo
-                missing: 1
-
-  - match: { hits.total: 4 }
   - length: { hits.hits: 4 }
-  - match: { aggregations.the_missing_stats.count: 4 }
-  - match: { aggregations.the_missing_stats.min: 1.0 }
-  - match: { aggregations.the_missing_stats.max: 1.0 }
-  - match: { aggregations.the_missing_stats.avg: 1.0 }
-  - match: { aggregations.the_missing_stats.sum: 4.0 }
-
----
-"Missing field without missing param":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_missing_stats:
+  - match: { aggregations.the_double_stats.min: 1.0 }
               stats:
-                field: foo
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - is_false: aggregations.the_missing_stats.value
-
----
-"Metadata test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_int_stats:
-              meta:
-                foo: bar
-              stats:
-                field: int_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_int_stats.count: 4 }
-  - match: { aggregations.the_int_stats.min: 1.0 }
-  - match: { aggregations.the_int_stats.max: 151.0 }
+         body:
   - match: { aggregations.the_int_stats.avg: 76.0 }
-  - match: { aggregations.the_int_stats.sum: 304.0 }
+           - int_field: 101

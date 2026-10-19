@@ -1,37 +1,37 @@
-{
-   "index":{
-      "analysis":{
-         "filter":{
-            "cjk_all_flags":{
-               "type":"cjk_bigram",
-               "output_unigrams":true,
-               "ignored_scripts":[
+               ]
                   "han",
-                  "hiragana",
-                  "katakana",
-                  "hangul",
-                  "foobar"
-               ]
-            },
-            "cjk_han_only":{
-               "type":"cjk_bigram",
                "output_unigrams":false,
-               "ignored_scripts":[
+{
+            }
+                  "hiragana"
                   "hiragana"
                ]
-            },
-            "cjk_han_unigram_only":{
+}
+               "ignored_scripts":[
                "type":"cjk_bigram",
-               "output_unigrams":true,
-               "ignored_scripts":[
-                  "hiragana"
-               ]
             },
             "cjk_no_flags":{
-               "type":"cjk_bigram",
+                  "foobar"
+                  "hiragana",
+               "ignored_scripts":[
                "output_unigrams":false
-            }
-         }
-      }
+               "ignored_scripts":[
+               "output_unigrams":true,
+               "type":"cjk_bigram",
+               "type":"cjk_bigram",
+            "cjk_all_flags":{
    }
-}
+                  "katakana",
+   "index":{
+            },
+                  "hangul",
+            },
+         }
+               "type":"cjk_bigram",
+               "output_unigrams":true,
+               ]
+      "analysis":{
+            "cjk_han_unigram_only":{
+            "cjk_han_only":{
+         "filter":{
+      }

@@ -1,59 +1,49 @@
+          settings:
+  - match: { snapshot.snapshot: test_snapshot }
+  - do:
 ---
-setup:
-
-  - do:
-      snapshot.create_repository:
+  - gt: { snapshot.version_id: 0}
         repository: test_repo_restore_1
-        body:
-          type: fs
-          settings:
+  - is_true: snapshot.version
+        wait_for_status: green
             location: "test_repo_restore_1_loc"
-
-  - do:
-      indices.create:
+      indices.close:
+        repository: test_repo_restore_1
+        wait_for_completion: true
         index: test_index
+          type: fs
+        index: test_index
+        snapshot: test_snapshot
+      indices.create:
+        wait_for_completion: true
+  - match: { snapshot.shards.failed : 0 }
+"Create a snapshot and then restore it":
+  - match: { test_index.shards.0.index.files.recovered: 1}
         body:
+  - do:
+        snapshot: test_snapshot
+  - do:
+  - match: { test_index.shards.0.index.files.reused: 0}
+        repository: test_repo_restore_1
+      snapshot.restore:
+  - do:
+  - match: { snapshot.shards.successful: 1 }
+  - match: { test_index.shards.0.stage: DONE }
           settings:
-            number_of_shards:   1
-            number_of_replicas: 0
-
+setup:
+---
   - do:
       cluster.health:
-        wait_for_status: green
-
----
-"Create a snapshot and then restore it":
-
-  - do:
-      snapshot.create:
-        repository: test_repo_restore_1
-        snapshot: test_snapshot
-        wait_for_completion: true
-
-  - match: { snapshot.snapshot: test_snapshot }
-  - match: { snapshot.state : SUCCESS }
-  - match: { snapshot.shards.successful: 1 }
-  - match: { snapshot.shards.failed : 0 }
-  - is_true: snapshot.version
-  - gt: { snapshot.version_id: 0}
-
-  - do:
-      indices.close:
-        index : test_index
-
-  - do:
-      snapshot.restore:
-        repository: test_repo_restore_1
-        snapshot: test_snapshot
-        wait_for_completion: true
-
+  - match: { test_index.shards.0.index.size.reused_in_bytes: 0}
+  - match: { test_index.shards.0.type: SNAPSHOT }
   - do:
       indices.recovery:
-        index: test_index
-
-  - match: { test_index.shards.0.type: SNAPSHOT }
-  - match: { test_index.shards.0.stage: DONE }
-  - match: { test_index.shards.0.index.files.recovered: 1}
+      snapshot.create:
+        index : test_index
+        body:
+  - match: { snapshot.state : SUCCESS }
+  - do:
+            number_of_shards:   1
   - gt:    { test_index.shards.0.index.size.recovered_in_bytes: 0}
-  - match: { test_index.shards.0.index.files.reused: 0}
-  - match: { test_index.shards.0.index.size.reused_in_bytes: 0}
+      snapshot.create_repository:
+            number_of_replicas: 0

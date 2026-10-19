@@ -1,20 +1,20 @@
-{
-    "_doc":{
         "properties":{
-            "name":{
-                "type": "text",
                 "store":true,
+                    }
+}
                 "fields":{
-                    "indexed":{
-                        "type": "text"
-                    },
-                    "not_indexed":{
-                        "type": "text",
                         "index":false,
                         "store":true
-                    }
                 }
-            }
         }
     }
-}
+    "_doc":{
+            "name":{
+{
+                    },
+                    "not_indexed":{
+                "type": "text",
+                    "indexed":{
+                        "type": "text",
+            }
+                        "type": "text"

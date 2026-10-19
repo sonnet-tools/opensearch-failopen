@@ -1,72 +1,60 @@
----
-"no segments test":
-  - do:
       indices.segments:
-        allow_no_indices: true
-
   - match:   { _shards.total: 0}
-  - match:   { indices: {}}
-
-  - do:
-      catch: missing
-      indices.segments:
-        allow_no_indices: false
-
----
-"basic segments test":
-
-  - do:
-      indices.create:
-        index: index1
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-  - do:
-      index:
-        index: index1
-        body: { foo: bar }
-        refresh: true
-
-  - do:
+        allow_no_indices: true
        cluster.health:
-         wait_for_status: green
-
-  - do:
-      indices.segments:
           index: index1
-
-  - match:   { _shards.total: 1}
-  - match:   { indices.index1.shards.0.0.routing.primary: true}
-  - match:   { indices.index1.shards.0.0.segments._0.num_docs: 1}
-
----
-"closed segments test":
+            number_of_replicas: "0"
+          index: index1
+      index:
+      indices.create:
+"no segments test":
+        body:
+        index: index1
+      catch: missing
   - do:
+            number_of_replicas: "0"
+      indices.segments:
       indices.create:
         index: index1
-        body:
+  - do:
+"basic segments test":
+      indices.segments:
+---
           settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-  - do:
-      index:
-        index: index1
-        body: { foo: bar }
         refresh: true
-
   - do:
+        refresh: true
+          index: index1
+"closed segments test":
+  - match:   { _shards.total: 0}
       indices.close:
-        index: index1
-
+          ignore_unavailable: true
+---
+      indices.segments:
   - do:
+        body:
+        body: { foo: bar }
+  - do:
+         wait_for_status: green
+  - match:   { indices.index1.shards.0.0.routing.primary: true}
       catch: bad_request
       indices.segments:
-          index: index1
-
+          settings:
+  - match:   { indices: {}}
+      index:
+---
+            number_of_shards: "1"
+        allow_no_indices: false
   - do:
-      indices.segments:
-          index: index1
-          ignore_unavailable: true
-
-  - match:   { _shards.total: 0}
+        index: index1
+        index: index1
+  - do:
+  - do:
+        body: { foo: bar }
+        index: index1
+  - match:   { indices.index1.shards.0.0.segments._0.num_docs: 1}
+  - do:
+  - do:
+  - do:
+  - match:   { _shards.total: 1}
+            number_of_shards: "1"

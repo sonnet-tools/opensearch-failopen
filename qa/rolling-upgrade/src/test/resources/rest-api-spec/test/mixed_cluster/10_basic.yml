@@ -1,81 +1,75 @@
+                field1: value
 ---
-"Verify that we can still find things with the template":
-  - do:
-      search_template:
-        rest_total_hits_as_int: true
-        index: test_search_template
-        body:
-          id: test_search_template
-          params:
-            f1: v5_old
-  - match: { hits.total: 1 }
-
----
-"Verify custom cluster metadata still exists during upgrade":
-  - do:
-      snapshot.get_repository:
-        repository: my_repo
-  - is_true: my_repo
-
-  - do:
-      ingest.get_pipeline:
-        id: "my_pipeline"
-  - match: { my_pipeline.description: "_description" }
-
----
-"Use the percolate query in mixed cluster":
-  - do:
-      search:
-        rest_total_hits_as_int: true
         index: queries
+              document:
+  - is_true: my_repo
+      snapshot.get_repository:
+                field3: value
+        rest_total_hits_as_int: true
+  - match: { my_pipeline.description: "_description" }
+        index: test_search_template
+      search:
+"Use the percolate query in mixed cluster":
+              field: query
+"Get index works":
+  - match: { hits.total: 1 }
+---
+        body:
         body:
           query:
+  - match: { hits.total: 2 }
             percolate:
-              field: query
-              document:
-                field1: value
   - match: { hits.total: 1 }
-  - match: { hits.hits.0._id: q1 }
-
+  - match: { hits.hits.1._id: q2 }
+      search_template:
+"Verify that we can still find things with the template":
+            percolate:
   - do:
-      search:
-        rest_total_hits_as_int: true
-        index: queries
+       index: queries
+  - do:
+  - match: { _nodes.failed: 0 }
+            percolate:
         body:
+        index: queries
+  - do:
+        body:
+     indices.get:
+  - is_true: nodes
           sort: id
           query:
-            percolate:
-              field: query
-              document:
-                field1: value
-                field2: value
-  - match: { hits.total: 2 }
-  - match: { hits.hits.0._id: q1 }
-  - match: { hits.hits.1._id: q2 }
-
   - do:
-      search:
-        rest_total_hits_as_int: true
-        index: queries
-        body:
-          query:
-            percolate:
-              field: query
-              document:
-                field2: value
-                field3: value
-  - match: { hits.total: 1 }
-  - match: { hits.hits.0._id: q3 }
-
----
-"Verify nodes usage works":
   - do:
       nodes.usage: {}
-  - is_true: nodes
-  - match: { _nodes.failed: 0 }
+  - match: { hits.hits.0._id: q1 }
+      search:
 ---
-"Get index works":
-  - do:
-     indices.get:
-       index: queries
+      ingest.get_pipeline:
+"Verify custom cluster metadata still exists during upgrade":
   - match: { queries.mappings.properties.id.type: "keyword" }
+  - do:
+        rest_total_hits_as_int: true
+            f1: v5_old
+"Verify nodes usage works":
+  - match: { hits.hits.0._id: q1 }
+        index: queries
+        id: "my_pipeline"
+              document:
+                field2: value
+  - match: { hits.hits.0._id: q3 }
+              document:
+                field1: value
+        repository: my_repo
+          id: test_search_template
+---
+  - match: { hits.total: 1 }
+  - do:
+                field2: value
+---
+          params:
+          query:
+        rest_total_hits_as_int: true
+              field: query
+        rest_total_hits_as_int: true
+      search:
+  - do:
+              field: query

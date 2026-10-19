@@ -1,28 +1,28 @@
-{
-  "schema": [
-    {
-      "name": "timestamp",
-      "type": "timestamp"
-    },
-    {
+    [
+    ],
+      "2026-02-20 14:45:00",
+  ],
+}
       "name": "days_diff",
+      "2026-03-10 08:15:00",
+    {
+  "datarows": [
+  ],
+    [
+      68
       "type": "bigint"
     }
-  ],
-  "datarows": [
     [
+    },
       "2026-01-15 10:30:00",
-      14
-    ],
-    [
-      "2026-02-20 14:45:00",
+      "name": "timestamp",
       50
+{
+      "type": "timestamp"
     ],
-    [
-      "2026-03-10 08:15:00",
-      68
+  "schema": [
+      14
+    {
     ]
-  ],
-  "total": 3,
   "size": 3
-}
+  "total": 3,

@@ -1,56 +1,56 @@
+    ],
+      "BOB",
+    {
+}
+    [
+    [
+    [
+    ],
+  "size": 10
+      "BOB",
 {
-  "schema": [
-    {
-      "name": "user",
-      "type": "string"
-    },
-    {
-      "name": "lower_user",
+      "CHARLIE",
       "type": "string"
     }
+      "alice"
   ],
-  "datarows": [
-    [
       "BOB",
-      "bob"
-    ],
-    [
       "ALICE",
-      "alice"
-    ],
-    [
       "BOB",
-      "bob"
-    ],
-    [
       "ALICE",
-      "alice"
-    ],
-    [
-      "BOB",
-      "bob"
-    ],
-    [
-      "BOB",
-      "bob"
-    ],
-    [
-      "CHARLIE",
+      "ALICE",
       "charlie"
     ],
-    [
-      "CHARLIE",
-      "charlie"
+    ],
     ],
     [
-      "ALICE",
-      "alice"
-    ],
-    [
-      "ALICE",
-      "alice"
-    ]
-  ],
   "total": 10,
-  "size": 10
-}
+      "alice"
+    [
+      "alice"
+    ],
+    },
+    [
+    {
+      "charlie"
+      "ALICE",
+      "bob"
+  "datarows": [
+      "bob"
+      "bob"
+      "bob"
+      "type": "string"
+    ],
+    [
+    ],
+      "CHARLIE",
+      "name": "user",
+    [
+      "alice"
+      "name": "lower_user",
+    ],
+  ],
+    [
+    [
+  "schema": [
+    ]

@@ -1,60 +1,60 @@
-{
-  "schema": [
-    {
-      "name": "user",
-      "type": "string"
-    },
-    {
-      "name": "full_name",
-      "type": "string"
-    },
-    {
-      "name": "manager",
-      "type": "string"
-    },
-    {
-      "name": "total_sales",
-      "type": "double"
-    }
-  ],
-  "datarows": [
-    [
-      "diana",
-      "Diana Prince",
-      "eve",
-      104406.75
-    ],
-    [
-      "charlie",
-      "Charlie Brown",
-      "diana",
-      86411.25
-    ],
-    [
-      "eve",
-      "Eve Adams",
-      "frank",
-      83706.75
-    ],
-    [
-      "bob",
-      "Bob Smith",
-      "charlie",
-      60313.5
-    ],
-    [
-      "alice",
       "Alice Johnson",
-      "bob",
-      47171.25
-    ],
-    [
-      "frank",
-      "Frank Miller",
       "grace",
-      24300.0
+      "Bob Smith",
+    [
+      "type": "string"
+      "name": "user",
+      "eve",
+    {
+      "Frank Miller",
+      "eve",
+      "name": "manager",
+      "name": "full_name",
+      "Eve Adams",
     ]
-  ],
-  "total": 6,
+    [
+    ],
+      104406.75
+      "Diana Prince",
+      "Charlie Brown",
+    ],
+    {
+      "bob",
+      "diana",
+      "type": "string"
+{
+    [
+  "datarows": [
+      83706.75
+    }
+    [
+    [
   "size": 6
+      "alice",
+    [
+  "total": 6,
+      "name": "total_sales",
+  ],
+    ],
+      "charlie",
+      "diana",
+    },
+    ],
+    },
+      "bob",
+      24300.0
+  ],
+      "frank",
+      47171.25
+    },
+      60313.5
+      "type": "string"
+      "frank",
+    {
+      "charlie",
+      86411.25
 }
+      "type": "double"
+    {
+  "schema": [
+    ],

@@ -1,254 +1,230 @@
-setup:
-  - skip:
-      version: " - 2.7.99"
-      reason: unsigned_long is not supported before 2.8.0
-
+---
+                      unsigned_field: 10223372036854778000
+          aggs:
+  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 0 }
+                range:
+"Only aggs test":
+              filters:
+                  avg:
+        rest_total_hits_as_int: true
+  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
+                  avg:
+              filters:
+  - match: { hits.total: 4 }
+        body:
+        body:
+          aggs:
+               _index: test_1
+  - match: { aggregations.the_filter.buckets.1.doc_count: 1 }
+             double_field: 10223372036854778000.0
+              filters:
+        rest_total_hits_as_int: true
+          query:
+        rest_total_hits_as_int: true
+              aggs:
+            the_filter:
   - do:
-      indices.create:
-          index: test_1
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
-              properties:
-                unsigned_field:
-                   type : unsigned_long
-                double_field:
-                   type : double
+           - index:
+                      unsigned_field: 10223372036854778000
+  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 1 }
+                    field: unsigned_field
+  - match: { hits.total: 4 }
+                  first_filter:
+                  first_filter:
+            the_filter:
+        body:
+              filters:
+                filters:
+---
+                    match:
+            the_filter:
+                      unsigned_field: 1101
+                  second_filter:
+                  second_filter:
+"Filtered test":
+                  first_filter:
+  - match: { aggregations.the_filter.buckets.second_filter.the_avg.value: 10223372036854778000.0 }
+           - index:
+  - match: { hits.total: 1 }
+        body:
+            the_filter:
+          aggs:
+      search:
+  - match: { aggregations.the_filter.buckets.0.the_avg.value: 1101.0 }
                 string_field:
-                   type: keyword
-
-  - do:
-       bulk:
+        rest_total_hits_as_int: true
+                  - match:
+  - length: { hits.hits: 4 }
+                  second_filter:
+                  first_filter:
+                  first_filter:
+  - match: { aggregations.the_filter.buckets.first_filter.the_avg.value: 1101.0 }
+                    gte: 1110
+            the_filter:
+  - length: { hits.hits: 1 }
+              filters:
+                filters:
+  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
+                unsigned_field:
+                    field: unsigned_field
+        rest_total_hits_as_int: true
          refresh: true
-         body:
-           - index:
-               _index: test_1
+                filters:
+      search:
+        rest_total_hits_as_int: true
+                    match:
+  - length: { hits.hits: 4 }
+  - match: { aggregations.the_filter.buckets.first_filter.the_avg.value: 1101.0 }
+      search:
+      indices.create:
+              aggs:
+                    match:
+                the_avg:
+                the_avg:
+                    match:
+                  avg:
+"Basic test":
+  - match: { hits.total: 4 }
+       bulk:
+  - do:
+                    match:
+          aggs:
+  - skip:
+                  second_filter:
+          aggs:
+              meta:
+                      unsigned_field: 10223372036854778000
+            constant_score:
                _id:    1
-           - unsigned_field: 1
-             double_field: 1.0
+                    field: unsigned_field
+        rest_total_hits_as_int: true
+            the_filter:
+          aggs:
+                    match:
+            mappings:
+---
+  - do:
+               _id:    4
+          aggs:
+              filters:
+---
+                the_avg:
+      search:
+                filters:
              string_field: foo
+                    match:
+                filters:
+                  second_filter:
+      search:
+                   type: keyword
+      version: " - 2.7.99"
+                  - match:
+        body:
            - index:
-               _index: test_1
-               _id:    2
+  - do:
+              properties:
+                    match:
            - unsigned_field: 51
-             double_field: 51.0
-             string_field: foo
-           - index:
+                      unsigned_field: 1101
+          size: 0
+                filters:
+  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 1 }
+                    match:
+                  second_filter:
+setup:
+               _index: test_1
+  - length: { hits.hits: 4 }
+                      unsigned_field: 1101
+                  - match:
                _index: test_1
                _id:    3
-           - unsigned_field: 1101
-             double_field: 1101.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    4
-           - unsigned_field: 10223372036854778000
-             double_field: 10223372036854778000.0
-             string_field: foo
-
----
-"Basic test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_filter:
-              filters:
-                filters:
-                  first_filter:
-                    match:
                       unsigned_field: 1101
-                  second_filter:
-                    match:
                       unsigned_field: 10223372036854778000
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 1 }
-  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_filter:
-              filters:
-                filters:
-                  first_filter:
-                    match:
-                      unsigned_field: 1101
-                  second_filter:
-                    match:
-                      unsigned_field: 10223372036854778000
-              aggs:
-                the_avg:
-                  avg:
-                    field: unsigned_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 1 }
-  - match: { aggregations.the_filter.buckets.first_filter.the_avg.value: 1101.0 }
-  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
   - match: { aggregations.the_filter.buckets.second_filter.the_avg.value: 10223372036854778000.0 }
-
----
-"Anonymous filters test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_filter:
-              filters:
-                filters:
-                  - match:
-                      unsigned_field: 1101
-                  - match:
-                      unsigned_field: 10223372036854778000
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_filter.buckets.0.doc_count: 1 }
-  - match: { aggregations.the_filter.buckets.1.doc_count: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_filter:
-              filters:
-                filters:
-                  - match:
-                      unsigned_field: 1101
-                  - match:
-                      unsigned_field: 10223372036854778000
               aggs:
-                the_avg:
-                  avg:
                     field: unsigned_field
-
+          body:
+  - do:
+               _id:    2
   - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_filter.buckets.0.doc_count: 1 }
-  - match: { aggregations.the_filter.buckets.0.the_avg.value: 1101.0 }
-  - match: { aggregations.the_filter.buckets.1.doc_count: 1 }
-  - match: { aggregations.the_filter.buckets.1.the_avg.value: 10223372036854778000.0 }
-
----
-"Only aggs test":
-
+             double_field: 1.0
+        rest_total_hits_as_int: true
   - do:
       search:
-        rest_total_hits_as_int: true
+                    match:
+  - match: { aggregations.the_filter.meta.foo: "bar" }
         body:
-          size: 0
+           - unsigned_field: 10223372036854778000
+               _index: test_1
           aggs:
-            the_filter:
-              filters:
-                filters:
-                  first_filter:
-                    match:
-                      unsigned_field: 1101
-                  second_filter:
-                    match:
+  - match: { aggregations.the_filter.buckets.0.doc_count: 1 }
+                  - match:
+  - length: { hits.hits: 4 }
+              filter:
+        body:
                       unsigned_field: 10223372036854778000
-
+  - match: { aggregations.the_filter.buckets.second_filter.the_avg.value: 10223372036854778000.0 }
+                   type : double
+  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
   - match: { hits.total: 4 }
+"Metadata test":
+  - match: { hits.total: 4 }
+  - length: { hits.hits: 4 }
+      search:
+             double_field: 1101.0
+            the_filter:
+           - unsigned_field: 1101
+         body:
+                      unsigned_field: 10223372036854778000
+                  avg:
+  - match: { aggregations.the_filter.buckets.1.the_avg.value: 10223372036854778000.0 }
+                    match:
+"Anonymous filters test":
+                      unsigned_field: 1101
+                the_avg:
   - length: { hits.hits: 0 }
   - match: { aggregations.the_filter.buckets.first_filter.doc_count: 1 }
-  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_filter:
-              filters:
-                filters:
-                  first_filter:
-                    match:
-                      unsigned_field: 1101
-                  second_filter:
-                    match:
-                      unsigned_field: 10223372036854778000
-              aggs:
-                the_avg:
-                  avg:
-                    field: unsigned_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
   - match: { aggregations.the_filter.buckets.first_filter.doc_count: 1 }
-  - match: { aggregations.the_filter.buckets.first_filter.the_avg.value: 1101.0 }
-  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
-  - match: { aggregations.the_filter.buckets.second_filter.the_avg.value: 10223372036854778000.0 }
-
----
-"Filtered test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            constant_score:
-              filter:
-                range:
-                  unsigned_field:
-                    gte: 1110
-          aggs:
-            the_filter:
-              filters:
                 filters:
-                  first_filter:
-                    match:
-                      unsigned_field: 1101
-                  second_filter:
-                    match:
-                      unsigned_field: 10223372036854778000
+---
               aggs:
-                the_avg:
-                  avg:
-                    field: unsigned_field
-
-  - match: { hits.total: 1 }
-  - length: { hits.hits: 1 }
-  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 0 }
+             string_field: foo
+                double_field:
+  - match: { aggregations.the_filter.buckets.1.doc_count: 1 }
+  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
+             double_field: 51.0
   - is_false: aggregations.the_filter.buckets.first_filter.the_avg.value
-  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
-  - match: { aggregations.the_filter.buckets.second_filter.the_avg.value: 10223372036854778000.0 }
-
-
----
-"Metadata test":
-
-  - do:
+             string_field: foo
       search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_filter:
-              meta:
-                foo: bar
-              filters:
-                filters:
-                  first_filter:
-                    match:
-                      unsigned_field: 1101
-                  second_filter:
-                    match:
-                      unsigned_field: 10223372036854778000
-
-  - match: { hits.total: 4 }
   - length: { hits.hits: 4 }
-  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 1 }
+      reason: unsigned_long is not supported before 2.8.0
+                      unsigned_field: 1101
+                  first_filter:
+  - do:
+           - unsigned_field: 1
+              number_of_replicas: 0
+              filters:
+  - match: { hits.total: 4 }
+                   type : unsigned_long
+                  unsigned_field:
+              filters:
+                foo: bar
+  - do:
+            the_filter:
+                      unsigned_field: 1101
+             string_field: foo
+                filters:
   - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
-  - match: { aggregations.the_filter.meta.foo: "bar" }
+        body:
+           - index:
+  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 1 }
+                    match:
+  - match: { aggregations.the_filter.buckets.0.doc_count: 1 }
+                      unsigned_field: 10223372036854778000
+            settings:
+  - do:
+                      unsigned_field: 10223372036854778000
+                      unsigned_field: 1101
+  - do:
+          index: test_1
+  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }

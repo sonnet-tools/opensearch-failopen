@@ -1,18 +1,18 @@
-{
-  "from": 0,
   "size": 0,
-  "timeout": "1m",
-  "query": {
-    "exists": {
-      "field": "SearchPhrase",
-      "boost": 1.0
-    }
-  },
-  "aggregations": {
     "dc(SearchPhrase)": {
-      "cardinality": {
-        "field": "SearchPhrase"
+  "query": {
+  "timeout": "1m",
+}
+{
+    }
       }
     }
+    "exists": {
+  "from": 0,
+  "aggregations": {
+      "cardinality": {
+        "field": "SearchPhrase"
+      "field": "SearchPhrase",
+  },
+      "boost": 1.0
   }
-}

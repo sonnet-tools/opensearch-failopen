@@ -1,54 +1,47 @@
-# Integration tests for HDFS Repository plugin
-#
-# Tests creating a repository, then deleting it and creating it again.
-#
-"HDFS Delete Repository":
-    # Create repository
     - do:
-        snapshot.create_repository:
+#
+                principal: "opensearch@BUILD.OPENSEARCH.ORG"
+          repository: test_repo_hdfs_1
           repository: test_repo_hdfs_1
           body:
-            type: hdfs
-            settings:
-              uri: "hdfs://localhost:9998"
-              path: "/user/opensearch/foo/bar"
               security:
-                principal: "opensearch@BUILD.OPENSEARCH.ORG"
-
-    # Get repository
-    - do:
-        snapshot.get_repository:
-          repository: test_repo_hdfs_1
-
-    - is_true: test_repo_hdfs_1
-    - match: {test_repo_hdfs_1.settings.path : "/user/opensearch/foo/bar"}
-
-    # Delete repository
-    - do:
-        snapshot.delete_repository:
-          repository: test_repo_hdfs_1
-
-    # Get repository: It should be gone
-    - do:
-        catch:    /repository_missing_exception/
-        snapshot.get_repository:
-          repository: test_repo_hdfs_1
-
-    # Create it again
-    - do:
-        snapshot.create_repository:
-          repository: test_repo_hdfs_1
-          body:
-            type: hdfs
-            settings:
-              uri: "hdfs://localhost:9998"
               path: "/user/opensearch/foo/bar"
-              security:
-                principal: "opensearch@BUILD.OPENSEARCH.ORG"
-
+            settings:
     # Get repository again
-    - do:
-        snapshot.get_repository:
+        catch:    /repository_missing_exception/
+            type: hdfs
+                principal: "opensearch@BUILD.OPENSEARCH.ORG"
+    # Get repository: It should be gone
           repository: test_repo_hdfs_1
-
+        snapshot.get_repository:
+        snapshot.create_repository:
+          repository: test_repo_hdfs_1
+              uri: "hdfs://localhost:9998"
+        snapshot.get_repository:
+    - match: {test_repo_hdfs_1.settings.path : "/user/opensearch/foo/bar"}
+    # Create repository
+#
+              security:
+            type: hdfs
+    - do:
+    - do:
     - is_true: test_repo_hdfs_1
+              path: "/user/opensearch/foo/bar"
+        snapshot.create_repository:
+    # Get repository
+        snapshot.get_repository:
+"HDFS Delete Repository":
+            settings:
+    - is_true: test_repo_hdfs_1
+    - do:
+# Integration tests for HDFS Repository plugin
+        snapshot.delete_repository:
+          body:
+# Tests creating a repository, then deleting it and creating it again.
+              uri: "hdfs://localhost:9998"
+    # Create it again
+          repository: test_repo_hdfs_1
+          repository: test_repo_hdfs_1
+    - do:
+    - do:
+    # Delete repository

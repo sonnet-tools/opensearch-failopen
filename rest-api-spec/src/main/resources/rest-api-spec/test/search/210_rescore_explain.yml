@@ -1,38 +1,34 @@
----
-"Score should match explanation in rescore":
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - '{"index": {"_index": "test_index", "_id": "1"}}'
-          - '{"f1": "1"}'
-          - '{"index": {"_index": "test_index", "_id": "2"}}'
-          - '{"f1": "2"}'
-          - '{"index": {"_index": "test_index", "_id": "3"}}'
-          - '{"f1": "3"}'
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test_index
-        body:
-          explain: true
-          query:
-            match_all: {}
-          rescore:
-            window_size: 2
-            query:
-              rescore_query:
-                match_all: {}
-              query_weight: 5
-              rescore_query_weight: 10
-
-  - match: {hits.max_score: 15}
-  - match: { hits.hits.0._score: 15 }
-  - match: { hits.hits.0._explanation.value: 15 }
-
-  - match: { hits.hits.1._score: 15 }
   - match: { hits.hits.1._explanation.value: 15 }
-
-  - match: { hits.hits.2._score: 5 }
+          - '{"index": {"_index": "test_index", "_id": "2"}}'
+      search:
+          - '{"f1": "1"}'
+          rescore:
+  - do:
   - match: { hits.hits.2._explanation.value: 5 }
+  - do:
+        index: test_index
+          query:
+        body:
+              query_weight: 5
+  - match: { hits.hits.1._score: 15 }
+  - match: { hits.hits.2._score: 5 }
+            query:
+      bulk:
+"Score should match explanation in rescore":
+  - match: {hits.max_score: 15}
+  - match: { hits.hits.0._explanation.value: 15 }
+        rest_total_hits_as_int: true
+          - '{"f1": "3"}'
+              rescore_query_weight: 10
+              rescore_query:
+          explain: true
+---
+        refresh: true
+          - '{"index": {"_index": "test_index", "_id": "1"}}'
+                match_all: {}
+  - match: { hits.hits.0._score: 15 }
+            match_all: {}
+          - '{"index": {"_index": "test_index", "_id": "3"}}'
+        body:
+          - '{"f1": "2"}'
+            window_size: 2

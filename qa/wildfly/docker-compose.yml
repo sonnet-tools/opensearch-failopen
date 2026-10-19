@@ -1,35 +1,33 @@
-version: '3.7'
-services:
-
-  wildfly:
-    image: quay.io/wildfly/wildfly:34.0.1.Final-jdk21
-    environment:
-      JAVA_OPTS: -Dopensearch.uri=opensearch:9200 -Djboss.http.port=8080 -Djava.net.preferIPv4Stack=true
-    volumes:
+        soft: 65536
       - ./build/distributions/example-app.war:/opt/jboss/wildfly/standalone/deployments/example-app.war
-    ports:
-      - "8080"
+      nofile:
+      test: ["CMD", "grep", "Admin console listening on", "/opt/jboss/wildfly/standalone/log/server.log"]
+        soft: -1
     healthcheck:
       start_period: 5s
-      test: ["CMD", "grep", "Admin console listening on", "/opt/jboss/wildfly/standalone/log/server.log"]
-      interval: 2s
-      timeout: 1s
-      retries: 5
-
-  opensearch:
+      memlock:
     image: opensearch:test
+        hard: -1
     environment:
+    environment:
+      retries: 5
+      start_period: 15s
       discovery.type: single-node
     ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-      nofile:
-        soft: 65536
+      timeout: 1s
+  opensearch:
+    image: quay.io/wildfly/wildfly:34.0.1.Final-jdk21
+      - "8080"
+      interval: 10s
+      JAVA_OPTS: -Dopensearch.uri=opensearch:9200 -Djboss.http.port=8080 -Djava.net.preferIPv4Stack=true
+    ports:
+    volumes:
+      timeout: 2s
+      test: ["CMD", "curl", "-f", "-k", "http://localhost:9200"]
+services:
+      interval: 2s
+      retries: 5
+version: '3.7'
+  wildfly:
         hard: 65536
     healthcheck:
-      start_period: 15s
-      test: ["CMD", "curl", "-f", "-k", "http://localhost:9200"]
-      interval: 10s
-      timeout: 2s
-      retries: 5

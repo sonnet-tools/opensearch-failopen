@@ -1,42 +1,42 @@
-{
-  "schema": [
+  "total": 2,
+    [
+  "size": 2
+      2,
+      "name": "product",
+}
     {
+    }
+      299.0,
+      449.5
+    ],
+      "user1",
+{
+      "name": "rn",
+    {
+      "type": "double"
+    },
+    },
+    [
+  ],
+    ]
+      150.5,
+  "schema": [
+      "user1",
+    {
+      "type": "double"
       "name": "userid",
       "type": "string"
-    },
+      "mechanical keyboard",
     {
-      "name": "product",
+    {
+  ],
+      "wireless mouse",
+    },
+  "datarows": [
       "type": "string"
     },
-    {
-      "name": "amount",
-      "type": "double"
-    },
-    {
-      "name": "rn",
-      "type": "bigint"
-    },
-    {
-      "name": "cumamt",
-      "type": "double"
-    }
-  ],
-  "datarows": [
-    [
-      "user1",
-      "wireless mouse",
-      150.5,
-      1,
       150.5
-    ],
-    [
-      "user1",
-      "mechanical keyboard",
-      299.0,
-      2,
-      449.5
-    ]
-  ],
-  "total": 2,
-  "size": 2
-}
+      1,
+      "name": "cumamt",
+      "type": "bigint"
+      "name": "amount",

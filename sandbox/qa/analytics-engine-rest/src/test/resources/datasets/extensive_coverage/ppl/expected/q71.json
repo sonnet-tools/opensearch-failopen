@@ -1,35 +1,35 @@
-{
-  "schema": [
-    {
-      "name": "total_value",
+    ],
+      1050.25,
       "type": "double"
-    },
-    {
-      "name": "category",
-      "type": "string"
-    },
-    {
-      "name": "Total",
-      "type": "double"
-    }
-  ],
-  "datarows": [
-    [
+      677.0,
       606.25,
       "A",
-      606.25
-    ],
     [
-      677.0,
-      "B",
+    [
+  "schema": [
       677.0
-    ],
+  ],
+      "type": "string"
+      "name": "Total",
+  "total": 3,
+      "name": "category",
     [
-      1050.25,
-      "C",
-      1050.25
+      "type": "double"
+      "name": "total_value",
+    }
+    },
+    {
+    {
+      606.25
     ]
   ],
-  "total": 3,
-  "size": 3
+{
+    },
+    {
 }
+  "datarows": [
+      "B",
+    ],
+      1050.25
+      "C",
+  "size": 3

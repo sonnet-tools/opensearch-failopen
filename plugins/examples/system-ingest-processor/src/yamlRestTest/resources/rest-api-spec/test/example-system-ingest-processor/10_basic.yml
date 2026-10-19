@@ -1,16 +1,13 @@
-# Integration tests for the system ingest processor example plugin
-#
-"Plugin loaded":
-    - skip:
-        reason: "contains is a newly added assertion"
         features: contains
+    # Get cluster-manager node id
+        nodes.info: {}
+    - set: { cluster_manager_node: cluster_manager }
     - do:
         cluster.state: {}
-
-    # Get cluster-manager node id
-    - set: { cluster_manager_node: cluster_manager }
-
     - do:
-        nodes.info: {}
-
+#
+"Plugin loaded":
+        reason: "contains is a newly added assertion"
+    - skip:
     - contains:  { nodes.$cluster_manager.plugins: { name: example-system-ingest-processor } }
+# Integration tests for the system ingest processor example plugin

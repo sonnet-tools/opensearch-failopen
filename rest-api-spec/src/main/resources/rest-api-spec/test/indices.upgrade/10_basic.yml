@@ -1,71 +1,57 @@
----
-"Basic test for upgrade indices":
-
-  - do:
-      indices.create:
-        index: test_index
-        body:
-          settings:
-            index:
-              number_of_replicas: 0
-
-  - do:
-      indices.upgrade:
-        index: test_index
-
-  - match: {upgraded_indices.test_index.oldest_lucene_segment_version: '/(\d\.)+\d/'}
-  - is_true: upgraded_indices.test_index.upgrade_version
-
----
-"Upgrade indices ignore unavailable":
-  - do:
-      indices.create:
-        index: test_index
-        body:
-          settings:
-            index:
-              number_of_shards: 1
-              number_of_replicas: 0
-
-  - do:
-      indices.upgrade:
-        index: ["does_not_exist", "test_index"]
-        ignore_unavailable: true
-
   - match: {_shards.total: 1}
+      indices.upgrade:
+              number_of_shards: 1
+      indices.create:
+        ignore_unavailable: true
+  - do:
+      indices.upgrade:
   - is_true: upgraded_indices.test_index.upgrade_version
-  - is_false: upgraded_indices.does_not_exist
-
 ---
+        index: ["test_index", "does_not_exist"]
+      indices.create:
+        ignore_unavailable: false
+              number_of_replicas: 0
 "Upgrade indices allow no indices":
-
-  - do:
       indices.upgrade:
-        index: test_index
-        ignore_unavailable: true
-        allow_no_indices: true
-
   - match: {_shards.total: 0}
-
----
-"Upgrade indices disallow no indices":
-
-  - do:
-      catch: missing
-      indices.upgrade:
+          settings:
         index: test_index
+"Basic test for upgrade indices":
+      catch: missing
         ignore_unavailable: true
-        allow_no_indices: false
-
+      indices.upgrade:
+            index:
+  - is_false: upgraded_indices.does_not_exist
+---
+      indices.upgrade:
+        ignore_unavailable: true
+  - do:
+        index: test_index
+"Upgrade indices ignore unavailable":
+            index:
+              number_of_replicas: 0
+  - do:
+        allow_no_indices: true
+        index: test_index
+---
+        index: test_index
+  - do:
+        index: ["does_not_exist", "test_index"]
+      indices.create:
 ---
 "Upgrade indices disallow unavailable":
-
+        allow_no_indices: false
   - do:
-      indices.create:
         index: test_index
-
+          settings:
   - do:
+  - do:
+  - match: {upgraded_indices.test_index.oldest_lucene_segment_version: '/(\d\.)+\d/'}
       catch: missing
-      indices.upgrade:
-        index: ["test_index", "does_not_exist"]
-        ignore_unavailable: false
+  - do:
+  - is_true: upgraded_indices.test_index.upgrade_version
+"Upgrade indices disallow no indices":
+        body:
+        body:
+---
+        index: test_index

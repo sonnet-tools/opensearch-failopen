@@ -1,12 +1,12 @@
 {
-  "schema": [
-    { "name": "name", "type": "string" },
-    { "name": "age", "type": "string" }
   ],
-  "datarows": [
     [ "Alice", "30" ],
-    [ "Bob", "25" ]
-  ],
-  "total": 2,
-  "size": 2
+  "datarows": [
 }
+  ],
+  "schema": [
+    [ "Bob", "25" ]
+  "size": 2
+    { "name": "age", "type": "string" }
+  "total": 2,
+    { "name": "name", "type": "string" },

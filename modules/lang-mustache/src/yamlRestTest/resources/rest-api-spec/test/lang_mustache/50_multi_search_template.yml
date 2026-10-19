@@ -1,255 +1,229 @@
----
-setup:
-
   - do:
-      index:
-          index:  index_1
-          id:     1
-          body:   { foo: bar }
-
-  - do:
-      index:
-          index:  index_1
-          id:     2
-          body:   { foo: baz }
-
-  - do:
-      index:
-          index:  index_1
           id:     3
-          body:   { foo: foo }
-
-  - do:
-      index:
-          index:  index_2
-          id:     1
-          body:   { foo: foo }
-
-  - do:
-      indices.refresh: {}
-
----
-"Basic multi-search template":
-
-  - do:
-      msearch_template:
-        rest_total_hits_as_int: true
-        body:
-          - index: index_*
-          - source: '{"query": {"match": {"foo": "{{value}}"} } }'
+          params:
+  - match:  { responses.4.error.root_cause.0.type: illegal_argument_exception }
+  - match:  { responses.1.hits.total.relation:  eq }
             params:
+            params:
+"Multi-search template with invalid request":
+  - match: { acknowledged: true }
+          - source: '{"query": {"match": {"foo": "{{value}}"} } }'
+      msearch_template:
               value: "foo"
+      version: " - 2.17.99"
+              text: "baz"
+            params:
+  - match:  { responses.5.status:     404  }
+          - source: '{"query": {"match": {'
+          - source: '{"query": {"match": {"foo": "{{value}}"} } }'
+  - do:
+          - index: index_*
+  - match: { acknowledged: true }
+  - match:  { responses.2.hits.total:     1  }
+          - source: ""
+            field: "foo"
+  - match:  { responses.4.status:     400  }
+              value: "bar"
+          - index: index_*
+          body:   { foo: foo }
+      put_script:
+          - index: index_*
+      indices.refresh: {}
+          - source: '{"query": {"match": {"foo": "{{value}}"} } }'
+          # Search 3 has an unknown query type
+  - length: { responses.3.hits.hits:      0  }
+        id: stored_template_1
+        body:
+      msearch_template:
+            params:
+          - source:
+        rest_total_hits_as_int: true
+  - match:  { responses.1.hits.total.relation:  eq }
+        - id: stored_template_1
+        id: stored_template_1
+          # Search 0 is OK
+            params:
+      index:
+  - do:
+  - match:  { responses.3.status:     400  }
+          - id: stored_template_1
+          body:   { foo: bar }
+          params:
+          - id: stored_template_1
+  - match:  { responses.1.error.root_cause.0.reason: "/Unexpected.end.of.input/" }
+        - id: stored_template_1
+      put_script:
+            value: "foo"
+        body: { "script": { "lang" : "mustache", "source": { "query": {"match": {"{{field}}": "{{value}}" }}}}}
+          params:
+            params:
+        body:
+      msearch_template:
+          - source:
+  - match: { acknowledged: true }
+  - do:
+          - index: _all
+  - do:
+  - match:  { responses.1.hits.total:     1  }
+"Multi-search template with errors":
+          - source: '{"query": {"{{query_type}}": {} }' # Unknown query type
+            params:
+      index:
+          # Search 3 has an unknown query type
+          - index: index_*
+        body:
+          - index: index_2
+  - match:  { responses.2.hits.total:     4  }
+---
+              value: "foo"
+          - source:
+---
+  - match:  { responses.0.hits.total.value:     2  }
+          # Search 0 is OK
+            params:
+          - index: index_*
+              trackTotalHits: 1
+              query_type: "match_all"
+  - match:  { responses.1.status:     400  }
+              field: "foo"
+  - match:  { responses.0.hits.total:     2  }
+  - match:  { responses.0.hits.total.relation:  eq }
+      reason: Fixed in 2.18.0.
+  - do:
+      catch: /(.)*action_request_validation_exception(.)*template.is.missing(.)*/
+              query_type: "unknown"
+              query_content: "{}"
+          - source: '{"query": {"match_all": {} }, "track_total_hits": "{{trackTotalHits}}" }'
+---
+          - source: '{"query": {"match": {'
+          # Search 1 has an unclosed JSON template
+            params:
+            value: "bar"
+        id: stored_template_1
+  - match:  { responses.3.error.root_cause.0.type: parsing_exception }
+              size: 0
+  - match:  { responses.1.hits.total:     1  }
+  - match:  { responses.3.error.root_cause.0.reason: "/unknown.query.\\[unknown\\]/" }
+            params:
+        - index: index_*
+  - do:
+              field: "foo"
+          id:     1
           - index: index_*
           - source: '{"query": {"match": {"{{field}}": "{{value}}"} } }'
             params:
-              field: "foo"
-              value: "bar"
-          - index: _all
-          - source: '{"query": {"{{query_type}}": {{query_content}} } }'
-            params:
-              query_type: "match_all"
-              query_content: "{}"
-          - index: _all
-          - source:
-              query:
-                match: {foo: "{{text}}"}
-              size: 0
-            params:
-              text: "baz"
-
-  - match:  { responses.0.hits.total:     2  }
-  - match:  { responses.1.hits.total:     1  }
-  - match:  { responses.2.hits.total:     4  }
-  - match:  { responses.3.hits.total:     1  }
-  - length: { responses.3.hits.hits:      0  }
-
-
----
-"Multi-search template with errors":
-
   - do:
-      msearch_template:
-        rest_total_hits_as_int: true
         body:
-          # Search 0 is OK
-          - index: index_*
-          - source: '{"query": {"match": {"foo": "{{value}}"} } }'
-            params:
-              value: "foo"
-          # Search 1 has an unclosed JSON template
-          - index: index_*
-          - source: '{"query": {"match": {'
-            params:
-              field: "foo"
-              value: "bar"
+          - id: stored_template_1
           # Search 2 is OK
-          - index: _all
-          - source:
-              query:
-                match: {foo: "{{text}}"}
-            params:
-              text: "baz"
-          # Search 3 has an unknown query type
-          - index: index_*
-          - source: '{"query": {"{{query_type}}": {} }' # Unknown query type
-            params:
-              query_type: "unknown"
-          # Search 4 has an unsupported track_total_hits
-          - index: index_*
-          - source: '{"query": {"match_all": {} }, "track_total_hits": "{{trackTotalHits}}" }'
-            params:
-              trackTotalHits: 1
-
-  - match:  { responses.0.hits.total:     2  }
-  - match:  { responses.1.error.root_cause.0.type: unexpected_end_of_input_exception }
-  - match:  { responses.1.error.root_cause.0.reason: "/Unexpected.end.of.input/" }
-  - match:  { responses.2.hits.total:     1  }
-  - match:  { responses.3.error.root_cause.0.type: parsing_exception }
-  - match:  { responses.3.error.root_cause.0.reason: "/unknown.query.\\[unknown\\]/" }
-  - match:  { responses.4.error.root_cause.0.type: illegal_argument_exception }
   - match:  { responses.4.error.root_cause.0.reason: "[rest_total_hits_as_int] cannot be used if the tracking of total hits is not accurate, got 1" }
-
-
----
-"Multi-search template with invalid request":
-
   - do:
-      catch: /(.)*action_request_validation_exception(.)*template.is.missing(.)*/
-      msearch_template:
-        rest_total_hits_as_int: true
-        body:
-          # Search 0 is OK
-          - index: index_*
-          - source: '{"query": {"match": {"foo": "{{value}}"} } }'
-            params:
-              value: "foo"
-          # Search 1 has not template
-          - index: _all
-          - source: ""
-          # Search 2 is OK
-          - index: index_*
-          - source: '{"query": {"match": {"foo": "{{value}}"} } }'
-            params:
-              value: "bar"
-
----
-"Basic multi-search using stored template":
-
   - do:
-      put_script:
-        id: stored_template_1
-        body: { "script": { "lang" : "mustache", "source": { "query": {"match": {"{{field}}": "{{value}}" }}}}}
-  - match: { acknowledged: true }
-
-  - do:
-      msearch_template:
-        rest_total_hits_as_int: true
-        body:
-          - index: index_*
-          - id: stored_template_1
-            params:
-              field: "foo"
-              value: "foo"
-          - index: _all
-          - id: stored_template_1
-            params:
-              field: "foo"
-              value: "bar"
-          - index: index_2
-          - id: stored_template_1
-            params:
-              field: "foo"
-              value: "foo"
-
-  - match:  { responses.0.hits.total:     2  }
-  - match:  { responses.1.hits.total:     1  }
-  - match:  { responses.2.hits.total:     1  }
-
-
-  - do:
-      put_script:
-        id: stored_template_1
-        body: { "script": { "lang" : "mustache", "source": { "query": {"match": {"{{field}}": "{{value}}" }}}}}
-  - match: { acknowledged: true }
-
----
-"Test with rest_total_hits_as_int":
-  - do:
-      put_script:
-        id: stored_template_1
-        body: { "script": { "lang": "mustache", "source": { "query": {"match": {"{{field}}": "{{value}}" }}}}}
-  - match: { acknowledged: true }
-
-  - do:
-      msearch_template:
-        body:
-        - index: index_*
-        - id: stored_template_1
-          params:
-            field: "foo"
-            value: "foo"
-        - index: _all
-        - id: stored_template_1
-          params:
-            field: "foo"
-            value: "bar"
-        - index: index_2
-        - id: stored_template_1
-          params:
-            field: "foo"
-            value: "foo"
-
-  - match:  { responses.0.hits.total.value:     2  }
-  - match:  { responses.0.hits.total.relation:  eq }
-  - match:  { responses.1.hits.total.value:     1  }
-  - match:  { responses.1.hits.total.relation:  eq }
-  - match:  { responses.2.hits.total.value:     1  }
-  - match:  { responses.1.hits.total.relation:  eq }
-
----
-"Test multi-search template returns status code":
-  - skip:
-      version: " - 2.17.99"
-      reason: Fixed in 2.18.0.
-  - do:
-      msearch_template:
-        rest_total_hits_as_int: true
-        body:
-          # Search 0 is OK
-          - index: index_*
-          - source: '{"query": {"match": {"foo": "{{value}}"} } }'
-            params:
-              value: "foo"
-          # Search 1 has an unclosed JSON template
-          - index: index_*
-          - source: '{"query": {"match": {'
-            params:
-              field: "foo"
-              value: "bar"
-          # Search 2 is OK
-          - index: _all
-          - source:
+          - source: '{"query": {"{{query_type}}": {} }' # Unknown query type
+  - match:  { responses.1.error.root_cause.0.type: unexpected_end_of_input_exception }
+          index:  index_1
               query:
+          - index: index_*
+          - source: '{"query": {"{{query_type}}": {{query_content}} } }'
                 match: {foo: "{{text}}"}
             params:
-              text: "baz"
-          # Search 3 has an unknown query type
-          - index: index_*
-          - source: '{"query": {"{{query_type}}": {} }' # Unknown query type
-            params:
-              query_type: "unknown"
+  - skip:
+          - index: _all
           # Search 4 has an unsupported track_total_hits
-          - index: index_*
-          - source: '{"query": {"match_all": {} }, "track_total_hits": "{{trackTotalHits}}" }'
-            params:
-              trackTotalHits: 1
-          # Search 5 has an unknown index
-          - index: unknown_index
-          - source: '{"query": {"match_all": {} } }'
-
-  - match:  { responses.0.status:     200  }
-  - match:  { responses.1.status:     400  }
+        body: { "script": { "lang": "mustache", "source": { "query": {"match": {"{{field}}": "{{value}}" }}}}}
+        rest_total_hits_as_int: true
+              query:
+  - match:  { responses.2.hits.total:     1  }
+              value: "foo"
+              value: "foo"
+setup:
+"Basic multi-search template":
+        - index: index_2
+        rest_total_hits_as_int: true
   - match:  { responses.2.status:     200  }
-  - match:  { responses.3.status:     400  }
-  - match:  { responses.4.status:     400  }
-  - match:  { responses.5.status:     404  }
+          # Search 5 has an unknown index
+          # Search 1 has an unclosed JSON template
+            params:
+        - index: _all
+          body:   { foo: foo }
+            params:
+          - source: '{"query": {"match_all": {} }, "track_total_hits": "{{trackTotalHits}}" }'
+          - index: index_*
+          - index: _all
+          id:     1
+  - match:  { responses.2.hits.total.value:     1  }
+          - index: index_*
+          # Search 2 is OK
+        rest_total_hits_as_int: true
+              field: "foo"
+          index:  index_1
+          - index: _all
+          - index: index_*
+  - do:
+            params:
+          - source: '{"query": {"match": {"foo": "{{value}}"} } }'
+---
+          - index: index_*
+              query_type: "unknown"
+          index:  index_2
+          - source: '{"query": {"match_all": {} } }'
+              query:
+        rest_total_hits_as_int: true
+  - do:
+      msearch_template:
+          - index: _all
+---
+  - match:  { responses.3.hits.total:     1  }
+      index:
+          - index: index_*
+                match: {foo: "{{text}}"}
+            field: "foo"
+        body:
+          # Search 0 is OK
+"Basic multi-search using stored template":
+          # Search 1 has not template
+              field: "foo"
+              value: "bar"
+              field: "foo"
+          - source: '{"query": {"match": {"foo": "{{value}}"} } }'
+          id:     2
+            params:
+      msearch_template:
+  - match:  { responses.1.hits.total.value:     1  }
+      msearch_template:
+  - match:  { responses.0.status:     200  }
+          - index: _all
+            params:
+"Test multi-search template returns status code":
+              value: "foo"
+        body:
+                match: {foo: "{{text}}"}
+              text: "baz"
+              field: "foo"
+"Test with rest_total_hits_as_int":
+              text: "baz"
+          # Search 2 is OK
+  - do:
+            params:
+      index:
+              value: "bar"
+              value: "bar"
+              value: "bar"
+          # Search 4 has an unsupported track_total_hits
+---
+          - index: unknown_index
+  - match:  { responses.0.hits.total:     2  }
+  - match:  { responses.0.hits.total:     2  }
+            value: "foo"
+          body:   { foo: baz }
+  - do:
+              trackTotalHits: 1
+          - index: index_*
+            params:
+        - id: stored_template_1
+        body: { "script": { "lang" : "mustache", "source": { "query": {"match": {"{{field}}": "{{value}}" }}}}}
+            field: "foo"
+      put_script:
+---
+              value: "foo"
+          index:  index_1

@@ -1,46 +1,46 @@
-{
-  "cluster.get_settings":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/cluster-api/cluster-settings/",
-      "description":"Returns cluster settings."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
           "path":"/_cluster/settings",
-          "methods":[
-            "GET"
-          ]
-        }
-      ]
-    },
-    "params":{
-      "flat_settings":{
-        "type":"boolean",
         "description":"Return settings in flat format (default: false)"
-      },
-      "master_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to master node",
-        "deprecated":{
-          "version":"2.0.0",
-          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
-        }
-      },
-      "cluster_manager_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to cluster-manager node"
-      },
-      "timeout":{
-        "type":"time",
         "description":"Explicit operation timeout"
       },
-      "include_defaults":{
-        "type":"boolean",
-        "description":"Whether to return all default clusters setting.",
-        "default":false
-      }
-    }
+    "params":{
+      },
+        }
+    "stability":"stable",
+      "master_timeout":{
+          "version":"2.0.0",
+        "type":"time",
+          "methods":[
+    "url":{
+      },
+            "GET"
+        "type":"time",
+    },
+      "description":"Returns cluster settings."
+      "cluster_manager_timeout":{
   }
+        "type":"boolean",
+        "description":"Explicit operation timeout for connection to master node",
+        "deprecated":{
+      }
+        }
 }
+    },
+        "description":"Whether to return all default clusters setting.",
+{
+      "include_defaults":{
+      "url":"https://opensearch.org/docs/latest/api-reference/cluster-api/cluster-settings/",
+      ]
+        "default":false
+          ]
+    "documentation":{
+        "description":"Explicit operation timeout for connection to cluster-manager node"
+        {
+      "paths":[
+      "timeout":{
+  "cluster.get_settings":{
+      },
+      "flat_settings":{
+        "type":"time",
+          "description":"To promote inclusive language, use 'cluster_manager_timeout' instead."
+        "type":"boolean",
+    }

@@ -1,1895 +1,1789 @@
-## Smoke tests for token filters included in the analysis-common module
-
-"asciifolding":
-    - do:
+    - match:  { tokens.4.position: 2 }
+    - match: { tokens.1.token: "#text2" }
+        indices.create:
+            filter:    [scandinavian_normalization]
+    - match:  { tokens.2.token: cash }
+    - match:  { tokens.0.token: কর }
         indices.analyze:
-          body:
-            text:      Musée d'Orsay
-            tokenizer: keyword
-            filter:    [asciifolding]
     - length: { tokens: 1 }
-    - match:  { tokens.0.token: Musee d'Orsay }
-
-    - do:
-        indices.analyze:
-          body:
-            text:      Musée d'Orsay
-            tokenizer: keyword
-            filter:
-              - type: asciifolding
+    - match: { tokens.0.position: 0 }
                 preserve_original: true
-    - length: { tokens: 2 }
-    - match:  { tokens.0.token: Musee d'Orsay }
-    - match:  { tokens.1.token: Musée d'Orsay }
-
+            text:      ত্‍
+    - length: { tokens: 9 }
 ---
-"lowercase":
-    - do:
-        indices.analyze:
-          body:
-            text:      Foo Bar!
-            tokenizer: keyword
-            filter:    [lowercase]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: foo bar! }
-
+    - is_false: tokens.6.positionLength
 ---
-"porterstem":
-    - do:
-        indices.analyze:
-          body:
-            text:      This is troubled
-            tokenizer: standard
-            filter:    [porter_stem]
-    - length: { tokens: 3 }
-    - match:  { tokens.2.token: troubl }
-    - match:  { tokens.2.position: 2 }
-
----
-"keywordmarker":
-    - do:
-        indices.analyze:
-          body:
-            text:      This is troubled
-            tokenizer: standard
-            filter:
-              - type: keyword_marker
-                keywords: troubled
-              - type: porter_stem
-    - length: { tokens: 3 }
-    - match:  { tokens.2.token: troubled }
-    - match:  { tokens.2.position: 2 }
-
----
-"snowball":
-    - do:
-        indices.analyze:
-          body:
-            text:      This is troubled
-            tokenizer: standard
-            filter:    [snowball]
-    - length: { tokens: 3 }
-    - match:  { tokens.2.token: troubl }
-    - match:  { tokens.2.position: 2 }
-
-    - do:
-        indices.analyze:
-          body:
-            explain:   true
-            text:      This is troubled
-            tokenizer: standard
-            filter:    [snowball]
-    - length: { detail.tokenfilters.0.tokens: 3 }
-    - match:  { detail.tokenfilters.0.tokens.2.token: troubl }
-    - match:  { detail.tokenfilters.0.tokens.2.position: 2 }
-    - is_true: detail.tokenfilters.0.tokens.2.bytes
-    - match: { detail.tokenfilters.0.tokens.2.positionLength: 1 }
-    - match: { detail.tokenfilters.0.tokens.2.keyword: false }
-
----
-"trim":
-    - do:
-        indices.analyze:
-          body:
-            text:      Foo Bar !
-            tokenizer: keyword
-            filter:    [trim]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: Foo Bar !  }
-
----
-"word_delimiter":
-    - do:
-        indices.analyze:
-          body:
-            text:      the qu1ck brown fox
-            tokenizer: standard
-            filter:    [word_delimiter]
-    - length: { tokens: 6 }
-    - match:  { tokens.0.token: the }
-    - match:  { tokens.1.token: qu }
-    - match:  { tokens.2.token: "1" }
-    - match:  { tokens.3.token: ck }
-    - match:  { tokens.4.token: brown }
-    - match:  { tokens.5.token: fox }
-
-    - do:
-        indices.analyze:
-          body:
-            text:      the qu1ck brown fox
-            tokenizer: standard
-            filter:
-              - type: word_delimiter
-                split_on_numerics: false
-    - length: { tokens: 4 }
-    - match:  { tokens.0.token: the }
-    - match:  { tokens.1.token: qu1ck }
-    - match:  { tokens.2.token: brown }
-    - match:  { tokens.3.token: fox }
-
-    - do:
-        indices.analyze:
-          body:
-            text: 'text1 #text2'
-            tokenizer: whitespace
-            filter:
-              - type: word_delimiter
-                split_on_numerics: false
-                type_table:
-                  - "\\u0023 => ALPHANUM"
-    - length: { tokens: 2 }
-    - match: { tokens.0.token: text1 }
-    - match: { tokens.0.start_offset: 0 }
-    - match: { tokens.0.end_offset: 5 }
-    - match: { tokens.0.position: 0 }
-    - match: { tokens.1.token: "#text2" }
-    - match: { tokens.1.start_offset: 6 }
-    - match: { tokens.1.end_offset: 12 }
-    - match: { tokens.1.position: 1 }
-
-    - do:
-        indices.analyze:
-          body:
-            text: 'text1 #text2'
-            tokenizer: whitespace
-            filter:
-              - type: word_delimiter
-                split_on_numerics: false
-                type_table:
-                  - "# This is a comment"
-                  - "# => ALPHANUM"
-    - length: { tokens: 2 }
-    - match: { tokens.0.token: text1 }
-    - match: { tokens.0.start_offset: 0 }
-    - match: { tokens.0.end_offset: 5 }
-    - match: { tokens.0.position: 0 }
-    - match: { tokens.1.token: "#text2" }
-    - match: { tokens.1.start_offset: 6 }
-    - match: { tokens.1.end_offset: 12 }
-    - match: { tokens.1.position: 1 }
-
-    - do:
-        indices.analyze:
-          body:
-            text: 'text1 #text2'
-            tokenizer: whitespace
-            filter:
-              - type: word_delimiter
-                split_on_numerics: false
-                type_table:
-                  - "# This is a comment"
-                  - "# => ALPHANUM"
-                  - "@ => ALPHANUM"
-    - length: { tokens: 2 }
-    - match: { tokens.0.token: text1 }
-    - match: { tokens.0.start_offset: 0 }
-    - match: { tokens.0.end_offset: 5 }
-    - match: { tokens.0.position: 0 }
-    - match: { tokens.1.token: "#text2" }
-    - match: { tokens.1.start_offset: 6 }
-    - match: { tokens.1.end_offset: 12 }
-    - match: { tokens.1.position: 1 }
-
----
-"word_delimiter_graph":
-    - do:
-        indices.analyze:
-          body:
-            text:      the qu1ck brown fox
-            tokenizer: standard
-            filter:    [word_delimiter_graph]
-    - length: { tokens: 6 }
-    - match:  { tokens.0.token: the }
-    - match:  { tokens.1.token: qu }
-    - match:  { tokens.2.token: "1" }
-    - match:  { tokens.3.token: ck }
-    - match:  { tokens.4.token: brown }
-    - match:  { tokens.5.token: fox }
-
-    - do:
-        indices.analyze:
-          body:
-            text:      the qu1ck brown fox
-            tokenizer: standard
-            filter:
-              - type: word_delimiter_graph
-                split_on_numerics: false
-    - length: { tokens: 4 }
-    - match:  { tokens.0.token: the }
-    - match:  { tokens.1.token: qu1ck }
-    - match:  { tokens.2.token: brown }
-    - match:  { tokens.3.token: fox }
-
-    - do:
-        indices.analyze:
-          body:
-            text:      the qu1ck brown fox
-            tokenizer: standard
-            filter:
-              - type: word_delimiter_graph
-                adjust_offsets: false
-    - length: { tokens: 6 }
-    - match:  { tokens.0.token: the }
-    - match:  { tokens.1.token: qu }
-    - match:  { tokens.1.start_offset: 4 }
-    - match:  { tokens.1.end_offset: 9 }
-    - match:  { tokens.2.token: "1" }
-    - match:  { tokens.2.start_offset: 4 }
-    - match:  { tokens.2.end_offset: 9 }
-    - match:  { tokens.3.token: ck }
-    - match:  { tokens.3.start_offset: 4 }
-    - match:  { tokens.3.end_offset: 9 }
-
-    - do:
-        indices.analyze:
-          body:
-            text:      the qu1ck brown fox
-            explain:   true
-            tokenizer: standard
-            filter:    [word_delimiter_graph]
-    - match:  { detail.custom_analyzer: true }
-    - match:  { detail.tokenizer.name: standard }
-    - length: { detail.tokenizer.tokens: 4 }
-    - match:  { detail.tokenizer.tokens.0.token: the }
-    - match:  { detail.tokenizer.tokens.0.start_offset: 0 }
-    - match:  { detail.tokenizer.tokens.0.end_offset: 3 }
-    - match:  { detail.tokenizer.tokens.0.position: 0 }
-    - match:  { detail.tokenizer.tokens.1.token: qu1ck }
-    - match:  { detail.tokenizer.tokens.1.start_offset: 4 }
-    - match:  { detail.tokenizer.tokens.1.end_offset: 9 }
-    - match:  { detail.tokenizer.tokens.1.position: 1 }
-    - match:  { detail.tokenizer.tokens.2.token: brown }
-    - match:  { detail.tokenizer.tokens.2.start_offset: 10 }
-    - match:  { detail.tokenizer.tokens.2.end_offset: 15 }
-    - match:  { detail.tokenizer.tokens.2.position: 2 }
-    - match:  { detail.tokenizer.tokens.3.token: fox }
-    - match:  { detail.tokenizer.tokens.3.start_offset: 16 }
-    - match:  { detail.tokenizer.tokens.3.end_offset: 19 }
-    - match:  { detail.tokenizer.tokens.3.position: 3 }
-    - length: { detail.tokenfilters: 1 }
-    - match:  { detail.tokenfilters.0.name: word_delimiter_graph }
-    - length: { detail.tokenfilters.0.tokens: 6 }
-    - match:  { detail.tokenfilters.0.tokens.0.token: the }
-    - match:  { detail.tokenfilters.0.tokens.0.start_offset: 0 }
-    - match:  { detail.tokenfilters.0.tokens.0.end_offset: 3 }
-    - match:  { detail.tokenfilters.0.tokens.0.position: 0 }
-    - match:  { detail.tokenfilters.0.tokens.1.token: qu }
-    - match:  { detail.tokenfilters.0.tokens.1.start_offset: 4 }
-    - match:  { detail.tokenfilters.0.tokens.1.end_offset: 6 }
-    - match:  { detail.tokenfilters.0.tokens.1.position: 1 }
-    - match:  { detail.tokenfilters.0.tokens.2.token: "1" }
-    - match:  { detail.tokenfilters.0.tokens.2.start_offset: 6 }
-    - match:  { detail.tokenfilters.0.tokens.2.end_offset: 7 }
-    - match:  { detail.tokenfilters.0.tokens.2.position: 2 }
-    - match:  { detail.tokenfilters.0.tokens.3.token: ck }
-    - match:  { detail.tokenfilters.0.tokens.3.start_offset: 7 }
-    - match:  { detail.tokenfilters.0.tokens.3.end_offset: 9 }
-    - match:  { detail.tokenfilters.0.tokens.3.position: 3 }
-    - match:  { detail.tokenfilters.0.tokens.4.token: brown }
-    - match:  { detail.tokenfilters.0.tokens.4.start_offset: 10 }
-    - match:  { detail.tokenfilters.0.tokens.4.end_offset: 15 }
-    - match:  { detail.tokenfilters.0.tokens.4.position: 4 }
-    - match:  { detail.tokenfilters.0.tokens.5.token: fox }
-    - match:  { detail.tokenfilters.0.tokens.5.start_offset: 16 }
-    - match:  { detail.tokenfilters.0.tokens.5.end_offset: 19 }
-    - match:  { detail.tokenfilters.0.tokens.5.position: 5 }
-
-    - do:
-        indices.analyze:
-          body:
-            text: 'text1 #text2'
-            tokenizer: whitespace
-            filter:
-              - type: word_delimiter_graph
-                split_on_numerics: false
-                type_table:
-                  - "\\u0023 => ALPHANUM"
-    - length: { tokens: 2 }
-    - match: { tokens.0.token: text1 }
-    - match: { tokens.0.start_offset: 0 }
-    - match: { tokens.0.end_offset: 5 }
-    - match: { tokens.0.position: 0 }
-    - match: { tokens.1.token: "#text2" }
-    - match: { tokens.1.start_offset: 6 }
-    - match: { tokens.1.end_offset: 12 }
-    - match: { tokens.1.position: 1 }
-
-    - do:
-        indices.analyze:
-          body:
-            text: 'text1 #text2'
-            tokenizer: whitespace
-            filter:
-              - type: word_delimiter_graph
-                split_on_numerics: false
-                type_table:
-                  - "# This is a comment"
-                  - "# => ALPHANUM"
-    - length: { tokens: 2 }
-    - match: { tokens.0.token: text1 }
-    - match: { tokens.0.start_offset: 0 }
-    - match: { tokens.0.end_offset: 5 }
-    - match: { tokens.0.position: 0 }
-    - match: { tokens.1.token: "#text2" }
-    - match: { tokens.1.start_offset: 6 }
-    - match: { tokens.1.end_offset: 12 }
-    - match: { tokens.1.position: 1 }
-
-    - do:
-        indices.analyze:
-          body:
-            text: 'text1 #text2'
-            tokenizer: whitespace
-            filter:
-              - type: word_delimiter_graph
-                split_on_numerics: false
-                type_table:
-                  - "# This is a comment"
-                  - "# => ALPHANUM"
-                  - "@ => ALPHANUM"
-    - length: { tokens: 2 }
-    - match: { tokens.0.token: text1 }
-    - match: { tokens.0.start_offset: 0 }
-    - match: { tokens.0.end_offset: 5 }
-    - match: { tokens.0.position: 0 }
-    - match: { tokens.1.token: "#text2" }
-    - match: { tokens.1.start_offset: 6 }
-    - match: { tokens.1.end_offset: 12 }
-    - match: { tokens.1.position: 1 }
-
----
-"unique":
-    - do:
-        indices.analyze:
-          body:
-            text:      Foo Foo Bar!
-            tokenizer: whitespace
-            filter:    [unique]
-    - length: { tokens: 2 }
-    - match:  { tokens.0.token: Foo }
-    - match:  { tokens.1.token: Bar! }
-
----
-"synonym":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_synonym:
-                    type: synonym
-                    synonyms: ["car,auto"]
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text: what car magazine
-            tokenizer: whitespace
-            filter: [ my_synonym ]
-    - length: { tokens: 4 }
     - match:  { tokens.0.token: what }
-    - match:  { tokens.0.position: 0 }
-    - match:  { tokens.1.token: car }
-    - match:  { tokens.1.position: 1 }
-    - match:  { tokens.2.token: auto }
-    - match:  { tokens.2.position: 1 }
-    - match:  { tokens.3.token: magazine }
-    - match:  { tokens.3.position: 2 }
-
----
-"synonym_without_index":
-  - do:
-      indices.analyze:
-        body:
-          text: wibble
-          tokenizer: standard
-          filter: [ { type: synonym, synonyms: [ "wibble, quack" ]}]
-  - length: { tokens: 2 }
-  - match:  { tokens.0.token: wibble }
-  - match:  { tokens.0.position: 0 }
-  - match:  { tokens.1.token: quack }
-  - match:  { tokens.1.position: 0 }
-
----
-"synonym_graph_without_index":
-  - do:
-      indices.analyze:
-        body:
-          text: wibble
-          tokenizer: standard
-          filter: [ { type: synonym_graph, synonyms: [ "wibble, quack" ]}]
-  - length: { tokens: 2 }
-  - match:  { tokens.0.token: quack }
-  - match:  { tokens.0.position: 0 }
-  - match:  { tokens.1.token: wibble }
-  - match:  { tokens.1.position: 0 }
-
----
-"synonym_graph":
-    - do:
-        indices.create:
-          index: test
           body:
-            settings:
-              analysis:
-                filter:
-                  my_graph_synonym:
-                    type: synonym_graph
-                    synonyms: [ "guinea pig,cavy" ]
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text: my guinea pig snores
-            tokenizer: whitespace
-            filter: [ my_graph_synonym ]
-    - length: { tokens: 5 }
-    - match:  { tokens.0.token: my }
-    - match:  { tokens.1.token: cavy }
-    - match:  { tokens.1.position: 1 }
-    - match:  { tokens.1.positionLength: 2 }
-    - match:  { tokens.2.token: guinea }
-    - match:  { tokens.2.position: 1 }
-    - match:  { tokens.3.token: pig }
-    - match:  { tokens.3.position: 2 }
-    - match:  { tokens.4.token: snores }
-    - match:  { tokens.4.position: 3 }
-
----
-"synonym_graph and flatten_graph":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_synonym_graph:
-                    type: synonym_graph
-                    synonyms: ["automatic teller machine,atm,cash point"]
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text: this automatic teller machine is down
-            tokenizer: whitespace
-            filter: [my_synonym_graph]
-    - length: { tokens: 9 }
-    - match:  { tokens.0.token: this }
-    - match:  { tokens.0.position: 0 }
-    - is_false: tokens.0.positionLength
-    - match:  { tokens.1.token: atm }
-    - match:  { tokens.1.position: 1 }
-    - match:  { tokens.1.positionLength: 4 }
-    - match:  { tokens.2.token: cash }
-    - match:  { tokens.2.position: 1 }
-    - is_false: tokens.2.positionLength
-    - match:  { tokens.3.token: automatic }
-    - match:  { tokens.3.position: 1 }
-    - match:  { tokens.3.positionLength: 2 }
-    - match:  { tokens.4.token: point }
-    - match:  { tokens.4.position: 2 }
-    - match:  { tokens.4.positionLength: 3 }
-    - match:  { tokens.5.token: teller }
-    - match:  { tokens.5.position: 3 }
-    - is_false: tokens.5.positionLength
-    - match:  { tokens.6.token: machine }
-    - match:  { tokens.6.position: 4 }
-    - is_false: tokens.6.positionLength
-    - match:  { tokens.7.token: is }
-    - match:  { tokens.7.position: 5 }
-    - is_false: tokens.7.positionLength
-    - match:  { tokens.8.token: down }
-    - match:  { tokens.8.position: 6 }
-    - is_false: tokens.8.positionLength
-
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text: this automatic teller machine is down
-            tokenizer: whitespace
-            filter: [my_synonym_graph,flatten_graph]
-    - length: { tokens: 9 }
-    - match:  { tokens.0.token: this }
-    - match:  { tokens.0.position: 0 }
-    - is_false: tokens.0.positionLength
-    - match:  { tokens.1.token: atm }
-    - match:  { tokens.1.position: 1 }
-    - match:  { tokens.1.positionLength: 3 }
-    - match:  { tokens.2.token: cash }
-    - match:  { tokens.2.position: 1 }
-    - is_false: tokens.2.positionLength
-    - match:  { tokens.3.token: automatic }
-    - match:  { tokens.3.position: 1 }
-    - is_false: tokens.3.positionLength
-    - match:  { tokens.4.token: point }
-    - match:  { tokens.4.position: 2 }
-    - match:  { tokens.4.positionLength: 2 }
-    - match:  { tokens.5.token: teller }
-    - match:  { tokens.5.position: 2 }
-    - is_false: tokens.5.positionLength
-    - match:  { tokens.6.token: machine }
-    - match:  { tokens.6.position: 3 }
-    - is_false: tokens.6.positionLength
-    - match:  { tokens.7.token: is }
-    - match:  { tokens.7.position: 4 }
-    - is_false: tokens.7.positionLength
-    - match:  { tokens.8.token: down }
-    - match:  { tokens.8.position: 5 }
-    - is_false: tokens.8.positionLength
-
----
-"length":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_length:
-                    type: length
-                    min: 6
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      foo bar foobar
-            tokenizer: whitespace
-            filter:    [my_length]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: foobar }
-
----
-"uppercase":
-    - do:
-        indices.analyze:
-          body:
-            text:      foobar
-            tokenizer: keyword
-            filter:    [uppercase]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: FOOBAR }
-
----
-"ngram":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_ngram:
-                    type: ngram
-                    min_gram: 3
-                    max_gram: 3
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      foobar
-            tokenizer: keyword
-            filter:    [my_ngram]
-    - length: { tokens: 4 }
-    - match:  { tokens.0.token: foo }
-    - match:  { tokens.1.token: oob }
-    - match:  { tokens.2.token: oba }
-    - match:  { tokens.3.token: bar }
-
----
-"edge_ngram":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_edge_ngram:
-                    type: edge_ngram
-                    min_gram: 3
-                    max_gram: 6
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      foobar
-            tokenizer: keyword
-            filter:    [my_edge_ngram]
-    - length: { tokens: 4 }
-    - match:  { tokens.0.token: foo }
-    - match:  { tokens.1.token: foob }
-    - match:  { tokens.2.token: fooba }
-    - match:  { tokens.3.token: foobar }
-
----
-"kstem":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_kstem:
-                    type: kstem
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      bricks
-            tokenizer: keyword
-            filter:    [my_kstem]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: brick }
-
-    # use preconfigured token filter:
-    - do:
-        indices.analyze:
-          body:
-            text:      bricks
-            tokenizer: keyword
-            filter:    [kstem]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: brick }
-
----
-"reverse":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_reverse:
-                    type: reverse
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      foobar
-            tokenizer: keyword
-            filter:    [my_reverse]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: raboof }
-
-    # use preconfigured token filter:
-    - do:
-        indices.analyze:
-          body:
-            text:      foobar
-            tokenizer: keyword
-            filter:    [reverse]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: raboof }
-
----
-"elision":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_elision:
-                    type: elision
-                    articles: ["l", "m", "t", "qu", "n", "s", "j"]
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      "l'avion"
-            tokenizer: keyword
-            filter:    [my_elision]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: avion }
-
-    - do:
-        catch: bad_request
-        indices.create:
-          index: test2
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_elision:
-                    type: elision
-    - match: { status: 400 }
-    - match: { error.type: illegal_argument_exception }
-    - match: { error.reason: "elision filter requires [articles] or [articles_path] setting" }
-
----
-"stemmer":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_stemmer:
-                    type: stemmer
-                    language: dutch
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      zoeken
-            tokenizer: keyword
-            filter:    [my_stemmer]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: zoek }
----
-"stemmer_override":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_stemmer:
-                    type: stemmer
-                    language: dutch
-                  my_stemmer_override:
-                    type: stemmer_override
-                    rules: [
-                      "zoeken => override",
-                      "foo, bar => baz"
-                    ]
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      zoeken
-            tokenizer: keyword
-            filter:    [my_stemmer_override, my_stemmer]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: override }
-
-    # Test rule with multiple tokens on LHS:
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      foo bar
-            tokenizer: whitespace
-            filter:    [my_stemmer_override]
-    - length: { tokens: 2 }
-    - match:  { tokens.0.token: baz }
-    - match:  { tokens.1.token: baz }
-
----
-"decompounder":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_decompounder:
-                    type: dictionary_decompounder
-                    word_list: [foo, bar]
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      foobar
-            tokenizer: keyword
-            filter:    [my_decompounder]
-    - length: { tokens: 3 }
-    - match:  { tokens.0.token: foobar }
-    - match:  { tokens.1.token: foo }
-    - match:  { tokens.2.token: bar }
-
----
-"truncate":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_truncate:
-                    type: truncate
-                    length: 3
-                normalizer:
-                  my_truncate_norm:
-                    type: custom
-                    filter:
-                      - my_truncate
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      foobar
-            tokenizer: keyword
-            filter:    [my_truncate]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: foo }
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      foobar
-            normalizer: my_truncate_norm
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: foo }
-
----
-"pattern_capture":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_pattern_capture:
-                    type: pattern_capture
-                    preserve_original: false
-                    patterns: ["([^@]+)"]
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      foo@bar.baz
-            tokenizer: keyword
-            filter:    [my_pattern_capture]
-    - length: { tokens: 2 }
-    - match:  { tokens.0.token: foo }
-    - match:  { tokens.1.token: bar.baz }
-
----
-"pattern_replace":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_pattern_replace:
-                    type: pattern_replace
-                    pattern: a
-                    replacement: b
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      a
-            tokenizer: keyword
-            filter:    [my_pattern_replace]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: b }
-
----
-"limit_count":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_limit:
-                    type: limit
-                    max_token_count: 2
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      a b c
-            tokenizer: whitespace
-            filter:    [my_limit]
-    - length: { tokens: 2 }
-    - match:  { tokens.0.token: a }
-    - match:  { tokens.1.token: b }
-
----
-"common_grams":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_limit:
-                    type: common_grams
-                    common_words: [a]
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      a b c
-            tokenizer: whitespace
-            filter:    [my_limit]
-    - length: { tokens: 4 }
-    - match:  { tokens.0.token: a }
-    - match:  { tokens.1.token: a_b }
-    - match:  { tokens.2.token: b }
-    - match:  { tokens.3.token: c }
-
----
-"arabic_normalization":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_arabic_normalization:
-                    type: arabic_normalization
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      آجن
-            tokenizer: keyword
-            filter:    [my_arabic_normalization]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: اجن }
-
-    # Test pre-configured token filter too:
-    - do:
-        indices.analyze:
-          body:
-            text:      آجن
-            tokenizer: keyword
             filter:    [arabic_normalization]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: اجن }
-
----
-"bengali_normalization":
     - do:
-        indices.create:
-          index: test
           body:
-            settings:
-              analysis:
-                filter:
-                  my_bengali_normalization:
-                    type: bengali_normalization
-    - do:
+"arabic_stem":
+              - type: keyword_marker
+            filter:    [indic_normalization]
+            filter:    [my_scandinavian_normalization]
+    - match:  { tokens.1.token: Musée d'Orsay }
+    - match:  { detail.tokenfilters.0.tokens.5.end_offset: 19 }
         indices.analyze:
-          index: test
+    - match:  { tokens.1.token: bar }
+                    type: scandinavian_normalization
+    - length: { tokens: 11 }
+    - do:
+            text:      多くの学生が試験に落ちた
+            explain:   true
           body:
-            text:      চাঁদ
-            tokenizer: keyword
-            filter:    [my_bengali_normalization]
+          index: test
+    - do:
+            tokenizer: whitespace
+---
+        indices.create:
+    - do:
+          index: test
+    - match:  { tokens.2.token: b }
+---
+    - match:  { tokens.8.token: に落 }
     - length: { tokens: 1 }
+            text:      This is troubled
+    - match:  { tokens.0.token: brick }
+    - length: { tokens: 1 }
+    - do:
+                    min_gram: 3
+            filter:
+    - match:  { tokens.0.token: foo }
+    - match:  { tokens.0.token: the }
+    - match:  { tokens.0.token: अंगरेजि }
+        indices.analyze:
+        indices.analyze:
+          body:
+    - length: { tokens: 1 }
+              - type: word_delimiter
+          body:
+    - length: { tokens: 2 }
+    - length: { tokens: 4 }
     - match:  { tokens.0.token: চাদ }
-
+    - match:  { tokens.0.position: 0 }
+          body:
+          body:
+            filter:    [word_delimiter_graph]
+          text: wibble
+    - match: { tokens.1.token: "#text2" }
+        indices.analyze:
+          tokenizer:  keyword
+    - match:  { tokens.0.token: ø }
+                  - "@ => ALPHANUM"
+    - length: { tokens: 4 }
+            text: my guinea pig snores
+        indices.analyze:
+                    types: [<NUM>]
+            filter:    [my_decompounder]
+---
+    - match:  { tokens.1.positionLength: 3 }
+        indices.analyze:
+  - do:
+              analysis:
+            tokenizer: keyword
+    - is_false: tokens.3.positionLength
+            filter:    [my_scandinavian_folding]
+            filter:    [my_elision]
+                    type: pattern_capture
+    - length: { tokens: 9 }
+        indices.analyze:
+    - match:  { tokens.0.token: abschliess }
+          body:
+    - match:  { detail.tokenizer.tokens.2.position: 2 }
+  - match:  { tokens.1.position: 0 }
+        indices.analyze:
+        indices.create:
     # Test pre-configured token filter too:
     - do:
+            filter:    [scandinavian_folding]
+            tokenizer: whitespace
+              analysis:
+    - do:
+    # Test rule with multiple tokens on LHS:
         indices.analyze:
+                type_table:
+        indices.create:
+                    language: dutch
+          index: test
+          index: test
+          filter:     [my_delimited_term_freq]
+    - length: { tokens: 2 }
+    - match: { tokens.0.start_offset: 0 }
+      indices.analyze:
+    # Test pre-configured token filter too:
+    - match:  { tokens.2.token: "1" }
+            settings:
+    - is_false: tokens.5.positionLength
+    - match:  { tokens.2.position: 1 }
           body:
-            text:      চাঁদ
-            tokenizer: keyword
-            filter:    [bengali_normalization]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: চাদ }
-
+            filter:    [my_keep_types]
+              analysis:
+                  my_dutch_stem:
+        indices.analyze:
+  - match:  { tokens.0.token: wibble }
+          tokenizer: keyword
+    - match:  { tokens.1.token: bar }
 ---
+          index: test
+                split_on_numerics: false
+    - match:  { tokens.3.token: ck }
+    - do:
+---
+              analysis:
+---
+    - length: { tokens: 2 }
+            text: 'text1 #text2'
+    - do:
+          body:
+        indices.create:
+              analysis:
+    - do:
+          tokenizer:  keyword
+          body:
+            settings:
+          body:
+          index: test
+    - match:  { tokens.3.position: 1 }
+    - match: { error.type: illegal_argument_exception }
+    - match:  { tokens.8.token: down }
+    - do:
+    - do:
+            settings:
+                    type: elision
+                filter:
+  - match:  { detail.tokenfilters.0.tokens.0.termFrequency: 3 }
+          index: test
+              analysis:
+    - match:  { tokens.4.token: brown }
+"unique":
+        indices.analyze:
+    # Test pre-configured token filter too:
+              analysis:
+            filter:    [word_delimiter]
+          body:
+            filter:    [my_truncate]
+          body:
+    - do:
+  - match:  { detail.tokenfilters.0.tokens.0.token: foo }
+          body:
+            tokenizer: keyword
+          body:
+            filter:
+              - type: word_delimiter
+            tokenizer: keyword
+        indices.analyze:
+                    type: dictionary_decompounder
+                    type: cjk_width
+    - match:  { detail.custom_analyzer: true }
+        indices.analyze:
+    - match: { tokens.0.end_offset: 5 }
+            text:      ত্‍
+    - match:  { detail.tokenfilters.0.tokens.0.start_offset: 0 }
+      reason: "delimited_term_freq token filter was added in v2.10.0"
+          body:
+        indices.create:
+"cjk_width":
+    - length: { tokens: 1 }
+            tokenizer: keyword
+                  my_serbian_normalization:
+    - match: { tokens.0.token: text1 }
+            tokenizer: keyword
+      indices.create:
+    - match:  { tokens.0.token: foo }
+          index: test
+    - match:  { tokens.0.token: اجن }
+    - do:
+        indices.create:
+          body:
+                    min: 6
+            tokenizer: whitespace
+    - do:
+    - match:  { tokens.1.token: くの }
+    - match:  { detail.tokenizer.tokens.0.start_offset: 0 }
+          body:
+                split_on_numerics: false
+    - do:
+---
+    - match:  { tokens.5.token: が試 }
+    - do:
+                    type: classic
+    - match: { tokens.0.position: 0 }
+    - do:
+                keywords: troubled
+    - match:  { tokens.5.token: teller }
+    - match:  { tokens.3.token: automatic }
+    - match:  { detail.tokenfilters.0.tokens.4.position: 4 }
+                filter:
+          body:
+            tokenizer: keyword
+    - match:  { tokens.3.token: pig }
+    - match:  { detail.tokenizer.tokens.1.token: qu1ck }
+            text: "The quick fox"
+    - do:
 "german_normalization":
     - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_german_normalization:
-                    type: german_normalization
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      weißbier
-            tokenizer: keyword
-            filter:    [my_german_normalization]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: weissbier }
-
     # Test pre-configured token filter too:
-    - do:
+    - match:  { tokens.2.position: 1 }
+    - match:  { detail.tokenizer.tokens.0.token: the }
+                    type: length
+          body:
+          body:
         indices.analyze:
-          body:
-            text:      weißbier
-            tokenizer: keyword
-            filter:    [german_normalization]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: weissbier }
-
----
-"hindi_normalization":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_hindi_normalization:
-                    type: hindi_normalization
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      अँगरेज़ी
-            tokenizer: keyword
-            filter:    [my_hindi_normalization]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: अंगरेजि }
-
-    # Test pre-configured token filter too:
-    - do:
-        indices.analyze:
-          body:
-            text:      अँगरेज़ी
-            tokenizer: keyword
-            filter:    [hindi_normalization]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: अंगरेजि }
-
----
-"indic_normalization":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_indic_normalization:
-                    type: indic_normalization
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      ত্‍
-            tokenizer: keyword
-            filter:    [my_indic_normalization]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: ৎ }
-
-    # Test pre-configured token filter too:
-    - do:
-        indices.analyze:
-          body:
-            text:      ত্‍
-            tokenizer: keyword
-            filter:    [indic_normalization]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: ৎ }
-
----
-"persian_normalization":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_persian_normalization:
-                    type: persian_normalization
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      های
-            tokenizer: keyword
-            filter:    [my_persian_normalization]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: هاي }
-
-    # Test pre-configured token filter too:
-    - do:
-        indices.analyze:
-          body:
-            text:      های
-            tokenizer: keyword
-            filter:    [persian_normalization]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: هاي }
-
----
-"scandinavian_normalization":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_scandinavian_normalization:
-                    type: scandinavian_normalization
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      ö
-            tokenizer: keyword
-            filter:    [my_scandinavian_normalization]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: ø }
-
-    # Test pre-configured token filter too:
-    - do:
-        indices.analyze:
-          body:
-            text:      ö
-            tokenizer: keyword
-            filter:    [scandinavian_normalization]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: ø }
-
----
-"serbian_normalization":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_serbian_normalization:
-                    type: serbian_normalization
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      абвгдђежзијклљмнњопрстћуфхцчџш
-            tokenizer: keyword
-            filter:    [my_serbian_normalization]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: abvgddjezzijklljmnnjoprstcufhccdzs }
-
-    # Test pre-configured token filter too:
-    - do:
-        indices.analyze:
-          body:
-            text:      абвгдђежзијклљмнњопрстћуфхцчџш
-            tokenizer: keyword
-            filter:    [serbian_normalization]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: abvgddjezzijklljmnnjoprstcufhccdzs }
-
----
-"sorani_normalization":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_sorani_normalization:
-                    type: sorani_normalization
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      ي
-            tokenizer: keyword
-            filter:    [my_sorani_normalization]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: ی }
-
-    # Test pre-configured token filter too:
-    - do:
-        indices.analyze:
-          body:
-            text:      ي
-            tokenizer: keyword
-            filter:    [sorani_normalization]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: ی }
-
----
-"cjk_width":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_cjk_width:
-                    type: cjk_width
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      ｶﾀｶﾅ
-            tokenizer: keyword
-            filter:    [my_cjk_width]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: カタカナ }
-
-    # Test pre-configured token filter too:
-    - do:
-        indices.analyze:
-          body:
-            text:      ｶﾀｶﾅ
-            tokenizer: keyword
-            filter:    [cjk_width]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: カタカナ }
-
----
-"cjk_bigram":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_cjk_bigram:
-                    type: cjk_bigram
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      多くの学生が試験に落ちた
-            tokenizer: standard
-            filter:    [my_cjk_bigram]
-    - length: { tokens: 11 }
-    - match:  { tokens.0.token: 多く }
-    - match:  { tokens.1.token: くの }
-    - match:  { tokens.2.token: の学 }
-    - match:  { tokens.3.token: 学生 }
-    - match:  { tokens.4.token: 生が }
-    - match:  { tokens.5.token: が試 }
-    - match:  { tokens.6.token: 試験 }
-    - match:  { tokens.7.token: 験に }
-    - match:  { tokens.8.token: に落 }
-    - match:  { tokens.9.token: 落ち }
-    - match:  { tokens.10.token: ちた }
-
-    # Test pre-configured token filter too:
-    - do:
-        indices.analyze:
-          body:
-            text:      多くの学生が試験に落ちた
-            tokenizer: standard
-            filter:    [cjk_bigram]
-    - length: { tokens: 11 }
-    - match:  { tokens.0.token: 多く }
-    - match:  { tokens.1.token: くの }
-    - match:  { tokens.2.token: の学 }
-    - match:  { tokens.3.token: 学生 }
-    - match:  { tokens.4.token: 生が }
-    - match:  { tokens.5.token: が試 }
-    - match:  { tokens.6.token: 試験 }
-    - match:  { tokens.7.token: 験に }
-    - match:  { tokens.8.token: に落 }
-    - match:  { tokens.9.token: 落ち }
-    - match:  { tokens.10.token: ちた }
-
----
-"delimited_payload":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_delimited_payload:
-                    type: delimited_payload
-                    delimiter: ^
-                    encoding: identity
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      foo^bar
-            tokenizer: keyword
-            filter:    [my_delimited_payload]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: foo }
-
-    # Test pre-configured token filter too:
-    - do:
-        indices.analyze:
-          body:
-            text:      foo|5
-            tokenizer: keyword
-            filter:    [delimited_payload]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: foo }
-
----
-"delimited_term_freq":
-  - skip:
-      version: " - 2.9.99"
-      reason: "delimited_term_freq token filter was added in v2.10.0"
-  - do:
-      indices.create:
-        index: test
-        body:
-          settings:
-            analysis:
-              filter:
-                my_delimited_term_freq:
-                  type: delimited_term_freq
-                  delimiter: ^
-  - do:
-      indices.analyze:
-        index: test
-        body:
-          text:       foo^3
-          tokenizer:  keyword
-          filter:     [my_delimited_term_freq]
-          attributes: termFrequency
-          explain:    true
-  - length: { detail.tokenfilters: 1 }
-  - match:  { detail.tokenfilters.0.tokens.0.token: foo }
-  - match:  { detail.tokenfilters.0.tokens.0.termFrequency: 3 }
-
-  # Test pre-configured token filter too:
-  - do:
-      indices.analyze:
-        body:
-          text:       foo|100
-          tokenizer:  keyword
           filter:     [delimited_term_freq]
-          attributes: termFrequency
-          explain:    true
-  - length: { detail.tokenfilters: 1 }
-  - match:  { detail.tokenfilters.0.tokens.0.token: foo }
-  - match:  { detail.tokenfilters.0.tokens.0.termFrequency: 100 }
----
-"keep_filter":
-    - do:
-        indices.create:
+    - length: { tokens: 1 }
+    - length: { tokens: 512 }
+    - match:  { tokens.0.token: ৎ }
+                    common_words: [a]
+            filter:    [my_bengali_normalization]
+                    type: custom
+            text: ophouden
+            tokenizer: keyword
+            text:      های
+    - match:  { tokens.0.token: Musee d'Orsay }
+            text: الحسن
+            text:      foo's bar
+        body:
+  - length: { tokens: 2 }
+            filter:    [my_arabic_normalization]
+    - is_false: tokens.0.positionLength
           index: test
-          body:
-            settings:
-              analysis:
+                type_table:
                 filter:
-                  my_keep:
-                    type: keep
-                    keep_words: [foo,bar]
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      foo bar baz
-            tokenizer: whitespace
-            filter:    [my_keep]
-    - length: { tokens: 2 }
     - match:  { tokens.0.token: foo }
-    - match:  { tokens.1.token: bar }
-
----
-"keep_types_filter":
-    - do:
-        indices.create:
+            filter: [ my_synonym ]
           index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_keep_types:
-                    type: keep_types
-                    types: [<NUM>]
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      foo 123 bar
+            filter:    [my_stemmer]
             tokenizer: standard
-            filter:    [my_keep_types]
+    - match:  { detail.tokenfilters.0.tokens.5.token: fox }
+        indices.analyze:
+            text: chevaux
+            settings:
+          body:
+    - match:  { detail.tokenizer.tokens.2.start_offset: 10 }
+        body:
     - length: { tokens: 1 }
-    - match:  { tokens.0.token: "123" }
-
----
-"classic":
-    - do:
-        indices.create:
           index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_classic:
-                    type: classic
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      foo's bar
-            tokenizer: classic
-            filter:    [my_classic]
-    - length: { tokens: 2 }
-    - match:  { tokens.0.token: foo }
-    - match:  { tokens.1.token: bar }
-
-    # Test pre-configured token filter too:
-    - do:
-        indices.analyze:
-          body:
-            text:      foo's bar
-            tokenizer: classic
-            filter:    [classic]
-    - length: { tokens: 2 }
-    - match:  { tokens.0.token: foo }
-    - match:  { tokens.1.token: bar }
-
----
-"apostrophe":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_apostrophe:
-                    type: apostrophe
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text:      foo's bar
+    - match: { tokens.0.end_offset: 5 }
             tokenizer: keyword
-            filter:    [my_apostrophe]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: foo }
-
-    # Test pre-configured token filter too:
+            text:      foobar
+    - match:  { tokens.5.position: 2 }
+    - match:  { tokens.0.token: ophoud }
+            text: 'text1 #text2'
     - do:
-        indices.analyze:
-          body:
-            text:      foo's bar
+          attributes: termFrequency
+"multiplexer":
             tokenizer: keyword
-            filter:    [apostrophe]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: foo }
-
----
-"decimal_digit":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_decimal_digit:
-                    type: decimal_digit
-    - do:
-        indices.analyze:
-          index: test
-          body:
             text:      ١٢٣٤
-            tokenizer: keyword
-            filter:    [my_decimal_digit]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: "1234" }
-
-    # Test pre-configured token filter too:
-    - do:
-        indices.analyze:
+    - match:  { tokens.2.start_offset: 4 }
           body:
-            text:      ١٢٣٤
-            tokenizer: keyword
-            filter:    [decimal_digit]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: "1234" }
-
----
-"fingerprint":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
+  - do:
               analysis:
                 filter:
-                  my_fingerprint:
-                    type: fingerprint
-                    separator: _
-    - do:
-        indices.analyze:
+    - match:  { tokens.1.token: cavy }
+    - match:  { tokens.2.position: 2 }
           index: test
-          body:
-            text: A1 B2 A1 D4 C3
             tokenizer: whitespace
-            filter:    [my_fingerprint]
+                    type: edge_ngram
+                  - "# => ALPHANUM"
+        indices.create:
+            tokenizer: keyword
+          body:
+                  type: persian_stem
+    - match:  { tokens.0.token: abvgddjezzijklljmnnjoprstcufhccdzs }
+            text:      a b c
+            text:      foo 123 bar
+          body:
+    - match: { tokens.1.start_offset: 6 }
     - length: { tokens: 1 }
-    - match:  { tokens.0.token: A1_B2_C3_D4 }
-
-    # Test pre-configured token filter too:
+            filter:    [my_limit]
+            tokenizer: standard
+          index: test
+            text: করেছিলাম
+    - match:  { tokens.2.token: cash }
     - do:
-        indices.analyze:
-          body:
-            text: A1 B2 A1 D4 C3
-            tokenizer: whitespace
-            filter:    [fingerprint]
+            tokenizer: keyword
     - length: { tokens: 1 }
+                filter:
+        indices.analyze:
+    - match:  { tokens.0.token: foo }
+            filter:    [lowercase]
+    - do:
+    - match:  { tokens.0.token: Foo }
+            filter:    [german_stem]
+          body:
+          body:
+            text:      foo's bar
+    - is_false: tokens.6.positionLength
+                  my_graph_synonym:
+            tokenizer: whitespace
+"arabic_normalization":
+    - match:  { tokens.3.token: 学生 }
+    - do:
+            tokenizer: keyword
+    - length: { tokens: 11 }
+          body:
+                    type: stemmer
+          body:
+        indices.analyze:
+            filter:    [porter_stem]
+                  my_cjk_width:
+    - is_false: tokens.0.positionLength
+    - match: { tokens.1.start_offset: 6 }
+        indices.analyze:
+"keep_types_filter":
+          body:
+    - length: { detail.tokenfilters.0.tokens: 3 }
+    - match:  { tokens.1.position: 1 }
+    - do:
+                  my_czech_stem:
+                type_table:
+        indices.analyze:
+              - type: word_delimiter
+        index: test
+---
+    - length: { tokens: 1 }
+            settings:
+    - match: { tokens.0.start_offset: 0 }
+                  my_keep_types:
+    - match:  { tokens.0.token: अंगरेजि }
+                    type: kstem
+    - match:  { tokens.1.token: foob }
+          index: test
+        body:
+        indices.analyze:
+    - match: { tokens.0.start_offset: 0 }
+                    type: limit
+            filter:
+    - match:  { tokens.0.token: هاي }
+    - match:  { tokens.0.token: حسن }
     - match:  { tokens.0.token: A1 B2 C3 D4 }
-
----
-"min_hash":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
               analysis:
-                filter:
-                  my_min_hash:
-                    type: min_hash
+              analysis:
+    - match: { tokens.1.token: "#text2" }
     - do:
         indices.analyze:
           index: test
-          body:
-            text: the quick brown fox
+            tokenizer: standard
             tokenizer: whitespace
-            filter:    [my_min_hash]
-    - length: { tokens: 512 }
-
-    # Test pre-configured token filter too:
+                    type: czech_stem
+            filter:    [decimal_digit]
+              - type: porter_stem
+    - match:  { tokens.1.token: b }
+                normalizer:
+                  - "# This is a comment"
+---
     - do:
-        indices.analyze:
+    - length: { tokens: 4 }
+                filter:
+    - do:
+            text:      अँगरेज़ी
+                filter:
+                    pattern: a
           body:
-            text: the quick brown fox
-            tokenizer: whitespace
-            filter:    [min_hash]
-    - length: { tokens: 512 }
-
+    - match:  { tokens.1.end_offset: 9 }
+            tokenizer: keyword
+          body:
+  - match:  { tokens.0.token: جامد }
+              analysis:
+            text: ophouden
+          index: test
+    - do:
+          body:
+            tokenizer: keyword
+                    type: brazilian_stem
+                  my_cjk_bigram:
+            tokenizer: keyword
+          body:
+          body:
+    - length: { tokens: 1 }
+    - match:  { detail.tokenfilters.0.tokens.2.position: 2 }
+    - do:
+            settings:
+                filter:
+          index: test
+    - length: { tokens: 1 }
+          index: test
+          body:
+            tokenizer: keyword
+            text:      абвгдђежзијклљмнњопрстћуфхцчџш
+        indices.analyze:
+            filter:    [hindi_normalization]
+          body:
+          index: test
+          body:
+"persian_stem":
+                  my_kstem:
+          index: test
+    - match:  { tokens.0.token: "1234" }
+                    type: bengali_normalization
+          index: test
+          index: test
+          text: جامدات
+          body:
+    - length: { tokens: 1 }
+                    max_gram: 3
+                  my_bengali_stem:
+  - match:  { tokens.1.token: wibble }
+                filter:
+            filter:    [my_arabic_stem]
+            filter:    [my_fingerprint]
+    - do:
+            settings:
+    - length: { tokens: 1 }
+            text:      foo's bar
+  - length: { detail.tokenfilters: 1 }
+    - match:  { tokens.0.token: foo }
+        indices.analyze:
+                    patterns: ["([^@]+)"]
+    - do:
+    - length: { tokens: 1 }
+    - match:  { tokens.3.token: c }
+    - match:  { detail.tokenizer.tokens.1.start_offset: 4 }
+          index: test
+    - length: { tokens: 1 }
+            settings:
+            tokenizer: keyword
+            filter:    [my_cjk_bigram]
+        indices.analyze:
+                    synonyms: ["car,auto"]
 ---
 "scandinavian_folding":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_scandinavian_folding:
-                    type: scandinavian_folding
-    - do:
-        indices.analyze:
-          index: test
-          body:
             text: räksmörgås
-            tokenizer: keyword
-            filter:    [my_scandinavian_folding]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: raksmorgas }
-
-    # Test pre-configured token filter too:
-    - do:
         indices.analyze:
-          body:
-            text: räksmörgås
-            tokenizer: keyword
-            filter:    [scandinavian_folding]
+    - match: { tokens.0.position: 0 }
+"french_stem":
+            filter:    [my_persian_normalization]
     - length: { tokens: 1 }
-    - match:  { tokens.0.token: raksmorgas }
-
 ---
-"arabic_stem":
-    - do:
-        indices.create:
+            tokenizer: whitespace
+              analysis:
           index: test
           body:
+    - match:  { tokens.1.token: qu }
+            tokenizer: whitespace
+---
+            filter:    [my_pattern_replace]
+                  - "# => ALPHANUM"
+                filter:
+          body:
+            filter:    [delimited_payload]
+    - match:  { tokens.0.token: abschliess }
+            tokenizer: whitespace
+            text:      চাঁদ
+                  - "# => ALPHANUM"
+    - match:  { tokens.3.token: ck }
+"pattern_capture":
+    - match:  { detail.tokenizer.name: standard }
+              analysis:
+    - match:  { tokens.10.token: ちた }
+                  my_indic_normalization:
+        indices.analyze:
+            settings:
+            settings:
+        indices.analyze:
+    - do:
+              analysis:
+    # Test pre-configured token filter too:
+        indices.analyze:
+                    type: elision
+                  my_min_hash:
+    - do:
+          body:
+            tokenizer: keyword
+              analysis:
+    - match:  { tokens.3.token: bar }
+    - length: { tokens: 1 }
+    - do:
+    - do:
+            filter:    [german_normalization]
+          settings:
+                filter:
+    - match: { tokens.1.token: "#text2" }
+          body:
+          index: test
+                    type: arabic_normalization
+            settings:
+          settings:
+    - match:  { tokens.0.token: weissbier }
+          attributes: termFrequency
+            filter:    [my_german_stem]
+"dutch_stem":
+          index: test
+            text:      foo bar
+    - length: { tokens: 1 }
+    - match: { tokens.1.end_offset: 12 }
+          filter: [ { type: synonym_graph, synonyms: [ "wibble, quack" ]}]
+        indices.analyze:
+            tokenizer: standard
+    - match:  { tokens.0.token: চাদ }
+    - do:
+    - match:  { tokens.0.token: カタカナ }
+                filter:
+          index: test
+          body:
+                    replacement: b
+            text: räksmörgås
+        indices.create:
+---
+        indices.analyze:
+    - match:  { detail.tokenizer.tokens.2.token: brown }
+    - is_false: tokens.2.positionLength
+            tokenizer: keyword
+            filter:
+    - length: { tokens: 1 }
+    - match:  { detail.tokenfilters.0.tokens.2.position: 2 }
+    - length: { tokens: 1 }
+            text: angličtí
+    - length: { tokens: 3 }
+          body:
+          body:
+    - do:
+                  my_synonym_graph:
+                  type: delimited_term_freq
+        indices.create:
+            text: Brasília
+      indices.analyze:
+    # Test pre-configured token filter too:
+  - match:  { tokens.1.token: quack }
+"synonym_graph_without_index":
+                    min_gram: 3
+    - length: { tokens: 1 }
+    - do:
+    - do:
+    - match:  { tokens.0.token: اجن }
+    - match:  { tokens.0.token: foo }
+            settings:
+          body:
+          body:
+    - match:  { detail.tokenizer.tokens.3.start_offset: 16 }
+              analysis:
+    - do:
+        indices.create:
+    - match:  { tokens.1.start_offset: 4 }
+              analysis:
+          body:
+            filter:    [french_stem]
+---
+    - match:  { detail.tokenfilters.0.tokens.0.position: 0 }
+    # Test pre-configured token filter too:
+            text: 'text1 #text2'
+                    type: stemmer
+            text:      "l'avion"
+          index: test
+---
+---
+    - length: { tokens: 1 }
+                  my_bengali_normalization:
+          body:
+          index: test
+  - length: { tokens: 2 }
+            filter:    [classic]
+            text: this automatic teller machine is down
+              - type: word_delimiter_graph
+          tokenizer: standard
+    - match:  { tokens.0.token: ø }
+---
+        indices.analyze:
+          body:
+    - length: { tokens: 1 }
+        indices.analyze:
+                  my_hindi_normalization:
+  - do:
+          index: test
+        indices.analyze:
+    - do:
+                  my_synonym:
+            text:      های
+    - match: { tokens.1.token: "#text2" }
+          body:
+      indices.analyze:
+        indices.analyze:
+          body:
+          body:
+                    type: german_normalization
+            filter:    [min_hash]
+                    type: ngram
+            tokenizer: standard
+            filter:    [my_length]
+            tokenizer: keyword
+              analysis:
+            tokenizer: keyword
+                    language: dutch
+          body:
+"bengali_normalization":
+                  - "\\u0023 => ALPHANUM"
+            settings:
+    - do:
+          index: test
+            settings:
+        body:
+          body:
+        indices.analyze:
+          body:
+                    preserve_original: false
+                    type: reverse
+        indices.analyze:
+    - length: { tokens: 1 }
+    - do:
+            tokenizer: keyword
+    - match:  { tokens.2.position: 1 }
+          body:
+            tokenizer: whitespace
+            text:      zoeken
+---
+            text:      foobar
+                filter:
+    - match: { tokens.0.position: 0 }
+    # Test pre-configured token filter too:
+        indices.analyze:
+    - length: { tokens: 3 }
+    - do:
+"serbian_normalization":
+        indices.create:
+    - match: { tokens.1.start_offset: 6 }
+            text: chevaux
+---
+    - do:
+            tokenizer: "standard"
+    - match:  { tokens.2.token: troubled }
+                filter:
+          body:
+    - match: { tokens.1.position: 1 }
+    - length: { tokens: 1 }
+    - is_false: tokens.5.positionLength
+    - do:
+          body:
+    - match: { tokens.0.end_offset: 5 }
+                filter:
+            tokenizer: standard
+    - length: { tokens: 6 }
+            tokenizer: keyword
+  - skip:
+---
+    - match:  { tokens.1.token: くの }
+        indices.analyze:
+          body:
+    - do:
+    - match:  { tokens.0.token: カタカナ }
+            tokenizer: keyword
+        indices.analyze:
+          index: test
+          body:
+          explain:    true
+            filter:    [my_edge_ngram]
+    - match:  { tokens.4.token: 生が }
+          index: test
+    - match: { tokens.1.start_offset: 6 }
+    - length: { tokens: 6 }
+          body:
+            settings:
+---
+                filter:
+    - match:  { tokens.0.token: override }
+    - length: { tokens: 2 }
+    - match:  { detail.tokenizer.tokens.3.end_offset: 19 }
+                  my_reverse:
+            filter:    [my_german_normalization]
+"classic":
+            filter:    [my_stemmer_override, my_stemmer]
+    # Test pre-configured token filter too:
+                adjust_offsets: false
+            tokenizer: keyword
+    - do:
+  - match:  { tokens.1.position: 0 }
+---
+  - do:
+            tokenizer: classic
+          index: test2
+          text:       foo|100
+          body:
+    - match:  { tokens.1.token: qu1ck }
+            tokenizer: keyword
+            tokenizer: keyword
+          body:
+        indices.analyze:
+    # Test pre-configured token filter too:
+    - length: { tokens: 1 }
+    - match:  { tokens.2.token: bar }
+            filter:    [my_serbian_normalization]
+            text:      ي
+            text:      the qu1ck brown fox
+            filter:    [brazilian_stem]
+                    ]
+            text:      अँगरेज़ी
+          body:
+            text:      foobar
+        indices.analyze:
+    - match:  { tokens.7.position: 5 }
+    - length: { tokens: 2 }
+          body:
+            tokenizer: keyword
+              analysis:
+"delimited_term_freq":
+        indices.create:
+          body:
+            filter:    [dutch_stem]
+            settings:
+---
+    - match:  { tokens.8.token: down }
+          body:
+            text: A1 B2 A1 D4 C3
+          index: test
+            filter: [ my_graph_synonym ]
+    - match:  { tokens.0.token: raboof }
+        indices.analyze:
+        indices.create:
+                  my_russian_stem:
+            settings:
+    - match:  { tokens.0.token: foo }
             settings:
               analysis:
+            filter:    [my_limit]
+    - do:
+            tokenizer: keyword
+        indices.analyze:
+    - length: { tokens: 1 }
                 filter:
-                  my_arabic_stem:
+                    type: synonym_graph
+            text: 'text1 #text2'
+"ngram":
+          index: test
+            settings:
+    - length: { tokens: 1 }
+              analysis:
+          index: test
+            analysis:
+        indices.analyze:
+          body:
+                  my_decimal_digit:
+        indices.create:
+            settings:
+    - match:  { detail.tokenfilters.0.tokens.0.token: the }
+    - do:
+    - do:
+"sorani_normalization":
+    - match:  { tokens.2.token: brown }
+          body:
+                filter:
+    - match:  { tokens.1.token: a_b }
+                  my_fingerprint:
+    - do:
+        indices.analyze:
+  # Test pre-configured token filter too:
+        indices.analyze:
+            text:      weißbier
+"edge_ngram":
+    - match:  { detail.tokenfilters.0.tokens.5.start_offset: 16 }
+    - length: { detail.tokenfilters.0.tokens: 6 }
+    - match:  { tokens.6.token: 試験 }
+    - match: { tokens.0.token: text1 }
+            tokenizer: standard
+    - do:
+            text:      ö
+        indices.analyze:
+        indices.create:
+    - match:  { tokens.0.token: the }
+    - do:
+            filter:    [cjk_bigram]
+    - do:
+          body:
+                split_on_numerics: false
+                filter:
+            filter:    [uppercase]
+---
+            tokenizer: keyword
+            tokenizer: whitespace
+                    type: keep_types
+            filter:    [my_indic_normalization]
+          body:
+            settings:
+    - match: { tokens.1.token: THE }
+            text: الحسن
+---
+    - do:
+    - match:  { detail.tokenfilters.0.tokens.2.token: "1" }
+            tokenizer: keyword
+            text:      ｶﾀｶﾅ
+---
+          body:
+                filter:
+          index: test
+                filter:
+            settings:
+    - length: { tokens: 1 }
+          body:
+        indices.create:
+                    synonyms: [ "guinea pig,cavy" ]
+            text: A1 B2 A1 D4 C3
+    - do:
+    - match:  { tokens.6.position: 3 }
+                filter:
+        indices.analyze:
+    - match:  { tokens.0.token: weissbier }
+          body:
+          body:
+        body:
+                    type: french_stem
+        indices.create:
+        indices.analyze:
+        indices.analyze:
+        index: test
+    - match:  { tokens.0.token: anglick }
+    - length: { tokens: 2 }
+    - match:  { detail.tokenfilters.0.tokens.5.position: 5 }
+    - match:  { tokens.3.position: 2 }
+            tokenizer: standard
+                    type: indic_normalization
+            filter:    [reverse]
+        indices.analyze:
+            text:      the qu1ck brown fox
+  - do:
+    # Test pre-configured token filter too:
+            settings:
+            tokenizer: whitespace
+      indices.create:
+                  - "@ => ALPHANUM"
+"snowball":
+    - match:  { tokens.0.token: журнал }
+    # Test pre-configured token filter too:
+    - match:  { tokens.10.token: ちた }
+    - match:  { tokens.0.token: foobar }
+                  my_stemmer:
+          body:
+                      - my_truncate
+            text:      多くの学生が試験に落ちた
+    - do:
+    - match:  { tokens.3.token: fox }
+    - length: { tokens: 1 }
+                    type: dutch_stem
+            settings:
+    - length: { tokens: 6 }
+    - match:  { tokens.0.token: ophoud }
+                  my_truncate_norm:
+    - match:  { tokens.7.token: is }
+    - length: { tokens: 1 }
+        indices.analyze:
+    - do:
+        indices.create:
+          body:
+            tokenizer: keyword
+        indices.analyze:
+                    type: synonym
+          body:
+            settings:
+            text:      This is troubled
+                filter:
+    - do:
+    - length: { tokens: 2 }
+          body:
+                  my_german_normalization:
+          index: test
+          body:
+          index: test
+    - length: { tokens: 1 }
+            text:      foobar
+                    type: sorani_normalization
+          body:
+            text: the quick brown fox
+---
+    - length: { tokens: 1 }
+          body:
+    - match:  { detail.tokenizer.tokens.2.end_offset: 15 }
+        indices.create:
+    - is_false: tokens.8.positionLength
+            filter:    [fingerprint]
+    - do:
+    - match: { tokens.0.end_offset: 5 }
+            filter:    [my_keep]
+            settings:
+    - match:  { tokens.4.token: 生が }
+        indices.create:
                     type: arabic_stem
     - do:
-        indices.analyze:
+  - do:
           index: test
+    - match:  { tokens.8.position: 6 }
+    - match:  { tokens.0.token: журнал }
+            filter:    [apostrophe]
           body:
-            text: الحسن
-            tokenizer: keyword
-            filter:    [my_arabic_stem]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: حسن }
-
+            settings:
+    - match:  { tokens.4.position: 2 }
     # Test pre-configured token filter too:
     - do:
+    - do:
+                  my_stemmer_override:
+"german_stem":
         indices.analyze:
-          body:
-            text: الحسن
-            tokenizer: keyword
-            filter:    [arabic_stem]
     - length: { tokens: 1 }
-    - match:  { tokens.0.token: حسن }
-
+            filter:    [my_kstem]
+          index: test
+          body:
+    - do:
+                my_persian_stem:
+        indices.create:
+            text:      foobar
+    - do:
+            tokenizer: whitespace
+                    type: fingerprint
+            filter:    [my_brazilian_stem]
+    # Test pre-configured token filter too:
+          index: test
+    - match:  { tokens.3.token: foobar }
+                  - "# This is a comment"
+    # Test pre-configured token filter too:
+              analysis:
+        indices.analyze:
+    # Test pre-configured token filter too:
+            filter:    [word_delimiter_graph]
+    - match: { tokens.0.position: 0 }
+        indices.create:
+            tokenizer: standard
+            filter:    [my_ngram]
+                  my_arabic_stem:
+                  my_scandinavian_normalization:
+            tokenizer: keyword
+    - match: { tokens.0.token: text1 }
+            filter:
+    - do:
+  - match:  { tokens.0.token: quack }
+    - do:
+            tokenizer: keyword
+            tokenizer: whitespace
+    - match: { tokens.0.position: 0 }
+          filter:    [my_persian_stem]
+    - match:  { tokens.0.token: cheval }
+        indices.analyze:
+            text: abschließen
+    - do:
+    - match:  { tokens.9.token: 落ち }
+    - do:
+          index: test
+  - length: { tokens: 1 }
 ---
+            tokenizer: keyword
+        indices.analyze:
+              analysis:
+    - do:
+---
+  - match:  { tokens.0.position: 0 }
+            filter:
+        indices.create:
+            text:      weißbier
+    - match:  { tokens.1.position: 1 }
+    - match:  { detail.tokenfilters.0.tokens.4.start_offset: 10 }
+    - do:
+    - match:  { detail.tokenfilters.0.name: word_delimiter_graph }
+          index: test
+    - match:  { tokens.3.position: 1 }
+          index: test
+---
+"indic_normalization":
+              analysis:
+    - do:
+---
+              - type: word_delimiter_graph
+    - match:  { detail.tokenizer.tokens.3.token: fox }
+          body:
+                  my_length:
+                    type: hindi_normalization
+        index: test
+          index: test
+                    type: truncate
+      indices.analyze:
+    - length: { tokens: 1 }
+    - match:  { tokens.1.position: 1 }
+    - match:  { tokens.0.token: anglick }
+"keep_filter":
+"reverse":
+                my_delimited_term_freq:
+    - match:  { tokens.0.token: foo bar! }
+              - type: word_delimiter_graph
+    - length: { tokens: 2 }
+            tokenizer: keyword
+            filter: [my_synonym_graph,flatten_graph]
+          body:
+    - length: { tokens: 2 }
+            tokenizer: keyword
+        indices.analyze:
+            text:      foo bar foobar
+    - match:  { tokens.2.position: 1 }
+          index: test
+    - match:  { detail.tokenfilters.0.tokens.1.end_offset: 6 }
+            text:      the qu1ck brown fox
+            tokenizer: whitespace
+                filter:
+    - do:
+---
+        indices.analyze:
+          index: test
+"pattern_replace":
+                filter:
+    - length: { tokens: 1 }
+          body:
+                split_on_numerics: false
+          body:
+  - match:  { detail.tokenfilters.0.tokens.0.termFrequency: 100 }
+    - match:  { tokens.2.token: の学 }
+          body:
+            filter:    [my_reverse]
+          body:
+            filter:    [czech_stem]
+    - match:  { detail.tokenfilters.0.tokens.3.start_offset: 7 }
+    - length: { detail.tokenfilters: 1 }
+            text: Brasília
+    - match:  { tokens.5.token: fox }
+            text:      Musée d'Orsay
+    - length: { tokens: 1 }
+    - do:
+    - match:  { tokens.6.position: 4 }
+    - match:  { tokens.7.token: is }
+          body:
+                    type: stemmer_override
+            tokenizer: keyword
+    # Test pre-configured token filter too:
+            text: 'text1 #text2'
+    - do:
+          index: test
+"delimited_payload":
+    - length: { tokens: 4 }
+        indices.analyze:
+    - do:
+  - do:
+    - length: { tokens: 1 }
+---
+          filter:    [persian_stem]
+            text:      foobar
+    - do:
+    # Test pre-configured token filter too:
+    - length: { tokens: 512 }
+"synonym_graph and flatten_graph":
+    - length: { tokens: 2 }
+            text:      the qu1ck brown fox
+    - match:  { tokens.8.position: 5 }
+    - match:  { detail.tokenfilters.0.tokens.3.position: 3 }
+        indices.analyze:
+        indices.create:
+    - is_false: tokens.7.positionLength
+              analysis:
+            text:      foo@bar.baz
+    # Test pre-configured token filter too:
+        indices.create:
+          index: test
+    - match: { tokens.0.start_offset: 0 }
+        indices.analyze:
+            text: this automatic teller machine is down
+    - do:
+---
+                    max_token_count: 2
+    - match:  { tokens.0.token: A1_B2_C3_D4 }
+    - match:  { tokens.1.position: 1 }
+            normalizer: my_truncate_norm
+          index: test
+    - length: { tokens: 2 }
+    - do:
+            text:      ي
+    - do:
+---
+        catch: bad_request
+    - match:  { tokens.1.token: Bar! }
+    - do:
+            settings:
+    - length: { tokens: 3 }
+                  my_stemmer:
+        indices.create:
+        indices.analyze:
+                  my_elision:
+---
+        indices.create:
+            settings:
+            filter:    [my_decimal_digit]
+    - match:  { detail.tokenfilters.0.tokens.4.end_offset: 15 }
+    - match:  { tokens.1.positionLength: 4 }
+    - match:  { tokens.0.token: baz }
+            tokenizer: keyword
+            filter:    [my_delimited_payload]
+          body:
+          body:
+                  my_german_stem:
+    - match:  { tokens.0.token: "1234" }
+                filter:
+          body:
+    - do:
+    - match:  { tokens.5.token: teller }
+    - match:  { tokens.0.token: brick }
+    - is_false: tokens.2.positionLength
+    - match:  { tokens.0.token: foo }
+          body:
+            settings:
+"synonym_without_index":
+    - match:  { tokens.0.token: a }
+    - do:
+  - do:
+    - match:  { tokens.7.position: 4 }
+            filter:
+    - match: { tokens.1.end_offset: 12 }
+            tokenizer: standard
+    - match:  { tokens.0.token: this }
+            text:      آجن
+    - match:  { tokens.1.token: oob }
+    # use preconfigured token filter:
+        indices.create:
+      version: " - 2.9.99"
+          text:       foo^3
+    - match:  { tokens.8.token: に落 }
+"keywordmarker":
+    # Test pre-configured token filter too:
+"scandinavian_normalization":
+    - match:  { detail.tokenizer.tokens.1.end_offset: 9 }
+    - match: { tokens.0.token: text1 }
+          index: test
+                filter:
+    - do:
+    - length: { tokens: 1 }
+          index: test
+            text:      চাঁদ
+    - match:  { tokens.6.token: machine }
+    - match:  { tokens.0.token: cheval }
+## Smoke tests for token filters included in the analysis-common module
+        indices.analyze:
+                  my_classic:
+            tokenizer: keyword
+          tokenizer: standard
+"kstem":
+    - match:  { tokens.0.token: 多く }
+    - match:  { tokens.3.end_offset: 9 }
+          body:
+            filter:    [my_apostrophe]
+    - match:  { tokens.1.token: atm }
+        indices.analyze:
+                    type: min_hash
+    - length: { tokens: 1 }
+    - length: { tokens: 6 }
+            filter:    [unique]
+---
+    - match:  { tokens.5.token: fox }
+            settings:
+        indices.analyze:
+  - length: { tokens: 1 }
+                  my_limit:
+          body:
+    - do:
+                filter:
+    - do:
+            filter:
+          body:
+                    encoding: identity
+          body:
+---
+              analysis:
 "brazilian_stem":
     - do:
-        indices.create:
-          index: test
-          body:
-            settings:
+    - do:
               analysis:
+---
+"apostrophe":
+          index: test
+    - match:  { tokens.2.token: troubl }
+            filter:    [persian_normalization]
+                    type: delimited_payload
+            tokenizer: standard
+            filter:    [asciifolding]
+    - do:
+            tokenizer: keyword
+    - length: { tokens: 1 }
+            tokenizer: standard
+    - do:
+---
+          index: test
+        indices.analyze:
+    - match: { error.reason: "elision filter requires [articles] or [articles_path] setting" }
+---
+    - is_false: tokens.8.positionLength
+          index: test
+          index: test
+                    type: decimal_digit
+            filter:
+    - do:
+          body:
                 filter:
+        body:
+    - do:
+"russian_stem":
+            settings:
+    - match:  { tokens.0.token: brasil }
+    - match:  { tokens.0.token: the }
+            tokenizer: keyword
+        indices.create:
+    - do:
+"lowercase":
+            tokenizer: keyword
+    - match:  { tokens.0.token: Musee d'Orsay }
+        indices.analyze:
+              - type: word_delimiter_graph
+  # Test pre-configured token filter too:
+              analysis:
+            filter:    [my_classic]
+    - match:  { tokens.0.token: the }
+            tokenizer: whitespace
+    - do:
+"min_hash":
+        indices.analyze:
+        indices.analyze:
+          body:
+    - match: { tokens.1.end_offset: 12 }
+    - do:
+        body:
+---
+          index: test
+        indices.analyze:
+        indices.analyze:
+          index: test
+          index: test
+    - do:
+          index: test
+              analysis:
+"decimal_digit":
+          index: test
+              filter:
+          index: test
+          index: test
+    - do:
+            filter:    [my_hindi_normalization]
+                filter:
+    - match:  { detail.tokenfilters.0.tokens.3.end_offset: 9 }
                   my_brazilian_stem:
-                    type: brazilian_stem
-    - do:
-        indices.analyze:
-          index: test
+    - match:  { tokens.4.positionLength: 2 }
+            settings:
+            settings:
           body:
-            text: Brasília
-            tokenizer: keyword
-            filter:    [my_brazilian_stem]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: brasil }
-
-    # Test pre-configured token filter too:
-    - do:
+"synonym_graph":
         indices.analyze:
-          body:
-            text: Brasília
-            tokenizer: keyword
-            filter:    [brazilian_stem]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: brasil }
-
----
-"czech_stem":
     - do:
+    - is_false: tokens.7.positionLength
+    - match:  { tokens.4.position: 3 }
+      indices.analyze:
+          body:
+    - do:
+              filter:
+              - type: multiplexer
+    - match: { tokens.1.end_offset: 12 }
+            text:      Foo Foo Bar!
+            text:      a b c
         indices.create:
-          index: test
+    - match:  { tokens.5.token: が試 }
+        indices.create:
+            text:      bricks
+          body:
+          explain:    true
+                filter:
+    - length: { tokens: 3 }
+"stemmer":
+            filter:    [arabic_stem]
+                filter:
+    - do:
           body:
             settings:
+"common_grams":
+    - do:
+    - do:
+            tokenizer: classic
+          body:
+          filter: [ { type: synonym, synonyms: [ "wibble, quack" ]}]
               analysis:
-                filter:
-                  my_czech_stem:
-                    type: czech_stem
+    - match:  { tokens.2.token: oba }
+                split_on_numerics: false
     - do:
-        indices.analyze:
-          index: test
-          body:
-            text: angličtí
+    - match:  { detail.tokenizer.tokens.3.position: 3 }
+            filter:    [serbian_normalization]
+              analysis:
+    - do:
             tokenizer: keyword
-            filter:    [my_czech_stem]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: anglick }
-
-    # Test pre-configured token filter too:
     - do:
-        indices.analyze:
-          body:
-            text: angličtí
-            tokenizer: keyword
-            filter:    [czech_stem]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: anglick }
-
----
-"dutch_stem":
-    - do:
-        indices.create:
-          index: test
-          body:
+    - match:  { tokens.7.token: 験に }
             settings:
-              analysis:
-                filter:
-                  my_dutch_stem:
-                    type: dutch_stem
-    - do:
-        indices.analyze:
           index: test
-          body:
-            text: ophouden
-            tokenizer: keyword
+            filter:    [my_french_stem]
+                    type: pattern_replace
+          tokenizer: keyword
+            filter:
             filter:    [my_dutch_stem]
     - length: { tokens: 1 }
-    - match:  { tokens.0.token: ophoud }
-
-    # Test pre-configured token filter too:
-    - do:
-        indices.analyze:
-          body:
-            text: ophouden
-            tokenizer: keyword
-            filter:    [dutch_stem]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: ophoud }
-
----
-"french_stem":
-    - do:
-        indices.create:
           index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_french_stem:
-                    type: french_stem
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text: chevaux
-            tokenizer: keyword
-            filter:    [my_french_stem]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: cheval }
-
-    # Test pre-configured token filter too:
-    - do:
-        indices.analyze:
-          body:
-            text: chevaux
-            tokenizer: keyword
-            filter:    [french_stem]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: cheval }
-
----
-"german_stem":
-    - do:
-        indices.create:
-          index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_german_stem:
-                    type: german_stem
-    - do:
-        indices.analyze:
-          index: test
-          body:
             text: abschließen
-            tokenizer: keyword
-            filter:    [my_german_stem]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: abschliess }
-
-    # Test pre-configured token filter too:
-    - do:
-        indices.analyze:
-          body:
-            text: abschließen
-            tokenizer: keyword
-            filter:    [german_stem]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: abschliess }
-
----
-"persian_stem":
-  - do:
-      indices.create:
-        index: test
-        body:
-          settings:
-            analysis:
-              filter:
-                my_persian_stem:
-                  type: persian_stem
-  - do:
-      indices.analyze:
-        index: test
-        body:
-          text: جامدات
-          tokenizer: keyword
-          filter:    [my_persian_stem]
-  - length: { tokens: 1 }
-  - match:  { tokens.0.token: جامد }
-
-  # Test pre-configured token filter too:
-  - do:
-      indices.analyze:
-        body:
-          text: جامدات
-          tokenizer: keyword
-          filter:    [persian_stem]
-  - length: { tokens: 1 }
-  - match:  { tokens.0.token: جامد }
-
----
-"russian_stem":
-    - do:
         indices.create:
           index: test
-          body:
-            settings:
-              analysis:
-                filter:
-                  my_russian_stem:
-                    type: russian_stem
-    - do:
-        indices.analyze:
-          index: test
-          body:
-            text: журналы
-            tokenizer: keyword
-            filter:    [my_russian_stem]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: журнал }
-
-    # Test pre-configured token filter too:
-    - do:
-        indices.analyze:
-          body:
-            text: журналы
-            tokenizer: keyword
-            filter:    [russian_stem]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: журнал }
-
----
-"bengali_stem":
-    - do:
         indices.create:
-          index: test
-          body:
-            settings:
               analysis:
-                filter:
-                  my_bengali_stem:
-                    type: stemmer
+    - match:  { tokens.4.token: brown }
+            text:      ١٢٣٤
+        indices.analyze:
+    - do:
+    - do:
+          body:
+        indices.create:
+    - match:  { tokens.0.token: raksmorgas }
+---
+    - match:  { tokens.1.token: qu1ck }
+              analysis:
+            filter:    [my_min_hash]
+              analysis:
+            tokenizer: whitespace
+    - match: { tokens.0.end_offset: 5 }
+          body:
+          body:
+    - match:  { tokens.4.positionLength: 3 }
+        indices.create:
+    - match: { tokens.1.start_offset: 6 }
+    - match:  { tokens.0.token: Foo Bar !  }
+    - do:
+            tokenizer: keyword
+            text:      foobar
+    - match: { tokens.0.start_offset: 0 }
+            tokenizer: keyword
+              analysis:
+    - match:  { tokens.0.token: the }
+"length":
+    - length: { tokens: 1 }
+    - match:  { detail.tokenizer.tokens.1.position: 1 }
+        indices.create:
+    # Test pre-configured token filter too:
                     language: bengali
-
-    - do:
+            text: angličtí
+            tokenizer: whitespace
+          body:
+                type_table:
+            text:      абвгдђежзијклљмнњопрстћуфхцчџш
+        indices.analyze:
+    - match: { detail.tokenfilters.0.tokens.2.keyword: false }
+    - match:  { tokens.0.token: a }
+            text:      zoeken
+    - match:  { tokens.0.token: raksmorgas }
+                      "foo, bar => baz"
+        indices.create:
+            filter:    [my_stemmer_override]
+            settings:
+    - match:  { tokens.0.position: 0 }
+---
+                  my_edge_ngram:
+                  my_delimited_payload:
+              - type: word_delimiter
+                  my_persian_normalization:
+            tokenizer: keyword
         indices.analyze:
           index: test
+          index: test
+          index: test
+          index: test
           body:
-            text: করেছিলাম
+    - match:  { tokens.3.positionLength: 2 }
             tokenizer: keyword
-            filter:    [my_bengali_stem]
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: কর }
-
+          body:
+            tokenizer: keyword
 ---
-"multiplexer":
+            tokenizer: keyword
+    - match:  { tokens.4.token: point }
+    - do:
+            tokenizer: whitespace
+    - match:  { tokens.0.token: foo }
+                  my_ngram:
+---
+    - match: { tokens.1.token: "#text2" }
+    - match:  { tokens.6.token: machine }
+    - length: { tokens: 1 }
+    - do:
+    - do:
+    - match:  { tokens.0.position: 0 }
+            filter:
+          index: test
+            filter:    [kstem]
+            tokenizer: keyword
+    - match:  { tokens.7.token: 験に }
+            text:      Musée d'Orsay
+    - match:  { detail.tokenfilters.0.tokens.4.token: brown }
+          body:
+                filter:
+    - match:  { detail.tokenfilters.0.tokens.2.end_offset: 7 }
+    - match:  { detail.tokenfilters.0.tokens.3.token: ck }
     - do:
         indices.analyze:
           body:
-            text: "The quick fox"
-            tokenizer: "standard"
-            filter:
-              - type: multiplexer
-                filters: [ lowercase, uppercase ]
-                preserve_original: false
-    - length: { tokens: 6 }
+        indices.analyze:
+                    type: synonym_graph
+            text:      This is troubled
+    - do:
+                filter:
+    - match:  { tokens.0.token: raboof }
+            settings:
+            filter:    [my_bengali_stem]
+        body:
+    - match: { tokens.1.end_offset: 12 }
+            text:      a
+    - match:  { tokens.1.token: qu }
+    - match:  { tokens.0.token: 多く }
+                    type: apostrophe
+            tokenizer: keyword
+    - match:  { tokens.0.token: my }
+    - match:  { tokens.2.token: "1" }
+          body:
+            filter:    [russian_stem]
+            filter:    [cjk_width]
+              analysis:
+    - match:  { tokens.1.token: baz }
+    - match: { tokens.1.position: 1 }
+    - match:  { tokens.3.token: magazine }
+---
+            text:      the qu1ck brown fox
+              - type: asciifolding
+        indices.create:
+    - do:
+              analysis:
+"limit_count":
+    - match: { status: 400 }
     - match: { tokens.0.token: the }
-    - match: { tokens.1.token: THE }
+            settings:
+    - match:  { tokens.1.token: atm }
+          index: test
+    - match:  { tokens.2.token: troubl }
+    - length: { tokens: 1 }
+"truncate":
+        indices.create:
+        indices.analyze:
+            filter:    [snowball]
+    - length: { tokens: 1 }
+    - match: { tokens.1.position: 1 }
+                filter:
+          body:
+          body:
+                  my_truncate:
+          body:
+                filter:
+    - length: { tokens: 1 }
+    - match:  { detail.tokenfilters.0.tokens.0.end_offset: 3 }
+                  my_arabic_normalization:
+            text:      foo bar baz
+            settings:
+            tokenizer: keyword
+    - do:
+            text:      bricks
+    - match:  { tokens.1.token: bar }
+            text:      Foo Bar!
+              analysis:
+    - match:  { detail.tokenfilters.0.tokens.2.start_offset: 6 }
+    - do:
+            text: what car magazine
+---
+                    synonyms: ["automatic teller machine,atm,cash point"]
+          index: test
+                  - "\\u0023 => ALPHANUM"
+    - do:
+    - match:  { tokens.0.token: ৎ }
+    - do:
+            filter:    [my_cjk_width]
+    - match:  { tokens.1.positionLength: 2 }
+"porterstem":
+    - match:  { tokens.0.token: FOOBAR }
+                split_on_numerics: false
+    - do:
+                    articles: ["l", "m", "t", "qu", "n", "s", "j"]
+            text:      foo's bar
+              analysis:
+            text: 'text1 #text2'
+                filter:
+            text: журналы
+          index: test
+              analysis:
+            tokenizer: keyword
+          body:
+    - length: { tokens: 1 }
+              analysis:
+            explain:   true
+          body:
+            filter:
+          index: test
+    - do:
+          body:
+          index: test
+            text:      آجن
+---
+    - length: { tokens: 1 }
+    - match:  { tokens.0.token: حسن }
+    - length: { tokens: 1 }
+    - match: { tokens.1.position: 1 }
+                    separator: _
+              analysis:
+            text:      the qu1ck brown fox
+    - length: { tokens: 1 }
+    - match:  { tokens.0.token: "123" }
+    - do:
+            settings:
+            filter: [my_synonym_graph]
+          body:
+        indices.analyze:
+          index: test
+                    type: serbian_normalization
+    - do:
+          index: test
+            settings:
+"decompounder":
+          body:
+        indices.analyze:
+    - do:
+                  my_pattern_replace:
+"asciifolding":
+---
+    - match:  { tokens.3.start_offset: 4 }
+    - match:  { detail.tokenizer.tokens.0.end_offset: 3 }
+    - match:  { tokens.2.position: 2 }
+              analysis:
+          body:
+    - match:  { detail.tokenfilters.0.tokens.2.token: troubl }
+            settings:
+    - match:  { tokens.3.token: 学生 }
+    # Test pre-configured token filter too:
+                filter:
+    - do:
+        indices.analyze:
+    - match: { tokens.1.end_offset: 12 }
+          index: test
+    - do:
+---
+---
+          body:
+            filter:    [trim]
+    - match:  { detail.tokenfilters.0.tokens.1.start_offset: 4 }
+    - match:  { tokens.0.token: zoek }
+          index: test
+            tokenizer: keyword
+            tokenizer: standard
+---
+    - match:  { tokens.0.token: brasil }
+    - match:  { tokens.0.token: abvgddjezzijklljmnnjoprstcufhccdzs }
+  - match:  { detail.tokenfilters.0.tokens.0.token: foo }
+    - match:  { detail.tokenfilters.0.tokens.1.token: qu }
+    - match:  { tokens.4.token: point }
+    - match: { tokens.0.start_offset: 0 }
+          text: wibble
+          body:
+          text: جامدات
+                filter:
+                  my_keep:
+          body:
+            settings:
+    - match:  { tokens.0.token: foobar }
+            settings:
+              - type: word_delimiter_graph
+          body:
+            filter:    [my_pattern_capture]
+                filter:
+            text:      ö
+        indices.analyze:
+    - match: { tokens.0.token: text1 }
+                filter:
+---
+            filter:    [my_russian_stem]
+                  delimiter: ^
+                  - "# This is a comment"
+    - match:  { tokens.2.position: 2 }
+                    type: stemmer
+    - do:
+                    word_list: [foo, bar]
+                type_table:
+        indices.analyze:
+"cjk_bigram":
+    - match:  { tokens.2.token: auto }
+    - match: { tokens.0.end_offset: 5 }
+    - do:
+                  my_limit:
+    - match:  { tokens.9.token: 落ち }
+          index: test
+                  my_elision:
+    - length: { tokens: 1 }
+            filter:    [sorani_normalization]
+    - match:  { tokens.2.token: guinea }
+    - match:  { tokens.0.token: foo }
+          body:
+                  my_french_stem:
+    - match:  { tokens.3.token: automatic }
+                    filter:
+          index: test
+                  my_decompounder:
+                    type: common_grams
+            text:      foobar
+    - do:
+          index: test
+          index: test
+          body:
+    - match:  { tokens.5.position: 3 }
+"uppercase":
+        index: test
+    - match: { tokens.1.position: 1 }
+    - do:
+        indices.analyze:
+                preserve_original: false
+    - do:
+    - match:  { tokens.0.token: foo }
+    # Test pre-configured token filter too:
+                filters: [ lowercase, uppercase ]
+        indices.analyze:
+    - do:
+    # Test pre-configured token filter too:
+            tokenizer: keyword
+    - do:
+    - length: { tokens: 1 }
+    - length: { tokens: 1 }
+    - length: { tokens: 1 }
+            settings:
+                filter:
+"bengali_stem":
+            text:      foo|5
+"word_delimiter":
+        indices.create:
+    - match: { detail.tokenfilters.0.tokens.2.positionLength: 1 }
+                    max_gram: 6
+        indices.analyze:
+          body:
+    - length: { tokens: 5 }
+    - match:  { detail.tokenizer.tokens.0.position: 0 }
+    - match:  { tokens.0.token: هاي }
+          index: test
+            filter:    [my_sorani_normalization]
+    # use preconfigured token filter:
+            filter:    [my_czech_stem]
+          body:
+        indices.create:
+  - match:  { tokens.0.position: 0 }
+        indices.create:
+---
+"fingerprint":
+                    rules: [
+                split_on_numerics: false
+"hindi_normalization":
+        indices.analyze:
+          body:
+          body:
+                filter:
+            tokenizer: whitespace
+        indices.analyze:
+                    type: persian_normalization
+    - match:  { tokens.0.token: ی }
+    - match:  { tokens.2.token: fooba }
+    - match: { tokens.1.position: 1 }
+    - length: { detail.tokenizer.tokens: 4 }
+          body:
+                split_on_numerics: false
+    # Test pre-configured token filter too:
+            filter:    [bengali_normalization]
+          index: test
+        indices.analyze:
+                    type: cjk_bigram
+    - do:
+            text:      ｶﾀｶﾅ
+    - match:  { tokens.3.token: fox }
+        indices.analyze:
+                filter:
+    - match:  { tokens.1.token: foo }
+"elision":
+    - match:  { tokens.2.token: brown }
+"czech_stem":
+                  my_sorani_normalization:
+    - match: { tokens.0.token: text1 }
+            text: журналы
+          index: test
+        indices.analyze:
+                    type: scandinavian_folding
+    - length: { tokens: 2 }
+        indices.analyze:
+"word_delimiter_graph":
+    - match:  { tokens.1.token: bar.baz }
+    - match:  { tokens.0.token: ی }
+          body:
+    - do:
+    - length: { tokens: 4 }
+            text:      This is troubled
+                    keep_words: [foo,bar]
+  - length: { detail.tokenfilters: 1 }
+    - match: { tokens.1.start_offset: 6 }
+    - length: { tokens: 4 }
+    - match:  { tokens.2.token: の学 }
+                    length: 3
+    - do:
+---
+          body:
+    - length: { tokens: 1 }
+    - match:  { tokens.1.token: qu }
+    - do:
+                  my_pattern_capture:
+    - length: { tokens: 1 }
+              analysis:
+    - match:  { tokens.0.token: avion }
+        indices.create:
+    - do:
+            tokenizer: keyword
+                  - "# => ALPHANUM"
+            text: the quick brown fox
+    - length: { tokens: 1 }
+            tokenizer: keyword
+    - match:  { tokens.2.end_offset: 9 }
+        indices.create:
+        indices.analyze:
+    - match:  { tokens.3.token: ck }
+    - match:  { tokens.3.position: 2 }
+          index: test
+    - match:  { tokens.0.token: b }
+          index: test
+    - length: { tokens: 2 }
+          body:
+                    type: russian_stem
+                    delimiter: ^
+                    type: keep
+"stemmer_override":
+---
+                  my_scandinavian_folding:
+        indices.create:
+    - do:
+          index: test
+    - do:
+"synonym":
+              analysis:
+          body:
+    - do:
+        indices.analyze:
+            tokenizer: keyword
+            text:      Foo Bar !
+    - do:
+    - do:
+    - match:  { tokens.0.token: foo }
+            tokenizer: keyword
+"persian_normalization":
+    - match:  { tokens.6.token: 試験 }
+          body:
+                filter:
+  - match:  { tokens.0.token: جامد }
+    - match:  { detail.tokenfilters.0.tokens.1.position: 1 }
+"trim":
+    - match:  { tokens.0.token: this }
+          index: test
+            analysis:
+          index: test
+            filter:    [snowball]
+          body:
+        indices.analyze:
+                  - "# This is a comment"
+              analysis:
+                    type: german_stem
+      indices.analyze:
+        indices.analyze:
+    - match:  { tokens.2.token: "1" }
+    - length: { tokens: 1 }
+    - match:  { tokens.4.token: snores }
+            text:      foo^bar
+    - is_true: detail.tokenfilters.0.tokens.2.bytes
+            tokenizer: keyword
+                  my_apostrophe:
+                      "zoeken => override",
+                type_table:
+    - length: { tokens: 2 }
+                filter:
+    - length: { tokens: 1 }
+    - match:  { tokens.1.token: car }

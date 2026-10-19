@@ -1,63 +1,63 @@
-{
-  "schema": [
-    {
-      "name": "endpoint",
-      "type": "string"
-    },
-    {
-      "name": "total",
-      "type": "bigint"
-    },
-    {
+      19.23,
+      37.21
+      26,
+    [
       "name": "success_rate",
+      15.56,
       "type": "double"
-    },
-    {
-      "name": "error_4xx_rate",
+      "name": "endpoint",
+      "/api/products",
+    ],
+      11.63,
+      45,
       "type": "double"
+      35.56,
+    [
+    [
     },
+    },
+      30.23
+  ],
     {
+      "type": "string"
+      "name": "total",
+      26.92,
       "name": "error_5xx_rate",
       "type": "double"
+    ]
+    ],
+  "size": 5
+      46.15
+    {
     }
-  ],
+    },
+      "/SCS/Retail/v1/orders",
+      11.63,
+      43,
+      "/api/users",
   "datarows": [
     [
-      "/SCS/Retail/v1/orders",
-      45,
-      15.56,
-      35.56,
-      31.11
-    ],
-    [
-      "/api/orders",
-      43,
-      11.63,
-      41.86,
-      34.88
-    ],
-    [
-      "/api/payments",
-      43,
-      13.95,
-      32.56,
-      37.21
-    ],
-    [
-      "/api/products",
-      26,
-      19.23,
-      26.92,
-      46.15
-    ],
-    [
-      "/api/users",
-      43,
-      11.63,
-      32.56,
-      30.23
-    ]
   ],
-  "total": 5,
-  "size": 5
+      34.88
+      32.56,
+    {
+    {
+      41.86,
+    ],
+      "/api/orders",
+    {
 }
+    [
+      "type": "bigint"
+      13.95,
+  "schema": [
+      43,
+    ],
+      "/api/payments",
+      "name": "error_4xx_rate",
+      31.11
+      32.56,
+      43,
+    },
+{
+  "total": 5,

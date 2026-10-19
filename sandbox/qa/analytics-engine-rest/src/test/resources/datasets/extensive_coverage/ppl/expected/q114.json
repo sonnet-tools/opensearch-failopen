@@ -1,20 +1,20 @@
-{
-  "schema": [
-    {
-      "name": "id",
-      "type": "string"
-    },
-    {
+      "%%DATE%%"
+    ]
+      "1",
       "name": "today",
+  "datarows": [
+  "size": 1
+    [
+}
+      "name": "id",
+  "total": 1,
       "type": "date"
     }
   ],
-  "datarows": [
-    [
-      "1",
-      "%%DATE%%"
-    ]
+    {
+    {
+      "type": "string"
+{
+  "schema": [
   ],
-  "total": 1,
-  "size": 1
-}
+    },

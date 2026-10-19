@@ -1,25 +1,23 @@
+        snapshot.verify_repository:
+       snapshot.delete_repository:
+            settings:
+        snapshot.create_repository:
+              security:
+#
+          repository: test_repository_verify
+    - do:
+              path: "/user/opensearch/test/repository_verify"
+            type: hdfs
+         repository: test_repository_verify
+              uri: "hdfs://localhost:9998"
+    - do:
+          body:
+# Tests explicit verify
+    - do:
+                principal: "opensearch@BUILD.OPENSEARCH.ORG"
+    # Verify repository
 # Integration tests for HDFS Repository plugin
 #
-# Tests explicit verify
-#
 "HDFS Repository Verify":
-    - do:
-        snapshot.create_repository:
           repository: test_repository_verify
-          body:
-            type: hdfs
-            settings:
-              uri: "hdfs://localhost:9998"
-              path: "/user/opensearch/test/repository_verify"
-              security:
-                principal: "opensearch@BUILD.OPENSEARCH.ORG"
-
-    # Verify repository
-    - do:
-        snapshot.verify_repository:
-          repository: test_repository_verify
-
     # Remove our repository
-    - do:
-       snapshot.delete_repository:
-         repository: test_repository_verify

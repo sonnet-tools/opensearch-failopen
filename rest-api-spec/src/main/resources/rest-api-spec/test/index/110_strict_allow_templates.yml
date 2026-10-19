@@ -1,155 +1,149 @@
----
-"Index documents with setting dynamic parameter to strict_allow_templates in the mapping of the index":
-  - skip:
-      version: " - 2.15.99"
-      reason: "introduced in 2.16.0"
-
   - do:
-      indices.create:
-        index:    test_1
-        body:
-          mappings:
-            dynamic: strict_allow_templates
-            dynamic_templates: [
-              {
-                strings: {
-                  "match": "stringField*",
-                  "match_mapping_type": "string",
-                  "mapping": {
-                    "type": "keyword"
+            bar1: "bar1",
                   }
-                }
-              },
-              {
+            properties:
+                  "mapping": {
                 object: {
-                  "match": "objectField*",
-                  "match_mapping_type": "object",
+        }
+  - match: {test_1.mappings.properties.dateField.type:     date}
                   "mapping": {
-                    "type": "object",
-                    "properties": {
-                      "bar1": {
-                        "type": "keyword"
-                      },
-                      "bar2": {
-                        "type": "text"
-                      }
-                    }
+            bar2: "bar2"
+  - skip:
                   }
-                }
-              },
-              {
-                boolean: {
-                  "match": "booleanField*",
-                  "match_mapping_type": "boolean",
-                  "mapping": {
-                    "type": "boolean"
-                  }
-                }
-              },
-              {
-                double: {
-                  "match": "doubleField*",
+        id:      1
+      objectField: {
+          },
+  - match: {test_1.mappings.dynamic:     strict_allow_templates}
                   "match_mapping_type": "double",
+              {
+      index:
+                    "type": "keyword"
+                array: {
+          test1: test1
+        body:    {
+      longField: 100,
+                }
+                  "match_mapping_type": "boolean",
+        index:    test_1
+      version: " - 2.15.99"
+  - do:
+          mappings:
+        body:
+                  "match_mapping_type": "long",
+                }
+        }
+        index: test_1
+                  "mapping": {
+              {
+  - match: { _source: {
+        index: test_1
+                  }
+                  }
+                type: text
+                    "properties": {
+                      },
+                date: {
+                }
+          objectField: {
+                  "match": "booleanField*",
+                  "match_mapping_type": "string",
+              test1:
+                  "match_mapping_type": "object",
+                  "match": "objectField*",
+                  "match": "longField*",
+                  "mapping": {
+      indices.get_mapping: {
+              },
+                }
+              {
+"Index documents with setting dynamic parameter to strict_allow_templates in the mapping of the index":
+              {
+                      "bar2": {
+              {
+      arrayField: [ "1","2" ],
+              },
+              }
+      stringField: bar,
                   "mapping": {
                     "type": "double"
-                  }
-                }
+                      }
+                double: {
               },
-              {
-                long: {
-                  "match": "longField*",
-                  "match_mapping_type": "long",
-                  "mapping": {
-                    "type": "long"
-                  }
-                }
-              },
-              {
-                array: {
-                  "match": "arrayField*",
-                  "mapping": {
-                    "type": "keyword"
-                  }
-                }
-              },
-              {
-                date: {
-                  "match": "dateField*",
-                  "match_mapping_type": "date",
-                  "mapping": {
-                    "type": "date"
-                  }
-                }
-              }
-            ]
-            properties:
-              test1:
-                type: text
-
-  - do:
-      catch: /mapping set to strict_allow_templates, dynamic introduction of \[test2\] within \[\_doc\] is not allowed/
-      index:
-        index:   test_1
-        id:      1
-        body:    {
-          stringField: bar,
-          objectField: {
-            bar1: "bar1",
-            bar2: "bar2"
-          },
-          test1: test1,
-          test2: test2
-        }
-
-  - do:
-      index:
-        index:   test_1
-        id:      1
-        body:    {
-          stringField: bar,
-          objectField: {
-            bar1: "bar1",
-            bar2: "bar2"
-          },
-          booleanField: true,
-          doubleField: 1.0,
-          longField: 100,
-          arrayField: ["1","2"],
-          dateField: "2024-06-25T05:11:51.243Z",
-          test1: test1
-        }
-
-  - do:
-      get:
-        index: test_1
-        id: 1
-  - match: { _source: {
-      stringField: bar,
-      objectField: {
-        bar1: "bar1",
-        bar2: "bar2"
-      },
-      booleanField: true,
-      doubleField: 1.0,
-      longField: 100,
-      arrayField: [ "1","2" ],
-      dateField: "2024-06-25T05:11:51.243Z",
-      test1: test1
-    }
-  }
-
-  - do:
-      indices.get_mapping: {
-        index: test_1
-      }
-
-  - match: {test_1.mappings.dynamic:     strict_allow_templates}
-  - match: {test_1.mappings.properties.stringField.type:     keyword}
-  - match: {test_1.mappings.properties.objectField.properties.bar1.type:     keyword}
-  - match: {test_1.mappings.properties.objectField.properties.bar2.type:     text}
-  - match: {test_1.mappings.properties.booleanField.type:     boolean}
-  - match: {test_1.mappings.properties.doubleField.type:     double}
-  - match: {test_1.mappings.properties.longField.type:     long}
-  - match: {test_1.mappings.properties.arrayField.type:     keyword}
-  - match: {test_1.mappings.properties.dateField.type:     date}
+            dynamic: strict_allow_templates
   - match: {test_1.mappings.properties.test1.type:     text}
+      get:
+        body:    {
+                    "type": "long"
+        id:      1
+          test1: test1,
+                  }
+  }
+          stringField: bar,
+        bar1: "bar1",
+                        "type": "text"
+  - match: {test_1.mappings.properties.stringField.type:     keyword}
+                  "match": "dateField*",
+      reason: "introduced in 2.16.0"
+              },
+  - match: {test_1.mappings.properties.longField.type:     long}
+          doubleField: 1.0,
+  - do:
+                    "type": "object",
+        id: 1
+                  "mapping": {
+            bar1: "bar1",
+              {
+                }
+          stringField: bar,
+                      "bar1": {
+          test2: test2
+                    "type": "boolean"
+                  "match": "doubleField*",
+                    "type": "keyword"
+      booleanField: true,
+---
+  - do:
+      test1: test1
+                  "mapping": {
+              },
+  - match: {test_1.mappings.properties.booleanField.type:     boolean}
+                  "match_mapping_type": "date",
+            bar2: "bar2"
+                  "match": "arrayField*",
+      }
+                    "type": "date"
+      },
+        index:   test_1
+                  }
+              {
+                strings: {
+  - do:
+                  "match": "stringField*",
+  - match: {test_1.mappings.properties.doubleField.type:     double}
+                boolean: {
+          booleanField: true,
+          arrayField: ["1","2"],
+          },
+      doubleField: 1.0,
+          dateField: "2024-06-25T05:11:51.243Z",
+            ]
+        bar2: "bar2"
+          objectField: {
+      catch: /mapping set to strict_allow_templates, dynamic introduction of \[test2\] within \[\_doc\] is not allowed/
+                }
+    }
+              },
+                    }
+                long: {
+                }
+          longField: 100,
+  - match: {test_1.mappings.properties.arrayField.type:     keyword}
+                        "type": "keyword"
+            dynamic_templates: [
+                  }
+      index:
+  - match: {test_1.mappings.properties.objectField.properties.bar2.type:     text}
+      dateField: "2024-06-25T05:11:51.243Z",
+        index:   test_1
+  - match: {test_1.mappings.properties.objectField.properties.bar1.type:     keyword}
+      indices.create:

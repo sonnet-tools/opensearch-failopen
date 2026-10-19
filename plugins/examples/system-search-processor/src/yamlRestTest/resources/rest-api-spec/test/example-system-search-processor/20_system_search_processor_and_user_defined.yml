@@ -1,99 +1,89 @@
----
-"Use system generated search request processors and user defined search pipeline":
-  - do:
-      cluster.put_settings:
-        body:
-          persistent:
-            cluster.search.enabled_system_generated_factories:
-              - "example-search-request-pre-processor-factory"
               - "example-search-request-post-processor-factory"
-
   - do:
-      search_pipeline.put:
-        id: "test-user-defined-pipeline"
         body:
-          request_processors:
-            - oversample:
-                tag: "scale-by-2"
-                sample_factor: 2
-
-  - do:
-      indices.create:
-        index: "test-system-generated-search-processor-index"
-        body:
-          settings:
-            number_of_shards: 1
-            number_of_replicas: 0
-          mappings:
-            properties:
-              message:
-                type: text
-
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - { index: { _index: "test-system-generated-search-processor-index", _id: "1" } }
-          - { message: "doc1" }
-          - { index: { _index: "test-system-generated-search-processor-index", _id: "2" } }
-          - { message: "doc2" }
-          - { index: { _index: "test-system-generated-search-processor-index", _id: "3" } }
-          - { message: "doc3" }
-          - { index: { _index: "test-system-generated-search-processor-index", _id: "4" } }
-          - { message: "doc4" }
-          - { index: { _index: "test-system-generated-search-processor-index", _id: "5" } }
-          - { message: "doc5" }
-          - { index: { _index: "test-system-generated-search-processor-index", _id: "6" } }
-          - { message: "doc6" }
-          - { index: { _index: "test-system-generated-search-processor-index", _id: "7" } }
-          - { message: "doc7" }
-          - { index: { _index: "test-system-generated-search-processor-index", _id: "8" } }
-          - { message: "doc8" }
-          - { index: { _index: "test-system-generated-search-processor-index", _id: "9" } }
-          - { message: "doc9" }
-          - { index: { _index: "test-system-generated-search-processor-index", _id: "10" } }
-          - { message: "doc10" }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: "test-system-generated-search-processor-index"
-        search_pipeline: "test-user-defined-pipeline"
-        body:
-          size: 1
-          query:
-            match_all: {}
-
-  - match: { hits.total: 10 }
-  # Both the system generated search request processors and the user defined pipeline work to increase the query size to 6
-  - length: { hits.hits: 6 }
-
-  # Disable system-generated factories
-  - do:
-      cluster.put_settings:
-        body:
-          persistent:
-            cluster.search.enabled_system_generated_factories: []
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: "test-system-generated-search-processor-index"
-        search_pipeline: "test-user-defined-pipeline"
-        body:
-          size: 1
-          query:
-            match_all: {}
-
-  - match: { hits.total: 10 }
-  # Only the user defined pipeline works to increase the query size to 2
-  - length: { hits.hits: 2 }
-
+              - "example-search-request-pre-processor-factory"
   # Cleanup
+          - { index: { _index: "test-system-generated-search-processor-index", _id: "10" } }
   - do:
-      indices.delete:
+        rest_total_hits_as_int: true
+        refresh: true
         index: "test-system-generated-search-processor-index"
-
+            number_of_shards: 1
+  - match: { hits.total: 10 }
+        search_pipeline: "test-user-defined-pipeline"
+          - { message: "doc7" }
+          - { message: "doc3" }
+        body:
+          size: 1
+          - { message: "doc2" }
+        index: "test-system-generated-search-processor-index"
   - do:
-      ingest.delete_pipeline:
+  - match: { hits.total: 10 }
+      search:
+        search_pipeline: "test-user-defined-pipeline"
+          - { message: "doc1" }
+  - do:
+          - { message: "doc8" }
+            cluster.search.enabled_system_generated_factories:
+          mappings:
         id: "test-user-defined-pipeline"
+        body:
+        body:
+                type: text
+          size: 1
+  # Both the system generated search request processors and the user defined pipeline work to increase the query size to 6
+      cluster.put_settings:
+                sample_factor: 2
+          - { index: { _index: "test-system-generated-search-processor-index", _id: "1" } }
+            - oversample:
+          query:
+        id: "test-user-defined-pipeline"
+          - { index: { _index: "test-system-generated-search-processor-index", _id: "2" } }
+            cluster.search.enabled_system_generated_factories: []
+          - { index: { _index: "test-system-generated-search-processor-index", _id: "7" } }
+  - do:
+              message:
+      indices.create:
+          - { message: "doc4" }
+                tag: "scale-by-2"
+      cluster.put_settings:
+          - { index: { _index: "test-system-generated-search-processor-index", _id: "5" } }
+          query:
+"Use system generated search request processors and user defined search pipeline":
+            number_of_replicas: 0
+        index: "test-system-generated-search-processor-index"
+      indices.delete:
+  # Disable system-generated factories
+          persistent:
+        body:
+      search_pipeline.put:
+            properties:
+          - { message: "doc6" }
+---
+          - { message: "doc9" }
+          settings:
+            match_all: {}
+          - { index: { _index: "test-system-generated-search-processor-index", _id: "6" } }
+          - { index: { _index: "test-system-generated-search-processor-index", _id: "8" } }
+      ingest.delete_pipeline:
+      bulk:
+          request_processors:
+      search:
+  - do:
+        body:
+        rest_total_hits_as_int: true
+  - length: { hits.hits: 6 }
+            match_all: {}
+          - { index: { _index: "test-system-generated-search-processor-index", _id: "9" } }
+  - length: { hits.hits: 2 }
+  - do:
+          - { message: "doc10" }
+          - { index: { _index: "test-system-generated-search-processor-index", _id: "4" } }
+  # Only the user defined pipeline works to increase the query size to 2
+        index: "test-system-generated-search-processor-index"
+  - do:
+          persistent:
+          - { message: "doc5" }
+  - do:
+          - { index: { _index: "test-system-generated-search-processor-index", _id: "3" } }
+        body:

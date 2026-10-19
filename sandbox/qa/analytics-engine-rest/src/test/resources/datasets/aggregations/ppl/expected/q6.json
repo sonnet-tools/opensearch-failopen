@@ -1,48 +1,48 @@
-{
-  "schema": [
+  "total": 4,
     {
-      "name": "min_rt",
-      "type": "int"
-    },
-    {
-      "name": "min_score",
-      "type": "float"
-    },
-    {
-      "name": "total",
-      "type": "bigint"
-    },
-    {
-      "name": "region",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
+    ],
+      50,
       53,
-      0.0,
       50,
-      "North"
-    ],
-    [
-      59,
-      1.0,
-      50,
-      "South"
-    ],
-    [
+      "name": "total",
       83,
-      3.0,
-      50,
-      "East"
-    ],
-    [
-      159,
       0.0,
-      50,
       "West"
+      1.0,
+      "name": "min_score",
+    {
+  ],
+      "type": "int"
+      50,
+      0.0,
+    [
+  "schema": [
+      3.0,
+      159,
+}
+    },
+      50,
+      "name": "min_rt",
+      "East"
+  "size": 4
+      "South"
     ]
   ],
-  "total": 4,
-  "size": 4
-}
+      "type": "float"
+    ],
+    [
+      "type": "bigint"
+    ],
+    [
+    }
+{
+    [
+    {
+      "North"
+    },
+  "datarows": [
+      59,
+      "name": "region",
+    },
+    {
+      "type": "string"

@@ -1,42 +1,42 @@
-{
-  "schema": [
-    {
-      "name": "critical_alerts",
       "type": "bigint"
-    },
     {
-      "name": "max_cpu",
-      "type": "bigint"
-    },
-    {
-      "name": "max_memory",
-      "type": "bigint"
-    },
-    {
-      "name": "host",
       "type": "string"
-    }
-  ],
+      "type": "bigint"
   "datarows": [
-    [
-      6,
-      95,
-      91,
+    },
+    ],
+    {
       "host1"
-    ],
-    [
-      3,
-      40,
-      95,
-      "host3"
-    ],
-    [
-      3,
-      56,
-      95,
-      "host4"
-    ]
-  ],
-  "total": 3,
-  "size": 3
 }
+  ],
+    ],
+  "size": 3
+    {
+      "type": "bigint"
+    ]
+    [
+  "total": 3,
+      3,
+      "name": "critical_alerts",
+      40,
+    }
+      56,
+    {
+    [
+      "name": "max_memory",
+      "host3"
+      6,
+  ],
+      95,
+  "schema": [
+      3,
+{
+      "host4"
+      95,
+    },
+      95,
+      "name": "host",
+      "name": "max_cpu",
+    },
+    [
+      91,

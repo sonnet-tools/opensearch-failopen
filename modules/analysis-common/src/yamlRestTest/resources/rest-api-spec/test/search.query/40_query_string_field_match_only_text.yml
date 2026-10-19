@@ -1,59 +1,49 @@
----
-"Test query string with snowball":
-  - skip:
-      version: " - 2.11.99"
-      reason: "match_only_text was added in 2.12"
   - do:
-      indices.create:
-          index:  test
-          body:
-            mappings:
-              properties:
-                field:
-                  type: match_only_text
-                number:
-                  type: integer
-
-  - do:
-      index:
-          index:  test
-          id:     1
-          body:   { field: foo bar}
-
-  - do:
+        q: field:bars
       indices.refresh:
-        index: [test]
-
   - do:
-      indices.validate_query:
-        index: test
-        q: field:bars
-        analyzer: snowball
-
-  - is_true: valid
-
+                  type: match_only_text
   - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        q: field:bars
-        analyzer: snowball
-
-  - match: {hits.total: 1}
-
-  - do:
-      explain:
-        index:  test
-        id:     1
-        q: field:bars
-        analyzer: snowball
-
+          id:     1
   - is_true: matched
-
-  - do:
-      count:
-        index: test
-        q: field:bars
+  - match: {hits.total: 1}
+          body:   { field: foo bar}
+      index:
+      indices.create:
         analyzer: snowball
-
+        q: field:bars
+  - do:
+      reason: "match_only_text was added in 2.12"
+        index: test
+      version: " - 2.11.99"
+        q: field:bars
+  - do:
   - match: {count : 1}
+        index: [test]
+        index: test
+  - is_true: valid
+                field:
+        analyzer: snowball
+              properties:
+  - do:
+"Test query string with snowball":
+        rest_total_hits_as_int: true
+        index:  test
+                  type: integer
+            mappings:
+          body:
+  - skip:
+      count:
+                number:
+          index:  test
+        analyzer: snowball
+        index: test
+        id:     1
+        analyzer: snowball
+      indices.validate_query:
+  - do:
+---
+      explain:
+      search:
+          index:  test
+        q: field:bars

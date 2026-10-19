@@ -1,68 +1,68 @@
-{
-  "msearch_template":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/search-template/",
-      "description":"Allows to execute several search template operations in one request."
+  }
+            "GET",
+      "rest_total_hits_as_int" : {
+        "description" : "Indicates whether network round-trips should be minimized as part of cross-cluster search requests execution",
+      },
+        "type" : "boolean",
     },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_msearch/template",
-          "methods":[
-            "GET",
-            "POST"
-          ]
-        },
-        {
-          "path":"/{index}/_msearch/template",
-          "methods":[
-            "GET",
-            "POST"
-          ],
-          "parts":{
-            "index":{
-              "type":"list",
-              "description":"A comma-separated list of index names to use as default"
-            }
           }
-        }
-      ]
     },
-    "params": {
-      "search_type":{
-        "type":"enum",
-        "options":[
-          "query_then_fetch",
-          "query_and_fetch",
+          ]
+            "GET",
+        {
+      "ccs_minimize_roundtrips": {
+          "path":"/{index}/_msearch/template",
+      "description":"The request definitions (metadata-search request definition pairs), separated by newlines",
+      ]
+    }
+      }
+        "description" : "Specify whether aggregation and suggester names should be prefixed by their respective types in the response"
           "dfs_query_then_fetch",
+          "query_then_fetch",
+        "type" : "boolean",
+            "POST"
+          "methods":[
+          "parts":{
+        },
+          "path":"/_msearch/template",
+              "type":"list",
+    },
+{
+        "description" : "Controls the maximum number of concurrent searches the multi search api will execute"
+      "description":"Allows to execute several search template operations in one request."
+      },
+    "documentation":{
+      "paths":[
+        "type" : "number",
+        "description":"Search operation type"
+    "body":{
+      "max_concurrent_searches" : {
+        "description" : "Indicates whether hits.total should be rendered as an integer or an object in the rest search response",
+      "typed_keys": {
+        "options":[
+    "url":{
+      "serialize":"bulk"
+        }
+        "type" : "boolean",
           "dfs_query_and_fetch"
         ],
-        "description":"Search operation type"
+    "params": {
+            }
       },
-      "typed_keys": {
-        "type" : "boolean",
-        "description" : "Specify whether aggregation and suggester names should be prefixed by their respective types in the response"
-      },
-      "max_concurrent_searches" : {
-        "type" : "number",
-        "description" : "Controls the maximum number of concurrent searches the multi search api will execute"
-      },
-      "rest_total_hits_as_int" : {
-        "type" : "boolean",
-        "description" : "Indicates whether hits.total should be rendered as an integer or an object in the rest search response",
-        "default" : false
-      },
-      "ccs_minimize_roundtrips": {
-        "type" : "boolean",
-        "description" : "Indicates whether network round-trips should be minimized as part of cross-cluster search requests execution",
-        "default" : "true"
-      }
-    },
-    "body":{
-      "description":"The request definitions (metadata-search request definition pairs), separated by newlines",
       "required":true,
-      "serialize":"bulk"
-    }
-  }
+          ],
+        "default" : false
 }
+            "index":{
+            "POST"
+      },
+          "methods":[
+          "query_and_fetch",
+        "default" : "true"
+  "msearch_template":{
+      "search_type":{
+      "url":"https://opensearch.org/docs/latest/api-reference/search-template/",
+    "stability":"stable",
+              "description":"A comma-separated list of index names to use as default"
+        {
+        "type":"enum",

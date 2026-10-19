@@ -1,40 +1,40 @@
-{
-  "schema": [
-    {
-      "name": "query_count",
+    ],
       "type": "bigint"
-    },
     {
-      "name": "avg_rows",
-      "type": "double"
-    },
-    {
+      "transactions"
       "name": "table_name",
-      "type": "string"
-    }
-  ],
   "datarows": [
     [
-      23,
-      3970.913043478261,
-      "transactions"
-    ],
-    [
-      17,
       3871.764705882353,
-      "users"
-    ],
+      "name": "avg_rows",
+      14,
+  "size": 4
+      "products"
+    }
+    [
+      "type": "double"
+      "orders"
     [
       16,
-      5793.9375,
-      "orders"
-    ],
-    [
-      14,
-      3994.9285714285716,
-      "products"
+}
+    },
+  "total": 4,
+      23,
     ]
   ],
-  "total": 4,
-  "size": 4
-}
+{
+      "type": "string"
+      3970.913043478261,
+    {
+    ],
+  "schema": [
+      "name": "query_count",
+    },
+  ],
+    ],
+      "users"
+      17,
+      3994.9285714285716,
+    [
+    {
+      5793.9375,

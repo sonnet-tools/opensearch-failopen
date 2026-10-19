@@ -1,63 +1,51 @@
----
-"search with query_string parameters":
-  - do:
-      indices.create:
-          index:  test
           body:
-            mappings:
-              properties:
-                number:
-                  type: integer
-
-  - do:
-      index:
-          index:  test
-          id:     1
-          body:   { field: foo bar}
-
-  - do:
-      indices.refresh:
-        index: [test]
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
         q: bar
-        df: field
-
-  - match: {hits.total: 1}
-
   - do:
-      search:
-        rest_total_hits_as_int: true
         index: test
-        q: field:foo field:xyz
-
   - match: {hits.total: 1}
-
   - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        q: field:foo field:xyz
-        default_operator: AND
-
+          index:  test
+                  type: integer
   - match: {hits.total: 0}
-
+                number:
   - do:
-      search:
-        rest_total_hits_as_int: true
+  - match: {hits.total: 1}
         index: test
         q: field:BA*
-
-  - match: {hits.total: 1}
-
   - do:
-      search:
-        rest_total_hits_as_int: true
+  - do:
+  - do:
+---
+            mappings:
         index: test
+        rest_total_hits_as_int: true
+        index: [test]
+        q: field:foo field:xyz
+        df: field
+        rest_total_hits_as_int: true
+          body:   { field: foo bar}
+      index:
+      indices.create:
+        index: test
+        q: field:foo field:xyz
+        rest_total_hits_as_int: true
+          index:  test
+      search:
+      search:
+      indices.refresh:
+        default_operator: AND
         q: number:foo
         lenient: true
-
+  - do:
+              properties:
+  - do:
+        index: test
+      search:
+          id:     1
+        rest_total_hits_as_int: true
+      search:
+"search with query_string parameters":
   - match: {hits.total: 0}
+        rest_total_hits_as_int: true
+  - match: {hits.total: 1}
+      search:

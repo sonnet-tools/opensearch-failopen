@@ -1,43 +1,37 @@
+      catch: bad_request
+  - do:
+              query:
 ---
+                  foo: bar
+"Test search_type=query_and_fetch not supported from REST layer":
+      index:
+          search_type: query_and_fetch
+      search:
+          rest_total_hits_as_int: true
+          id:     1
 setup:
+          rest_total_hits_as_int: true
+          body:   { foo: bar }
+              query:
+---
   - do:
       indices.create:
-          index: test
-
-  - do:
-      index:
-          index:  test
-          id:     1
-          body:   { foo: bar }
-
+        index: [test]
+                match:
   - do:
       indices.refresh:
-        index: [test]
-
----
-"Test search_type=query_and_fetch not supported from REST layer":
-
   - do:
-      catch: bad_request
-      search:
-          rest_total_hits_as_int: true
-          index: test
-          search_type: query_and_fetch
-          body:
-              query:
-                match:
                   foo: bar
-
----
-"Test search_type=dfs_query_and_fetch not supported from REST layer":
-
-  - do:
+          index:  test
       catch: bad_request
+          index: test
+          index: test
+  - do:
+          body:
+          body:
+                match:
       search:
-          rest_total_hits_as_int: true
           index: test
           search_type: dfs_query_and_fetch
-          body:
-              query:
-                match:
-                  foo: bar
+"Test search_type=dfs_query_and_fetch not supported from REST layer":
+---

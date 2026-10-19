@@ -1,56 +1,50 @@
+"regex search on alias field":
 setup:
-  - skip:
-      version: " - 3.1.99"
-      reason: "regex query over field alias support starts 3.2"
-
-  - do:
-      indices.create:
-        index: test_index
-        body:
-          settings:
-            number_of_shards: 1
-            number_of_replicas: 0
-          mappings:
-            properties:
-              test:
-                type: text
-              test_alias:
                 type: alias
-                path: test
-
+            properties:
+          query:
   - do:
+        rest_total_hits_as_int: true
+  - match: {hits.total: 1}
       bulk:
+"regex search on normal field":
+              query: "test_alias: /h[a-z].*/"
+          mappings:
+---
+  - skip:
+        index: test_index
+          {"test":"world"}
+        index: test_index
+          {"index":{"_index":"test_index","_id":"2"}}
+              test_alias:
+                type: text
+                path: test
+        rest_total_hits_as_int: true
+      reason: "regex query over field alias support starts 3.2"
+  - match: {hits.hits.0._id: "1"}
+            number_of_shards: 1
+        index: test_index
+          {"test":"hello"}
+          settings:
+  - do:
+              query: "test: /h[a-z].*/"
+  - match: {hits.hits.0._id: "1"}
+        body:
+            query_string:
+---
+      search:
+            query_string:
+  - do:
+        body:
+          {"index":{"_index":"test_index","_id":"1"}}
+          query:
+            number_of_replicas: 0
+  - match: {hits.total: 1}
         refresh: true
         body: |
-          {"index":{"_index":"test_index","_id":"1"}}
-          {"test":"hello"}
-          {"index":{"_index":"test_index","_id":"2"}}
-          {"test":"world"}
-
----
-"regex search on normal field":
-  - do:
       search:
-        rest_total_hits_as_int: true
-        index: test_index
-        body:
-          query:
-            query_string:
-              query: "test: /h[a-z].*/"
-
-  - match: {hits.total: 1}
-  - match: {hits.hits.0._id: "1"}
-
----
-"regex search on alias field":
   - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test_index
+              test:
+      indices.create:
+      version: " - 3.1.99"
         body:
-          query:
-            query_string:
-              query: "test_alias: /h[a-z].*/"
-
-  - match: {hits.total: 1}
-  - match: {hits.hits.0._id: "1"}

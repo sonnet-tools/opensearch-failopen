@@ -1,48 +1,48 @@
-{
-  "schema": [
-    {
-      "name": "count()",
-      "type": "bigint"
-    },
-    {
-      "name": "kubernetes.pod_name",
-      "type": "string"
-    }
-  ],
+    [
   "datarows": [
     [
+  "total": 8,
+      5,
+    ],
+}
+    ],
+{
+    }
+      5,
+    {
+      "name": "kubernetes.pod_name",
+    {
+    ],
+      "type": "string"
+  "size": 8
+      "pod-18"
       5,
       "pod-12"
     ],
+    },
+      "type": "bigint"
+  ],
+      "pod-3"
+      5,
     [
+    ]
+      5,
+    ],
+      5,
       5,
       "pod-13"
-    ],
     [
-      5,
+  "schema": [
       "pod-17"
-    ],
     [
-      5,
-      "pod-18"
-    ],
-    [
-      5,
-      "pod-2"
-    ],
-    [
-      5,
-      "pod-3"
-    ],
-    [
-      5,
-      "pod-7"
-    ],
-    [
-      5,
       "pod-8"
-    ]
+      "name": "count()",
+    ],
+      "pod-7"
   ],
-  "total": 8,
-  "size": 8
-}
+    [
+    [
+      "pod-2"
+    [
+      5,
+    ],

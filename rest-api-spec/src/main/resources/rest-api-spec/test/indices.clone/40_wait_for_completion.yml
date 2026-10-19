@@ -1,88 +1,77 @@
----
-"Clone index with wait_for_completion":
-  # clone index with wait_for_completion parameter, when the parameter is set to false, the API
-  # will return a task immediately and the clone operation will run in background.
-
-  - skip:
-      version: " - 2.6.99"
-      reason: "wait_for_completion was introduced in 2.7.0"
-      features: allowed_warnings
-
-  - do:
-      nodes.info:
-        node_id: data:true
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  - do:
-      indices.create:
-        index: source
-        wait_for_active_shards: 1
-        body:
-          settings:
-            # ensure everything is allocated on the same data node
-            index.routing.allocation.include._id: $node_id
-            index.number_of_shards: 1
-            index.number_of_replicas: 0
-  - do:
-      index:
-        index: source
-        id:    "1"
-        body:  { "foo": "hello world" }
-
-  - do:
-      get:
-        index: source
-        id:    "1"
-
-  - match: { _index:   source }
-  - match: { _id:      "1"     }
-  - match: { _source:  { foo: "hello world" } }
-
-  # make it read-only
-  - do:
-      indices.put_settings:
-        index: source
-        body:
-          index.blocks.write: true
-          index.number_of_replicas: 0
-
-  - do:
-      cluster.health:
-        wait_for_status: green
-        index: source
-
+  # .tasks index is created when the clone index operation completes, so we should delete .tasks index finally,
   # clone with wait_for_completion
-  - do:
-      indices.clone:
-        index: "source"
-        target: "new_cloned_index"
-        wait_for_active_shards: 1
-        cluster_manager_timeout: 10s
-        wait_for_completion: false
-        task_execution_timeout: 30s
-        body:
-          settings:
-            index.number_of_shards: 1
-            "index.number_of_replicas": 0
-
-  - match: { task: /^.+$/ }
-  - set: { task: taskId }
-
+      indices.delete:
   - do:
       tasks.get:
-        wait_for_completion: true
-        task_id: $taskId
-  - match: { task.action: "indices:admin/resize" }
-  - match: { task.description: "clone from [source] to [new_cloned_index]" }
-
-  # .tasks index is created when the clone index operation completes, so we should delete .tasks index finally,
-  # if not, the .tasks index may introduce unexpected warnings and then cause other test cases to fail.
-  # Delete the .tasks index directly will also introduce warning, but currently we don't have such APIs which can delete one
+      nodes._arbitrary_key_: node_id
   # specified task or clear all completed tasks, so we have to do so. Expect we can introduce more tasks related APIs in future
+        node_id: data:true
+            index.routing.allocation.include._id: $node_id
+  - match: { _id:      "1"     }
   - do:
-      allowed_warnings:
+  - do:
+        body:
+  - match: { task.description: "clone from [source] to [new_cloned_index]" }
+      index:
+        wait_for_active_shards: 1
+  - set:
+"Clone index with wait_for_completion":
+        index: source
+      cluster.health:
+            index.number_of_replicas: 0
+        index: "source"
+        id:    "1"
+      reason: "wait_for_completion was introduced in 2.7.0"
+      nodes.info:
+  - do:
         - "this request accesses system indices: [.tasks], but in a future major version, direct access to system indices will be prevented by default"
-      indices.delete:
+      indices.put_settings:
+      features: allowed_warnings
+  - skip:
         index: .tasks
+      allowed_warnings:
+  - match: { _source:  { foo: "hello world" } }
+  # Delete the .tasks index directly will also introduce warning, but currently we don't have such APIs which can delete one
+      indices.clone:
+        task_execution_timeout: 30s
+  - do:
+      indices.create:
+      version: " - 2.6.99"
+  - do:
+        index: source
+        task_id: $taskId
+  - match: { _index:   source }
+        target: "new_cloned_index"
+            index.number_of_shards: 1
+      get:
+        body:  { "foo": "hello world" }
+          settings:
+---
+  - match: { task.action: "indices:admin/resize" }
+  - match: { task: /^.+$/ }
+          settings:
+        body:
+  - do:
+        wait_for_completion: false
+        wait_for_completion: true
+  - do:
+  - set: { task: taskId }
+        cluster_manager_timeout: 10s
+          index.number_of_replicas: 0
+        body:
+        index: source
+  - do:
+            index.number_of_shards: 1
+        wait_for_active_shards: 1
+        index: source
+        wait_for_status: green
+  # clone index with wait_for_completion parameter, when the parameter is set to false, the API
+  # will return a task immediately and the clone operation will run in background.
         ignore_unavailable: true
+            "index.number_of_replicas": 0
+  # if not, the .tasks index may introduce unexpected warnings and then cause other test cases to fail.
+  # make it read-only
+          index.blocks.write: true
+        index: source
+            # ensure everything is allocated on the same data node
+        id:    "1"

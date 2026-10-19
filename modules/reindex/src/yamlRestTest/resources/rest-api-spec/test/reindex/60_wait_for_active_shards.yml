@@ -1,45 +1,42 @@
----
+        wait_for_active_shards: 1
+  - do:
+  - do:
+          source:
+            index: src
+      catch: unavailable
+        index:       src
+  - do:
+        body:
+            index: dest
+          dest:
+          body:
+  - match: {created: 1}
+        id:          1
+      indices.refresh: {}
+        body:        {"text": "test"}
+          index: dest
+      reindex:
 "can override wait_for_active_shards":
+        timeout: 1s
+      failures.0.cause.reason: /Not.enough.active.copies.to.meet.shard.count.of.\[4\].\(have.1,.needed.4\)\..Timeout\:.\[1s\]/
   - do:
       indices.create:
-          index: dest
-          body:
-            settings:
               number_of_replicas: 5
-  - do:
-      index:
-        index:       src
-        id:          1
-        body:        {"text": "test"}
-  - do:
-      indices.refresh: {}
-
-  - do:
-      catch: unavailable
-      reindex:
-        timeout: 1s
-        wait_for_active_shards: 4
-        body:
-          source:
-            index: src
-          dest:
-            index: dest
   - match:
-      failures.0.cause.reason: /Not.enough.active.copies.to.meet.shard.count.of.\[4\].\(have.1,.needed.4\)\..Timeout\:.\[1s\]/
-
-  - do:
-      reindex:
-        wait_for_active_shards: 1
-        body:
           source:
-            index: src
+        wait_for_active_shards: 4
+      index:
+        body:
           dest:
-            index: dest
-  - match: {failures: []}
-  - match: {created: 1}
-  - match: {version_conflicts: 0}
-
-  - do:
+      reindex:
+            settings:
       get:
-        index: dest
+  - match: {failures: []}
+  - do:
         id:    1
+---
+  - match: {version_conflicts: 0}
+            index: src
+        index: dest
+  - do:
+            index: dest

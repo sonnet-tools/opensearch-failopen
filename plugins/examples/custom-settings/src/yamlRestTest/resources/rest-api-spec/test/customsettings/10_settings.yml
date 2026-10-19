@@ -1,54 +1,46 @@
-"Test custom settings":
-
-  # Use the Get Cluster Settings API to list the settings including the default ones
-  - do:
-      cluster.get_settings:
-        include_defaults: true
-
-  - is_false: defaults.custom.bool
-  - match: { defaults.custom.list.0: "0" }
-  - match: { defaults.custom.list.1: "1" }
-  - match: { defaults.custom.list.2: "1" }
-  - match: { defaults.custom.list.3: "2" }
+          transient:
   - match: { defaults.custom.list.4: "3" }
-  - match: { defaults.custom.list.5: "5" }
-  - match: { defaults.custom.list.6: "8" }
-  - match: { defaults.custom.list.7: "13" }
   - match: { defaults.custom.list.8: "21" }
-
+            custom:
+  - match: { transient.custom.validated: "updated" }
+      cluster.get_settings:
+  - match: { defaults.custom.list.2: "1" }
   # This setting is filtered: it does not appear in the response
-  - is_false: defaults.custom.filtered
-
-  # Use the Cluster Update Settings API to update some custom settings
-  - do:
-      cluster.put_settings:
+              validated: "forbidden"
+      cluster.get_settings: {}
         body:
           transient:
-            custom:
-              bool: true
-              validated: "updated"
-
+              validated: null
+        body:
+  # Try to update the "validated" setting with a forbidden value
+"Test custom settings":
+        body:
+  - is_false: defaults.custom.filtered
+  - match: { defaults.custom.list.6: "8" }
   # Use the Get Cluster Settings API to list the settings again
   - do:
-      cluster.get_settings: {}
-
-  - is_true: transient.custom.bool
-  - match: { transient.custom.validated: "updated" }
-
-  # Try to update the "validated" setting with a forbidden value
-  - do:
-      catch: bad_request
+  - match: { defaults.custom.list.5: "5" }
       cluster.put_settings:
-        body:
-          transient:
-            custom:
-              validated: "forbidden"
-
-  # Reset the settings to their default values
-  - do:
-      cluster.put_settings:
-        body:
-          transient:
-            custom:
+              bool: true
+        include_defaults: true
+  - match: { defaults.custom.list.7: "13" }
               bool: null
-              validated: null
+  - do:
+  - do:
+            custom:
+  # Reset the settings to their default values
+  - match: { defaults.custom.list.0: "0" }
+  - match: { defaults.custom.list.3: "2" }
+  - do:
+  - match: { defaults.custom.list.1: "1" }
+  - is_false: defaults.custom.bool
+  - do:
+      cluster.put_settings:
+      catch: bad_request
+  # Use the Cluster Update Settings API to update some custom settings
+          transient:
+              validated: "updated"
+  # Use the Get Cluster Settings API to list the settings including the default ones
+      cluster.put_settings:
+            custom:
+  - is_true: transient.custom.bool

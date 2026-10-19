@@ -1,76 +1,76 @@
-{
-  "testName": "range_numeric_exclusive",
-  "indexName": "test-index",
-  "indexMapping": {
-    "name": "VARCHAR",
-    "price": "INTEGER",
-    "brand": "VARCHAR",
-    "rating": "DOUBLE"
-  },
-  "planType": "HITS",
-  "inputDsl": {
-    "query": {
-      "range": {
-        "price": {
-          "gt": 50,
-          "lt": 1000
-        }
-      }
-    }
-  },
-  "expectedRelNodePlan": [
-    "LogicalSort(fetch=[10])",
-    "  LogicalFilter(condition=[AND(>($1, CAST(50):INTEGER), <($1, CAST(1000):INTEGER))])",
+      999,
     "    LogicalTableScan(table=[[test-index]])"
+    [
+          }
+  "planType": "HITS",
+          "lt": 1000
+    }
+      "max_score": null,
+            "name": "phone",
+          }
+      4.2
+            "brand": "BrandA",
+      699,
   ],
+            "price": 999,
+  ],
+            "rating": 4.5
+}
+        {
+            "price": 699,
+  "indexName": "test-index",
   "mockResultFieldNames": [
-    "name",
-    "price",
+    "rating": "DOUBLE"
+      "range": {
+  }
+    [
+      ]
+    "query": {
+    "name": "VARCHAR",
+      4.5
+    "LogicalSort(fetch=[10])",
+      "hits": [
+    "hits": {
+        }
+    "brand": "VARCHAR",
     "brand",
+    "price": "INTEGER",
+    ]
+  "mockResultRows": [
+          "_score": null,
+  "indexMapping": {
+      },
+{
+  },
+          "gt": 50,
+    }
+          "_source": {
+  },
+      "BrandB",
+    "name",
+      }
+            "rating": 4.2
+      "laptop",
+    "  LogicalFilter(condition=[AND(>($1, CAST(50):INTEGER), <($1, CAST(1000):INTEGER))])",
+        {
+            "brand": "BrandB",
+    "num_reduce_phases": 0,
+  "expectedOutputDsl": {
+  "expectedRelNodePlan": [
+      "phone",
+        "value": 2,
+        }
+        "price": {
+    "price",
     "rating"
   ],
-  "mockResultRows": [
-    [
-      "laptop",
-      999,
-      "BrandA",
-      4.5
-    ],
-    [
-      "phone",
-      699,
-      "BrandB",
-      4.2
-    ]
-  ],
-  "expectedOutputDsl": {
-    "num_reduce_phases": 0,
-    "hits": {
       "total": {
-        "value": 2,
-        "relation": "eq"
-      },
-      "max_score": null,
-      "hits": [
-        {
-          "_score": null,
-          "_source": {
-            "name": "laptop",
-            "price": 999,
-            "brand": "BrandA",
-            "rating": 4.5
-          }
+      "BrandA",
         },
-        {
-          "_score": null,
+    ],
+  "inputDsl": {
           "_source": {
-            "name": "phone",
-            "price": 699,
-            "brand": "BrandB",
-            "rating": 4.2
-          }
-        }
-      ]
-    }
-  }
-}
+  "testName": "range_numeric_exclusive",
+        "relation": "eq"
+            "name": "laptop",
+          "_score": null,

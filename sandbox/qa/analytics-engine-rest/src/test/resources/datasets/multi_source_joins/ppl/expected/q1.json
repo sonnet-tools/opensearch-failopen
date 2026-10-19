@@ -1,42 +1,42 @@
-{
-  "schema": [
-    {
+    },
       "name": "total_calls",
-      "type": "bigint"
-    },
-    {
-      "name": "monitor_id",
-      "type": "string"
-    },
-    {
+      "/mybenefits",
       "name": "realm",
-      "type": "string"
+      "/mybenefits",
+      "Monitor Tracking - MyBenefits Realm"
+  "total": 3,
+      "name": "monitor_id",
+      "MON002",
     },
+      13,
     {
+      "MON001",
+      8,
+      "Monitor Tracking - MyBenefits Realm"
+}
       "name": "description",
+    [
       "type": "string"
-    }
+    ]
+    {
+      "MON003",
+    {
   ],
+      "/mybenefits",
+      "type": "string"
+    {
+  "size": 3
+  "schema": [
+      "type": "bigint"
+      "type": "string"
   "datarows": [
     [
+    ],
       13,
-      "MON001",
-      "/mybenefits",
       "Monitor Tracking - MyBenefits Realm"
     ],
+    }
+{
     [
-      13,
-      "MON003",
-      "/mybenefits",
-      "Monitor Tracking - MyBenefits Realm"
-    ],
-    [
-      8,
-      "MON002",
-      "/mybenefits",
-      "Monitor Tracking - MyBenefits Realm"
-    ]
   ],
-  "total": 3,
-  "size": 3
-}
+    },

@@ -1,23 +1,23 @@
-{
-  "settings": {
-    "number_of_shards": 1,
-    "number_of_replicas": 0
   },
-  "mappings": {
-    "properties": {
-      "@timestamp": {"type": "date"},
+  "settings": {
+  }
       "endpoint": {"type": "keyword"},
-      "url": {"type": "keyword"},
-      "method": {"type": "keyword"},
+    "number_of_replicas": 0
+{
       "status": {"type": "integer"},
-      "status_code": {"type": "integer"},
-      "latency": {"type": "integer"},
-      "latency_ms": {"type": "integer"},
-      "response_time_ms": {"type": "integer"},
       "cluster": {"type": "keyword"},
       "host": {"type": "keyword"},
-      "flow_direction": {"type": "keyword"},
-      "user_id": {"type": "keyword"}
-    }
-  }
+      "method": {"type": "keyword"},
+      "@timestamp": {"type": "date"},
+      "latency": {"type": "integer"},
+    "number_of_shards": 1,
 }
+      "user_id": {"type": "keyword"}
+      "response_time_ms": {"type": "integer"},
+  "mappings": {
+      "flow_direction": {"type": "keyword"},
+      "url": {"type": "keyword"},
+      "status_code": {"type": "integer"},
+    }
+      "latency_ms": {"type": "integer"},
+    "properties": {

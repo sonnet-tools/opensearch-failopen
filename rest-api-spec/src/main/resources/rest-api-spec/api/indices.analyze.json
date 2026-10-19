@@ -1,42 +1,42 @@
-{
-  "indices.analyze":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/analyze-apis/",
-      "description":"Performs the analysis process on a text and return the tokens breakdown of the text."
     },
+            "GET",
+          }
+            "GET",
     "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_analyze",
-          "methods":[
-            "GET",
-            "POST"
-          ]
-        },
-        {
-          "path":"/{index}/_analyze",
-          "methods":[
-            "GET",
             "POST"
           ],
+    },
+      "description":"Define analyzer/tokenizer parameters and the text on which the analysis should be performed"
           "parts":{
+        {
+      "index":{
+        },
+          "methods":[
+  }
             "index":{
+          "methods":[
+            }
+    }
               "type":"string",
               "description":"The name of the index to scope the operation"
-            }
-          }
-        }
-      ]
-    },
-    "params":{
-      "index":{
-        "type":"string",
-        "description":"The name of the index to scope the operation"
-      }
-    },
+      "url":"https://opensearch.org/docs/latest/api-reference/analyze-apis/",
+        {
+    "documentation":{
     "body":{
-      "description":"Define analyzer/tokenizer parameters and the text on which the analysis should be performed"
-    }
-  }
+    },
+  "indices.analyze":{
+    "url":{
+          ]
+      "paths":[
+      ]
+    "params":{
+            "POST"
+          "path":"/_analyze",
+        "type":"string",
+      "description":"Performs the analysis process on a text and return the tokens breakdown of the text."
+          "path":"/{index}/_analyze",
+        "description":"The name of the index to scope the operation"
+{
+        }
 }
+      }

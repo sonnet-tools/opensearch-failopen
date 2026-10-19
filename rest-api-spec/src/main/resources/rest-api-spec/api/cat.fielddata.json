@@ -1,76 +1,76 @@
-{
-  "cat.fielddata":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-field-data/",
-      "description":"Shows how much heap memory is currently being used by fielddata on every data node in the cluster."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_cat/fielddata",
-          "methods":[
-            "GET"
-          ]
-        },
-        {
-          "path":"/_cat/fielddata/{fields}",
-          "methods":[
-            "GET"
-          ],
-          "parts":{
-            "fields":{
-              "type":"list",
-              "description":"A comma-separated list of fields to return the fielddata size"
+      },
             }
-          }
-        }
-      ]
-    },
-    "params":{
-      "format":{
-        "type":"string",
-        "description":"a short version of the Accept header, e.g. json, yaml"
+      "paths":[
       },
-      "bytes":{
-        "type":"enum",
-        "description":"The unit in which to display byte values",
-        "options":[
-          "b",
-          "k",
-          "kb",
-          "m",
-          "mb",
-          "g",
-          "gb",
-          "t",
-          "tb",
-          "p",
-          "pb"
-        ]
-      },
-      "h":{
-        "type":"list",
         "description":"Comma-separated list of column names to display"
+          "gb",
+        }
+      "bytes":{
+        "options":[
+          "methods":[
+      "h":{
+    },
       },
+          }
+      "description":"Shows how much heap memory is currently being used by fielddata on every data node in the cluster."
+        "default":false
+        {
+          "mb",
       "help":{
-        "type":"boolean",
-        "description":"Return help information",
-        "default":false
-      },
+          "g",
+      "format":{
       "s":{
+        "type":"string",
+  "cat.fielddata":{
+          "path":"/_cat/fielddata/{fields}",
         "type":"list",
-        "description":"Comma-separated list of column names or column aliases to sort by"
-      },
+        "type":"list",
       "v":{
-        "type":"boolean",
-        "description":"Verbose mode. Display column headers",
-        "default":false
+          "b",
+          "kb",
       },
-      "fields":{
+      "url":"https://opensearch.org/docs/latest/api-reference/cat/cat-field-data/",
+              "type":"list",
+      },
+        "description":"The unit in which to display byte values",
+        "description":"Comma-separated list of column names or column aliases to sort by"
+    },
+              "description":"A comma-separated list of fields to return the fielddata size"
+          ]
+          ],
+      ]
+    "stability":"stable",
+          "methods":[
+          "k",
+            "GET"
+          "pb"
+          "path":"/_cat/fielddata",
+            "fields":{
+            "GET"
         "type":"list",
-        "description":"A comma-separated list of fields to return in the output"
-      }
-    }
-  }
 }
+        {
+        "description":"Return help information",
+          "tb",
+          "parts":{
+    "documentation":{
+        },
+        "description":"a short version of the Accept header, e.g. json, yaml"
+        "default":false
+  }
+          "m",
+    "params":{
+{
+    "url":{
+      },
+        "type":"boolean",
+      }
+      "fields":{
+        "type":"enum",
+          "t",
+        "type":"boolean",
+          "p",
+        "description":"A comma-separated list of fields to return in the output"
+    }
+        "description":"Verbose mode. Display column headers",
+        ]

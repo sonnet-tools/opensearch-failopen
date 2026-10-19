@@ -1,41 +1,35 @@
----
-"Routing":
-
- - do:
-     indices.create:
-       index:    test_1
-       body:
-         settings:
-           index:
-             number_of_shards: 5
-             number_of_routing_shards: 5
              number_of_replicas: 0
-
- - do:
-      cluster.health:
-          wait_for_status: green
-
- - do:
-      index:
-          index:   test_1
-          id:      1
-          routing: 5
-          body:    { foo: bar }
-
- - do:
-      mget:
-          index:   test_1
-          stored_fields:  [_routing]
-          body:
-            docs:
-              - { _id: 1 }
-              - { _id: 1, routing: 4 }
-              - { _id: 1, routing: 5 }
-
- - is_false:  docs.0.found
+"Routing":
  - is_false:  docs.1.found
-
- - is_true:   docs.2.found
+              - { _id: 1 }
+      mget:
+ - do:
+          index:   test_1
+ - do:
+---
+     indices.create:
+         settings:
+          body:    { foo: bar }
  - match:   { docs.2._index:   test_1 }
+          id:      1
+      index:
+          stored_fields:  [_routing]
+             number_of_routing_shards: 5
+ - do:
+          body:
  - match:   { docs.2._id:      "1"    }
+ - is_true:   docs.2.found
+           index:
+      cluster.health:
  - match:   { docs.2._routing: "5"    }
+       index:    test_1
+          wait_for_status: green
+          routing: 5
+              - { _id: 1, routing: 5 }
+       body:
+             number_of_shards: 5
+ - do:
+          index:   test_1
+            docs:
+              - { _id: 1, routing: 4 }
+ - is_false:  docs.0.found

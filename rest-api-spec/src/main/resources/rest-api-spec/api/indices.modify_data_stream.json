@@ -1,33 +1,33 @@
-{
-  "indices.modify_data_stream":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/im-plugin/data-streams/",
-      "description":"Adds or removes backing indices of a data stream with metadata-only actions"
-    },
-    "stability":"experimental",
-    "url":{
-      "paths":[
-        {
-          "path":"/_data_stream/_modify",
-          "methods":[
-            "POST"
-          ]
+      "timeout":{
         }
+    }
+      },
+    "params":{
+      }
+      "paths":[
+}
+      "url":"https://opensearch.org/docs/latest/im-plugin/data-streams/",
+    "documentation":{
+          "path":"/_data_stream/_modify",
+        "description":"Explicit operation timeout for connection to cluster-manager node"
       ]
     },
-    "params":{
-      "cluster_manager_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to cluster-manager node"
-      },
-      "timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout"
-      }
+{
     },
-    "body":{
-      "description":"The data stream modify actions",
-      "required":true
-    }
+    },
   }
-}
+        "type":"time",
+    "stability":"experimental",
+      "description":"The data stream modify actions",
+        {
+          "methods":[
+      "required":true
+  "indices.modify_data_stream":{
+        "type":"time",
+      "description":"Adds or removes backing indices of a data stream with metadata-only actions"
+    "url":{
+        "description":"Explicit operation timeout"
+      "cluster_manager_timeout":{
+          ]
+            "POST"
+    "body":{

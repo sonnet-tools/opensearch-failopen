@@ -1,16 +1,12 @@
----
-"node_info test aggregations":
-  - skip:
-      features: [arbitrary_key]
-
-
-  - do:
       nodes.info: {}
+  - do:
+  - match : { nodes.$node_id.aggregations.filter: { "types": ["other"] } }
+---
+  - do:
+  - skip:
+"node_info test aggregations":
   - set:
       nodes._arbitrary_key_: node_id
-
-  - do:
-      nodes.info:
+      features: [arbitrary_key]
         metric: [ aggregations ]
-
-  - match : { nodes.$node_id.aggregations.filter: { "types": ["other"] } }
+      nodes.info:

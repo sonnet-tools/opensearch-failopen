@@ -1,29 +1,29 @@
-{
-  "_scroll_id" : "DnF1ZXJ5VGhlbkZldGNoBQAAAfakescroll",
+      "_parent": "testparent",
+      "sort" : [ 0 ],
+    "max_score" : null,
+    } ]
+}
   "took" : 3,
-  "timed_out" : false,
-  "terminated_early" : true,
-  "_shards" : {
-    "total" : 5,
-    "successful" : 5,
+{
     "failed" : 0
   },
-  "hits" : {
-    "total" : 4,
-    "max_score" : null,
-    "hits" : [ {
       "_index" : "test",
-      "_id" : "AVToMiDL50DjIiBO3yKA",
-      "_version" : 1,
+      },
+  "_shards" : {
+    "hits" : [ {
+    "successful" : 5,
+  "_scroll_id" : "DnF1ZXJ5VGhlbkZldGNoBQAAAfakescroll",
       "_score" : null,
       "_source" : {
+  "timed_out" : false,
         "test" : "test3"
-      },
-      "sort" : [ 0 ],
-      "_routing": "testrouting",
-      "_parent": "testparent",
       "_ttl" : 1234,
-      "_timestamp": 123444
-    } ]
+      "_routing": "testrouting",
+    "total" : 4,
+      "_id" : "AVToMiDL50DjIiBO3yKA",
+  "hits" : {
   }
-}
+  "terminated_early" : true,
+    "total" : 5,
+      "_timestamp": 123444
+      "_version" : 1,

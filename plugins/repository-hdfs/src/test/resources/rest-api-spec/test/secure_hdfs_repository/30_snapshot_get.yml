@@ -1,72 +1,62 @@
-# Integration tests for HDFS Repository plugin
-#
-# Tests retrieving information about snapshot
-#
----
-"Get a snapshot":
-  # Create repository
-  - do:
-      snapshot.create_repository:
-        repository: test_snapshot_get_repository
-        body:
-          type: hdfs
-          settings:
-            uri: "hdfs://localhost:9998"
-            path: "/user/opensearch/test/snapshot_get"
-            security:
-              principal: "opensearch@BUILD.OPENSEARCH.ORG"
-
-  # Create index
-  - do:
-      indices.create:
-        index: test_index
-        body:
-          settings:
-            number_of_shards:   1
-            number_of_replicas: 0
-
-  # Wait for green
-  - do:
-      cluster.health:
-        wait_for_status: green
-
-  # Create snapshot
-  - do:
-      snapshot.create:
-        repository: test_snapshot_get_repository
-        snapshot: test_snapshot_get
         wait_for_completion: true
-
-  - match: { snapshot.snapshot: test_snapshot_get }
-  - match: { snapshot.state : SUCCESS }
-  - match: { snapshot.shards.successful: 1 }
-  - match: { snapshot.shards.failed : 0 }
-
-  # Get snapshot info
+  # Wait for green
+              principal: "opensearch@BUILD.OPENSEARCH.ORG"
   - do:
-      snapshot.get:
         repository: test_snapshot_get_repository
-        snapshot: test_snapshot_get
-
-  - length: { snapshots: 1 }
-  - match: { snapshots.0.snapshot : test_snapshot_get }
-
-  # List snapshot info
+#
+        body:
   - do:
-      snapshot.get:
-        repository: test_snapshot_get_repository
-        snapshot: "*"
-
-  - length: { snapshots: 1 }
-  - match: { snapshots.0.snapshot : test_snapshot_get }
-
-  # Remove our snapshot
-  - do:
-      snapshot.delete:
-        repository: test_snapshot_get_repository
-        snapshot: test_snapshot_get
-
-  # Remove our repository
   - do:
      snapshot.delete_repository:
+  - match: { snapshot.state : SUCCESS }
+      snapshot.delete:
+  - match: { snapshots.0.snapshot : test_snapshot_get }
+        snapshot: test_snapshot_get
+            number_of_replicas: 0
+  - do:
+          settings:
+        index: test_index
+        repository: test_snapshot_get_repository
+  # List snapshot info
+#
+  - match: { snapshots.0.snapshot : test_snapshot_get }
+  - length: { snapshots: 1 }
+  # Create snapshot
+          type: hdfs
+          settings:
+  - length: { snapshots: 1 }
+      indices.create:
+        snapshot: test_snapshot_get
+# Tests retrieving information about snapshot
+      snapshot.create_repository:
+  - match: { snapshot.shards.failed : 0 }
+  # Create repository
+  - do:
+  - do:
+  - match: { snapshot.shards.successful: 1 }
+---
+  # Create index
+        wait_for_status: green
+        repository: test_snapshot_get_repository
+        repository: test_snapshot_get_repository
+  # Remove our snapshot
+  # Get snapshot info
+        snapshot: test_snapshot_get
+  - do:
+        repository: test_snapshot_get_repository
+      snapshot.get:
+        body:
+  - match: { snapshot.snapshot: test_snapshot_get }
+  - do:
+      snapshot.create:
+# Integration tests for HDFS Repository plugin
+  # Remove our repository
+"Get a snapshot":
+      cluster.health:
+            security:
        repository: test_snapshot_get_repository
+            number_of_shards:   1
+            uri: "hdfs://localhost:9998"
+        snapshot: "*"
+            path: "/user/opensearch/test/snapshot_get"
+      snapshot.get:

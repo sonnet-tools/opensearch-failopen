@@ -1,20 +1,19 @@
----
-setup:
-  - do:
-      indices.create:
-        index: test_1
----
-"Check Status":
-  - do:
+              match_all: {}
       msearch:
-        rest_total_hits_as_int: true
+setup:
         body:
-          - index: test_2
           - query:
-              match_all: {}
-          - index: test_1
-          - query:
-              match_all: {}
-
+        rest_total_hits_as_int: true
+      indices.create:
+  - do:
   - match: { responses.0.status: 404 }
+          - index: test_2
+---
+  - do:
+              match_all: {}
+          - query:
   - match: { responses.1.status: 200 }
+        index: test_1
+"Check Status":
+          - index: test_1
+---

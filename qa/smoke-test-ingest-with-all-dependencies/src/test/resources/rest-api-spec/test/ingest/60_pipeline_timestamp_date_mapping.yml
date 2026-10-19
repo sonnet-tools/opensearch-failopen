@@ -1,36 +1,33 @@
----
-"Test timestamp templating matches date-mapping defaults":
-  - do:
-      cluster.health:
-          wait_for_status: green
-
-  - do:
-      indices.create:
-        index: timetest
         body:
-          mappings:
-            "properties": { "my_time": {"type": "date", "format": "strict_date_optional_time_nanos"}}
-
   - do:
-      ingest.put_pipeline:
-        id: "my_timely_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "set" : {
-                  "field": "my_time",
                   "value": "{{ _ingest.timestamp }}"
-                }
-              }
-            ]
           }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: timetest
-        id: 1
+        id: "my_timely_pipeline"
+      indices.create:
+"Test timestamp templating matches date-mapping defaults":
+            ]
         pipeline: "my_timely_pipeline"
         body: {}
+        id: 1
+  - do:
+              {
+---
+          mappings:
+      index:
+              }
+                  "field": "my_time",
+        body:  >
+  - match: { acknowledged: true }
+      ingest.put_pipeline:
+            "description": "_description",
+            "processors": [
+  - do:
+                "set" : {
+      cluster.health:
+          wait_for_status: green
+          {
+  - do:
+        index: timetest
+            "properties": { "my_time": {"type": "date", "format": "strict_date_optional_time_nanos"}}
+        index: timetest
+                }

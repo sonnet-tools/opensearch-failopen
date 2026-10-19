@@ -1,39 +1,33 @@
----
-"Routing":
-
- - do:
-     indices.create:
-       index:    test_1
-       body:
-         settings:
-           index:
-             number_of_shards: 5
-             number_of_routing_shards: 5
-             number_of_replicas: 0
-
- - do:
-      cluster.health:
-          wait_for_status: green
-
- - do:
-      create:
-          index:   test_1
+          routing: 5
+      catch: missing
           id:      1
+---
+ - match:   { _id:              "1"}
+      cluster.health:
+      create:
+       body:
+             number_of_replicas: 0
+ - do:
+          stored_fields:  [_routing]
+             number_of_shards: 5
+ - do:
+          wait_for_status: green
+"Routing":
+          index:   test_1
+ - do:
+          index:   test_1
+       index:    test_1
+ - match:   { _routing:  "5"}
+     indices.create:
+      get:
+ - do:
+          index:   test_1
           routing: 5
           body:    { foo: bar }
-
- - do:
-      get:
-          index:   test_1
           id:      1
-          routing: 5
-          stored_fields:  [_routing]
-
- - match:   { _id:              "1"}
- - match:   { _routing:  "5"}
-
- - do:
-      catch: missing
-      get:
-          index:   test_1
+         settings:
           id:      1
+      get:
+             number_of_routing_shards: 5
+ - do:
+           index:

@@ -1,28 +1,28 @@
-{
   "schema": [
     {
-      "name": "status",
-      "type": "string"
-    },
-    {
       "name": "coalesced",
-      "type": "string"
-    }
   ],
-  "datarows": [
-    [
-      "active",
-      "active"
-    ],
-    [
-      "inactive",
-      "inactive"
-    ],
-    [
-      "active",
-      "active"
-    ]
-  ],
-  "total": 3,
   "size": 3
+    ]
+    ],
+{
+  "datarows": [
+  "total": 3,
+      "type": "string"
+      "inactive",
+    },
+      "inactive"
+    [
 }
+      "active",
+    {
+    [
+    [
+      "active"
+      "active",
+      "name": "status",
+    }
+      "type": "string"
+    ],
+      "active"
+  ],

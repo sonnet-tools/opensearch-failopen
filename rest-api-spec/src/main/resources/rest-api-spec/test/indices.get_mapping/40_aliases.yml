@@ -1,24 +1,20 @@
----
-"Getting mapping for aliases should return the real index as key":
-
-  - do:
-        indices.create:
-          index: test_index
-          body:
-              mappings:
-                  properties:
-                    text:
-                      type:     text
-                      analyzer: whitespace
-
-  - do:
-      indices.put_alias:
-        index: test_index
-        name:  test_alias
-
-  - do:
-      indices.get_mapping:
-        index: test_alias
-
   - match: {test_index.mappings.properties.text.type:     text}
+      indices.put_alias:
+          body:
+        index: test_index
+                      analyzer: whitespace
+                      type:     text
+  - do:
+        name:  test_alias
+        indices.create:
+                  properties:
+      indices.get_mapping:
+"Getting mapping for aliases should return the real index as key":
+              mappings:
+        index: test_alias
   - match: {test_index.mappings.properties.text.analyzer: whitespace}
+  - do:
+  - do:
+                    text:
+          index: test_index
+---

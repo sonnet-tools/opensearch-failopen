@@ -1,75 +1,75 @@
-{
-  "schema": [
-    {
-      "name": "category",
-      "type": "string"
-    },
-    {
-      "name": "value",
-      "type": "double"
-    },
-    {
-      "name": "avg_value",
-      "type": "double"
-    }
-  ],
-  "datarows": [
-    [
-      "A",
-      100.5,
-      null
-    ],
-    [
+  "total": 11,
       "B",
-      200.75,
-      null
-    ],
-    [
-      "A",
-      150.25,
-      null
-    ],
-    [
-      "C",
       300.0,
-      null
+      "type": "string"
     ],
-    [
-      "B",
-      250.5,
-      null
-    ],
-    [
-      "A",
-      175.0,
-      null
-    ],
-    [
-      "C",
-      400.25,
-      null
-    ],
-    [
-      "B",
-      225.75,
-      null
-    ],
-    [
-      "A",
-      180.5,
-      null
-    ],
-    [
-      "C",
       350.0,
       null
     ],
+      250.5,
+  "size": 11
+    [
+      400.25,
+    [
+    ],
+      "type": "double"
+      "A",
+      "C",
+    ],
+      "B",
+      "C",
+    ]
+    [
+      null
+      "name": "avg_value",
+      150.25,
+    {
+    }
+    [
+      "B",
+      233.35
+{
     [
       null,
+      175.0,
+    ],
+      "name": "value",
+      "A",
       null,
-      233.35
-    ]
-  ],
-  "total": 11,
-  "size": 11
+      "name": "category",
 }
+    [
+    ],
+      null
+  "datarows": [
+    [
+  ],
+    ],
+    },
+    [
+      null
+      null
+    {
+    {
+    },
+      null
+      225.75,
+    [
+      null
+      100.5,
+      null
+      null
+      "type": "double"
+    ],
+      "A",
+      "A",
+      "C",
+      null
+    [
+  "schema": [
+    [
+    ],
+      180.5,
+      200.75,
+    ],
+  ],

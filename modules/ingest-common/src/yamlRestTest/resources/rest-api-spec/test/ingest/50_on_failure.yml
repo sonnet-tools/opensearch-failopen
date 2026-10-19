@@ -1,209 +1,198 @@
----
-teardown:
-  - do:
-      ingest.delete_pipeline:
-        id: "my_pipeline"
-        ignore: 404
-
----
-"Test Pipeline With On Failure Block":
-  - do:
       ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
                 "set" : {
-                  "field" : "_executed",
-                  "value" : true
-                }
-              },
-              {
-                "date" : {
-                  "field" : "date",
-                  "target_field" : "date",
-                  "formats" : ["yyyy"]
-                }
-              },
-              {
-                "uppercase" : {
-                  "field": "field1"
-                }
-              }
-            ],
-            "on_failure" : [
-              {
-                "set" : {
-                  "field" : "_failed",
-                  "value" : true
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
         index: test
         id: 1
-        pipeline: "my_pipeline"
-        body: {field1: "value1"}
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.field1: "value1" }
-  - match: { _source._executed: true }
-  - match: { _source._failed: true }
-
----
-"Test Pipeline With Nested Processor On Failures":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "rename" : {
-                  "field" : "foofield",
-                  "target_field" : "field1",
-                  "on_failure" : [
-                    {
-                      "set" : {
-                        "field" : "foofield",
-                        "value" : "exists"
-                      }
-                    },
-                    {
-                      "rename" : {
-                        "field" : "foofield2",
-                        "target_field" : "field1",
-                        "on_failure" : [
-                          {
-                            "set" : {
-                            "field" : "foofield2",
-                            "value" : "ran"
-                            }
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {field1: "value1"}
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.field1: "value1" }
-  - match: { _source.foofield: "exists" }
-  - match: { _source.foofield2: "ran" }
-
----
-"Test pipeline with empty on_failure in a processor":
-  - do:
-      catch: bad_request
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "fail" : {
-                  "tag" : "emptyfail",
-                  "message" : "_message",
-                  "on_failure": []
-                }
-              }
-            ],
-            "on_failure": [
-              {
-                "set" : {
                   "field": "on_failure_executed",
-                  "value": true
-                }
-              }
-            ]
-          }
-  - match: { error.root_cause.0.type: "parse_exception" }
-  - match: { error.root_cause.0.reason: "[on_failure] processors list cannot be empty" }
-  - match: { error.root_cause.0.processor_type: "fail" }
-  - match: { error.root_cause.0.processor_tag: "emptyfail" }
-  - match: { error.root_cause.0.property_name: "on_failure" }
-
----
-"Test pipeline with empty on_failure in pipeline":
-  - do:
-      catch: bad_request
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
+  - match: { acknowledged: true }
+"Test Pipeline With On Failure Block":
+  - match: { acknowledged: true }
+                        "field" : "foofield2",
               {
-                "set" : {
-                  "field" : "foo",
-                  "value" : "_message"
                 }
-              }
+                "fail" : {
             ],
-            "on_failure": []
+              }
+        body:  >
           }
-  - match: { error.root_cause.0.type: "parse_exception" }
-  - match: { error.root_cause.0.reason: "pipeline [my_pipeline] cannot have an empty on_failure option defined" }
-
+                  "field" : "_failed",
+            ],
+                }
 ---
+  - do:
+---
+            "description": "_description",
+"Test Pipeline With Nested Processor On Failures":
+                      }
+  - match: { error.root_cause.0.type: "parse_exception" }
+                            "value" : "ran"
+                        ]
+                "set" : {
+                }
 "Test pipeline with ignore_failure in a processor":
   - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "fail" : {
-                  "message" : "_message",
-                  "ignore_failure": true
                 }
+        pipeline: "my_pipeline"
+                  "field" : "_executed",
+              {
+        id: 1
+            "on_failure" : [
+            ]
+                        "on_failure" : [
+  - match: { error.root_cause.0.reason: "pipeline [my_pipeline] cannot have an empty on_failure option defined" }
+  - match: { _source._failed: true }
+                }
+        body:  >
+  - match: { error.root_cause.0.reason: "[on_failure] processors list cannot be empty" }
+                  ]
+            "processors": [
+  - do:
+  - do:
+      ingest.put_pipeline:
+                  "field" : "foo",
+          }
+              }
+                }
+  - do:
+  - match: { error.root_cause.0.property_name: "on_failure" }
+        id: 1
+                }
+                  "target_field" : "field1",
+      ingest.put_pipeline:
+                  "on_failure": []
+        body:  >
+                "set" : {
+                      "set" : {
+  - match: { error.root_cause.0.type: "parse_exception" }
+        id: "my_pipeline"
+        index: test
+            ]
+        index: test
+              }
+                  "value" : "_message"
+      get:
+      ingest.delete_pipeline:
+---
+      ingest.put_pipeline:
+                }
+  - do:
+  - match: { _source.foofield: "exists" }
+                "date" : {
+        id: "my_pipeline"
+              {
+              {
+              }
+"Test pipeline with empty on_failure in a processor":
+        id: "my_pipeline"
+                    }
+              {
+  - match: { _source.foofield2: "ran" }
+      catch: bad_request
+              }
+                  "value" : "value"
+          {
+                        "target_field" : "field1",
+                    {
+              },
+        id: "my_pipeline"
+  - do:
+              },
+            "processors": [
+      get:
+              {
+                  "field" : "field",
+        pipeline: "my_pipeline"
+                "set" : {
+                  "formats" : ["yyyy"]
+"Test pipeline with empty on_failure in pipeline":
+      index:
+                  "value" : true
+            "on_failure": [
+            "description": "_description",
+                "uppercase" : {
+        index: test
+                }
+        body: {field1: "value1"}
+          {
+          {
+  - do:
+                  "ignore_failure": true
+          }
+  - do:
+  - match: { acknowledged: true }
+          }
+        index: test
+  - match: { _source.field1: "value1" }
+      catch: bad_request
+            "description": "_description",
+                }
+                      "rename" : {
+                  "value": true
+        body:  >
+        body:  >
+        index: test
+  - do:
+  - match: { error.root_cause.0.processor_tag: "emptyfail" }
+            "processors": [
+                            "set" : {
+              }
+                "rename" : {
+            "description": "_description",
+                          }
+        ignore: 404
+                            }
+                  "tag" : "emptyfail",
+              {
+        body: {}
+                  "field" : "foofield",
+                          {
+  - match: { _source._executed: true }
               },
               {
-                "set" : {
-                  "field" : "field",
-                  "value" : "value"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
+                  "field" : "date",
+                    },
+                  "on_failure" : [
+        id: 1
       index:
-        index: test
+        id: "my_pipeline"
+                            "field" : "foofield2",
+teardown:
+            "processors": [
+          {
+          {
+              }
         id: 1
-        pipeline: "my_pipeline"
-        body: {}
-
-  - do:
+        body: {field1: "value1"}
       get:
-        index: test
+                  "target_field" : "date",
+                  "message" : "_message",
+                "fail" : {
+                  "value" : true
+---
+                  "field": "field1"
+                "set" : {
+            ],
+              {
+                        "value" : "exists"
+      index:
+  - match: { error.root_cause.0.processor_type: "fail" }
+                    {
+                        "field" : "foofield",
+            "description": "_description",
+              {
         id: 1
+  - match: { _source.field1: "value1" }
+            "on_failure": []
+  - do:
+                  "message" : "_message",
+        pipeline: "my_pipeline"
+---
+                      }
   - match: { _source.field: "value" }
+            ]
+            ]
+  - do:
+            "processors": [
+      ingest.put_pipeline:
+          }
+---
+        id: "my_pipeline"

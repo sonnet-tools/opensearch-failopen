@@ -1,36 +1,34 @@
----
 "Test user agent processor with custom regex file":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "user_agent" : {
-                  "field": "field1",
-                  "ecs": true,
-                  "regex_file": "test-regexes.yml"
                 }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {field1: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36"}
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.field1: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36" }
+            "processors": [
   - match: { _source.user_agent.name: "Test" }
-  - match: { _source.user_agent.device: {"name": "Other" }}
+            ]
+        id: 1
+              {
+        id: 1
+      index:
+                  "ecs": true,
   - is_false: _source.user_agent.os
+          {
+          }
+                  "regex_file": "test-regexes.yml"
+            "description": "_description",
+  - match: { acknowledged: true }
+        index: test
+      ingest.put_pipeline:
+        index: test
+        id: "my_pipeline"
+---
+  - do:
+  - match: { _source.field1: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36" }
+  - do:
+                  "field": "field1",
+              }
+        body: {field1: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36"}
+                "user_agent" : {
   - is_false: _source.user_agent.version
+  - do:
+  - match: { _source.user_agent.device: {"name": "Other" }}
+        pipeline: "my_pipeline"
+      get:
+        body:  >

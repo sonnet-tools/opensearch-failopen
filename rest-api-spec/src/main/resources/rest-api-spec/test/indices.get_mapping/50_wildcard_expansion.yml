@@ -1,129 +1,110 @@
----
-setup:
-  - do:
-        indices.create:
-          index: test-xxx
-          body:
-            settings:
-              index:
-                number_of_replicas: 0
-            mappings:
-              properties:
-                foo:
-                  type: keyword
-  - do:
-        indices.create:
-          index: test-xxy
-          body:
-            settings:
-              index:
-                number_of_replicas: 0
-            mappings:
-              properties:
-                foo2:
-                  type: keyword
-  - do:
-        indices.create:
-          index: test-xyy
-          body:
-            settings:
-              index:
-                number_of_replicas: 0
-            mappings:
-              properties:
-                foo3:
-                  type: keyword
-  - do:
-        indices.create:
-          index: test-yyy
-          body:
-            settings:
-              index:
-                number_of_replicas: 0
-            mappings:
-              properties:
-                foo4:
-                  type: keyword
-
-  - do:
-        cluster.health:
-            wait_for_status: green
-
-  - do:
-      indices.close:
-        index: test-xyy
-
-  - do:
-        cluster.health:
-            wait_for_status: green
-
----
 "Get test-* with defaults":
-
- - do:
+                foo4:
     indices.get_mapping:
-        index: test-x*
-
- - is_true: test-xxx.mappings
- - is_true: test-xxy.mappings
-
----
-"Get test-* with wildcard_expansion=all":
-
- - do:
-    indices.get_mapping:
-        index: test-x*
-        expand_wildcards: all
-
- - is_true: test-xxx.mappings
- - is_true: test-xxy.mappings
  - is_true: test-xyy.mappings
-
----
-"Get test-* with wildcard_expansion=open":
-
- - do:
     indices.get_mapping:
-        index: test-x*
-        expand_wildcards: open
-
- - is_true: test-xxx.mappings
- - is_true: test-xxy.mappings
-
----
-"Get test-* with wildcard_expansion=closed":
-
- - do:
-    indices.get_mapping:
-        index: test-x*
-        expand_wildcards: closed
-
- - is_true: test-xyy.mappings
-
----
+  - do:
+            mappings:
 "Get test-* with wildcard_expansion=none":
- - do:
+"Get test-* with wildcard_expansion=open,closed":
+            wait_for_status: green
+        index: test-xyy
+                  type: keyword
+          body:
+          body:
+        indices.create:
+ - is_true: test-xxx.mappings
     indices.get_mapping:
-        index: test-x*
-        expand_wildcards: none
-
+---
+    catch: missing
+ - is_true: test-xxy.mappings
  - match: { '':  {} }
 ---
-"Get test-* with wildcard_expansion=none allow_no_indices=false":
+                number_of_replicas: 0
+          body:
  - do:
-    catch: missing
     indices.get_mapping:
-        index: test-x*
-        expand_wildcards: none
-        allow_no_indices: false
 ---
-"Get test-* with wildcard_expansion=open,closed":
-
  - do:
+---
+            settings:
+  - do:
+"Get test-* with wildcard_expansion=all":
+ - is_true: test-xxy.mappings
+          index: test-xxx
+    indices.get_mapping:
+  - do:
+        index: test-x*
+ - do:
+  - do:
+          index: test-xyy
+        index: test-x*
+                number_of_replicas: 0
+---
+        expand_wildcards: all
+ - do:
+              index:
+          index: test-yyy
+ - is_true: test-xxx.mappings
+              index:
+                foo3:
+                  type: keyword
+        index: test-x*
+                number_of_replicas: 0
+                  type: keyword
+ - is_true: test-xyy.mappings
+            wait_for_status: green
+"Get test-* with wildcard_expansion=open":
+ - is_true: test-xxy.mappings
+      indices.close:
+        indices.create:
+"Get test-* with wildcard_expansion=none allow_no_indices=false":
+            settings:
+        allow_no_indices: false
+              properties:
+              properties:
+ - is_true: test-xyy.mappings
+ - is_true: test-xxx.mappings
+              index:
+            mappings:
+  - do:
+"Get test-* with wildcard_expansion=closed":
+setup:
+        expand_wildcards: open,closed
+            mappings:
+---
+        index: test-x*
+                foo2:
+ - is_true: test-xxx.mappings
+        index: test-x*
+            mappings:
+            settings:
+            settings:
+ - do:
+                  type: keyword
+  - do:
+        expand_wildcards: none
+        indices.create:
+        cluster.health:
+ - is_true: test-xxy.mappings
+              properties:
+              index:
+        indices.create:
+        expand_wildcards: closed
+        expand_wildcards: open
+                number_of_replicas: 0
+          body:
+ - do:
+        expand_wildcards: none
+---
+                foo:
+        index: test-x*
+        cluster.health:
     indices.get_mapping:
         index: test-x*
-        expand_wildcards: open,closed
-
- - is_true: test-xxx.mappings
- - is_true: test-xxy.mappings
- - is_true: test-xyy.mappings
+    indices.get_mapping:
+---
+          index: test-xxy
+  - do:
+ - do:
+              properties:

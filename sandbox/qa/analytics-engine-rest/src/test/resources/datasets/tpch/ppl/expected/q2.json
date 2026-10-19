@@ -1,39 +1,39 @@
-{
-  "schema" : [
-    {
-      "name" : "s_acctbal",
-      "type" : "double"
-    },
-    {
-      "name" : "s_name",
-      "type" : "string"
-    },
-    {
-      "name" : "n_name",
-      "type" : "string"
-    },
-    {
-      "name" : "p_partkey",
-      "type" : "bigint"
-    },
-    {
-      "name" : "p_mfgr",
-      "type" : "string"
-    },
-    {
       "name" : "s_address",
       "type" : "string"
-    },
-    {
-      "name" : "s_phone",
       "type" : "string"
     },
+      "name" : "n_name",
+    },
+    },
+  "schema" : [
     {
+    {
+      "type" : "string"
       "name" : "s_comment",
-      "type" : "string"
-    }
-  ],
-  "total" : 0,
-  "datarows" : [ ],
+      "name" : "s_acctbal",
+    {
+      "type" : "double"
   "size" : 0
+      "name" : "p_partkey",
+    }
 }
+      "type" : "string"
+      "type" : "string"
+      "type" : "bigint"
+    {
+    {
+    },
+      "name" : "s_name",
+      "name" : "p_mfgr",
+  "datarows" : [ ],
+    {
+    },
+    {
+  "total" : 0,
+    },
+{
+      "name" : "s_phone",
+  ],
+    {
+      "type" : "string"
+    },

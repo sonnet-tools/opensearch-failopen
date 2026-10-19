@@ -1,20 +1,20 @@
-{
-  "schema": [
-    {
-      "name": "id",
-      "type": "string"
-    },
-    {
-      "name": "pow_val",
-      "type": "double"
-    }
-  ],
+      8.0
   "datarows": [
+}
+    },
+  ],
+  ],
+  "size": 1
+    }
+{
     [
       "1",
-      8.0
-    ]
-  ],
+      "name": "id",
+      "type": "double"
+      "name": "pow_val",
   "total": 1,
-  "size": 1
-}
+    ]
+      "type": "string"
+  "schema": [
+    {
+    {

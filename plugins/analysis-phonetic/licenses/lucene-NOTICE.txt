@@ -1,192 +1,154 @@
-Apache Lucene
-Copyright 2014 The Apache Software Foundation
-
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
-Includes software from other Apache Software Foundation projects,
-including, but not limited to:
- - Apache Ant
- - Apache Jakarta Regexp
- - Apache Commons
- - Apache Xerces
-
-ICU4J, (under analysis/icu) is licensed under an MIT styles license
-and Copyright (c) 1995-2008 International Business Machines Corporation and others
-
-Some data files (under analysis/icu/src/data) are derived from Unicode data such
-as the Unicode Character Database. See http://unicode.org/copyright.html for more
-details.
-
-Brics Automaton (under core/src/java/org/apache/lucene/util/automaton) is 
-BSD-licensed, created by Anders Møller. See http://www.brics.dk/automaton/
-
-The levenshtein automata tables (under core/src/java/org/apache/lucene/util/automaton) were
-automatically generated with the moman/finenight FSA library, created by
-Jean-Philippe Barrette-LaPierre. This library is available under an MIT license,
-see http://sites.google.com/site/rrettesite/moman and 
-http://bitbucket.org/jpbarrette/moman/overview/
-
-The class org.apache.lucene.util.WeakIdentityMap was derived from
-the Apache CXF project and is Apache License 2.0.
-
-The Google Code Prettify is Apache License 2.0.
-See http://code.google.com/p/google-code-prettify/
-
-JUnit (junit-4.10) is licensed under the Common Public License v. 1.0
-See http://junit.sourceforge.net/cpl-v10.html
-
-This product includes code (JaspellTernarySearchTrie) from Java Spelling Checkin
-g Package (jaspell): http://jaspell.sourceforge.net/
-License: The BSD License (http://www.opensource.org/licenses/bsd-license.php)
-
-The snowball stemmers in
-  analysis/common/src/java/net/sf/snowball
-were developed by Martin Porter and Richard Boulton.
-The snowball stopword lists in
-  analysis/common/src/resources/org/apache/lucene/analysis/snowball
-were developed by Martin Porter and Richard Boulton.
-The full snowball package is available from
-  http://snowball.tartarus.org/
-
-The KStem stemmer in
-  analysis/common/src/org/apache/lucene/analysis/en
-was developed by Bob Krovetz and Sergio Guzman-Lara (CIIR-UMass Amherst)
-under the BSD-license.
-
-The Arabic,Persian,Romanian,Bulgarian, Hindi and Bengali analyzers (common) come with a default
-stopword list that is BSD-licensed created by Jacques Savoy.  These files reside in:
-analysis/common/src/resources/org/apache/lucene/analysis/ar/stopwords.txt,
-analysis/common/src/resources/org/apache/lucene/analysis/fa/stopwords.txt,
-analysis/common/src/resources/org/apache/lucene/analysis/ro/stopwords.txt,
-analysis/common/src/resources/org/apache/lucene/analysis/bg/stopwords.txt,
-analysis/common/src/resources/org/apache/lucene/analysis/hi/stopwords.txt,
-analysis/common/src/resources/org/apache/lucene/analysis/bn/stopwords.txt
-See http://members.unine.ch/jacques.savoy/clef/index.html.
-
 The German,Spanish,Finnish,French,Hungarian,Italian,Portuguese,Russian and Swedish light stemmers
-(common) are based on BSD-licensed reference implementations created by Jacques Savoy and
+that the provisions of Section 3 ("NO WARRANTY") will ALWAYS appear
+analysis/common/src/java/org/apache/lucene/analysis/fr/FrenchLightStemmer.java
+"use" as used herein includes, but is not limited to, the use,
+mecab-ipadic-2.7.0-20070801 Notice
+The Polish analyzer (stempel) comes with a default
+See http://members.unine.ch/jacques.savoy/clef/index.html.
+in the same form as set out herein and that such intended
+analysis/common/src/java/org/apache/lucene/analysis/fr/FrenchMinimalStemmer.java
+Copyright 2014 The Apache Software Foundation
+or
+the program and the nonexistence of any infringement or violation of
+===========================================================================
+See http://junit.sourceforge.net/cpl-v10.html
+source code for this can be found at http://www.eclipse.org/jetty/downloads.php
+  http://atilika.com/releases/mecab-ipadic/mecab-ipadic-2.7.0-20070801.tar.gz
+have agreed and understood, that there is no warranty whatsoever for
+which can be obtained from
+provided by Xiaoping Gao and copyright 2009 by www.imdict.net.
+The full snowball package is available from
+analysis/common/src/resources/org/apache/lucene/analysis/bn/stopwords.txt
+analysis/common/src/java/org/apache/lucene/analysis/pt/PortugueseLightStemmer.java
+The levenshtein automata tables (under core/src/java/org/apache/lucene/util/automaton) were
+NO WARRANTY
+organization that participated in or was otherwise related to the
+analysis/common/src/java/org/apache/lucene/analysis/ru/RussianLightStemmer.java
+by the Egothor project http://egothor.sf.net/, created by Leo Galambos, Martin Kvapil,
+  analysis/common/src/resources/org/apache/lucene/analysis/snowball
+Each user of the program will agree and understand, and be deemed to
+otherwise connected with the program is assumed by the user.
+in stempel/src/resources/org/apache/lucene/analysis/pl/stopwords.txt.
+modified, was distributed or delivered to or received by a user from
+to users as so produced on an experimental basis.  Accordingly, the
+performance, merchantability and fitness for a particular purpose of
 Ljiljana Dolamic. These files reside in:
-analysis/common/src/java/org/apache/lucene/analysis/de/GermanLightStemmer.java
+Therefore, neither ICOT, the copyright holder, or any other
+Kuromoji Japanese Morphological Analyzer - Apache Lucene Integration
+or result produced or otherwise obtained by using the program,
+The KStem stemmer in
+License: The BSD License (http://www.opensource.org/licenses/bsd-license.php)
+including, but not limited to:
+  analysis/common/src/org/apache/lucene/analysis/en
+fitness, in no event shall NAIST be liable for
+any person, organization or entity other than ICOT, unless it makes or
+ICU4J, (under analysis/icu) is licensed under an MIT styles license
+g Package (jaspell): http://jaspell.sourceforge.net/
+analysis/common/src/resources/org/apache/lucene/analysis/ro/stopwords.txt,
+writing, such person, organization or entity, will also be exempted
+damages, including, without limitation, general, special, incidental
+===========================================================================
+The Arabic,Persian,Romanian,Bulgarian, Hindi and Bengali analyzers (common) come with a default
+ - Apache Commons
+development of the program and their respective officials, directors,
+===========================================================================
+In the case where the program, whether in its original form or
+The class org.apache.lucene.util.WeakIdentityMap was derived from
+project or thereafter.  Each user will be deemed to have agreed to the
+distribution, if actually made, will neither violate or otherwise
+were developed by Martin Porter and Richard Boulton.
+production of secondary products from the program.
+on, or be attached to, the Program, which is distributed substantially
+see http://sites.google.com/site/rrettesite/moman and 
+See http://project.carrot2.org/license.html.
+WordBreakTestUnicode_*.java (under modules/analysis/common/src/test/) 
+contravene any of the laws and regulations of the countries having
+  http://snowball.tartarus.org/
+This software includes a binary and/or source version of data from
+  mecab-ipadic-2.7.0-20070801
+Morfologik uses data from Polish ispell/myspell dictionary
+and Copyright (c) 1995-2008 International Business Machines Corporation and others
+regardless of whether they have been advised of, or otherwise had
+The Google Code Prettify is Apache License 2.0.
+Some data files (under analysis/icu/src/data) are derived from Unicode data such
+under the BSD-license.
+analysis/common/src/resources/org/apache/lucene/analysis/ar/stopwords.txt,
+The SmartChineseAnalyzer source code (smartcn) was
+ - Apache Ant
 analysis/common/src/java/org/apache/lucene/analysis/de/GermanMinimalStemmer.java
+The program was produced on an experimental basis in the course of the
+(common) are based on BSD-licensed reference implementations created by Jacques Savoy and
+Includes software from other Apache Software Foundation projects,
+any right of any third party.
+implied, statutory or otherwise.  The term "warranty" used herein
+Each User may also freely distribute the Program, whether in its
+stopword list that is BSD-licensed created by the Carrot2 project. The file resides
+original form or modified, to any third party or parties, PROVIDED
+This product includes software developed at
+analysis/common/src/resources/org/apache/lucene/analysis/fa/stopwords.txt,
+analysis/common/src/java/org/apache/lucene/analysis/de/GermanLightStemmer.java
+of or in connection with the use or performance of this software.
+Brics Automaton (under core/src/java/org/apache/lucene/util/automaton) is 
+analysis/common/src/java/org/apache/lucene/analysis/sv/SwedishLightStemmer.java
+analysis/common/src/resources/org/apache/lucene/analysis/bg/stopwords.txt,
+research and development conducted during the project and is provided
+This product includes code (JaspellTernarySearchTrie) from Java Spelling Checkin
+See http://unicode.org/copyright.html for more details.
+  analysis/common/src/java/net/sf/snowball
+The Morfologik analyzer (morfologik) includes BSD-licensed software
+with the use or inability to use the program or any product, material
+program is provided without any warranty whatsoever, whether express,
+were developed by Martin Porter and Richard Boulton.
+JUnit (junit-4.10) is licensed under the Common Public License v. 1.0
+analysis/common/src/java/org/apache/lucene/analysis/hu/HungarianLightStemmer.java
+the program and, accordingly, the entire risk arising from or
+The snowball stemmers in
+Morfologic includes data from BSD-licensed dictionary of Polish (SGJP)
+from and not be held liable to the user for any such damages as noted
+Nara Institute of Science and Technology (NAIST),
+is derived from Unicode data such as the Unicode Character Database. 
+See http://code.google.com/p/google-code-prettify/
+The snowball stopword lists in
+includes, but is not limited to, any warranty of the quality,
+and consequential damages, arising out of or otherwise in connection
+(http://sgjp.pl/morfeusz/)
+jurisdiction over the User or the intended distribution itself.
+as the Unicode Character Database. See http://unicode.org/copyright.html for more
+above as far as the program is concerned.
+The Stempel analyzer (stempel) includes BSD-licensed software developed 
+was developed by Bob Krovetz and Sergio Guzman-Lara (CIIR-UMass Amherst)
+ - Apache Jakarta Regexp
+http://bitbucket.org/jpbarrette/moman/overview/
+action of contract, negligence or other tortuous action, arising out
+originate from ICOT Free Software.  The following conditions for ICOT
+whatsoever resulting from loss of use, data or profits, whether in an
+and Edmond Nolan.
+officers and other employees shall be held liable for any and all
+The Apache Software Foundation (http://www.apache.org/).
+the Apache CXF project and is Apache License 2.0.
+knowledge of, the possibility of such damages at any time during the
+grants independently of ICOT any specific warranty to the user in
+ - Apache Xerces
+Jean-Philippe Barrette-LaPierre. This library is available under an MIT license,
+any special, indirect or consequential damages or any damages
+===========================================================================
+modification, copying and distribution of the program and the
+stopword list that is BSD-licensed created by Jacques Savoy.  These files reside in:
+Free Software applies to the current dictionary as well.
+developed by Dawid Weiss and Marcin Miłkowski (http://morfologik.blogspot.com/).
+foregoing by his or her commencement of use of the program.  The term
+  http://jaist.dl.sourceforge.net/project/mecab/mecab-ipadic/2.7.0-20070801/mecab-ipadic-2.7.0-20070801.tar.gz
+Servlet-api.jar and javax.servlet-*.jar are under the CDDL license, the original
+analysis/common/src/java/org/apache/lucene/analysis/it/ItalianLightStemmer.java
+details.
+(http://www.sjp.pl/slownik/en/) licenced on the terms of (inter alia)
+analysis/common/src/resources/org/apache/lucene/analysis/hi/stopwords.txt,
+software, including all implied warranties of merchantability and
 analysis/common/src/java/org/apache/lucene/analysis/es/SpanishLightStemmer.java
 analysis/common/src/java/org/apache/lucene/analysis/fi/FinnishLightStemmer.java
-analysis/common/src/java/org/apache/lucene/analysis/fr/FrenchLightStemmer.java
-analysis/common/src/java/org/apache/lucene/analysis/fr/FrenchMinimalStemmer.java
-analysis/common/src/java/org/apache/lucene/analysis/hu/HungarianLightStemmer.java
-analysis/common/src/java/org/apache/lucene/analysis/it/ItalianLightStemmer.java
-analysis/common/src/java/org/apache/lucene/analysis/pt/PortugueseLightStemmer.java
-analysis/common/src/java/org/apache/lucene/analysis/ru/RussianLightStemmer.java
-analysis/common/src/java/org/apache/lucene/analysis/sv/SwedishLightStemmer.java
-
-The Stempel analyzer (stempel) includes BSD-licensed software developed 
-by the Egothor project http://egothor.sf.net/, created by Leo Galambos, Martin Kvapil,
-and Edmond Nolan.
-
-The Polish analyzer (stempel) comes with a default
-stopword list that is BSD-licensed created by the Carrot2 project. The file resides
-in stempel/src/resources/org/apache/lucene/analysis/pl/stopwords.txt.
-See http://project.carrot2.org/license.html.
-
-The SmartChineseAnalyzer source code (smartcn) was
-provided by Xiaoping Gao and copyright 2009 by www.imdict.net.
-
-WordBreakTestUnicode_*.java (under modules/analysis/common/src/test/) 
-is derived from Unicode data such as the Unicode Character Database. 
-See http://unicode.org/copyright.html for more details.
-
-The Morfologik analyzer (morfologik) includes BSD-licensed software
-developed by Dawid Weiss and Marcin Miłkowski (http://morfologik.blogspot.com/).
-
-Morfologik uses data from Polish ispell/myspell dictionary
-(http://www.sjp.pl/slownik/en/) licenced on the terms of (inter alia)
-LGPL and Creative Commons ShareAlike.
-
-Morfologic includes data from BSD-licensed dictionary of Polish (SGJP)
-(http://sgjp.pl/morfeusz/)
-
-Servlet-api.jar and javax.servlet-*.jar are under the CDDL license, the original
-source code for this can be found at http://www.eclipse.org/jetty/downloads.php
-
-===========================================================================
-Kuromoji Japanese Morphological Analyzer - Apache Lucene Integration
-===========================================================================
-
-This software includes a binary and/or source version of data from
-
-  mecab-ipadic-2.7.0-20070801
-
-which can be obtained from
-
-  http://atilika.com/releases/mecab-ipadic/mecab-ipadic-2.7.0-20070801.tar.gz
-
-or
-
-  http://jaist.dl.sourceforge.net/project/mecab/mecab-ipadic/2.7.0-20070801/mecab-ipadic-2.7.0-20070801.tar.gz
-
-===========================================================================
-mecab-ipadic-2.7.0-20070801 Notice
-===========================================================================
-
-Nara Institute of Science and Technology (NAIST),
-the copyright holders, disclaims all warranties with regard to this
-software, including all implied warranties of merchantability and
-fitness, in no event shall NAIST be liable for
-any special, indirect or consequential damages or any damages
-whatsoever resulting from loss of use, data or profits, whether in an
-action of contract, negligence or other tortuous action, arising out
-of or in connection with the use or performance of this software.
-
+automatically generated with the moman/finenight FSA library, created by
+Apache Lucene
 A large portion of the dictionary entries
-originate from ICOT Free Software.  The following conditions for ICOT
-Free Software applies to the current dictionary as well.
-
-Each User may also freely distribute the Program, whether in its
-original form or modified, to any third party or parties, PROVIDED
-that the provisions of Section 3 ("NO WARRANTY") will ALWAYS appear
-on, or be attached to, the Program, which is distributed substantially
-in the same form as set out herein and that such intended
-distribution, if actually made, will neither violate or otherwise
-contravene any of the laws and regulations of the countries having
-jurisdiction over the User or the intended distribution itself.
-
-NO WARRANTY
-
-The program was produced on an experimental basis in the course of the
-research and development conducted during the project and is provided
-to users as so produced on an experimental basis.  Accordingly, the
-program is provided without any warranty whatsoever, whether express,
-implied, statutory or otherwise.  The term "warranty" used herein
-includes, but is not limited to, any warranty of the quality,
-performance, merchantability and fitness for a particular purpose of
-the program and the nonexistence of any infringement or violation of
-any right of any third party.
-
-Each user of the program will agree and understand, and be deemed to
-have agreed and understood, that there is no warranty whatsoever for
-the program and, accordingly, the entire risk arising from or
-otherwise connected with the program is assumed by the user.
-
-Therefore, neither ICOT, the copyright holder, or any other
-organization that participated in or was otherwise related to the
-development of the program and their respective officials, directors,
-officers and other employees shall be held liable for any and all
-damages, including, without limitation, general, special, incidental
-and consequential damages, arising out of or otherwise in connection
-with the use or inability to use the program or any product, material
-or result produced or otherwise obtained by using the program,
-regardless of whether they have been advised of, or otherwise had
-knowledge of, the possibility of such damages at any time during the
-project or thereafter.  Each user will be deemed to have agreed to the
-foregoing by his or her commencement of use of the program.  The term
-"use" as used herein includes, but is not limited to, the use,
-modification, copying and distribution of the program and the
-production of secondary products from the program.
-
-In the case where the program, whether in its original form or
-modified, was distributed or delivered to or received by a user from
-any person, organization or entity other than ICOT, unless it makes or
-grants independently of ICOT any specific warranty to the user in
-writing, such person, organization or entity, will also be exempted
-from and not be held liable to the user for any such damages as noted
-above as far as the program is concerned.
+BSD-licensed, created by Anders Møller. See http://www.brics.dk/automaton/
+the copyright holders, disclaims all warranties with regard to this
+LGPL and Creative Commons ShareAlike.

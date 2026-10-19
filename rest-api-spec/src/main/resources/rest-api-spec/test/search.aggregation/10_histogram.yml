@@ -1,881 +1,756 @@
-setup:
-  - do:
-      indices.create:
-          index: test_1
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
-              properties:
-                number:
-                  type: integer
-                date:
-                  type: date
-  - do:
-      cluster.health:
-        wait_for_status: green
-
----
-"Basic test":
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body: { "number" : 1 }
-
-  - do:
-      index:
-        index: test_1
-        id: 2
-        body: { "number" : 51 }
-
-  - do:
-      index:
-        index: test_1
-        id: 3
-        body: { "number" : 101 }
-
-  - do:
-      index:
-        index: test_1
-        id: 4
-        body: { "number" : 151 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "aggs" : { "histo" : { "histogram" : { "field" : "number", "interval" : 50 } } } }
-
-  - match: { hits.total: 4 }
-
+          aggs:
+            number_of_replicas: 0
   - length: { aggregations.histo.buckets: 4 }
-
-  - match: { aggregations.histo.buckets.0.key: 0 }
-
-  - is_false: aggregations.histo.buckets.0.key_as_string
-
-  - match: { aggregations.histo.buckets.0.doc_count: 1 }
-
-  - match: { aggregations.histo.buckets.1.key: 50 }
-
-  - is_false: aggregations.histo.buckets.1.key_as_string
-
-  - match: { aggregations.histo.buckets.1.doc_count: 1 }
-
-  - match: { aggregations.histo.buckets.2.key: 100 }
-
-  - is_false: aggregations.histo.buckets.2.key_as_string
-
-  - match: { aggregations.histo.buckets.2.doc_count: 1 }
-
-  - match: { aggregations.histo.buckets.3.key: 150 }
-
-  - is_false: aggregations.histo.buckets.3.key_as_string
-
-  - match: { aggregations.histo.buckets.3.doc_count: 1 }
-
----
-"Format test":
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body: { "number" : 1 }
-
-  - do:
-      index:
-        index: test_1
-        id: 2
-        body: { "number" : 51 }
-
-  - do:
-      index:
-        index: test_1
-        id: 3
-        body: { "number" : 101 }
-
-  - do:
-      index:
-        index: test_1
-        id: 4
-        body: { "number" : 151 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "aggs" : { "histo" : { "histogram" : { "field" : "number", "interval" : 50, "format" : "Value is ##0.0" } } } }
-
-  - match: { hits.total: 4 }
-
-  - length: { aggregations.histo.buckets: 4 }
-
-  - match: { aggregations.histo.buckets.0.key: 0 }
-
-  - match: { aggregations.histo.buckets.0.key_as_string: "Value is 0.0" }
-
-  - match: { aggregations.histo.buckets.0.doc_count: 1 }
-
-  - match: { aggregations.histo.buckets.1.key: 50 }
-
-  - match: { aggregations.histo.buckets.1.key_as_string: "Value is 50.0" }
-
-  - match: { aggregations.histo.buckets.1.doc_count: 1 }
-
-  - match: { aggregations.histo.buckets.2.key: 100 }
-
-  - match: { aggregations.histo.buckets.2.key_as_string: "Value is 100.0" }
-
-  - match: { aggregations.histo.buckets.2.doc_count: 1 }
-
-  - match: { aggregations.histo.buckets.3.key: 150 }
-
-  - match: { aggregations.histo.buckets.3.key_as_string: "Value is 150.0" }
-
-  - match: { aggregations.histo.buckets.3.doc_count: 1 }
-
----
-"Deprecated _time order":
-
-  - skip:
-      features: "allowed_warnings"
-
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body: { "date" : "2016-01-01" }
-
-  - do:
-      index:
-        index: test_1
-        id: 2
-        body: { "date" : "2016-01-02" }
-
-  - do:
-      index:
-        index: test_1
-        id: 3
-        body: { "date" : "2016-02-01" }
-
-  - do:
-      index:
-        index: test_1
-        id: 4
-        body: { "date" : "2016-03-01" }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "aggs" : { "histo" : { "date_histogram" : { "field" : "date", "calendar_interval" : "month", "order" : { "_time" : "desc" } } } } }
-      allowed_warnings:
-        - "Deprecated aggregation order key [_time] used, replaced by [_key]"
-
-  - match: { hits.total: 4 }
-
-  - length: { aggregations.histo.buckets: 3 }
-
-  - match: { aggregations.histo.buckets.0.key_as_string: "2016-03-01T00:00:00.000Z" }
-
-  - match: { aggregations.histo.buckets.0.doc_count: 1 }
-
-  - match: { aggregations.histo.buckets.1.key_as_string: "2016-02-01T00:00:00.000Z" }
-
-  - match: { aggregations.histo.buckets.1.doc_count: 1 }
-
-  - match: { aggregations.histo.buckets.2.key_as_string: "2016-01-01T00:00:00.000Z" }
-
-  - match: { aggregations.histo.buckets.2.doc_count: 2 }
-
----
-"date_histogram":
-
-  - do:
-      indices.create:
-          index: test_2
-          body:
-            settings:
-              # There was a BWC issue that only showed up on empty shards. This
-              # test has 4 docs and 5 shards makes sure we get one empty.
-              number_of_shards: 5
-            mappings:
-              properties:
+        body:
                 date:
-                  type: date
-                  fields:
-                    nanos:
-                      type: date_nanos
-
-  - do:
-      bulk:
-        index: test_2
-        refresh: true
-        body:
-            - '{"index": {}}'
-            - '{"date": "2016-01-01"}'
-            - '{"index": {}}'
-            - '{"date": "2016-01-02"}'
-            - '{"index": {}}'
-            - '{"date": "2016-02-01"}'
-            - '{"index": {}}'
-            - '{"date": "2016-03-01"}'
-
-  - do:
-      search:
-        body:
-          size: 0
-          aggs:
-            histo:
-              date_histogram:
-                field: date
-                calendar_interval: month
-  - match: { hits.total.value: 4 }
-  - length: { aggregations.histo.buckets: 3 }
-  - match: { aggregations.histo.buckets.0.key_as_string: "2016-01-01T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.0.doc_count: 2 }
-  - match: { aggregations.histo.buckets.1.key_as_string: "2016-02-01T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.1.doc_count: 1 }
-  - match: { aggregations.histo.buckets.2.key_as_string: "2016-03-01T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.2.doc_count: 1 }
-
-  - do:
-      search:
-        body:
-          size: 0
-          aggs:
-            histo:
-              date_histogram:
-                field: date.nanos
-                calendar_interval: month
-  - match: { hits.total.value: 4 }
-  - length: { aggregations.histo.buckets: 3 }
-  - match: { aggregations.histo.buckets.0.key_as_string: "2016-01-01T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.0.doc_count: 2 }
-  - match: { aggregations.histo.buckets.1.key_as_string: "2016-02-01T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.1.doc_count: 1 }
-  - match: { aggregations.histo.buckets.2.key_as_string: "2016-03-01T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.2.doc_count: 1 }
-
 ---
-"date_histogram with offset":
-  - skip:
-      version: "all"
-      reason:  "AwaitsFix https://github.com/elastic/elasticsearch/issues/51525"
-      # When fixed, reinstate these lines
-      #version: " - 7.1.99"
-      #reason:  calendar_interval introduced in 7.2.0
-
-  - do:
-      indices.create:
-          index: test_2
-          body:
-            settings:
-              # There was a BWC issue that only showed up on empty shards. This
-              # test has 4 docs and 5 shards makes sure we get one empty.
-              number_of_shards: 5
-            mappings:
-              properties:
-                date:
-                  type : date
-
-  - do:
-      bulk:
-        index: test_2
-        refresh: true
         body:
-            - '{"index": {}}'
-            - '{"date": "2016-01-01"}'
-            - '{"index": {}}'
-            - '{"date": "2016-01-02"}'
-            - '{"index": {}}'
-            - '{"date": "2016-02-01"}'
-            - '{"index": {}}'
-            - '{"date": "2016-03-01"}'
-
-  - do:
-      search:
-        body:
-          size: 0
-          aggs:
-            histo:
-              date_histogram:
-                field: date
-                calendar_interval: month
-                offset: +1d
-
-  - match: { hits.total.value: 4 }
-  - length: { aggregations.histo.buckets: 3 }
-  - match: { aggregations.histo.buckets.0.key_as_string: "2015-12-02T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.0.doc_count: 1 }
-  - match: { aggregations.histo.buckets.1.key_as_string: "2016-01-02T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.1.doc_count: 2 }
-  - match: { aggregations.histo.buckets.2.key_as_string: "2016-02-02T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.2.doc_count: 1 }
-
-
----
-"date_histogram on range":
-
-
-  - do:
-      indices.create:
-          index: test_2
-          body:
-            settings:
-              # There was a BWC issue that only showed up on empty shards. This
-              # test has 4 docs and 5 shards makes sure we get one empty.
-              number_of_shards: 5
-            mappings:
-              properties:
-                range:
-                  type : date_range
-
-  - do:
-      bulk:
-        index: test_2
-        refresh: true
-        body:
-            - '{"index": {}}'
-            - '{"range": {"gte": "2016-01-01", "lt": "2016-01-02"}}'
-            - '{"index": {}}'
-            - '{"range": {"gte": "2016-01-02", "lt": "2016-01-03"}}'
-            - '{"index": {}}'
-            - '{"range": {"gte": "2016-02-01", "lt": "2016-02-02"}}'
-            - '{"index": {}}'
-            - '{"range": {"gte": "2016-03-01", "lt": "2016-03-02"}}'
-
-  - do:
-      search:
-        body:
-          size: 0
-          aggs:
-            histo:
-              date_histogram:
-                field: range
-                calendar_interval: month
-
-  - match: { hits.total.value: 4 }
-  - length: { aggregations.histo.buckets: 3 }
-  - match: { aggregations.histo.buckets.0.key_as_string: "2016-01-01T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.0.doc_count: 2 }
-  - match: { aggregations.histo.buckets.1.key_as_string: "2016-02-01T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.1.doc_count: 1 }
-  - match: { aggregations.histo.buckets.2.key_as_string: "2016-03-01T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.2.doc_count: 1 }
-
----
-"date_histogram on range with offset":
-
-
-  - do:
-      indices.create:
-          index: test_2
-          body:
-            settings:
-              # There was a BWC issue that only showed up on empty shards. This
-              # test has 4 docs and 5 shards makes sure we get one empty.
-              number_of_shards: 5
-            mappings:
-              properties:
-                range:
-                  type : date_range
-
-  - do:
-      bulk:
-        index: test_2
-        refresh: true
-        body:
-            - '{"index": {}}'
-            - '{"range": {"gte": "2016-01-01", "lt": "2016-01-02"}}'
-            - '{"index": {}}'
-            - '{"range": {"gte": "2016-01-02", "lt": "2016-01-03"}}'
-            - '{"index": {}}'
-            - '{"range": {"gte": "2016-02-01", "lt": "2016-02-02"}}'
-            - '{"index": {}}'
-            - '{"range": {"gte": "2016-03-01", "lt": "2016-03-02"}}'
-
-  - do:
-      search:
-        body:
-          size: 0
-          aggs:
-            histo:
-              date_histogram:
-                field: range
-                calendar_interval: month
-                offset: +1d
-
-  - match: { hits.total.value: 4 }
-  - length: { aggregations.histo.buckets: 3 }
-  - match: { aggregations.histo.buckets.0.key_as_string: "2015-12-02T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.0.doc_count: 1 }
-  - match: { aggregations.histo.buckets.1.key_as_string: "2016-01-02T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.1.doc_count: 2 }
-  - match: { aggregations.histo.buckets.2.key_as_string: "2016-02-02T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.2.doc_count: 1 }
-
----
-"date_histogram with pre-epoch daylight savings time transition":
-
-  # Add date_nanos to the mapping. We couldn't do it during setup because that
-  # is run against 6.8 which doesn't have date_nanos
-  - do:
-      indices.put_mapping:
-          index: test_1
-          body:
-            properties:
-              number:
-                type: integer
+        index: test_1
               date:
-                type: date
-                fields:
-                  nanos:
-                    type: date_nanos
-
   - do:
+  - match: { aggregations.histo.buckets.2.doc_count: 1 }
+            - '{"index": {}}'
+          - '{"value": 1}'
+            properties:
+            value_hist:
+  - match: { aggregations.histo.buckets.1.doc_count: 1 }
+      features: "allowed_warnings"
+      search:
+                  type: date
+            - '{"index": {}}'
+                field: range
+        id: 1
+  - match: { aggregations.histo.buckets.0.doc_count: 1 }
+        body:
+  - match: { aggregations.histo.buckets.1.key_as_string: "Value is 50.0" }
+          size: 0
+              date_histogram:
+          aggs:
+        body:
+  - do:
+      search:
+                  max: 100000
+                extended_bounds:
+  - match: { aggregations.histo.buckets.2.doc_count: 1 }
+  - length: { aggregations.histo.buckets: 3 }
+  - match: { aggregations.histo.buckets.1.doc_count: 0 }
+                type: double
+              number_of_shards: 5
+  - length: { aggregations.histo.buckets: 3 }
+          body:
+                offset: +1d
+      search:
+                time_zone: America/Phoenix
+            - '{"date": "2016-02-01"}'
+  - do:
+            mappings:
+              properties:
+      bulk:
+      version: " - 3.9.99"
+                date:
+  - match: { profile.shards.0.aggregations.0.debug.unoptimized_segments: 0 }
+"date_histogram on range":
+          size: 0
+                      type: date_nanos
+                calendar_interval: month
+                  min: 0
+        index: test_empty_histogram
+              properties:
+          size: 0
+        refresh: true
+          body:
+  - match: { aggregations.histo.buckets.0.key: 0 }
+      index:
+                  type: long
+      bulk:
+  - match: { aggregations.histo.buckets.1.key: 50 }
+  # Add date_nanos to the mapping. We couldn't do it during setup because that
+                min_doc_count: 0
+      index:
+          index: test_2
+                date:
+      indices.create:
+            - '{"date": "2016-03-01"}'
+  - do:
+  - match: { aggregations.histo.buckets.1.doc_count: 1 }
+            - '{"index": {}}'
+      index:
+  - do:
+  - length: { aggregations.histo.buckets: 3 }
+          profile: true
+        index: test_2
+  - do:
+                field: range
+        id: 2
+          aggs:
+            histo:
+      indices.create:
+        body: { "number" : 101 }
+  - do:
+  - match: { aggregations.histo.buckets.0.doc_count: 2 }
+          aggs:
+          settings:
+                field: date
+          body:
+                hard_bounds:
+  - do:
+                extended_bounds:
+  - do:
+              value:
+  - do:
+      reason: fix added in 3.10.0
+            mappings:
+            histo:
+      search:
+          mappings:
+  - match: { aggregations.histo.buckets.3.doc_count: 1 }
+      search:
+            mappings:
+        index: test_2
+              histogram:
+                  min: 0
+        index: test_2
+          body:
+  - match: { error.type: "search_phase_execution_exception" }
+  - match: { aggregations.histo.buckets.1.key_as_string: "2016-02-01T00:00:00.000Z" }
+            mappings:
+        rest_total_hits_as_int: true
+        index: test_1
+            - '{"index": {}}'
+  - match: { aggregations.histo.buckets.0.key_as_string: "2016-03-01T00:00:00.000Z" }
+        index: test_2
+            - '{"index": {}}'
+  - do:
+      catch: /too_many_buckets_exception/
+  - match: { profile.shards.0.aggregations.0.description: histo }
+            number_of_shards: 1
+"histogram without extended bounds":
+  - match: { error.caused_by.type: "too_many_buckets_exception" }
+        rest_total_hits_as_int: true
+        index: test_2
+            - '{"index": {}}'
+        body: { "number" : 1 }
+  - match: { aggregations.histo.buckets.0.doc_count: 1 }
+  - match: { aggregations.histo.buckets.3.doc_count: 1 }
+            - '{"index": {}}'
+  - do:
+          body:
+        body:
+  - match: { error.caused_by.type: "too_many_buckets_exception" }
+  - match: { aggregations.histo.buckets.1.doc_count: 2 }
+          settings:
+              histogram:
+        id: "1"
+        body: { "number" : 1 }
+            - '{"n": "2"}'
+        body:
+                type: double
+  - match: { aggregations.histo.buckets.3.key: 150 }
+      bulk:
+  - match: { aggregations.histo.buckets.1.key_as_string: "2016-02-01T00:00:00.000Z" }
+                time_zone: America/Phoenix
+              # test has 4 docs and 5 shards makes sure we get one empty.
+                field: range
+  - skip:
+              date_histogram:
+            settings:
+            - '{"range": {"gte": 15}}'
+        index: test_1
+  - match: { aggregations.histo.buckets.0.doc_count: 1 }
+      bulk:
+          aggs:
+  - length: { aggregations.histo.buckets: 3 }
+        id: 4
+                  min: -100000
+          aggs:
+        id: 4
+      index:
+        body:
+              # There was a BWC issue that only showed up on empty shards. This
+                field: date
+  - match: { aggregations.histo.buckets.0.doc_count: 1 }
+                calendar_interval: month
+            histo:
+        refresh: true
+                calendar_interval: month
+      search:
+  - match: { aggregations.histo.buckets.3.key: 150 }
+  - match: { status: 503 }
+                calendar_interval: month
+  - length: { aggregations.histo.buckets: 1 }
+  - match: { profile.shards.0.aggregations.0.debug.total_buckets: 3 }
+      index:
+                field: date
+  - match: { status: 503 }
+          size: 0
+        index: test_empty_histogram
+  - match: { error.caused_by.type: "too_many_buckets_exception" }
+        refresh: true
+        body: { "number" : 151 }
+              date_histogram:
+        body:
+          - '{"date": "2016-02-01"}'
+            settings:
+  - match: { hits.total: 4 }
+          size: 0
+              number_of_shards: 5
+        body:
+"histogram with hard bounds":
+        index: test_1
+            - '{"range": {"lte": 10}}'
+            - '{"range": {"gte": "2016-01-02", "lt": "2016-01-03"}}'
+        body: { "date" : "2016-01-01" }
+            histo:
+  - length: { aggregations.histo.buckets: 3 }
+        index: test_sparse
+      indices.create:
+        body:
+              number_of_replicas: 0
+  - do:
+  - do:
+      search:
+  - do:
+        id: 1
+  - match: { status: 503 }
+  - match: { aggregations.histo.buckets.0.key_as_string: "2016-01-01T00:00:00.000Z" }
+---
+            - '{"n": "10"}'
+  - skip:
+      search:
+        id: 4
+"histogram creating empty buckets":
+          aggs:
+            properties:
+      search:
+                field: n
+          - '{"number": 500000}'
+        body:
+  - length: { aggregations.histo.buckets: 4 }
+  - do:
+        id: 3
+        body:
+  - do:
+      version: " - 3.9.99"
+                field: date.nanos
+  - do:
+  - match: { aggregations.histo.buckets.1.key_as_string: "2016-02-01T00:00:00.000Z" }
+  - match: { aggregations.histo.buckets.2.key_as_string: "2016-02-02T00:00:00.000Z" }
+  - match: { status: 503 }
+  - do:
+              properties:
+      reason:  debug info for filter rewrite added in 3.0.0 (to be backported to 2.14.0)
+"date_histogram profiler shows filter rewrite info":
+          index: test_1
+  - length: { aggregations.histo.buckets: 1 }
+          size: 0
+      indices.refresh: {}
+        index: test_1
+            - '{"date": "2016-01-01"}'
+                field: value
+                field: date
+  - do:
+        body: { "number" : 151 }
+        index: test_2
+            - '{"index": {}}'
+  - match: { aggregations.histo.buckets.1.doc_count: 1 }
+            - '{"date": "2016-03-01"}'
+        body:
+              properties:
+        id: 2
+            properties:
+      indices.put_mapping:
+  - do:
+      reason:  "AwaitsFix https://github.com/elastic/elasticsearch/issues/51525"
+            histo:
+          size: 0
+            - '{"index": {}}'
+  - match: { aggregations.histo.buckets.2.key_as_string: "2016-02-02T00:00:00.000Z" }
+        index: test_sparse
+  - do:
+                interval: 1
+      indices.refresh: {}
+            settings:
+              # There was a BWC issue that only showed up on empty shards. This
+  - match: { aggregations.histo.buckets.0.key: 0 }
+                field: date
+      #version: " - 7.1.99"
+      indices.create:
+            settings:
+  - match: { aggregations.histo.buckets.2.doc_count: 1 }
+  - do:
+            settings:
+          - '{"date": "2016-01-01"}'
+          index: test_1
+      index:
+          size: 0
+            histo:
+  - do:
+  - match: { aggregations.histo.buckets.2.key_as_string: "2016-03-01T00:00:00.000Z" }
+  - match: { hits.total.value: 1 }
+            settings:
+          aggs:
+  - match: { profile.shards.0.aggregations.0.debug.total_buckets: 3 }
+        index: test_3
+        body: { "aggs" : { "histo" : { "histogram" : { "field" : "number", "interval" : 50 } } } }
+      catch: /too_many_buckets_exception/
+  - is_false: aggregations.histo.buckets.3.key_as_string
+  - match: { aggregations.histo.buckets.1.doc_count: 1 }
+---
+              number_of_replicas: 0
+          index: test_2
+                extended_bounds:
+            - '{"index": {}}'
+          aggs:
+  - match: { profile.shards.0.aggregations.0.debug.inner_visited: 0 }
+      search:
+  - is_false: aggregations.histo.buckets.2.key_as_string
+              histogram:
+                field: date.nanos
+  - match: { error.type: "search_phase_execution_exception" }
+            - '{"range": {"gte": "2016-01-02", "lt": "2016-01-03"}}'
+---
+              properties:
+  - do:
+  - match: { aggregations.histo.buckets.2.doc_count: 1 }
+  - match: { aggregations.histo.buckets.1.key_as_string: "2016-01-02T00:00:00.000Z" }
+        body:
+          profile: true
+  - match: { aggregations.histo.buckets.2.key: 10 }
+      # When fixed, reinstate these lines
+        body: { "number" : 101 }
+        refresh: true
+            - '{"date": "2016-01-02"}'
+  - match: { aggregations.histo.buckets.0.key: 0 }
+            - '{"n": "1"}'
+  - do:
+      version: " - 2.99.99"
+        body:
+            - '{"range": {"gte": "2016-01-01", "lt": "2016-01-02"}}'
+            - '{"index": {}}'
+                date:
+            number_of_shards: 1
+  - match: { aggregations.histo.buckets.0.doc_count: 1 }
+  - do:
+      catch: /too_many_buckets_exception/
+              range:
+  - match: { error.caused_by.type: "too_many_buckets_exception" }
+      indices.create:
+"date_histogram profiler":
+  - match: { hits.total.value: 4 }
+        index: test_2
+            histo:
+          size: 0
+  - match: { aggregations.histo.buckets.0.doc_count: 2 }
+          size: 0
+  - do:
+  - match: { profile.shards.0.aggregations.0.type: NumericHistogramAggregator }
+---
+        body:
+      search:
+  - do:
+        index: test_2
+            - '{"index": {}}'
+      bulk:
+  - match: { aggregations.histo.buckets.1.key: 50 }
+      reason: fix added in 3.10.0
+  - do:
+            properties:
+        index: test_one_sided_histogram
+        index: test_one_sided_histogram
+        index: test_3
+                calendar_interval: month
+      index:
+  - match: { hits.total: 4 }
+                field: number
+          - '{"index": {}}'
+  - do:
+              number:
+      indices.refresh: {}
+  - skip:
+  - do:
+      index:
+      cluster.health:
+            - '{"index": {}}'
+            properties:
+        body:
+  - do:
+              # test has 4 docs and 5 shards makes sure we get one empty.
+        body:
+                type: date
+          - '{"number": 500}'
+      bulk:
+            number_of_shards: 1
+          settings:
+  - match: { profile.shards.0.aggregations.0.debug.leaf_visited: 1 }
+              date_histogram:
+  - match: { aggregations.histo.buckets.2.doc_count: 1 }
+            - '{"date": "2016-01-01"}'
+  - match: { aggregations.histo.buckets.2.doc_count: 2 }
+        body: { "number" : 51 }
+      #reason:  calendar_interval introduced in 7.2.0
+              date_histogram:
+            - '{"index": {}}'
+          aggs:
+            number_of_replicas: 0
+                  type: date
+                fields:
+      indices.create:
+          aggs:
+      indices.create:
+      search:
+      catch: /too_many_buckets_exception/
+      version: " - 3.9.99"
+              value:
+            value_hist:
+  - do:
+            histo:
+            - '{"date": "2016-01-02"}'
+        body:
+        refresh: true
+                interval: 1
+  - do:
+          - '{"index": {}}'
+              number_of_replicas: 0
+            - '{"index": {}}'
+        index: test_2
+  - do:
+              date_histogram:
+              date_histogram:
+  - length: { aggregations.histo.buckets: 3 }
+  - skip:
+          - '{"date": "2016-01-02"}'
+        id: 3
+              value:
+      bulk:
+      index:
+                offset: +1d
+        body: { "aggs" : { "histo" : { "histogram" : { "field" : "number", "interval" : 50, "format" : "Value is ##0.0" } } } }
+          - '{"index": {}}'
+"Deprecated _time order":
+            - '{"index": {}}'
+      reason: fix added in 3.10.0
+      catch: /too_many_buckets_exception/
+          profile: true
+  - match: { profile.shards.0.aggregations.0.debug.optimized_segments: 1 }
+            number_of_shards: 1
+  - match: { aggregations.histo.buckets.2.doc_count: 1 }
+      index:
+  - do:
+              properties:
+  - match: { hits.total.value: 4 }
+                interval: 5
+              number:
+      index:
+  - match: { hits.total.value: 1 }
+        refresh: true
+        body:
+            - '{"range": {"gte": "2016-01-01", "lt": "2016-01-02"}}'
+                extended_bounds:
+        index: test_1
+  - match: { hits.total.value: 4 }
+  - match: { hits.total: 4 }
+          settings:
+            number_of_shards: 1
+                fixed_interval: 1ms
+  - match: { aggregations.histo.buckets.3.key: 15 }
+  - match: { aggregations.histo.buckets.20.key: 20 }
+          - '{"index": {}}'
+              number_of_shards: 1
+          size: 0
+        body:
+                n:
+        body:
+            - '{"n": "17"}'
+  - match: { error.type: "search_phase_execution_exception" }
+          size: 0
+                type: date
+            histo:
+  - do:
+        body:
+  - do:
+      version: " - 3.9.99"
+          - '{"value": 100000}'
+        index: test_cb
+              histogram:
+        index: test_1
+  - match: { status: 503 }
+              date_histogram:
+            - '{"date": "2016-01-01"}'
+---
+  - match: { aggregations.histo.buckets.0.doc_count: 1 }
+  - match: { hits.total.value: 2 }
+          - '{"number": 5000}'
+  - match: { hits.total.value: 4 }
+---
+            mappings:
+      version: "all"
+  - match: { hits.total.value: 4 }
+  - match: { aggregations.histo.buckets.0.key_as_string: "2016-01-01T00:00:00.000Z" }
+  - do:
+  - match: { aggregations.histo.buckets.1.key_as_string: "2016-01-02T00:00:00.000Z" }
+        refresh: true
+                type: double
+                range:
+  - do:
+  - match: { aggregations.histo.buckets.2.key: 100 }
+  - skip:
+            - '{"index": {}}'
+  - match: { aggregations.histo.buckets.0.doc_count: 2 }
+  - match: { profile.shards.0.aggregations.0.debug.total_buckets: 3 }
+  - do:
+            number_of_replicas: 0
+  - do:
+            - '{"index": {}}'
+---
+      search:
+  - match: { aggregations.histo.buckets.0.key: 0 }
+                calendar_interval: month
+                  max: 174155895372
+  - skip:
+                  type: date
+  - skip:
+        body: { "number" : 51 }
+"date_histogram with offset":
+  - match: { aggregations.histo.buckets.2.doc_count: 1 }
+  - match: { aggregations.histo.buckets.0.key_as_string: "2016-01-01T00:00:00.000Z" }
+  - length: { aggregations.histo.buckets: 3 }
+---
+          - '{"index": {}}'
+            - '{"range": {"gte": "2016-03-01", "lt": "2016-03-02"}}'
+                type: long_range
+      search:
+        id: 1
+                field: value
+          mappings:
+        index: test_1
+                interval: 1
+          mappings:
+---
+                    nanos:
+  # is run against 6.8 which doesn't have date_nanos
+            - '{"range": {"gte": "2016-03-01", "lt": "2016-03-02"}}'
+  - match: { aggregations.histo.buckets.0.doc_count: 2 }
+"Basic test":
+        index: test_1
+  - match: { aggregations.histo.buckets.0.key_as_string: "2015-12-02T00:00:00.000Z" }
+---
+  - match: { hits.total.value: 4 }
+          index: test_2
+            - '{"range": {"gte": "2016-02-01", "lt": "2016-02-02"}}'
+          mappings:
+            - '{"index": {}}'
+              date_histogram:
+            - '{"index": {}}'
+  - is_false: aggregations.histo.buckets.1.key_as_string
+            value_hist:
+  - do:
+      bulk:
+  - do:
+        body: { "date" : "2016-03-01" }
+        id: 3
+          aggs:
+  - match: { aggregations.histo.buckets.1.doc_count: 2 }
+        index: test_sparse
+          body:
+        body:
+  - is_false: aggregations.histo.buckets.0.key_as_string
+  - do:
+            number_of_replicas: 0
+        - "Deprecated aggregation order key [_time] used, replaced by [_key]"
+  - match: { hits.total.value: 4 }
+        index: test_3
+  - do:
+  - match: { profile.shards.0.aggregations.0.type: DateHistogramAggregator }
+  - do:
+  - do:
+  - do:
+  - match: { aggregations.histo.buckets.0.key_as_string: "2015-12-02T00:00:00.000Z" }
+                  type: integer
+            - '{"index": {}}'
+            - '{"index": {}}'
+  - match: { error.caused_by.type: "too_many_buckets_exception" }
+        refresh: true
+        index: test_one_sided_histogram
+        refresh: true
+            value_hist:
+  - do:
+              histogram:
+  - match: { error.type: "search_phase_execution_exception" }
+  - match: { aggregations.histo.buckets.2.key_as_string: "2016-03-01T00:00:00.000Z" }
+          aggs:
+                fixed_interval: 1ms
+  - length: { aggregations.histo.buckets: 4 }
+        refresh: true
+              # There was a BWC issue that only showed up on empty shards. This
+            mappings:
+            - '{"index": {}}'
+  - do:
+  - match: { aggregations.histo.buckets.2.key_as_string: "Value is 100.0" }
+            - '{"date": "2016-01-02"}'
+          aggs:
+  - match: { aggregations.histo.buckets.0.key_as_string: "2016-01-01T00:00:00.000Z" }
+            properties:
+  - match: { aggregations.histo.buckets.0.doc_count: 2 }
+                field: value
+"date_histogram on range with offset":
+              number_of_shards: 5
+  - match: { aggregations.histo.buckets.0.doc_count: 1 }
+                    type: date_nanos
+              # test has 4 docs and 5 shards makes sure we get one empty.
+                calendar_interval: month
+      index:
+          size: 0
+        index: test_1
+      bulk:
+          size: 0
+        body:
+                  max: 100000
+  - match: { aggregations.histo.buckets.0.key_as_string: "2016-01-01T00:00:00.000Z" }
+  - do:
+            histo:
+            refresh_interval: -1
+        index: test_1
+  - length: { aggregations.histo.buckets: 21 }
+            histo:
+      indices.create:
+            - '{"date": "2016-02-01"}'
+                  type : date
+      search:
+                interval: 1
+  - match: { profile.shards.0.aggregations.0.type: DateHistogramAggregator }
+          - '{"date": "2016-03-01"}'
+"histogram profiler":
+        body:
       bulk:
         index: test_1
-        refresh: true
-        body:
-            - '{"index": {}}'
-            - '{"date": "2016-01-01"}'
-
-  - do:
-      search:
-        body:
-          size: 0
-          aggs:
-            histo:
-              date_histogram:
-                field: date
-                fixed_interval: 1ms
-                time_zone: America/Phoenix
-
-  - match: { hits.total.value: 1 }
-  - length: { aggregations.histo.buckets: 1 }
-  - match: { aggregations.histo.buckets.0.key_as_string: "2015-12-31T17:00:00.000-07:00" }
-  - match: { aggregations.histo.buckets.0.doc_count: 1 }
-
-  - do:
-      search:
-        body:
-          size: 0
-          aggs:
-            histo:
-              date_histogram:
-                field: date.nanos
-                fixed_interval: 1ms
-                time_zone: America/Phoenix
-
-  - match: { hits.total.value: 1 }
-  - length: { aggregations.histo.buckets: 1 }
-  - match: { aggregations.histo.buckets.0.key_as_string: "2015-12-31T17:00:00.000-07:00" }
-  - match: { aggregations.histo.buckets.0.doc_count: 1 }
-
----
-"histogram profiler":
-
-
-  - do:
-      indices.create:
-          index: test_2
-          body:
-            settings:
-              number_of_replicas: 0
-              number_of_shards: 1
-            mappings:
-              properties:
-                n:
-                  type: long
-
-  - do:
-      bulk:
-        index: test_2
-        refresh: true
-        body:
-            - '{"index": {}}'
-            - '{"n": "1"}'
-            - '{"index": {}}'
-            - '{"n": "2"}'
-            - '{"index": {}}'
-            - '{"n": "10"}'
-            - '{"index": {}}'
-            - '{"n": "17"}'
-
-  - do:
-      search:
-        index: test_2
-        body:
-          size: 0
-          profile: true
-          aggs:
-            histo:
-              histogram:
-                field: n
-                interval: 5
-  - match: { hits.total.value: 4 }
-  - length: { aggregations.histo.buckets: 4 }
-  - match: { aggregations.histo.buckets.0.key: 0 }
-  - match: { aggregations.histo.buckets.0.doc_count: 2 }
-  - match: { aggregations.histo.buckets.1.key: 5 }
-  - match: { aggregations.histo.buckets.1.doc_count: 0 }
-  - match: { aggregations.histo.buckets.2.key: 10 }
-  - match: { aggregations.histo.buckets.2.doc_count: 1 }
-  - match: { aggregations.histo.buckets.3.key: 15 }
-  - match: { aggregations.histo.buckets.3.doc_count: 1 }
-  - match: { profile.shards.0.aggregations.0.type: NumericHistogramAggregator }
-  - match: { profile.shards.0.aggregations.0.description: histo }
-  - match: { profile.shards.0.aggregations.0.breakdown.collect_count: 4 }
-  - match: { profile.shards.0.aggregations.0.debug.total_buckets: 3 }
-
----
-"date_histogram profiler":
-
-
-  - do:
-      indices.create:
-          index: test_2
-          body:
-            settings:
-              number_of_replicas: 0
-              number_of_shards: 1
-            mappings:
-              properties:
-                date:
-                  type: date
-
-  - do:
-      bulk:
-        index: test_2
-        refresh: true
-        body:
-            - '{"index": {}}'
-            - '{"date": "2016-01-01"}'
-            - '{"index": {}}'
-            - '{"date": "2016-01-02"}'
-            - '{"index": {}}'
-            - '{"date": "2016-02-01"}'
-            - '{"index": {}}'
-            - '{"date": "2016-03-01"}'
-
-  - do:
-      search:
-        index: test_2
-        body:
-          size: 0
-          profile: true
-          aggs:
-            histo:
-              date_histogram:
-                field: date
-                calendar_interval: month
-  - match: { hits.total.value: 4 }
-  - length: { aggregations.histo.buckets: 3 }
-  - match: { aggregations.histo.buckets.0.key_as_string: "2016-01-01T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.0.doc_count: 2 }
-  - match: { profile.shards.0.aggregations.0.type: DateHistogramAggregator }
-  - match: { profile.shards.0.aggregations.0.description: histo }
-  - match: { profile.shards.0.aggregations.0.debug.total_buckets: 3 }
-
----
-"histogram with hard bounds":
-  - do:
-      indices.create:
-        index: test_3
-        body:
-          mappings:
+"histogram with one-sided extended bounds":
             properties:
-              range:
-                type: long_range
-
-  - do:
-      bulk:
-        index: test_3
-        refresh: true
-        body:
-            - '{"index": {}}'
-            - '{"range": {"lte": 10}}'
-            - '{"index": {}}'
-            - '{"range": {"gte": 15}}'
-
-  - do:
-      search:
-        index: test_3
-        body:
+  - match: { error.type: "search_phase_execution_exception" }
+  - match: { aggregations.histo.buckets.1.doc_count: 1 }
+  - match: { aggregations.histo.buckets.1.key_as_string: "2016-02-01T00:00:00.000Z" }
+            number_of_replicas: 0
+                  type : date_range
+                field: value
+            settings:
+  - length: { aggregations.histo.buckets: 3 }
           size: 0
-          aggs:
-            histo:
-              histogram:
-                field: range
+        body:
+        id: 2
+"histogram with empty index":
+          index: test_2
+  - do:
+---
+        body: { "date" : "2016-02-01" }
+      search:
+          mappings:
+        index: test_2
+            - '{"index": {}}'
+  - match: { profile.shards.0.aggregations.0.description: histo }
+  - match: { hits.total.value: 4 }
+      search:
+  - do:
+        body:
+                interval: 10
+        body:
+                  type : date_range
+            refresh_interval: -1
+          - '{"index": {}}'
                 interval: 1
-                hard_bounds:
+                  fields:
+"date_histogram with pre-epoch daylight savings time transition":
+      bulk:
+  - match: { aggregations.histo.buckets.0.key_as_string: "2015-12-31T17:00:00.000-07:00" }
                   min: 0
                   max: 20
-  - match: { hits.total.value: 2 }
-  - length: { aggregations.histo.buckets: 21 }
-  - match: { aggregations.histo.buckets.0.key: 0 }
-  - match: { aggregations.histo.buckets.0.doc_count: 1 }
-  - match: { aggregations.histo.buckets.20.key: 20 }
-  - match: { aggregations.histo.buckets.20.doc_count: 1 }
-
----
-"date_histogram profiler shows filter rewrite info":
-  - skip:
-      version: " - 2.99.99"
-      reason:  debug info for filter rewrite added in 3.0.0 (to be backported to 2.14.0)
-
-  - do:
-      indices.create:
-        index: test_2
-        body:
-          settings:
-            number_of_replicas: 0
-            number_of_shards: 1
-            refresh_interval: -1
-          mappings:
-            properties:
-              date:
-                type: date
-
-  - do:
-      bulk:
-        index: test_2
-        refresh: true
-        body:
-          - '{"index": {}}'
-          - '{"date": "2016-01-01"}'
-          - '{"index": {}}'
-          - '{"date": "2016-01-02"}'
-          - '{"index": {}}'
-          - '{"date": "2016-02-01"}'
-          - '{"index": {}}'
-          - '{"date": "2016-03-01"}'
-
-  - do:
-      search:
-        index: test_2
-        body:
-          size: 0
-          profile: true
-          aggs:
-            histo:
-              date_histogram:
-                field: date
-                calendar_interval: month
-
-  - match: { hits.total.value: 4 }
-  - length: { aggregations.histo.buckets: 3 }
-  - match: { aggregations.histo.buckets.0.key_as_string: "2016-01-01T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.0.doc_count: 2 }
-  - match: { profile.shards.0.aggregations.0.type: DateHistogramAggregator }
-  - match: { profile.shards.0.aggregations.0.description: histo }
-  - match: { profile.shards.0.aggregations.0.debug.total_buckets: 3 }
-  - match: { profile.shards.0.aggregations.0.debug.optimized_segments: 1 }
-  - match: { profile.shards.0.aggregations.0.debug.unoptimized_segments: 0 }
-  - match: { profile.shards.0.aggregations.0.debug.leaf_visited: 1 }
-  - match: { profile.shards.0.aggregations.0.debug.inner_visited: 0 }
-
----
-"histogram creating empty buckets":
-  - skip:
-      version: " - 3.9.99"
-      reason: fix added in 3.10.0
-
-  - do:
-      indices.create:
+            - '{"index": {}}'
         index: test_cb
+  - match: { aggregations.histo.buckets.0.key_as_string: "Value is 0.0" }
+        index: test_1
+  - match: { aggregations.histo.buckets.0.key_as_string: "2015-12-31T17:00:00.000-07:00" }
+      reason: fix added in 3.10.0
+          size: 0
+  - match: { profile.shards.0.aggregations.0.breakdown.collect_count: 4 }
+          aggs:
+setup:
+  - do:
         body:
-          settings:
-            number_of_replicas: 0
-            number_of_shards: 1
-            refresh_interval: -1
+"date_histogram":
+          - '{"index": {}}'
           mappings:
-            properties:
-              number:
                 type: integer
-
+          index: test_2
+        body: { "aggs" : { "histo" : { "date_histogram" : { "field" : "date", "calendar_interval" : "month", "order" : { "_time" : "desc" } } } } }
+      indices.create:
+      indices.create:
   - do:
-      bulk:
+              histogram:
+---
+              # test has 4 docs and 5 shards makes sure we get one empty.
+            - '{"date": "2016-02-01"}'
         index: test_cb
-        refresh: true
-        body:
-          - '{"index": {}}'
-          - '{"number": 1}'
-          - '{"index": {}}'
-          - '{"number": 500}'
-          - '{"index": {}}'
-          - '{"number": 5000}'
-          - '{"index": {}}'
-          - '{"number": 500000}'
-
-  - do:
-      catch: /too_many_buckets_exception/
       search:
-        index: test_cb
+            - '{"range": {"gte": "2016-02-01", "lt": "2016-02-02"}}'
         body:
-          size: 0
-          aggs:
+          - '{"index": {}}'
+            - '{"index": {}}'
+        rest_total_hits_as_int: true
+            - '{"date": "2016-01-01"}'
             histo:
-              histogram:
-                field: number
-                interval: 10
-                extended_bounds:
-                  min: 0
-                  max: 174155895372
-
-  - match: { error.type: "search_phase_execution_exception" }
-  - match: { error.caused_by.type: "too_many_buckets_exception" }
-  - match: { status: 503 }
-
----
-"histogram without extended bounds":
-  - skip:
-      version: " - 3.9.99"
-      reason: fix added in 3.10.0
-
-  - do:
-      indices.create:
-        index: test_sparse
-        body:
+  - match: { aggregations.histo.buckets.1.doc_count: 1 }
+  - match: { aggregations.histo.buckets.2.doc_count: 1 }
+      search:
+  - match: { aggregations.histo.buckets.3.key_as_string: "Value is 150.0" }
+              number_of_shards: 1
+          - '{"index": {}}'
           settings:
-            number_of_replicas: 0
-            number_of_shards: 1
-            refresh_interval: -1
-          mappings:
-            properties:
-              value:
-                type: double
-
+  - match: { aggregations.histo.buckets.20.doc_count: 1 }
+"Format test":
+---
   - do:
-      bulk:
-        index: test_sparse
+  - match: { aggregations.histo.buckets.2.key_as_string: "2016-01-01T00:00:00.000Z" }
+  - match: { aggregations.histo.buckets.2.key: 100 }
+          body:
+  - match: { aggregations.histo.buckets.1.key: 5 }
+        wait_for_status: green
         refresh: true
-        body:
-          - '{"index": {}}'
-          - '{"value": 1}'
-          - '{"index": {}}'
-          - '{"value": 100000}'
-
-  - do:
-      catch: /too_many_buckets_exception/
-      search:
-        index: test_sparse
-        body:
-          size: 0
+            - '{"date": "2016-03-01"}'
+              properties:
+            mappings:
           aggs:
-            value_hist:
-              histogram:
-                field: value
-                interval: 1
-                min_doc_count: 0
-
-  - match: { error.type: "search_phase_execution_exception" }
-  - match: { error.caused_by.type: "too_many_buckets_exception" }
-  - match: { status: 503 }
-
----
-"histogram with empty index":
-  - skip:
-      version: " - 3.9.99"
-      reason: fix added in 3.10.0
-
-  - do:
-      indices.create:
-        index: test_empty_histogram
-        body:
-          settings:
-            number_of_replicas: 0
-            number_of_shards: 1
-          mappings:
-            properties:
-              value:
-                type: double
-
-  - do:
-      catch: /too_many_buckets_exception/
-      search:
-        index: test_empty_histogram
-        body:
-          size: 0
-          aggs:
-            value_hist:
-              histogram:
-                field: value
-                interval: 1
-                extended_bounds:
-                  min: 0
-                  max: 100000
-
-  - match: { error.type: "search_phase_execution_exception" }
-  - match: { error.caused_by.type: "too_many_buckets_exception" }
-  - match: { status: 503 }
-
----
-"histogram with one-sided extended bounds":
-  - skip:
-      version: " - 3.9.99"
-      reason: fix added in 3.10.0
-
-  - do:
-      indices.create:
-        index: test_one_sided_histogram
-        body:
-          settings:
-            number_of_replicas: 0
-            number_of_shards: 1
-          mappings:
-            properties:
-              value:
-                type: double
-
-  - do:
+          - '{"number": 1}'
+  - match: { profile.shards.0.aggregations.0.description: histo }
       index:
-        index: test_one_sided_histogram
-        id: "1"
-        refresh: true
         body:
+                type: integer
+          - '{"index": {}}'
+  - match: { aggregations.histo.buckets.0.doc_count: 1 }
+  - do:
+  - match: { aggregations.histo.buckets.0.doc_count: 2 }
+      allowed_warnings:
+        body:
+      indices.create:
           value: 0
-
   - do:
-      catch: /too_many_buckets_exception/
-      search:
-        index: test_one_sided_histogram
+          index: test_2
+---
+---
+              number_of_shards: 5
+            - '{"index": {}}'
+        refresh: true
+        body: { "date" : "2016-01-02" }
+                  nanos:
         body:
-          size: 0
-          aggs:
-            value_hist:
               histogram:
-                field: value
-                interval: 1
-                extended_bounds:
-                  min: -100000
-
-  - match: { error.type: "search_phase_execution_exception" }
-  - match: { error.caused_by.type: "too_many_buckets_exception" }
-  - match: { status: 503 }
-
+        index: test_2
+        index: test_one_sided_histogram
+  - match: { aggregations.histo.buckets.3.doc_count: 1 }
+      indices.create:
+              date:
+      indices.create:
+            refresh_interval: -1
+                range:
   - do:
-      catch: /too_many_buckets_exception/
-      search:
-        index: test_one_sided_histogram
-        body:
-          size: 0
-          aggs:
-            value_hist:
-              histogram:
-                field: value
-                interval: 1
-                extended_bounds:
-                  max: 100000
-
-  - match: { error.type: "search_phase_execution_exception" }
-  - match: { error.caused_by.type: "too_many_buckets_exception" }
-  - match: { status: 503 }
+              # There was a BWC issue that only showed up on empty shards. This
+                number:
+          body:
+  - match: { aggregations.histo.buckets.2.key_as_string: "2016-03-01T00:00:00.000Z" }

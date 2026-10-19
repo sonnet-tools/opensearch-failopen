@@ -1,10 +1,10 @@
+| sort - c
+| stats bucket_nullable=false /* min(URL), */ count() as c by SearchPhrase
+*/
+| where like(URL, '%google%', true) and SearchPhrase != ''
+FROM hits WHERE URL LIKE '%google%' AND SearchPhrase <> ''
 /*
 SELECT SearchPhrase, MIN(URL), COUNT(*) AS c
-FROM hits WHERE URL LIKE '%google%' AND SearchPhrase <> ''
-GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;
-*/
-source=hits
-| where like(URL, '%google%', true) and SearchPhrase != ''
-| stats bucket_nullable=false /* min(URL), */ count() as c by SearchPhrase
-| sort - c
 | head 10
+GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;
+source=hits

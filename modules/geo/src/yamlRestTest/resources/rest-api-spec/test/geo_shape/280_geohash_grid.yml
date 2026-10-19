@@ -1,61 +1,57 @@
-setup:
-  - do:
-      indices.create:
-        index: test_1
-        body:
-          settings:
-            number_of_replicas: 0
-          mappings:
-            properties:
-              location:
-                type: geo_point
-
----
-"Basic test":
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - index:
-              _index: test_1
-              _id:    1
-          - location: "52.374081,4.912350"
-          - index:
-              _index: test_1
-              _id:    2
-          - location: "52.369219,4.901618"
-          - index:
-              _index: test_1
-              _id:    3
-          - location: "52.371667,4.914722"
-          - index:
-              _index: test_1
               _id:    4
-          - location: "51.222900,4.405200"
-          - index:
+      indices.create:
+          aggregations:
+  - match: { aggregations.grid.buckets.2.doc_count: 1 }
+          - location: "48.860000,2.327000"
+        refresh: true
+setup:
+              _index: test_1
+        body:
               _index: test_1
               _id:    5
-          - location: "48.861111,2.336389"
-          - index:
-              _index: test_1
-              _id:    6
-          - location: "48.860000,2.327000"
-
   - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggregations:
-            grid:
-              geohash_grid:
-                field: location
-                precision: 3
-
-
-  - match: { hits.total: 6 }
-  - match: { aggregations.grid.buckets.0.key: u17 }
-  - match: { aggregations.grid.buckets.0.doc_count: 3 }
-  - match: { aggregations.grid.buckets.1.key: u09 }
+              location:
+          - index:
   - match: { aggregations.grid.buckets.1.doc_count: 2 }
+---
+              geohash_grid:
+              _index: test_1
   - match: { aggregations.grid.buckets.2.key: u15 }
-  - match: { aggregations.grid.buckets.2.doc_count: 1 }
+          - location: "48.861111,2.336389"
+              _index: test_1
+  - match: { aggregations.grid.buckets.1.key: u09 }
+      bulk:
+        rest_total_hits_as_int: true
+        index: test_1
+          - location: "51.222900,4.405200"
+      search:
+              _index: test_1
+          - location: "52.369219,4.901618"
+  - match: { aggregations.grid.buckets.0.doc_count: 3 }
+          settings:
+              _id:    6
+          - index:
+          - index:
+              _id:    3
+          - index:
+        body:
+          mappings:
+  - do:
+          - location: "52.374081,4.912350"
+  - do:
+                field: location
+        body:
+              _index: test_1
+              _id:    1
+"Basic test":
+          - location: "52.371667,4.914722"
+            number_of_replicas: 0
+                type: geo_point
+          - index:
+            grid:
+                precision: 3
+              _id:    2
+            properties:
+          - index:
+  - match: { aggregations.grid.buckets.0.key: u17 }
+  - match: { hits.total: 6 }

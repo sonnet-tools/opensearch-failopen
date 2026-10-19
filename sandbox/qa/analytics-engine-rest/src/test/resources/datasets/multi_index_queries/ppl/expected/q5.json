@@ -1,36 +1,36 @@
-{
-  "schema": [
-    {
-      "name": "event_count",
-      "type": "bigint"
-    },
-    {
-      "name": "user",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
-      59,
-      "asmith"
-    ],
-    [
-      58,
-      "bwilson"
-    ],
-    [
-      51,
-      "jdoe"
-    ],
-    [
       46,
-      "admin"
-    ],
-    [
-      43,
-      "mjones"
-    ]
   ],
   "total": 5,
-  "size": 5
+      43,
+    ],
+    }
+      "type": "bigint"
+  "datarows": [
+{
+      "type": "string"
+    [
+      51,
+      "mjones"
+    [
+      "admin"
+      "jdoe"
+      58,
+    ],
+    ]
+      "asmith"
+    },
+    ],
+    {
+    {
+    ],
 }
+  ],
+      "bwilson"
+  "size": 5
+  "schema": [
+      "name": "user",
+      59,
+      "name": "event_count",
+    [
+    [
+    [

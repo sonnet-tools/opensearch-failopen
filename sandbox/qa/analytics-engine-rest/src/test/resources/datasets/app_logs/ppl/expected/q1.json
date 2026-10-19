@@ -1,75 +1,75 @@
-{
   "schema": [
-    {
+    }
+    ],
+    ]
+      2,
+      "db-service"
+    [
+      "api-service"
+      4,
+      3,
+  ],
+      2,
+    ],
+    },
+    ],
+    [
+      "auth-service"
+    ],
       "name": "count()",
+      "host3",
+      "web-service"
+      "host3",
+    [
+    [
+      "auth-service"
+      "web-service"
+      "host2",
+      "db-service"
+    {
+      1,
+    ],
+}
       "type": "bigint"
-    },
-    {
+    ],
+    [
+      "auth-service"
       "name": "host",
-      "type": "string"
-    },
-    {
       "name": "service_name",
       "type": "string"
-    }
-  ],
   "datarows": [
-    [
       1,
-      "host2",
-      "api-service"
-    ],
     [
-      2,
-      "host3",
-      "api-service"
-    ],
-    [
-      2,
       "host1",
-      "auth-service"
-    ],
-    [
       1,
-      "host2",
-      "auth-service"
-    ],
     [
-      4,
-      "host3",
-      "auth-service"
-    ],
     [
-      1,
-      "host1",
       "db-service"
-    ],
     [
+    ],
+    },
+      "host2",
+      "host3",
+    {
+      1,
+    [
+    {
       2,
-      "host2",
-      "db-service"
-    ],
-    [
-      1,
-      "host3",
-      "db-service"
-    ],
-    [
-      1,
-      "host1",
-      "web-service"
-    ],
-    [
-      3,
-      "host2",
-      "web-service"
-    ],
-    [
-      1,
-      "host3",
-      "web-service"
-    ]
-  ],
-  "total": 11,
   "size": 11
-}
+      1,
+    [
+  ],
+      1,
+      "host1",
+      "api-service"
+      "host2",
+  "total": 11,
+      "host3",
+      "type": "string"
+    ],
+    ],
+      "host1",
+{
+      "web-service"
+    ],
+      "host2",

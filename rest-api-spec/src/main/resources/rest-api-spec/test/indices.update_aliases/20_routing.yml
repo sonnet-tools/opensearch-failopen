@@ -1,134 +1,106 @@
+        index: test_index
+  - do:
+  - do:
+  - do:
+                index: test_index
+          actions:
+                search_routing: search_routing
+  - do:
+  - do:
+---
+  - do:
+            - add:
+---
+      indices.update_aliases:
+        index: test_index
 setup:
-  - do:
+                index: test_index
+---
+            - add:
+      indices.update_aliases:
       indices.create:
-        index: test_index
-
----
-"Routing":
-
   - do:
-      indices.update_aliases:
-        body:
-          actions:
-            - add:
-                index: test_index
                 alias: test_alias
-                routing: routing
-
+---
   - do:
       indices.get_alias:
-        index: test_index
-
-  - match: {test_index.aliases.test_alias: {'index_routing': 'routing', 'search_routing': 'routing'}}
-
----
-"Index Routing":
-
-  - do:
-      indices.update_aliases:
-        body:
-          actions:
-            - add:
-                index: test_index
                 alias: test_alias
-                index_routing: index_routing
-
-  - do:
       indices.get_alias:
-        index: test_index
-
-  - match: {test_index.aliases.test_alias: {'index_routing': 'index_routing'}}
-
----
-"Search Routing":
-
-  - do:
-      indices.update_aliases:
-        body:
-          actions:
-            - add:
-                index: test_index
                 alias: test_alias
-                search_routing: search_routing
-
-  - do:
-      indices.get_alias:
-        index: test_index
-
+      indices.update_aliases:
+          actions:
   - match: {test_index.aliases.test_alias: {'search_routing': 'search_routing'}}
-
----
+      indices.get_alias:
+          actions:
+                alias: test_alias
+  - do:
+            - add:
 "Index, Default Routing":
-
-  - do:
-      indices.update_aliases:
-        body:
-          actions:
-            - add:
-                index: test_index
-                alias: test_alias
-                index_routing: index_routing
                 routing: routing
-
-  - do:
       indices.get_alias:
-        index: test_index
-
-  - match: {test_index.aliases.test_alias: {'index_routing': 'index_routing', 'search_routing': 'routing'}}
-
----
-"Search, Default Routing":
-
   - do:
-      indices.update_aliases:
-        body:
-          actions:
-            - add:
-                index: test_index
-                alias: test_alias
                 search_routing: search_routing
-                routing: routing
-
-  - do:
-      indices.get_alias:
-        index: test_index
-
-  - match: {test_index.aliases.test_alias: {'index_routing': 'routing', 'search_routing': 'search_routing'}}
-
----
-"Index, Search, Default Routing":
-
-  - do:
-      indices.update_aliases:
-        body:
           actions:
-            - add:
-                index: test_index
                 alias: test_alias
-                index_routing: index_routing
-                search_routing: search_routing
-                routing: routing
-
   - do:
-      indices.get_alias:
-        index: test_index
-
   - match: {test_index.aliases.test_alias: {'index_routing': 'index_routing', 'search_routing': 'search_routing'}}
-
----
-"Numeric Routing":
-
+            - add:
+                index_routing: index_routing
+"Index, Search, Default Routing":
   - do:
-      indices.update_aliases:
+  - match: {test_index.aliases.test_alias: {'index_routing': 'index_routing'}}
+                index: test_index
+                index: test_index
         body:
-          actions:
+                alias: test_alias
+        index: test_index
+"Routing":
             - add:
                 index: test_index
-                alias: test_alias
-                routing: 5
-
+        body:
+            - add:
   - do:
       indices.get_alias:
-        index: test_index
-
+                routing: 5
   - match: {test_index.aliases.test_alias: {'index_routing': '5', 'search_routing': '5'}}
+          actions:
+            - add:
+        body:
+                routing: routing
+  - match: {test_index.aliases.test_alias: {'index_routing': 'index_routing', 'search_routing': 'routing'}}
+        body:
+                index_routing: index_routing
+                routing: routing
+                index_routing: index_routing
+      indices.update_aliases:
+          actions:
+        index: test_index
+      indices.update_aliases:
+          actions:
+---
+      indices.get_alias:
+                index: test_index
+---
+        index: test_index
+      indices.update_aliases:
+        index: test_index
+      indices.get_alias:
+        index: test_index
+      indices.update_aliases:
+"Numeric Routing":
+                search_routing: search_routing
+  - match: {test_index.aliases.test_alias: {'index_routing': 'routing', 'search_routing': 'routing'}}
+"Index Routing":
+                alias: test_alias
+  - do:
+        body:
+                routing: routing
+"Search, Default Routing":
+---
+        index: test_index
+        body:
+"Search Routing":
+  - match: {test_index.aliases.test_alias: {'index_routing': 'routing', 'search_routing': 'search_routing'}}
+                index: test_index
+  - do:
+        body:

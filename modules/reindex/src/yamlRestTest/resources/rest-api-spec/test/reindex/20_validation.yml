@@ -1,408 +1,368 @@
----
-"no body fails":
-  - do:
-      catch: param
-      reindex: {}
-
----
-"junk in body fails":
-  - do:
-      catch: /unknown field \[junk\]/
-      reindex:
-        body:
-          junk:
-            more_junk:
-
----
-"junk in source fails":
-  - do:
-      catch: /Unknown key for a START_OBJECT in \[junk\]./
-      reindex:
-        body:
+      catch: /\[requests_per_second\] must be a float greater than 0. Use -1 to disable throttling./
           source:
-            junk: {}
-
----
-"junk in dest fails":
-  - do:
-      catch: /unknown field \[junk\]/
-      reindex:
-        body:
-          dest:
-            junk: {}
-
----
-"no index on destination fails":
-  - do:
-      catch: /index must be specified/
-      reindex:
-        body:
-          dest: {}
-
----
-"source size is accepted":
-  - do:
-      index:
-        index:   source
-        id:      1
-        body:    { "text": "test" }
-  - do:
-      reindex:
-        body:
-          source:
-            index: source
-            size:  1000
-          dest:
-            index: dest
-
----
-"search size fails if not a number":
-  - do:
-      catch: '/number_format_exception.*For input string: \"cat\"/'
-      reindex:
-        body:
-          source:
-            size: cat
-          dest:
-            index: dest
-
----
-"search from is not supported":
-  - do:
-      catch: /from is not supported in this context/
-      reindex:
-        body:
-          source:
-            from: 1
-          dest:
-            index: dest
-
----
-"overwriting version is not supported":
-  - do:
       catch: /.*\[dest\] unknown field \[version\].*/
-      reindex:
+"_source:false is rejected":
         body:
           dest:
-            version: 10
-
----
-"bad conflicts is error":
-  - do:
-      catch: /.*conflicts may only be "proceed" or "abort" but was \[cat\]/
-      reindex:
-        body:
-          conflicts: cat
-
----
-"invalid size fails":
-  - do:
-      index:
-        index:   test
+              host: badremote
         id:      1
-        body:    { "text": "test" }
   - do:
-      catch: /\[max_docs\] parameter cannot be negative, found \[-4\]/
-      reindex:
-        body:
-          source:
-            index: test
-          dest:
-            index: dest
-          size: -4
-
----
+  - do:
 "invalid max_docs in body fails":
-
-
-  - do:
-      index:
-        index:   test
+            index: test
+---
+            index: dest
         id:      1
-        body:    { "text": "test" }
-  - do:
-      catch: /\[max_docs\] parameter cannot be negative, found \[-4\]/
-      reindex:
+        id:      1
         body:
           source:
-            index: test
-          dest:
-            index: dest
-          max_docs: -4
-
+        body:
 ---
-"max_docs shoule be greater than slices":
-
-
+          dest:
   - do:
-      index:
-        index:   test
-        id:      1
+      catch: /Unsupported fields in \[remote\]. \[weird,badkey\]/
+        requests_per_second: unlimited
+        max_docs: 5
+      indices.refresh: {}
+      reindex:
+---
+        body:
+        slices: junk
+"requests_per_second cannot be negative":
+            index: dest
+      indices.create:
+      catch: /\[host\] must be of the form \[scheme\].//\[host\].\[port\]/
+  - do:
+  - do:
         body:    { "text": "test" }
+            index: test
+      catch: /index must be specified/
+            index: test
+        max_docs: -4
+---
+          source:
+      reindex:
+      catch: /\[max_docs\] set to two different values \[4\] and \[5\]/
+          dest:
+            index: test
+---
+            index: dest
+          dest:
+        body:
+  - do:
+            _source: false
+      catch: /stored_fields is not supported in this context/
+  - do:
+          source:
+"inconsistent max_docs and size fails":
+            index: test
+        body:
+          source:
+  - do:
+        id:     1
+          dest:
+        max_docs: 1
+"junk in dest fails":
+---
+          dest:
+        body:
+"no body fails":
+---
+---
+"zero slices fails":
+            index: dest
+          dest: {}
+            index: dest
+      catch: /.*conflicts may only be "proceed" or "abort" but was \[cat\]/
+  - do:
+          source:
+        id:      1
+        index:   test
+        index:  test
+              host: http://badremote:9200
+"requests_per_second cannot be zero":
+              badkey: is bad
+      reindex:
+---
+  - do:
+          source:
+---
+"requests_per_second cannot be an empty string":
+            index: dest
+            index: test
+      catch: /unknown field \[junk\]/
+"no index on destination fails":
+      reindex:
+      reindex:
+  - do:
+        requests_per_second: ""
+          dest:
+  - do:
+      reindex:
+          source:
+      reindex:
+            index: dest
+      reindex:
+"reindex without source gives useful error message":
+            index: source
+        body:
+      reindex:
+        body:
+            index: test
+        requests_per_second: 0
   - do:
       catch: /\[max_docs\] should be >= \[slices\]/
       reindex:
-        max_docs: 1
-        slices: 2
-        body:
+      catch: /Unknown key for a START_OBJECT in \[junk\]./
           source:
-            index: test
           dest:
-            index: dest
-
 ---
 "invalid max_docs in URL fails":
-
-
-  - do:
-      index:
-        index:   test
-        id:      1
+"broken socket timeout in remote fails":
         body:    { "text": "test" }
-  - do:
-      catch: /\[max_docs\] parameter cannot be negative, found \[-4\]/
       reindex:
-        max_docs: -4
-        body:
-          source:
-            index: test
-          dest:
-            index: dest
-
----
-"inconsistent max_docs and size fails":
-
-
   - do:
-      index:
-        index:   test
+          size: -4
+  - do:
+            index: dest
+            index: dest
         id:      1
-        body:    { "text": "test" }
-  - do:
-      catch: /\[max_docs\] set to two different values \[4\] and \[5\]/
-      reindex:
         body:
-          source:
-            index: test
-          dest:
-            index: dest
-          size: 4
-          max_docs: 5
-
----
+      reindex: {}
 "inconsistent max_docs in body and max_docs in URL fails":
-
-
   - do:
-      index:
-        index:   test
-        id:      1
+        body:
+            size: cat
+          source:
+      reindex:
+          source:
+            index: test
         body:    { "text": "test" }
-  - do:
-      catch: /\[max_docs\] set to two different values \[4\] and \[5\]/
-      reindex:
-        max_docs: 5
         body:
-          source:
-            index: test
-          dest:
-            index: dest
-          max_docs: 4
-
----
-"requests_per_second cannot be an empty string":
-  - do:
-      catch: /\[requests_per_second\] must be a float greater than 0. Use -1 to disable throttling./
-      reindex:
-        requests_per_second: ""
-        body:
-          source:
-            index: test
-          dest:
-            index: dest
-
----
-"requests_per_second cannot be negative":
-  - do:
-      catch: /\[requests_per_second\] must be a float greater than 0. Use -1 to disable throttling./
-      reindex:
-        requests_per_second: -12
-        body:
-          source:
-            index: test
-          dest:
-            index: dest
-
----
-"requests_per_second cannot be zero":
-  - do:
-      catch: /\[requests_per_second\] must be a float greater than 0. Use -1 to disable throttling./
-      reindex:
-        requests_per_second: 0
-        body:
-          source:
-            index: test
-          dest:
-            index: dest
-
----
-"requests_per_second cannot be unlimited":
-  - do:
-      catch: /\[requests_per_second\] must be a float greater than 0. Use -1 to disable throttling./
-      reindex:
-        requests_per_second: unlimited
-        body:
-          source:
-            index: test
-          dest:
-            index: dest
-
----
-"reindex without source gives useful error message":
-  - do:
-      indices.create:
-        index: test
-        body:
-          mappings:
-            _source:
-              enabled: false
-  - do:
-      index:
-        index:  test
-        id:     1
-        body:   { age: 23 }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      catch: /\[test\]\[1\] didn't store _source/
-      reindex:
-        body:
-          source:
-            index: test
-          dest:
-            index: dest
-
----
-"source fields may not be modified":
-  - do:
-      catch: /stored_fields is not supported in this context/
-      reindex:
-        body:
-          source:
-            index: test
-            stored_fields: [_id]
-          dest:
-            index: dest
-
----
-"unallowlisted remote host fails":
-  - do:
-      catch: /\[badremote:9200\] not allowlisted in reindex.remote.allowlist/
-      reindex:
-        body:
-          source:
-            remote:
-              host: http://badremote:9200
-            index: test
-          dest:
-            index: dest
-
----
-"badly formatted remote host fails":
-  - do:
-      catch: /\[host\] must be of the form \[scheme\].//\[host\].\[port\]/
-      reindex:
-        body:
-          source:
-            remote:
-              host: badremote
-              weird: stuff
-              badkey: is bad
-            index: test
-          dest:
-            index: dest
-
----
 "junk in remote fails":
   - do:
-      catch: /Unsupported fields in \[remote\]. \[weird,badkey\]/
-      reindex:
-        body:
-          source:
-            remote:
-              host: http://okremote:9200
-              weird: stuff
-              badkey: is bad
+      catch: /\[max_docs\] set to two different values \[4\] and \[5\]/
             index: test
-          dest:
-            index: dest
-
----
-"broken socket timeout in remote fails":
-  - do:
-      catch: /number_format_exception/
+"badly formatted remote host fails":
       reindex:
         body:
-          source:
-            remote:
-              host: http://okremote:9200
+      reindex:
               socket_timeout: borked
-            index: test
+---
+          source:
+      reindex:
+        index: test
+      index:
           dest:
             index: dest
-
 ---
+            version: 10
+        body:
+            remote:
+            index: dest
+      catch: /\[requests_per_second\] must be a float greater than 0. Use -1 to disable throttling./
+            junk: {}
+      index:
+          source:
+              enabled: false
+          dest:
+            index: dest
+---
+      catch: /number_format_exception/
+              host: http://okremote:9200
+"junk in source fails":
+        index:   source
+  - do:
+  - do:
+"invalid size fails":
+      catch: /\[slices\] must be a positive integer or the string "auto"/
+      reindex:
+          source:
+            index: dest
+            size:  1000
+          source:
+        id:      1
+        slices: 0
+"requests_per_second cannot be unlimited":
+        body:
+        body:
+      reindex:
+"search size fails if not a number":
+            index: test
+---
+          dest:
+        id:      1
+  - do:
+---
+              host: http://okremote:9200
+      catch: '/number_format_exception.*For input string: \"cat\"/'
+        index:   test
+---
+        body:
+      reindex:
+      catch: /unknown field \[junk\]/
+            remote:
+  - do:
+          dest:
+            remote:
+  - do:
+---
+  - do:
+            index: dest
+            index: test
+            index: dest
+          source:
+      index:
+      catch: /\[max_docs\] parameter cannot be negative, found \[-4\]/
+        body:    { "text": "test" }
+      catch: /\[max_docs\] parameter cannot be negative, found \[-4\]/
+"junk in slices fails":
+      reindex:
+      catch: /_source:false is not supported in this context/
+      catch: param
+          junk:
+      catch: /\[slices\] must be a positive integer or the string "auto"/
+            index: dest
+      index:
+            stored_fields: [_id]
+            more_junk:
+          dest:
+  - do:
+        body:
+      index:
+          source:
+        body:
+      catch: /\[max_docs\] parameter cannot be negative, found \[-4\]/
+      catch: /from is not supported in this context/
+      catch: /\[requests_per_second\] must be a float greater than 0. Use -1 to disable throttling./
+"junk in body fails":
+        body:
+          source:
+---
+  - do:
+          dest:
+      reindex:
+            from: 1
+  - do:
+        body:
+      reindex:
+              weird: stuff
+            index: dest
+          dest:
+      reindex:
+---
+        body:
+            index: test
+---
+  - do:
+  - do:
+              badkey: is bad
+  - do:
+            index: dest
+            junk: {}
+          dest:
+      reindex:
+          max_docs: 5
+      index:
+            index: source
+        body:
+        index:   source
+            index: test
+          dest:
+---
+            index: test
+      reindex:
+          dest:
+  - do:
+              host: http://okremote:9200
+        body:    { "text": "test" }
+"max_docs shoule be greater than slices":
+      reindex:
+            index: test
+          mappings:
+            index: dest
+        requests_per_second: -12
+  - do:
 "broken connect timeout in remote fails":
+            _source:
+      index:
+"overwriting version is not supported":
+      index:
+        index:   test
+          source:
+---
+        body:
+        slices: 2
+      catch: /\[test\]\[1\] didn't store _source/
+          conflicts: cat
+        body:    { "text": "test" }
+          dest:
+  - do:
+        body:
+"unallowlisted remote host fails":
+  - do:
+      reindex:
+  - do:
+---
+        body:   { age: 23 }
+        index:   test
+---
+            index: dest
+      catch: /\[badremote:9200\] not allowlisted in reindex.remote.allowlist/
+  - do:
+          source:
+          source:
+            index: dest
+          dest:
+      reindex:
+          source:
+          source:
+            index: test
+          source:
+---
+  - do:
+"source size is accepted":
+        id:      1
+  - do:
+          size: 4
+          dest:
+---
+"bad conflicts is error":
+        index:   test
+        body:    { "text": "test" }
+---
+        body:
+          dest:
+            index: dest
+            index: dest
+        body:
+        body:
+          dest:
+          dest:
+            index: test
+      catch: /\[requests_per_second\] must be a float greater than 0. Use -1 to disable throttling./
+        body:
+      reindex:
+            remote:
+            index: test
+          max_docs: 4
+            index: test
+"search from is not supported":
+---
   - do:
       catch: /number_format_exception/
-      reindex:
-        body:
-          source:
-            remote:
-              host: http://okremote:9200
-              connect_timeout: borked
-            index: test
-          dest:
-            index: dest
-
----
-"junk in slices fails":
-  - do:
-      catch: /\[slices\] must be a positive integer or the string "auto"/
-      reindex:
-        slices: junk
-        body:
-          source:
-            index: test
-          dest:
-            index: dest
-
----
-"zero slices fails":
-  - do:
-      catch: /\[slices\] must be a positive integer or the string "auto"/
-      reindex:
-        slices: 0
-        body:
-          source:
-            index: test
-          dest:
-            index: dest
-
----
-"_source:false is rejected":
-  - do:
-      index:
-        index:   source
-        id:      1
         body:    { "text": "test" }
-  - do:
-      catch: /_source:false is not supported in this context/
+          max_docs: -4
       reindex:
         body:
-          source:
-            index: source
-            _source: false
           dest:
-            index: dest
+"source fields may not be modified":
+  - do:
+            remote:
+  - do:
+              connect_timeout: borked
+      index:
+---
+  - do:
+        index:   test
+              weird: stuff

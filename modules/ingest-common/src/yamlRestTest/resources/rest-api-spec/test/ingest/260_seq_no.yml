@@ -1,62 +1,57 @@
----
-teardown:
-  - do:
+  - match: { _primary_term: 1 }
       ingest.delete_pipeline:
-        id: "my_pipeline"
+        id: 1
+        index: test
         ignore: 404
-
----
-"Test set _if_seq_no & _if_primary_term":
-  - do:
-      cluster.health:
-          wait_for_status: green
-
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
+        pipeline: "my_pipeline"
             "processors": [
-              {
-                "set" : {
-                  "field" : "_if_seq_no",
-                  "value": 0
-                }
-              },
-              {
-                "set" : {
-                  "field" : "_if_primary_term",
-                  "value": 1
-                }
-              }
-            ]
+            "description": "_description",
           }
-  - match: { acknowledged: true }
-
   - do:
+---
+        id: "my_pipeline"
+  - do:
+        index: test
+  - do:
+              },
+                  "field" : "_if_primary_term",
+        index: test
+      cluster.health:
+                "set" : {
+          {
+  - do:
+  - do:
+  - match: { _primary_term: 1 }
+        body: {}
+---
       catch: conflict
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
+  - do:
         body: {}
-  - match: { error.root_cause.0.type: "version_conflict_engine_exception" }
+                  "value": 1
+        id: 1
+"Test set _if_seq_no & _if_primary_term":
+  - match: { acknowledged: true }
+                "set" : {
+                  "value": 0
+          wait_for_status: green
+                  "field" : "_if_seq_no",
+              {
+        id: 1
+      ingest.put_pipeline:
+              {
+            ]
+                }
+teardown:
   - match: { error.root_cause.0.reason: "[1]: version conflict, required seqNo [0], primary term [1]. but no document was found" }
-
-  - do:
       index:
-        index: test
-        id: 1
-        body: {}
-  - match: { _seq_no: 0 }
-  - match: { _primary_term: 1 }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {}
   - match: { _seq_no: 1 }
-  - match: { _primary_term: 1 }
+        body:  >
+              }
+  - match: { error.root_cause.0.type: "version_conflict_engine_exception" }
+        body: {}
+        id: "my_pipeline"
+  - match: { _seq_no: 0 }
+      index:
+      index:
+                }
+        pipeline: "my_pipeline"

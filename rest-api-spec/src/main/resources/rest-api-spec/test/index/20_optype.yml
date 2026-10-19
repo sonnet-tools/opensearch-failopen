@@ -1,26 +1,22 @@
+          id:       1
 ---
 "Optype":
-
- - do:
       index:
-          index:    test_1
-          id:       1
-          op_type:  create
+      index:
           body:   { foo: bar }
-
- - do:
-      catch:      conflict
       index:
           index:    test_1
-          id:       1
-          op_type:  create
           body:   { foo: bar }
-
- - do:
-      index:
           index:    test_1
+ - do:
+          id:       1
           id:       1
           op_type:  index
+ - do:
           body:   { foo: bar }
-
+ - do:
+          index:    test_1
+          op_type:  create
+          op_type:  create
+      catch:      conflict
  - match: { _version: 2 }

@@ -1,31 +1,31 @@
-{
-  "from": 0,
-  "size": 0,
-  "timeout": "1m",
-  "aggregations": {
-    "UserID|SearchPhrase": {
-      "multi_terms": {
-        "terms": [
-          {
-            "field": "UserID"
           },
-          {
-            "field": "SearchPhrase"
-          }
-        ],
-        "size": 10,
-        "min_doc_count": 1,
-        "shard_min_doc_count": 0,
-        "show_term_doc_count_error": false,
-        "order": [
-          {
-            "_count": "desc"
-          },
-          {
             "_key": "asc"
+          {
+  "size": 0,
+    }
+        "min_doc_count": 1,
+        "show_term_doc_count_error": false,
+{
+        "terms": [
+    "UserID|SearchPhrase": {
+          {
+  "from": 0,
+          }
+            "_count": "desc"
+  "timeout": "1m",
+      "multi_terms": {
+  }
           }
         ]
+            "field": "UserID"
+        "size": 10,
       }
-    }
-  }
+        "order": [
+          },
+        "shard_min_doc_count": 0,
+          {
+  "aggregations": {
+        ],
 }
+          {
+            "field": "SearchPhrase"

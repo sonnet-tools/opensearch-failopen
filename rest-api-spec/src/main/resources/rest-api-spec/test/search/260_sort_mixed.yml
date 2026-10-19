@@ -1,206 +1,191 @@
-"search across indices with mixed long and double numeric types":
-  - skip:
-      version: " - 2.6.99"
-      reason: relies on numeric sort optimization that landed in 2.7.0 only
-
-  - do:
-      indices.create:
-        index: test_1
-        body:
-          mappings:
-            properties:
               counter:
-                type: long
-
-  - do:
-      indices.create:
-        index: test_2
-        body:
-          mappings:
-            properties:
-              counter:
-                type: double
-
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - index:
-              _index: test_1
-          - counter: 223372036854775800
-          - index:
-              _index: test_2
-          - counter: 1223372036854775800.23
-          - index:
-              _index: test_2
-          - counter: 184.4
-
-  - do:
-      search:
-        index: test_*
-        rest_total_hits_as_int: true
-        body:
-          sort: [{ counter: desc }]
-  - match: { hits.total: 3 }
-  - length: { hits.hits: 3 }
-  - match: { hits.hits.0._index: test_2 }
-  - match: { hits.hits.0._source.counter: 1223372036854775800.23 }
-  - match: { hits.hits.0.sort.0: 1223372036854775800.23 }
-  - match: { hits.hits.1._index: test_1 }
-  - match: { hits.hits.1._source.counter: 223372036854775800 }
   - match: { hits.hits.1.sort.0: 223372036854775800  }
-
-  - do:
-      search:
-        index: test_*
-        rest_total_hits_as_int: true
-        body:
-          sort: [{ counter: asc }]
-  - match: { hits.total: 3 }
-  - length: { hits.hits: 3 }
-  - match: { hits.hits.0._index: test_2 }
-  - match: { hits.hits.0._source.counter: 184.4 }
-  - match: { hits.hits.0.sort.0: 184.4 }
-  - match: { hits.hits.1._index: test_1 }
-  - match: { hits.hits.1._source.counter: 223372036854775800 }
-  - match: { hits.hits.1.sort.0: 223372036854775800 }
-
----
-"search across indices with mixed long, double and unsigned_long numeric types":
-  - skip:
-      version: " - 2.7.99"
-      reason: unsigned_long is not supported before 2.8.0
-
-  - do:
       indices.create:
-        index: test_1
-        body:
-          mappings:
-            properties:
-              counter:
-                type: unsigned_long
-  - do:
-      indices.create:
-        index: test_2
-        body:
-          mappings:
-            properties:
-              counter:
-                type: long
-  - do:
-      indices.create:
-        index: test_3
-        body:
-          mappings:
-            properties:
-              counter:
+  - match: { hits.hits.1._source.counter: 187.4 }
                 type: double
-  - do:
-      bulk:
-        refresh: true
+  - match: { hits.hits.0.sort.0: 184.4 }
         body:
-          - index:
-              _index: test_1
           - counter: 10223372036854775800
-          - index:
-              _index: test_2
-          - counter: 223372036854775800
-          - index:
+        refresh: true
+      search:
+  - match: { hits.hits.1.sort.0: 223372036854775800 }
+  - do:
+  - match: { hits.hits.1._index: test_1 }
               _index: test_3
           - counter: 184.0
-
+          mappings:
+                type: unsigned_long
   - do:
-      catch: bad_request
-      search:
-        index: test_*
-        rest_total_hits_as_int: true
-        body:
-          sort: [{ counter: asc }]
-  # The search across fields with mixed types (where one of those is unsigned_long) is not supported
-  - match: { status: 400 }
-  - match: { error.type: search_phase_execution_exception }
-  - match: { error.caused_by.reason: "Can't do sort across indices, as a field has [unsigned_long] type in one index, and different type in another index!" }
-
 ---
-"search across indices with mixed long and double and float numeric types":
-  - skip:
-      version: " - 2.11.0"
-      reason: half float was broken before 2.11.1
-
-  - do:
+          - index:
+          - index:
+  - match: { hits.total: 3 }
+            properties:
+  - match: { hits.hits.0._index: test_2 }
+          sort: [{ counter: asc }]
+          mappings:
+  - match: { hits.total: 3 }
+  - match: { hits.hits.1._source.counter: 223372036854775800 }
+        index: test_*
+  - length: { hits.hits: 3 }
+  - match: { hits.hits.0.sort.0: 1223372036854775800.23 }
+              counter:
+        body:
+      search:
+        body:
+      bulk:
+              _index: test_2
+        refresh: true
       indices.create:
+          - index:
+              counter:
+      version: " - 2.11.0"
+  - match: { hits.hits.0._index: test_2 }
+  - do:
+          sort: [{ counter: asc }]
+          - index:
+              counter:
+  - match: { hits.hits.1._source.counter: 223372036854775800 }
+              counter:
+  - do:
+  - length: { hits.hits: 3 }
+          mappings:
+          sort: [{ counter: asc }]
+  - match: { hits.hits.0.sort.0: 184.4 }
+          sort: [{ counter: desc }]
+  - match: { hits.hits.1._index: test_1 }
+        index: test_2
+          - counter: 184.4
+  - skip:
+          - counter: 223372036854775800
+  - do:
+        body:
+  - do:
+          - counter: 1223372036854775800.23
+      search:
+  - match: { hits.hits.0._source.counter: 184.4 }
+              _index: test_2
+  - match: { hits.hits.0._source.counter: 184.4 }
+        index: test_*
+        body:
+        body:
+      reason: unsigned_long is not supported before 2.8.0
+  - match: { hits.hits.0._index: test_2 }
+        body:
+      bulk:
+  - do:
+          - index:
+      indices.create:
+                type: long
+  - match: { hits.hits.0._index: test_2 }
+  - match: { hits.total: 5 }
+          sort: [{ counter: desc }]
+              _index: test_2
+        body:
+        index: test_2
+  - match: { hits.total: 5 }
+  - match: { hits.hits.1._source.counter: 223372036854775800 }
+      search:
+      indices.create:
+        index: test_*
+          - index:
+"search across indices with mixed long and double numeric types":
+          - counter: 223372036854775800
+            properties:
+          mappings:
+        body:
+        rest_total_hits_as_int: true
+              _index: test_1
+        rest_total_hits_as_int: true
+            properties:
+        body:
+  - match: { hits.hits.1._index: test_1 }
+        body:
+  - do:
+      search:
+  - match: { hits.hits.1._index: test_3 }
+            properties:
+"search across indices with mixed long, double and unsigned_long numeric types":
+          - counter: 187.4
+          - counter: 194.4
+  - length: { hits.hits: 5 }
+      bulk:
+          - counter: 184.4
+              counter:
+              _index: test_1
+  - match: { hits.hits.1.sort.0: 223372036854775800  }
+            properties:
+      reason: relies on numeric sort optimization that landed in 2.7.0 only
+          mappings:
+              _index: test_2
+              _index: test_2
+            properties:
+  - skip:
+        rest_total_hits_as_int: true
         index: test_1
         body:
-          mappings:
-            properties:
-              counter:
-                type: long
-
+      reason: half float was broken before 2.11.1
+        body:
+      indices.create:
   - do:
+          mappings:
+        index: test_*
+          - counter: 1223372036854775800.23
+  - match: { error.type: search_phase_execution_exception }
+              counter:
+            properties:
+  - do:
+"search across indices with mixed long and double and float numeric types":
+          mappings:
+  - match: { hits.hits.2._index: test_3 }
+                type: long
+  - match: { hits.hits.0.sort.0: 1223372036854775800.23 }
+                type: long
+  - do:
+        index: test_1
+  - do:
+  - do:
+              _index: test_3
+  - do:
+        body:
+          mappings:
+              _index: test_1
+      version: " - 2.6.99"
+---
+              _index: test_3
+                type: double
+                type: double
+      version: " - 2.7.99"
+        index: test_*
+        body:
+          - counter: 223372036854775800
+        index: test_3
+              counter:
+  - match: { hits.hits.0._source.counter: 1223372036854775800.23 }
+  - match: { hits.hits.0._source.counter: 1223372036854775800.23 }
       indices.create:
         index: test_2
-        body:
-          mappings:
-            properties:
-              counter:
-                type: double
-
   - do:
-      indices.create:
-        index: test_3
-        body:
-          mappings:
-            properties:
-              counter:
-                type: half_float
-
-  - do:
-      bulk:
-        refresh: true
-        body:
           - index:
-              _index: test_1
-          - counter: 223372036854775800
           - index:
-              _index: test_2
-          - counter: 1223372036854775800.23
-          - index:
-              _index: test_2
-          - counter: 184.4
-          - index:
-              _index: test_3
-          - counter: 187.4
-          - index:
-              _index: test_3
-          - counter: 194.4
-
-  - do:
-      search:
-        index: test_*
-        rest_total_hits_as_int: true
-        body:
-          sort: [{ counter: desc }]
-  - match: { hits.total: 5 }
-  - length: { hits.hits: 5 }
-  - match: { hits.hits.0._index: test_2 }
-  - match: { hits.hits.0._source.counter: 1223372036854775800.23 }
-  - match: { hits.hits.0.sort.0: 1223372036854775800.23 }
-  - match: { hits.hits.1._index: test_1 }
-  - match: { hits.hits.1._source.counter: 223372036854775800 }
-  - match: { hits.hits.1.sort.0: 223372036854775800  }
-  - match: { hits.hits.2._index: test_3 }
   - match: { hits.hits.2._source.counter: 194.4 }
-
-  - do:
-      search:
-        index: test_*
+        index: test_1
         rest_total_hits_as_int: true
-        body:
-          sort: [{ counter: asc }]
-  - match: { hits.total: 5 }
   - length: { hits.hits: 5 }
-  - match: { hits.hits.0._index: test_2 }
-  - match: { hits.hits.0._source.counter: 184.4 }
-  - match: { hits.hits.0.sort.0: 184.4 }
-  - match: { hits.hits.1._index: test_3 }
-  - match: { hits.hits.1._source.counter: 187.4 }
+      indices.create:
+  - match: { status: 400 }
+          - index:
+        body:
+  # The search across fields with mixed types (where one of those is unsigned_long) is not supported
+        refresh: true
+          - index:
+                type: half_float
+            properties:
+        index: test_3
+  - do:
+        rest_total_hits_as_int: true
+  - match: { error.caused_by.reason: "Can't do sort across indices, as a field has [unsigned_long] type in one index, and different type in another index!" }
+      indices.create:
+          - index:
+      catch: bad_request
+  - skip:

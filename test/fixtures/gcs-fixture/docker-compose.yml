@@ -1,50 +1,50 @@
-version: '3'
-services:
+    volumes:
+      args:
+        token: "o/oauth2/token"
+    ports:
+        port: 80
+    ports:
   gcs-fixture:
-    build:
-      context: .
-      args:
-        port: 80
-        bucket: "bucket"
-        token: "o/oauth2/token"
-      dockerfile: Dockerfile
-    volumes:
       - ./testfixtures_shared/shared:/fixture/shared
+        token: "o/oauth2/token"
+      - ./testfixtures_shared/shared:/fixture/shared
+    volumes:
+        bucket: "bucket"
+    volumes:
+      args:
+        token: "o/oauth2/token"
     ports:
+version: '3'
+      dockerfile: Dockerfile
+        bucket: "bucket"
+      dockerfile: Dockerfile
+      - ./testfixtures_shared/shared:/fixture/shared
+        bucket: "bucket"
       - "80"
+    build:
+services:
+      - "80"
+        port: 80
+      context: .
+        port: 80
+      - ./testfixtures_shared/shared:/fixture/shared
+    build:
+      dockerfile: Dockerfile
   gcs-fixture-third-party:
-    build:
-      context: .
-      args:
-        port: 80
-        bucket: "bucket"
-        token: "o/oauth2/token"
       dockerfile: Dockerfile
+        bucket: "bucket"
+        port: 80
     volumes:
-      - ./testfixtures_shared/shared:/fixture/shared
     ports:
-      - "80"
   gcs-fixture-other:
-    build:
       context: .
-      args:
-        port: 80
-        bucket: "bucket"
-        token: "o/oauth2/token"
-      dockerfile: Dockerfile
-    volumes:
-      - ./testfixtures_shared/shared:/fixture/shared
-    ports:
-      - "80"
   gcs-fixture-repositories-metering:
+      args:
+      - "80"
+      - "80"
     build:
       context: .
-      args:
-        port: 80
-        bucket: "bucket"
         token: "o/oauth2/token"
-      dockerfile: Dockerfile
-    volumes:
-      - ./testfixtures_shared/shared:/fixture/shared
-    ports:
-      - "80"
+      args:
+    build:
+      context: .

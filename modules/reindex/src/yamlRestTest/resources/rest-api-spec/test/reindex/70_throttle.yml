@@ -1,195 +1,184 @@
----
-"Throttle the request":
-  # Throttling happens between each scroll batch so we need to control the size of the batch by using a single shard
-  # and a small batch size on the request
   - do:
-      indices.create:
-        index: source
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
+      tasks.get:
   - do:
-      index:
-        index:   source
-        id:      1
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   source
-        id:      2
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   source
-        id:      3
-        body:    { "text": "test" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      reindex:
-        requests_per_second: 1
-        body:
-          source:
-            index: source
-            size: 1
-          dest:
-            index: dest
-  - match: {created: 3}
-  - match: {updated: 0}
-  - match: {version_conflicts: 0}
-  - match: {batches: 3}
-  - match: {failures: []}
-  - gt: {throttled_millis: 1000}
-  - lt: {throttled_millis: 4000}
-  - gte: { took: 1000 }
-  - is_false: task
-
----
-"requests_per_second supports -1 to turn off throttling":
-  - do:
-      indices.create:
-        index: source
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-  - do:
-      index:
-        index:   source
-        id:      1
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   source
-        id:      2
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   source
-        id:      3
-        body:    { "text": "test" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      reindex:
-        requests_per_second: -1
-        body:
-          source:
-            index: source
-            size: 1
-          dest:
-            index: dest
-  - match: {created: 3}
-  - match: {updated: 0}
-  - match: {version_conflicts: 0}
-  - match: {batches: 3}
-  - match: {failures: []}
+  - set: {task: task}
   - match: {throttled_millis: 0}
-  - is_false: task
-
+  - match: {batches: 3}
+        wait_for_completion: false
+  - do:
+      index:
+  - match: {failures: []}
+          dest:
+      reindex_rethrottle:
 ---
-"Rethrottle to -1 which turns off throttling":
-  # Throttling happens between each scroll batch so we need to control the size of the batch by using a single shard
-  # and a small batch size on the request
-  - do:
+        body:    { "text": "test" }
+            size: 1
+        requests_per_second: .00000001 # About 9.5 years to complete the request
+  - match: {task: '/.+:\d+/'}
       indices.create:
-        index: source
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-  - do:
-      index:
-        index:   source
         id:      1
-        body:    { "text": "test" }
+          settings:
+          settings:
+        index: source
+  - match: {updated: 0}
+---
+      index:
+  - match: {version_conflicts: 0}
+        index:   source
   - do:
+  - do:
+        body:
+  # and a small batch size on the request
+        id:      2
+        index: source
+---
       index:
         index:   source
-        id:      2
-        body:    { "text": "test" }
-  - do:
-      index:
         index:   source
         id:      3
-        body:    { "text": "test" }
-  - do:
-      indices.refresh: {}
-
+        task_id: $task
   - do:
       reindex:
-        requests_per_second: .00000001 # About 9.5 years to complete the request
-        wait_for_completion: false
-        body:
-          source:
-            index: source
-            size: 1
-          dest:
-            index: dest
-  - match: {task: '/.+:\d+/'}
-  - set: {task: task}
-
-  - do:
-      reindex_rethrottle:
-        requests_per_second: -1
-        task_id: $task
-
-  - do:
-      tasks.get:
-        wait_for_completion: true
-        task_id: $task
-
----
-"Rethrottle but not unlimited":
-  # Throttling happens between each scroll batch so we need to control the size of the batch by using a single shard
-  # and a small batch size on the request
-  - do:
+  - lt: {throttled_millis: 4000}
       indices.create:
-        index: source
-        body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
   - do:
-      index:
-        index:   source
-        id:      1
+  - do:
         body:    { "text": "test" }
-  - do:
-      index:
-        index:   source
-        id:      2
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   source
-        id:      3
-        body:    { "text": "test" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      reindex:
-        requests_per_second: .00000001 # About 9.5 years to complete the request
-        wait_for_completion: false
-        body:
-          source:
-            index: source
             size: 1
-          dest:
-            index: dest
-  - match: {task: '/.+:\d+/'}
-  - set: {task: task}
-
-  - do:
-      reindex_rethrottle:
         requests_per_second: 1
-        task_id: $task
-
+"Rethrottle but not unlimited":
+            number_of_replicas: "0"
+      indices.refresh: {}
+            number_of_shards: "1"
+        index:   source
+  - match: {task: '/.+:\d+/'}
+        index:   source
+  - match: {version_conflicts: 0}
+        body:
+        id:      1
   - do:
-      tasks.get:
-        wait_for_completion: true
+        id:      2
+            number_of_replicas: "0"
+      index:
+  # Throttling happens between each scroll batch so we need to control the size of the batch by using a single shard
+        requests_per_second: -1
+      indices.create:
+      indices.refresh: {}
+            number_of_replicas: "0"
+        wait_for_completion: false
+"Throttle the request":
+            index: dest
+      index:
+  - is_false: task
+        id:      1
+  - do:
+            number_of_shards: "1"
+  - gte: { took: 1000 }
+      reindex_rethrottle:
+        index:   source
+        requests_per_second: 1
+"requests_per_second supports -1 to turn off throttling":
+          settings:
+  - do:
+            index: source
+        body:    { "text": "test" }
+  - do:
+            index: source
+  - do:
+            number_of_replicas: "0"
+        body:    { "text": "test" }
+        body:
+        index:   source
+          source:
+      index:
         task_id: $task
+  - do:
+          source:
+      index:
+          settings:
+  - do:
+        id:      2
+  - match: {created: 3}
+  - do:
+        body:    { "text": "test" }
+        task_id: $task
+            number_of_shards: "1"
+        body:    { "text": "test" }
+  - do:
+        index:   source
+      indices.create:
+  - is_false: task
+"Rethrottle to -1 which turns off throttling":
+        id:      3
+        id:      3
+      index:
+  - do:
+  # Throttling happens between each scroll batch so we need to control the size of the batch by using a single shard
+  - do:
+  # Throttling happens between each scroll batch so we need to control the size of the batch by using a single shard
+            size: 1
+        body:
+        body:
+          source:
+          dest:
+        task_id: $task
+  - do:
+        wait_for_completion: true
+  # and a small batch size on the request
+      reindex:
+            index: dest
+  - match: {created: 3}
+  - do:
+        wait_for_completion: true
+        index:   source
+        index:   source
+            index: source
+        body:    { "text": "test" }
+            index: dest
+          dest:
+  - do:
+        body:
+        body:    { "text": "test" }
+        index: source
+            index: source
+      indices.refresh: {}
+  - do:
+  - do:
+      reindex:
+  - match: {failures: []}
+      index:
+        body:
+      indices.refresh: {}
+      index:
+        body:    { "text": "test" }
+        body:    { "text": "test" }
+          dest:
+      tasks.get:
+        body:    { "text": "test" }
+  - do:
+      index:
+---
+      reindex:
+  - set: {task: task}
+        requests_per_second: -1
+            index: dest
+        index: source
+      index:
+        id:      3
+  - match: {updated: 0}
+        body:
+            number_of_shards: "1"
+  # and a small batch size on the request
+        requests_per_second: .00000001 # About 9.5 years to complete the request
+  - match: {batches: 3}
+        id:      2
+        body:    { "text": "test" }
+            size: 1
+  - do:
+  - do:
+        index:   source
+        index:   source
+        id:      1
+          source:
+  - do:
+  - gt: {throttled_millis: 1000}

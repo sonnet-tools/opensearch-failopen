@@ -1,272 +1,246 @@
+                  first_filter:
+                  - match:
+                filters:
+        rest_total_hits_as_int: true
+  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 1 }
+  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 1 }
+                      int_field: 101
+             string_field: foo
+               _index: test_1
+        rest_total_hits_as_int: true
+                filters:
+  - match: { hits.total: 4 }
+      search:
+      search:
+                      int_field: 101
+                      int_field: 151
+  - length: { hits.hits: 0 }
+        rest_total_hits_as_int: true
+        rest_total_hits_as_int: true
+---
+                    gte: 110
+            mappings:
+        body:
+           - index:
+"Filtered test":
+               _id:    2
+                filters:
+        rest_total_hits_as_int: true
+            the_filter:
+        rest_total_hits_as_int: true
+              filters: {}
+                the_avg:
+                    match:
+           - index:
+  - length: { hits.hits: 4 }
+           - int_field: 151
+          aggs:
+  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 1 }
+                filters:
+         refresh: true
+  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
+  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 1 }
+          aggs:
+  - do:
+                    match:
+                    match:
+                  avg:
+"Basic test":
+                      int_field: 151
+        body:
+                  second_filter:
+  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
+  - match: { hits.total: 4 }
+             string_field: foo
+  - do:
+  - match: { hits.total: 1 }
+  - length: { hits.hits: 4 }
+                      int_field: 151
+      search:
+                  first_filter:
+---
+                   type : integer
+  - length: { hits.hits: 4 }
+        body:
+          body:
+  - do:
+                    match:
+             double_field: 101.0
+  - match: { aggregations.the_filter.buckets.second_filter.the_avg.value: 151.0 }
+        body:
+                    field: int_field
+                      int_field: 101
+             double_field: 151.0
+                  avg:
+  - length: { hits.hits: 4 }
+                   type : double
+                filters:
+          query:
+           - int_field: 1
+                      int_field: 151
+      search:
+              filters:
+---
+  - match: { aggregations.the_filter.buckets.1.doc_count: 1 }
+        body:
+                      int_field: 151
+        rest_total_hits_as_int: true
+---
 setup:
   - do:
-      indices.create:
-          index: test_1
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
-              properties:
-                int_field:
-                   type : integer
-                double_field:
-                   type : double
-                string_field:
-                   type: keyword
-
-  - do:
-       bulk:
-         refresh: true
+  - length: { hits.hits: 4 }
+                  first_filter:
+  - match: { aggregations.the_filter.buckets.1.doc_count: 1 }
+                  second_filter:
+                      int_field: 151
+                filters:
          body:
-           - index:
                _index: test_1
-               _id:    1
-           - int_field: 1
-             double_field: 1.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    2
-           - int_field: 51
+            the_filter:
+  - match: { aggregations.the_filter.buckets.second_filter.the_avg.value: 151.0 }
+  - do:
+              filters:
+          aggs:
+              filters:
+                      int_field: 101
+                the_avg:
+  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
+---
+       bulk:
+                    match:
+                  second_filter:
              double_field: 51.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    3
+                string_field:
+          aggs:
+                filters:
+          aggs:
+      search:
            - int_field: 101
-             double_field: 101.0
-             string_field: foo
-           - index:
                _index: test_1
-               _id:    4
-           - int_field: 151
-             double_field: 151.0
-             string_field: foo
-
----
-"Basic test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
+                    match:
           aggs:
-            the_filter:
-              filters:
-                filters:
-                  first_filter:
-                    match:
-                      int_field: 101
-                  second_filter:
-                    match:
-                      int_field: 151
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 1 }
-  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
         body:
-          aggs:
-            the_filter:
-              filters:
-                filters:
-                  first_filter:
-                    match:
-                      int_field: 101
-                  second_filter:
-                    match:
-                      int_field: 151
-              aggs:
-                the_avg:
-                  avg:
-                    field: int_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 1 }
+        body:
   - match: { aggregations.the_filter.buckets.first_filter.the_avg.value: 101.0 }
-  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
-  - match: { aggregations.the_filter.buckets.second_filter.the_avg.value: 151.0 }
-
----
-"Anonymous filters test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_filter:
-              filters:
-                filters:
-                  - match:
-                      int_field: 101
-                  - match:
-                      int_field: 151
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_filter.buckets.0.doc_count: 1 }
-  - match: { aggregations.the_filter.buckets.1.doc_count: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_filter:
-              filters:
-                filters:
-                  - match:
-                      int_field: 101
-                  - match:
-                      int_field: 151
-              aggs:
-                the_avg:
-                  avg:
-                    field: int_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_filter.buckets.0.doc_count: 1 }
-  - match: { aggregations.the_filter.buckets.0.the_avg.value: 101.0 }
-  - match: { aggregations.the_filter.buckets.1.doc_count: 1 }
+                    match:
+                  first_filter:
   - match: { aggregations.the_filter.buckets.1.the_avg.value: 151.0 }
-
----
-"Only aggs test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          size: 0
-          aggs:
-            the_filter:
-              filters:
-                filters:
-                  first_filter:
-                    match:
-                      int_field: 101
-                  second_filter:
-                    match:
-                      int_field: 151
-
   - match: { hits.total: 4 }
-  - length: { hits.hits: 0 }
-  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 1 }
-  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_filter:
               filters:
-                filters:
-                  first_filter:
-                    match:
-                      int_field: 101
-                  second_filter:
-                    match:
-                      int_field: 151
-              aggs:
-                the_avg:
-                  avg:
-                    field: int_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 1 }
-  - match: { aggregations.the_filter.buckets.first_filter.the_avg.value: 101.0 }
-  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
-  - match: { aggregations.the_filter.buckets.second_filter.the_avg.value: 151.0 }
-
----
-"Filtered test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            constant_score:
-              filter:
-                range:
-                  int_field:
-                    gte: 110
-          aggs:
-            the_filter:
-              filters:
-                filters:
-                  first_filter:
-                    match:
-                      int_field: 101
-                  second_filter:
-                    match:
-                      int_field: 151
-              aggs:
-                the_avg:
-                  avg:
-                    field: int_field
-
-  - match: { hits.total: 1 }
-  - length: { hits.hits: 1 }
-  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 0 }
   - is_false: aggregations.the_filter.buckets.first_filter.the_avg.value
-  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
-  - match: { aggregations.the_filter.buckets.second_filter.the_avg.value: 151.0 }
-
-
----
-"Metadata test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_filter:
-              meta:
-                foo: bar
-              filters:
-                filters:
+              aggs:
                   first_filter:
-                    match:
+      search:
                       int_field: 101
                   second_filter:
+                      int_field: 101
+             string_field: foo
+                  - match:
+              filters:
+                    field: int_field
+                  first_filter:
+                foo: bar
                     match:
                       int_field: 151
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 1 }
+                the_avg:
+            constant_score:
+             string_field: foo
+              properties:
+          aggs:
+            the_filter:
+        body:
+            the_filter:
+                int_field:
+      indices.create:
+            the_filter:
   - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
-  - match: { aggregations.the_filter.meta.foo: "bar" }
-
 ---
-"Bad params":
-
-  - do:
-      catch: /\[filters\] cannot be empty/
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
+  - match: { aggregations.the_filter.buckets.0.doc_count: 1 }
+  - match: { hits.total: 4 }
+  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 1 }
+              aggs:
+  - match: { aggregations.the_filter.buckets.first_filter.the_avg.value: 101.0 }
             the_filter:
-              filters: {}
-
-  - do:
-      catch: /\[filters\] cannot be empty/
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
             the_filter:
+      search:
+            the_filter:
+        rest_total_hits_as_int: true
+  - do:
+              filter:
+  - match: { hits.total: 4 }
+  - match: { aggregations.the_filter.meta.foo: "bar" }
+        rest_total_hits_as_int: true
               filters:
+                    match:
+  - match: { aggregations.the_filter.buckets.second_filter.the_avg.value: 151.0 }
+                double_field:
+          index: test_1
+  - do:
+  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
+      catch: /\[filters\] cannot be empty/
+                    match:
+  - match: { aggregations.the_filter.buckets.0.doc_count: 1 }
+                  second_filter:
+      search:
+               _id:    3
+          aggs:
+  - match: { hits.total: 4 }
+                  - match:
+                    match:
+            the_filter:
+        rest_total_hits_as_int: true
+        body:
+              aggs:
+  - match: { hits.total: 4 }
+              number_of_replicas: 0
+              filters:
+           - index:
+              filters:
+                  - match:
+"Metadata test":
+               _id:    1
+                      int_field: 101
+"Bad params":
+"Anonymous filters test":
+      catch: /\[filters\] cannot be empty/
+                the_avg:
+                    match:
+           - index:
+                range:
+                  avg:
+             double_field: 1.0
+  - match: { aggregations.the_filter.buckets.first_filter.doc_count: 0 }
+                   type: keyword
+               _id:    4
+  - match: { aggregations.the_filter.buckets.0.the_avg.value: 101.0 }
+        body:
+                  second_filter:
+  - do:
+  - match: { aggregations.the_filter.buckets.second_filter.doc_count: 1 }
+            the_filter:
+          size: 0
+              meta:
+      search:
                 filters: []
+              aggs:
+                    field: int_field
+          aggs:
+      search:
+  - do:
+                      int_field: 151
+  - length: { hits.hits: 4 }
+  - do:
+                    field: int_field
+  - do:
+           - int_field: 51
+            settings:
+                      int_field: 101
+  - length: { hits.hits: 1 }
+                filters:
+                  avg:
+  - do:
+                  int_field:
+               _index: test_1
+"Only aggs test":
+              filters:
+          aggs:

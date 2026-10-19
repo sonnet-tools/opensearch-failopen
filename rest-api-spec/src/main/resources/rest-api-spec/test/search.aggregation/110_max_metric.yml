@@ -1,177 +1,155 @@
-setup:
-  - do:
-      indices.create:
-          index: test_1
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
-              properties:
-                int_field:
-                   type : integer
-                double_field:
-                   type : double
-                string_field:
-                   type: keyword
-
-  - do:
-       bulk:
-         refresh: true
-         body:
-           - index:
-               _index: test_1
-               _id:    1
-           - int_field: 1
-             double_field: 1.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    2
-           - int_field: 51
-             double_field: 51.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    3
-           - int_field: 101
-             double_field: 101.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    4
-           - int_field: 151
-             double_field: 151.0
-             string_field: foo
-
----
-"Basic test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_int_max:
-              max:
-                field: int_field
-            the_double_max:
-              max:
-                field: double_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_int_max.value: 151.0 }
-  - match: { aggregations.the_double_max.value: 151.0 }
-
----
 "Only aggs test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
+                  int_field:
           size: 0
+  - length: { hits.hits: 4 }
+             string_field: foo
+      search:
+                field: foo
+               _index: test_1
+  - do:
+        rest_total_hits_as_int: true
+            the_double_max:
+"Aggregating wrong datatype test":
+              max:
+  - length: { hits.hits: 4 }
+  - do:
+             double_field: 51.0
+---
+              max:
+          aggs:
+      indices.create:
+              number_of_replicas: 0
+          query:
+             double_field: 151.0
+---
+            the_int_max:
+  - match: { hits.total: 4 }
+              max:
+          aggs:
+               _index: test_1
+  - length: { hits.hits: 4 }
+                   type : double
+            mappings:
+      search:
+  - match: { aggregations.the_int_max.meta.foo: "bar" }
+        body:
+           - index:
+      search:
+---
+        rest_total_hits_as_int: true
+            the_missing_max:
+             string_field: foo
+  - match: { aggregations.the_int_max.value: 151.0 }
+                field: string_field
+  - match: { hits.total: 4 }
+        body:
+        rest_total_hits_as_int: true
+"Missing field without missing param":
+         refresh: true
+       bulk:
+  - do:
+                    lte: 60
+      search:
+            the_int_max:
+  - do:
+          body:
+            constant_score:
+             double_field: 101.0
+                   type: keyword
+                field: int_field
+               _id:    4
+  - is_false: aggregations.the_missing_max.value
+                field: int_field
+                   type : integer
+        body:
+                field: int_field
+  - do:
+---
+  - do:
+        body:
+                int_field:
+"Filtered test":
+              meta:
+                double_field:
+      search:
+                string_field:
+        body:
+         body:
+          aggs:
+              max:
+                field: foo
+           - int_field: 101
+           - int_field: 51
+  - match: { hits.total: 4 }
+              max:
+              max:
+            the_double_max:
+  - match: { aggregations.the_double_max.value: 51.0 }
+        body:
+           - int_field: 1
+               _id:    2
+                field: double_field
+"Missing field with missing param":
+          aggs:
+  - match: { aggregations.the_int_max.value: 151.0 }
+                field: int_field
+          aggs:
+  - match: { hits.total: 4 }
+             double_field: 1.0
+            the_int_max:
+"Basic test":
+              max:
+          aggs:
+               _index: test_1
+          index: test_1
+  - match: { aggregations.the_missing_max.value: 1 }
+               _index: test_1
+  - match: { aggregations.the_double_max.value: 151.0 }
+            the_missing_max:
+  - do:
+            settings:
+  - do:
+              properties:
+              max:
+           - index:
+      search:
+              max:
+---
+  - match: { aggregations.the_double_max.value: 151.0 }
+            the_double_max:
+                foo: bar
+              filter:
+                field: double_field
+      search:
+  - match: { aggregations.the_int_max.value: 151.0 }
+        rest_total_hits_as_int: true
+---
+                field: double_field
+setup:
+           - index:
+  - match: { hits.total: 2 }
+        body:
+               _id:    3
+                missing: 1
           aggs:
             the_int_max:
-              max:
-                field: int_field
-            the_double_max:
-              max:
-                field: double_field
-
   - match: { hits.total: 4 }
   - length: { hits.hits: 0 }
-  - match: { aggregations.the_int_max.value: 151.0 }
-  - match: { aggregations.the_double_max.value: 151.0 }
-
----
-"Filtered test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            constant_score:
-              filter:
-                range:
-                  int_field:
-                    lte: 60
-          aggs:
-            the_int_max:
-              max:
-                field: int_field
-            the_double_max:
-              max:
-                field: double_field
-
-  - match: { hits.total: 2 }
-  - length: { hits.hits: 2 }
   - match: { aggregations.the_int_max.value: 51.0 }
-  - match: { aggregations.the_double_max.value: 51.0 }
-
-
----
-"Missing field with missing param":
-
-  - do:
-      search:
         rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_missing_max:
-              max:
-                field: foo
-                missing: 1
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_missing_max.value: 1 }
-
 ---
-"Missing field without missing param":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_missing_max:
-              max:
-                field: foo
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - is_false: aggregations.the_missing_max.value
-
----
-"Metadata test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_int_max:
-              meta:
-                foo: bar
-              max:
-                field: int_field
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.the_int_max.value: 151.0 }
-  - match: { aggregations.the_int_max.meta.foo: "bar" }
-
----
-"Aggregating wrong datatype test":
-
-  - do:
-      catch: bad_request
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            the_string_avg:
+             string_field: foo
+               _id:    1
               avg:
-                field: string_field
+  - length: { hits.hits: 2 }
+             string_field: foo
+"Metadata test":
+  - length: { hits.hits: 4 }
+           - index:
+        rest_total_hits_as_int: true
+      catch: bad_request
+            the_string_avg:
+        rest_total_hits_as_int: true
+                range:
+  - do:
+           - int_field: 151

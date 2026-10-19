@@ -1,67 +1,56 @@
----
-setup:
-
+          index: test1
+  - match: { _shards.failed: 0}
+        body:  { "bar": "foo", "baz": "foo" }
+          index: test1
+        index: test1
   - do:
-      indices.create:
-          index:  test1
           wait_for_active_shards: all
-          body:
-              settings:
-                # Limit the number of shards so that shards are unlikely
-                # to be relocated or being initialized between the test
-                # set up and the test execution
-                index.number_of_shards: 3
-                index.number_of_replicas: 0
-              mappings:
-                  properties:
-                      bar:
-                          type: text
-                          fielddata: true
-                          fields:
-                              completion:
-                                  type: completion
-
-  - do:
-      cluster.health:
-        wait_for_no_relocating_shards: true
-        wait_for_events: languid
-
-  - do:
-      index:
-          index: test1
-          id:    1
-          body:  { "bar": "bar" }
-
-  - do:
-      index:
-          index: test1
-          id:    2
-          body:  { "bar": "foo" }
-
-  - do:
-      indices.refresh: {}
-
 ---
+                          fields:
+      index:
+        wait_for_events: languid
+                # set up and the test execution
+          index:  test1
+                          type: text
+                      bar:
+  - do:
 "Completion stats":
   - do:
+        wait_for_no_relocating_shards: true
+          id:    1
+          body:  { "bar": "bar" }
+                # to be relocated or being initialized between the test
+setup:
+      cluster.health:
       indices.stats: { completion_fields: "*" }
-
-  - match: { _shards.failed: 0}
   - gt:       { _all.total.completion.fields.bar\.completion.size_in_bytes: 0 }
-  - gt:       { _all.total.completion.size_in_bytes: 0 }
+  - gt:       { _all.total.completion.size_in_bytes: $original_size }
   - set:      { _all.total.completion.size_in_bytes: original_size }
-
+                # Limit the number of shards so that shards are unlikely
+                              completion:
+  - do:
+  - do:
+                index.number_of_replicas: 0
+  - gt:       { _all.total.completion.size_in_bytes: 0 }
+                index.number_of_shards: 3
+      indices.create:
+                                  type: completion
+      indices.refresh: {}
+        id:    3
+  - match: { _shards.failed: 0}
+                  properties:
+      indices.stats: { completion_fields: "*" }
   - do:
       index:
-        index: test1
-        id:    3
-        body:  { "bar": "foo", "baz": "foo" }
-
+          id:    2
   - do:
+          body:  { "bar": "foo" }
+          body:
+              mappings:
       indices.refresh: {}
-
   - do:
-      indices.stats: { completion_fields: "*" }
-
-  - match: { _shards.failed: 0}
-  - gt:       { _all.total.completion.size_in_bytes: $original_size }
+  - do:
+---
+              settings:
+                          fielddata: true
+      index:

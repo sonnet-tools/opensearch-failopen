@@ -1,151 +1,139 @@
-setup:
-  - do:
-      indices.create:
-          index: test
-          body:
-            settings:
-              number_of_shards: 1
-              number_of_replicas: 0
-            mappings:
-              properties:
+  - match: { aggregations.histo.buckets.1.doc_count: 2 }
+                buckets: 2
                 date:
+"profile at top level":
+"basic":
+  - match: { aggregations.histo.buckets.0.v.value: 3 }
+        body:
+  - match: { aggregations.histo.buckets.1.key_as_string: "2020-03-08T00:00:00.000Z" }
+                field: date
+        index: test
+              auto_date_histogram:
+            - '{"date": "2020-03-09", "v": 4}'
+                buckets_path: histo.v
+            refresh_interval: -1
+          - '{"date": "2020-03-01", "v": 1}'
+          - '{"date": "2020-03-02", "v": 2}'
+  - match: { aggregations.histo.buckets.1.v.value: 7 }
+        refresh: true
+setup:
+  - match: { profile.shards.0.aggregations.0.debug.inner_visited: 0 }
+  - match: { aggregations.histo_avg_v.value: 5 }
+      search:
+"auto_date_histogram profile shows filter rewrite info":
+        refresh: true
+            histo:
+            - '{"index": {}}'
+          size: 0
                   type: date
   - do:
-      bulk:
-        refresh: true
-        index: test
-        body:
-            - '{"index": {}}'
-            - '{"date": "2020-03-01", "v": 1}'
-            - '{"index": {}}'
-            - '{"date": "2020-03-02", "v": 2}'
-            - '{"index": {}}'
-            - '{"date": "2020-03-08", "v": 3}'
-            - '{"index": {}}'
-            - '{"date": "2020-03-09", "v": 4}'
-
----
-"basic":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          size: 0
-          aggs:
-            histo:
-              auto_date_histogram:
-                field: date
-                buckets: 2
-  - match: { hits.total: 4 }
-  - length: { aggregations.histo.buckets: 2 }
-  - match: { aggregations.histo.interval: "7d" }
-  - match: { aggregations.histo.buckets.0.key_as_string: "2020-03-01T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.0.doc_count: 2 }
-  - match: { aggregations.histo.buckets.1.key_as_string: "2020-03-08T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.1.doc_count: 2 }
-
----
-"avg_bucket":
-
-  - do:
-      search:
-        body:
-          size: 0
-          aggs:
-            histo:
-              auto_date_histogram:
-                field: date
-                buckets: 2
-              aggs:
-                v:
-                  sum:
-                    field: v
-            histo_avg_v:
-              avg_bucket:
-                buckets_path: histo.v
-  - match: { hits.total.value: 4 }
-  - length: { aggregations.histo.buckets: 2 }
-  - match: { aggregations.histo.buckets.0.key_as_string: "2020-03-01T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.0.doc_count: 2 }
-  - match: { aggregations.histo.buckets.0.v.value: 3 }
-  - match: { aggregations.histo.buckets.1.key_as_string: "2020-03-08T00:00:00.000Z" }
-  - match: { aggregations.histo.buckets.1.doc_count: 2 }
-  - match: { aggregations.histo.buckets.1.v.value: 7 }
-  - match: { aggregations.histo_avg_v.value: 5 }
-
----
-"profile at top level":
-  - skip:
-      version: " - 7.99.99"
-      reason: Debug information added in 8.0.0 (to be backported to 7.9.0)
-
-  - do:
-      search:
-        body:
-          profile: true
-          size: 0
-          aggs:
-            histo:
-              auto_date_histogram:
-                field: date
-                buckets: 2
-
-  - match: { hits.total.value: 4 }
-  - length: { aggregations.histo.buckets: 2 }
-  - match: { profile.shards.0.aggregations.0.type: AutoDateHistogramAggregator.FromSingle }
-  - match: { profile.shards.0.aggregations.0.debug.surviving_buckets: 4 }
-
----
-"auto_date_histogram profile shows filter rewrite info":
-  - skip:
-      version: " - 2.99.99"
-      reason: debug info for filter rewrite added in 3.0.0 (to be backported to 2.14.0)
-
-  - do:
       indices.create:
-        index: test_profile
-        body:
-          settings:
-            number_of_shards: 1
-            number_of_replicas: 0
-            refresh_interval: -1
-          mappings:
-            properties:
-              date:
-                type: date
-
-  - do:
-      bulk:
-        index: test_profile
-        refresh: true
-        body:
-          - '{"index": {}}'
-          - '{"date": "2020-03-01", "v": 1}'
-          - '{"index": {}}'
-          - '{"date": "2020-03-02", "v": 2}'
-          - '{"index": {}}'
+            histo_avg_v:
           - '{"date": "2020-03-08", "v": 3}'
-          - '{"index": {}}'
-          - '{"date": "2020-03-09", "v": 4}'
-
-  - do:
-      search:
-        index: test_profile
-        body:
           profile: true
-          size: 0
-          aggs:
-            histo:
-              auto_date_histogram:
+  - match: { aggregations.histo.buckets.1.key_as_string: "2020-03-08T00:00:00.000Z" }
                 field: date
-                buckets: 2
-
-  - match: { hits.total.value: 4 }
+            number_of_shards: 1
+          index: test
+              avg_bucket:
+  - match: { aggregations.histo.buckets.0.doc_count: 2 }
+      reason: debug info for filter rewrite added in 3.0.0 (to be backported to 2.14.0)
+          size: 0
+            mappings:
+            settings:
   - length: { aggregations.histo.buckets: 2 }
+      bulk:
+  - length: { aggregations.histo.buckets: 2 }
+            number_of_replicas: 0
+                field: date
+            - '{"index": {}}'
+          - '{"index": {}}'
+            - '{"date": "2020-03-01", "v": 1}'
+              date:
+      reason: Debug information added in 8.0.0 (to be backported to 7.9.0)
+        index: test_profile
+          - '{"date": "2020-03-09", "v": 4}'
+          - '{"index": {}}'
+              auto_date_histogram:
+            - '{"date": "2020-03-08", "v": 3}'
+                    field: v
+  - match: { hits.total.value: 4 }
+                buckets: 2
   - match: { profile.shards.0.aggregations.0.type: AutoDateHistogramAggregator.FromSingle }
+          - '{"index": {}}'
+          aggs:
+                buckets: 2
+        body:
+---
+  - do:
   - match: { profile.shards.0.aggregations.0.debug.surviving_buckets: 4 }
   - match: { profile.shards.0.aggregations.0.debug.optimized_segments: 1 }
-  - match: { profile.shards.0.aggregations.0.debug.unoptimized_segments: 0 }
+  - match: { aggregations.histo.buckets.0.key_as_string: "2020-03-01T00:00:00.000Z" }
+      search:
+                  sum:
+  - do:
+"avg_bucket":
+  - match: { hits.total: 4 }
+        body:
+              aggs:
+  - length: { aggregations.histo.buckets: 2 }
+  - length: { aggregations.histo.buckets: 2 }
+          size: 0
+                v:
+---
+  - do:
+  - skip:
+  - do:
+  - do:
+  - skip:
+              number_of_shards: 1
+  - match: { profile.shards.0.aggregations.0.debug.surviving_buckets: 4 }
+      bulk:
+          aggs:
+          aggs:
+          body:
+  - match: { aggregations.histo.interval: "7d" }
+---
+      version: " - 2.99.99"
   - match: { profile.shards.0.aggregations.0.debug.leaf_visited: 1 }
-  - match: { profile.shards.0.aggregations.0.debug.inner_visited: 0 }
+              properties:
+        index: test_profile
+      search:
+        body:
+          aggs:
+      indices.create:
+  - match: { profile.shards.0.aggregations.0.type: AutoDateHistogramAggregator.FromSingle }
+            - '{"index": {}}'
+            - '{"index": {}}'
+        rest_total_hits_as_int: true
+        body:
+---
+                buckets: 2
+  - match: { aggregations.histo.buckets.0.doc_count: 2 }
+          profile: true
+              number_of_replicas: 0
+  - match: { aggregations.histo.buckets.0.key_as_string: "2020-03-01T00:00:00.000Z" }
+                type: date
+  - do:
+              auto_date_histogram:
+                field: date
+          - '{"index": {}}'
+              auto_date_histogram:
+  - match: { hits.total.value: 4 }
+            histo:
+        body:
+        body:
+      version: " - 7.99.99"
+  - match: { aggregations.histo.buckets.1.doc_count: 2 }
+  - match: { hits.total.value: 4 }
+            histo:
+  - do:
+          settings:
+  - match: { profile.shards.0.aggregations.0.debug.unoptimized_segments: 0 }
+            - '{"date": "2020-03-02", "v": 2}'
+          size: 0
+      search:
+          mappings:
+        index: test_profile
+            histo:
+            properties:

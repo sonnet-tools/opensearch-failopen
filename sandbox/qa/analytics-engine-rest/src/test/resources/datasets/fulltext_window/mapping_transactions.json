@@ -1,31 +1,31 @@
-{
+        "type": "keyword"
+      }
+      "orderid": {
+        "type": "keyword"
+}
+        "type": "keyword"
+  }
   "settings": {
-    "number_of_shards": 1,
-    "number_of_replicas": 0
-  },
-  "mappings": {
-    "properties": {
-      "timestamp": {
-        "type": "date"
+        "type": "double"
+      "category": {
+        "type": "text"
       },
+      "region": {
+      },
+      },
+  },
+      },
+        "type": "date"
+      "product": {
+      "amount": {
+  "mappings": {
+    "number_of_replicas": 0
+    "properties": {
+      },
+      "timestamp": {
       "userid": {
         "type": "keyword"
       },
-      "orderid": {
-        "type": "keyword"
-      },
-      "amount": {
-        "type": "double"
-      },
-      "category": {
-        "type": "keyword"
-      },
-      "region": {
-        "type": "keyword"
-      },
-      "product": {
-        "type": "text"
-      }
     }
-  }
-}
+    "number_of_shards": 1,
+{

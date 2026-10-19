@@ -1,225 +1,204 @@
-#
-# Licensed to Elasticsearch under one or more contributor
-# license agreements. See the NOTICE file distributed with
-# this work for additional information regarding copyright
-# ownership. Elasticsearch licenses this file to you under
-# the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations
-# under the License.
-#
-
-#
-# Painless definition file. This defines the hierarchy of classes,
-# what methods and fields they have, etc.
-#
-
-#### Interfaces
-
-class java.time.temporal.Temporal {
-  Temporal minus(long,TemporalUnit)
-  Temporal minus(TemporalAmount)
-  Temporal plus(long,TemporalUnit)
-  Temporal plus(TemporalAmount)
-  long until(Temporal,TemporalUnit)
-  Temporal with(TemporalAdjuster)
-  Temporal with(TemporalField,long)
-}
-
-class java.time.temporal.TemporalAccessor {
-  int get(TemporalField)
-  long getLong(TemporalField)
-  boolean isSupported(TemporalField)
-  def query(TemporalQuery)
-  ValueRange range(TemporalField)
-}
-
-class java.time.temporal.TemporalAdjuster {
-  Temporal adjustInto(Temporal)
-}
-
-class java.time.temporal.TemporalAmount {
-  Temporal addTo(Temporal)
-  long get(TemporalUnit)
-  List getUnits()
-  Temporal subtractFrom(Temporal)
-}
-
-class java.time.temporal.TemporalField {
-  Temporal adjustInto(Temporal,long)
-  TemporalUnit getBaseUnit()
-  String getDisplayName(Locale)
-  long getFrom(TemporalAccessor)
-  TemporalUnit getRangeUnit()
-  boolean isDateBased()
-  boolean isSupportedBy(TemporalAccessor)
-  boolean isTimeBased()
-  ValueRange range()
   ValueRange rangeRefinedBy(TemporalAccessor)
-  TemporalAccessor resolve(Map,TemporalAccessor,ResolverStyle)
-  String toString()
-}
-
-class java.time.temporal.TemporalQuery {
-  def queryFrom(TemporalAccessor)
-}
-
-class java.time.temporal.TemporalUnit {
-  Temporal addTo(Temporal,long)
-  long between(Temporal,Temporal)
-  Duration getDuration()
-  boolean isDateBased()
-  boolean isDurationEstimated()
-  boolean isSupportedBy(Temporal)
-  boolean isTimeBased()
-  String toString()
-}
-
-#### Classes
-
-class java.time.temporal.IsoFields {
-  TemporalField DAY_OF_QUARTER
-  TemporalField QUARTER_OF_YEAR
-  TemporalUnit QUARTER_YEARS
-  TemporalField WEEK_BASED_YEAR
-  TemporalUnit WEEK_BASED_YEARS
-  TemporalField WEEK_OF_WEEK_BASED_YEAR
-}
-
-class java.time.temporal.JulianFields {
-  TemporalField JULIAN_DAY
-  TemporalField MODIFIED_JULIAN_DAY
-  TemporalField RATA_DIE
-}
-
-class java.time.temporal.TemporalAdjusters {
-  TemporalAdjuster dayOfWeekInMonth(int,DayOfWeek)
-  TemporalAdjuster firstDayOfMonth()
-  TemporalAdjuster firstDayOfNextMonth()
-  TemporalAdjuster firstDayOfNextYear()
-  TemporalAdjuster firstDayOfYear()
-  TemporalAdjuster firstInMonth(DayOfWeek)
-  TemporalAdjuster lastDayOfMonth()
-  TemporalAdjuster lastDayOfYear()
-  TemporalAdjuster lastInMonth(DayOfWeek)
-  TemporalAdjuster next(DayOfWeek)
-  TemporalAdjuster nextOrSame(DayOfWeek)
-  TemporalAdjuster ofDateAdjuster(UnaryOperator)
-  TemporalAdjuster previous(DayOfWeek)
-  TemporalAdjuster previousOrSame(DayOfWeek)
-}
-
-class java.time.temporal.TemporalQueries {
-  TemporalQuery chronology()
-  TemporalQuery localDate()
-  TemporalQuery localTime()
-  TemporalQuery offset()
-  TemporalQuery precision()
-  TemporalQuery zone()
-  TemporalQuery zoneId()
-}
-
-class java.time.temporal.ValueRange {
-  int checkValidIntValue(long,TemporalField)
-  long checkValidValue(long,TemporalField)
-  long getLargestMinimum()
-  long getMaximum()
-  long getMinimum()
-  long getSmallestMaximum()
-  boolean isFixed()
-  boolean isIntValue()
-  boolean isValidIntValue(long)
-  boolean isValidValue(long)
-  ValueRange of(long,long)
-  ValueRange of(long,long,long)
-  ValueRange of(long,long,long,long)
-}
-
-class java.time.temporal.WeekFields {
-  WeekFields ISO
-  WeekFields SUNDAY_START
-  TemporalUnit WEEK_BASED_YEARS
-  TemporalField dayOfWeek()
-  DayOfWeek getFirstDayOfWeek()
-  int getMinimalDaysInFirstWeek()
-  WeekFields of(DayOfWeek,int)
-  WeekFields of(Locale)
-  TemporalField weekBasedYear()
-  TemporalField weekOfMonth()
-  TemporalField weekOfWeekBasedYear()
-  TemporalField weekOfYear()
-}
-
-#### Enums
-
-class java.time.temporal.ChronoField {
-  ChronoField ALIGNED_DAY_OF_WEEK_IN_MONTH
-  ChronoField ALIGNED_DAY_OF_WEEK_IN_YEAR
-  ChronoField ALIGNED_WEEK_OF_MONTH
-  ChronoField ALIGNED_WEEK_OF_YEAR
-  ChronoField AMPM_OF_DAY
-  ChronoField CLOCK_HOUR_OF_AMPM
-  ChronoField CLOCK_HOUR_OF_DAY
-  ChronoField DAY_OF_MONTH
-  ChronoField DAY_OF_WEEK
-  ChronoField DAY_OF_YEAR
-  ChronoField EPOCH_DAY
-  ChronoField ERA
-  ChronoField HOUR_OF_AMPM
-  ChronoField HOUR_OF_DAY
-  ChronoField INSTANT_SECONDS
-  ChronoField MICRO_OF_DAY
-  ChronoField MICRO_OF_SECOND
-  ChronoField MILLI_OF_DAY
-  ChronoField MILLI_OF_SECOND
-  ChronoField MINUTE_OF_DAY
-  ChronoField MINUTE_OF_HOUR
-  ChronoField MONTH_OF_YEAR
-  ChronoField NANO_OF_DAY
-  ChronoField NANO_OF_SECOND
-  ChronoField OFFSET_SECONDS
-  ChronoField PROLEPTIC_MONTH
-  ChronoField SECOND_OF_DAY
-  ChronoField SECOND_OF_MINUTE
-  ChronoField YEAR
-  ChronoField YEAR_OF_ERA
-  int checkValidIntValue(long)
-  long checkValidValue(long)
-  ChronoField valueOf(String)
-  ChronoField[] values()
-}
-
-class java.time.temporal.ChronoUnit {
-  ChronoUnit CENTURIES
-  ChronoUnit DAYS
-  ChronoUnit DECADES
   ChronoUnit ERAS
-  ChronoUnit FOREVER
-  ChronoUnit HALF_DAYS
-  ChronoUnit HOURS
-  ChronoUnit MICROS
-  ChronoUnit MILLENNIA
-  ChronoUnit MILLIS
-  ChronoUnit MINUTES
-  ChronoUnit MONTHS
-  ChronoUnit NANOS
-  ChronoUnit SECONDS
-  ChronoUnit WEEKS
-  ChronoUnit YEARS
-  ChronoUnit valueOf(String)
+#### Classes
+  TemporalField MODIFIED_JULIAN_DAY
+# specific language governing permissions and limitations
+  TemporalAdjuster firstDayOfMonth()
+  TemporalQuery localDate()
+}
+  int checkValidIntValue(long)
+  boolean isDateBased()
   ChronoUnit[] values()
 }
-
-#### Exceptions
-
 class java.time.temporal.UnsupportedTemporalTypeException {
-  (String)
+  Temporal with(TemporalAdjuster)
+class java.time.temporal.TemporalUnit {
+  TemporalQuery precision()
+  TemporalAdjuster ofDateAdjuster(UnaryOperator)
 }
+#### Enums
+  WeekFields of(DayOfWeek,int)
+  ChronoField ALIGNED_DAY_OF_WEEK_IN_YEAR
+  TemporalAdjuster nextOrSame(DayOfWeek)
+  ChronoUnit YEARS
+}
+  ChronoUnit MINUTES
+class java.time.temporal.JulianFields {
+  ChronoField MILLI_OF_SECOND
+  TemporalAdjuster next(DayOfWeek)
+  TemporalField JULIAN_DAY
+  TemporalAdjuster firstInMonth(DayOfWeek)
+class java.time.temporal.TemporalAdjusters {
+  long getMinimum()
+#
+  List getUnits()
+  TemporalUnit WEEK_BASED_YEARS
+  ChronoField SECOND_OF_DAY
+  ChronoField CLOCK_HOUR_OF_DAY
+  ChronoUnit DAYS
+  TemporalUnit WEEK_BASED_YEARS
+  ChronoField NANO_OF_DAY
+  ChronoUnit SECONDS
+  long getLargestMinimum()
+  ChronoUnit MONTHS
+  int checkValidIntValue(long,TemporalField)
+  TemporalUnit getRangeUnit()
+  TemporalField weekOfMonth()
+  ChronoField HOUR_OF_AMPM
+#
+  Temporal addTo(Temporal)
+  TemporalUnit QUARTER_YEARS
+  ChronoField DAY_OF_MONTH
+  boolean isValidValue(long)
+  ChronoField valueOf(String)
+  ValueRange of(long,long)
+  int get(TemporalField)
+}
+#
+  ChronoUnit MICROS
+  TemporalField WEEK_BASED_YEAR
+  long getMaximum()
+  TemporalQuery zone()
+  ValueRange range()
+  ChronoUnit NANOS
+  long getSmallestMaximum()
+class java.time.temporal.Temporal {
+  ChronoField CLOCK_HOUR_OF_AMPM
+# ownership. Elasticsearch licenses this file to you under
+  ChronoField ALIGNED_WEEK_OF_MONTH
+# license agreements. See the NOTICE file distributed with
+  Duration getDuration()
+  TemporalField DAY_OF_QUARTER
+  ChronoField DAY_OF_WEEK
+  long getFrom(TemporalAccessor)
+  TemporalAdjuster lastDayOfMonth()
+}
+  boolean isSupportedBy(TemporalAccessor)
+  Temporal minus(TemporalAmount)
+  ChronoField MINUTE_OF_HOUR
+  TemporalUnit getBaseUnit()
+  Temporal plus(long,TemporalUnit)
+# not use this file except in compliance with the License.
+#
+class java.time.temporal.ValueRange {
+  Temporal addTo(Temporal,long)
+}
+  ChronoField[] values()
+  TemporalQuery localTime()
+  WeekFields of(Locale)
+  boolean isIntValue()
+  TemporalField RATA_DIE
+  ChronoField NANO_OF_SECOND
+  ChronoUnit MILLENNIA
+  ChronoUnit valueOf(String)
+  Temporal subtractFrom(Temporal)
+  def queryFrom(TemporalAccessor)
+  DayOfWeek getFirstDayOfWeek()
+  ChronoField MILLI_OF_DAY
+# Licensed to Elasticsearch under one or more contributor
+  String toString()
+  ChronoField INSTANT_SECONDS
+class java.time.temporal.TemporalAdjuster {
+  ValueRange of(long,long,long)
+  boolean isTimeBased()
+  long get(TemporalUnit)
+  TemporalField weekBasedYear()
+  TemporalAccessor resolve(Map,TemporalAccessor,ResolverStyle)
+  TemporalAdjuster previous(DayOfWeek)
+  ChronoField ERA
+  ChronoField MICRO_OF_DAY
+  boolean isTimeBased()
+  long checkValidValue(long)
+  ChronoUnit CENTURIES
+  boolean isSupportedBy(Temporal)
+}
+#    http://www.apache.org/licenses/LICENSE-2.0
+  TemporalAdjuster firstDayOfYear()
+class java.time.temporal.ChronoField {
+  long getLong(TemporalField)
+  (String)
+  TemporalField QUARTER_OF_YEAR
+  ChronoField MINUTE_OF_DAY
+}
+  ChronoField EPOCH_DAY
+  String toString()
+class java.time.temporal.ChronoUnit {
+}
+}
+  TemporalAdjuster previousOrSame(DayOfWeek)
+  TemporalAdjuster lastInMonth(DayOfWeek)
+  TemporalQuery offset()
+  TemporalAdjuster dayOfWeekInMonth(int,DayOfWeek)
+  ChronoField ALIGNED_DAY_OF_WEEK_IN_MONTH
+#
+  ChronoField YEAR_OF_ERA
+  long between(Temporal,Temporal)
+  Temporal adjustInto(Temporal)
+# this work for additional information regarding copyright
+  long checkValidValue(long,TemporalField)
+# under the License.
+}
+}
+  ChronoField AMPM_OF_DAY
+  TemporalAdjuster lastDayOfYear()
+  boolean isSupported(TemporalField)
+  boolean isValidIntValue(long)
+  long until(Temporal,TemporalUnit)
+  ValueRange range(TemporalField)
+  ChronoField MICRO_OF_SECOND
+  ChronoUnit MILLIS
+  TemporalField WEEK_OF_WEEK_BASED_YEAR
+  ChronoField ALIGNED_WEEK_OF_YEAR
+  TemporalField weekOfYear()
+class java.time.temporal.TemporalAmount {
+# the Apache License, Version 2.0 (the "License"); you may
+  ChronoField HOUR_OF_DAY
+  ChronoUnit HOURS
+  TemporalAdjuster firstDayOfNextMonth()
+  ChronoField DAY_OF_YEAR
+#### Exceptions
+class java.time.temporal.TemporalQueries {
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# Unless required by applicable law or agreed to in writing,
+  Temporal plus(TemporalAmount)
+  WeekFields ISO
+  boolean isDateBased()
+  String getDisplayName(Locale)
+class java.time.temporal.TemporalAccessor {
+# KIND, either express or implied.  See the License for the
+  ChronoField SECOND_OF_MINUTE
+class java.time.temporal.TemporalField {
+  ChronoUnit FOREVER
+  Temporal adjustInto(Temporal,long)
+  TemporalAdjuster firstDayOfNextYear()
+  boolean isFixed()
+class java.time.temporal.TemporalQuery {
+  ValueRange of(long,long,long,long)
+  Temporal minus(long,TemporalUnit)
+class java.time.temporal.IsoFields {
+  ChronoField MONTH_OF_YEAR
+  ChronoUnit WEEKS
+  ChronoField OFFSET_SECONDS
+}
+# what methods and fields they have, etc.
+# You may obtain a copy of the License at
+  def query(TemporalQuery)
+class java.time.temporal.WeekFields {
+  Temporal with(TemporalField,long)
+  ChronoUnit DECADES
+  ChronoField PROLEPTIC_MONTH
+# software distributed under the License is distributed on an
+#
+  boolean isDurationEstimated()
+  TemporalQuery zoneId()
+  ChronoUnit HALF_DAYS
+  WeekFields SUNDAY_START
+  ChronoField YEAR
+}
+  TemporalQuery chronology()
+  TemporalField weekOfWeekBasedYear()
+#### Interfaces
+}
+# Painless definition file. This defines the hierarchy of classes,
+  int getMinimalDaysInFirstWeek()
+  TemporalField dayOfWeek()

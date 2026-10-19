@@ -1,142 +1,123 @@
-setup:
-  - do:
-        indices.create:
-            index: test
-            body:
-              settings:
-                number_of_replicas: 0
-              mappings:
-                properties:
-                  int_field:
-                    type: integer
-                  double_field:
-                    type: double
-                  incomplete_field:
-                    type: integer
-  - do:
-        bulk:
-          refresh: true
+            mad_int:
+            - index:
           body:
-            - index:
-                _index: test
-            - int_field: 100
-              double_field: 100.0
-              incomplete_field: 1000
-            - index:
-                _index: test
-            - int_field: 200
-              double_field: 200.0
-              incomplete_field: 2000
-            - index:
-                _index: test
-            - int_field: 300
-              double_field: 300.0
-
+        indices.create:
 ---
-"basic test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
           aggs:
-            mad_int:
-              median_absolute_deviation:
-                field: int_field
-            mad_double:
-              median_absolute_deviation:
-                field: double_field
-
-  - match: { hits.total: 3 }
-  - length: { hits.hits: 3 }
-
-  - match: { aggregations.mad_int.value: 100 }
-  - match: { aggregations.mad_double.value: 100 }
-
----
-"with setting compression":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            mad_int:
-              median_absolute_deviation:
-                field: int_field
-                compression: 500
-            mad_double:
-              median_absolute_deviation:
-                field: double_field
-                compression: 500
-
-  - match: { hits.total: 3 }
-  - length: { hits.hits: 3 }
-
-  - match: { aggregations.mad_int.value: 100 }
-  - match: { aggregations.mad_double.value: 100 }
-
----
-"no documents":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            bool:
-              filter:
-                term:
-                  non_existent_field: non_existent_value
-          aggs:
-            mad_no_docs:
-              median_absolute_deviation:
-                field: non_existent_field
-
-  - match: { hits.total: 0 }
-  - length: { hits.hits: 0 }
-
-  - match: { aggregations.mad_no_docs.value: null }
-
----
-"missing value":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            mad_missing:
-              median_absolute_deviation:
-                field: incomplete_field
                 missing: 3000
-
-  - match: { hits.total: 3 }
-  - length: { hits.hits: 3 }
-
-  - match: { aggregations.mad_missing.value: 1000 }
-
+"missing value":
+                compression: 500
 ---
-"bad arguments":
-
+                    type: integer
+            - int_field: 200
+---
+            - index:
   - do:
-      catch: /\[compression\] must be greater than 0. Found \[0.0\] in \[mad\]/
+  - match: { hits.total: 0 }
+                  int_field:
+                field: non_existent_field
       search:
+                _index: test
         rest_total_hits_as_int: true
-        body:
-          aggs:
-            mad:
-              median_absolute_deviation:
-                field: int_field
-                compression: 0
-
   - do:
-      catch: /\[compression\] must be greater than 0. Found \[-1.0\] in \[mad\]/
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            mad:
+                field: double_field
+                  non_existent_field: non_existent_value
               median_absolute_deviation:
+      search:
+        body:
+                _index: test
+        body:
+  - do:
+        body:
                 field: int_field
+              settings:
+  - match: { aggregations.mad_no_docs.value: null }
+  - match: { aggregations.mad_double.value: 100 }
+                properties:
+            mad_missing:
+            mad_double:
+              median_absolute_deviation:
+                compression: 500
+  - match: { hits.total: 3 }
+          aggs:
+---
+        bulk:
+                term:
+  - match: { aggregations.mad_int.value: 100 }
+        rest_total_hits_as_int: true
+              incomplete_field: 1000
+            mad:
+  - length: { hits.hits: 3 }
+              median_absolute_deviation:
+setup:
+            index: test
+"basic test":
+            mad_no_docs:
+      search:
+          aggs:
+                field: double_field
+"with setting compression":
                 compression: -1
+            - int_field: 100
+              median_absolute_deviation:
+      search:
+        body:
+"no documents":
+                field: int_field
+          aggs:
+            mad_int:
+          query:
+  - do:
+                  incomplete_field:
+            body:
+  - match: { aggregations.mad_double.value: 100 }
+  - match: { hits.total: 3 }
+                compression: 0
+                field: incomplete_field
+            - int_field: 300
+              median_absolute_deviation:
+                number_of_replicas: 0
+              double_field: 200.0
+  - match: { aggregations.mad_int.value: 100 }
+  - length: { hits.hits: 3 }
+      catch: /\[compression\] must be greater than 0. Found \[-1.0\] in \[mad\]/
+"bad arguments":
+        rest_total_hits_as_int: true
+  - do:
+          refresh: true
+  - do:
+              double_field: 100.0
+  - match: { aggregations.mad_missing.value: 1000 }
+              median_absolute_deviation:
+  - do:
+              incomplete_field: 2000
+                    type: double
+                  double_field:
+              median_absolute_deviation:
+                _index: test
+  - length: { hits.hits: 0 }
+  - match: { hits.total: 3 }
+        rest_total_hits_as_int: true
+          aggs:
+                field: int_field
+      catch: /\[compression\] must be greater than 0. Found \[0.0\] in \[mad\]/
+        body:
+      search:
+            mad:
+        rest_total_hits_as_int: true
+          aggs:
+  - length: { hits.hits: 3 }
+            mad_double:
+              median_absolute_deviation:
+                    type: integer
+              double_field: 300.0
+              filter:
+                field: int_field
+              mappings:
+        body:
+            bool:
+  - do:
+            - index:
+---
+      search:
+        rest_total_hits_as_int: true

@@ -1,98 +1,98 @@
-{
-    "settings": {
-        "number_of_shards": 1,
-        "number_of_replicas": 0
-    },
-    "mappings" : {
-        "properties" : {
-            "key" : {
-                "type" : "keyword"
             },
-            "num0" : {
-                "type" : "double"
-            },
-            "num1" : {
-                "type" : "double"
+            "zzz" : {
             },
             "num2" : {
-                "type" : "double"
+        "number_of_replicas": 0
             },
-            "num3" : {
-                "type" : "double"
+    "settings": {
             },
-            "num4" : {
-                "type" : "double"
+}
+            "date2" : {
             },
-            "str0" : {
-                "type" : "keyword"
-            },
-            "str1" : {
-                "type" : "keyword"
-            },
-            "str2" : {
-                "type" : "keyword"
-            },
-            "str3" : {
-                "type" : "keyword"
-            },
-            "int0" : {
                 "type" : "integer"
+                "format": "year_month_day"
             },
-            "int1" : {
-                "type" : "integer"
+{
+                "type" : "double"
+                "type" : "date",
+                "type" : "keyword"
+            "num0" : {
+            }
+                "type" : "date"
+            "bool0" : {
+                "type" : "date",
+                "type" : "double"
+                "type" : "boolean"
+            "datetime1" : {
             },
-            "int2" : {
-                "type" : "integer"
             },
             "int3" : {
+            "int0" : {
+                "format": "year_month_day"
+            "date0" : {
+                "format": "year_month_day"
+            "str0" : {
+            },
+            },
                 "type" : "integer"
-            },
-            "bool0" : {
-                "type" : "boolean"
-            },
+            "int2" : {
             "bool1" : {
-                "type" : "boolean"
+                "type" : "date",
+                "format": "hour_minute_second"
+                "type" : "date",
             },
             "bool2" : {
-                "type" : "boolean"
+    }
+            "num3" : {
             },
             "bool3" : {
                 "type" : "boolean"
-            },
-            "date0" : {
-                "type" : "date",
-                "format": "year_month_day"
-            },
-            "date1" : {
-                "type" : "date",
-                "format": "year_month_day"
-            },
-            "date2" : {
-                "type" : "date",
-                "format": "year_month_day"
-            },
-            "date3" : {
-                "type" : "date",
-                "format": "year_month_day"
+            "str2" : {
             },
             "time0" : {
-                "type" : "date",
-                "format": "date_time_no_millis"
-            },
-            "time1" : {
-                "type" : "date",
-                "format": "hour_minute_second"
-            },
             "datetime0" : {
+            },
+            },
+            "str3" : {
+                "type" : "integer"
+                "type" : "boolean"
+        "number_of_shards": 1,
                 "type" : "date",
+                "type" : "keyword"
+            "num4" : {
+                "type" : "integer"
                 "format": "date_time_no_millis"
             },
-            "datetime1" : {
-                "type" : "date"
             },
-            "zzz" : {
+            },
+            "int1" : {
+            },
+            },
+            },
                 "type" : "keyword"
-            }
+            "date3" : {
+            "num1" : {
+                "type" : "double"
+    },
+            "key" : {
+                "type" : "boolean"
+    "mappings" : {
+            "time1" : {
+                "type" : "keyword"
+            },
+                "type" : "date",
+                "format": "year_month_day"
+            "date1" : {
+            },
         }
-    }
-}
+                "type" : "double"
+                "format": "date_time_no_millis"
+                "type" : "keyword"
+                "type" : "keyword"
+            },
+        "properties" : {
+            },
+                "type" : "date",
+                "type" : "double"
+            "str1" : {
+            },

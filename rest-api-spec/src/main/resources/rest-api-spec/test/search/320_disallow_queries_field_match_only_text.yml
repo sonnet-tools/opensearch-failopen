@@ -1,141 +1,125 @@
----
-setup:
-  - skip:
-      version: " - 2.11.99"
-      reason: "match_only_text was added in 2.12"
-
-  - do:
-      indices.create:
-        index: test
-        body:
-          mappings:
-            properties:
-              text:
-                type: match_only_text
-                analyzer: standard
-                fields:
-                  raw:
-                    type: keyword
-              nested1:
-                type: nested
-
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - '{"index": {"_index": "test", "_id": "1"}}'
-          - '{"text" : "Some like it hot, some like it cold", "nested1": [{"foo": "bar1"}]}'
-          - '{"index": {"_index": "test", "_id": "2"}}'
-          - '{"text" : "Its cold outside, theres no kind of atmosphere", "nested1": [{"foo": "bar2"}]}'
-          - '{"index": {"_index": "test", "_id": "3"}}'
-          - '{"text" : "Baby its cold there outside", "nested1": [{"foo": "bar3"}]}'
-          - '{"index": {"_index": "test", "_id": "4"}}'
-          - '{"text" : "Outside it is cold and wet", "nested1": [{"foo": "bar4"}]}'
-
----
-teardown:
-
-  - do:
-      cluster.put_settings:
-        body:
-          transient:
-            search.allow_expensive_queries: null
-
----
-"Test disallow expensive queries":
-
-  ### Check for initial setting = null -> false
-  - do:
-      cluster.get_settings:
-        flat_settings: true
-
-  - is_false: search.allow_expensive_queries
-
-  ### Update setting to false
-  - do:
-      cluster.put_settings:
-        body:
-          transient:
-            search.allow_expensive_queries: "false"
-        flat_settings: true
-
-  - match: {transient: {search.allow_expensive_queries: "false"}}
-
-  ### Prefix
-  - do:
       catch: /\[prefix\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false. For optimised prefix queries on text fields please enable \[index_prefixes\]./
       search:
-        index: test
-        body:
-          query:
-            prefix:
-              text:
-                value: out
-
-  ### Fuzzy
-  - do:
-      catch: /\[fuzzy\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false./
-      search:
-        index: test
-        body:
-          query:
-            fuzzy:
-              text:
                 value: outwide
-
-  ### Regexp
-  - do:
-      catch: /\[regexp\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false./
-      search:
         index: test
-        body:
-          query:
-            regexp:
-              text:
-                value: .*ou.*id.*
-
-  ### Wildcard
-  - do:
-      catch: /\[wildcard\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false./
+          transient:
+        flat_settings: true
+                type: nested
       search:
-        index: test
-        body:
-          query:
-            wildcard:
-              text:
-                value: out?ide
-
-  ### Range on text
-  - do:
-      catch: /\[range\] queries on \[text\] or \[keyword\] fields cannot be executed when \'search.allow_expensive_queries\' is set to false./
-      search:
-        index: test
-        body:
-          query:
-            range:
-              text:
-                gte: "theres"
-
-  ### Range on keyword
-  - do:
-      catch: /\[range\] queries on \[text\] or \[keyword\] fields cannot be executed when \'search.allow_expensive_queries\' is set to false./
-      search:
-        index: test
-        body:
-          query:
-            range:
               text.raw:
-                gte : "Outside it is cold and wet"
-
-  ### Nested
-  - do:
-      catch: /\[joining\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false./
-      search:
-        index: test
         body:
+      indices.create:
+  ### Check for initial setting = null -> false
+                value: .*ou.*id.*
+        index: test
+  ### Wildcard
+            wildcard:
           query:
             nested:
-              path: "nested1"
-              query:
-                bool:
+              text:
+      cluster.put_settings:
+        body:
+"Test disallow expensive queries":
+      search:
+      cluster.get_settings:
                   must: [{"match" : {"nested1.foo" : "bar2"}}]
+              text:
+                gte: "theres"
+        body:
+  - do:
+        index: test
+      catch: /\[range\] queries on \[text\] or \[keyword\] fields cannot be executed when \'search.allow_expensive_queries\' is set to false./
+          - '{"text" : "Some like it hot, some like it cold", "nested1": [{"foo": "bar1"}]}'
+            fuzzy:
+          - '{"index": {"_index": "test", "_id": "3"}}'
+  - do:
+                bool:
+        index: test
+              nested1:
+                  raw:
+      search:
+                value: out
+        index: test
+              text:
+        body:
+            range:
+setup:
+            properties:
+          - '{"text" : "Baby its cold there outside", "nested1": [{"foo": "bar3"}]}'
+  - do:
+  - do:
+            range:
+            prefix:
+      search:
+      catch: /\[regexp\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false./
+  - do:
+          mappings:
+  - skip:
+        index: test
+          - '{"index": {"_index": "test", "_id": "4"}}'
+        body:
+              path: "nested1"
+      reason: "match_only_text was added in 2.12"
+                fields:
+      search:
+          query:
+      cluster.put_settings:
+---
+  - do:
+        body:
+        index: test
+teardown:
+          query:
+              query:
+      catch: /\[wildcard\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false./
+  - do:
+              text:
+        index: test
+  ### Nested
+        body:
+      bulk:
+          query:
+                type: match_only_text
+  - match: {transient: {search.allow_expensive_queries: "false"}}
+  - is_false: search.allow_expensive_queries
+  ### Fuzzy
+            regexp:
+            search.allow_expensive_queries: "false"
+      catch: /\[range\] queries on \[text\] or \[keyword\] fields cannot be executed when \'search.allow_expensive_queries\' is set to false./
+                gte : "Outside it is cold and wet"
+          - '{"index": {"_index": "test", "_id": "1"}}'
+        refresh: true
+      search:
+        body:
+          - '{"text" : "Outside it is cold and wet", "nested1": [{"foo": "bar4"}]}'
+      catch: /\[joining\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false./
+        body:
+  - do:
+          query:
+              text:
+      catch: /\[fuzzy\] queries cannot be executed when \'search.allow_expensive_queries\' is set to false./
+              text:
+                analyzer: standard
+        body:
+          - '{"text" : "Its cold outside, theres no kind of atmosphere", "nested1": [{"foo": "bar2"}]}'
+            search.allow_expensive_queries: null
+  - do:
+  ### Range on text
+        body:
+        flat_settings: true
+      version: " - 2.11.99"
+                    type: keyword
+          query:
+---
+---
+          - '{"index": {"_index": "test", "_id": "2"}}'
+  ### Regexp
+  ### Range on keyword
+                value: out?ide
+          transient:
+  - do:
+  ### Update setting to false
+  ### Prefix
+  - do:
+          query:
+  - do:

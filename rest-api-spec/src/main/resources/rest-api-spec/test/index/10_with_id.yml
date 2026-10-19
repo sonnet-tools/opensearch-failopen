@@ -1,29 +1,24 @@
----
-"Index with ID":
-
- - do:
       index:
-          index:  test-weird-index-中文
-          id:     1
-          body:   { foo: bar }
-
- - match:   { _index:   test-weird-index-中文 }
- - match:   { _id:      "1"}
  - match:   { _version: 1}
-
- - do:
+          id:     1
       get:
-          index:  test-weird-index-中文
-          id:     1
-
  - match:   { _index:   test-weird-index-中文 }
- - match:   { _id:      "1"}
- - match:   { _version: 1}
- - match:   { _source: { foo: bar }}
-
- - do:
-      catch: bad_request
       index:
-          index:  idx
           id:     aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+"Index with ID":
+ - do:
           body:   { foo: bar }
+          id:     1
+---
+ - match:   { _index:   test-weird-index-中文 }
+ - do:
+ - match:   { _id:      "1"}
+          index:  test-weird-index-中文
+ - do:
+          index:  test-weird-index-中文
+ - match:   { _version: 1}
+          body:   { foo: bar }
+ - match:   { _id:      "1"}
+      catch: bad_request
+          index:  idx
+ - match:   { _source: { foo: bar }}

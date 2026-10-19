@@ -1,195 +1,182 @@
+  - match: { hits.total: 1 }
+      search:
+            match:
+      search:
+  - match: { hits.total: 1 }
+  - match: { hits.total: 2 }
+          query:
 # Integration tests for phone analysis components
-#
----
-"Index phone number content":
   - do:
-      indices.create:
-        index: test
-        body:
+  - do:
+  - match: { hits.total: 1 }
           settings:
-            index:
-              analysis:
-                analyzer:
-                  phone-ch:
-                    type: "phone"
-                    "phone-region": "CH"
-                  phone-search-ch:
-                    type: "phone-search"
-                    "phone-region": "CH"
-          mappings:
-            properties:
-              phone:
-                type: text
-                analyzer: "phone"
-                search_analyzer: "phone-search"
-              phone-ch:
-                type: text
-                analyzer: "phone-ch"
-                search_analyzer: "phone-search-ch"
-
-  - do:
       index:
-        index:  test
-        id:     1
-        body:   { "phone": "+41 58 316 10 10", "phone-ch": "058 316 10 10" }
-  - do:
-      index:
-        index:  test
-        id:     2
-        body:   { "phone": "+41 58 316 99 99", "phone-ch": "058 316 99 99" }
-  - do:
-      index:
-        index:  test
-        id:     3
-        # number not used in the examples below, just present to make sure that it's never matched
-        body:   { "phone": "+41 12 345 67 89", "phone-ch": "012 345 67 89" }
-  - do:
-      index:
-        index:  test
-        id:     4
-        # germany has a different phone number length, but for this test we ignore it and pretend they're the same
-        body:   { "phone": "+49 58 316 10 10", "phone-ch": "+49 58 316 10 10" }
-  - do:
-      index:
-        index:  test
-        id:     5
-        body:   { "phone": "+1-888-280-4331", "phone-ch": "+1-888-280-4331" }
-  - do:
-      index:
-        index:  test
-        id:     6
-        body:   { "phone": "tel:+441344840400", "phone-ch": "tel:+441344840400" }
-  - do:
-      indices.refresh: {}
-
-  # international format in document & search will always work
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            match:
-              "phone": "+41583161010"
-  - match: { hits.total: 1 }
-
-  # correct national format & international format in search will always work
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            match:
-              "phone-ch": "+41583161010"
-  - match: { hits.total: 1 }
-
-  # national format without country specified won't work
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            match:
-              "phone": "0583161010"
-  - match: { hits.total: 0 }
-
-  # correct national format with country specified in document & search will always work
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            match:
-              "phone-ch": "0583161010"
-  - match: { hits.total: 1 }
-
-  # search-as-you-type style query
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            match:
-              "phone": "+4158316"
-  - match: { hits.total: 2 }
-
-  # search-as-you-type style query
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            match:
-              "phone-ch": "058316"
-  - match: { hits.total: 2 }
-
-  # international format in document & search will always work
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            match:
-              "phone": "+1 888 280 4331"
-  - match: { hits.total: 1 }
-
-  # international format in document & search will always work
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            match:
-              "phone-ch": "+1 888 280 4331"
-  - match: { hits.total: 1 }
-
-  # national format in search won't work if no country is specified
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            match:
-              "phone": "888 280 4331"
-  - match: { hits.total: 0 }
-
-  # document & search have a tel: prefix
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: test
-        body:
-          query:
-            match:
-              "phone": "tel:+441344840400"
-  - match: { hits.total: 1 }
-
   # only document has a tel: prefix
-  - do:
-      search:
-        rest_total_hits_as_int: true
         index: test
-        body:
-          query:
+            index:
+  # national format in search won't work if no country is specified
+              "phone": "tel:+1 888 280 4331"
+  - do:
+  - match: { hits.total: 1 }
+      index:
+        index: test
+  - do:
+              "phone": "+1 888 280 4331"
+      index:
+  # national format without country specified won't work
             match:
               "phone": "+441344840400"
-  - match: { hits.total: 1 }
-
-  # only search has a tel: prefix
+  - match: { hits.total: 2 }
+      indices.refresh: {}
   - do:
-      search:
-        rest_total_hits_as_int: true
+          query:
+        body:   { "phone": "+1-888-280-4331", "phone-ch": "+1-888-280-4331" }
+        id:     5
+          query:
+  - do:
+            match:
+            match:
+        body:
+              "phone-ch": "+1 888 280 4331"
+      index:
+        id:     6
         index: test
+  # document & search have a tel: prefix
+      indices.create:
+  # international format in document & search will always work
+  - do:
+        body:
+        rest_total_hits_as_int: true
+  - match: { hits.total: 1 }
+      search:
+        index: test
+        rest_total_hits_as_int: true
+          query:
+  - do:
+          query:
+                    type: "phone-search"
+              phone:
+        index:  test
+        index: test
+                analyzer:
+              phone-ch:
         body:
           query:
-            match:
-              "phone": "tel:+1 888 280 4331"
+          query:
+          query:
+  - do:
+        # number not used in the examples below, just present to make sure that it's never matched
+        index: test
+              "phone": "0583161010"
+  - do:
+        body:
+            properties:
+        id:     4
+  - do:
+  # search-as-you-type style query
+  - do:
+        body:
+        rest_total_hits_as_int: true
+                    "phone-region": "CH"
+  # international format in document & search will always work
+        index: test
+  # correct national format & international format in search will always work
+        body:
+        body:   { "phone": "+41 58 316 10 10", "phone-ch": "058 316 10 10" }
+        index:  test
+        rest_total_hits_as_int: true
+  - match: { hits.total: 0 }
+                search_analyzer: "phone-search-ch"
+        index: test
+        body:   { "phone": "tel:+441344840400", "phone-ch": "tel:+441344840400" }
+              analysis:
   - match: { hits.total: 1 }
+        index:  test
+  - match: { hits.total: 1 }
+      search:
+              "phone": "+4158316"
+            match:
+          query:
+        index: test
+  # correct national format with country specified in document & search will always work
+                type: text
+              "phone-ch": "+41583161010"
+              "phone": "888 280 4331"
+        rest_total_hits_as_int: true
+      search:
+        index:  test
+            match:
+        body:   { "phone": "+41 58 316 99 99", "phone-ch": "058 316 99 99" }
+                search_analyzer: "phone-search"
+        body:   { "phone": "+49 58 316 10 10", "phone-ch": "+49 58 316 10 10" }
+      search:
+        rest_total_hits_as_int: true
+  - do:
+            match:
+  - do:
+        rest_total_hits_as_int: true
+      search:
+      search:
+  - do:
+      index:
+        body:
+        index: test
+        rest_total_hits_as_int: true
+  - do:
+  - do:
+        body:
+                analyzer: "phone"
+          mappings:
+  - do:
+        index:  test
+          query:
+      search:
+  - do:
+          query:
+        body:   { "phone": "+41 12 345 67 89", "phone-ch": "012 345 67 89" }
+  # only search has a tel: prefix
+  # search-as-you-type style query
+                  phone-search-ch:
+        body:
+                type: text
+  - match: { hits.total: 1 }
+              "phone-ch": "0583161010"
+        body:
+      index:
+        index: test
+                    type: "phone"
+      search:
+        rest_total_hits_as_int: true
+              "phone-ch": "058316"
+          query:
+      search:
+        index: test
+        # germany has a different phone number length, but for this test we ignore it and pretend they're the same
+        body:
+---
+                analyzer: "phone-ch"
+  - match: { hits.total: 0 }
+#
+        id:     1
+              "phone": "tel:+441344840400"
+  # international format in document & search will always work
+        rest_total_hits_as_int: true
+        rest_total_hits_as_int: true
+        body:
+              "phone": "+41583161010"
+            match:
+                    "phone-region": "CH"
+        body:
+            match:
+        id:     2
+        rest_total_hits_as_int: true
+        index: test
+  - do:
+        id:     3
+            match:
+                  phone-ch:
+            match:
+            match:
+        index:  test
+"Index phone number content":
+      search:

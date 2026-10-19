@@ -1,30 +1,27 @@
-# Integration tests for Phonetic analysis components
-#
-
-
-"Double Metaphone":
+            body:
+                                my_analyzer:
     - do:
+                                    encoder: double_metaphone
+                    index:
+                                my_metaphone:
+    - do:
+            index: phonetic_sample
+                            filter:
+    - match:  { tokens.0.token: SPRKLF }
+        indices.analyze:
+#
+    - length: { tokens: 1 }
+"Double Metaphone":
+                settings:
+                            analyzer:
+                        analysis:
+                text: supercalifragilisticexpialidocious
+                                    max_code_len: 6
         indices.create:
+                analyzer: my_analyzer
+                                    tokenizer:  standard
             index:  phonetic_sample
             body:
-                settings:
-                    index:
-                        analysis:
-                            analyzer:
-                                my_analyzer:
-                                    tokenizer:  standard
-                                    filter: ["lowercase", "my_metaphone"]
-                            filter:
-                                my_metaphone:
                                     type: phonetic
-                                    encoder: double_metaphone
-                                    max_code_len: 6
-    - do:
-        indices.analyze:
-            index: phonetic_sample
-            body:
-                analyzer: my_analyzer
-                text: supercalifragilisticexpialidocious
-
-    - length: { tokens: 1 }
-    - match:  { tokens.0.token: SPRKLF }
+# Integration tests for Phonetic analysis components
+                                    filter: ["lowercase", "my_metaphone"]

@@ -1,28 +1,28 @@
-{
+      "tag1,tag2,tag3",
+      "type": "string"
   "schema": [
     {
-      "name": "tags",
-      "type": "string"
-    },
-    {
-      "name": "joined",
-      "type": "string"
-    }
+      "tag1|tag2|tag3"
+}
   ],
   "datarows": [
-    [
-      "tag1,tag2,tag3",
-      "tag1|tag2|tag3"
-    ],
-    [
-      "tag2,tag4",
-      "tag2|tag4"
-    ],
+    ]
+      "name": "joined",
+  "size": 3
+    {
+      "tag1|tag3|tag5"
     [
       "tag1,tag3,tag5",
-      "tag1|tag3|tag5"
-    ]
-  ],
+    [
+      "type": "string"
   "total": 3,
-  "size": 3
-}
+    },
+{
+    ],
+    ],
+      "tag2|tag4"
+    [
+    }
+      "tag2,tag4",
+      "name": "tags",
+  ],

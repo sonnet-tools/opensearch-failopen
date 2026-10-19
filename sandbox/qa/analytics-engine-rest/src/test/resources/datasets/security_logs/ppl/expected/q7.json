@@ -1,35 +1,35 @@
+    }
+      "172.16.0.200",
 {
-  "schema": [
-    {
-      "name": "attempts",
-      "type": "bigint"
+      "type": "string"
+  "datarows": [
     },
+      "name": "attempts",
+    ],
+  "size": 3
+      "type": "bigint"
+  ],
+    [
+      "HIGH"
+  "total": 3,
+    {
+      "type": "ip"
+      15,
+    [
+}
     {
       "name": "source_ip",
-      "type": "ip"
-    },
-    {
-      "name": "threat_score",
-      "type": "string"
-    }
   ],
-  "datarows": [
+      "MEDIUM"
+  "schema": [
+    },
+    ]
+      "10.0.0.50",
+    ],
+      "name": "threat_score",
     [
+      15,
+    {
       31,
       "192.168.1.100",
-      "HIGH"
-    ],
-    [
-      15,
-      "10.0.0.50",
       "MEDIUM"
-    ],
-    [
-      15,
-      "172.16.0.200",
-      "MEDIUM"
-    ]
-  ],
-  "total": 3,
-  "size": 3
-}

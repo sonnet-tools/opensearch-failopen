@@ -1,25 +1,25 @@
-{
-  "cluster.put_weighted_routing": {
-    "documentation": {
-      "url": "https://opensearch.org/docs/latest/api-reference/cluster-api/cluster-awareness",
-      "description": "Updates weighted shard routing weights"
-    },
-    "stability": "stable",
-    "url": {
-      "paths": [
-        {
-          "path": "/_cluster/routing/awareness/{attribute}/weights",
-          "methods": [
-            "PUT"
-          ],
-          "parts": {
-            "attribute": {
               "type": "string",
+      "paths": [
+  }
+    }
+            "PUT"
               "description": "Awareness attribute name"
-            }
+  "cluster.put_weighted_routing": {
+    "stability": "stable",
+        {
+          "parts": {
+    "url": {
+      "url": "https://opensearch.org/docs/latest/api-reference/cluster-api/cluster-awareness",
+{
+          "methods": [
+            "attribute": {
+          "path": "/_cluster/routing/awareness/{attribute}/weights",
+    },
           }
+          ],
         }
       ]
-    }
-  }
+      "description": "Updates weighted shard routing weights"
+    "documentation": {
 }
+            }

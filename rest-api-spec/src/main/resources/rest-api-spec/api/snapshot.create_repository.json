@@ -1,52 +1,52 @@
 {
-  "snapshot.create_repository":{
-    "documentation":{
       "url":"https://opensearch.org/docs/latest/api-reference/snapshots/create-repository/",
-      "description":"Creates a repository."
+    "body":{
     },
+        }
     "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_snapshot/{repository}",
-          "methods":[
-            "PUT",
-            "POST"
           ],
+    }
+    },
+}
+      "verify":{
+    "url":{
+        "description":"Explicit operation timeout"
+              "description":"A repository name"
+      },
           "parts":{
             "repository":{
-              "type":"string",
-              "description":"A repository name"
-            }
-          }
         }
-      ]
-    },
-    "params":{
-      "master_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to master node",
         "deprecated":{
-          "version":"2.0.0",
-          "description":"To support inclusive language, use 'cluster_manager_timeout' instead."
-        }
-      },
+      "master_timeout":{
+      "paths":[
       "cluster_manager_timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout for connection to cluster-manager node"
-      },
-      "timeout":{
-        "type":"time",
-        "description":"Explicit operation timeout"
-      },
-      "verify":{
+              "type":"string",
+            }
         "type":"boolean",
+        "type":"time",
+        "type":"time",
+      },
+      },
         "description":"Whether to verify the repository after creation"
-      }
-    },
-    "body":{
-      "description":"The repository definition",
-      "required":true
-    }
   }
-}
+        "type":"time",
+          "description":"To support inclusive language, use 'cluster_manager_timeout' instead."
+            "PUT",
+    "documentation":{
+    },
+      "timeout":{
+      "required":true
+          "path":"/_snapshot/{repository}",
+        "description":"Explicit operation timeout for connection to cluster-manager node"
+      ]
+      }
+          "version":"2.0.0",
+    "params":{
+        {
+        "description":"Explicit operation timeout for connection to master node",
+      "description":"The repository definition",
+          "methods":[
+  "snapshot.create_repository":{
+      "description":"Creates a repository."
+          }
+            "POST"

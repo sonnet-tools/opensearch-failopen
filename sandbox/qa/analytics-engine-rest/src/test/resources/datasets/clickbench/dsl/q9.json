@@ -1,31 +1,31 @@
-{
-  "from": 0,
-  "size": 0,
-  "timeout": "1m",
+            "u": "desc"
   "aggregations": {
-    "RegionID": {
-      "terms": {
-        "field": "RegionID",
         "size": 10,
-        "min_doc_count": 1,
-        "shard_min_doc_count": 0,
+        }
+      "aggregations": {
+  "timeout": "1m",
+      },
         "show_term_doc_count_error": false,
+            "_key": "asc"
+  }
+        "u": {
+        "field": "RegionID",
+        "shard_min_doc_count": 0,
+    }
+    "RegionID": {
+}
+        ]
+  "from": 0,
+            "field": "UserID"
+        "min_doc_count": 1,
+          }
+          }
+      }
+  "size": 0,
+          },
+{
+          "cardinality": {
+      "terms": {
         "order": [
           {
-            "u": "desc"
-          },
           {
-            "_key": "asc"
-          }
-        ]
-      },
-      "aggregations": {
-        "u": {
-          "cardinality": {
-            "field": "UserID"
-          }
-        }
-      }
-    }
-  }
-}

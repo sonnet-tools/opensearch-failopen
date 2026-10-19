@@ -1,73 +1,70 @@
----
-teardown:
-  - do:
-      ingest.delete_pipeline:
-        id: "1"
-        ignore: 404
-
----
-"Test JSON Processor":
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
           {
-            "processors": [
-              {
-                "json" : {
-                  "field" : "foo_object"
-                }
-              },
-              {
-                "json" : {
+                  "field" : "foo_string"
                   "field" : "foo_array"
                 }
-              },
-              {
-                "json" : {
-                  "field" : "foo_null"
-                }
-              },
-              {
-                "json" : {
-                  "field" : "foo_string"
-                }
-              },
-              {
-                "json" : {
-                  "field" : "foo_number"
-                }
-              },
-              {
-                "json" : {
-                  "field" : "foo_boolean"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
         index: test
-        id: 1
-        pipeline: "1"
-        body: {
-          foo_object: "{\"hello\": \"world\"}",
-          foo_array: "[1, 2, 3]",
-          foo_null: null,
+              {
+                "json" : {
+        index: test
           foo_string: "\"bla bla\"",
-          foo_number: 3,
-          foo_boolean: "true"
-        }
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.foo_object.hello: "world" }
-  - match: { _source.foo_array.0: 1 }
-  - match: { _source.foo_string: "bla bla" }
-  - match: { _source.foo_number: 3 }
   - is_true:  _source.foo_boolean
+                  "field" : "foo_boolean"
+              {
+          foo_array: "[1, 2, 3]",
   - is_false: _source.foo_null
+  - match: { _source.foo_number: 3 }
+teardown:
+          foo_object: "{\"hello\": \"world\"}",
+                "json" : {
+        body: {
+              },
+              }
+              },
+              {
+        ignore: 404
+  - do:
+  - match: { acknowledged: true }
+              },
+---
+              },
+          }
+                }
+"Test JSON Processor":
+        pipeline: "1"
+        id: "1"
+      get:
+  - match: { _source.foo_object.hello: "world" }
+              {
+        id: 1
+                "json" : {
+        }
+                }
+                  "field" : "foo_object"
+                "json" : {
+---
+            "processors": [
+      ingest.delete_pipeline:
+                "json" : {
+                }
+          foo_number: 3,
+                  "field" : "foo_null"
+        id: 1
+      ingest.put_pipeline:
+  - match: { _source.foo_string: "bla bla" }
+        id: "1"
+      index:
+          foo_boolean: "true"
+  - do:
+              },
+  - match: { _source.foo_array.0: 1 }
+                }
+                }
+            ]
+        body:  >
+              {
+  - do:
+              {
+  - do:
+                  "field" : "foo_number"
+                "json" : {
+          foo_null: null,

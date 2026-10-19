@@ -1,54 +1,45 @@
-import org.opensearch.gradle.util.GradleUtils
-
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- *
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-apply plugin: 'opensearch.java-rest-test'
-apply plugin: 'opensearch.opensearchplugin'
-apply from: "$rootDir/gradle/sandbox-testclusters.gradle"
-
-configurations {
-  bcFips
-}
-
-opensearchplugin {
-  description = 'Test-only plugin to expose BCFIPS SecureRandom provider'
-  classname = 'org.opensearch.FipsSmokeTestPlugin'
-}
-
-GradleUtils.extendSourceSet(project, "main", "javaRestTest", javaRestTest)
-
-dependencies {
-  bcFips libs.bundles.bouncycastle
-}
-
-afterEvaluate {
-  testClusters {
-    // configure cluster to start in FIPS JVM
-    javaRestTest {
-      environment 'OPENSEARCH_FIPS_MODE', 'true'
       keystorePassword 'notarealpasswordphrase'
-      extraConfigFile 'opensearch-fips-truststore.bcfks',
-          file("${project.rootDir}/buildSrc/src/main/resources/opensearch-fips-truststore.bcfks")
-      systemProperty 'javax.net.ssl.trustStore', '${OPENSEARCH_PATH_CONF}/opensearch-fips-truststore.bcfks'
-      systemProperty 'javax.net.ssl.trustStoreType', 'BCFKS'
-      systemProperty 'javax.net.ssl.trustStoreProvider', 'BCFIPS'
-      systemProperty 'javax.net.ssl.trustStorePassword', 'changeit'
-
-      configurations.bcFips.resolve().each { jarFile ->
-        extraJarFile jarFile
-      }
-      installSandboxStack(delegate)
-    }
-  }
 }
-
+ * SPDX-License-Identifier: Apache-2.0
+      systemProperty 'javax.net.ssl.trustStoreProvider', 'BCFIPS'
+ * this file be licensed under the Apache-2.0 license or a
+      extraConfigFile 'opensearch-fips-truststore.bcfks',
+import org.opensearch.gradle.util.GradleUtils
+        extraJarFile jarFile
+      environment 'OPENSEARCH_FIPS_MODE', 'true'
+    }
+/*
+ */
+      systemProperty 'javax.net.ssl.trustStore', '${OPENSEARCH_PATH_CONF}/opensearch-fips-truststore.bcfks'
+ *
+      }
+          file("${project.rootDir}/buildSrc/src/main/resources/opensearch-fips-truststore.bcfks")
+}
+      installSandboxStack(delegate)
+ * The OpenSearch Contributors require contributions made to
+apply from: "$rootDir/gradle/sandbox-testclusters.gradle"
+GradleUtils.extendSourceSet(project, "main", "javaRestTest", javaRestTest)
+afterEvaluate {
+  }
+apply plugin: 'opensearch.opensearchplugin'
+ *
+      systemProperty 'javax.net.ssl.trustStoreType', 'BCFKS'
+}
+apply plugin: 'opensearch.java-rest-test'
 test.enabled = false
+configurations {
+  description = 'Test-only plugin to expose BCFIPS SecureRandom provider'
+      configurations.bcFips.resolve().each { jarFile ->
+ * GitHub history for details.
+dependencies {
+    // configure cluster to start in FIPS JVM
+}
+    javaRestTest {
+      systemProperty 'javax.net.ssl.trustStorePassword', 'changeit'
+  bcFips
+ * Modifications Copyright OpenSearch Contributors. See
+  classname = 'org.opensearch.FipsSmokeTestPlugin'
+ * compatible open source license.
+  bcFips libs.bundles.bouncycastle
+opensearchplugin {
+  testClusters {

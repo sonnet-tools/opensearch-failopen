@@ -1,48 +1,48 @@
-{
-  "remote_store.stats":{
-    "documentation":{
-      "url": "https://opensearch.org/docs/latest/tuning-your-cluster/availability-and-recovery/remote-store/remote-store-stats-api/",
-      "description":"Stats for remote store."
-    },
-    "stability":"experimental",
+          "parts":{
     "url":{
-      "paths":[
-        {
-          "path":"/_remotestore/stats/{index}",
-          "methods":[
-            "GET"
-          ],
-          "parts":{
-            "index":{
-              "type":"string",
-              "description": "Index name to fetch stats"
-            }
-          }
-        },
-        {
-          "path":"/_remotestore/stats/{index}/{shard_id}",
-          "methods":[
-            "GET"
-          ],
-          "parts":{
-            "index":{
-              "type":"string",
-              "description":"Index name to fetch stats"
-            },
             "shard_id":{
-              "type":"string",
-              "description":"Specific shard to fetch stats"
-            }
-          }
-        }
-      ]
     },
+          "methods":[
+          "parts":{
+          }
     "params":{
-      "timeout":{
+          }
+              "type":"string",
+      "paths":[
+      "url": "https://opensearch.org/docs/latest/tuning-your-cluster/availability-and-recovery/remote-store/remote-store-stats-api/",
+    "documentation":{
         "type":"time",
-        "default":"10s",
+              "description":"Index name to fetch stats"
+{
+      "timeout":{
         "description":"Max time each individual stats request should take."
+        "default":"10s",
+              "description": "Index name to fetch stats"
+            "GET"
+              "type":"string",
+      "description":"Stats for remote store."
+  "remote_store.stats":{
+              "type":"string",
+            }
+            }
+        },
+          "path":"/_remotestore/stats/{index}/{shard_id}",
+        {
+            },
+          "path":"/_remotestore/stats/{index}",
+            "index":{
+        }
+            "GET"
+          "methods":[
+        {
+          ],
       }
+          ],
     }
+    "stability":"experimental",
+            "index":{
+              "description":"Specific shard to fetch stats"
+    },
   }
+      ]
 }

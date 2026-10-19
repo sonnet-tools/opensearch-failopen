@@ -1,71 +1,54 @@
----
+"Test put and reset persistent settings":
+            cluster.routing.allocation.enable: "none"
 "Test put and reset transient settings":
   - do:
-      cluster.put_settings:
-        body:
-          transient:
+  - match: {persistent: {cluster.routing.allocation.enable: "none"}}
             cluster.routing.allocation.enable: "none"
-        flat_settings: true
-
-  - match: {transient: {cluster.routing.allocation.enable: "none"}}
-
   - do:
+        flat_settings: true
+  - match: {transient: {cluster.routing.allocation.enable: "none"}}
+  - match: {transient: {}}
+          persistent:
       cluster.get_settings:
-        flat_settings: true
-
-  - match: {transient: {cluster.routing.allocation.enable: "none"}}
-
   - do:
-      cluster.put_settings:
-        body:
+  - match: {persistent: {cluster.routing.allocation.enable: "none"}}
           transient:
             cluster.routing.allocation.enable: null
-        flat_settings: true
-
-  - match: {transient: {}}
-
-  - do:
-      cluster.get_settings:
-        flat_settings: true
-
-  - match: {transient: {}}
----
-"Test put and reset persistent settings":
-  - do:
       cluster.put_settings:
-        body:
-          persistent:
-            cluster.routing.allocation.enable: "none"
-        flat_settings: true
-
-  - match: {persistent: {cluster.routing.allocation.enable: "none"}}
-
-  - do:
-      cluster.get_settings:
-        flat_settings: true
-
-  - match: {persistent: {cluster.routing.allocation.enable: "none"}}
-
-  - do:
       cluster.put_settings:
-        body:
-          persistent:
-            cluster.routing.allocation.enable: null
         flat_settings: true
-
+  - match: {transient: {cluster.routing.allocation.enable: "none"}}
   - match: {persistent: {}}
-
   - do:
-      cluster.get_settings:
-        flat_settings: true
-
-  - match: {persistent: {}}
-
----
-"Test get a default settings":
-
+          transient:
+  - do:
  - do:
+---
+  - match: {persistent: {}}
+        flat_settings: true
+  - match: {transient: {}}
+  - do:
+  - do:
       cluster.get_settings:
         include_defaults: true
-
+      cluster.get_settings:
  - match: {defaults.node.attr.testattr: "test"}
+        body:
+        flat_settings: true
+          persistent:
+  - do:
+        flat_settings: true
+        flat_settings: true
+---
+        body:
+      cluster.get_settings:
+---
+        flat_settings: true
+        body:
+            cluster.routing.allocation.enable: null
+      cluster.put_settings:
+        flat_settings: true
+"Test get a default settings":
+      cluster.put_settings:
+      cluster.get_settings:
+        body:

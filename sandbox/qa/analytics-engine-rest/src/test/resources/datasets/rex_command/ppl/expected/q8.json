@@ -1,52 +1,52 @@
-{
-  "schema": [
-    {
-      "name": "msgcontent",
-      "type": "string"
-    },
-    {
-      "name": "service",
-      "type": "string"
-    }
-  ],
+      "analytics"
   "datarows": [
+    },
+      "proxy"
+}
     [
-      "timeout occurred",
       "auth"
-    ],
+    {
     [
+    [
+  ],
+    [
+    ],
+  ],
       "transaction completed",
-      "payment"
-    ],
     [
-      "rate limit exceeded",
+      "type": "string"
+      "name": "msgcontent",
+  "size": 9
       "auth"
+      "user \\\"admin\\\" logged in",
+      "admin"
+      "type": "string"
     ],
-    [
+      "security"
+    ],
       "connection pool exhausted",
+      "query executed",
+    [
+      "name": "service",
+    [
       "db"
     ],
     [
-      "cache hit",
-      "cache"
-    ],
-    [
-      "query executed",
-      "analytics"
-    ],
-    [
-      "user \\\"admin\\\" logged in",
-      "admin"
-    ],
-    [
+      "payment"
+      "timeout occurred",
       "error: \\\"connection refused\\\"",
-      "proxy"
+    ],
+    ],
+    ]
+      "intrusion detected",
+    }
+      "cache hit",
     ],
     [
-      "intrusion detected",
-      "security"
-    ]
-  ],
+      "cache"
   "total": 9,
-  "size": 9
-}
+    {
+      "rate limit exceeded",
+{
+    ],
+  "schema": [

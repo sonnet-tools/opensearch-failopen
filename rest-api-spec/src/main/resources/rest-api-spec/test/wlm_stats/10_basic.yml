@@ -1,135 +1,123 @@
----
-"Custom size param still returns headers":
-  - skip:
-        version: " - 3.0.0"
-        reason: "wlm_stats_list API added after 3.0.0"
-  - do:
-      wlm_stats_list:
-        size: 1
-        v: true
-  - is_true: $body
   - match:
-      $body: /TOTAL_REJECTIONS/
-
----
-"Sort by node_id asc does not error":
-  - skip:
-      version: " - 3.0.0"
-      reason: "wlm_stats_list API added after 3.0.0"
-  - do:
-      wlm_stats_list:
-        sort: node_id
-        order: asc
-  - is_true: $body
-  - match:
-      $body: /DEFAULT_WORKLOAD_GROUP/
-
----
 "Sort by workload_group_id desc does not error":
   - skip:
       version: " - 3.0.0"
-      reason: "wlm_stats_list API added after 3.0.0"
-  - do:
-      wlm_stats_list:
-        sort: workload_group
-        order: desc
-  - is_true: $body
-  - match:
-      $body: /DEFAULT_WORKLOAD_GROUP/
-
 ---
-"Invalid sort field returns error":
-  - skip:
-      version: " - 3.0.0"
-      reason: "wlm_stats_list API added after 3.0.0"
-  - do:
-      catch: bad_request
       wlm_stats_list:
-        sort: memory_usage
-        order: desc
-  - match:
-      error.reason: "Invalid value for 'sort'. Allowed: 'node_id', 'workload_group'"
-
----
-"Invalid sort order returns error":
-  - skip:
-      version: " - 3.0.0"
-      reason: "wlm_stats_list API added after 3.0.0"
-  - do:
-      catch: bad_request
-      wlm_stats_list:
-        order: upside_down
-  - match:
-          error.reason: "Invalid value for 'order'. Allowed: 'asc', 'desc'"
-
----
-"Invalid token returns 400":
-  - skip:
-      version: " - 3.0.0"
-      reason: "wlm_stats_list API added after 3.0.0"
-  - do:
-      catch: bad_request
-      wlm_stats_list:
-        next_token: "abcdef123456"
-
   - match: { error: "Pagination state has changed (e.g., new workload groups added or removed). Please restart pagination from the beginning by omitting the 'next_token' parameter." }
-
----
-"Default request returns 200 and contains expected keys":
   - skip:
-      version: " - 3.0.0"
+---
+      error.reason: "Invalid value for 'size'. Allowed range: 1 to 100"
       reason: "wlm_stats_list API added after 3.0.0"
+      version: " - 3.0.0"
+  - match:
+  - skip:
+        size: -1
+      error.reason: "Invalid value for 'sort'. Allowed: 'node_id', 'workload_group'"
+        reason: "wlm_stats_list API added after 3.0.0"
+      version: " - 3.0.0"
+  - do:
+      version: " - 3.0.0"
+      wlm_stats_list:
+      wlm_stats_list:
+  - is_true: $body
+  - do:
+      reason: "wlm_stats_list API added after 3.0.0"
+  - is_true: $body
+  - do:
+---
+---
+          error.reason: "Invalid value for 'order'. Allowed: 'asc', 'desc'"
+      $body: /TOTAL_REJECTIONS/
+      wlm_stats_list:
+  - skip:
+        sort: node_id
+      version: " - 3.0.0"
+      error.reason: "Invalid value for 'size'. Allowed range: 1 to 100"
+  - skip:
+      reason: "wlm_stats_list API added after 3.0.0"
+      reason: "wlm_stats_list API added after 3.0.0"
+"Sort by node_id asc does not error":
+  - do:
+      $body: /DEFAULT_WORKLOAD_GROUP/
+  - match:
+---
+      wlm_stats_list:
+  - match:
+  - match:
+        size: 1000
+"Invalid token returns 400":
+      version: " - 3.0.0"
+        v: true
+      version: " - 3.0.0"
+        order: asc
+  - do:
+        order: desc
+        order: upside_down
+        sort: workload_group
+"Invalid sort order returns error":
+      catch: bad_request
   - do:
       wlm_stats_list:
+---
+      catch: bad_request
+      $body: /NODE_ID/
+        version: " - 3.0.0"
+  - skip:
+  - skip:
+        size: 1
+      catch: bad_request
+  - match:
+"Max allowed size param returns success":
+"Invalid sort field returns error":
+      wlm_stats_list:
+      version: " - 3.0.0"
+        sort: memory_usage
+      reason: "wlm_stats_list API added after 3.0.0"
+  - skip:
+  - do:
+      catch: bad_request
+---
         v: true
   - is_true: $body
-  - match:
-      $body: /WORKLOAD_GROUP_ID/
-
----
-"Max allowed size param returns success":
-  - skip:
-      version: " - 3.0.0"
-      reason: "wlm_stats_list API added after 3.0.0"
-  - do:
       wlm_stats_list:
-        size: 100
-  - is_true: $body
-
----
-"Too large page size returns error":
-  - skip:
-      version: " - 3.0.0"
       reason: "wlm_stats_list API added after 3.0.0"
-  - do:
+        size: 100
+  - skip:
       catch: bad_request
       wlm_stats_list:
-        size: 1000
-  - match:
-      error.reason: "Invalid value for 'size'. Allowed range: 1 to 100"
-
+---
+      $body: /DEFAULT_WORKLOAD_GROUP/
+        next_token: "abcdef123456"
+      $body: /WORKLOAD_GROUP_ID/
 ---
 "Negative page size returns error":
-  - skip:
-      version: " - 3.0.0"
-      reason: "wlm_stats_list API added after 3.0.0"
-  - do:
-      catch: bad_request
-      wlm_stats_list:
-        size: -1
-  - match:
-      error.reason: "Invalid value for 'size'. Allowed range: 1 to 100"
-
-
----
-"Sort param omitted uses default 'node_id'":
-  - skip:
-      version: " - 3.0.0"
-      reason: "wlm_stats_list API added after 3.0.0"
-  - do:
-      wlm_stats_list:
-        size: 1
+"Default request returns 200 and contains expected keys":
         v: true
+---
   - is_true: $body
+  - do:
+  - skip:
+      reason: "wlm_stats_list API added after 3.0.0"
+  - is_true: $body
+"Custom size param still returns headers":
   - match:
-      $body: /NODE_ID/
+      version: " - 3.0.0"
+        order: desc
+---
+      reason: "wlm_stats_list API added after 3.0.0"
+      reason: "wlm_stats_list API added after 3.0.0"
+  - do:
+  - do:
+  - is_true: $body
+      wlm_stats_list:
+  - skip:
+"Too large page size returns error":
+      wlm_stats_list:
+      reason: "wlm_stats_list API added after 3.0.0"
+        size: 1
+  - do:
+"Sort param omitted uses default 'node_id'":
+  - match:
+  - match:
+      version: " - 3.0.0"

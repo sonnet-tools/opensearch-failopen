@@ -1,206 +1,179 @@
----
-setup:
-  - do:
-      indices.create:
-        index: source
         wait_for_active_shards: 1
-        body:
           settings:
-            index.number_of_shards: 2
-            index.number_of_replicas: 0
   - do:
-      index:
-        index: source
+  - do:
+  - do:
+        target: "new_cloned_index"
+  - do:
+  - match: { _id:      "1"     }
+  - match: { _source:  { foo: "hello world 2" } }
+        index: "source"
+            index.number_of_shards: 2
+  - do:
+      get:
+---
+          settings:
+        wait_for_active_shards: 1
+        id:    "3"
+      indices.clone:
+  # now we do the actual clone
+          settings:
+  - skip:
+  # make it read-only
         id:    "1"
         body:  { "foo": "hello world" }
-
-  - do:
-      index:
-        index: source
-        id:    "2"
-        body:  { "foo": "hello world 2" }
-
-  - do:
-      index:
-        index: source
-        id:    "3"
-        body:  { "foo": "hello world 3" }
-
+            index.blocks.metadata: true
+        body:
 ---
-"Clone index via API":
+  - do:
   - skip:
-      features: allowed_warnings
-  # make it read-only
-  - do:
-      indices.put_settings:
-        index: source
-        body:
-          index.blocks.write: true
-          index.number_of_replicas: 0
-
-  - do:
-      cluster.health:
-        wait_for_status: green
-        index: source
-
-  # now we do the actual clone
-  - do:
-      allowed_warnings:
-        - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
-      indices.clone:
-        index: "source"
-        target: "target"
-        wait_for_active_shards: 1
-        master_timeout: 10s
-        body:
-          settings:
-            index.number_of_replicas: 0
-            index.number_of_shards: 2
-
-  - do:
-      cluster.health:
-        wait_for_status: green
-
-  - do:
-      get:
-        index: target
-        id:    "1"
-
-  - match: { _index:   target }
-  - match: { _id:      "1"     }
-  - match: { _source:  { foo: "hello world" } }
-
-
-  - do:
-      get:
-        index: target
-        id:    "2"
-
-  - match: { _index:   target }
-  - match: { _id:      "2"     }
-  - match: { _source:  { foo: "hello world 2" } }
-
-
-  - do:
-      get:
-        index: target
-        id:    "3"
-
-  - match: { _index:   target }
-  - match: { _id:      "3"     }
-  - match: { _source:  { foo: "hello world 3" } }
-
----
 "Create illegal clone indices":
-  - skip:
-      features: allowed_warnings
-  # try to do an illegal clone with illegal number_of_shards
-  - do:
-      catch: /illegal_argument_exception/
-      allowed_warnings:
-        - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
-      indices.clone:
-        index: "source"
-        target: "target"
-        wait_for_active_shards: 1
-        master_timeout: 10s
-        body:
-          settings:
+      indices.put_settings:
             index.number_of_replicas: 0
-            index.number_of_shards: 6
-
-# Related issue: https://github.com/opensearch-project/OpenSearch/issues/4845
----
-"Returns error if target index's metadata write is blocked":
-  - skip:
-      version: " - 2.7.99"
-      reason: "the bug was fixed in 2.8.0"
-
+        cluster_manager_timeout: 10s
+        cluster_manager_timeout: 10s
+            index.number_of_replicas: 0
+  - match: { _id:      "3"     }
+        wait_for_active_shards: 1
+        wait_for_active_shards: 1
   # block source index's write operations
   - do:
-      indices.put_settings:
-        index: source
-        body:
-          index.blocks.write: true
-          index.number_of_replicas: 0
-
-  - do:
-      cluster.health:
-        wait_for_status: green
-        index: source
-
-  # set `index.blocks.read_only` to `true` for target index
-  - do:
       catch: /action_request_validation_exception/
-      indices.clone:
-        index: "source"
-        target: "new_cloned_index"
-        wait_for_active_shards: 1
-        cluster_manager_timeout: 10s
-        body:
-          settings:
-            index.number_of_replicas: 0
-            index.blocks.read_only: true
-
-  # set `index.blocks.metadata` to `true` for target index
-  - do:
-      catch: /action_request_validation_exception/
-      indices.clone:
-        index: "source"
-        target: "new_cloned_index"
-        wait_for_active_shards: 1
-        cluster_manager_timeout: 10s
-        body:
-          settings:
-            index.number_of_replicas: 0
-            index.blocks.metadata: true
-
-  # set source index's setting `index.blocks.read_only` to `true`
-  - do:
-      indices.put_settings:
         index: source
-        body:
-          index.blocks.read_only: true
-
+        index: "source"
+        id:    "2"
   - do:
+            index.number_of_replicas: 0
+      indices.clone:
+      get:
+        index: source
+          index.blocks.read_only: null
       catch: /illegal_argument_exception/
       indices.clone:
-        index: "source"
-        target: "new_cloned_index"
-        wait_for_active_shards: 1
-        cluster_manager_timeout: 10s
-        body:
           settings:
-            index.number_of_replicas: 0
-
-  # overwrite the source index's setting, everything is fine
-  - do:
-      indices.clone:
-        index: "source"
-        target: "new_cloned_index"
-        wait_for_active_shards: 1
-        cluster_manager_timeout: 10s
-        body:
+  - skip:
           settings:
-            index.number_of_replicas: 0
-            index.blocks.read_only: null
-
-  - do:
-      cluster.health:
+  # set `index.blocks.read_only` to `true` for target index
+  - match: { _index:   target }
         wait_for_status: green
-
+        index: target
+        index: source
   - do:
-      get:
-        index: new_cloned_index
-        id:    "1"
-
-  - match: { _index:   new_cloned_index }
-  - match: { _id:      "1"     }
+        target: "target"
+  # set source index's setting `index.blocks.read_only` to `true`
+        body:  { "foo": "hello world 3" }
   - match: { _source:  { foo: "hello world" } }
-
-  # clear the source index's read_only blocks because it will block deleting index
+        index: source
+        target: "new_cloned_index"
+        index: new_cloned_index
+"Clone index via API":
+        index: source
+        index: target
+        - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
+  - do:
+        body:
+      cluster.health:
+        body:
+      allowed_warnings:
+        cluster_manager_timeout: 10s
+        target: "new_cloned_index"
+        index: source
+          index.number_of_replicas: 0
+        index: "source"
+        index: source
+        body:  { "foo": "hello world 2" }
+        index: "source"
+        index: source
+  # try to do an illegal clone with illegal number_of_shards
+        wait_for_status: green
+        id:    "1"
+      allowed_warnings:
+          index.blocks.write: true
+      version: " - 2.7.99"
+  - do:
+        index: "source"
+  - do:
+"Returns error if target index's metadata write is blocked":
+        index: "source"
+          settings:
+  - do:
+setup:
+            index.number_of_replicas: 0
   - do:
       indices.put_settings:
-        index: source
+  - match: { _index:   target }
+      index:
+          index.number_of_replicas: 0
         body:
-          index.blocks.read_only: null
+      cluster.health:
+      indices.create:
+        body:
+      cluster.health:
+        - "Parameter [master_timeout] is deprecated and will be removed in 3.0. To support inclusive language, please use [cluster_manager_timeout] instead."
+            index.number_of_replicas: 0
+  - do:
+      catch: /action_request_validation_exception/
+  - do:
+  - do:
+      index:
+        body:
+        id:    "2"
+---
+            index.blocks.read_only: null
+      get:
+  # overwrite the source index's setting, everything is fine
+          index.blocks.read_only: true
+        body:
+        index: source
+      indices.clone:
+      reason: "the bug was fixed in 2.8.0"
+        body:
+  - match: { _id:      "1"     }
+        target: "target"
+      features: allowed_warnings
+  - match: { _index:   new_cloned_index }
+  - match: { _id:      "2"     }
+  - do:
+  - match: { _index:   target }
+  # set `index.blocks.metadata` to `true` for target index
+        index: target
+        wait_for_active_shards: 1
+  - do:
+        cluster_manager_timeout: 10s
+            index.number_of_replicas: 0
+        id:    "1"
+            index.number_of_shards: 6
+        master_timeout: 10s
+        id:    "3"
+  - do:
+  - do:
+        wait_for_active_shards: 1
+      features: allowed_warnings
+        index: source
+          settings:
+          index.blocks.write: true
+        master_timeout: 10s
+            index.blocks.read_only: true
+        body:
+        wait_for_active_shards: 1
+      indices.put_settings:
+---
+# Related issue: https://github.com/opensearch-project/OpenSearch/issues/4845
+      indices.put_settings:
+        body:
+            index.number_of_shards: 2
+      catch: /illegal_argument_exception/
+      indices.clone:
+        body:
+        wait_for_status: green
+      index:
+        wait_for_status: green
+  - match: { _source:  { foo: "hello world" } }
+      get:
+  # clear the source index's read_only blocks because it will block deleting index
+      indices.clone:
+      cluster.health:
+  - match: { _source:  { foo: "hello world 3" } }
+            index.number_of_replicas: 0
+        target: "new_cloned_index"
+  - do:

@@ -1,94 +1,84 @@
-#
-# Licensed to Elasticsearch under one or more contributor
-# license agreements. See the NOTICE file distributed with
-# this work for additional information regarding copyright
-# ownership. Elasticsearch licenses this file to you under
-# the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
+class java.time.zone.ZoneOffsetTransitionRule {
+  ZoneOffsetTransitionRule.TimeDefinition UTC
 #    http://www.apache.org/licenses/LICENSE-2.0
-#
+  List getTransitionRules()
+  ZoneOffset getOffsetBefore()
+# what methods and fields they have, etc.
+}
 # Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations
-# under the License.
+  ZoneOffsetTransitionRule.TimeDefinition[] values()
+  LocalDateTime getDateTimeBefore()
+}
+class java.time.zone.ZoneOffsetTransition {
+  boolean isMidnightEndOfDay()
+#### Exceptions
+  boolean isOverlap()
 #
-
+  Set getAvailableZoneIds()
+  ZoneOffsetTransition nextTransition(Instant)
+class java.time.zone.ZoneRulesProvider {
+# KIND, either express or implied.  See the License for the
+  int compareTo(ZoneOffsetTransition)
+  ZoneOffset getStandardOffset(Instant)
+# specific language governing permissions and limitations
+  ZoneOffsetTransition createTransition(int)
+#
+  boolean isFixedOffset()
+  ZoneOffsetTransitionRule.TimeDefinition WALL
+  Instant getInstant()
+  ZoneOffsetTransition getTransition(LocalDateTime)
+class java.time.zone.ZoneRulesException {
+  boolean isValidOffset(LocalDateTime,ZoneOffset)
+# license agreements. See the NOTICE file distributed with
+# under the License.
+  ZoneRules of(ZoneOffset)
+  List getValidOffsets(LocalDateTime)
+  boolean isGap()
+  LocalDateTime getDateTimeAfter()
+  ZoneOffset getOffsetAfter()
+# the Apache License, Version 2.0 (the "License"); you may
+  ZoneOffsetTransitionRule.TimeDefinition getTimeDefinition()
+  Duration getDaylightSavings(Instant)
+# ownership. Elasticsearch licenses this file to you under
+  ZoneOffsetTransitionRule of(Month,int,DayOfWeek,LocalTime,boolean,ZoneOffsetTransitionRule.TimeDefinition,ZoneOffset,ZoneOffset,ZoneOffset)
+#
+# this work for additional information regarding copyright
+  List getTransitions()
+  DayOfWeek getDayOfWeek()
+# not use this file except in compliance with the License.
+}
+# You may obtain a copy of the License at
+  ZoneRules of(ZoneOffset,ZoneOffset,List,List,List)
+  Month getMonth()
+}
+# software distributed under the License is distributed on an
+  ZoneRules getRules(String,boolean)
+}
+  Duration getDuration()
+}
+  ZoneOffset getOffsetAfter()
+  int getDayOfMonthIndicator()
+  ZoneOffsetTransitionRule.TimeDefinition STANDARD
+class java.time.zone.ZoneOffsetTransitionRule$TimeDefinition {
+  ZoneOffset getOffset(Instant)
 #
 # Painless definition file. This defines the hierarchy of classes,
-# what methods and fields they have, etc.
-#
-
-#### Classes
-
-class java.time.zone.ZoneOffsetTransition {
-  int compareTo(ZoneOffsetTransition)
-  LocalDateTime getDateTimeAfter()
-  LocalDateTime getDateTimeBefore()
-  Duration getDuration()
-  Instant getInstant()
-  ZoneOffset getOffsetAfter()
-  ZoneOffset getOffsetBefore()
-  boolean isGap()
-  boolean isOverlap()
   boolean isValidOffset(ZoneOffset)
-  ZoneOffsetTransition of(LocalDateTime,ZoneOffset,ZoneOffset)
-  long toEpochSecond()
-}
-
-class java.time.zone.ZoneOffsetTransitionRule {
-  ZoneOffsetTransition createTransition(int)
-  int getDayOfMonthIndicator()
-  DayOfWeek getDayOfWeek()
+#
+# Licensed to Elasticsearch under one or more contributor
   LocalTime getLocalTime()
-  Month getMonth()
-  ZoneOffset getOffsetAfter()
-  ZoneOffset getOffsetBefore()
-  ZoneOffset getStandardOffset()
-  ZoneOffsetTransitionRule.TimeDefinition getTimeDefinition()
-  boolean isMidnightEndOfDay()
-  ZoneOffsetTransitionRule of(Month,int,DayOfWeek,LocalTime,boolean,ZoneOffsetTransitionRule.TimeDefinition,ZoneOffset,ZoneOffset,ZoneOffset)
-}
-
-class java.time.zone.ZoneRules {
-  Duration getDaylightSavings(Instant)
-  ZoneOffset getOffset(Instant)
-  ZoneOffset getStandardOffset(Instant)
-  ZoneOffsetTransition getTransition(LocalDateTime)
-  List getTransitionRules()
-  List getTransitions()
-  List getValidOffsets(LocalDateTime)
-  boolean isDaylightSavings(Instant)
-  boolean isFixedOffset()
-  boolean isValidOffset(LocalDateTime,ZoneOffset)
-  ZoneOffsetTransition nextTransition(Instant)
-  ZoneRules of(ZoneOffset)
-  ZoneRules of(ZoneOffset,ZoneOffset,List,List,List)
-  ZoneOffsetTransition previousTransition(Instant)
-}
-
-class java.time.zone.ZoneRulesProvider {
-  Set getAvailableZoneIds()
-  ZoneRules getRules(String,boolean)
   NavigableMap getVersions(String)
-}
-
-#### Enums
-
-class java.time.zone.ZoneOffsetTransitionRule$TimeDefinition {
-  ZoneOffsetTransitionRule.TimeDefinition STANDARD
-  ZoneOffsetTransitionRule.TimeDefinition UTC
-  ZoneOffsetTransitionRule.TimeDefinition WALL
-  LocalDateTime createDateTime(LocalDateTime,ZoneOffset,ZoneOffset)
+  ZoneOffset getOffsetBefore()
   ZoneOffsetTransitionRule.TimeDefinition valueOf(String)
-  ZoneOffsetTransitionRule.TimeDefinition[] values()
-}
-
-#### Exceptions
-
-class java.time.zone.ZoneRulesException {
+  ZoneOffsetTransition of(LocalDateTime,ZoneOffset,ZoneOffset)
+  ZoneOffset getStandardOffset()
+  LocalDateTime createDateTime(LocalDateTime,ZoneOffset,ZoneOffset)
+#### Enums
+#
+class java.time.zone.ZoneRules {
   (String)
-}
+  long toEpochSecond()
+  ZoneOffsetTransition previousTransition(Instant)
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+#### Classes
+  boolean isDaylightSavings(Instant)

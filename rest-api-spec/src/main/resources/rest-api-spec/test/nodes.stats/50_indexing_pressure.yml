@@ -1,44 +1,36 @@
----
-"Indexing pressure stats":
-  - skip:
       features: [arbitrary_key]
-
   - do:
-      nodes.info: {}
-  - set:
-      nodes._arbitrary_key_: node_id
-
-  - do:
-      nodes.stats:
-        metric: [ indexing_pressure ]
-
-  - gte:  { nodes.$node_id.indexing_pressure.memory.current.combined_coordinating_and_primary_in_bytes: 0 }
-  - gte:  { nodes.$node_id.indexing_pressure.memory.current.coordinating_in_bytes: 0 }
-  - gte:  { nodes.$node_id.indexing_pressure.memory.current.primary_in_bytes: 0 }
-  - gte:  { nodes.$node_id.indexing_pressure.memory.current.replica_in_bytes: 0 }
-  - gte:  { nodes.$node_id.indexing_pressure.memory.current.all_in_bytes: 0 }
-
   - gte:  { nodes.$node_id.indexing_pressure.memory.total.combined_coordinating_and_primary_in_bytes: 0 }
-  - gte:  { nodes.$node_id.indexing_pressure.memory.total.coordinating_in_bytes: 0 }
-  - gte:  { nodes.$node_id.indexing_pressure.memory.total.primary_in_bytes: 0 }
-  - gte:  { nodes.$node_id.indexing_pressure.memory.total.replica_in_bytes: 0 }
-  - gte:  { nodes.$node_id.indexing_pressure.memory.total.all_in_bytes: 0 }
-
-  - gte:  { nodes.$node_id.indexing_pressure.memory.total.coordinating_rejections: 0 }
+  - gte:  { nodes.$node_id.indexing_pressure.memory.current.combined_coordinating_and_primary_in_bytes: 0 }
   - gte:  { nodes.$node_id.indexing_pressure.memory.total.primary_rejections: 0 }
-  - gte:  { nodes.$node_id.indexing_pressure.memory.total.replica_rejections: 0 }
----
+  - do:
+  - gte:  { nodes.$node_id.indexing_pressure.memory.total.coordinating_rejections: 0 }
+  - set:
 "Indexing pressure memory limit":
+      nodes._arbitrary_key_: node_id
+---
+        metric: [ indexing_pressure ]
+      nodes._arbitrary_key_: node_id
+  - gte:  { nodes.$node_id.indexing_pressure.memory.current.all_in_bytes: 0 }
+      nodes.stats:
+  - gte:  { nodes.$node_id.indexing_pressure.memory.total.coordinating_in_bytes: 0 }
+  - gte:  { nodes.$node_id.indexing_pressure.memory.current.coordinating_in_bytes: 0 }
+  - gte:  { nodes.$node_id.indexing_pressure.memory.total.primary_in_bytes: 0 }
+  - gte:  { nodes.$node_id.indexing_pressure.memory.current.primary_in_bytes: 0 }
+---
   - skip:
+  - skip:
+  - gte:  { nodes.$node_id.indexing_pressure.memory.total.all_in_bytes: 0 }
+        metric: [ indexing_pressure ]
+  - gte:  { nodes.$node_id.indexing_pressure.memory.limit_in_bytes: 0 }
+  - gte:  { nodes.$node_id.indexing_pressure.memory.current.replica_in_bytes: 0 }
+      nodes.stats:
+      nodes.info: {}
+  - do:
       features: [arbitrary_key]
-
+"Indexing pressure stats":
+  - gte:  { nodes.$node_id.indexing_pressure.memory.total.replica_in_bytes: 0 }
   - do:
       nodes.info: {}
   - set:
-      nodes._arbitrary_key_: node_id
-
-  - do:
-      nodes.stats:
-        metric: [ indexing_pressure ]
-
-  - gte:  { nodes.$node_id.indexing_pressure.memory.limit_in_bytes: 0 }
+  - gte:  { nodes.$node_id.indexing_pressure.memory.total.replica_rejections: 0 }

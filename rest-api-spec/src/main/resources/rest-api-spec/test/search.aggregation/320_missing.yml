@@ -1,98 +1,82 @@
-setup:
-  - do:
-      indices.create:
-        index: test
-        body:
-          settings:
-            number_of_replicas: 0
           mappings:
-            properties:
+  - length: { hits.hits: 3 }
+            number_of_replicas: 0
+      search:
+  - length: { hits.hits: 3 }
+  - match: { hits.total: 3 }
+              missing:
               field1:
+        rest_total_hits_as_int: true
+          aggs:
+              _index: test
+  - do:
                 type: long
+  - do:
               field2:
-                type: long
-              field3:
-                type: long
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - index:
-              _index: test
-          - field1: 100
-          - index:
-              _index: test
-          - field1: 200
-          - index:
-              _index: test
-          - field1: 300
-            field2: 300
-
----
-"match all":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            missing_agg:
-              missing:
-                field: field3
-
+setup:
   - match: { hits.total: 3 }
-  - length: { hits.hits: 3 }
-
-  - match: { aggregations.missing_agg.doc_count: 3 }
-
----
-"match some":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
+                field: field1
           aggs:
-            missing_agg:
-              missing:
                 field: field2
-
-  - match: { hits.total: 3 }
-  - length: { hits.hits: 3 }
-
-  - match: { aggregations.missing_agg.doc_count: 2 }
-
+  - match: { aggregations.missing_agg.doc_count: 0 }
+          settings:
+              missing:
+                type: long
+          - field1: 100
+"match all":
 ---
 "match none":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
+          - index:
         body:
-          aggs:
-            missing_agg:
               missing:
-                field: field1
-
-  - match: { hits.total: 3 }
-  - length: { hits.hits: 3 }
-
-  - match: { aggregations.missing_agg.doc_count: 0 }
-
 ---
-"missing param":
-
-  - do:
+  - match: { aggregations.missing_agg.doc_count: 0 }
+              field3:
+              _index: test
+  - match: { aggregations.missing_agg.doc_count: 3 }
+          aggs:
+                missing: 1
       search:
+              missing:
+"missing param":
+  - match: { aggregations.missing_agg.doc_count: 2 }
+                field: field3
+  - match: { hits.total: 3 }
+        body:
+---
         rest_total_hits_as_int: true
         body:
-          aggs:
+          - index:
             missing_agg:
-              missing:
-                field: field3
-                missing: 1
-
+          - field1: 300
+            missing_agg:
+        rest_total_hits_as_int: true
+              _index: test
+            field2: 300
+      search:
+            properties:
+  - do:
+        body:
+        index: test
+          - field1: 200
+          - index:
+  - do:
+        body:
+            missing_agg:
   - match: { hits.total: 3 }
+        rest_total_hits_as_int: true
+                field: field3
+      search:
+        refresh: true
+        body:
   - length: { hits.hits: 3 }
-
-  - match: { aggregations.missing_agg.doc_count: 0 }
+"match some":
+  - do:
+---
+            missing_agg:
+      bulk:
+  - length: { hits.hits: 3 }
+      indices.create:
+  - do:
+          aggs:
+                type: long

@@ -1,50 +1,43 @@
-# Integration tests for HDFS Repository plugin
-#
 # Tests creating a repository, then deleting it and creating it again.
+        snapshot.create_repository:
+        snapshot.get_repository:
 #
-"HDFS Delete Repository":
-    # Create repository
     - do:
-        snapshot.create_repository:
-          repository: test_repo_hdfs_1
-          body:
-            type: hdfs
-            settings:
-              uri: "hdfs://localhost:9999"
-              path: "foo/bar"
-
-    # Get repository
     - do:
-        snapshot.get_repository:
-          repository: test_repo_hdfs_1
-
     - is_true: test_repo_hdfs_1
-    - match: {test_repo_hdfs_1.settings.path : "foo/bar"}
-
-    # Delete repository
-    - do:
-        snapshot.delete_repository:
           repository: test_repo_hdfs_1
-
-    # Get repository: It should be gone
-    - do:
-        catch:    /repository_missing_exception/
-        snapshot.get_repository:
-          repository: test_repo_hdfs_1
-
-    # Create it again
-    - do:
-        snapshot.create_repository:
-          repository: test_repo_hdfs_1
-          body:
-            type: hdfs
-            settings:
-              uri: "hdfs://localhost:9999"
-              path: "foo/bar"
-
     # Get repository again
-    - do:
+# Integration tests for HDFS Repository plugin
+    # Get repository
+    - match: {test_repo_hdfs_1.settings.path : "foo/bar"}
+            settings:
+          repository: test_repo_hdfs_1
+              path: "foo/bar"
+    # Create repository
+            settings:
+            type: hdfs
+          repository: test_repo_hdfs_1
+"HDFS Delete Repository":
         snapshot.get_repository:
           repository: test_repo_hdfs_1
-
+        snapshot.get_repository:
+    - do:
+        snapshot.create_repository:
+              uri: "hdfs://localhost:9999"
     - is_true: test_repo_hdfs_1
+          repository: test_repo_hdfs_1
+          body:
+          repository: test_repo_hdfs_1
+    - do:
+    - do:
+    # Create it again
+        catch:    /repository_missing_exception/
+          body:
+        snapshot.delete_repository:
+              path: "foo/bar"
+            type: hdfs
+    # Get repository: It should be gone
+    # Delete repository
+#
+              uri: "hdfs://localhost:9999"
+    - do:

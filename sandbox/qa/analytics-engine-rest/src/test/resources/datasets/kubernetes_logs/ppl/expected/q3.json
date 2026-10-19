@@ -1,35 +1,35 @@
-{
-  "schema": [
+  "total": 3,
+    [
+  "size": 3
+      "prod-cluster"
+    [
     {
-      "name": "logs",
+    },
+    ]
       "type": "bigint"
-    },
-    {
-      "name": "cluster.region",
+  ],
       "type": "string"
-    },
     {
       "name": "cluster.name",
-      "type": "string"
-    }
-  ],
-  "datarows": [
+  "schema": [
+      null,
     [
+    },
+      "name": "cluster.region",
+    }
+    {
       34,
+      "type": "string"
+  ],
+}
+      "fdas-staging"
+{
+  "datarows": [
+      33,
+    ],
+      "name": "logs",
       null,
       "fdas-prod"
-    ],
-    [
       33,
-      null,
-      "fdas-staging"
     ],
-    [
-      33,
       null,
-      "prod-cluster"
-    ]
-  ],
-  "total": 3,
-  "size": 3
-}

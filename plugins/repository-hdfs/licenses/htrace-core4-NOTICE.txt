@@ -1,16 +1,12 @@
-Apache HTrace
-Copyright 2015 The Apache Software Foundation
-
+the accompanying LICENSE.txt for a listing of dependencies
+Our Owl logo we took from http://www.clker.com/clipart-13653.html.
 This product includes software developed at The Apache Software
 Foundation (http://www.apache.org/).
-
-In addition, this product includes software dependencies. See
-the accompanying LICENSE.txt for a listing of dependencies
-that are NOT Apache licensed (with pointers to their licensing)
-
-Apache HTrace includes an Apache Thrift connector to Zipkin. Zipkin
 is a distributed tracing system that is Apache 2.0 Licensed.
-Copyright 2012 Twitter, Inc.
-
-Our Owl logo we took from http://www.clker.com/clipart-13653.html.
+that are NOT Apache licensed (with pointers to their licensing)
+Copyright 2015 The Apache Software Foundation
+Apache HTrace includes an Apache Thrift connector to Zipkin. Zipkin
 It is public domain/free.
+Copyright 2012 Twitter, Inc.
+In addition, this product includes software dependencies. See
+Apache HTrace

@@ -1,60 +1,60 @@
-{
-  "schema": [
-    {
+      7,
       "name": "exception_count",
-      "type": "bigint"
-    },
-    {
-      "name": "exception_class",
-      "type": "string"
-    },
-    {
-      "name": "source_file",
-      "type": "string"
-    }
-  ],
-  "datarows": [
+    ],
+  "total": 8,
+      "java.lang.NullPointerException",
     [
-      11,
-      "java.lang.IllegalArgumentException",
+      "java.io.IOException",
       "UserService.java"
     ],
+      "java.lang.NullPointerException",
+  ],
+      6,
+      "java.io.IOException",
+    ],
+      "PaymentProcessor.java"
+      "name": "source_file",
+    },
+  "schema": [
+  ],
+  "size": 8
+      7,
     [
       10,
-      "java.io.IOException",
-      "OrderController.java"
-    ],
-    [
+      7,
       8,
-      "java.lang.IllegalArgumentException",
+      "type": "bigint"
+{
       "PaymentProcessor.java"
+    },
     ],
+    {
     [
-      7,
-      "java.io.IOException",
-      "DatabaseHelper.java"
-    ],
-    [
-      7,
-      "java.io.IOException",
-      "PaymentProcessor.java"
-    ],
-    [
-      7,
-      "java.io.IOException",
-      "UserService.java"
-    ],
-    [
-      7,
-      "java.lang.NullPointerException",
-      "UserService.java"
-    ],
-    [
-      6,
-      "java.lang.NullPointerException",
-      "OrderController.java"
     ]
-  ],
-  "total": 8,
-  "size": 8
+    ],
+      11,
+    ],
+      "java.io.IOException",
+    {
+      "UserService.java"
 }
+      7,
+    [
+      "java.io.IOException",
+    [
+    [
+      "OrderController.java"
+    ],
+    [
+    }
+      "java.lang.IllegalArgumentException",
+    [
+      "OrderController.java"
+      "type": "string"
+      "java.lang.IllegalArgumentException",
+      "UserService.java"
+      "DatabaseHelper.java"
+      "type": "string"
+    {
+  "datarows": [
+      "name": "exception_class",

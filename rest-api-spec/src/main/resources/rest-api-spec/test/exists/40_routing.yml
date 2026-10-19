@@ -1,38 +1,31 @@
----
-"Routing":
-
+ - is_true: ''
+          id:      1
+             number_of_replicas: 0
  - do:
+          index:   test_1
+      exists:
+      index:
+          id:      1
+          index:   test_1
+          wait_for_status: green
+         settings:
+ - do:
+      exists:
+ - do:
+          id:      1
+      cluster.health:
+          routing: 5
+          routing: 5
+           index:
      indices.create:
        index:    test_1
-       body:
-         settings:
-           index:
-             number_of_shards: 5
-             number_of_routing_shards: 5
-             number_of_replicas: 0
-
- - do:
-      cluster.health:
-          wait_for_status: green
-
- - do:
-      index:
-          index:   test_1
-          id:      1
-          routing: 5
-          body:    { foo: bar }
-
- - do:
-      exists:
-          index:   test_1
-          id:      1
-          routing: 5
-
- - is_true: ''
-
- - do:
-      exists:
-          index:   test_1
-          id:      1
-
+"Routing":
  - is_false: ''
+             number_of_shards: 5
+---
+ - do:
+             number_of_routing_shards: 5
+          index:   test_1
+       body:
+          body:    { foo: bar }
+ - do:

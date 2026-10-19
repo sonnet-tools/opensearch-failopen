@@ -1,66 +1,66 @@
-{
-  "testName": "range_timestamp",
-  "indexName": "test-index",
-  "indexMapping": {
     "name": "VARCHAR",
-    "price": "INTEGER",
-    "brand": "VARCHAR",
-    "rating": "DOUBLE",
-    "created_at": "TIMESTAMP"
-  },
-  "planType": "HITS",
-  "inputDsl": {
-    "query": {
-      "range": {
-        "created_at": {
-          "gte": "2024-01-01",
-          "lte": "2024-12-31",
-          "format": "strict_date_optional_time"
-        }
-      }
-    }
-  },
-  "expectedRelNodePlan": [
-    "LogicalSort(fetch=[10])",
-    "  LogicalFilter(condition=[AND(>=($4, 2024-01-01 00:00:00), <=($4, 2024-12-31 23:59:59.999))])",
-    "    LogicalTableScan(table=[[test-index]])"
-  ],
+      "max_score": null,
   "mockResultFieldNames": [
-    "name",
-    "price",
-    "brand",
-    "rating",
-    "created_at"
-  ],
-  "mockResultRows": [
-    [
-      "laptop",
-      999,
-      "BrandA",
       4.5,
-      "2024-06-15T10:30:00.000Z"
+      "total": {
+          "_score": null,
+      ]
+        {
+    "query": {
+    [
+  "indexName": "test-index",
+          "format": "strict_date_optional_time"
     ]
+  "expectedRelNodePlan": [
+  "planType": "HITS",
+    "brand": "VARCHAR",
+  "mockResultRows": [
+            "rating": 4.5,
+        }
+      "hits": [
+        }
+    }
+    "rating",
+    "rating": "DOUBLE",
+    "name",
+  "indexMapping": {
   ],
   "expectedOutputDsl": {
+    "price": "INTEGER",
     "num_reduce_phases": 0,
-    "hits": {
-      "total": {
-        "value": 1,
-        "relation": "eq"
-      },
-      "max_score": null,
-      "hits": [
-        {
-          "_score": null,
-          "_source": {
-            "name": "laptop",
-            "price": 999,
-            "brand": "BrandA",
-            "rating": 4.5,
-            "created_at": "2024-06-15T10:30:00.000Z"
-          }
-        }
-      ]
-    }
-  }
 }
+  "testName": "range_timestamp",
+            "price": 999,
+    "  LogicalFilter(condition=[AND(>=($4, 2024-01-01 00:00:00), <=($4, 2024-12-31 23:59:59.999))])",
+        "created_at": {
+          "lte": "2024-12-31",
+  },
+        "relation": "eq"
+      "laptop",
+          "gte": "2024-01-01",
+  ],
+    "created_at": "TIMESTAMP"
+    "price",
+          "_source": {
+      "BrandA",
+    "brand",
+            "name": "laptop",
+      },
+      999,
+  }
+        "value": 1,
+    "    LogicalTableScan(table=[[test-index]])"
+  "inputDsl": {
+            "created_at": "2024-06-15T10:30:00.000Z"
+    "hits": {
+    }
+      "range": {
+  },
+{
+            "brand": "BrandA",
+          }
+      "2024-06-15T10:30:00.000Z"
+    "LogicalSort(fetch=[10])",
+    "created_at"
+      }
+  ],

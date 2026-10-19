@@ -1,73 +1,64 @@
+        body:
+  - do:
 setup:
-  - skip:
-      version: " - 2.7.99"
-      reason: unsigned_long is not supported before 2.8.0
-
-  - do:
-      indices.create:
-        index: test_1
-        body:
-          settings:
-            number_of_replicas: 0
-          mappings:
-            properties:
-              counter:
-                type: unsigned_long
-
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - index:
-              _index: test_1
-              _id: 1
-          - counter: "10223372036854775807.23"
-
----
-"Unsigned long with decimal part test":
-
-  - do:
-      search:
-        index: test_1
-        rest_total_hits_as_int: true
-        body:
-          query:
-            term:
-              counter:
-                value: 10223372036854775807
-
   - match: { hits.total: 1 }
-
----
-"Stored unsigned long with decimal part test":
-  - do:
-      indices.create:
-        index: test_2
-        body:
-          settings:
-            number_of_replicas: 0
-          mappings:
-            properties:
-              counter:
-                type: unsigned_long
-                store: true
-
-      bulk:
-        refresh: true
-        body:
-          - index:
               _index: test_2
-              _id: 2
-          - counter: "10223372036854775807"
-
-  - do:
-      search:
-        index: test_*
+          mappings:
+      indices.create:
         rest_total_hits_as_int: true
-        body:
-          query:
-            term:
-              counter:
+        index: test_2
+        index: test_*
+        index: test_1
+          settings:
                 value: 10223372036854775807
-
+          mappings:
+---
+        refresh: true
+          - index:
+      bulk:
+        body:
+          - counter: "10223372036854775807.23"
+        body:
+  - do:
+            term:
+          - index:
+        body:
+              counter:
+        refresh: true
+            properties:
+              _id: 2
+  - do:
+              counter:
+            number_of_replicas: 0
+"Stored unsigned long with decimal part test":
+      reason: unsigned_long is not supported before 2.8.0
+        rest_total_hits_as_int: true
+      version: " - 2.7.99"
+  - skip:
+          query:
+          settings:
+      bulk:
+      indices.create:
+      search:
+          query:
+                type: unsigned_long
+  - do:
+            properties:
+        body:
+                type: unsigned_long
+        body:
+              _id: 1
+        index: test_1
+---
+            number_of_replicas: 0
+"Unsigned long with decimal part test":
+          - counter: "10223372036854775807"
+            term:
+                value: 10223372036854775807
+  - do:
+              counter:
+              _index: test_1
+                store: true
+      search:
   - match: { hits.total: 2 }
+              counter:

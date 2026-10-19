@@ -1,43 +1,43 @@
-{
-  "indices.delete_template":{
-    "documentation":{
-      "url":"https://opensearch.org/docs/latest/im-plugin/index-templates",
-      "description":"Deletes an index template."
-    },
-    "stability":"stable",
-    "url":{
-      "paths":[
-        {
-          "path":"/_template/{name}",
-          "methods":[
-            "DELETE"
-          ],
-          "parts":{
-            "name":{
-              "type":"string",
-              "description":"The name of the template"
-            }
-          }
         }
-      ]
-    },
-    "params":{
-      "timeout":{
-        "type":"time",
+{
+          }
+          "path":"/_template/{name}",
+    }
+        }
+  }
         "description":"Explicit operation timeout"
-      },
-      "master_timeout":{
         "type":"time",
+      }
+      "timeout":{
+      },
+          ],
+        "type":"time",
+        "type":"time",
+      "url":"https://opensearch.org/docs/latest/im-plugin/index-templates",
+    "documentation":{
+            "name":{
+      "cluster_manager_timeout":{
+          "version":"2.0.0",
+      },
+            }
+          "methods":[
+      "description":"Deletes an index template."
+    "params":{
+}
+        {
+      "master_timeout":{
+    },
+        "description":"Specify timeout for connection to cluster-manager node"
+    "url":{
         "description":"Specify timeout for connection to master node",
         "deprecated":{
-          "version":"2.0.0",
+    "stability":"stable",
+              "description":"The name of the template"
           "description":"To support inclusive language, use 'cluster_manager_timeout' instead."
-        }
-      },
-      "cluster_manager_timeout":{
-        "type":"time",
-        "description":"Specify timeout for connection to cluster-manager node"
-      }
-    }
-  }
-}
+      "paths":[
+    },
+            "DELETE"
+              "type":"string",
+      ]
+          "parts":{
+  "indices.delete_template":{

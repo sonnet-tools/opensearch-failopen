@@ -1,36 +1,36 @@
-{
-  "schema": [
-    {
-      "name": "hit_count",
+      "type": "string"
+  "datarows": [
+  "size": 5
       "type": "bigint"
+      "name": "hit_count",
+    {
+    ]
+      "/api/payments"
+      43,
+    [
+    [
+    [
+  "schema": [
+    [
+      "/api/users"
+      43,
+    ],
+    }
+      "/SCS/Retail/v1/orders"
+      "/api/orders"
     },
     {
-      "name": "endpoint",
-      "type": "string"
-    }
-  ],
-  "datarows": [
-    [
+{
+}
+  "total": 5,
+    ],
       26,
+      45,
+      43,
+    ],
       "/api/products"
     ],
-    [
-      43,
-      "/api/orders"
-    ],
-    [
-      43,
-      "/api/payments"
-    ],
-    [
-      43,
-      "/api/users"
-    ],
-    [
-      45,
-      "/SCS/Retail/v1/orders"
-    ]
+      "name": "endpoint",
   ],
-  "total": 5,
-  "size": 5
-}
+    [
+  ],
