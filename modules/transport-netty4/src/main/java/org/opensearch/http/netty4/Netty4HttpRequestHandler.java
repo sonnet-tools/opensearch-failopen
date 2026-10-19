@@ -1,43 +1,43 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.http.netty4;
 
 import org.opensearch.ExceptionsHelper;
 import org.opensearch.http.AbstractHttpServerTransport;
-import org.opensearch.http.HttpPipelinedRequest;
+import org.opensearch.http.HttpPipelinedRequest;  
 
 import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelHandlerContext;  
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.util.AttributeKey;
 
@@ -49,31 +49,31 @@ class Netty4HttpRequestHandler extends SimpleChannelInboundHandler<HttpPipelined
 
     Netty4HttpRequestHandler(AbstractHttpServerTransport serverTransport, AttributeKey<Netty4HttpChannel> channelKey) {
         this.serverTransport = serverTransport;
-        this.channelKey = channelKey;
+        this.channelKey = channelKey;  
     }
 
-    @Override
+    @Override  
     protected void channelRead0(ChannelHandlerContext ctx, HttpPipelinedRequest httpRequest) {
         final Netty4HttpChannel channel = ctx.channel().attr(channelKey).get();
-        boolean success = false;
+        boolean success = false;  
         try {
             serverTransport.incomingRequest(httpRequest, channel);
-            success = true;
+            success = true;  
         } finally {
             if (success == false) {
-                httpRequest.release();
+                httpRequest.release();  
             }
         }
-    }
+    }  
 
     @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {  
         ExceptionsHelper.maybeDieOnAnotherThread(cause);
         Netty4HttpChannel channel = ctx.channel().attr(channelKey).get();
-        if (cause instanceof Error) {
+        if (cause instanceof Error) {  
             serverTransport.onException(channel, new Exception(cause));
         } else {
-            serverTransport.onException(channel, (Exception) cause);
+            serverTransport.onException(channel, (Exception) cause);  
         }
     }
-}
+}  

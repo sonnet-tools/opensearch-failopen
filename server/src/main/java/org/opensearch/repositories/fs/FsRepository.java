@@ -1,124 +1,124 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.repositories.fs;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.opensearch.cluster.metadata.RepositoryMetadata;
+import org.opensearch.cluster.metadata.RepositoryMetadata;  
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.blobstore.BlobStore;
+import org.opensearch.common.blobstore.BlobStore;  
 import org.opensearch.common.blobstore.fs.FsBlobStore;
 import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Setting.Property;
+import org.opensearch.common.settings.Setting.Property;  
 import org.opensearch.core.common.Strings;
 import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
 import org.opensearch.env.Environment;
 import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.plugins.NativeRemoteObjectStoreProvider;
+import org.opensearch.plugins.NativeRemoteObjectStoreProvider;  
 import org.opensearch.repositories.NativeStoreRepository;
 import org.opensearch.repositories.RepositoryException;
-import org.opensearch.repositories.blobstore.BlobStoreRepository;
+import org.opensearch.repositories.blobstore.BlobStoreRepository;  
 
 import java.nio.file.Path;
-import java.util.ArrayList;
+import java.util.ArrayList;  
 import java.util.List;
 import java.util.function.Function;
 
 /**
  * Shared file system implementation of the BlobStoreRepository
- * <p>
+ * <p>  
  * Shared file system repository supports the following settings
  * <dl>
- * <dt>{@code location}</dt><dd>Path to the root of repository. This is mandatory parameter.</dd>
+ * <dt>{@code location}</dt><dd>Path to the root of repository. This is mandatory parameter.</dd>  
  * <dt>{@code concurrent_streams}</dt><dd>Number of concurrent read/write stream (per repository on each node). Defaults to 5.</dd>
  * <dt>{@code chunk_size}</dt><dd>Large file can be divided into chunks. This parameter specifies the chunk size.
- *      Defaults to not chucked.</dd>
+ *      Defaults to not chucked.</dd>  
  * </dl>
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 public class FsRepository extends BlobStoreRepository {
-    private static final Logger logger = LogManager.getLogger(FsRepository.class);
+    private static final Logger logger = LogManager.getLogger(FsRepository.class);  
 
     public static final String TYPE = "fs";
 
     public static final Setting<String> LOCATION_SETTING = new Setting<>("location", "", Function.identity(), Property.NodeScope);
     public static final Setting<String> REPOSITORIES_LOCATION_SETTING = new Setting<>(
-        "repositories.fs.location",
+        "repositories.fs.location",  
         LOCATION_SETTING,
         Function.identity(),
-        Property.NodeScope
+        Property.NodeScope  
     );
     public static final Setting<ByteSizeValue> CHUNK_SIZE_SETTING = Setting.byteSizeSetting(
-        "chunk_size",
+        "chunk_size",  
         new ByteSizeValue(Long.MAX_VALUE),
         new ByteSizeValue(5),
-        new ByteSizeValue(Long.MAX_VALUE),
+        new ByteSizeValue(Long.MAX_VALUE),  
         Property.NodeScope
     );
-    public static final Setting<ByteSizeValue> REPOSITORIES_CHUNK_SIZE_SETTING = Setting.byteSizeSetting(
+    public static final Setting<ByteSizeValue> REPOSITORIES_CHUNK_SIZE_SETTING = Setting.byteSizeSetting(  
         "repositories.fs.chunk_size",
         new ByteSizeValue(Long.MAX_VALUE),
-        new ByteSizeValue(5),
+        new ByteSizeValue(5),  
         new ByteSizeValue(Long.MAX_VALUE),
         Property.NodeScope
-    );
+    );  
     public static final Setting<Boolean> REPOSITORIES_COMPRESS_SETTING = Setting.boolSetting(
         "repositories.fs.compress",
-        false,
+        false,  
         Property.NodeScope,
         Property.Deprecated
-    );
+    );  
 
     public static final Setting<String> BASE_PATH_SETTING = Setting.simpleString("base_path", value -> {
-        // CWE-22 hardening (string-only fail-fast; avoids constructing a Path from a raw user-supplied string):
+        // CWE-22 hardening (string-only fail-fast; avoids constructing a Path from a raw user-supplied string):  
         // reject absolute base_path values (POSIX "/", Windows "\\"/UNC, drive-letter "C:..") and any parent-directory
         // ("..") segment. An absolute base_path makes Path.resolve discard the path.repo-validated location, escaping
-        // containment; a ".." segment lets the resolved path climb above it. The authoritative, location-aware
+        // containment; a ".." segment lets the resolved path climb above it. The authoritative, location-aware  
         // containment check is performed in validateBasePathWithinRepo().
         if (Strings.hasLength(value)
-            && (value.startsWith("/") || value.startsWith("\\") || value.matches("^[A-Za-z]:.*") || value.contains(".."))) {
+            && (value.startsWith("/") || value.startsWith("\\") || value.matches("^[A-Za-z]:.*") || value.contains(".."))) {  
             throw new IllegalArgumentException(
                 "[base_path] must be a relative path that does not contain '..' segments; got [" + value + "]"
-            );
+            );  
         }
     });
 
     protected final Environment environment;
 
-    protected ByteSizeValue chunkSize;
+    protected ByteSizeValue chunkSize;  
 
     protected BlobPath basePath;
 
@@ -127,165 +127,165 @@ public class FsRepository extends BlobStoreRepository {
 
     /**
      * Constructs a shared file system repository.
-     */
+     */  
     public FsRepository(
         RepositoryMetadata metadata,
-        Environment environment,
+        Environment environment,  
         NamedXContentRegistry namedXContentRegistry,
         ClusterService clusterService,
-        RecoverySettings recoverySettings
+        RecoverySettings recoverySettings  
     ) {
         this(metadata, environment, namedXContentRegistry, clusterService, recoverySettings, null);
-    }
+    }  
 
     /**
-     * Constructs a shared file system repository with optional native store provider.
+     * Constructs a shared file system repository with optional native store provider.  
      *
      * <p>Unlike S3/GCS/Azure repos which discover their native provider via
-     * {@link org.opensearch.plugins.ExtensiblePlugin}, FsRepository is a built-in
+     * {@link org.opensearch.plugins.ExtensiblePlugin}, FsRepository is a built-in  
      * repo type (not a plugin). The native provider is passed from
      * {@link org.opensearch.repositories.RepositoriesModule} which discovers it
-     * via {@code filterPlugins(NativeRemoteObjectStoreProvider.class)} in Node.java.
+     * via {@code filterPlugins(NativeRemoteObjectStoreProvider.class)} in Node.java.  
      *
      * @param nativeStoreProvider native FS store factory from sandbox, or null
-     */
+     */  
     public FsRepository(
         RepositoryMetadata metadata,
-        Environment environment,
+        Environment environment,  
         NamedXContentRegistry namedXContentRegistry,
         ClusterService clusterService,
-        RecoverySettings recoverySettings,
+        RecoverySettings recoverySettings,  
         NativeRemoteObjectStoreProvider nativeStoreProvider
     ) {
-        super(metadata, namedXContentRegistry, clusterService, recoverySettings);
+        super(metadata, namedXContentRegistry, clusterService, recoverySettings);  
         this.environment = environment;
         validateLocation();
-        readMetadata();
+        readMetadata();  
 
         // Initialize native store if provider is available (sandbox warm nodes only)
-        if (nativeStoreProvider != null) {
+        if (nativeStoreProvider != null) {  
             final NativeStoreRepository store = nativeStoreProvider.createNativeStore(metadata, clusterService.getSettings());
             if (store != null && store.isLive()) {
-                this.nativeStore = store;
+                this.nativeStore = store;  
             } else if (store != null && store != NativeStoreRepository.EMPTY) {
                 store.close();
-            }
+            }  
         }
     }
 
     protected void readMetadata() {
         if (CHUNK_SIZE_SETTING.exists(metadata.settings())) {
-            this.chunkSize = CHUNK_SIZE_SETTING.get(metadata.settings());
+            this.chunkSize = CHUNK_SIZE_SETTING.get(metadata.settings());  
         } else {
             this.chunkSize = REPOSITORIES_CHUNK_SIZE_SETTING.get(environment.settings());
-        }
+        }  
         final String basePath = BASE_PATH_SETTING.get(metadata.settings());
         if (Strings.hasLength(basePath)) {
-            if (isUnderRepo(basePath) == false) {
+            if (isUnderRepo(basePath) == false) {  
                 throw new RepositoryException(
                     metadata.name(),
-                    "base_path [" + basePath + "] resolves to a location outside of the repository paths specified by path.repo"
+                    "base_path [" + basePath + "] resolves to a location outside of the repository paths specified by path.repo"  
                 );
             }
-            this.basePath = new BlobPath().add(basePath);
+            this.basePath = new BlobPath().add(basePath);  
         } else {
             this.basePath = BlobPath.cleanPath();
-        }
+        }  
     }
 
-    /**
+    /**  
      * Defense-in-depth containment check (CWE-22) that complements the {@link #BASE_PATH_SETTING} setting-level
      * validator: ensures the user-supplied {@code base_path}, once resolved against the already-validated repository
-     * {@code location}, still falls within one of the operator-configured {@code path.repo} directories. The setting
+     * {@code location}, still falls within one of the operator-configured {@code path.repo} directories. The setting  
      * validator already rejects absolute and upward-escaping values; this location-aware check is the authoritative
      * backstop. Without containment, an absolute {@code base_path} would cause {@link java.nio.file.Path#resolve} to
-     * discard the validated location entirely and redirect all blob-store operations to an arbitrary filesystem path
+     * discard the validated location entirely and redirect all blob-store operations to an arbitrary filesystem path  
      * (the {@code /_snapshot/<repo>/_cleanup} arbitrary-deletion vector).
      */
-    private boolean isUnderRepo(String basePath) {
+    private boolean isUnderRepo(String basePath) {  
         final String location = REPOSITORIES_LOCATION_SETTING.get(metadata.settings());
         final Path locationFile = environment.resolveRepoFile(location);
-        if (locationFile == null) {
+        if (locationFile == null) {  
             // location is already validated by validateLocation(); a null here is treated as a containment failure.
             return false;
-        }
+        }  
         final Path resolved = locationFile.resolve(basePath).normalize();
         for (Path repoPath : environment.repoFiles()) {
-            if (resolved.startsWith(repoPath)) {
+            if (resolved.startsWith(repoPath)) {  
                 return true;
             }
-        }
+        }  
         return false;
     }
 
     protected void validateLocation() {
         String location = REPOSITORIES_LOCATION_SETTING.get(metadata.settings());
-        if (location.isEmpty()) {
+        if (location.isEmpty()) {  
             logger.warn(
                 "the repository location is missing, it should point to a shared file system location"
-                    + " that is available on all cluster-manager and data nodes"
+                    + " that is available on all cluster-manager and data nodes"  
             );
             throw new RepositoryException(metadata.name(), "missing location");
-        }
+        }  
         Path locationFile = environment.resolveRepoFile(location);
         if (locationFile == null) {
-            if (environment.repoFiles().length > 0) {
+            if (environment.repoFiles().length > 0) {  
                 logger.warn(
                     "The specified location [{}] doesn't start with any " + "repository paths specified by the path.repo setting: [{}] ",
-                    location,
+                    location,  
                     environment.repoFiles()
                 );
-                throw new RepositoryException(
+                throw new RepositoryException(  
                     metadata.name(),
                     "location [" + location + "] doesn't match any of the locations specified by path.repo"
-                );
+                );  
             } else {
                 logger.warn(
-                    "The specified location [{}] should start with a repository path specified by"
+                    "The specified location [{}] should start with a repository path specified by"  
                         + " the path.repo setting, but the path.repo setting was not set on this node",
                     location
-                );
+                );  
                 throw new RepositoryException(
                     metadata.name(),
-                    "location [" + location + "] doesn't match any of the locations specified by path.repo because this setting is empty"
+                    "location [" + location + "] doesn't match any of the locations specified by path.repo because this setting is empty"  
                 );
             }
-        }
+        }  
     }
 
-    @Override
+    @Override  
     protected BlobStore createBlobStore() throws Exception {
         final String location = REPOSITORIES_LOCATION_SETTING.get(getMetadata().settings());
-        final Path locationFile = environment.resolveRepoFile(location);
+        final Path locationFile = environment.resolveRepoFile(location);  
         return new FsBlobStore(bufferSize, locationFile, isReadOnly());
     }
 
     @Override
     protected ByteSizeValue chunkSize() {
-        return chunkSize;
+        return chunkSize;  
     }
 
-    @Override
+    @Override  
     public BlobPath basePath() {
         return basePath;
-    }
+    }  
 
     @Override
-    public List<Setting<?>> getRestrictedSystemRepositorySettings() {
+    public List<Setting<?>> getRestrictedSystemRepositorySettings() {  
         List<Setting<?>> restrictedSettings = new ArrayList<>();
         restrictedSettings.addAll(super.getRestrictedSystemRepositorySettings());
-        restrictedSettings.add(LOCATION_SETTING);
+        restrictedSettings.add(LOCATION_SETTING);  
         return restrictedSettings;
     }
 
     @Override
     protected void doClose() {
-        nativeStore.close();
+        nativeStore.close();  
         super.doClose();
     }
 
     @Override
     public NativeStoreRepository getNativeStore() {
-        return nativeStore;
+        return nativeStore;  
     }
 }

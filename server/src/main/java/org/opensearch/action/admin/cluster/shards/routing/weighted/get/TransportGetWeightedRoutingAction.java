@@ -1,102 +1,102 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.action.admin.cluster.shards.routing.weighted.get;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.opensearch.action.support.ActionFilters;
+import org.opensearch.action.support.ActionFilters;  
 import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeReadAction;
 import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlockException;
+import org.opensearch.cluster.block.ClusterBlockException;  
 import org.opensearch.cluster.block.ClusterBlockLevel;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.WeightedRoutingMetadata;
+import org.opensearch.cluster.metadata.WeightedRoutingMetadata;  
 import org.opensearch.cluster.routing.WeightedRouting;
 import org.opensearch.cluster.routing.WeightedRoutingService;
-import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.cluster.service.ClusterService;  
 import org.opensearch.common.inject.Inject;
 import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.common.io.stream.StreamInput;  
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.TransportService;
 
 import java.io.IOException;
 
-/**
+/**  
  * Transport action for getting weights for weighted round-robin search routing policy
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 public class TransportGetWeightedRoutingAction extends TransportClusterManagerNodeReadAction<
-    ClusterGetWeightedRoutingRequest,
+    ClusterGetWeightedRoutingRequest,  
     ClusterGetWeightedRoutingResponse> {
     private static final Logger logger = LogManager.getLogger(TransportGetWeightedRoutingAction.class);
-    private final WeightedRoutingService weightedRoutingService;
+    private final WeightedRoutingService weightedRoutingService;  
 
     @Inject
-    public TransportGetWeightedRoutingAction(
+    public TransportGetWeightedRoutingAction(  
         TransportService transportService,
         ClusterService clusterService,
-        WeightedRoutingService weightedRoutingService,
+        WeightedRoutingService weightedRoutingService,  
         ThreadPool threadPool,
         ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver
+        IndexNameExpressionResolver indexNameExpressionResolver  
     ) {
         super(
-            ClusterGetWeightedRoutingAction.NAME,
+            ClusterGetWeightedRoutingAction.NAME,  
             transportService,
             clusterService,
-            threadPool,
+            threadPool,  
             actionFilters,
             ClusterGetWeightedRoutingRequest::new,
-            indexNameExpressionResolver,
+            indexNameExpressionResolver,  
             true
         );
-        this.weightedRoutingService = weightedRoutingService;
+        this.weightedRoutingService = weightedRoutingService;  
     }
 
-    @Override
+    @Override  
     protected String executor() {
         return ThreadPool.Names.SAME;
-    }
+    }  
 
     @Override
-    protected ClusterGetWeightedRoutingResponse read(StreamInput in) throws IOException {
+    protected ClusterGetWeightedRoutingResponse read(StreamInput in) throws IOException {  
         return new ClusterGetWeightedRoutingResponse(in);
     }
 
     @Override
     protected ClusterBlockException checkBlock(ClusterGetWeightedRoutingRequest request, ClusterState state) {
-        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);
+        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);  
     }
 
-    @Override
+    @Override  
     protected void clusterManagerOperation(
         final ClusterGetWeightedRoutingRequest request,
-        ClusterState state,
+        ClusterState state,  
         final ActionListener<ClusterGetWeightedRoutingResponse> listener
     ) {
-        try {
+        try {  
             weightedRoutingService.verifyAwarenessAttribute(request.getAwarenessAttribute());
             WeightedRoutingMetadata weightedRoutingMetadata = state.metadata().custom(WeightedRoutingMetadata.TYPE);
-            ClusterGetWeightedRoutingResponse clusterGetWeightedRoutingResponse = new ClusterGetWeightedRoutingResponse();
+            ClusterGetWeightedRoutingResponse clusterGetWeightedRoutingResponse = new ClusterGetWeightedRoutingResponse();  
             if (weightedRoutingMetadata != null && weightedRoutingMetadata.getWeightedRouting() != null) {
                 WeightedRouting weightedRouting = weightedRoutingMetadata.getWeightedRouting();
-                clusterGetWeightedRoutingResponse = new ClusterGetWeightedRoutingResponse(
+                clusterGetWeightedRoutingResponse = new ClusterGetWeightedRoutingResponse(  
                     weightedRouting,
                     state.nodes().getClusterManagerNodeId() != null,
-                    weightedRoutingMetadata.getVersion()
+                    weightedRoutingMetadata.getVersion()  
                 );
             }
-            listener.onResponse(clusterGetWeightedRoutingResponse);
+            listener.onResponse(clusterGetWeightedRoutingResponse);  
         } catch (Exception ex) {
             listener.onFailure(ex);
-        }
+        }  
     }
 }

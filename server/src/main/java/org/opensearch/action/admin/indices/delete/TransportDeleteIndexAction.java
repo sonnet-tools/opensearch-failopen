@@ -1,158 +1,158 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.action.admin.indices.delete;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.apache.logging.log4j.message.ParameterizedMessage;  
 import org.opensearch.action.support.ActionFilters;
 import org.opensearch.action.support.DestructiveOperations;
-import org.opensearch.action.support.TransportIndicesResolvingAction;
+import org.opensearch.action.support.TransportIndicesResolvingAction;  
 import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
 import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
-import org.opensearch.cluster.ClusterState;
+import org.opensearch.cluster.ClusterState;  
 import org.opensearch.cluster.ack.ClusterStateUpdateResponse;
 import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
 import org.opensearch.cluster.metadata.MetadataDeleteIndexService;
 import org.opensearch.cluster.metadata.ResolvedIndices;
-import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.cluster.service.ClusterService;  
 import org.opensearch.common.inject.Inject;
 import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.common.io.stream.StreamInput;  
 import org.opensearch.core.index.Index;
 import org.opensearch.tasks.Task;
-import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.threadpool.ThreadPool;  
 import org.opensearch.transport.TransportService;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.util.Arrays;
 
-/**
+/**  
  * Delete index action.
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 public class TransportDeleteIndexAction extends TransportClusterManagerNodeAction<DeleteIndexRequest, AcknowledgedResponse>
-    implements
+    implements  
         TransportIndicesResolvingAction<DeleteIndexRequest> {
 
-    private static final Logger logger = LogManager.getLogger(TransportDeleteIndexAction.class);
+    private static final Logger logger = LogManager.getLogger(TransportDeleteIndexAction.class);  
 
     private final MetadataDeleteIndexService deleteIndexService;
-    private final DestructiveOperations destructiveOperations;
+    private final DestructiveOperations destructiveOperations;  
 
     @Inject
-    public TransportDeleteIndexAction(
+    public TransportDeleteIndexAction(  
         TransportService transportService,
         ClusterService clusterService,
-        ThreadPool threadPool,
+        ThreadPool threadPool,  
         MetadataDeleteIndexService deleteIndexService,
         ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver,
+        IndexNameExpressionResolver indexNameExpressionResolver,  
         DestructiveOperations destructiveOperations
     ) {
-        super(
+        super(  
             DeleteIndexAction.NAME,
             transportService,
-            clusterService,
+            clusterService,  
             threadPool,
             actionFilters,
-            DeleteIndexRequest::new,
+            DeleteIndexRequest::new,  
             indexNameExpressionResolver
         );
-        this.deleteIndexService = deleteIndexService;
+        this.deleteIndexService = deleteIndexService;  
         this.destructiveOperations = destructiveOperations;
     }
 
     @Override
     protected String executor() {
-        return ThreadPool.Names.SAME;
+        return ThreadPool.Names.SAME;  
     }
 
-    @Override
+    @Override  
     protected AcknowledgedResponse read(StreamInput in) throws IOException {
         return new AcknowledgedResponse(in);
-    }
+    }  
 
     @Override
-    protected void doExecute(Task task, DeleteIndexRequest request, ActionListener<AcknowledgedResponse> listener) {
+    protected void doExecute(Task task, DeleteIndexRequest request, ActionListener<AcknowledgedResponse> listener) {  
         destructiveOperations.failDestructive(request.indices());
         super.doExecute(task, request, listener);
-    }
+    }  
 
     @Override
-    protected ClusterBlockException checkBlock(DeleteIndexRequest request, ClusterState state) {
+    protected ClusterBlockException checkBlock(DeleteIndexRequest request, ClusterState state) {  
         return state.blocks().indicesAllowReleaseResources(indexNameExpressionResolver.concreteIndexNames(state, request));
     }
 
     @Override
     protected void clusterManagerOperation(
-        final DeleteIndexRequest request,
+        final DeleteIndexRequest request,  
         final ClusterState state,
         final ActionListener<AcknowledgedResponse> listener
-    ) {
+    ) {  
         Index[] concreteIndices = resolveIndices(request, state).concreteIndicesAsArray();
         if (concreteIndices.length == 0) {
-            listener.onResponse(new AcknowledgedResponse(true));
+            listener.onResponse(new AcknowledgedResponse(true));  
             return;
         }
 
         DeleteIndexClusterStateUpdateRequest deleteRequest = new DeleteIndexClusterStateUpdateRequest().ackTimeout(request.timeout())
             .clusterManagerNodeTimeout(request.clusterManagerNodeTimeout())
-            .indices(concreteIndices);
+            .indices(concreteIndices);  
 
         deleteIndexService.deleteIndices(deleteRequest, new ActionListener<ClusterStateUpdateResponse>() {
 
             @Override
             public void onResponse(ClusterStateUpdateResponse response) {
-                listener.onResponse(new AcknowledgedResponse(response.isAcknowledged()));
+                listener.onResponse(new AcknowledgedResponse(response.isAcknowledged()));  
             }
 
-            @Override
+            @Override  
             public void onFailure(Exception t) {
                 logger.debug(() -> new ParameterizedMessage("failed to delete indices [{}]", Arrays.asList(concreteIndices)), t);
-                listener.onFailure(t);
+                listener.onFailure(t);  
             }
         });
-    }
+    }  
 
     @Override
-    public ResolvedIndices resolveIndices(DeleteIndexRequest request) {
+    public ResolvedIndices resolveIndices(DeleteIndexRequest request) {  
         return ResolvedIndices.of(resolveIndices(request, clusterService.state()));
     }
 
     private ResolvedIndices.Local.Concrete resolveIndices(DeleteIndexRequest request, ClusterState clusterState) {
         return indexNameExpressionResolver.concreteResolvedIndices(clusterState, request);
-    }
+    }  
 }

@@ -1,311 +1,311 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.http.reactor.netty4;
 
 import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.rest.RestStatus;
-import org.opensearch.http.HttpRequest;
+import org.opensearch.http.HttpRequest;  
 import org.opensearch.rest.RestRequest;
 import org.opensearch.transport.netty4.Netty4Utils;
 
 import java.util.AbstractMap;
 import java.util.Collection;
-import java.util.Collections;
+import java.util.Collections;  
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.Set;  
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.handler.codec.http.DefaultHttpHeaders;
+import io.netty.handler.codec.http.DefaultHttpHeaders;  
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
-import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpMethod;  
 import io.netty.handler.codec.http.cookie.Cookie;
 import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
-import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
+import io.netty.handler.codec.http.cookie.ServerCookieEncoder;  
 import reactor.netty.http.server.HttpServerRequest;
 
-class ReactorNetty4HttpRequest implements HttpRequest {
+class ReactorNetty4HttpRequest implements HttpRequest {  
     private final String protocol;
     private final HttpMethod method;
-    private final String uri;
+    private final String uri;  
     private final ByteBuf content;
     private final HttpHeadersMap headers;
-    private final AtomicBoolean released;
+    private final AtomicBoolean released;  
     private final Exception inboundException;
     private final boolean pooled;
-    private final HttpResponseHeadersFactory responseHeadersFactory;
+    private final HttpResponseHeadersFactory responseHeadersFactory;  
 
     ReactorNetty4HttpRequest(HttpServerRequest request, HttpResponseHeadersFactory responseHeadersFactory) {
-        this(
+        this(  
             request,
             new HttpHeadersMap(request.requestHeaders()),
-            new AtomicBoolean(false),
+            new AtomicBoolean(false),  
             false,
             Unpooled.EMPTY_BUFFER,
-            responseHeadersFactory
+            responseHeadersFactory  
         );
     }
 
     ReactorNetty4HttpRequest(HttpServerRequest request, ByteBuf content, HttpResponseHeadersFactory responseHeadersFactory) {
         this(request, new HttpHeadersMap(request.requestHeaders()), new AtomicBoolean(false), true, content, responseHeadersFactory);
-    }
+    }  
 
     ReactorNetty4HttpRequest(
-        HttpServerRequest request,
+        HttpServerRequest request,  
         ByteBuf content,
         Exception inboundException,
-        HttpResponseHeadersFactory responseHeadersFactory
+        HttpResponseHeadersFactory responseHeadersFactory  
     ) {
         this(
-            request.protocol(),
+            request.protocol(),  
             request.method(),
             request.uri(),
-            new HttpHeadersMap(request.requestHeaders()),
+            new HttpHeadersMap(request.requestHeaders()),  
             new AtomicBoolean(false),
             true,
-            content,
+            content,  
             inboundException,
             responseHeadersFactory
-        );
+        );  
     }
 
-    private ReactorNetty4HttpRequest(
+    private ReactorNetty4HttpRequest(  
         HttpServerRequest request,
         HttpHeadersMap headers,
-        AtomicBoolean released,
+        AtomicBoolean released,  
         boolean pooled,
         ByteBuf content,
-        HttpResponseHeadersFactory responseHeadersFactory
+        HttpResponseHeadersFactory responseHeadersFactory  
     ) {
         this(request.protocol(), request.method(), request.uri(), headers, released, pooled, content, null, responseHeadersFactory);
-    }
+    }  
 
     private ReactorNetty4HttpRequest(
-        String protocol,
+        String protocol,  
         HttpMethod method,
         String uri,
-        HttpHeadersMap headers,
+        HttpHeadersMap headers,  
         AtomicBoolean released,
         boolean pooled,
-        ByteBuf content,
+        ByteBuf content,  
         Exception inboundException,
         HttpResponseHeadersFactory responseHeadersFactory
-    ) {
+    ) {  
 
         this.protocol = protocol;
-        this.method = method;
+        this.method = method;  
         this.uri = uri;
         this.headers = headers;
-        this.content = content;
+        this.content = content;  
         this.pooled = pooled;
         this.released = released;
-        this.inboundException = inboundException;
+        this.inboundException = inboundException;  
         this.responseHeadersFactory = responseHeadersFactory;
     }
 
     @Override
     public RestRequest.Method method() {
-        return HttpConversionUtil.convertMethod(method);
+        return HttpConversionUtil.convertMethod(method);  
     }
 
-    @Override
+    @Override  
     public String uri() {
         return uri;
-    }
+    }  
 
     @Override
-    public BytesReference content() {
+    public BytesReference content() {  
         assert released.get() == false;
         return Netty4Utils.toBytesReference(content);
-    }
+    }  
 
     @Override
-    public void release() {
+    public void release() {  
         if (pooled && released.compareAndSet(false, true)) {
             content.release();
-        }
+        }  
     }
 
-    @Override
+    @Override  
     public HttpRequest releaseAndCopy() {
         assert released.get() == false;
-        if (pooled == false) {
+        if (pooled == false) {  
             return this;
         }
-        try {
+        try {  
             final ByteBuf copiedContent = Unpooled.copiedBuffer(content);
             return new ReactorNetty4HttpRequest(
-                protocol,
+                protocol,  
                 method,
                 uri,
-                headers,
+                headers,  
                 new AtomicBoolean(false),
                 false,
-                copiedContent,
+                copiedContent,  
                 null,
                 responseHeadersFactory
-            );
+            );  
         } finally {
             release();
-        }
+        }  
     }
 
-    @Override
+    @Override  
     public final Map<String, List<String>> getHeaders() {
         return headers;
-    }
+    }  
 
     @Override
-    public List<String> strictCookies() {
+    public List<String> strictCookies() {  
         String cookieString = headers.httpHeaders.get(HttpHeaderNames.COOKIE);
         if (cookieString != null) {
-            Set<Cookie> cookies = ServerCookieDecoder.STRICT.decode(cookieString);
+            Set<Cookie> cookies = ServerCookieDecoder.STRICT.decode(cookieString);  
             if (!cookies.isEmpty()) {
                 return ServerCookieEncoder.STRICT.encode(cookies);
-            }
+            }  
         }
         return Collections.emptyList();
-    }
+    }  
 
     @Override
-    public HttpVersion protocolVersion() {
+    public HttpVersion protocolVersion() {  
         if (protocol.equals(io.netty.handler.codec.http.HttpVersion.HTTP_1_0.toString())) {
             return HttpRequest.HttpVersion.HTTP_1_0;
-        } else if (protocol.equals(io.netty.handler.codec.http.HttpVersion.HTTP_1_1.toString())) {
+        } else if (protocol.equals(io.netty.handler.codec.http.HttpVersion.HTTP_1_1.toString())) {  
             return HttpRequest.HttpVersion.HTTP_1_1;
         } else if (protocol.equals("HTTP/2.0")) {
-            return HttpRequest.HttpVersion.HTTP_2_0;
+            return HttpRequest.HttpVersion.HTTP_2_0;  
         } else if (protocol.equals("HTTP/3.0")) {
             return HttpRequest.HttpVersion.HTTP_3_0;
-        } else {
+        } else {  
             throw new IllegalArgumentException("Unexpected http protocol version: " + protocol);
         }
-    }
+    }  
 
     @Override
-    public HttpRequest removeHeader(String header) {
+    public HttpRequest removeHeader(String header) {  
         HttpHeaders headersWithoutContentTypeHeader = new DefaultHttpHeaders();
         headersWithoutContentTypeHeader.add(headers.httpHeaders);
-        headersWithoutContentTypeHeader.remove(header);
+        headersWithoutContentTypeHeader.remove(header);  
 
         return new ReactorNetty4HttpRequest(
-            protocol,
+            protocol,  
             method,
             uri,
-            new HttpHeadersMap(headersWithoutContentTypeHeader),
+            new HttpHeadersMap(headersWithoutContentTypeHeader),  
             released,
             pooled,
-            content,
+            content,  
             null,
             responseHeadersFactory
-        );
+        );  
     }
 
-    @Override
+    @Override  
     public ReactorNetty4HttpResponse createResponse(RestStatus status, BytesReference content) {
         final ReactorNetty4HttpResponse response = new ReactorNetty4HttpResponse(
-            headers.httpHeaders,
+            headers.httpHeaders,  
             io.netty.handler.codec.http.HttpVersion.valueOf(protocol),
             status,
-            content
+            content  
         );
         responseHeadersFactory.headers(protocolVersion()).forEach(response::addHeader);
-        return response;
+        return response;  
 
     }
 
     @Override
     public Exception getInboundException() {
-        return inboundException;
+        return inboundException;  
     }
 
-    /**
+    /**  
      * A wrapper of {@link HttpHeaders} that implements a map to prevent copying unnecessarily. This class does not support modifications
      * and due to the underlying implementation, it performs case insensitive lookups of key to values.
-     *
+     *  
      * It is important to note that this implementation does have some downsides in that each invocation of the
      * {@link #values()} and {@link #entrySet()} methods will perform a copy of the values in the HttpHeaders rather than returning a
-     * view of the underlying values.
+     * view of the underlying values.  
      */
     private static class HttpHeadersMap implements Map<String, List<String>> {
 
         private final HttpHeaders httpHeaders;
 
-        private HttpHeadersMap(HttpHeaders httpHeaders) {
+        private HttpHeadersMap(HttpHeaders httpHeaders) {  
             this.httpHeaders = httpHeaders;
         }
 
         @Override
         public int size() {
-            return httpHeaders.size();
+            return httpHeaders.size();  
         }
 
-        @Override
+        @Override  
         public boolean isEmpty() {
             return httpHeaders.isEmpty();
-        }
+        }  
 
         @Override
-        public boolean containsKey(Object key) {
+        public boolean containsKey(Object key) {  
             return key instanceof String s && httpHeaders.contains(s);
         }
 
         @Override
         public boolean containsValue(Object value) {
-            return value instanceof List && httpHeaders.names().stream().map(httpHeaders::getAll).anyMatch(value::equals);
+            return value instanceof List && httpHeaders.names().stream().map(httpHeaders::getAll).anyMatch(value::equals);  
         }
 
-        @Override
+        @Override  
         public List<String> get(Object key) {
             return key instanceof String s ? httpHeaders.getAll(s) : null;
-        }
+        }  
 
         @Override
-        public List<String> put(String key, List<String> value) {
+        public List<String> put(String key, List<String> value) {  
             throw new UnsupportedOperationException("modifications are not supported");
         }
 
         @Override
         public List<String> remove(Object key) {
-            throw new UnsupportedOperationException("modifications are not supported");
+            throw new UnsupportedOperationException("modifications are not supported");  
         }
 
-        @Override
+        @Override  
         public void putAll(Map<? extends String, ? extends List<String>> m) {
             throw new UnsupportedOperationException("modifications are not supported");
-        }
+        }  
 
         @Override
-        public void clear() {
+        public void clear() {  
             throw new UnsupportedOperationException("modifications are not supported");
         }
 
         @Override
         public Set<String> keySet() {
-            return httpHeaders.names();
+            return httpHeaders.names();  
         }
 
-        @Override
+        @Override  
         public Collection<List<String>> values() {
             return httpHeaders.names().stream().map(k -> Collections.unmodifiableList(httpHeaders.getAll(k))).collect(Collectors.toList());
-        }
+        }  
 
         @Override
-        public Set<Entry<String, List<String>>> entrySet() {
+        public Set<Entry<String, List<String>>> entrySet() {  
             return httpHeaders.names()
                 .stream()
-                .map(k -> new AbstractMap.SimpleImmutableEntry<>(k, httpHeaders.getAll(k)))
+                .map(k -> new AbstractMap.SimpleImmutableEntry<>(k, httpHeaders.getAll(k)))  
                 .collect(Collectors.toSet());
         }
-    }
+    }  
 }

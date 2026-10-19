@@ -1,118 +1,118 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.common.compress;
 
 import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.lease.Releasable;
+import org.opensearch.common.lease.Releasable;  
 import org.opensearch.core.Assertions;
 import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.compress.Compressor;
+import org.opensearch.core.compress.Compressor;  
 
 import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
+import java.io.BufferedOutputStream;  
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.OutputStream;  
 import java.util.Arrays;
 import java.util.zip.Deflater;
-import java.util.zip.DeflaterOutputStream;
+import java.util.zip.DeflaterOutputStream;  
 import java.util.zip.Inflater;
 import java.util.zip.InflaterInputStream;
-import java.util.zip.InflaterOutputStream;
+import java.util.zip.InflaterOutputStream;  
 
 /**
- * {@link Compressor} implementation based on the DEFLATE compression algorithm.
+ * {@link Compressor} implementation based on the DEFLATE compression algorithm.  
  *
  * @opensearch.api - registered name requires BWC support
- * @opensearch.experimental - class methods might change
+ * @opensearch.experimental - class methods might change  
  */
 public class DeflateCompressor implements Compressor {
 
     // An arbitrary header that we use to identify compressed streams
     // It needs to be different from other compressors and to not be specific
-    // enough so that no stream starting with these bytes could be detected as
+    // enough so that no stream starting with these bytes could be detected as  
     // a XContent
     private static final byte[] HEADER = new byte[] { 'D', 'F', 'L', '\0' };
 
     /**
      * The name to register the compressor by
-     *
+     *  
      * @opensearch.api - requires BWC support
      */
-    @PublicApi(since = "2.10.0")
+    @PublicApi(since = "2.10.0")  
     public static String NAME = "DEFLATE";
 
-    // 3 is a good trade-off between speed and compression ratio
+    // 3 is a good trade-off between speed and compression ratio  
     private static final int LEVEL = 3;
     // We use buffering on the input and output of in/def-laters in order to
-    // limit the number of JNI calls
+    // limit the number of JNI calls  
     private static final int BUFFER_SIZE = 4096;
 
-    @Override
+    @Override  
     public boolean isCompressed(BytesReference bytes) {
         if (bytes.length() < HEADER.length) {
-            return false;
+            return false;  
         }
         for (int i = 0; i < HEADER.length; ++i) {
-            if (bytes.get(i) != HEADER[i]) {
+            if (bytes.get(i) != HEADER[i]) {  
                 return false;
             }
-        }
+        }  
         return true;
     }
 
     @Override
     public int headerLength() {
-        return HEADER.length;
+        return HEADER.length;  
     }
 
-    // Reusable inflater reference for streaming decompression
+    // Reusable inflater reference for streaming decompression  
     private static final ThreadLocal<ReleasableReference<Inflater>> inflaterForStreamRef = ThreadLocal.withInitial(() -> {
         final Inflater inflater = new Inflater(true);
-        return new ReleasableReference<>(inflater, inflater::reset);
+        return new ReleasableReference<>(inflater, inflater::reset);  
     });
 
-    // Reusable deflater reference for streaming compression
+    // Reusable deflater reference for streaming compression  
     private static final ThreadLocal<ReleasableReference<Deflater>> deflaterForStreamRef = ThreadLocal.withInitial(() -> {
         final Deflater deflater = new Deflater(LEVEL, true);
-        return new ReleasableReference<>(deflater, deflater::reset);
+        return new ReleasableReference<>(deflater, deflater::reset);  
     });
 
-    // Reference to a deflater or inflater that is used to make sure we do not use the same stream twice when nesting streams.
+    // Reference to a deflater or inflater that is used to make sure we do not use the same stream twice when nesting streams.  
     private static final class ReleasableReference<T> implements Releasable {
 
-        protected final T resource;
+        protected final T resource;  
 
         private final Releasable releasable;
 
@@ -124,164 +124,164 @@ public class DeflateCompressor implements Compressor {
 
         protected ReleasableReference(T resource, Releasable releasable) {
             this.resource = resource;
-            this.releasable = releasable;
+            this.releasable = releasable;  
         }
 
-        T get() {
+        T get() {  
             if (Assertions.ENABLED) {
                 assert thread == null;
-                thread = Thread.currentThread();
+                thread = Thread.currentThread();  
             }
             assert inUse == false;
-            inUse = true;
+            inUse = true;  
             return resource;
         }
 
         @Override
         public void close() {
-            if (Assertions.ENABLED) {
+            if (Assertions.ENABLED) {  
                 assert thread == Thread.currentThread() : "Opened on ["
                     + thread.getName()
-                    + "] but closed on ["
+                    + "] but closed on ["  
                     + Thread.currentThread().getName()
                     + "]";
-                thread = null;
+                thread = null;  
             }
             assert inUse;
-            inUse = false;
+            inUse = false;  
             releasable.close();
         }
-    }
+    }  
 
     @Override
-    public InputStream threadLocalInputStream(InputStream in) throws IOException {
+    public InputStream threadLocalInputStream(InputStream in) throws IOException {  
         return inputStream(in, true);
     }
 
     /**
      * Creates a new input stream that decompresses the contents read from the provided input stream.
-     * Closing the returned stream will close the provided input stream.
+     * Closing the returned stream will close the provided input stream.  
      * Optionally uses thread-local, pooled resources to save off-heap allocations if the stream is guaranteed to not escape the current
      * thread.
-     *
+     *  
      * @param in           input stream to wrap
      * @param threadLocal  whether this stream will only be used on the current thread or not
-     * @return             decompressing stream
+     * @return             decompressing stream  
      */
     public static InputStream inputStream(InputStream in, boolean threadLocal) throws IOException {
-        final byte[] header = in.readNBytes(HEADER.length);
+        final byte[] header = in.readNBytes(HEADER.length);  
 
         if (Arrays.equals(header, HEADER) == false) {
-            throw new IllegalArgumentException("Input stream is not compressed with DEFLATE!");
+            throw new IllegalArgumentException("Input stream is not compressed with DEFLATE!");  
         }
 
-        final Releasable releasable;
+        final Releasable releasable;  
         final Inflater inflater;
         if (threadLocal) {
-            final ReleasableReference<Inflater> current = inflaterForStreamRef.get();
+            final ReleasableReference<Inflater> current = inflaterForStreamRef.get();  
             if (current.inUse) {
                 // Nested de-compression streams should not happen but we still handle them safely by using a fresh Inflater
-                inflater = new Inflater(true);
+                inflater = new Inflater(true);  
                 releasable = inflater::end;
             } else {
-                inflater = current.get();
+                inflater = current.get();  
                 releasable = current;
             }
-        } else {
+        } else {  
             inflater = new Inflater(true);
             releasable = inflater::end;
-        }
+        }  
         return new BufferedInputStream(new InflaterInputStream(in, inflater, BUFFER_SIZE) {
             @Override
-            public void close() throws IOException {
+            public void close() throws IOException {  
                 try {
                     super.close();
-                } finally {
+                } finally {  
                     // We are ensured to only call this once since we wrap this stream in a BufferedInputStream that will only close
                     // its delegate once
-                    releasable.close();
+                    releasable.close();  
                 }
             }
-        }, BUFFER_SIZE);
+        }, BUFFER_SIZE);  
     }
 
-    @Override
+    @Override  
     public OutputStream threadLocalOutputStream(OutputStream out) throws IOException {
         out.write(HEADER);
-        final ReleasableReference<Deflater> current = deflaterForStreamRef.get();
+        final ReleasableReference<Deflater> current = deflaterForStreamRef.get();  
         final Releasable releasable;
         final Deflater deflater;
-        if (current.inUse) {
+        if (current.inUse) {  
             // Nested compression streams should not happen but we still handle them safely by using a fresh Deflater
             deflater = new Deflater(LEVEL, true);
-            releasable = deflater::end;
+            releasable = deflater::end;  
         } else {
             deflater = current.get();
-            releasable = current;
+            releasable = current;  
         }
         final boolean syncFlush = true;
-        DeflaterOutputStream deflaterOutputStream = new DeflaterOutputStream(out, deflater, BUFFER_SIZE, syncFlush);
+        DeflaterOutputStream deflaterOutputStream = new DeflaterOutputStream(out, deflater, BUFFER_SIZE, syncFlush);  
         return new BufferedOutputStream(deflaterOutputStream, BUFFER_SIZE) {
 
-            // Due to https://bugs.openjdk.java.net/browse/JDK-8054565 we can't rely on the buffered output stream to only close once
+            // Due to https://bugs.openjdk.java.net/browse/JDK-8054565 we can't rely on the buffered output stream to only close once  
             // in code that has to support Java 8 so we manually manage a close flag for this stream.
             private boolean closed = false;
 
             public void close() throws IOException {
                 if (closed) {
-                    return;
+                    return;  
                 }
                 closed = true;
-                try {
+                try {  
                     super.close();
                 } finally {
-                    // important to release native memory
+                    // important to release native memory  
                     releasable.close();
                 }
-            }
+            }  
         };
     }
 
     private static final ThreadLocal<BytesStreamOutput> baos = ThreadLocal.withInitial(BytesStreamOutput::new);
 
-    // Reusable Inflater reference. Note: This is a separate instance from the one used for the decompressing stream wrapper because we
+    // Reusable Inflater reference. Note: This is a separate instance from the one used for the decompressing stream wrapper because we  
     // want to be able to deal with decompressing bytes references that were read from a decompressing stream.
     private static final ThreadLocal<Inflater> inflaterRef = ThreadLocal.withInitial(() -> new Inflater(true));
 
     @Override
     public BytesReference uncompress(BytesReference bytesReference) throws IOException {
-        final BytesStreamOutput buffer = baos.get();
+        final BytesStreamOutput buffer = baos.get();  
         final Inflater inflater = inflaterRef.get();
         try (InflaterOutputStream ios = new InflaterOutputStream(buffer, inflater)) {
-            bytesReference.slice(HEADER.length, bytesReference.length() - HEADER.length).writeTo(ios);
+            bytesReference.slice(HEADER.length, bytesReference.length() - HEADER.length).writeTo(ios);  
         } finally {
             inflater.reset();
-        }
+        }  
         try {
             return buffer.copyBytes();
-        } finally {
+        } finally {  
             buffer.reset();
         }
-    }
+    }  
 
     // Reusable Deflater reference. Note: This is a separate instance from the one used for the compressing stream wrapper because we
-    // want to be able to deal with compressing bytes references to a decompressing stream.
+    // want to be able to deal with compressing bytes references to a decompressing stream.  
     private static final ThreadLocal<Deflater> deflaterRef = ThreadLocal.withInitial(() -> new Deflater(LEVEL, true));
 
-    @Override
+    @Override  
     public BytesReference compress(BytesReference bytesReference) throws IOException {
         final BytesStreamOutput buffer = baos.get();
-        buffer.write(HEADER);
+        buffer.write(HEADER);  
         final Deflater deflater = deflaterRef.get();
         try (DeflaterOutputStream dos = new DeflaterOutputStream(buffer, deflater, true)) {
-            bytesReference.writeTo(dos);
+            bytesReference.writeTo(dos);  
         } finally {
             deflater.reset();
-        }
+        }  
         try {
             return buffer.copyBytes();
-        } finally {
+        } finally {  
             buffer.reset();
         }
-    }
+    }  
 }

@@ -1,29 +1,29 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.analytics.schema;
 
 import org.apache.calcite.schema.SchemaPlus;
 
-/**
+/**  
  * Provides a Calcite {@link SchemaPlus} from the current cluster state.
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 @FunctionalInterface
-public interface SchemaProvider {
+public interface SchemaProvider {  
 
     /**
-     * Builds a Calcite {@link SchemaPlus} from the given cluster state.
+     * Builds a Calcite {@link SchemaPlus} from the given cluster state.  
      *
      * @param clusterState the current cluster state (opaque Object to avoid
-     *                     server dependency in the library)
+     *                     server dependency in the library)  
      * @return a SchemaPlus with tables derived from index mappings
      */
-    SchemaPlus buildSchema(Object clusterState);
+    SchemaPlus buildSchema(Object clusterState);  
 }

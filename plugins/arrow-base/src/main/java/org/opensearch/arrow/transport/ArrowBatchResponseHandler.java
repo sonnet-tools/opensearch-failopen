@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.arrow.transport;
 
@@ -13,18 +13,18 @@ import org.opensearch.transport.StreamTransportResponseHandler;
 
 /**
  * Receive-side base for handlers that consume {@link ArrowBatchResponse}. Pins
- * {@link #skipsDeserialization()} to {@code true} so an Arrow-aware transport routes to
+ * {@link #skipsDeserialization()} to {@code true} so an Arrow-aware transport routes to  
  * the native Arrow path instead of byte deserialization.
  *
- * @opensearch.experimental
+ * @opensearch.experimental  
  */
 @ExperimentalApi
-public abstract class ArrowBatchResponseHandler<T extends ArrowBatchResponse> implements StreamTransportResponseHandler<T> {
+public abstract class ArrowBatchResponseHandler<T extends ArrowBatchResponse> implements StreamTransportResponseHandler<T> {  
     /** Constructor. */
     protected ArrowBatchResponseHandler() {}
 
     @Override
     public final boolean skipsDeserialization() {
-        return true;
+        return true;  
     }
 }

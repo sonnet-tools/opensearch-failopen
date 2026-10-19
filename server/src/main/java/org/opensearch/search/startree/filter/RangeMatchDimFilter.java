@@ -1,115 +1,115 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.search.startree.filter;
 
 import org.opensearch.common.annotation.ExperimentalApi;
 import org.opensearch.index.compositeindex.datacube.startree.index.StarTreeValues;
-import org.opensearch.index.compositeindex.datacube.startree.node.StarTreeNode;
+import org.opensearch.index.compositeindex.datacube.startree.node.StarTreeNode;  
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.startree.StarTreeNodeCollector;
-import org.opensearch.search.startree.filter.provider.DimensionFilterMapper;
+import org.opensearch.search.startree.filter.provider.DimensionFilterMapper;  
 
 import java.io.IOException;
-import java.util.Optional;
+import java.util.Optional;  
 
 /**
- * Performs range match based on the params of @{@link org.opensearch.index.query.RangeQueryBuilder}
+ * Performs range match based on the params of @{@link org.opensearch.index.query.RangeQueryBuilder}  
  * Also, contains logic to skip performing range search if it's sure that it won't be found in Star Tree.
  */
-@ExperimentalApi
+@ExperimentalApi  
 public class RangeMatchDimFilter implements DimensionFilter {
 
-    private final String dimensionName;
+    private final String dimensionName;  
     private final Object low;
     private final Object high;
-    private final boolean includeLow;
+    private final boolean includeLow;  
     private final boolean includeHigh;
 
-    private Long lowOrdinal;
+    private Long lowOrdinal;  
     private Long highOrdinal;
 
-    // TODO - see if we need to handle this while intersecting
+    // TODO - see if we need to handle this while intersecting  
     private boolean skipRangeCollection = false;
 
-    private DimensionFilterMapper dimensionFilterMapper;
+    private DimensionFilterMapper dimensionFilterMapper;  
 
     public RangeMatchDimFilter(String dimensionName, Object low, Object high, boolean includeLow, boolean includeHigh) {
-        this.dimensionName = dimensionName;
+        this.dimensionName = dimensionName;  
         this.low = low;
         this.high = high;
-        this.includeLow = includeLow;
+        this.includeLow = includeLow;  
         this.includeHigh = includeHigh;
     }
 
     @Override
     public void initialiseForSegment(StarTreeValues starTreeValues, SearchContext searchContext) {
-        skipRangeCollection = false;
+        skipRangeCollection = false;  
         this.dimensionFilterMapper = DimensionFilterMapper.Factory.fromMappedFieldType(
             searchContext.mapperService().fieldType(dimensionName),
-            searchContext
+            searchContext  
         );
 
-        lowOrdinal = 0L;
+        lowOrdinal = 0L;  
         if (low != null) {
             MatchType lowMatchType = includeLow ? MatchType.GTE : MatchType.GT;
-            Optional<Long> lowOrdinalFound = dimensionFilterMapper.getMatchingOrdinal(dimensionName, low, starTreeValues, lowMatchType);
+            Optional<Long> lowOrdinalFound = dimensionFilterMapper.getMatchingOrdinal(dimensionName, low, starTreeValues, lowMatchType);  
             if (lowOrdinalFound.isPresent()) {
                 lowOrdinal = lowOrdinalFound.get();
-            } else {
+            } else {  
                 // This is only valid for Non-numeric fields.
                 // High can't be found since nothing >= low exists.
-                lowOrdinal = highOrdinal = Long.MAX_VALUE;
+                lowOrdinal = highOrdinal = Long.MAX_VALUE;  
                 skipRangeCollection = true;
                 return;
-            }
+            }  
         }
         highOrdinal = Long.MAX_VALUE;
-        if (high != null) {
+        if (high != null) {  
             MatchType highMatchType = includeHigh ? MatchType.LTE : MatchType.LT;
             Optional<Long> highOrdinalFound = dimensionFilterMapper.getMatchingOrdinal(dimensionName, high, starTreeValues, highMatchType);
-            highOrdinalFound.ifPresent(ord -> highOrdinal = ord);
+            highOrdinalFound.ifPresent(ord -> highOrdinal = ord);  
         }
     }
 
     @Override
     public void matchStarTreeNodes(StarTreeNode parentNode, StarTreeValues starTreeValues, StarTreeNodeCollector collector)
-        throws IOException {
+        throws IOException {  
         if (parentNode != null && !skipRangeCollection) {
             parentNode.collectChildrenInRange(lowOrdinal, highOrdinal, collector, dimensionFilterMapper);
-        }
+        }  
     }
 
-    @Override
+    @Override  
     public boolean matchDimValue(long ordinal, StarTreeValues starTreeValues) {
         return dimensionFilterMapper.comparator().compare(lowOrdinal, ordinal) <= 0
-            && dimensionFilterMapper.comparator().compare(ordinal, highOrdinal) <= 0;
+            && dimensionFilterMapper.comparator().compare(ordinal, highOrdinal) <= 0;  
     }
 
-    @Override
+    @Override  
     public String getDimensionName() {
         return dimensionName;
-    }
+    }  
 
     public Object getLow() {
-        return low;
+        return low;  
     }
 
-    public Object getHigh() {
+    public Object getHigh() {  
         return high;
     }
 
     public boolean isIncludeLow() {
         return includeLow;
-    }
+    }  
 
     public boolean isIncludeHigh() {
-        return includeHigh;
+        return includeHigh;  
     }
 
-}
+}  

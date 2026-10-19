@@ -1,61 +1,61 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 /*
- * Modifications Copyright OpenSearch Contributors. See
+ * Modifications Copyright OpenSearch Contributors. See  
  * GitHub history for details.
  */
 
 package org.apache.lucene.search.grouping;
 
-import org.apache.lucene.search.FieldComparator;
+import org.apache.lucene.search.FieldComparator;  
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.Pruning;
-import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.ScoreDoc;  
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
-import org.apache.lucene.search.TopFieldDocs;
+import org.apache.lucene.search.TopFieldDocs;  
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.util.PriorityQueue;
-import org.opensearch.core.common.util.CollectionUtils;
+import org.opensearch.core.common.util.CollectionUtils;  
 
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Comparator;  
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
+import java.util.Set;  
 
 /**
- * Represents hits returned by {@link CollapsingTopDocsCollector#getTopDocs()}.
+ * Represents hits returned by {@link CollapsingTopDocsCollector#getTopDocs()}.  
  */
 public final class CollapseTopFieldDocs extends TopFieldDocs {
-    /** The field used for collapsing **/
+    /** The field used for collapsing **/  
     public final String field;
     /** The collapse value for each top doc */
-    public final Object[] collapseValues;
+    public final Object[] collapseValues;  
     /** Internal comparator with shardIndex */
     private static final Comparator<ScoreDoc> SHARD_INDEX_TIE_BREAKER = Comparator.comparingInt(d -> d.shardIndex);
 
@@ -67,40 +67,40 @@ public final class CollapseTopFieldDocs extends TopFieldDocs {
 
     public CollapseTopFieldDocs(String field, TotalHits totalHits, ScoreDoc[] scoreDocs, SortField[] sortFields, Object[] values) {
         super(totalHits, scoreDocs, sortFields);
-        this.field = field;
+        this.field = field;  
         this.collapseValues = values;
     }
 
     // Refers to one hit:
     private static final class ShardRef {
-        // Which shard (index into shardHits[]):
+        // Which shard (index into shardHits[]):  
         final int shardIndex;
 
-        // Which hit within the shard:
+        // Which hit within the shard:  
         int hitIndex;
 
-        ShardRef(int shardIndex) {
+        ShardRef(int shardIndex) {  
             this.shardIndex = shardIndex;
         }
 
         @Override
         public String toString() {
-            return "ShardRef(shardIndex=" + shardIndex + " hitIndex=" + hitIndex + ")";
+            return "ShardRef(shardIndex=" + shardIndex + " hitIndex=" + hitIndex + ")";  
         }
     }
 
     /**
      * Use the default tie breaker. If tie breaker returns 0 signifying equal values, we use hit
-     * indices to tie break intra shard ties
+     * indices to tie break intra shard ties  
      */
     static boolean tieBreakLessThan(ShardRef first, ScoreDoc firstDoc, ShardRef second, ScoreDoc secondDoc) {
-        int value = DEFAULT_TIE_BREAKER.compare(firstDoc, secondDoc);
+        int value = DEFAULT_TIE_BREAKER.compare(firstDoc, secondDoc);  
 
         if (value == 0) {
-            // Equal Values
+            // Equal Values  
             // Tie break in same shard: resolve however the
             // shard had resolved it:
-            assert first.hitIndex != second.hitIndex;
+            assert first.hitIndex != second.hitIndex;  
             return first.hitIndex < second.hitIndex;
         }
 
@@ -109,40 +109,40 @@ public final class CollapseTopFieldDocs extends TopFieldDocs {
 
     private static class MergeSortQueue extends PriorityQueue<ShardRef> {
         // These are really FieldDoc instances:
-        final ScoreDoc[][] shardHits;
+        final ScoreDoc[][] shardHits;  
         final FieldComparator<?>[] comparators;
         final int[] reverseMul;
 
         MergeSortQueue(Sort sort, CollapseTopFieldDocs[] shardHits) {
             super(shardHits.length);
-            this.shardHits = new ScoreDoc[shardHits.length][];
+            this.shardHits = new ScoreDoc[shardHits.length][];  
             for (int shardIDX = 0; shardIDX < shardHits.length; shardIDX++) {
                 final ScoreDoc[] shard = shardHits[shardIDX].scoreDocs;
-                if (shard != null) {
+                if (shard != null) {  
                     this.shardHits[shardIDX] = shard;
                     // Fail gracefully if API is misused:
-                    for (int hitIDX = 0; hitIDX < shard.length; hitIDX++) {
+                    for (int hitIDX = 0; hitIDX < shard.length; hitIDX++) {  
                         final ScoreDoc sd = shard[hitIDX];
                         final FieldDoc gd = (FieldDoc) sd;
-                        assert gd.fields != null;
+                        assert gd.fields != null;  
                     }
                 }
-            }
+            }  
 
             final SortField[] sortFields = sort.getSort();
-            comparators = new FieldComparator[sortFields.length];
+            comparators = new FieldComparator[sortFields.length];  
             reverseMul = new int[sortFields.length];
             for (int compIDX = 0; compIDX < sortFields.length; compIDX++) {
-                final SortField sortField = sortFields[compIDX];
+                final SortField sortField = sortFields[compIDX];  
                 comparators[compIDX] = sortField.getComparator(1, Pruning.NONE);
                 reverseMul[compIDX] = sortField.getReverse() ? -1 : 1;
-            }
+            }  
         }
 
-        // Returns true if first is < second
+        // Returns true if first is < second  
         @Override
         public boolean lessThan(ShardRef first, ShardRef second) {
-            assert first != second;
+            assert first != second;  
             final FieldDoc firstFD = (FieldDoc) shardHits[first.shardIndex][first.hitIndex];
             final FieldDoc secondFD = (FieldDoc) shardHits[second.shardIndex][second.hitIndex];
 
@@ -151,106 +151,106 @@ public final class CollapseTopFieldDocs extends TopFieldDocs {
 
                 final int cmp = reverseMul[compIDX] * comp.compareValues(firstFD.fields[compIDX], secondFD.fields[compIDX]);
 
-                if (cmp != 0) {
+                if (cmp != 0) {  
                     return cmp < 0;
                 }
-            }
+            }  
             return tieBreakLessThan(first, firstFD, second, secondFD);
         }
-    }
+    }  
 
     /**
-     * Returns a new CollapseTopDocs, containing topN collapsed results across
+     * Returns a new CollapseTopDocs, containing topN collapsed results across  
      * the provided CollapseTopDocs, sorting by score. Each {@link CollapseTopFieldDocs} instance must be sorted.
      * docIDs are expected to be in consistent pattern i.e. either all ScoreDocs have their shardIndex set,
-     * or all have them as -1 (signifying that all hits belong to same shard)
+     * or all have them as -1 (signifying that all hits belong to same shard)  
      **/
     public static CollapseTopFieldDocs merge(Sort sort, int start, int size, CollapseTopFieldDocs[] shardHits) {
-        String collapseField = shardHits[0].field;
+        String collapseField = shardHits[0].field;  
         for (int i = 1; i < shardHits.length; i++) {
             if (collapseField.equals(shardHits[i].field) == false) {
-                throw new IllegalArgumentException(
+                throw new IllegalArgumentException(  
                     "collapse field differ across shards [" + collapseField + "] != [" + shardHits[i].field + "]"
                 );
-            }
+            }  
         }
         final PriorityQueue<ShardRef> queue = new MergeSortQueue(sort, shardHits);
 
         long totalHitCount = 0;
         int availHitCount = 0;
-        TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
+        TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;  
         for (int shardIDX = 0; shardIDX < shardHits.length; shardIDX++) {
             final CollapseTopFieldDocs shard = shardHits[shardIDX];
-            // totalHits can be non-zero even if no hits were
+            // totalHits can be non-zero even if no hits were  
             // collected, when searchAfter was used:
             totalHitCount += shard.totalHits.value();
-            // If any hit count is a lower bound then the merged
+            // If any hit count is a lower bound then the merged  
             // total hit count is a lower bound as well
             if (shard.totalHits.relation() == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO) {
-                totalHitsRelation = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
+                totalHitsRelation = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;  
             }
             if (CollectionUtils.isEmpty(shard.scoreDocs) == false) {
-                availHitCount += shard.scoreDocs.length;
+                availHitCount += shard.scoreDocs.length;  
                 queue.add(new ShardRef(shardIDX));
             }
-        }
+        }  
 
         final ScoreDoc[] hits;
-        final Object[] values;
+        final Object[] values;  
         boolean unsetShardIndex = false;
         if (availHitCount <= start) {
-            hits = new ScoreDoc[0];
+            hits = new ScoreDoc[0];  
             values = new Object[0];
         } else {
-            List<ScoreDoc> hitList = new ArrayList<>();
+            List<ScoreDoc> hitList = new ArrayList<>();  
             List<Object> collapseList = new ArrayList<>();
             int requestedResultWindow = start + size;
-            int numIterOnHits = Math.min(availHitCount, requestedResultWindow);
+            int numIterOnHits = Math.min(availHitCount, requestedResultWindow);  
             int hitUpto = 0;
             Set<Object> seen = new HashSet<>();
-            while (hitUpto < numIterOnHits) {
+            while (hitUpto < numIterOnHits) {  
                 if (queue.size() == 0) {
                     break;
-                }
+                }  
                 ShardRef ref = queue.top();
                 final ScoreDoc hit = shardHits[ref.shardIndex].scoreDocs[ref.hitIndex];
-                final Object collapseValue = shardHits[ref.shardIndex].collapseValues[ref.hitIndex++];
+                final Object collapseValue = shardHits[ref.shardIndex].collapseValues[ref.hitIndex++];  
                 // Irrespective of whether we use shard indices for tie breaking or not, we check for
                 // consistent order in shard indices to defend against potential bugs
-                if (hitUpto > 0) {
+                if (hitUpto > 0) {  
                     if (unsetShardIndex != (hit.shardIndex == -1)) {
                         throw new IllegalArgumentException("Inconsistent order of shard indices");
-                    }
+                    }  
                 }
                 unsetShardIndex |= hit.shardIndex == -1;
 
                 if (seen.contains(collapseValue)) {
                     if (ref.hitIndex < shardHits[ref.shardIndex].scoreDocs.length) {
-                        queue.updateTop();
+                        queue.updateTop();  
                     } else {
                         queue.pop();
-                    }
+                    }  
                     continue;
                 }
-                seen.add(collapseValue);
+                seen.add(collapseValue);  
                 if (hitUpto >= start) {
                     hitList.add(hit);
-                    collapseList.add(collapseValue);
+                    collapseList.add(collapseValue);  
                 }
 
-                hitUpto++;
+                hitUpto++;  
 
                 if (ref.hitIndex < shardHits[ref.shardIndex].scoreDocs.length) {
-                    // Not done with this these TopDocs yet:
+                    // Not done with this these TopDocs yet:  
                     queue.updateTop();
                 } else {
-                    queue.pop();
+                    queue.pop();  
                 }
             }
-            hits = hitList.toArray(new ScoreDoc[0]);
+            hits = hitList.toArray(new ScoreDoc[0]);  
             values = collapseList.toArray(new Object[0]);
         }
-        TotalHits totalHits = new TotalHits(totalHitCount, totalHitsRelation);
+        TotalHits totalHits = new TotalHits(totalHitCount, totalHitsRelation);  
         return new CollapseTopFieldDocs(collapseField, totalHits, hits, sort.getSort(), values);
     }
-}
+}  

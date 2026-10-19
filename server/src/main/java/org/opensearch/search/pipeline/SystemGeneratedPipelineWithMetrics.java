@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.search.pipeline;
 
@@ -13,178 +13,178 @@ import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
+import java.util.List;  
 import java.util.Locale;
 import java.util.Map;
-import java.util.function.LongSupplier;
+import java.util.function.LongSupplier;  
 import java.util.stream.Collectors;
 
-import static org.opensearch.plugins.SearchPipelinePlugin.SystemGeneratedSearchPipelineConfigKeys.PARENT_ACTION;
+import static org.opensearch.plugins.SearchPipelinePlugin.SystemGeneratedSearchPipelineConfigKeys.PARENT_ACTION;  
 import static org.opensearch.plugins.SearchPipelinePlugin.SystemGeneratedSearchPipelineConfigKeys.SEARCH_REQUEST;
 import static org.opensearch.search.pipeline.SystemGeneratedProcessor.ExecutionStage.POST_USER_DEFINED;
-import static org.opensearch.search.pipeline.SystemGeneratedProcessor.ExecutionStage.PRE_USER_DEFINED;
+import static org.opensearch.search.pipeline.SystemGeneratedProcessor.ExecutionStage.PRE_USER_DEFINED;  
 
 class SystemGeneratedPipelineWithMetrics extends Pipeline {
-    private final SystemGeneratedProcessorMetrics systemGeneratedProcessorMetrics;
+    private final SystemGeneratedProcessorMetrics systemGeneratedProcessorMetrics;  
     private static final String ID = "_system_generated_pipeline";
     private static final String PIPELINE_DESCRIPTION = "This is a system generated search pipeline.";
-    private static final String TAG = "system_generated_processor";
+    private static final String TAG = "system_generated_processor";  
     private static final String PROCESSOR_DESCRIPTION = "This is a system generated search processor.";
     private static final boolean IGNORE_FAILURE = false;
-    private static final Processor.PipelineContext PIPELINE_CONTEXT = new Processor.PipelineContext(
+    private static final Processor.PipelineContext PIPELINE_CONTEXT = new Processor.PipelineContext(  
         Processor.PipelineSource.SEARCH_REQUEST
     );
 
     SystemGeneratedPipelineWithMetrics(
         String id,
-        String description,
+        String description,  
         Integer version,
         List<SearchRequestProcessor> requestProcessors,
-        List<SearchResponseProcessor> responseProcessors,
+        List<SearchResponseProcessor> responseProcessors,  
         List<SearchPhaseResultsProcessor> phaseResultsProcessors,
         NamedWriteableRegistry namedWriteableRegistry,
-        LongSupplier relativeTimeSupplier,
+        LongSupplier relativeTimeSupplier,  
         SystemGeneratedProcessorMetrics systemGeneratedProcessorMetrics
     ) {
-        super(
+        super(  
             id,
             description,
-            version,
+            version,  
             requestProcessors,
             responseProcessors,
-            phaseResultsProcessors,
+            phaseResultsProcessors,  
             namedWriteableRegistry,
             relativeTimeSupplier
-        );
+        );  
         this.systemGeneratedProcessorMetrics = systemGeneratedProcessorMetrics;
     }
 
     static SystemGeneratedPipelineHolder create(
         Map<String, Object> config,
-        Map<String, SystemGeneratedProcessor.SystemGeneratedFactory<SearchRequestProcessor>> requestProcessorFactories,
+        Map<String, SystemGeneratedProcessor.SystemGeneratedFactory<SearchRequestProcessor>> requestProcessorFactories,  
         Map<String, SystemGeneratedProcessor.SystemGeneratedFactory<SearchResponseProcessor>> responseProcessorFactories,
         Map<String, SystemGeneratedProcessor.SystemGeneratedFactory<SearchPhaseResultsProcessor>> phaseResultsProcessorFactories,
-        NamedWriteableRegistry namedWriteableRegistry,
+        NamedWriteableRegistry namedWriteableRegistry,  
         SystemGeneratedProcessorMetrics systemGeneratedProcessorMetrics,
         List<String> enabledSystemGeneratedFactories
-    ) throws Exception {
+    ) throws Exception {  
 
         final LongSupplier relativeTimeSupplier = System::nanoTime;
-        final ProcessorLists<SearchRequestProcessor> requestProcessorLists = generateProcessors(
+        final ProcessorLists<SearchRequestProcessor> requestProcessorLists = generateProcessors(  
             requestProcessorFactories,
             Processor.ProcessorType.SEARCH_REQUEST,
-            config,
+            config,  
             relativeTimeSupplier,
             systemGeneratedProcessorMetrics,
-            enabledSystemGeneratedFactories
+            enabledSystemGeneratedFactories  
         );
 
-        final ProcessorLists<SearchPhaseResultsProcessor> phaseResultsProcessorLists = generateProcessors(
+        final ProcessorLists<SearchPhaseResultsProcessor> phaseResultsProcessorLists = generateProcessors(  
             phaseResultsProcessorFactories,
             Processor.ProcessorType.SEARCH_PHASE_RESULTS,
-            config,
+            config,  
             relativeTimeSupplier,
             systemGeneratedProcessorMetrics,
-            enabledSystemGeneratedFactories
+            enabledSystemGeneratedFactories  
         );
 
-        final ProcessorLists<SearchResponseProcessor> responseProcessorLists = generateProcessors(
+        final ProcessorLists<SearchResponseProcessor> responseProcessorLists = generateProcessors(  
             responseProcessorFactories,
             Processor.ProcessorType.SEARCH_RESPONSE,
-            config,
+            config,  
             relativeTimeSupplier,
             systemGeneratedProcessorMetrics,
-            enabledSystemGeneratedFactories
+            enabledSystemGeneratedFactories  
         );
 
-        final SystemGeneratedPipelineWithMetrics prePipeline = new SystemGeneratedPipelineWithMetrics(
+        final SystemGeneratedPipelineWithMetrics prePipeline = new SystemGeneratedPipelineWithMetrics(  
             ID,
             PIPELINE_DESCRIPTION,
-            null,
+            null,  
             requestProcessorLists.pre,
             responseProcessorLists.pre,
-            phaseResultsProcessorLists.pre,
+            phaseResultsProcessorLists.pre,  
             namedWriteableRegistry,
             relativeTimeSupplier,
-            systemGeneratedProcessorMetrics
+            systemGeneratedProcessorMetrics  
         );
 
-        final SystemGeneratedPipelineWithMetrics postPipeline = new SystemGeneratedPipelineWithMetrics(
+        final SystemGeneratedPipelineWithMetrics postPipeline = new SystemGeneratedPipelineWithMetrics(  
             ID,
             PIPELINE_DESCRIPTION,
-            null,
+            null,  
             requestProcessorLists.post,
             responseProcessorLists.post,
-            phaseResultsProcessorLists.post,
+            phaseResultsProcessorLists.post,  
             namedWriteableRegistry,
             relativeTimeSupplier,
-            systemGeneratedProcessorMetrics
+            systemGeneratedProcessorMetrics  
         );
 
-        return new SystemGeneratedPipelineHolder(prePipeline, postPipeline);
+        return new SystemGeneratedPipelineHolder(prePipeline, postPipeline);  
     }
 
-    static class ProcessorLists<T> {
+    static class ProcessorLists<T> {  
         final List<T> pre = new ArrayList<>();
         final List<T> post = new ArrayList<>();
-    }
+    }  
 
     private static <T extends Processor> ProcessorLists<T> generateProcessors(
-        Map<String, SystemGeneratedProcessor.SystemGeneratedFactory<T>> factories,
+        Map<String, SystemGeneratedProcessor.SystemGeneratedFactory<T>> factories,  
         Processor.ProcessorType type,
         Map<String, Object> config,
-        LongSupplier relativeTimeSupplier,
+        LongSupplier relativeTimeSupplier,  
         SystemGeneratedProcessorMetrics systemGeneratedProcessorMetrics,
         List<String> enabledSystemGeneratedFactories
-    ) throws Exception {
+    ) throws Exception {  
         ProcessorLists<T> lists = new ProcessorLists<>();
         if (enabledSystemGeneratedFactories.isEmpty()) {
-            return lists;
+            return lists;  
         }
         boolean isAllEnabled = enabledSystemGeneratedFactories.contains("*");
-        ProcessorGenerationContext context = new ProcessorGenerationContext(
+        ProcessorGenerationContext context = new ProcessorGenerationContext(  
             (SearchRequest) config.get(SEARCH_REQUEST),
             (String) config.get(PARENT_ACTION)
-        );
+        );  
 
         for (Map.Entry<String, SystemGeneratedProcessor.SystemGeneratedFactory<T>> entry : factories.entrySet()) {
-            String factoryType = entry.getKey();
+            String factoryType = entry.getKey();  
             if (isAllEnabled == false && enabledSystemGeneratedFactories.contains(factoryType) == false) {
                 continue;
-            }
+            }  
             SystemGeneratedProcessor.SystemGeneratedFactory<T> factory = entry.getValue();
 
-            long start = relativeTimeSupplier.getAsLong();
+            long start = relativeTimeSupplier.getAsLong();  
             systemGeneratedProcessorMetrics.beforeEvaluation(factoryType, type);
             boolean shouldGenerate;
-            try {
+            try {  
                 shouldGenerate = factory.shouldGenerate(context);
                 systemGeneratedProcessorMetrics.afterEvaluation(factoryType, type, relativeTimeSupplier.getAsLong() - start);
-            } catch (Exception e) {
+            } catch (Exception e) {  
                 systemGeneratedProcessorMetrics.onEvaluationFailure(factoryType, type);
                 throw e;
-            }
+            }  
 
             if (!shouldGenerate) continue;
 
             start = relativeTimeSupplier.getAsLong();
             systemGeneratedProcessorMetrics.beforeGeneration(factoryType, type);
-            try {
+            try {  
                 T processor = factory.create(
                     Collections.unmodifiableMap(factories),
-                    TAG,
+                    TAG,  
                     PROCESSOR_DESCRIPTION,
                     IGNORE_FAILURE,
-                    config,
+                    config,  
                     PIPELINE_CONTEXT
                 );
-                systemGeneratedProcessorMetrics.afterGeneration(factoryType, type, relativeTimeSupplier.getAsLong() - start);
+                systemGeneratedProcessorMetrics.afterGeneration(factoryType, type, relativeTimeSupplier.getAsLong() - start);  
 
                 SystemGeneratedProcessor systemGeneratedProcessor = (SystemGeneratedProcessor) processor;
-                (PRE_USER_DEFINED.equals(systemGeneratedProcessor.getExecutionStage()) ? lists.pre : lists.post).add(processor);
+                (PRE_USER_DEFINED.equals(systemGeneratedProcessor.getExecutionStage()) ? lists.pre : lists.post).add(processor);  
             } catch (Exception e) {
                 systemGeneratedProcessorMetrics.onGenerationFailure(factoryType, type);
-                throw e;
+                throw e;  
             }
         }
 
@@ -196,75 +196,75 @@ class SystemGeneratedPipelineWithMetrics extends Pipeline {
 
     private static <T extends Processor> void ensureSingleProcessor(
         String typeName,
-        SystemGeneratedProcessor.ExecutionStage stage,
+        SystemGeneratedProcessor.ExecutionStage stage,  
         List<T> processors
     ) {
-        if (processors.size() > 1) {
+        if (processors.size() > 1) {  
             String processorTypes = processors.stream().map(Processor::getType).collect(Collectors.joining(","));
             throw new IllegalArgumentException(
-                String.format(
+                String.format(  
                     Locale.ROOT,
                     "Cannot support more than one system generated %s processor to be executed %s. Now we have [%s].",
-                    typeName,
+                    typeName,  
                     stage,
                     processorTypes
-                )
+                )  
             );
         }
-    }
+    }  
 
     /**
-     * Evaluate if there is any conflict between processors
+     * Evaluate if there is any conflict between processors  
      * @param processorConflictEvaluationContext The context to evaluate the conflicts
      */
-    void evaluateConflicts(ProcessorConflictEvaluationContext processorConflictEvaluationContext) {
+    void evaluateConflicts(ProcessorConflictEvaluationContext processorConflictEvaluationContext) {  
         evaluateConflicts(getSearchRequestProcessors(), processorConflictEvaluationContext);
         evaluateConflicts(getSearchPhaseResultsProcessors(), processorConflictEvaluationContext);
-        evaluateConflicts(getSearchResponseProcessors(), processorConflictEvaluationContext);
+        evaluateConflicts(getSearchResponseProcessors(), processorConflictEvaluationContext);  
     }
 
-    private <T extends Processor> void evaluateConflicts(
+    private <T extends Processor> void evaluateConflicts(  
         List<T> processors,
         ProcessorConflictEvaluationContext processorConflictEvaluationContext
-    ) {
+    ) {  
         for (T processor : processors) {
             ((SystemGeneratedProcessor) processor).evaluateConflicts(processorConflictEvaluationContext);
-        }
+        }  
     }
 
-    @Override
+    @Override  
     protected void beforeRequestProcessor(Processor processor) {
         super.beforeRequestProcessor(processor);
-        systemGeneratedProcessorMetrics.beforeProcess(processor.getType(), Processor.ProcessorType.SEARCH_REQUEST);
+        systemGeneratedProcessorMetrics.beforeProcess(processor.getType(), Processor.ProcessorType.SEARCH_REQUEST);  
     }
 
-    @Override
+    @Override  
     protected void afterRequestProcessor(Processor processor, long timeInNanos) {
         super.afterRequestProcessor(processor, timeInNanos);
-        systemGeneratedProcessorMetrics.afterProcess(processor.getType(), Processor.ProcessorType.SEARCH_REQUEST, timeInNanos);
+        systemGeneratedProcessorMetrics.afterProcess(processor.getType(), Processor.ProcessorType.SEARCH_REQUEST, timeInNanos);  
     }
 
-    @Override
+    @Override  
     protected void onRequestProcessorFailed(Processor processor) {
         super.onRequestProcessorFailed(processor);
-        systemGeneratedProcessorMetrics.onProcessFailure(processor.getType(), Processor.ProcessorType.SEARCH_REQUEST);
+        systemGeneratedProcessorMetrics.onProcessFailure(processor.getType(), Processor.ProcessorType.SEARCH_REQUEST);  
     }
 
-    @Override
+    @Override  
     protected void beforeResponseProcessor(Processor processor) {
         super.beforeResponseProcessor(processor);
-        systemGeneratedProcessorMetrics.beforeProcess(processor.getType(), Processor.ProcessorType.SEARCH_RESPONSE);
+        systemGeneratedProcessorMetrics.beforeProcess(processor.getType(), Processor.ProcessorType.SEARCH_RESPONSE);  
     }
 
-    @Override
+    @Override  
     protected void afterResponseProcessor(Processor processor, long timeInNanos) {
         super.afterResponseProcessor(processor, timeInNanos);
-        systemGeneratedProcessorMetrics.afterProcess(processor.getType(), Processor.ProcessorType.SEARCH_RESPONSE, timeInNanos);
+        systemGeneratedProcessorMetrics.afterProcess(processor.getType(), Processor.ProcessorType.SEARCH_RESPONSE, timeInNanos);  
     }
 
-    @Override
+    @Override  
     protected void onResponseProcessorFailed(Processor processor) {
         super.onResponseProcessorFailed(processor);
-        systemGeneratedProcessorMetrics.onProcessFailure(processor.getType(), Processor.ProcessorType.SEARCH_RESPONSE);
+        systemGeneratedProcessorMetrics.onProcessFailure(processor.getType(), Processor.ProcessorType.SEARCH_RESPONSE);  
     }
 }

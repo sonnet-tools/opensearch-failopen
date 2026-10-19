@@ -1,40 +1,40 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.painless.phase;
 
 import org.opensearch.painless.lookup.PainlessLookup;
 import org.opensearch.painless.node.SClass;
-import org.opensearch.painless.node.SFunction;
+import org.opensearch.painless.node.SFunction;  
 import org.opensearch.painless.symbol.FunctionTable;
 import org.opensearch.painless.symbol.ScriptScope;
 
@@ -43,61 +43,61 @@ import java.util.List;
 
 public class DefaultSemanticHeaderPhase extends UserTreeBaseVisitor<ScriptScope> {
 
-    @Override
+    @Override  
     public void visitClass(SClass userClassNode, ScriptScope scriptScope) {
         for (SFunction userFunctionNode : userClassNode.getFunctionNodes()) {
-            visitFunction(userFunctionNode, scriptScope);
+            visitFunction(userFunctionNode, scriptScope);  
         }
     }
 
     @Override
     public void visitFunction(SFunction userFunctionNode, ScriptScope scriptScope) {
-        String functionName = userFunctionNode.getFunctionName();
+        String functionName = userFunctionNode.getFunctionName();  
         List<String> canonicalTypeNameParameters = userFunctionNode.getCanonicalTypeNameParameters();
         List<String> parameterNames = userFunctionNode.getParameterNames();
-        int parameterCount = canonicalTypeNameParameters.size();
+        int parameterCount = canonicalTypeNameParameters.size();  
 
         if (parameterCount != parameterNames.size()) {
-            throw userFunctionNode.createError(
+            throw userFunctionNode.createError(  
                 new IllegalStateException(
                     "invalid function definition: "
-                        + "parameter types size ["
+                        + "parameter types size ["  
                         + canonicalTypeNameParameters.size()
                         + "] is not equal to "
-                        + "parameter names size ["
+                        + "parameter names size ["  
                         + parameterNames.size()
                         + "] for function ["
-                        + functionName
+                        + functionName  
                         + "]"
                 )
-            );
+            );  
         }
 
-        FunctionTable functionTable = scriptScope.getFunctionTable();
+        FunctionTable functionTable = scriptScope.getFunctionTable();  
         String functionKey = FunctionTable.buildLocalFunctionKey(functionName, canonicalTypeNameParameters.size());
 
-        if (functionTable.getFunction(functionKey) != null) {
+        if (functionTable.getFunction(functionKey) != null) {  
             throw userFunctionNode.createError(
                 new IllegalArgumentException("invalid function definition: " + "found duplicate function [" + functionKey + "].")
-            );
+            );  
         }
 
-        PainlessLookup painlessLookup = scriptScope.getPainlessLookup();
+        PainlessLookup painlessLookup = scriptScope.getPainlessLookup();  
         String returnCanonicalTypeName = userFunctionNode.getReturnCanonicalTypeName();
         Class<?> returnType = painlessLookup.canonicalTypeNameToType(returnCanonicalTypeName);
 
         if (returnType == null) {
             throw userFunctionNode.createError(
-                new IllegalArgumentException(
+                new IllegalArgumentException(  
                     "invalid function definition: "
                         + "return type ["
-                        + returnCanonicalTypeName
+                        + returnCanonicalTypeName  
                         + "] not found for function ["
                         + functionKey
-                        + "]"
+                        + "]"  
                 )
             );
-        }
+        }  
 
         List<Class<?>> typeParameters = new ArrayList<>();
 
@@ -106,20 +106,20 @@ public class DefaultSemanticHeaderPhase extends UserTreeBaseVisitor<ScriptScope>
 
             if (paramType == null) {
                 throw userFunctionNode.createError(
-                    new IllegalArgumentException(
+                    new IllegalArgumentException(  
                         "invalid function definition: "
                             + "parameter type ["
-                            + typeParameter
+                            + typeParameter  
                             + "] not found for function ["
                             + functionKey
-                            + "]"
+                            + "]"  
                     )
                 );
-            }
+            }  
 
             typeParameters.add(paramType);
-        }
+        }  
 
         functionTable.addFunction(functionName, returnType, typeParameters, userFunctionNode.isInternal(), userFunctionNode.isStatic());
-    }
+    }  
 }

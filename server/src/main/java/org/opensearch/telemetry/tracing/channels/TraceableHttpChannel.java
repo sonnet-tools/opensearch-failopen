@@ -1,100 +1,100 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.telemetry.tracing.channels;
 
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.http.HttpChannel;
-import org.opensearch.http.HttpResponse;
+import org.opensearch.http.HttpResponse;  
 import org.opensearch.telemetry.tracing.Span;
 import org.opensearch.telemetry.tracing.Tracer;
-import org.opensearch.telemetry.tracing.listener.TraceableActionListener;
+import org.opensearch.telemetry.tracing.listener.TraceableActionListener;  
 
 import java.net.InetSocketAddress;
-import java.util.Objects;
+import java.util.Objects;  
 import java.util.Optional;
 
-/**
+/**  
  * Tracer wrapped {@link HttpChannel}
  */
-public class TraceableHttpChannel implements HttpChannel {
+public class TraceableHttpChannel implements HttpChannel {  
     private final HttpChannel delegate;
     private final Span span;
-    private final Tracer tracer;
+    private final Tracer tracer;  
 
     /**
-     * Constructor.
+     * Constructor.  
      *
      * @param delegate delegate
-     * @param span     span
+     * @param span     span  
      * @param tracer tracer
      */
-    private TraceableHttpChannel(HttpChannel delegate, Span span, Tracer tracer) {
+    private TraceableHttpChannel(HttpChannel delegate, Span span, Tracer tracer) {  
         this.span = Objects.requireNonNull(span);
         this.delegate = Objects.requireNonNull(delegate);
-        this.tracer = Objects.requireNonNull(tracer);
+        this.tracer = Objects.requireNonNull(tracer);  
     }
 
-    /**
+    /**  
      * Factory method.
      *
-     * @param delegate delegate
+     * @param delegate delegate  
      * @param span     span
      * @param tracer tracer
-     * @return http channel
+     * @return http channel  
      */
     public static HttpChannel create(HttpChannel delegate, Span span, Tracer tracer) {
-        if (tracer.isRecording() == true) {
+        if (tracer.isRecording() == true) {  
             return new TraceableHttpChannel(delegate, span, tracer);
         } else {
-            return delegate;
+            return delegate;  
         }
     }
 
     @Override
     public void handleException(Exception ex) {
-        span.addEvent("The HttpChannel was closed without sending the response");
+        span.addEvent("The HttpChannel was closed without sending the response");  
         span.setError(ex);
         span.endSpan();
-    }
+    }  
 
     @Override
-    public void close() {
+    public void close() {  
         delegate.close();
     }
 
     @Override
     public void addCloseListener(ActionListener<Void> listener) {
-        delegate.addCloseListener(listener);
+        delegate.addCloseListener(listener);  
     }
 
-    @Override
+    @Override  
     public boolean isOpen() {
         return delegate.isOpen();
-    }
+    }  
 
     @Override
-    public void sendResponse(HttpResponse response, ActionListener<Void> listener) {
+    public void sendResponse(HttpResponse response, ActionListener<Void> listener) {  
         delegate.sendResponse(response, TraceableActionListener.create(listener, span, tracer));
     }
 
     @Override
     public InetSocketAddress getLocalAddress() {
-        return delegate.getLocalAddress();
+        return delegate.getLocalAddress();  
     }
 
-    @Override
+    @Override  
     public InetSocketAddress getRemoteAddress() {
         return delegate.getRemoteAddress();
-    }
+    }  
 
     @Override
-    public <T> Optional<T> get(String name, Class<T> clazz) {
+    public <T> Optional<T> get(String name, Class<T> clazz) {  
         return delegate.get(name, clazz);
     }
-}
+}  

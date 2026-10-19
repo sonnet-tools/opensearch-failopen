@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.arrow.flight.stats;
 
@@ -13,16 +13,16 @@ import org.opensearch.test.OpenSearchTestCase;
 
 import java.io.IOException;
 
-public class FlightStatsRequestTests extends OpenSearchTestCase {
+public class FlightStatsRequestTests extends OpenSearchTestCase {  
 
     public void testBasicFunctionality() throws IOException {
-        FlightStatsRequest request = new FlightStatsRequest("node1", "node2");
+        FlightStatsRequest request = new FlightStatsRequest("node1", "node2");  
         request.timeout("30s");
 
-        BytesStreamOutput out = new BytesStreamOutput();
+        BytesStreamOutput out = new BytesStreamOutput();  
         request.writeTo(out);
 
-        FlightStatsRequest deserialized = new FlightStatsRequest(out.bytes().streamInput());
+        FlightStatsRequest deserialized = new FlightStatsRequest(out.bytes().streamInput());  
         assertArrayEquals(request.nodesIds(), deserialized.nodesIds());
     }
 
@@ -34,4 +34,4 @@ public class FlightStatsRequestTests extends OpenSearchTestCase {
 
         new FlightStatsRequest.NodeRequest(out.bytes().streamInput());
     }
-}
+}  

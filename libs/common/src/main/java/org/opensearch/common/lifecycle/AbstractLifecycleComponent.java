@@ -1,130 +1,130 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.common.lifecycle;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.util.List;
+import java.util.List;  
 import java.util.concurrent.CopyOnWriteArrayList;
 
-/**
+/**  
  * Base class for a lifecycle component.
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 public abstract class AbstractLifecycleComponent implements LifecycleComponent {
 
     protected final Lifecycle lifecycle = new Lifecycle();
 
-    private final List<LifecycleListener> listeners = new CopyOnWriteArrayList<>();
+    private final List<LifecycleListener> listeners = new CopyOnWriteArrayList<>();  
 
     protected AbstractLifecycleComponent() {}
 
     @Override
     public Lifecycle.State lifecycleState() {
-        return this.lifecycle.state();
+        return this.lifecycle.state();  
     }
 
-    @Override
+    @Override  
     public void addLifecycleListener(LifecycleListener listener) {
         listeners.add(listener);
-    }
+    }  
 
     @Override
-    public void removeLifecycleListener(LifecycleListener listener) {
+    public void removeLifecycleListener(LifecycleListener listener) {  
         listeners.remove(listener);
     }
 
     @Override
     public void start() {
-        synchronized (lifecycle) {
+        synchronized (lifecycle) {  
             if (!lifecycle.canMoveToStarted()) {
                 return;
-            }
+            }  
             for (LifecycleListener listener : listeners) {
                 listener.beforeStart();
-            }
+            }  
             doStart();
             lifecycle.moveToStarted();
-            for (LifecycleListener listener : listeners) {
+            for (LifecycleListener listener : listeners) {  
                 listener.afterStart();
             }
-        }
+        }  
     }
 
-    protected abstract void doStart();
+    protected abstract void doStart();  
 
     @Override
-    public void stop() {
+    public void stop() {  
         synchronized (lifecycle) {
             if (!lifecycle.canMoveToStopped()) {
-                return;
+                return;  
             }
             for (LifecycleListener listener : listeners) {
-                listener.beforeStop();
+                listener.beforeStop();  
             }
             lifecycle.moveToStopped();
-            doStop();
+            doStop();  
             for (LifecycleListener listener : listeners) {
                 listener.afterStop();
-            }
+            }  
         }
     }
 
     protected abstract void doStop();
 
-    @Override
+    @Override  
     public void close() {
         synchronized (lifecycle) {
-            if (lifecycle.started()) {
+            if (lifecycle.started()) {  
                 stop();
             }
-            if (!lifecycle.canMoveToClosed()) {
+            if (!lifecycle.canMoveToClosed()) {  
                 return;
             }
-            for (LifecycleListener listener : listeners) {
+            for (LifecycleListener listener : listeners) {  
                 listener.beforeClose();
             }
-            lifecycle.moveToClosed();
+            lifecycle.moveToClosed();  
             try {
                 doClose();
-            } catch (IOException e) {
+            } catch (IOException e) {  
                 throw new UncheckedIOException(e);
             } finally {
-                for (LifecycleListener listener : listeners) {
+                for (LifecycleListener listener : listeners) {  
                     listener.afterClose();
                 }
-            }
+            }  
         }
     }
 

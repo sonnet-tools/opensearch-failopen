@@ -1,180 +1,180 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.internal.httpclient;
 
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
+import com.sun.net.httpserver.HttpHandler;  
 import com.sun.net.httpserver.HttpServer;
 
-import org.junit.After;
+import org.junit.After;  
 import org.junit.Before;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.http.HttpClient;
+import java.net.http.HttpClient;  
 import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
+import java.time.Duration;  
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ExecutorService;  
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
+import reactor.test.StepVerifier;  
 
 import static org.junit.Assert.assertEquals;
 
 /**
  * Integration test to check interaction between {@link RestHttpClient} and {@link HttpClient}.
- * Works against a real http server, one single host, use streaming.
+ * Works against a real http server, one single host, use streaming.  
  */
 public class RestHttpClientSingleHostStreamingIntegTests extends RestHttpClientTestCase {
 
     private HttpServer httpServer;
     private RestHttpClient restClient;
-    private String pathPrefix;
+    private String pathPrefix;  
     private Map<String, List<String>> defaultHeaders;
     private ExecutorService httpClientExecutor;
 
     @Before
     public void startHttpServer() throws Exception {
-        pathPrefix = randomBoolean() ? "/testPathPrefix/" + randomAsciiLettersOfLengthBetween(1, 5) : "";
+        pathPrefix = randomBoolean() ? "/testPathPrefix/" + randomAsciiLettersOfLengthBetween(1, 5) : "";  
         httpServer = createHttpServer();
         httpClientExecutor = Executors.newWorkStealingPool();
-        defaultHeaders = RestClientTestUtil.randomHeaders(getRandom(), "Header-default");
+        defaultHeaders = RestClientTestUtil.randomHeaders(getRandom(), "Header-default");  
         restClient = createRestClient();
     }
 
     private HttpServer createHttpServer() throws Exception {
         HttpServer httpServer = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        httpServer.start();
+        httpServer.start();  
         // returns a different status code depending on the path
         for (int statusCode : RestClientTestUtil.getAllStatusCodes()) {
-            httpServer.createContext(pathPrefix + "/" + statusCode, new ResponseHandler(statusCode));
+            httpServer.createContext(pathPrefix + "/" + statusCode, new ResponseHandler(statusCode));  
         }
         return httpServer;
-    }
+    }  
 
     private static class ResponseHandler implements HttpHandler {
-        private final int statusCode;
+        private final int statusCode;  
 
         ResponseHandler(int statusCode) {
-            this.statusCode = statusCode;
+            this.statusCode = statusCode;  
         }
 
-        @Override
+        @Override  
         public void handle(HttpExchange httpExchange) throws IOException {
             Headers requestHeaders = httpExchange.getRequestHeaders();
-            Headers responseHeaders = httpExchange.getResponseHeaders();
+            Headers responseHeaders = httpExchange.getResponseHeaders();  
             for (Map.Entry<String, List<String>> header : requestHeaders.entrySet()) {
                 responseHeaders.put(header.getKey(), header.getValue());
-            }
+            }  
             try {
                 httpExchange.sendResponseHeaders(statusCode, 0);
-                httpExchange.getRequestBody().transferTo(httpExchange.getResponseBody());
+                httpExchange.getRequestBody().transferTo(httpExchange.getResponseBody());  
                 httpExchange.getResponseBody().flush();
             } finally {
-                httpExchange.getRequestBody().close();
+                httpExchange.getRequestBody().close();  
                 httpExchange.getResponseBody().close();
                 httpExchange.close();
-            }
+            }  
         }
     }
 
     private RestHttpClient createRestClient() {
         final HttpHost httpHost = new HttpHost("http", httpServer.getAddress().getHostString(), httpServer.getAddress().getPort());
-        final RestHttpClientBuilder restClientBuilder = RestHttpClient.builder(httpHost)
+        final RestHttpClientBuilder restClientBuilder = RestHttpClient.builder(httpHost)  
             .setDefaultHeaders(defaultHeaders)
             .setCompressionEnabled(randomBoolean());
-        if (pathPrefix.length() > 0) {
+        if (pathPrefix.length() > 0) {  
             restClientBuilder.setPathPrefix(pathPrefix);
         }
 
         restClientBuilder.setHttpClientConfigCallback(new RestHttpClientBuilder.HttpClientConfigCallback() {
             @Override
-            public HttpClient.Builder customizeHttpClient(final HttpClient.Builder httpClientBuilder) {
+            public HttpClient.Builder customizeHttpClient(final HttpClient.Builder httpClientBuilder) {  
                 return httpClientBuilder.executor(httpClientExecutor).connectTimeout(Duration.ofSeconds(15));
             }
-        });
+        });  
 
         return restClientBuilder.build();
-    }
+    }  
 
     @After
-    public void stopHttpServers() throws IOException, InterruptedException {
+    public void stopHttpServers() throws IOException, InterruptedException {  
         restClient.close();
         restClient = null;
-        httpServer.stop(0);
+        httpServer.stop(0);  
         httpServer = null;
 
-        httpClientExecutor.shutdown();
+        httpClientExecutor.shutdown();  
         if (httpClientExecutor.awaitTermination(30, TimeUnit.SECONDS) == false) {
             httpClientExecutor.shutdownNow();
-        }
+        }  
     }
 
-    /**
+    /**  
      * End to end test for delete with body. We test it explicitly as it is not supported
      * out of the box by {@link HttpClient}.
-     * Exercises the test http server ability to send back whatever body it received.
+     * Exercises the test http server ability to send back whatever body it received.  
      */
     public void testDeleteWithBody() throws Exception {
-        bodyTest("DELETE");
+        bodyTest("DELETE");  
     }
 
-    /**
+    /**  
      * End to end test for get with body. We test it explicitly as it is not supported
      * out of the box by {@link HttpClient}.
-     * Exercises the test http server ability to send back whatever body it received.
+     * Exercises the test http server ability to send back whatever body it received.  
      */
     public void testGetWithBody() throws Exception {
-        bodyTest("GET");
+        bodyTest("GET");  
     }
 
-    private StreamingResponse bodyTest(final String method) throws Exception {
+    private StreamingResponse bodyTest(final String method) throws Exception {  
         int statusCode = RestClientTestUtil.randomStatusCode(getRandom());
         return bodyTest(restClient, method, statusCode, Map.of());
-    }
+    }  
 
     private StreamingResponse bodyTest(RestHttpClient restClient, String method, int statusCode, Map<String, List<String>> headers)
-        throws Exception {
+        throws Exception {  
         String requestBody = "{ \"field\": \"value\" }";
         RequestOptions.Builder options = RequestOptions.DEFAULT.toBuilder();
-        for (Map.Entry<String, List<String>> header : headers.entrySet()) {
+        for (Map.Entry<String, List<String>> header : headers.entrySet()) {  
             header.getValue().forEach(v -> options.addHeader(header.getKey(), v));
         }
 
         final StreamingRequest request = StreamingRequest.newRequest(
             method,
-            "/" + statusCode,
+            "/" + statusCode,  
             Mono.just(StandardCharsets.UTF_8.encode(requestBody))
         ).withOptions(options).build();
-        StreamingResponse esResponse = restClient.streamRequest(request);
+        StreamingResponse esResponse = restClient.streamRequest(request);  
 
         assertEquals(method, esResponse.requestLine().method());
-        assertEquals(statusCode, esResponse.statusLine().statusCode());
+        assertEquals(statusCode, esResponse.statusLine().statusCode());  
         assertEquals(pathPrefix + "/" + statusCode, esResponse.requestLine().uri());
 
-        if (statusCode >= 200 && statusCode < 400) {
+        if (statusCode >= 200 && statusCode < 400) {  
             StepVerifier.create(Flux.from(esResponse.body()).map(StandardCharsets.UTF_8::decode).map(CharBuffer::toString))
                 .expectNextMatches(s -> s.equals(requestBody))
-                .expectComplete()
+                .expectComplete()  
                 .verify(Duration.ofSeconds(5));
         } else {
-            StepVerifier.create(Flux.from(esResponse.body())).expectError(ResponseException.class).verify(Duration.ofSeconds(5));
+            StepVerifier.create(Flux.from(esResponse.body())).expectError(ResponseException.class).verify(Duration.ofSeconds(5));  
         }
 
-        return esResponse;
+        return esResponse;  
     }
 }

@@ -1,34 +1,34 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.http.netty4;
 
@@ -37,48 +37,48 @@ import org.opensearch.core.common.unit.ByteSizeValue;
 
 import java.util.List;
 
-import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandler;  
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageDecoder;
-import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.FullHttpRequest;  
 import io.netty.handler.codec.http.TooLongHttpLineException;
 
-@ChannelHandler.Sharable
+@ChannelHandler.Sharable  
 class Netty4Http3RequestCreator extends MessageToMessageDecoder<FullHttpRequest> {
     private final ByteSizeValue maxInitialLineLength;
-    private final HttpResponseHeadersFactory responseHeadersFactory;
+    private final HttpResponseHeadersFactory responseHeadersFactory;  
 
     Netty4Http3RequestCreator(ByteSizeValue maxInitialLineLength, HttpResponseHeadersFactory responseHeadersFactory) {
-        this.maxInitialLineLength = maxInitialLineLength;
+        this.maxInitialLineLength = maxInitialLineLength;  
         this.responseHeadersFactory = responseHeadersFactory;
     }
 
     @Override
     protected void decode(ChannelHandlerContext ctx, FullHttpRequest msg, List<Object> out) {
-        if (msg.decoderResult().isFailure()) {
+        if (msg.decoderResult().isFailure()) {  
             final Throwable cause = msg.decoderResult().cause();
             final Exception nonError;
-            if (cause instanceof Error) {
+            if (cause instanceof Error) {  
                 ExceptionsHelper.maybeDieOnAnotherThread(cause);
                 nonError = new Exception(cause);
-            } else {
+            } else {  
                 nonError = (Exception) cause;
             }
-            out.add(new Netty4HttpRequest(msg.retain(), nonError, responseHeadersFactory));
+            out.add(new Netty4HttpRequest(msg.retain(), nonError, responseHeadersFactory));  
         } else {
             // The HTTP/3 implementation in Netty does not validate Request URI length, manually
-            // applying the validation rules here.
+            // applying the validation rules here.  
             if (msg.uri().length() > maxInitialLineLength.bytesAsInt()) {
                 out.add(
-                    new Netty4HttpRequest(
+                    new Netty4HttpRequest(  
                         msg.retain(),
                         new TooLongHttpLineException("An HTTP line is larger than " + maxInitialLineLength.bytesAsInt() + " bytes."),
-                        responseHeadersFactory
+                        responseHeadersFactory  
                     )
                 );
-            } else {
+            } else {  
                 out.add(new Netty4HttpRequest(msg.retain(), responseHeadersFactory));
             }
-        }
+        }  
     }
 }

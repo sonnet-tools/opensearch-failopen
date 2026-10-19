@@ -1,34 +1,34 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.index.query;
 
@@ -37,71 +37,71 @@ import com.carrotsearch.randomizedtesting.generators.RandomStrings;
 
 import java.util.Random;
 
-import static org.opensearch.test.AbstractBuilderTestCase.TEXT_ALIAS_FIELD_NAME;
+import static org.opensearch.test.AbstractBuilderTestCase.TEXT_ALIAS_FIELD_NAME;  
 import static org.opensearch.test.AbstractBuilderTestCase.TEXT_FIELD_NAME;
 import static org.opensearch.test.OpenSearchTestCase.randomFrom;
 
 /**
  * Utility class for creating random QueryBuilders.
- * So far only leaf queries like {@link MatchAllQueryBuilder}, {@link TermQueryBuilder} or
+ * So far only leaf queries like {@link MatchAllQueryBuilder}, {@link TermQueryBuilder} or  
  * {@link IdsQueryBuilder} are returned.
  */
-public class RandomQueryBuilder {
+public class RandomQueryBuilder {  
 
     /**
-     * Create a new query of a random type
+     * Create a new query of a random type  
      * @param r random seed
      * @return a random {@link QueryBuilder}
-     */
+     */  
     public static QueryBuilder createQuery(Random r) {
         switch (RandomNumbers.randomIntBetween(r, 0, 3)) {
-            case 0:
+            case 0:  
                 return new MatchAllQueryBuilderTests().createTestQueryBuilder();
             case 1:
-                return new TermQueryBuilderTests().createTestQueryBuilder();
+                return new TermQueryBuilderTests().createTestQueryBuilder();  
             case 2:
                 // We make sure this query has no types to avoid deprecation warnings in the
-                // tests that use this method.
+                // tests that use this method.  
                 return new IdsQueryBuilderTests().createTestQueryBuilder();
             case 3:
-                return createMultiTermQuery(r);
+                return createMultiTermQuery(r);  
             default:
                 throw new UnsupportedOperationException();
-        }
+        }  
     }
 
-    /**
+    /**  
      * Create a new multi term query of a random type
      * @param r random seed
-     * @return a random {@link MultiTermQueryBuilder}
+     * @return a random {@link MultiTermQueryBuilder}  
      */
     public static MultiTermQueryBuilder createMultiTermQuery(Random r) {
-        // for now, only use String Rangequeries for MultiTerm test, numeric and date makes little sense
+        // for now, only use String Rangequeries for MultiTerm test, numeric and date makes little sense  
         // see issue #12123 for discussion
         MultiTermQueryBuilder multiTermQueryBuilder;
-        String fieldName = randomFrom(TEXT_FIELD_NAME, TEXT_ALIAS_FIELD_NAME);
+        String fieldName = randomFrom(TEXT_FIELD_NAME, TEXT_ALIAS_FIELD_NAME);  
         switch (RandomNumbers.randomIntBetween(r, 0, 3)) {
             case 0:
-                RangeQueryBuilder stringRangeQuery = new RangeQueryBuilder(fieldName);
+                RangeQueryBuilder stringRangeQuery = new RangeQueryBuilder(fieldName);  
                 stringRangeQuery.from("a" + RandomStrings.randomAsciiOfLengthBetween(r, 1, 10));
                 stringRangeQuery.to("z" + RandomStrings.randomAsciiOfLengthBetween(r, 1, 10));
-                multiTermQueryBuilder = stringRangeQuery;
+                multiTermQueryBuilder = stringRangeQuery;  
                 break;
             case 1:
-                multiTermQueryBuilder = new PrefixQueryBuilderTests().createTestQueryBuilder();
+                multiTermQueryBuilder = new PrefixQueryBuilderTests().createTestQueryBuilder();  
                 break;
             case 2:
-                multiTermQueryBuilder = new WildcardQueryBuilderTests().createTestQueryBuilder();
+                multiTermQueryBuilder = new WildcardQueryBuilderTests().createTestQueryBuilder();  
                 break;
             case 3:
-                multiTermQueryBuilder = new FuzzyQueryBuilder(fieldName, RandomStrings.randomAsciiOfLengthBetween(r, 1, 10));
+                multiTermQueryBuilder = new FuzzyQueryBuilder(fieldName, RandomStrings.randomAsciiOfLengthBetween(r, 1, 10));  
                 break;
             default:
-                throw new UnsupportedOperationException();
+                throw new UnsupportedOperationException();  
         }
         if (r.nextBoolean()) {
-            multiTermQueryBuilder.boost(2.0f / RandomNumbers.randomIntBetween(r, 1, 20));
+            multiTermQueryBuilder.boost(2.0f / RandomNumbers.randomIntBetween(r, 1, 20));  
         }
         return multiTermQueryBuilder;
-    }
+    }  
 }

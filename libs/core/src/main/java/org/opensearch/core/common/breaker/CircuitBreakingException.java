@@ -1,106 +1,106 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 /*
- * Modifications Copyright OpenSearch Contributors. See
+ * Modifications Copyright OpenSearch Contributors. See  
  * GitHub history for details.
  */
 
 package org.opensearch.core.common.breaker;
 
-import org.opensearch.OpenSearchException;
+import org.opensearch.OpenSearchException;  
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.rest.RestStatus;
+import org.opensearch.core.rest.RestStatus;  
 import org.opensearch.core.xcontent.XContentBuilder;
 
-import java.io.IOException;
+import java.io.IOException;  
 
 /**
- * Exception thrown when the circuit breaker trips
+ * Exception thrown when the circuit breaker trips  
  *
  * @opensearch.internal
- */
+ */  
 public class CircuitBreakingException extends OpenSearchException {
 
-    /** The number of bytes wanted */
+    /** The number of bytes wanted */  
     private final long bytesWanted;
     /** The circuit breaker limit */
-    private final long byteLimit;
+    private final long byteLimit;  
     /** The {@link CircuitBreaker.Durability} of the circuit breaker */
     private final CircuitBreaker.Durability durability;
 
     public CircuitBreakingException(StreamInput in) throws IOException {
         super(in);
-        byteLimit = in.readLong();
+        byteLimit = in.readLong();  
         bytesWanted = in.readLong();
         durability = in.readEnum(CircuitBreaker.Durability.class);
-    }
+    }  
 
     public CircuitBreakingException(String message, CircuitBreaker.Durability durability) {
-        this(message, 0, 0, durability);
+        this(message, 0, 0, durability);  
     }
 
-    public CircuitBreakingException(String message, long bytesWanted, long byteLimit, CircuitBreaker.Durability durability) {
+    public CircuitBreakingException(String message, long bytesWanted, long byteLimit, CircuitBreaker.Durability durability) {  
         super(message);
         this.bytesWanted = bytesWanted;
-        this.byteLimit = byteLimit;
+        this.byteLimit = byteLimit;  
         this.durability = durability;
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
+        super.writeTo(out);  
         out.writeLong(byteLimit);
         out.writeLong(bytesWanted);
-        out.writeEnum(durability);
+        out.writeEnum(durability);  
     }
 
-    public long getBytesWanted() {
+    public long getBytesWanted() {  
         return this.bytesWanted;
     }
 
     public long getByteLimit() {
         return this.byteLimit;
-    }
+    }  
 
     public CircuitBreaker.Durability getDurability() {
-        return durability;
+        return durability;  
     }
 
-    /** Always returns {@link RestStatus#TOO_MANY_REQUESTS} */
+    /** Always returns {@link RestStatus#TOO_MANY_REQUESTS} */  
     @Override
     public RestStatus status() {
-        return RestStatus.TOO_MANY_REQUESTS;
+        return RestStatus.TOO_MANY_REQUESTS;  
     }
 
-    @Override
+    @Override  
     protected void metadataToXContent(XContentBuilder builder, Params params) throws IOException {
         builder.field("bytes_wanted", bytesWanted);
-        builder.field("bytes_limit", byteLimit);
+        builder.field("bytes_limit", byteLimit);  
         builder.field("durability", durability);
     }
-}
+}  

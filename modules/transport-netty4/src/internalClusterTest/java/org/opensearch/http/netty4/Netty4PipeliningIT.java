@@ -1,40 +1,40 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.http.netty4;
 
 import org.opensearch.OpenSearchNetty4IntegTestCase;
 import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.http.HttpServerTransport;
+import org.opensearch.http.HttpServerTransport;  
 import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
 import org.opensearch.test.OpenSearchIntegTestCase.Scope;
 
@@ -52,36 +52,36 @@ public class Netty4PipeliningIT extends OpenSearchNetty4IntegTestCase {
 
     @Override
     protected boolean addMockHttpTransport() {
-        return false; // enable http
+        return false; // enable http  
     }
 
-    public void testThatNettyHttpServerSupportsPipelining() throws Exception {
+    public void testThatNettyHttpServerSupportsPipelining() throws Exception {  
         String[] requests = new String[] { "/", "/_nodes/stats", "/", "/_cluster/state", "/" };
 
-        HttpServerTransport httpServerTransport = internalCluster().getInstance(HttpServerTransport.class);
+        HttpServerTransport httpServerTransport = internalCluster().getInstance(HttpServerTransport.class);  
         TransportAddress[] boundAddresses = httpServerTransport.boundAddress().boundAddresses();
         TransportAddress transportAddress = randomFrom(boundAddresses);
 
         try (Netty4HttpClient nettyHttpClient = Netty4HttpClient.http()) {
             Collection<FullHttpResponse> responses = nettyHttpClient.get(transportAddress.address(), requests);
-            try {
+            try {  
                 assertThat(responses, hasSize(5));
 
-                Collection<String> opaqueIds = Netty4HttpClient.returnOpaqueIds(responses);
+                Collection<String> opaqueIds = Netty4HttpClient.returnOpaqueIds(responses);  
                 assertOpaqueIdsInOrder(opaqueIds);
             } finally {
-                responses.forEach(ReferenceCounted::release);
+                responses.forEach(ReferenceCounted::release);  
             }
         }
-    }
+    }  
 
     private void assertOpaqueIdsInOrder(Collection<String> opaqueIds) {
-        // check if opaque ids are monotonically increasing
+        // check if opaque ids are monotonically increasing  
         int i = 0;
         String msg = String.format(Locale.ROOT, "Expected list of opaque ids to be monotonically increasing, got [%s]", opaqueIds);
-        for (String opaqueId : opaqueIds) {
+        for (String opaqueId : opaqueIds) {  
             assertThat(msg, opaqueId, is(String.valueOf(i++)));
         }
-    }
+    }  
 
 }

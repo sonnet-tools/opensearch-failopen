@@ -1,40 +1,40 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 /*
- * Modifications Copyright OpenSearch Contributors. See
+ * Modifications Copyright OpenSearch Contributors. See  
  * GitHub history for details.
  */
 
 package org.opensearch.rest.action.admin.indices;
 
-import org.opensearch.action.admin.indices.template.delete.DeleteIndexTemplateRequest;
+import org.opensearch.action.admin.indices.template.delete.DeleteIndexTemplateRequest;  
 import org.opensearch.common.logging.DeprecationLogger;
 import org.opensearch.rest.BaseRestHandler;
-import org.opensearch.rest.RestRequest;
+import org.opensearch.rest.RestRequest;  
 import org.opensearch.rest.action.RestToXContentListener;
 import org.opensearch.transport.client.node.NodeClient;
 
@@ -46,30 +46,30 @@ import static org.opensearch.rest.RestRequest.Method.DELETE;
 
 /**
  * Transport action to delete index template
- *
+ *  
  * @opensearch.api
  */
-public class RestDeleteIndexTemplateAction extends BaseRestHandler {
+public class RestDeleteIndexTemplateAction extends BaseRestHandler {  
 
     private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(RestDeleteIndexTemplateAction.class);
 
     @Override
     public List<Route> routes() {
-        return singletonList(new Route(DELETE, "/_template/{name}"));
+        return singletonList(new Route(DELETE, "/_template/{name}"));  
     }
 
-    @Override
+    @Override  
     public String getName() {
         return "delete_index_template_action";
-    }
+    }  
 
     @Override
-    public RestChannelConsumer prepareRequest(final RestRequest request, final NodeClient client) throws IOException {
+    public RestChannelConsumer prepareRequest(final RestRequest request, final NodeClient client) throws IOException {  
         DeleteIndexTemplateRequest deleteIndexTemplateRequest = new DeleteIndexTemplateRequest(request.param("name"));
         deleteIndexTemplateRequest.clusterManagerNodeTimeout(
-            request.paramAsTime("cluster_manager_timeout", deleteIndexTemplateRequest.clusterManagerNodeTimeout())
+            request.paramAsTime("cluster_manager_timeout", deleteIndexTemplateRequest.clusterManagerNodeTimeout())  
         );
         parseDeprecatedMasterTimeoutParameter(deleteIndexTemplateRequest, request, deprecationLogger, getName());
-        return channel -> client.admin().indices().deleteTemplate(deleteIndexTemplateRequest, new RestToXContentListener<>(channel));
+        return channel -> client.admin().indices().deleteTemplate(deleteIndexTemplateRequest, new RestToXContentListener<>(channel));  
     }
 }

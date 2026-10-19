@@ -1,354 +1,354 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.parquet.bridge;
 
 import java.util.Collections;
 import java.util.Map;
-import java.util.Set;
+import java.util.Set;  
 
 /**
- * Immutable settings passed to the native Rust writer via JNI.
+ * Immutable settings passed to the native Rust writer via JNI.  
  * The Rust side reads values through the getter methods.
  * All fields are nullable; the native side falls back to defaults when null.
- */
+ */  
 public class NativeSettings {
 
-    private final String indexName;
+    private final String indexName;  
     private final String compressionType;
     private final Integer compressionLevel;
-    private final Long pageSizeBytes;
+    private final Long pageSizeBytes;  
     private final Integer pageRowLimit;
     private final Long dictSizeBytes;
-    private final Boolean bloomFilterEnabled;
+    private final Boolean bloomFilterEnabled;  
     private final Double bloomFilterFpp;
     private final Long bloomFilterNdv;
-    private final Long sortInMemoryThresholdBytes;
+    private final Long sortInMemoryThresholdBytes;  
     private final Integer rowGroupMaxRows;
     private final Long rowGroupMaxBytes;
-    private final Integer mergeBatchSize;
+    private final Integer mergeBatchSize;  
     private final Integer mergeRayonThreads;
     private final Integer mergeIoThreads;
-    private final Integer mergeDeferredColumnThreshold;
+    private final Integer mergeDeferredColumnThreshold;  
     private final Map<String, String> fieldEncodings;
     private final Map<String, String> fieldCompressions;
-    private final Map<String, Boolean> fieldBloomFilterEnabled;
+    private final Map<String, Boolean> fieldBloomFilterEnabled;  
     private final Set<String> lowCardinalityEnabledFields;
     private final Map<String, String> typeEncodings;
-    private final Map<String, String> typeCompressions;
+    private final Map<String, String> typeCompressions;  
     private final Map<String, Boolean> typeBloomFilterEnabled;
     private final Map<String, Double> typeBloomFilterFpp;
-    private final Map<String, Long> typeBloomFilterNdv;
+    private final Map<String, Long> typeBloomFilterNdv;  
 
     private NativeSettings(Builder builder) {
-        this.indexName = builder.indexName;
+        this.indexName = builder.indexName;  
         this.compressionType = builder.compressionType;
         this.compressionLevel = builder.compressionLevel;
-        this.pageSizeBytes = builder.pageSizeBytes;
+        this.pageSizeBytes = builder.pageSizeBytes;  
         this.pageRowLimit = builder.pageRowLimit;
         this.dictSizeBytes = builder.dictSizeBytes;
-        this.bloomFilterEnabled = builder.bloomFilterEnabled;
+        this.bloomFilterEnabled = builder.bloomFilterEnabled;  
         this.bloomFilterFpp = builder.bloomFilterFpp;
         this.bloomFilterNdv = builder.bloomFilterNdv;
-        this.sortInMemoryThresholdBytes = builder.sortInMemoryThresholdBytes;
+        this.sortInMemoryThresholdBytes = builder.sortInMemoryThresholdBytes;  
         this.rowGroupMaxRows = builder.rowGroupMaxRows;
         this.rowGroupMaxBytes = builder.rowGroupMaxBytes;
-        this.mergeBatchSize = builder.mergeBatchSize;
+        this.mergeBatchSize = builder.mergeBatchSize;  
         this.mergeRayonThreads = builder.mergeRayonThreads;
         this.mergeIoThreads = builder.mergeIoThreads;
-        this.mergeDeferredColumnThreshold = builder.mergeDeferredColumnThreshold;
+        this.mergeDeferredColumnThreshold = builder.mergeDeferredColumnThreshold;  
         this.fieldEncodings = builder.fieldEncodings != null ? Collections.unmodifiableMap(builder.fieldEncodings) : Collections.emptyMap();
         this.fieldCompressions = builder.fieldCompressions != null
-            ? Collections.unmodifiableMap(builder.fieldCompressions)
+            ? Collections.unmodifiableMap(builder.fieldCompressions)  
             : Collections.emptyMap();
         this.fieldBloomFilterEnabled = builder.fieldBloomFilterEnabled != null
-            ? Collections.unmodifiableMap(builder.fieldBloomFilterEnabled)
+            ? Collections.unmodifiableMap(builder.fieldBloomFilterEnabled)  
             : Collections.emptyMap();
         this.lowCardinalityEnabledFields = builder.lowCardinalityEnabledFields != null
-            ? Collections.unmodifiableSet(builder.lowCardinalityEnabledFields)
+            ? Collections.unmodifiableSet(builder.lowCardinalityEnabledFields)  
             : Collections.emptySet();
         this.typeEncodings = builder.typeEncodings != null ? Collections.unmodifiableMap(builder.typeEncodings) : Collections.emptyMap();
-        this.typeCompressions = builder.typeCompressions != null
+        this.typeCompressions = builder.typeCompressions != null  
             ? Collections.unmodifiableMap(builder.typeCompressions)
             : Collections.emptyMap();
-        this.typeBloomFilterEnabled = builder.typeBloomFilterEnabled != null
+        this.typeBloomFilterEnabled = builder.typeBloomFilterEnabled != null  
             ? Collections.unmodifiableMap(builder.typeBloomFilterEnabled)
             : Collections.emptyMap();
-        this.typeBloomFilterFpp = builder.typeBloomFilterFpp != null
+        this.typeBloomFilterFpp = builder.typeBloomFilterFpp != null  
             ? Collections.unmodifiableMap(builder.typeBloomFilterFpp)
             : Collections.emptyMap();
-        this.typeBloomFilterNdv = builder.typeBloomFilterNdv != null
+        this.typeBloomFilterNdv = builder.typeBloomFilterNdv != null  
             ? Collections.unmodifiableMap(builder.typeBloomFilterNdv)
             : Collections.emptyMap();
-    }
+    }  
 
     public String getIndexName() {
-        return indexName;
+        return indexName;  
     }
 
-    public String getCompressionType() {
+    public String getCompressionType() {  
         return compressionType;
     }
 
     public Integer getCompressionLevel() {
         return compressionLevel;
-    }
+    }  
 
     public Long getPageSizeBytes() {
-        return pageSizeBytes;
+        return pageSizeBytes;  
     }
 
-    public Integer getPageRowLimit() {
+    public Integer getPageRowLimit() {  
         return pageRowLimit;
     }
 
     public Long getDictSizeBytes() {
         return dictSizeBytes;
-    }
+    }  
 
     public Boolean getBloomFilterEnabled() {
-        return bloomFilterEnabled;
+        return bloomFilterEnabled;  
     }
 
-    public Double getBloomFilterFpp() {
+    public Double getBloomFilterFpp() {  
         return bloomFilterFpp;
     }
 
     public Long getBloomFilterNdv() {
         return bloomFilterNdv;
-    }
+    }  
 
     public Long getSortInMemoryThresholdBytes() {
-        return sortInMemoryThresholdBytes;
+        return sortInMemoryThresholdBytes;  
     }
 
-    public Integer getRowGroupMaxRows() {
+    public Integer getRowGroupMaxRows() {  
         return rowGroupMaxRows;
     }
 
     public Long getRowGroupMaxBytes() {
         return rowGroupMaxBytes;
-    }
+    }  
 
     public Integer getMergeBatchSize() {
-        return mergeBatchSize;
+        return mergeBatchSize;  
     }
 
-    public Integer getMergeRayonThreads() {
+    public Integer getMergeRayonThreads() {  
         return mergeRayonThreads;
     }
 
     public Integer getMergeIoThreads() {
         return mergeIoThreads;
-    }
+    }  
 
     public Integer getMergeDeferredColumnThreshold() {
-        return mergeDeferredColumnThreshold;
+        return mergeDeferredColumnThreshold;  
     }
 
-    public Map<String, String> getFieldEncodings() {
+    public Map<String, String> getFieldEncodings() {  
         return fieldEncodings;
     }
 
     public Map<String, String> getFieldCompressions() {
         return fieldCompressions;
-    }
+    }  
 
     public Map<String, Boolean> getFieldBloomFilterEnabled() {
-        return fieldBloomFilterEnabled;
+        return fieldBloomFilterEnabled;  
     }
 
-    /**
+    /**  
      * Returns the set of field names for which low-cardinality mode is enabled.
      * The Rust writer enables bloom filters for these columns.
-     */
+     */  
     public Set<String> getLowCardinalityEnabledFields() {
         return lowCardinalityEnabledFields;
-    }
+    }  
 
     public Map<String, String> getTypeEncodings() {
-        return typeEncodings;
+        return typeEncodings;  
     }
 
-    public Map<String, String> getTypeCompressions() {
+    public Map<String, String> getTypeCompressions() {  
         return typeCompressions;
     }
 
     public Map<String, Boolean> getTypeBloomFilterEnabled() {
         return typeBloomFilterEnabled;
-    }
+    }  
 
     public Map<String, Double> getTypeBloomFilterFpp() {
-        return typeBloomFilterFpp;
+        return typeBloomFilterFpp;  
     }
 
-    public Map<String, Long> getTypeBloomFilterNdv() {
+    public Map<String, Long> getTypeBloomFilterNdv() {  
         return typeBloomFilterNdv;
     }
 
     public static Builder builder() {
         return new Builder();
-    }
+    }  
 
     public static class Builder {
-        private String indexName;
+        private String indexName;  
         private String compressionType;
         private Integer compressionLevel;
-        private Long pageSizeBytes;
+        private Long pageSizeBytes;  
         private Integer pageRowLimit;
         private Long dictSizeBytes;
-        private Boolean bloomFilterEnabled;
+        private Boolean bloomFilterEnabled;  
         private Double bloomFilterFpp;
         private Long bloomFilterNdv;
-        private Long sortInMemoryThresholdBytes;
+        private Long sortInMemoryThresholdBytes;  
         private Integer rowGroupMaxRows;
         private Long rowGroupMaxBytes;
-        private Integer mergeBatchSize;
+        private Integer mergeBatchSize;  
         private Integer mergeRayonThreads;
         private Integer mergeIoThreads;
-        private Integer mergeDeferredColumnThreshold;
+        private Integer mergeDeferredColumnThreshold;  
         private Map<String, String> fieldEncodings;
         private Map<String, String> fieldCompressions;
-        private Map<String, Boolean> fieldBloomFilterEnabled;
+        private Map<String, Boolean> fieldBloomFilterEnabled;  
         private Set<String> lowCardinalityEnabledFields;
         private Map<String, String> typeEncodings;
-        private Map<String, String> typeCompressions;
+        private Map<String, String> typeCompressions;  
         private Map<String, Boolean> typeBloomFilterEnabled;
         private Map<String, Double> typeBloomFilterFpp;
-        private Map<String, Long> typeBloomFilterNdv;
+        private Map<String, Long> typeBloomFilterNdv;  
 
         public Builder indexName(String v) {
-            this.indexName = v;
+            this.indexName = v;  
             return this;
         }
 
         public Builder compressionType(String v) {
             this.compressionType = v;
-            return this;
+            return this;  
         }
 
-        public Builder compressionLevel(Integer v) {
+        public Builder compressionLevel(Integer v) {  
             this.compressionLevel = v;
             return this;
-        }
+        }  
 
         public Builder pageSizeBytes(Long v) {
-            this.pageSizeBytes = v;
+            this.pageSizeBytes = v;  
             return this;
         }
 
         public Builder pageRowLimit(Integer v) {
             this.pageRowLimit = v;
-            return this;
+            return this;  
         }
 
-        public Builder dictSizeBytes(Long v) {
+        public Builder dictSizeBytes(Long v) {  
             this.dictSizeBytes = v;
             return this;
-        }
+        }  
 
         public Builder bloomFilterEnabled(Boolean v) {
-            this.bloomFilterEnabled = v;
+            this.bloomFilterEnabled = v;  
             return this;
         }
 
         public Builder bloomFilterFpp(Double v) {
             this.bloomFilterFpp = v;
-            return this;
+            return this;  
         }
 
-        public Builder bloomFilterNdv(Long v) {
+        public Builder bloomFilterNdv(Long v) {  
             this.bloomFilterNdv = v;
             return this;
-        }
+        }  
 
         public Builder sortInMemoryThresholdBytes(Long v) {
-            this.sortInMemoryThresholdBytes = v;
+            this.sortInMemoryThresholdBytes = v;  
             return this;
         }
 
         public Builder rowGroupMaxRows(Integer v) {
             this.rowGroupMaxRows = v;
-            return this;
+            return this;  
         }
 
-        public Builder rowGroupMaxBytes(Long v) {
+        public Builder rowGroupMaxBytes(Long v) {  
             this.rowGroupMaxBytes = v;
             return this;
-        }
+        }  
 
         public Builder mergeBatchSize(Integer v) {
-            this.mergeBatchSize = v;
+            this.mergeBatchSize = v;  
             return this;
         }
 
         public Builder mergeRayonThreads(Integer v) {
             this.mergeRayonThreads = v;
-            return this;
+            return this;  
         }
 
-        public Builder mergeIoThreads(Integer v) {
+        public Builder mergeIoThreads(Integer v) {  
             this.mergeIoThreads = v;
             return this;
-        }
+        }  
 
         public Builder mergeDeferredColumnThreshold(Integer v) {
-            this.mergeDeferredColumnThreshold = v;
+            this.mergeDeferredColumnThreshold = v;  
             return this;
         }
 
         public Builder fieldEncodings(Map<String, String> v) {
             this.fieldEncodings = v;
-            return this;
+            return this;  
         }
 
-        public Builder fieldCompressions(Map<String, String> v) {
+        public Builder fieldCompressions(Map<String, String> v) {  
             this.fieldCompressions = v;
             return this;
-        }
+        }  
 
         public Builder fieldBloomFilterEnabled(Map<String, Boolean> v) {
-            this.fieldBloomFilterEnabled = v;
+            this.fieldBloomFilterEnabled = v;  
             return this;
         }
 
         public Builder lowCardinalityEnabledFields(Set<String> v) {
             this.lowCardinalityEnabledFields = v;
-            return this;
+            return this;  
         }
 
-        public Builder typeEncodings(Map<String, String> v) {
+        public Builder typeEncodings(Map<String, String> v) {  
             this.typeEncodings = v;
             return this;
-        }
+        }  
 
         public Builder typeCompressions(Map<String, String> v) {
-            this.typeCompressions = v;
+            this.typeCompressions = v;  
             return this;
         }
 
         public Builder typeBloomFilterEnabled(Map<String, Boolean> v) {
             this.typeBloomFilterEnabled = v;
-            return this;
+            return this;  
         }
 
-        public Builder typeBloomFilterFpp(Map<String, Double> v) {
+        public Builder typeBloomFilterFpp(Map<String, Double> v) {  
             this.typeBloomFilterFpp = v;
             return this;
-        }
+        }  
 
         public Builder typeBloomFilterNdv(Map<String, Long> v) {
-            this.typeBloomFilterNdv = v;
+            this.typeBloomFilterNdv = v;  
             return this;
         }
 
         public NativeSettings build() {
             return new NativeSettings(this);
-        }
+        }  
     }
 }

@@ -1,79 +1,79 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.tools.cli.fips.truststore;
 
 import org.opensearch.common.SuppressForbidden;
 import org.opensearch.test.OpenSearchTestCase;
-import org.junit.BeforeClass;
+import org.junit.BeforeClass;  
 import org.junit.ClassRule;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.ByteArrayInputStream;
 import java.io.PrintWriter;
-import java.io.StringWriter;
+import java.io.StringWriter;  
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.security.Provider;
+import java.security.Provider;  
 import java.security.Security;
 import java.util.Scanner;
 
 import picocli.CommandLine;
 
-import static org.opensearch.tools.cli.fips.truststore.ConfigureSystemTrustStore.findPKCS11ProviderService;
+import static org.opensearch.tools.cli.fips.truststore.ConfigureSystemTrustStore.findPKCS11ProviderService;  
 
 public class TrustStoreServiceTests extends OpenSearchTestCase {
 
     protected static Path sharedTempDir;
 
-    protected CommandLine.Model.CommandSpec spec;
+    protected CommandLine.Model.CommandSpec spec;  
     protected StringWriter outputCapture;
 
-    @ClassRule
+    @ClassRule  
     public static TemporaryFolder tempFolder = new TemporaryFolder();
 
-    @BeforeClass
+    @BeforeClass  
     @SuppressForbidden(reason = "TemporaryFolder does not support Path-based APIs")
     public static void setUpClass() throws Exception {
-        sharedTempDir = tempFolder.newFolder("config-test").toPath();
+        sharedTempDir = tempFolder.newFolder("config-test").toPath();  
     }
 
-    @Override
+    @Override  
     public void setUp() throws Exception {
         super.setUp();
-        outputCapture = new StringWriter();
+        outputCapture = new StringWriter();  
 
         @CommandLine.Command
-        class TestCommand {}
+        class TestCommand {}  
 
         var commandLine = new CommandLine(new TestCommand());
-        commandLine.setOut(new PrintWriter(outputCapture, true));
+        commandLine.setOut(new PrintWriter(outputCapture, true));  
         spec = commandLine.getCommandSpec();
     }
 
     public void testUseSystemTrustStoreUserCancels() {
         // given
-        var userInteraction = createUserInteractionService("no\n");
+        var userInteraction = createUserInteractionService("no\n");  
         var service = new TrustStoreService(userInteraction);
 
-        // when
+        // when  
         var result = service.useSystemTrustStore(spec, new CommonOptions(), null, sharedTempDir);
 
-        // then
+        // then  
         assertEquals(Integer.valueOf(0), result);
         assertTrue(outputCapture.toString().contains("Operation cancelled."));
-    }
+    }  
 
     public void testUseSystemTrustStoreNoPKCS11ProvidersFound() {
-        assumeTrue("Should only run when PKCS11 provider is NOT installed.", findPKCS11ProviderService().isEmpty());
+        assumeTrue("Should only run when PKCS11 provider is NOT installed.", findPKCS11ProviderService().isEmpty());  
         // given
         var options = new CommonOptions();
-        options.nonInteractive = true;
+        options.nonInteractive = true;  
         var userInteraction = createUserInteractionService("yes\n");
         var service = new TrustStoreService(userInteraction);
 
@@ -82,40 +82,40 @@ public class TrustStoreServiceTests extends OpenSearchTestCase {
 
         // then
         assertTrue(ex.getMessage().contains("No PKCS11 provider found"));
-    }
+    }  
 
     public void testUseSystemTrustStoreWithPKCS11Provider() {
-        // given
+        // given  
         var mockProvider = new Provider("PKCS11-Mock", "1.0", "Mock PKCS11 Provider") {
             @Override
-            public String toString() {
+            public String toString() {  
                 return "MockPKCS11Provider[" + getName() + "]";
             }
-        };
+        };  
 
         mockProvider.put("KeyStore.PKCS11", "com.example.MockPKCS11KeyStore");
-        mockProvider.put("KeyStore.PKCS11 KeySize", "1024|2048");
+        mockProvider.put("KeyStore.PKCS11 KeySize", "1024|2048");  
         Security.addProvider(mockProvider);
 
-        try {
+        try {  
             var options = new CommonOptions();
             var userInteraction = createUserInteractionService("yes\nno\n"); // Select installation then cancel
-            var service = new TrustStoreService(userInteraction);
+            var service = new TrustStoreService(userInteraction);  
 
             // when
-            var result = service.useSystemTrustStore(spec, options, null, sharedTempDir);
+            var result = service.useSystemTrustStore(spec, options, null, sharedTempDir);  
 
             // then
-            assertEquals(Integer.valueOf(0), result);
+            assertEquals(Integer.valueOf(0), result);  
             assertTrue(outputCapture.toString().contains("Operation cancelled."));
         } finally {
-            Security.removeProvider("PKCS11-Mock");
+            Security.removeProvider("PKCS11-Mock");  
         }
     }
 
     public void testExecuteInteractiveSelectionUserSelectsGenerate() {
         // given
-        var options = new CommonOptions();
+        var options = new CommonOptions();  
         var userInteraction = createUserInteractionService("1\nno\n"); // Select option 1, then cancel
         var service = new TrustStoreService(userInteraction);
 
@@ -124,16 +124,16 @@ public class TrustStoreServiceTests extends OpenSearchTestCase {
 
         // then
         var output = outputCapture.toString();
-        assertTrue(output.contains("OpenSearch FIPS Demo Configuration Installer"));
+        assertTrue(output.contains("OpenSearch FIPS Demo Configuration Installer"));  
         assertTrue(output.contains("Please select trust store configuration:"));
         assertTrue(output.contains("1. Generate new BCFKS trust store from system defaults"));
-        assertTrue(output.contains("2. Use existing system PKCS11 trust store"));
+        assertTrue(output.contains("2. Use existing system PKCS11 trust store"));  
         assertEquals(Integer.valueOf(0), result); // Cancelled
     }
 
     public void testExecuteInteractiveSelectionUserSelectsSystem() {
         // given
-        var options = new CommonOptions();
+        var options = new CommonOptions();  
         var userInteraction = createUserInteractionService("2\nno\n"); // Select option 2, then cancel
         var service = new TrustStoreService(userInteraction);
 
@@ -142,22 +142,22 @@ public class TrustStoreServiceTests extends OpenSearchTestCase {
 
         // then
         var output = outputCapture.toString();
-        assertTrue(output.contains("OpenSearch FIPS Demo Configuration Installer"));
+        assertTrue(output.contains("OpenSearch FIPS Demo Configuration Installer"));  
         assertEquals(Integer.valueOf(0), result); // Cancelled
     }
 
     /**
      * Creates a test UserInteractionService with simulated user input.
-     * Uses the same pattern as UserInteractionServiceTests.
+     * Uses the same pattern as UserInteractionServiceTests.  
      */
     protected UserInteractionService createUserInteractionService(String input) {
-        // Cache scanner outside anonymous class to maintain stream position across multiple getScanner() calls
+        // Cache scanner outside anonymous class to maintain stream position across multiple getScanner() calls  
         var scanner = new Scanner(new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8);
         return new UserInteractionService() {
-            @Override
+            @Override  
             protected Scanner getScanner() {
                 return scanner;
-            }
+            }  
         };
     }
-}
+}  

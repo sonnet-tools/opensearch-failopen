@@ -1,216 +1,216 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.example.expertscript;
 
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.PostingsEnum;
-import org.apache.lucene.index.Term;
+import org.apache.lucene.index.Term;  
 import org.apache.lucene.search.IndexSearcher;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.plugins.Plugin;
+import org.opensearch.plugins.Plugin;  
 import org.opensearch.plugins.ScriptPlugin;
 import org.opensearch.script.ScoreScript;
-import org.opensearch.script.ScoreScript.LeafFactory;
+import org.opensearch.script.ScoreScript.LeafFactory;  
 import org.opensearch.script.ScriptContext;
 import org.opensearch.script.ScriptEngine;
-import org.opensearch.script.ScriptFactory;
+import org.opensearch.script.ScriptFactory;  
 import org.opensearch.search.lookup.SearchLookup;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.io.UncheckedIOException;
 import java.util.Collection;
-import java.util.Collections;
+import java.util.Collections;  
 import java.util.Map;
 import java.util.Set;
 
 /**
  * An example script plugin that adds a {@link ScriptEngine}
- * implementing expert scoring.
+ * implementing expert scoring.  
  */
 public class ExpertScriptPlugin extends Plugin implements ScriptPlugin {
 
     /**
      * Instantiate this plugin.
-     */
+     */  
     public ExpertScriptPlugin() {}
 
-    @Override
+    @Override  
     public ScriptEngine getScriptEngine(Settings settings, Collection<ScriptContext<?>> contexts) {
         return new MyExpertScriptEngine();
-    }
+    }  
 
     /** An example {@link ScriptEngine} that uses Lucene segment details to
-     *  implement pure document frequency scoring. */
+     *  implement pure document frequency scoring. */  
     // tag::expert_engine
     private static class MyExpertScriptEngine implements ScriptEngine {
-        @Override
+        @Override  
         public String getType() {
             return "expert_scripts";
-        }
+        }  
 
         @Override
-        public <T> T compile(
+        public <T> T compile(  
             String scriptName,
             String scriptSource,
-            ScriptContext<T> context,
+            ScriptContext<T> context,  
             Map<String, String> params
         ) {
-            if (context.equals(ScoreScript.CONTEXT) == false) {
+            if (context.equals(ScoreScript.CONTEXT) == false) {  
                 throw new IllegalArgumentException(getType()
                         + " scripts cannot be used for context ["
-                        + context.name + "]");
+                        + context.name + "]");  
             }
             // we use the script "source" as the script identifier
-            if ("pure_df".equals(scriptSource)) {
+            if ("pure_df".equals(scriptSource)) {  
                 ScoreScript.Factory factory = new PureDfFactory();
                 return context.factoryClazz.cast(factory);
-            }
+            }  
             throw new IllegalArgumentException("Unknown script name "
                     + scriptSource);
-        }
+        }  
 
         @Override
-        public void close() {
+        public void close() {  
             // optionally close resources
         }
 
         @Override
         public Set<ScriptContext<?>> getSupportedContexts() {
-            return Collections.singleton(ScoreScript.CONTEXT);
+            return Collections.singleton(ScoreScript.CONTEXT);  
         }
 
-        private static class PureDfFactory implements ScoreScript.Factory,
+        private static class PureDfFactory implements ScoreScript.Factory,  
                                                       ScriptFactory {
             @Override
-            public boolean isResultDeterministic() {
+            public boolean isResultDeterministic() {  
                 // PureDfLeafFactory only uses deterministic APIs, this
                 // implies the results are cacheable.
-                return true;
+                return true;  
             }
 
-            @Override
+            @Override  
             public LeafFactory newFactory(
                 Map<String, Object> params,
-                SearchLookup lookup,
+                SearchLookup lookup,  
                 IndexSearcher indexSearcher
             ) {
-                return new PureDfLeafFactory(params, lookup, indexSearcher);
+                return new PureDfLeafFactory(params, lookup, indexSearcher);  
             }
         }
 
         private static class PureDfLeafFactory implements LeafFactory {
             private final Map<String, Object> params;
-            private final SearchLookup lookup;
+            private final SearchLookup lookup;  
             private final IndexSearcher indexSearcher;
             private final String field;
-            private final String term;
+            private final String term;  
 
             private PureDfLeafFactory(
-                        Map<String, Object> params, SearchLookup lookup, IndexSearcher indexSearcher) {
+                        Map<String, Object> params, SearchLookup lookup, IndexSearcher indexSearcher) {  
                 if (params.containsKey("field") == false) {
                     throw new IllegalArgumentException(
-                            "Missing parameter [field]");
+                            "Missing parameter [field]");  
                 }
                 if (params.containsKey("term") == false) {
-                    throw new IllegalArgumentException(
+                    throw new IllegalArgumentException(  
                             "Missing parameter [term]");
                 }
-                this.params = params;
+                this.params = params;  
                 this.lookup = lookup;
                 this.indexSearcher = indexSearcher;
-                field = params.get("field").toString();
+                field = params.get("field").toString();  
                 term = params.get("term").toString();
             }
 
             @Override
             public boolean needs_score() {
-                return false;  // Return true if the script needs the score
+                return false;  // Return true if the script needs the score  
             }
 
-            @Override
+            @Override  
             public ScoreScript newInstance(LeafReaderContext context)
                     throws IOException {
-                PostingsEnum postings = context.reader().postings(
+                PostingsEnum postings = context.reader().postings(  
                         new Term(field, term));
                 if (postings == null) {
-                    /*
+                    /*  
                      * the field and/or term don't exist in this segment,
                      * so always return 0
-                     */
+                     */  
                     return new ScoreScript(params, lookup, indexSearcher, context) {
                         @Override
-                        public double execute(
+                        public double execute(  
                             ExplanationHolder explanation
                         ) {
-                            return 0.0d;
+                            return 0.0d;  
                         }
                     };
-                }
+                }  
                 return new ScoreScript(params, lookup, indexSearcher, context) {
                     int currentDocid = -1;
-                    @Override
+                    @Override  
                     public void setDocument(int docid) {
                         /*
-                         * advance has undefined behavior calling with
+                         * advance has undefined behavior calling with  
                          * a docid <= its current docid
                          */
-                        if (postings.docID() < docid) {
+                        if (postings.docID() < docid) {  
                             try {
                                 postings.advance(docid);
-                            } catch (IOException e) {
+                            } catch (IOException e) {  
                                 throw new UncheckedIOException(e);
                             }
-                        }
+                        }  
                         currentDocid = docid;
                     }
-                    @Override
+                    @Override  
                     public double execute(ExplanationHolder explanation) {
                         if (postings.docID() != currentDocid) {
-                            /*
+                            /*  
                              * advance moved past the current doc, so this
                              * doc has no occurrences of the term
-                             */
+                             */  
                             return 0.0d;
                         }
-                        try {
+                        try {  
                             return postings.freq();
                         } catch (IOException e) {
-                            throw new UncheckedIOException(e);
+                            throw new UncheckedIOException(e);  
                         }
                     }
-                };
+                };  
             }
         }
-    }
+    }  
     // end::expert_engine
 }

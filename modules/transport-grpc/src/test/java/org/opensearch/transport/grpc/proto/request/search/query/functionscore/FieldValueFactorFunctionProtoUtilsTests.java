@@ -1,16 +1,16 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.transport.grpc.proto.request.search.query.functionscore;
 
 import org.opensearch.index.query.functionscore.FieldValueFactorFunctionBuilder;
 import org.opensearch.index.query.functionscore.ScoreFunctionBuilder;
-import org.opensearch.protobufs.FieldValueFactorModifier;
+import org.opensearch.protobufs.FieldValueFactorModifier;  
 import org.opensearch.protobufs.FieldValueFactorScoreFunction;
 import org.opensearch.test.OpenSearchTestCase;
 
@@ -19,25 +19,25 @@ import static org.hamcrest.Matchers.instanceOf;
 
 public class FieldValueFactorFunctionProtoUtilsTests extends OpenSearchTestCase {
 
-    public void testFromProtoWithValidFieldValueFactorFunction() {
+    public void testFromProtoWithValidFieldValueFactorFunction() {  
         // Create a field value factor function
         FieldValueFactorScoreFunction fieldValueFactor = FieldValueFactorScoreFunction.newBuilder()
-            .setField("popularity")
+            .setField("popularity")  
             .setFactor(1.2f)
             .setMissing(1.0f)
-            .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_LOG)
+            .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_LOG)  
             .build();
 
-        ScoreFunctionBuilder<?> result = FieldValueFactorFunctionProtoUtils.fromProto(fieldValueFactor);
+        ScoreFunctionBuilder<?> result = FieldValueFactorFunctionProtoUtils.fromProto(fieldValueFactor);  
 
         assertThat(result, instanceOf(FieldValueFactorFunctionBuilder.class));
-        FieldValueFactorFunctionBuilder fieldValueFactorFunction = (FieldValueFactorFunctionBuilder) result;
+        FieldValueFactorFunctionBuilder fieldValueFactorFunction = (FieldValueFactorFunctionBuilder) result;  
 
     }
 
     public void testFromProtoWithMinimalParameters() {
         // Create a minimal field value factor function (only field required)
-        FieldValueFactorScoreFunction fieldValueFactor = FieldValueFactorScoreFunction.newBuilder().setField("score").build();
+        FieldValueFactorScoreFunction fieldValueFactor = FieldValueFactorScoreFunction.newBuilder().setField("score").build();  
 
         ScoreFunctionBuilder<?> result = FieldValueFactorFunctionProtoUtils.fromProto(fieldValueFactor);
 
@@ -46,25 +46,25 @@ public class FieldValueFactorFunctionProtoUtilsTests extends OpenSearchTestCase 
 
     }
 
-    public void testFromProtoWithAllParameters() {
+    public void testFromProtoWithAllParameters() {  
         // Create a field value factor function with all parameters
         FieldValueFactorScoreFunction fieldValueFactor = FieldValueFactorScoreFunction.newBuilder()
-            .setField("rating")
+            .setField("rating")  
             .setFactor(2.5f)
             .setMissing(0.5f)
-            .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_SQRT)
+            .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_SQRT)  
             .build();
 
-        ScoreFunctionBuilder<?> result = FieldValueFactorFunctionProtoUtils.fromProto(fieldValueFactor);
+        ScoreFunctionBuilder<?> result = FieldValueFactorFunctionProtoUtils.fromProto(fieldValueFactor);  
 
         assertThat(result, instanceOf(FieldValueFactorFunctionBuilder.class));
-        FieldValueFactorFunctionBuilder fieldValueFactorFunction = (FieldValueFactorFunctionBuilder) result;
+        FieldValueFactorFunctionBuilder fieldValueFactorFunction = (FieldValueFactorFunctionBuilder) result;  
     }
 
-    public void testFromProtoWithDifferentModifiers() {
+    public void testFromProtoWithDifferentModifiers() {  
         // Test LOG modifier
         FieldValueFactorScoreFunction logFunction = FieldValueFactorScoreFunction.newBuilder()
-            .setField("views")
+            .setField("views")  
             .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_LOG)
             .build();
 
@@ -73,7 +73,7 @@ public class FieldValueFactorFunctionProtoUtilsTests extends OpenSearchTestCase 
 
         // Test LOG1P modifier
         FieldValueFactorScoreFunction log1pFunction = FieldValueFactorScoreFunction.newBuilder()
-            .setField("clicks")
+            .setField("clicks")  
             .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_LOG1P)
             .build();
 
@@ -82,7 +82,7 @@ public class FieldValueFactorFunctionProtoUtilsTests extends OpenSearchTestCase 
 
         // Test LOG2P modifier
         FieldValueFactorScoreFunction log2pFunction = FieldValueFactorScoreFunction.newBuilder()
-            .setField("likes")
+            .setField("likes")  
             .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_LOG2P)
             .build();
 
@@ -91,7 +91,7 @@ public class FieldValueFactorFunctionProtoUtilsTests extends OpenSearchTestCase 
 
         // Test LN modifier
         FieldValueFactorScoreFunction lnFunction = FieldValueFactorScoreFunction.newBuilder()
-            .setField("shares")
+            .setField("shares")  
             .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_LN)
             .build();
 
@@ -100,7 +100,7 @@ public class FieldValueFactorFunctionProtoUtilsTests extends OpenSearchTestCase 
 
         // Test LN1P modifier
         FieldValueFactorScoreFunction ln1pFunction = FieldValueFactorScoreFunction.newBuilder()
-            .setField("comments")
+            .setField("comments")  
             .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_LN1P)
             .build();
 
@@ -109,7 +109,7 @@ public class FieldValueFactorFunctionProtoUtilsTests extends OpenSearchTestCase 
 
         // Test LN2P modifier
         FieldValueFactorScoreFunction ln2pFunction = FieldValueFactorScoreFunction.newBuilder()
-            .setField("downloads")
+            .setField("downloads")  
             .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_LN2P)
             .build();
 
@@ -118,7 +118,7 @@ public class FieldValueFactorFunctionProtoUtilsTests extends OpenSearchTestCase 
 
         // Test SQUARE modifier
         FieldValueFactorScoreFunction squareFunction = FieldValueFactorScoreFunction.newBuilder()
-            .setField("revenue")
+            .setField("revenue")  
             .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_SQUARE)
             .build();
 
@@ -127,7 +127,7 @@ public class FieldValueFactorFunctionProtoUtilsTests extends OpenSearchTestCase 
 
         // Test SQRT modifier
         FieldValueFactorScoreFunction sqrtFunction = FieldValueFactorScoreFunction.newBuilder()
-            .setField("distance")
+            .setField("distance")  
             .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_SQRT)
             .build();
 
@@ -136,7 +136,7 @@ public class FieldValueFactorFunctionProtoUtilsTests extends OpenSearchTestCase 
 
         // Test RECIPROCAL modifier
         FieldValueFactorScoreFunction reciprocalFunction = FieldValueFactorScoreFunction.newBuilder()
-            .setField("time")
+            .setField("time")  
             .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_RECIPROCAL)
             .build();
 
@@ -145,70 +145,70 @@ public class FieldValueFactorFunctionProtoUtilsTests extends OpenSearchTestCase 
 
         // Test NONE modifier
         FieldValueFactorScoreFunction noneFunction = FieldValueFactorScoreFunction.newBuilder()
-            .setField("count")
+            .setField("count")  
             .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_NONE)
             .build();
 
         ScoreFunctionBuilder<?> noneResult = FieldValueFactorFunctionProtoUtils.fromProto(noneFunction);
         assertThat(noneResult, instanceOf(FieldValueFactorFunctionBuilder.class));
-    }
+    }  
 
     public void testFromProtoWithNullFieldValueFactor() {
-        IllegalArgumentException exception = expectThrows(
+        IllegalArgumentException exception = expectThrows(  
             IllegalArgumentException.class,
             () -> FieldValueFactorFunctionProtoUtils.fromProto(null)
-        );
+        );  
 
         assertThat(exception.getMessage(), containsString("FieldValueFactorScoreFunction cannot be null"));
-    }
+    }  
 
     public void testFromProtoWithZeroFactor() {
-        // Test with zero factor
+        // Test with zero factor  
         FieldValueFactorScoreFunction fieldValueFactor = FieldValueFactorScoreFunction.newBuilder()
             .setField("zero_field")
-            .setFactor(0.0f)
+            .setFactor(0.0f)  
             .build();
 
-        ScoreFunctionBuilder<?> result = FieldValueFactorFunctionProtoUtils.fromProto(fieldValueFactor);
+        ScoreFunctionBuilder<?> result = FieldValueFactorFunctionProtoUtils.fromProto(fieldValueFactor);  
 
         assertThat(result, instanceOf(FieldValueFactorFunctionBuilder.class));
-        FieldValueFactorFunctionBuilder fieldValueFactorFunction = (FieldValueFactorFunctionBuilder) result;
+        FieldValueFactorFunctionBuilder fieldValueFactorFunction = (FieldValueFactorFunctionBuilder) result;  
     }
 
-    public void testFromProtoWithNegativeFactor() {
+    public void testFromProtoWithNegativeFactor() {  
         // Test with negative factor
         FieldValueFactorScoreFunction fieldValueFactor = FieldValueFactorScoreFunction.newBuilder()
-            .setField("negative_field")
+            .setField("negative_field")  
             .setFactor(-1.5f)
             .build();
 
         ScoreFunctionBuilder<?> result = FieldValueFactorFunctionProtoUtils.fromProto(fieldValueFactor);
 
-        assertThat(result, instanceOf(FieldValueFactorFunctionBuilder.class));
+        assertThat(result, instanceOf(FieldValueFactorFunctionBuilder.class));  
         FieldValueFactorFunctionBuilder fieldValueFactorFunction = (FieldValueFactorFunctionBuilder) result;
 
-    }
+    }  
 
     public void testFromProtoWithZeroMissing() {
-        // Test with zero missing value
+        // Test with zero missing value  
         FieldValueFactorScoreFunction fieldValueFactor = FieldValueFactorScoreFunction.newBuilder()
             .setField("missing_zero")
-            .setMissing(0.0f)
+            .setMissing(0.0f)  
             .build();
 
-        ScoreFunctionBuilder<?> result = FieldValueFactorFunctionProtoUtils.fromProto(fieldValueFactor);
+        ScoreFunctionBuilder<?> result = FieldValueFactorFunctionProtoUtils.fromProto(fieldValueFactor);  
 
         assertThat(result, instanceOf(FieldValueFactorFunctionBuilder.class));
-        FieldValueFactorFunctionBuilder fieldValueFactorFunction = (FieldValueFactorFunctionBuilder) result;
+        FieldValueFactorFunctionBuilder fieldValueFactorFunction = (FieldValueFactorFunctionBuilder) result;  
 
     }
 
     public void testFromProtoWithNegativeMissing() {
         // Test with negative missing value
-        FieldValueFactorScoreFunction fieldValueFactor = FieldValueFactorScoreFunction.newBuilder()
+        FieldValueFactorScoreFunction fieldValueFactor = FieldValueFactorScoreFunction.newBuilder()  
             .setField("missing_negative")
             .setMissing(-0.5f)
-            .build();
+            .build();  
 
         ScoreFunctionBuilder<?> result = FieldValueFactorFunctionProtoUtils.fromProto(fieldValueFactor);
 

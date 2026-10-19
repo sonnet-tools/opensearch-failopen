@@ -1,145 +1,145 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.transport.grpc.proto.request.common;
 
 import org.opensearch.protobufs.InlineScript;
 import org.opensearch.protobufs.ObjectMap;
-import org.opensearch.protobufs.ScriptLanguage;
+import org.opensearch.protobufs.ScriptLanguage;  
 import org.opensearch.protobufs.StoredScriptId;
 import org.opensearch.script.Script;
-import org.opensearch.script.ScriptType;
+import org.opensearch.script.ScriptType;  
 import org.opensearch.test.OpenSearchTestCase;
 
-import java.util.HashMap;
+import java.util.HashMap;  
 import java.util.Map;
 
-import static org.opensearch.script.Script.DEFAULT_SCRIPT_LANG;
+import static org.opensearch.script.Script.DEFAULT_SCRIPT_LANG;  
 
 public class ScriptProtoUtilsTests extends OpenSearchTestCase {
 
     public void testParseFromProtoRequestWithInlineScript() {
         org.opensearch.protobufs.Script protoScript = org.opensearch.protobufs.Script.newBuilder()
-            .setInline(
+            .setInline(  
                 InlineScript.newBuilder()
                     .setSource("doc['field'].value * 2")
-                    .setLang(
+                    .setLang(  
                         ScriptLanguage.newBuilder()
                             .setBuiltin(org.opensearch.protobufs.BuiltinScriptLanguage.BUILTIN_SCRIPT_LANGUAGE_PAINLESS)
-                    )
+                    )  
                     .build()
             )
-            .build();
+            .build();  
 
         Script script = ScriptProtoUtils.parseFromProtoRequest(protoScript);
 
         assertNotNull("Script should not be null", script);
         assertEquals("Script type should be INLINE", ScriptType.INLINE, script.getType());
-        assertEquals("Script language should be painless", "painless", script.getLang());
+        assertEquals("Script language should be painless", "painless", script.getLang());  
         assertEquals("Script source should match", "doc['field'].value * 2", script.getIdOrCode());
         assertTrue("Script params should be empty", script.getParams().isEmpty());
-    }
+    }  
 
     public void testParseFromProtoRequestWithInlineScriptAndCustomLanguage() {
-        org.opensearch.protobufs.Script protoScript = org.opensearch.protobufs.Script.newBuilder()
+        org.opensearch.protobufs.Script protoScript = org.opensearch.protobufs.Script.newBuilder()  
             .setInline(
                 InlineScript.newBuilder()
-                    .setSource("doc['field'].value * 2")
+                    .setSource("doc['field'].value * 2")  
                     .setLang(ScriptLanguage.newBuilder().setCustom("custom_lang"))
                     .build()
-            )
+            )  
             .build();
 
-        Script script = ScriptProtoUtils.parseFromProtoRequest(protoScript);
+        Script script = ScriptProtoUtils.parseFromProtoRequest(protoScript);  
 
         assertNotNull("Script should not be null", script);
-        assertEquals("Script type should be INLINE", ScriptType.INLINE, script.getType());
+        assertEquals("Script type should be INLINE", ScriptType.INLINE, script.getType());  
         assertEquals("Script language should be custom_lang", "custom_lang", script.getLang());
         assertEquals("Script source should match", "doc['field'].value * 2", script.getIdOrCode());
-        assertTrue("Script params should be empty", script.getParams().isEmpty());
+        assertTrue("Script params should be empty", script.getParams().isEmpty());  
     }
 
-    public void testParseFromProtoRequestWithInlineScriptAndParams() {
+    public void testParseFromProtoRequestWithInlineScriptAndParams() {  
         ObjectMap params = ObjectMap.newBuilder()
             .putFields("factor", ObjectMap.Value.newBuilder().setDouble(2.5).build())
-            .putFields("name", ObjectMap.Value.newBuilder().setString("test").build())
+            .putFields("name", ObjectMap.Value.newBuilder().setString("test").build())  
             .build();
 
-        org.opensearch.protobufs.Script protoScript = org.opensearch.protobufs.Script.newBuilder()
+        org.opensearch.protobufs.Script protoScript = org.opensearch.protobufs.Script.newBuilder()  
             .setInline(
                 InlineScript.newBuilder()
-                    .setSource("doc['field'].value * params.factor")
+                    .setSource("doc['field'].value * params.factor")  
                     .setLang(
                         ScriptLanguage.newBuilder()
-                            .setBuiltin(org.opensearch.protobufs.BuiltinScriptLanguage.BUILTIN_SCRIPT_LANGUAGE_PAINLESS)
+                            .setBuiltin(org.opensearch.protobufs.BuiltinScriptLanguage.BUILTIN_SCRIPT_LANGUAGE_PAINLESS)  
                     )
                     .setParams(params)
-                    .build()
+                    .build()  
             )
             .build();
 
         Script script = ScriptProtoUtils.parseFromProtoRequest(protoScript);
 
-        assertNotNull("Script should not be null", script);
+        assertNotNull("Script should not be null", script);  
         assertEquals("Script type should be INLINE", ScriptType.INLINE, script.getType());
         assertEquals("Script language should be painless", "painless", script.getLang());
-        assertEquals("Script source should match", "doc['field'].value * params.factor", script.getIdOrCode());
+        assertEquals("Script source should match", "doc['field'].value * params.factor", script.getIdOrCode());  
         assertEquals("Script params should have 2 entries", 2, script.getParams().size());
         assertEquals("Script param 'factor' should be 2.5", 2.5, script.getParams().get("factor"));
-        assertEquals("Script param 'name' should be 'test'", "test", script.getParams().get("name"));
+        assertEquals("Script param 'name' should be 'test'", "test", script.getParams().get("name"));  
     }
 
-    public void testParseFromProtoRequestWithInlineScriptAndOptions() {
+    public void testParseFromProtoRequestWithInlineScriptAndOptions() {  
         Map<String, String> options = new HashMap<>();
         options.put("content_type", "application/json");
 
         org.opensearch.protobufs.Script protoScript = org.opensearch.protobufs.Script.newBuilder()
             .setInline(
-                InlineScript.newBuilder()
+                InlineScript.newBuilder()  
                     .setSource("doc['field'].value * 2")
                     .setLang(
-                        ScriptLanguage.newBuilder()
+                        ScriptLanguage.newBuilder()  
                             .setBuiltin(org.opensearch.protobufs.BuiltinScriptLanguage.BUILTIN_SCRIPT_LANGUAGE_PAINLESS)
                     )
-                    .putAllOptions(options)
+                    .putAllOptions(options)  
                     .build()
             )
-            .build();
+            .build();  
 
         Script script = ScriptProtoUtils.parseFromProtoRequest(protoScript);
 
         assertNotNull("Script should not be null", script);
         assertEquals("Script type should be INLINE", ScriptType.INLINE, script.getType());
-        assertEquals("Script language should be painless", "painless", script.getLang());
+        assertEquals("Script language should be painless", "painless", script.getLang());  
         assertEquals("Script source should match", "doc['field'].value * 2", script.getIdOrCode());
         assertEquals("Script options should have 1 entry", 1, script.getOptions().size());
-        assertEquals(
+        assertEquals(  
             "Script option 'content_type' should be 'application/json'",
             "application/json",
-            script.getOptions().get("content_type")
+            script.getOptions().get("content_type")  
         );
     }
 
     public void testParseFromProtoRequestWithInlineScriptAndInvalidOptions() {
         Map<String, String> options = new HashMap<>();
-        options.put("content_type", "application/json");
+        options.put("content_type", "application/json");  
         options.put("invalid_option", "value");
 
-        org.opensearch.protobufs.Script protoScript = org.opensearch.protobufs.Script.newBuilder()
+        org.opensearch.protobufs.Script protoScript = org.opensearch.protobufs.Script.newBuilder()  
             .setInline(
                 InlineScript.newBuilder()
-                    .setSource("doc['field'].value * 2")
+                    .setSource("doc['field'].value * 2")  
                     .setLang(
                         ScriptLanguage.newBuilder()
-                            .setBuiltin(org.opensearch.protobufs.BuiltinScriptLanguage.BUILTIN_SCRIPT_LANGUAGE_PAINLESS)
+                            .setBuiltin(org.opensearch.protobufs.BuiltinScriptLanguage.BUILTIN_SCRIPT_LANGUAGE_PAINLESS)  
                     )
                     .putAllOptions(options)
-                    .build()
+                    .build()  
             )
             .build();
 
@@ -148,37 +148,37 @@ public class ScriptProtoUtilsTests extends OpenSearchTestCase {
 
     public void testParseFromProtoRequestWithStoredScript() {
         org.opensearch.protobufs.Script protoScript = org.opensearch.protobufs.Script.newBuilder()
-            .setStored(StoredScriptId.newBuilder().setId("my-stored-script").build())
+            .setStored(StoredScriptId.newBuilder().setId("my-stored-script").build())  
             .build();
 
-        Script script = ScriptProtoUtils.parseFromProtoRequest(protoScript);
+        Script script = ScriptProtoUtils.parseFromProtoRequest(protoScript);  
 
         assertNotNull("Script should not be null", script);
-        assertEquals("Script type should be STORED", ScriptType.STORED, script.getType());
+        assertEquals("Script type should be STORED", ScriptType.STORED, script.getType());  
         assertNull("Script language should be null for stored scripts", script.getLang());
         assertEquals("Script id should match", "my-stored-script", script.getIdOrCode());
-        assertTrue("Script params should be empty", script.getParams().isEmpty());
+        assertTrue("Script params should be empty", script.getParams().isEmpty());  
         assertNull("Script options should be null for stored scripts", script.getOptions());
     }
 
     public void testParseFromProtoRequestWithStoredScriptAndParams() {
         ObjectMap params = ObjectMap.newBuilder()
-            .putFields("factor", ObjectMap.Value.newBuilder().setDouble(2.5).build())
+            .putFields("factor", ObjectMap.Value.newBuilder().setDouble(2.5).build())  
             .putFields("name", ObjectMap.Value.newBuilder().setString("test").build())
             .build();
 
         org.opensearch.protobufs.Script protoScript = org.opensearch.protobufs.Script.newBuilder()
             .setStored(StoredScriptId.newBuilder().setId("my-stored-script").setParams(params).build())
-            .build();
+            .build();  
 
         Script script = ScriptProtoUtils.parseFromProtoRequest(protoScript);
 
         assertNotNull("Script should not be null", script);
         assertEquals("Script type should be STORED", ScriptType.STORED, script.getType());
-        assertNull("Script language should be null for stored scripts", script.getLang());
+        assertNull("Script language should be null for stored scripts", script.getLang());  
         assertEquals("Script id should match", "my-stored-script", script.getIdOrCode());
         assertEquals("Script params should have 2 entries", 2, script.getParams().size());
-        assertEquals("Script param 'factor' should be 2.5", 2.5, script.getParams().get("factor"));
+        assertEquals("Script param 'factor' should be 2.5", 2.5, script.getParams().get("factor"));  
         assertEquals("Script param 'name' should be 'test'", "test", script.getParams().get("name"));
     }
 
@@ -190,73 +190,73 @@ public class ScriptProtoUtilsTests extends OpenSearchTestCase {
 
     public void testParseScriptLanguageWithExpressionLanguage() {
         org.opensearch.protobufs.Script protoScript = org.opensearch.protobufs.Script.newBuilder()
-            .setInline(
+            .setInline(  
                 InlineScript.newBuilder()
                     .setSource("doc['field'].value * 2")
-                    .setLang(
+                    .setLang(  
                         ScriptLanguage.newBuilder()
                             .setBuiltin(org.opensearch.protobufs.BuiltinScriptLanguage.BUILTIN_SCRIPT_LANGUAGE_EXPRESSION)
-                    )
+                    )  
                     .build()
             )
-            .build();
+            .build();  
 
         Script script = ScriptProtoUtils.parseFromProtoRequest(protoScript);
 
         assertNotNull("Script should not be null", script);
         assertEquals("Script language should be expression", "expression", script.getLang());
-    }
+    }  
 
     public void testParseScriptLanguageWithJavaLanguage() {
-        org.opensearch.protobufs.Script protoScript = org.opensearch.protobufs.Script.newBuilder()
+        org.opensearch.protobufs.Script protoScript = org.opensearch.protobufs.Script.newBuilder()  
             .setInline(
                 InlineScript.newBuilder()
-                    .setSource("doc['field'].value * 2")
+                    .setSource("doc['field'].value * 2")  
                     .setLang(
                         ScriptLanguage.newBuilder().setBuiltin(org.opensearch.protobufs.BuiltinScriptLanguage.BUILTIN_SCRIPT_LANGUAGE_JAVA)
-                    )
+                    )  
                     .build()
             )
-            .build();
+            .build();  
 
         Script script = ScriptProtoUtils.parseFromProtoRequest(protoScript);
 
         assertNotNull("Script should not be null", script);
         assertEquals("Script language should be java", "java", script.getLang());
-    }
+    }  
 
     public void testParseScriptLanguageWithMustacheLanguage() {
-        org.opensearch.protobufs.Script protoScript = org.opensearch.protobufs.Script.newBuilder()
+        org.opensearch.protobufs.Script protoScript = org.opensearch.protobufs.Script.newBuilder()  
             .setInline(
                 InlineScript.newBuilder()
-                    .setSource("doc['field'].value * 2")
+                    .setSource("doc['field'].value * 2")  
                     .setLang(
                         ScriptLanguage.newBuilder()
-                            .setBuiltin(org.opensearch.protobufs.BuiltinScriptLanguage.BUILTIN_SCRIPT_LANGUAGE_MUSTACHE)
+                            .setBuiltin(org.opensearch.protobufs.BuiltinScriptLanguage.BUILTIN_SCRIPT_LANGUAGE_MUSTACHE)  
                     )
                     .build()
-            )
+            )  
             .build();
 
-        Script script = ScriptProtoUtils.parseFromProtoRequest(protoScript);
+        Script script = ScriptProtoUtils.parseFromProtoRequest(protoScript);  
 
         assertNotNull("Script should not be null", script);
-        assertEquals("Script language should be mustache", "mustache", script.getLang());
+        assertEquals("Script language should be mustache", "mustache", script.getLang());  
     }
 
-    public void testParseScriptLanguageWithUnspecifiedLanguage() {
+    public void testParseScriptLanguageWithUnspecifiedLanguage() {  
         org.opensearch.protobufs.Script protoScript = org.opensearch.protobufs.Script.newBuilder()
             .setInline(
-                InlineScript.newBuilder()
+                InlineScript.newBuilder()  
                     .setSource("doc['field'].value * 2")
                     .setLang(
-                        ScriptLanguage.newBuilder()
+                        ScriptLanguage.newBuilder()  
                             .setBuiltin(org.opensearch.protobufs.BuiltinScriptLanguage.BUILTIN_SCRIPT_LANGUAGE_UNSPECIFIED)
                     )
-                    .build()
+                    .build()  
             )
             .build();
 
         assertEquals("uses default language", DEFAULT_SCRIPT_LANG, ScriptProtoUtils.parseFromProtoRequest(protoScript).getLang());
     }
-}
+}  

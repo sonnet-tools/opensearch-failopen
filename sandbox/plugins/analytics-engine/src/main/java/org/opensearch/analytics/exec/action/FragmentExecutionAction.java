@@ -1,19 +1,19 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.analytics.exec.action;
 
 import org.opensearch.action.ActionType;
 
-/**
+/**  
  * {@link ActionType} singleton for the analytics shard-level fragment
  * execution action. Pairs the action name with the
- * {@link FragmentExecutionArrowResponse} deserializer.
+ * {@link FragmentExecutionArrowResponse} deserializer.  
  */
 public class FragmentExecutionAction extends ActionType<FragmentExecutionArrowResponse> {
 
@@ -25,5 +25,5 @@ public class FragmentExecutionAction extends ActionType<FragmentExecutionArrowRe
 
     private FragmentExecutionAction() {
         super(NAME, FragmentExecutionArrowResponse::new);
-    }
+    }  
 }

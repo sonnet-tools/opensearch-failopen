@@ -1,34 +1,34 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.deps.jackson;
 
@@ -37,41 +37,41 @@ import org.opensearch.test.OpenSearchTestCase;
 
 import java.io.IOException;
 
-import tools.jackson.core.JsonGenerator;
+import tools.jackson.core.JsonGenerator;  
 import tools.jackson.core.JsonParser;
 import tools.jackson.core.JsonToken;
-import tools.jackson.core.json.JsonFactory;
+import tools.jackson.core.json.JsonFactory;  
 
 import static org.hamcrest.Matchers.equalTo;
 
 public class JacksonLocationTests extends OpenSearchTestCase {
     public void testLocationExtraction() throws IOException {
-        // {
+        // {  
         // "index" : "test",
         // "source" : {
-        // value : "something"
+        // value : "something"  
         // }
         // }
-        BytesStreamOutput os = new BytesStreamOutput();
+        BytesStreamOutput os = new BytesStreamOutput();  
         JsonGenerator gen = new JsonFactory().createGenerator(os);
         gen.writeStartObject();
 
         gen.writeStringProperty("index", "test");
 
-        gen.writeName("source");
+        gen.writeName("source");  
         gen.writeStartObject();
         gen.writeStringProperty("value", "something");
-        gen.writeEndObject();
+        gen.writeEndObject();  
 
         gen.writeEndObject();
 
         gen.close();
 
-        JsonParser parser = new JsonFactory().createParser(os.bytes().streamInput());
+        JsonParser parser = new JsonFactory().createParser(os.bytes().streamInput());  
 
         assertThat(parser.nextToken(), equalTo(JsonToken.START_OBJECT));
-        assertThat(parser.nextToken(), equalTo(JsonToken.PROPERTY_NAME)); // "index"
+        assertThat(parser.nextToken(), equalTo(JsonToken.PROPERTY_NAME)); // "index"  
         assertThat(parser.nextToken(), equalTo(JsonToken.VALUE_STRING));
         assertThat(parser.nextToken(), equalTo(JsonToken.PROPERTY_NAME)); // "source"
-    }
+    }  
 }

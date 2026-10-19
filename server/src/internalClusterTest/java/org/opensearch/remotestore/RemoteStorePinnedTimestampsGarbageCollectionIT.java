@@ -1,355 +1,355 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.remotestore;
 
 import org.apache.lucene.tests.util.LuceneTestCase;
 import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.common.blobstore.BlobPath;
+import org.opensearch.common.blobstore.BlobPath;  
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
+import org.opensearch.common.unit.TimeValue;  
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.index.translog.transfer.TranslogTransferMetadata;
-import org.opensearch.indices.RemoteStoreSettings;
+import org.opensearch.indices.RemoteStoreSettings;  
 import org.opensearch.node.remotestore.RemoteStorePinnedTimestampService;
 import org.opensearch.test.OpenSearchIntegTestCase;
 
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
+import java.nio.file.Path;  
 import java.time.Duration;
 import java.util.HashSet;
-import java.util.List;
+import java.util.List;  
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
+import java.util.stream.Collectors;  
 import java.util.stream.LongStream;
 
-import static org.opensearch.index.IndexSettings.INDEX_REMOTE_TRANSLOG_KEEP_EXTRA_GEN_SETTING;
+import static org.opensearch.index.IndexSettings.INDEX_REMOTE_TRANSLOG_KEEP_EXTRA_GEN_SETTING;  
 import static org.opensearch.index.remote.RemoteStoreEnums.DataCategory.TRANSLOG;
 import static org.opensearch.index.remote.RemoteStoreEnums.DataType.DATA;
-import static org.opensearch.index.remote.RemoteStoreEnums.DataType.METADATA;
+import static org.opensearch.index.remote.RemoteStoreEnums.DataType.METADATA;  
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertNoFailures;
 import static org.awaitility.Awaitility.await;
 
 @LuceneTestCase.AwaitsFix(bugUrl = "https://github.com/opensearch-project/OpenSearch/issues/16088")
 @OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
-public class RemoteStorePinnedTimestampsGarbageCollectionIT extends RemoteStoreBaseIntegTestCase {
+public class RemoteStorePinnedTimestampsGarbageCollectionIT extends RemoteStoreBaseIntegTestCase {  
     static final String INDEX_NAME = "remote-store-test-idx-1";
 
-    @Override
+    @Override  
     protected Settings nodeSettings(int nodeOrdinal) {
         return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
+            .put(super.nodeSettings(nodeOrdinal))  
             .put(RemoteStoreSettings.CLUSTER_REMOTE_STORE_PINNED_TIMESTAMP_ENABLED.getKey(), true)
             .put(RemoteStoreSettings.CLUSTER_REMOTE_STORE_TRANSLOG_METADATA.getKey(), false)
-            .build();
+            .build();  
     }
 
-    private static void keepPinnedTimestampSchedulerUpdated() {
+    private static void keepPinnedTimestampSchedulerUpdated() {  
         long currentTime = System.currentTimeMillis();
         await().atMost(Duration.ofSeconds(10))
-            .pollDelay(Duration.ofSeconds(1))
+            .pollDelay(Duration.ofSeconds(1))  
             .until(() -> RemoteStorePinnedTimestampService.getPinnedTimestamps().v1() > currentTime);
     }
 
     ActionListener<Void> noOpActionListener = new ActionListener<>() {
         @Override
-        public void onResponse(Void unused) {}
+        public void onResponse(Void unused) {}  
 
         @Override
-        public void onFailure(Exception e) {}
+        public void onFailure(Exception e) {}  
     };
 
-    public void testLiveIndexNoPinnedTimestamps() throws Exception {
+    public void testLiveIndexNoPinnedTimestamps() throws Exception {  
         prepareCluster(1, 1, Settings.EMPTY);
         Settings indexSettings = Settings.builder()
-            .put(remoteStoreIndexSettings(0, 1))
+            .put(remoteStoreIndexSettings(0, 1))  
             .put(INDEX_REMOTE_TRANSLOG_KEEP_EXTRA_GEN_SETTING.getKey(), 0)
             .build();
-        createIndex(INDEX_NAME, indexSettings);
+        createIndex(INDEX_NAME, indexSettings);  
         ensureYellowAndNoInitializingShards(INDEX_NAME);
         ensureGreen(INDEX_NAME);
 
         RemoteStoreSettings.setPinnedTimestampsLookbackInterval(TimeValue.ZERO);
 
-        RemoteStorePinnedTimestampService remoteStorePinnedTimestampService = internalCluster().getInstance(
+        RemoteStorePinnedTimestampService remoteStorePinnedTimestampService = internalCluster().getInstance(  
             RemoteStorePinnedTimestampService.class,
             primaryNodeName(INDEX_NAME)
-        );
+        );  
 
         remoteStorePinnedTimestampService.rescheduleAsyncUpdatePinnedTimestampTask(TimeValue.timeValueSeconds(1));
 
         int numDocs = randomIntBetween(5, 10);
         for (int i = 0; i < numDocs; i++) {
-            keepPinnedTimestampSchedulerUpdated();
+            keepPinnedTimestampSchedulerUpdated();  
             indexSingleDoc(INDEX_NAME, true);
         }
 
         String translogPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_TRANSLOG_PATH_PREFIX.get(getNodeSettings());
         String shardDataPath = getShardLevelBlobPath(
-            client(),
+            client(),  
             INDEX_NAME,
             BlobPath.cleanPath(),
-            "0",
+            "0",  
             TRANSLOG,
             DATA,
-            translogPathFixedPrefix
+            translogPathFixedPrefix  
         ).buildAsString();
         Path translogDataPath = Path.of(translogRepoPath + "/" + shardDataPath + "/1");
-        String shardMetadataPath = getShardLevelBlobPath(
+        String shardMetadataPath = getShardLevelBlobPath(  
             client(),
             INDEX_NAME,
-            BlobPath.cleanPath(),
+            BlobPath.cleanPath(),  
             "0",
             TRANSLOG,
-            METADATA,
+            METADATA,  
             translogPathFixedPrefix
         ).buildAsString();
-        Path translogMetadataPath = Path.of(translogRepoPath + "/" + shardMetadataPath);
+        Path translogMetadataPath = Path.of(translogRepoPath + "/" + shardMetadataPath);  
 
         assertBusy(() -> {
-            List<Path> metadataFiles = Files.list(translogMetadataPath).collect(Collectors.toList());
+            List<Path> metadataFiles = Files.list(translogMetadataPath).collect(Collectors.toList());  
             assertEquals(2, metadataFiles.size());
 
-            verifyTranslogDataFileCount(metadataFiles, translogDataPath);
+            verifyTranslogDataFileCount(metadataFiles, translogDataPath);  
         });
     }
 
     public void testLiveIndexNoPinnedTimestampsWithExtraGenSettingWithinLimit() throws Exception {
         prepareCluster(1, 1, Settings.EMPTY);
-        Settings indexSettings = Settings.builder()
+        Settings indexSettings = Settings.builder()  
             .put(remoteStoreIndexSettings(0, 1))
             .put(INDEX_REMOTE_TRANSLOG_KEEP_EXTRA_GEN_SETTING.getKey(), 10)
-            .build();
+            .build();  
         createIndex(INDEX_NAME, indexSettings);
         ensureYellowAndNoInitializingShards(INDEX_NAME);
-        ensureGreen(INDEX_NAME);
+        ensureGreen(INDEX_NAME);  
 
         RemoteStoreSettings.setPinnedTimestampsLookbackInterval(TimeValue.ZERO);
 
         RemoteStorePinnedTimestampService remoteStorePinnedTimestampService = internalCluster().getInstance(
             RemoteStorePinnedTimestampService.class,
-            primaryNodeName(INDEX_NAME)
+            primaryNodeName(INDEX_NAME)  
         );
 
-        remoteStorePinnedTimestampService.rescheduleAsyncUpdatePinnedTimestampTask(TimeValue.timeValueSeconds(1));
+        remoteStorePinnedTimestampService.rescheduleAsyncUpdatePinnedTimestampTask(TimeValue.timeValueSeconds(1));  
 
         int numDocs = randomIntBetween(5, 9);
-        for (int i = 0; i < numDocs; i++) {
+        for (int i = 0; i < numDocs; i++) {  
             keepPinnedTimestampSchedulerUpdated();
             indexSingleDoc(INDEX_NAME, true);
-        }
+        }  
 
         String translogPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_TRANSLOG_PATH_PREFIX.get(getNodeSettings());
-        String shardDataPath = getShardLevelBlobPath(
+        String shardDataPath = getShardLevelBlobPath(  
             client(),
             INDEX_NAME,
-            BlobPath.cleanPath(),
+            BlobPath.cleanPath(),  
             "0",
             TRANSLOG,
-            DATA,
+            DATA,  
             translogPathFixedPrefix
         ).buildAsString();
-        Path translogDataPath = Path.of(translogRepoPath + "/" + shardDataPath + "/1");
+        Path translogDataPath = Path.of(translogRepoPath + "/" + shardDataPath + "/1");  
         String shardMetadataPath = getShardLevelBlobPath(
             client(),
-            INDEX_NAME,
+            INDEX_NAME,  
             BlobPath.cleanPath(),
             "0",
-            TRANSLOG,
+            TRANSLOG,  
             METADATA,
             translogPathFixedPrefix
-        ).buildAsString();
+        ).buildAsString();  
         Path translogMetadataPath = Path.of(translogRepoPath + "/" + shardMetadataPath);
 
-        assertBusy(() -> {
+        assertBusy(() -> {  
             List<Path> metadataFiles = Files.list(translogMetadataPath).collect(Collectors.toList());
             assertTrue(metadataFiles.size() >= numDocs + 1);
 
             verifyTranslogDataFileCount(metadataFiles, translogDataPath);
         }, 30, TimeUnit.SECONDS);
-    }
+    }  
 
     public void testLiveIndexNoPinnedTimestampsWithExtraGenSetting() throws Exception {
-        prepareCluster(1, 1, Settings.EMPTY);
+        prepareCluster(1, 1, Settings.EMPTY);  
         Settings indexSettings = Settings.builder()
             .put(remoteStoreIndexSettings(0, 1))
-            .put(INDEX_REMOTE_TRANSLOG_KEEP_EXTRA_GEN_SETTING.getKey(), 3)
+            .put(INDEX_REMOTE_TRANSLOG_KEEP_EXTRA_GEN_SETTING.getKey(), 3)  
             .build();
         createIndex(INDEX_NAME, indexSettings);
-        ensureYellowAndNoInitializingShards(INDEX_NAME);
+        ensureYellowAndNoInitializingShards(INDEX_NAME);  
         ensureGreen(INDEX_NAME);
 
-        RemoteStoreSettings.setPinnedTimestampsLookbackInterval(TimeValue.ZERO);
+        RemoteStoreSettings.setPinnedTimestampsLookbackInterval(TimeValue.ZERO);  
 
         RemoteStorePinnedTimestampService remoteStorePinnedTimestampService = internalCluster().getInstance(
-            RemoteStorePinnedTimestampService.class,
+            RemoteStorePinnedTimestampService.class,  
             primaryNodeName(INDEX_NAME)
         );
 
         remoteStorePinnedTimestampService.rescheduleAsyncUpdatePinnedTimestampTask(TimeValue.timeValueSeconds(1));
 
-        int numDocs = 5;
+        int numDocs = 5;  
         for (int i = 0; i < numDocs; i++) {
             keepPinnedTimestampSchedulerUpdated();
-            indexSingleDoc(INDEX_NAME, true);
+            indexSingleDoc(INDEX_NAME, true);  
         }
 
-        String translogPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_TRANSLOG_PATH_PREFIX.get(getNodeSettings());
+        String translogPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_TRANSLOG_PATH_PREFIX.get(getNodeSettings());  
         String shardDataPath = getShardLevelBlobPath(
             client(),
-            INDEX_NAME,
+            INDEX_NAME,  
             BlobPath.cleanPath(),
             "0",
-            TRANSLOG,
+            TRANSLOG,  
             DATA,
             translogPathFixedPrefix
-        ).buildAsString();
+        ).buildAsString();  
         Path translogDataPath = Path.of(translogRepoPath + "/" + shardDataPath + "/1");
         String shardMetadataPath = getShardLevelBlobPath(
-            client(),
+            client(),  
             INDEX_NAME,
             BlobPath.cleanPath(),
-            "0",
+            "0",  
             TRANSLOG,
             METADATA,
-            translogPathFixedPrefix
+            translogPathFixedPrefix  
         ).buildAsString();
         Path translogMetadataPath = Path.of(translogRepoPath + "/" + shardMetadataPath);
 
         assertBusy(() -> {
             List<Path> metadataFiles = Files.list(translogMetadataPath).collect(Collectors.toList());
-            assertEquals(5, metadataFiles.size());
+            assertEquals(5, metadataFiles.size());  
 
             verifyTranslogDataFileCount(metadataFiles, translogDataPath);
-        });
+        });  
     }
 
-    public void testLiveIndexWithPinnedTimestamps() throws Exception {
+    public void testLiveIndexWithPinnedTimestamps() throws Exception {  
         prepareCluster(1, 1, Settings.EMPTY);
         Settings indexSettings = Settings.builder()
-            .put(remoteStoreIndexSettings(0, 1))
+            .put(remoteStoreIndexSettings(0, 1))  
             .put(INDEX_REMOTE_TRANSLOG_KEEP_EXTRA_GEN_SETTING.getKey(), 0)
             .build();
-        createIndex(INDEX_NAME, indexSettings);
+        createIndex(INDEX_NAME, indexSettings);  
         ensureYellowAndNoInitializingShards(INDEX_NAME);
         ensureGreen(INDEX_NAME);
 
         RemoteStoreSettings.setPinnedTimestampsLookbackInterval(TimeValue.ZERO);
 
-        RemoteStorePinnedTimestampService remoteStorePinnedTimestampService = internalCluster().getInstance(
+        RemoteStorePinnedTimestampService remoteStorePinnedTimestampService = internalCluster().getInstance(  
             RemoteStorePinnedTimestampService.class,
             primaryNodeName(INDEX_NAME)
-        );
+        );  
 
         remoteStorePinnedTimestampService.rescheduleAsyncUpdatePinnedTimestampTask(TimeValue.timeValueSeconds(1));
 
         int numDocs = randomIntBetween(5, 10);
         for (int i = 0; i < numDocs; i++) {
-            keepPinnedTimestampSchedulerUpdated();
+            keepPinnedTimestampSchedulerUpdated();  
             indexSingleDoc(INDEX_NAME, true);
             if (i == 2) {
-                RemoteStoreSettings.setPinnedTimestampsLookbackInterval(TimeValue.timeValueMinutes(1));
+                RemoteStoreSettings.setPinnedTimestampsLookbackInterval(TimeValue.timeValueMinutes(1));  
                 remoteStorePinnedTimestampService.pinTimestamp(System.currentTimeMillis(), "xyz", noOpActionListener);
                 RemoteStoreSettings.setPinnedTimestampsLookbackInterval(TimeValue.ZERO);
-            }
+            }  
         }
 
-        String translogPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_TRANSLOG_PATH_PREFIX.get(getNodeSettings());
+        String translogPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_TRANSLOG_PATH_PREFIX.get(getNodeSettings());  
         String shardDataPath = getShardLevelBlobPath(
             client(),
-            INDEX_NAME,
+            INDEX_NAME,  
             BlobPath.cleanPath(),
             "0",
-            TRANSLOG,
+            TRANSLOG,  
             DATA,
             translogPathFixedPrefix
-        ).buildAsString();
+        ).buildAsString();  
         Path translogDataPath = Path.of(translogRepoPath + "/" + shardDataPath + "/1");
         String shardMetadataPath = getShardLevelBlobPath(
-            client(),
+            client(),  
             INDEX_NAME,
             BlobPath.cleanPath(),
-            "0",
+            "0",  
             TRANSLOG,
             METADATA,
-            translogPathFixedPrefix
+            translogPathFixedPrefix  
         ).buildAsString();
         Path translogMetadataPath = Path.of(translogRepoPath + "/" + shardMetadataPath);
 
         assertBusy(() -> {
             List<Path> metadataFiles = Files.list(translogMetadataPath).collect(Collectors.toList());
-            assertEquals(3, metadataFiles.size());
+            assertEquals(3, metadataFiles.size());  
 
             verifyTranslogDataFileCount(metadataFiles, translogDataPath);
-        });
+        });  
     }
 
-    public void testLiveIndexWithPinnedTimestampsMultiplePrimaryTerms() throws Exception {
+    public void testLiveIndexWithPinnedTimestampsMultiplePrimaryTerms() throws Exception {  
         prepareCluster(1, 2, Settings.EMPTY);
         Settings indexSettings = Settings.builder()
-            .put(remoteStoreIndexSettings(1, 1))
+            .put(remoteStoreIndexSettings(1, 1))  
             .put(INDEX_REMOTE_TRANSLOG_KEEP_EXTRA_GEN_SETTING.getKey(), 3)
             .build();
-        createIndex(INDEX_NAME, indexSettings);
+        createIndex(INDEX_NAME, indexSettings);  
         ensureYellowAndNoInitializingShards(INDEX_NAME);
         ensureGreen(INDEX_NAME);
 
         RemoteStoreSettings.setPinnedTimestampsLookbackInterval(TimeValue.ZERO);
 
-        RemoteStorePinnedTimestampService remoteStorePinnedTimestampService = internalCluster().getInstance(
+        RemoteStorePinnedTimestampService remoteStorePinnedTimestampService = internalCluster().getInstance(  
             RemoteStorePinnedTimestampService.class,
             primaryNodeName(INDEX_NAME)
-        );
+        );  
 
         remoteStorePinnedTimestampService.rescheduleAsyncUpdatePinnedTimestampTask(TimeValue.timeValueSeconds(1));
 
         int numDocs = randomIntBetween(5, 10);
         for (int i = 0; i < numDocs; i++) {
-            keepPinnedTimestampSchedulerUpdated();
+            keepPinnedTimestampSchedulerUpdated();  
             indexSingleDoc(INDEX_NAME, true);
             if (i == 2) {
-                RemoteStoreSettings.setPinnedTimestampsLookbackInterval(TimeValue.timeValueMinutes(1));
+                RemoteStoreSettings.setPinnedTimestampsLookbackInterval(TimeValue.timeValueMinutes(1));  
                 remoteStorePinnedTimestampService.pinTimestamp(System.currentTimeMillis(), "xyz", noOpActionListener);
                 RemoteStoreSettings.setPinnedTimestampsLookbackInterval(TimeValue.ZERO);
-            }
+            }  
         }
 
-        ingestDocs();
+        ingestDocs();  
 
         internalCluster().restartNode(primaryNodeName(INDEX_NAME));
-        ensureGreen(INDEX_NAME);
+        ensureGreen(INDEX_NAME);  
 
         ingestDocs();
 
         String translogPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_TRANSLOG_PATH_PREFIX.get(getNodeSettings());
         String shardDataPath = getShardLevelBlobPath(
-            client(),
+            client(),  
             INDEX_NAME,
             BlobPath.cleanPath(),
-            "0",
+            "0",  
             TRANSLOG,
             DATA,
-            translogPathFixedPrefix
+            translogPathFixedPrefix  
         ).buildAsString();
         Path translogDataPath = Path.of(translogRepoPath + "/" + shardDataPath + "/1");
 
         assertBusy(() -> {
             List<Path> dataFiles = Files.list(translogDataPath).collect(Collectors.toList());
-            assertFalse(dataFiles.isEmpty());
+            assertFalse(dataFiles.isEmpty());  
         });
     }
 
     private void ingestDocs() {
         int numDocs = randomIntBetween(15, 20);
-        for (int i = 0; i < numDocs; i++) {
+        for (int i = 0; i < numDocs; i++) {  
             indexSingleDoc(INDEX_NAME, false);
         }
 
@@ -358,61 +358,61 @@ public class RemoteStorePinnedTimestampsGarbageCollectionIT extends RemoteStoreB
 
         int numDocsPostFailover = randomIntBetween(15, 20);
         for (int i = 0; i < numDocsPostFailover; i++) {
-            indexSingleDoc(INDEX_NAME, false);
+            indexSingleDoc(INDEX_NAME, false);  
         }
 
-        flushAndRefresh(INDEX_NAME);
+        flushAndRefresh(INDEX_NAME);  
         assertNoFailures(client().admin().indices().prepareRefresh(INDEX_NAME).setIndicesOptions(IndicesOptions.lenientExpandOpen()).get());
     }
 
     public void testIndexDeletionNoPinnedTimestamps() throws Exception {
         prepareCluster(1, 1, Settings.EMPTY);
-        Settings indexSettings = Settings.builder()
+        Settings indexSettings = Settings.builder()  
             .put(remoteStoreIndexSettings(0, 1))
             .put(INDEX_REMOTE_TRANSLOG_KEEP_EXTRA_GEN_SETTING.getKey(), 0)
-            .build();
+            .build();  
         createIndex(INDEX_NAME, indexSettings);
         ensureYellowAndNoInitializingShards(INDEX_NAME);
-        ensureGreen(INDEX_NAME);
+        ensureGreen(INDEX_NAME);  
 
         RemoteStoreSettings.setPinnedTimestampsLookbackInterval(TimeValue.ZERO);
 
         RemoteStorePinnedTimestampService remoteStorePinnedTimestampService = internalCluster().getInstance(
             RemoteStorePinnedTimestampService.class,
-            primaryNodeName(INDEX_NAME)
+            primaryNodeName(INDEX_NAME)  
         );
 
-        remoteStorePinnedTimestampService.rescheduleAsyncUpdatePinnedTimestampTask(TimeValue.timeValueSeconds(1));
+        remoteStorePinnedTimestampService.rescheduleAsyncUpdatePinnedTimestampTask(TimeValue.timeValueSeconds(1));  
 
         int numDocs = randomIntBetween(5, 10);
-        for (int i = 0; i < numDocs; i++) {
+        for (int i = 0; i < numDocs; i++) {  
             keepPinnedTimestampSchedulerUpdated();
             indexSingleDoc(INDEX_NAME, true);
-        }
+        }  
 
         String translogPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_TRANSLOG_PATH_PREFIX.get(getNodeSettings());
-        String shardDataPath = getShardLevelBlobPath(
+        String shardDataPath = getShardLevelBlobPath(  
             client(),
             INDEX_NAME,
-            BlobPath.cleanPath(),
+            BlobPath.cleanPath(),  
             "0",
             TRANSLOG,
-            DATA,
+            DATA,  
             translogPathFixedPrefix
         ).buildAsString();
-        Path translogDataPath = Path.of(translogRepoPath + "/" + shardDataPath + "/1");
+        Path translogDataPath = Path.of(translogRepoPath + "/" + shardDataPath + "/1");  
         String shardMetadataPath = getShardLevelBlobPath(
             client(),
-            INDEX_NAME,
+            INDEX_NAME,  
             BlobPath.cleanPath(),
             "0",
-            TRANSLOG,
+            TRANSLOG,  
             METADATA,
             translogPathFixedPrefix
-        ).buildAsString();
+        ).buildAsString();  
         Path translogMetadataPath = Path.of(translogRepoPath + "/" + shardMetadataPath);
 
-        assertBusy(() -> {
+        assertBusy(() -> {  
             List<Path> metadataFiles = Files.list(translogMetadataPath).collect(Collectors.toList());
             assertEquals(2, metadataFiles.size());
 
@@ -424,87 +424,87 @@ public class RemoteStorePinnedTimestampsGarbageCollectionIT extends RemoteStoreB
 
         assertBusy(() -> {
             assertEquals(1, Files.list(translogMetadataPath).collect(Collectors.toList()).size());
-            assertEquals(4, Files.list(translogDataPath).collect(Collectors.toList()).size());
+            assertEquals(4, Files.list(translogDataPath).collect(Collectors.toList()).size());  
         });
     }
 
     public void testIndexDeletionWithPinnedTimestamps() throws Exception {
         prepareCluster(1, 1, Settings.EMPTY);
-        Settings indexSettings = Settings.builder()
+        Settings indexSettings = Settings.builder()  
             .put(remoteStoreIndexSettings(0, 1))
             .put(INDEX_REMOTE_TRANSLOG_KEEP_EXTRA_GEN_SETTING.getKey(), 0)
-            .build();
+            .build();  
         createIndex(INDEX_NAME, indexSettings);
         ensureYellowAndNoInitializingShards(INDEX_NAME);
-        ensureGreen(INDEX_NAME);
+        ensureGreen(INDEX_NAME);  
 
         RemoteStoreSettings.setPinnedTimestampsLookbackInterval(TimeValue.ZERO);
 
         RemoteStorePinnedTimestampService remoteStorePinnedTimestampService = internalCluster().getInstance(
             RemoteStorePinnedTimestampService.class,
-            primaryNodeName(INDEX_NAME)
+            primaryNodeName(INDEX_NAME)  
         );
 
-        remoteStorePinnedTimestampService.rescheduleAsyncUpdatePinnedTimestampTask(TimeValue.timeValueSeconds(1));
+        remoteStorePinnedTimestampService.rescheduleAsyncUpdatePinnedTimestampTask(TimeValue.timeValueSeconds(1));  
 
         int numDocs = randomIntBetween(5, 10);
-        for (int i = 0; i < numDocs; i++) {
+        for (int i = 0; i < numDocs; i++) {  
             keepPinnedTimestampSchedulerUpdated();
             indexSingleDoc(INDEX_NAME, true);
-            if (i == 2) {
+            if (i == 2) {  
                 RemoteStoreSettings.setPinnedTimestampsLookbackInterval(TimeValue.timeValueMinutes(1));
                 remoteStorePinnedTimestampService.pinTimestamp(System.currentTimeMillis(), "xyz", noOpActionListener);
-                RemoteStoreSettings.setPinnedTimestampsLookbackInterval(TimeValue.ZERO);
+                RemoteStoreSettings.setPinnedTimestampsLookbackInterval(TimeValue.ZERO);  
             }
         }
 
         String translogPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_TRANSLOG_PATH_PREFIX.get(getNodeSettings());
         String shardDataPath = getShardLevelBlobPath(
-            client(),
+            client(),  
             INDEX_NAME,
             BlobPath.cleanPath(),
-            "0",
+            "0",  
             TRANSLOG,
             DATA,
-            translogPathFixedPrefix
+            translogPathFixedPrefix  
         ).buildAsString();
         Path translogDataPath = Path.of(translogRepoPath + "/" + shardDataPath + "/1");
-        String shardMetadataPath = getShardLevelBlobPath(
+        String shardMetadataPath = getShardLevelBlobPath(  
             client(),
             INDEX_NAME,
-            BlobPath.cleanPath(),
+            BlobPath.cleanPath(),  
             "0",
             TRANSLOG,
-            METADATA,
+            METADATA,  
             translogPathFixedPrefix
         ).buildAsString();
-        Path translogMetadataPath = Path.of(translogRepoPath + "/" + shardMetadataPath);
+        Path translogMetadataPath = Path.of(translogRepoPath + "/" + shardMetadataPath);  
 
         assertBusy(() -> {
-            List<Path> metadataFiles = Files.list(translogMetadataPath).collect(Collectors.toList());
+            List<Path> metadataFiles = Files.list(translogMetadataPath).collect(Collectors.toList());  
             assertEquals(3, metadataFiles.size());
 
-            verifyTranslogDataFileCount(metadataFiles, translogDataPath);
+            verifyTranslogDataFileCount(metadataFiles, translogDataPath);  
         }, 30, TimeUnit.SECONDS);
 
-        keepPinnedTimestampSchedulerUpdated();
+        keepPinnedTimestampSchedulerUpdated();  
         client().admin().indices().prepareDelete(INDEX_NAME).get();
 
-        assertBusy(() -> {
+        assertBusy(() -> {  
             List<Path> metadataFiles = Files.list(translogMetadataPath).collect(Collectors.toList());
             assertEquals(2, metadataFiles.size());
 
             verifyTranslogDataFileCount(metadataFiles, translogDataPath);
         });
-    }
+    }  
 
     private void verifyTranslogDataFileCount(List<Path> metadataFiles, Path translogDataPath) throws IOException {
-        List<String> mdFiles = metadataFiles.stream().map(p -> p.getFileName().toString()).collect(Collectors.toList());
+        List<String> mdFiles = metadataFiles.stream().map(p -> p.getFileName().toString()).collect(Collectors.toList());  
         Set<Long> generations = new HashSet<>();
         for (String mdFile : mdFiles) {
-            Tuple<Long, Long> minMaxGen = TranslogTransferMetadata.getMinMaxTranslogGenerationFromFilename(mdFile);
+            Tuple<Long, Long> minMaxGen = TranslogTransferMetadata.getMinMaxTranslogGenerationFromFilename(mdFile);  
             generations.addAll(LongStream.rangeClosed(minMaxGen.v1(), minMaxGen.v2()).boxed().collect(Collectors.toList()));
         }
-        assertEquals(generations.size() * 2, Files.list(translogDataPath).collect(Collectors.toList()).size());
+        assertEquals(generations.size() * 2, Files.list(translogDataPath).collect(Collectors.toList()).size());  
     }
 }

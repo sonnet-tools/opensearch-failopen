@@ -1,150 +1,150 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.search.aggregations.pipeline;
 
 import org.opensearch.core.ParseField;
 import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.common.io.stream.StreamOutput;  
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.InternalAggregation;
+import org.opensearch.search.aggregations.InternalAggregation;  
 import org.opensearch.search.aggregations.metrics.InternalNumericMetricsAggregation;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
+import java.util.Map;  
 import java.util.Objects;
 
-/**
+/**  
  * Implementation of a bucket metric value
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 public class InternalBucketMetricValue extends InternalNumericMetricsAggregation.SingleValue implements BucketMetricValue {
-    public static final String NAME = "bucket_metric_value";
+    public static final String NAME = "bucket_metric_value";  
     static final ParseField KEYS_FIELD = new ParseField("keys");
 
-    private double value;
+    private double value;  
     private String[] keys;
 
-    public InternalBucketMetricValue(String name, String[] keys, double value, DocValueFormat formatter, Map<String, Object> metadata) {
+    public InternalBucketMetricValue(String name, String[] keys, double value, DocValueFormat formatter, Map<String, Object> metadata) {  
         super(name, metadata);
         this.keys = keys;
-        this.value = value;
+        this.value = value;  
         this.format = formatter;
     }
 
     /**
      * Read from a stream.
-     */
+     */  
     public InternalBucketMetricValue(StreamInput in) throws IOException {
         super(in);
-        format = in.readNamedWriteable(DocValueFormat.class);
+        format = in.readNamedWriteable(DocValueFormat.class);  
         value = in.readDouble();
         keys = in.readStringArray();
-    }
+    }  
 
     @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
+    protected void doWriteTo(StreamOutput out) throws IOException {  
         out.writeNamedWriteable(format);
         out.writeDouble(value);
-        out.writeStringArray(keys);
+        out.writeStringArray(keys);  
     }
 
-    @Override
+    @Override  
     public String getWriteableName() {
         return NAME;
-    }
+    }  
 
     @Override
-    public double value() {
+    public double value() {  
         return value;
     }
 
     @Override
     public String[] keys() {
-        return keys;
+        return keys;  
     }
 
-    DocValueFormat formatter() {
+    DocValueFormat formatter() {  
         return format;
     }
 
     @Override
     public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
-        throw new UnsupportedOperationException("Not supported");
+        throw new UnsupportedOperationException("Not supported");  
     }
 
-    @Override
+    @Override  
     public Object getProperty(List<String> path) {
         if (path.isEmpty()) {
-            return this;
+            return this;  
         } else if (path.size() == 1 && "value".equals(path.get(0))) {
             return value();
-        } else if (path.size() == 1 && KEYS_FIELD.getPreferredName().equals(path.get(0))) {
+        } else if (path.size() == 1 && KEYS_FIELD.getPreferredName().equals(path.get(0))) {  
             return keys();
         } else {
-            throw new IllegalArgumentException("path not supported for [" + getName() + "]: " + path);
+            throw new IllegalArgumentException("path not supported for [" + getName() + "]: " + path);  
         }
     }
 
     @Override
     public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        boolean hasValue = !Double.isInfinite(value);
+        boolean hasValue = !Double.isInfinite(value);  
         builder.field(CommonFields.VALUE.getPreferredName(), hasValue ? value : null);
         if (hasValue && format != DocValueFormat.RAW) {
-            builder.field(CommonFields.VALUE_AS_STRING.getPreferredName(), format.format(value).toString());
+            builder.field(CommonFields.VALUE_AS_STRING.getPreferredName(), format.format(value).toString());  
         }
         builder.startArray(KEYS_FIELD.getPreferredName());
-        for (String key : keys) {
+        for (String key : keys) {  
             builder.value(key);
         }
-        builder.endArray();
+        builder.endArray();  
         return builder;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), value, Arrays.hashCode(keys));
+        return Objects.hash(super.hashCode(), value, Arrays.hashCode(keys));  
     }
 
-    @Override
+    @Override  
     public boolean equals(Object obj) {
         if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
+        if (obj == null || getClass() != obj.getClass()) return false;  
         if (super.equals(obj) == false) return false;
         InternalBucketMetricValue other = (InternalBucketMetricValue) obj;
-        return Objects.equals(value, other.value) && Arrays.equals(keys, other.keys);
+        return Objects.equals(value, other.value) && Arrays.equals(keys, other.keys);  
     }
 }

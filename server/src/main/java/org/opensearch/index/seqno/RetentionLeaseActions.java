@@ -1,148 +1,148 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.index.seqno;
 
 import org.opensearch.action.ActionRequestValidationException;
 import org.opensearch.action.ActionType;
-import org.opensearch.action.support.ActionFilters;
+import org.opensearch.action.support.ActionFilters;  
 import org.opensearch.action.support.single.shard.SingleShardRequest;
 import org.opensearch.action.support.single.shard.TransportSingleShardAction;
-import org.opensearch.cluster.ClusterState;
+import org.opensearch.cluster.ClusterState;  
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.routing.ShardsIterator;
-import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.cluster.service.ClusterService;  
 import org.opensearch.common.inject.Inject;
 import org.opensearch.common.lease.Releasable;
-import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.action.ActionListener;  
 import org.opensearch.core.action.ActionResponse;
 import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.common.io.stream.StreamOutput;  
 import org.opensearch.core.common.io.stream.Writeable;
 import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexService;
+import org.opensearch.index.IndexService;  
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.indices.IndicesService;
-import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.threadpool.ThreadPool;  
 import org.opensearch.transport.TransportService;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.util.Objects;
 
-/**
+/**  
  * This class holds all actions related to retention leases. Note carefully that these actions are executed under a primary permit. Care is
  * taken to thread the listener through the invocations so that for the sync APIs we do not notify the listener until these APIs have
- * responded with success. Additionally, note the use of
+ * responded with success. Additionally, note the use of  
  * {@link TransportSingleShardAction#asyncShardOperation(SingleShardRequest, ShardId, ActionListener)} to handle the case when acquiring
  * permits goes asynchronous because acquiring permits is blocked
- *
+ *  
  * @opensearch.internal
  */
-public class RetentionLeaseActions {
+public class RetentionLeaseActions {  
 
     public static final long RETAIN_ALL = -1;
 
     /**
      * Base class for transport retention lease actions
-     *
+     *  
      * @opensearch.internal
      */
-    abstract static class TransportRetentionLeaseAction<T extends Request<T>> extends TransportSingleShardAction<T, Response> {
+    abstract static class TransportRetentionLeaseAction<T extends Request<T>> extends TransportSingleShardAction<T, Response> {  
 
         private final IndicesService indicesService;
 
         @Inject
         TransportRetentionLeaseAction(
-            final String name,
+            final String name,  
             final ThreadPool threadPool,
             final ClusterService clusterService,
-            final TransportService transportService,
+            final TransportService transportService,  
             final ActionFilters actionFilters,
             final IndexNameExpressionResolver indexNameExpressionResolver,
-            final IndicesService indicesService,
+            final IndicesService indicesService,  
             final Writeable.Reader<T> requestSupplier
         ) {
-            super(
+            super(  
                 name,
                 threadPool,
-                clusterService,
+                clusterService,  
                 transportService,
                 actionFilters,
-                indexNameExpressionResolver,
+                indexNameExpressionResolver,  
                 requestSupplier,
                 ThreadPool.Names.MANAGEMENT
-            );
+            );  
             this.indicesService = Objects.requireNonNull(indicesService);
         }
 
         @Override
         protected ShardsIterator shards(final ClusterState state, final InternalRequest request) {
-            return state.routingTable().shardRoutingTable(request.concreteIndex(), request.request().getShardId().id()).primaryShardIt();
+            return state.routingTable().shardRoutingTable(request.concreteIndex(), request.request().getShardId().id()).primaryShardIt();  
         }
 
-        @Override
+        @Override  
         protected void asyncShardOperation(T request, ShardId shardId, final ActionListener<Response> listener) {
             final IndexService indexService = indicesService.indexServiceSafe(shardId.getIndex());
-            final IndexShard indexShard = indexService.getShard(shardId.id());
+            final IndexShard indexShard = indexService.getShard(shardId.id());  
             indexShard.acquirePrimaryOperationPermit(ActionListener.delegateFailure(listener, (delegatedListener, releasable) -> {
                 try (Releasable ignore = releasable) {
-                    doRetentionLeaseAction(indexShard, request, delegatedListener);
+                    doRetentionLeaseAction(indexShard, request, delegatedListener);  
                 }
             }), ThreadPool.Names.SAME, request);
-        }
+        }  
 
         @Override
-        protected Response shardOperation(final T request, final ShardId shardId) {
+        protected Response shardOperation(final T request, final ShardId shardId) {  
             throw new UnsupportedOperationException();
         }
 
         abstract void doRetentionLeaseAction(IndexShard indexShard, T request, ActionListener<Response> listener);
 
-        @Override
+        @Override  
         protected Writeable.Reader<Response> getResponseReader() {
             return Response::new;
-        }
+        }  
 
         @Override
-        protected boolean resolveIndex(final T request) {
+        protected boolean resolveIndex(final T request) {  
             return false;
         }
 
     }
 
-    /**
+    /**  
      * Add retention lease action
      *
-     * @opensearch.internal
+     * @opensearch.internal  
      */
     public static class Add extends ActionType<Response> {
 
@@ -151,58 +151,58 @@ public class RetentionLeaseActions {
 
         private Add() {
             super(ACTION_NAME, Response::new);
-        }
+        }  
 
         /**
-         * Internal transport action
+         * Internal transport action  
          *
          * @opensearch.internal
-         */
+         */  
         public static class TransportAction extends TransportRetentionLeaseAction<AddRequest> {
 
-            @Inject
+            @Inject  
             public TransportAction(
                 final ThreadPool threadPool,
-                final ClusterService clusterService,
+                final ClusterService clusterService,  
                 final TransportService transportService,
                 final ActionFilters actionFilters,
-                final IndexNameExpressionResolver indexNameExpressionResolver,
+                final IndexNameExpressionResolver indexNameExpressionResolver,  
                 final IndicesService indicesService
             ) {
-                super(
+                super(  
                     ACTION_NAME,
                     threadPool,
-                    clusterService,
+                    clusterService,  
                     transportService,
                     actionFilters,
-                    indexNameExpressionResolver,
+                    indexNameExpressionResolver,  
                     indicesService,
                     AddRequest::new
-                );
+                );  
             }
 
-            @Override
+            @Override  
             void doRetentionLeaseAction(final IndexShard indexShard, final AddRequest request, final ActionListener<Response> listener) {
                 indexShard.addRetentionLease(
-                    request.getId(),
+                    request.getId(),  
                     request.getRetainingSequenceNumber(),
                     request.getSource(),
-                    ActionListener.map(listener, r -> new Response())
+                    ActionListener.map(listener, r -> new Response())  
                 );
             }
 
             @Override
             protected Writeable.Reader<Response> getResponseReader() {
-                return Response::new;
+                return Response::new;  
             }
 
-        }
+        }  
     }
 
-    /**
+    /**  
      * Renew the retention lease
      *
-     * @opensearch.internal
+     * @opensearch.internal  
      */
     public static class Renew extends ActionType<Response> {
 
@@ -211,49 +211,49 @@ public class RetentionLeaseActions {
 
         private Renew() {
             super(ACTION_NAME, Response::new);
-        }
+        }  
 
         /**
-         * Internal transport action for renew
+         * Internal transport action for renew  
          *
          * @opensearch.internal
-         */
+         */  
         public static class TransportAction extends TransportRetentionLeaseAction<RenewRequest> {
 
-            @Inject
+            @Inject  
             public TransportAction(
                 final ThreadPool threadPool,
-                final ClusterService clusterService,
+                final ClusterService clusterService,  
                 final TransportService transportService,
                 final ActionFilters actionFilters,
-                final IndexNameExpressionResolver indexNameExpressionResolver,
+                final IndexNameExpressionResolver indexNameExpressionResolver,  
                 final IndicesService indicesService
             ) {
-                super(
+                super(  
                     ACTION_NAME,
                     threadPool,
-                    clusterService,
+                    clusterService,  
                     transportService,
                     actionFilters,
-                    indexNameExpressionResolver,
+                    indexNameExpressionResolver,  
                     indicesService,
                     RenewRequest::new
-                );
+                );  
             }
 
-            @Override
+            @Override  
             void doRetentionLeaseAction(final IndexShard indexShard, final RenewRequest request, final ActionListener<Response> listener) {
                 indexShard.renewRetentionLease(request.getId(), request.getRetainingSequenceNumber(), request.getSource());
-                listener.onResponse(new Response());
+                listener.onResponse(new Response());  
             }
 
-        }
+        }  
     }
 
-    /**
+    /**  
      * Remove retention lease action
      *
-     * @opensearch.internal
+     * @opensearch.internal  
      */
     public static class Remove extends ActionType<Response> {
 
@@ -262,198 +262,198 @@ public class RetentionLeaseActions {
 
         private Remove() {
             super(ACTION_NAME, Response::new);
-        }
+        }  
 
         /**
-         * Internal transport action for remove
+         * Internal transport action for remove  
          *
          * @opensearch.internal
-         */
+         */  
         public static class TransportAction extends TransportRetentionLeaseAction<RemoveRequest> {
 
-            @Inject
+            @Inject  
             public TransportAction(
                 final ThreadPool threadPool,
-                final ClusterService clusterService,
+                final ClusterService clusterService,  
                 final TransportService transportService,
                 final ActionFilters actionFilters,
-                final IndexNameExpressionResolver indexNameExpressionResolver,
+                final IndexNameExpressionResolver indexNameExpressionResolver,  
                 final IndicesService indicesService
             ) {
-                super(
+                super(  
                     ACTION_NAME,
                     threadPool,
-                    clusterService,
+                    clusterService,  
                     transportService,
                     actionFilters,
-                    indexNameExpressionResolver,
+                    indexNameExpressionResolver,  
                     indicesService,
                     RemoveRequest::new
-                );
+                );  
             }
 
-            @Override
+            @Override  
             void doRetentionLeaseAction(final IndexShard indexShard, final RemoveRequest request, final ActionListener<Response> listener) {
                 indexShard.removeRetentionLease(request.getId(), ActionListener.map(listener, r -> new Response()));
-            }
+            }  
 
         }
-    }
+    }  
 
     /**
-     * Base request
+     * Base request  
      *
      * @opensearch.internal
-     */
+     */  
     private abstract static class Request<T extends SingleShardRequest<T>> extends SingleShardRequest<T> {
 
-        private final ShardId shardId;
+        private final ShardId shardId;  
 
         public ShardId getShardId() {
-            return shardId;
+            return shardId;  
         }
 
-        private final String id;
+        private final String id;  
 
         public String getId() {
-            return id;
+            return id;  
         }
 
-        Request(StreamInput in) throws IOException {
+        Request(StreamInput in) throws IOException {  
             super(in);
             shardId = new ShardId(in);
-            id = in.readString();
+            id = in.readString();  
         }
 
-        Request(final ShardId shardId, final String id) {
+        Request(final ShardId shardId, final String id) {  
             super(Objects.requireNonNull(shardId).getIndexName());
             this.shardId = shardId;
-            this.id = Objects.requireNonNull(id);
+            this.id = Objects.requireNonNull(id);  
         }
 
-        @Override
+        @Override  
         public ActionRequestValidationException validate() {
             return null;
-        }
+        }  
 
         @Override
-        public void writeTo(final StreamOutput out) throws IOException {
+        public void writeTo(final StreamOutput out) throws IOException {  
             super.writeTo(out);
             shardId.writeTo(out);
-            out.writeString(id);
+            out.writeString(id);  
         }
 
-    }
+    }  
 
     /**
-     * Base add or renew request
+     * Base add or renew request  
      *
      * @opensearch.internal
-     */
+     */  
     private abstract static class AddOrRenewRequest<T extends SingleShardRequest<T>> extends Request<T> {
 
-        private final long retainingSequenceNumber;
+        private final long retainingSequenceNumber;  
 
         public long getRetainingSequenceNumber() {
-            return retainingSequenceNumber;
+            return retainingSequenceNumber;  
         }
 
-        private final String source;
+        private final String source;  
 
         public String getSource() {
-            return source;
+            return source;  
         }
 
-        AddOrRenewRequest(StreamInput in) throws IOException {
+        AddOrRenewRequest(StreamInput in) throws IOException {  
             super(in);
             retainingSequenceNumber = in.readZLong();
-            source = in.readString();
+            source = in.readString();  
         }
 
-        AddOrRenewRequest(final ShardId shardId, final String id, final long retainingSequenceNumber, final String source) {
+        AddOrRenewRequest(final ShardId shardId, final String id, final long retainingSequenceNumber, final String source) {  
             super(shardId, id);
             if (retainingSequenceNumber < 0 && retainingSequenceNumber != RETAIN_ALL) {
-                throw new IllegalArgumentException("retaining sequence number [" + retainingSequenceNumber + "] out of range");
+                throw new IllegalArgumentException("retaining sequence number [" + retainingSequenceNumber + "] out of range");  
             }
             this.retainingSequenceNumber = retainingSequenceNumber;
-            this.source = Objects.requireNonNull(source);
+            this.source = Objects.requireNonNull(source);  
         }
 
-        @Override
+        @Override  
         public void writeTo(final StreamOutput out) throws IOException {
             super.writeTo(out);
-            out.writeZLong(retainingSequenceNumber);
+            out.writeZLong(retainingSequenceNumber);  
             out.writeString(source);
         }
 
     }
 
-    /**
+    /**  
      * Add retention lease request
      *
-     * @opensearch.internal
+     * @opensearch.internal  
      */
     public static class AddRequest extends AddOrRenewRequest<AddRequest> {
 
         AddRequest(StreamInput in) throws IOException {
             super(in);
-        }
+        }  
 
         public AddRequest(final ShardId shardId, final String id, final long retainingSequenceNumber, final String source) {
-            super(shardId, id, retainingSequenceNumber, source);
+            super(shardId, id, retainingSequenceNumber, source);  
         }
 
-    }
+    }  
 
     /**
-     * Renew Request action
+     * Renew Request action  
      *
      * @opensearch.internal
-     */
+     */  
     public static class RenewRequest extends AddOrRenewRequest<RenewRequest> {
 
-        RenewRequest(StreamInput in) throws IOException {
+        RenewRequest(StreamInput in) throws IOException {  
             super(in);
         }
 
         public RenewRequest(final ShardId shardId, final String id, final long retainingSequenceNumber, final String source) {
             super(shardId, id, retainingSequenceNumber, source);
-        }
+        }  
 
     }
 
     /**
      * Remove request
-     *
+     *  
      * @opensearch.internal
      */
-    public static class RemoveRequest extends Request<RemoveRequest> {
+    public static class RemoveRequest extends Request<RemoveRequest> {  
 
         RemoveRequest(StreamInput in) throws IOException {
-            super(in);
+            super(in);  
         }
 
-        public RemoveRequest(final ShardId shardId, final String id) {
+        public RemoveRequest(final ShardId shardId, final String id) {  
             super(shardId, id);
         }
 
     }
 
-    /**
+    /**  
      * The response
      *
-     * @opensearch.internal
+     * @opensearch.internal  
      */
     public static class Response extends ActionResponse {
 
         public Response() {}
 
-        Response(final StreamInput in) throws IOException {
+        Response(final StreamInput in) throws IOException {  
             super(in);
         }
 
         @Override
         public void writeTo(StreamOutput out) throws IOException {}
-    }
+    }  
 
 }

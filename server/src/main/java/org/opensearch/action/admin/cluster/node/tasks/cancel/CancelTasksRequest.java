@@ -1,52 +1,52 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.action.admin.cluster.node.tasks.cancel;
 
 import org.opensearch.action.support.tasks.BaseTasksRequest;
 import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.common.io.stream.StreamInput;  
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.tasks.CancellableTask;
-import org.opensearch.tasks.Task;
+import org.opensearch.tasks.Task;  
 
 import java.io.IOException;
-import java.util.Arrays;
+import java.util.Arrays;  
 
 /**
- * A request to cancel tasks
+ * A request to cancel tasks  
  *
  * @opensearch.api
- */
+ */  
 @PublicApi(since = "1.0.0")
 public class CancelTasksRequest extends BaseTasksRequest<CancelTasksRequest> {
 
@@ -58,64 +58,64 @@ public class CancelTasksRequest extends BaseTasksRequest<CancelTasksRequest> {
 
     public CancelTasksRequest() {}
 
-    public CancelTasksRequest(StreamInput in) throws IOException {
+    public CancelTasksRequest(StreamInput in) throws IOException {  
         super(in);
         this.reason = in.readString();
-        waitForCompletion = in.readBoolean();
+        waitForCompletion = in.readBoolean();  
     }
 
-    @Override
+    @Override  
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
-        out.writeString(reason);
+        out.writeString(reason);  
         out.writeBoolean(waitForCompletion);
     }
 
     @Override
     public boolean match(Task task) {
-        return super.match(task) && task instanceof CancellableTask;
+        return super.match(task) && task instanceof CancellableTask;  
     }
 
-    /**
+    /**  
      * Set the reason for canceling the task.
      */
-    public CancelTasksRequest setReason(String reason) {
+    public CancelTasksRequest setReason(String reason) {  
         this.reason = reason;
         return this;
-    }
+    }  
 
     /**
-     * The reason for canceling the task.
+     * The reason for canceling the task.  
      */
     public String getReason() {
-        return reason;
+        return reason;  
     }
 
-    /**
+    /**  
      * If {@code true}, the request blocks until the cancellation of the task and its descendant tasks is completed.
      * Otherwise, the request can return soon after the cancellation is started. Defaults to {@code false}.
-     */
+     */  
     public void setWaitForCompletion(boolean waitForCompletion) {
         this.waitForCompletion = waitForCompletion;
-    }
+    }  
 
     public boolean waitForCompletion() {
-        return waitForCompletion;
+        return waitForCompletion;  
     }
 
-    @Override
+    @Override  
     public String getDescription() {
         return "reason["
-            + reason
+            + reason  
             + "], waitForCompletion["
             + waitForCompletion
-            + "], taskId["
+            + "], taskId["  
             + getTaskId()
             + "], parentTaskId["
-            + getParentTaskId()
+            + getParentTaskId()  
             + "], nodes"
             + Arrays.toString(getNodes())
-            + ", actions"
+            + ", actions"  
             + Arrays.toString(getActions());
     }
-}
+}  

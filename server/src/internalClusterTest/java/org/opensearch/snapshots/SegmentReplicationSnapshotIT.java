@@ -1,253 +1,253 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.snapshots;
 
 import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
 import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequestBuilder;
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;  
 import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.opensearch.action.admin.indices.settings.get.GetSettingsRequest;
-import org.opensearch.action.admin.indices.settings.get.GetSettingsResponse;
+import org.opensearch.action.admin.indices.settings.get.GetSettingsResponse;  
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.settings.Settings;
+import org.opensearch.common.settings.Settings;  
 import org.opensearch.core.index.Index;
 import org.opensearch.core.rest.RestStatus;
-import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.index.query.QueryBuilders;  
 import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.test.InternalTestCluster;
+import org.opensearch.test.InternalTestCluster;  
 import org.opensearch.test.OpenSearchIntegTestCase;
 
-import java.nio.file.Path;
+import java.nio.file.Path;  
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeUnit;  
 
 import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_REPLICATION_TYPE;
-import static org.opensearch.indices.IndicesService.CLUSTER_INDEX_RESTRICT_REPLICATION_TYPE_SETTING;
+import static org.opensearch.indices.IndicesService.CLUSTER_INDEX_RESTRICT_REPLICATION_TYPE_SETTING;  
 import static org.opensearch.indices.IndicesService.CLUSTER_SETTING_REPLICATION_TYPE;
 import static org.opensearch.indices.replication.SegmentReplicationBaseIT.waitForSearchableDocs;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
 
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)  
 public class SegmentReplicationSnapshotIT extends AbstractSnapshotIntegTestCase {
     private static final String INDEX_NAME = "test-segrep-idx";
-    private static final String RESTORED_INDEX_NAME = INDEX_NAME + "-restored";
+    private static final String RESTORED_INDEX_NAME = INDEX_NAME + "-restored";  
     private static final int SHARD_COUNT = 1;
     private static final int REPLICA_COUNT = 1;
-    private static final int DOC_COUNT = 1010;
+    private static final int DOC_COUNT = 1010;  
 
     private static final String REPOSITORY_NAME = "test-segrep-repo";
-    private static final String SNAPSHOT_NAME = "test-segrep-snapshot";
+    private static final String SNAPSHOT_NAME = "test-segrep-snapshot";  
 
     protected static final String REPLICATION_MISMATCH_VALIDATION_ERROR =
-        "Validation Failed: 1: index setting [index.replication.type] is not allowed to be set as [cluster.index.restrict.replication.type=true];";
+        "Validation Failed: 1: index setting [index.replication.type] is not allowed to be set as [cluster.index.restrict.replication.type=true];";  
 
     public Settings segRepEnableIndexSettings() {
-        return getShardSettings().put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT).build();
+        return getShardSettings().put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT).build();  
     }
 
-    public Settings docRepEnableIndexSettings() {
+    public Settings docRepEnableIndexSettings() {  
         return getShardSettings().put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.DOCUMENT).build();
     }
 
     public Settings.Builder getShardSettings() {
         return Settings.builder()
-            .put(super.indexSettings())
+            .put(super.indexSettings())  
             .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, SHARD_COUNT)
             .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, REPLICA_COUNT);
-    }
+    }  
 
     public Settings restoreIndexSegRepSettings() {
-        return Settings.builder().put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT).build();
+        return Settings.builder().put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT).build();  
     }
 
-    public Settings restoreIndexDocRepSettings() {
+    public Settings restoreIndexDocRepSettings() {  
         return Settings.builder().put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.DOCUMENT).build();
     }
 
     public void ingestData(int docCount, String indexName) throws Exception {
         for (int i = 0; i < docCount; i++) {
-            client().prepareIndex(indexName).setId(Integer.toString(i)).setSource("field", "value" + i).execute().actionGet();
+            client().prepareIndex(indexName).setId(Integer.toString(i)).setSource("field", "value" + i).execute().actionGet();  
         }
     }
 
     // Start cluster with provided settings and return the node names as list
     public List<String> startClusterWithSettings(Settings indexSettings, int replicaCount) throws Exception {
-        // Start primary
+        // Start primary  
         final String primaryNode = internalCluster().startNode();
         List<String> nodeNames = new ArrayList<>();
-        nodeNames.add(primaryNode);
+        nodeNames.add(primaryNode);  
         for (int i = 0; i < replicaCount; i++) {
             nodeNames.add(internalCluster().startNode());
-        }
+        }  
         createIndex(INDEX_NAME, indexSettings);
         ensureGreen(INDEX_NAME);
-        // Ingest data
+        // Ingest data  
         ingestData(DOC_COUNT, INDEX_NAME);
         return nodeNames;
-    }
+    }  
 
     public void createSnapshot() {
-        // Snapshot declaration
+        // Snapshot declaration  
         Path absolutePath = randomRepoPath().toAbsolutePath();
         // Create snapshot
-        createRepository(REPOSITORY_NAME, "fs", absolutePath);
+        createRepository(REPOSITORY_NAME, "fs", absolutePath);  
         CreateSnapshotResponse createSnapshotResponse = client().admin()
             .cluster()
-            .prepareCreateSnapshot(REPOSITORY_NAME, SNAPSHOT_NAME)
+            .prepareCreateSnapshot(REPOSITORY_NAME, SNAPSHOT_NAME)  
             .setWaitForCompletion(true)
             .setIndices(INDEX_NAME)
-            .get();
+            .get();  
         assertEquals(createSnapshotResponse.getSnapshotInfo().successfulShards(), createSnapshotResponse.getSnapshotInfo().totalShards());
         assertEquals(createSnapshotResponse.getSnapshotInfo().state(), SnapshotState.SUCCESS);
-    }
+    }  
 
     public RestoreSnapshotResponse restoreSnapshotWithSettings(Settings indexSettings) {
-        return restoreSnapshotWithSettings(indexSettings, RESTORED_INDEX_NAME);
+        return restoreSnapshotWithSettings(indexSettings, RESTORED_INDEX_NAME);  
     }
 
-    public RestoreSnapshotResponse restoreSnapshotWithSettings(Settings indexSettings, String restoredIndexName) {
+    public RestoreSnapshotResponse restoreSnapshotWithSettings(Settings indexSettings, String restoredIndexName) {  
         RestoreSnapshotRequestBuilder builder = client().admin()
             .cluster()
-            .prepareRestoreSnapshot(REPOSITORY_NAME, SNAPSHOT_NAME)
+            .prepareRestoreSnapshot(REPOSITORY_NAME, SNAPSHOT_NAME)  
             .setWaitForCompletion(false)
             .setRenamePattern(INDEX_NAME)
-            .setRenameReplacement(restoredIndexName);
+            .setRenameReplacement(restoredIndexName);  
         if (indexSettings != null) {
             builder.setIndexSettings(indexSettings);
-        }
+        }  
         return builder.get();
     }
 
     public void testRestoreOnSegRep() throws Exception {
         // Start cluster with one primary and one replica node
-        startClusterWithSettings(segRepEnableIndexSettings(), 1);
+        startClusterWithSettings(segRepEnableIndexSettings(), 1);  
         createSnapshot();
         // Delete index
-        assertAcked(client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).get());
+        assertAcked(client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).get());  
         assertFalse("index [" + INDEX_NAME + "] should have been deleted", indexExists(INDEX_NAME));
 
-        RestoreSnapshotResponse restoreSnapshotResponse = restoreSnapshotWithSettings(null);
+        RestoreSnapshotResponse restoreSnapshotResponse = restoreSnapshotWithSettings(null);  
 
         // Assertions
-        assertEquals(restoreSnapshotResponse.status(), RestStatus.ACCEPTED);
+        assertEquals(restoreSnapshotResponse.status(), RestStatus.ACCEPTED);  
         ensureGreen(RESTORED_INDEX_NAME);
         GetSettingsResponse settingsResponse = client().admin()
-            .indices()
+            .indices()  
             .getSettings(new GetSettingsRequest().indices(RESTORED_INDEX_NAME))
             .get();
-        assertEquals(settingsResponse.getSetting(RESTORED_INDEX_NAME, "index.replication.type"), "SEGMENT");
+        assertEquals(settingsResponse.getSetting(RESTORED_INDEX_NAME, "index.replication.type"), "SEGMENT");  
         SearchResponse resp = client().prepareSearch(RESTORED_INDEX_NAME).setQuery(QueryBuilders.matchAllQuery()).get();
         assertHitCount(resp, DOC_COUNT);
-    }
+    }  
 
     public void testSnapshotOnSegRep_RestoreOnSegRepDuringIngestion() throws Exception {
-        List<String> nodes = startClusterWithSettings(segRepEnableIndexSettings(), 1);
+        List<String> nodes = startClusterWithSettings(segRepEnableIndexSettings(), 1);  
         waitForSearchableDocs(INDEX_NAME, DOC_COUNT, nodes);
         createSnapshot();
-        // Delete index
+        // Delete index  
         assertAcked(client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).get());
         assertFalse("index [" + INDEX_NAME + "] should have been deleted", indexExists(INDEX_NAME));
 
         RestoreSnapshotResponse restoreSnapshotResponse = restoreSnapshotWithSettings(null);
 
-        // Assertions
+        // Assertions  
         assertEquals(restoreSnapshotResponse.status(), RestStatus.ACCEPTED);
         assertBusy(() -> ensureGreen(RESTORED_INDEX_NAME), 60, TimeUnit.SECONDS);
-        final int docCountPostRestore = 1001;
+        final int docCountPostRestore = 1001;  
         final int totalDocCount = DOC_COUNT + docCountPostRestore;
         for (int i = DOC_COUNT; i < totalDocCount; i++) {
-            client().prepareIndex(RESTORED_INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().actionGet();
+            client().prepareIndex(RESTORED_INDEX_NAME).setId(Integer.toString(i)).setSource("field", "value" + i).execute().actionGet();  
         }
         flushAndRefresh(RESTORED_INDEX_NAME);
-        assertBusy(() -> ensureGreen(RESTORED_INDEX_NAME), 60, TimeUnit.SECONDS);
+        assertBusy(() -> ensureGreen(RESTORED_INDEX_NAME), 60, TimeUnit.SECONDS);  
         waitForSearchableDocs(RESTORED_INDEX_NAME, totalDocCount, nodes);
         GetSettingsResponse settingsResponse = client().admin()
-            .indices()
+            .indices()  
             .getSettings(new GetSettingsRequest().indices(RESTORED_INDEX_NAME))
             .get();
-        assertEquals(settingsResponse.getSetting(RESTORED_INDEX_NAME, "index.replication.type"), "SEGMENT");
+        assertEquals(settingsResponse.getSetting(RESTORED_INDEX_NAME, "index.replication.type"), "SEGMENT");  
         SearchResponse resp = client().prepareSearch(RESTORED_INDEX_NAME).setQuery(QueryBuilders.matchAllQuery()).get();
         assertHitCount(resp, totalDocCount);
-    }
+    }  
 
     public void testSnapshotOnDocRep_RestoreOnSegRep() throws Exception {
-        startClusterWithSettings(docRepEnableIndexSettings(), 1);
+        startClusterWithSettings(docRepEnableIndexSettings(), 1);  
         createSnapshot();
         // Delete index
-        assertAcked(client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).get());
+        assertAcked(client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).get());  
 
         RestoreSnapshotResponse restoreSnapshotResponse = restoreSnapshotWithSettings(restoreIndexSegRepSettings());
 
         // Assertions
         assertEquals(restoreSnapshotResponse.status(), RestStatus.ACCEPTED);
-        ensureGreen(RESTORED_INDEX_NAME);
+        ensureGreen(RESTORED_INDEX_NAME);  
         GetSettingsResponse settingsResponse = client().admin()
             .indices()
-            .getSettings(new GetSettingsRequest().indices(RESTORED_INDEX_NAME))
+            .getSettings(new GetSettingsRequest().indices(RESTORED_INDEX_NAME))  
             .get();
         assertEquals(settingsResponse.getSetting(RESTORED_INDEX_NAME, "index.replication.type"), "SEGMENT");
 
         SearchResponse resp = client().prepareSearch(RESTORED_INDEX_NAME).setQuery(QueryBuilders.matchAllQuery()).get();
         assertHitCount(resp, DOC_COUNT);
-    }
+    }  
 
     public void testSnapshotOnSegRep_RestoreOnDocRep() throws Exception {
-        // Start a cluster with one primary and one replica
+        // Start a cluster with one primary and one replica  
         startClusterWithSettings(segRepEnableIndexSettings(), 1);
         createSnapshot();
-        // Delete index
+        // Delete index  
         assertAcked(client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).get());
 
-        RestoreSnapshotResponse restoreSnapshotResponse = restoreSnapshotWithSettings(restoreIndexDocRepSettings());
+        RestoreSnapshotResponse restoreSnapshotResponse = restoreSnapshotWithSettings(restoreIndexDocRepSettings());  
 
         // Assertions
-        assertEquals(restoreSnapshotResponse.status(), RestStatus.ACCEPTED);
+        assertEquals(restoreSnapshotResponse.status(), RestStatus.ACCEPTED);  
         ensureGreen(RESTORED_INDEX_NAME);
         GetSettingsResponse settingsResponse = client().admin()
-            .indices()
+            .indices()  
             .getSettings(new GetSettingsRequest().indices(RESTORED_INDEX_NAME))
             .get();
-        assertEquals(settingsResponse.getSetting(RESTORED_INDEX_NAME, "index.replication.type"), "DOCUMENT");
+        assertEquals(settingsResponse.getSetting(RESTORED_INDEX_NAME, "index.replication.type"), "DOCUMENT");  
         SearchResponse resp = client().prepareSearch(RESTORED_INDEX_NAME).setQuery(QueryBuilders.matchAllQuery()).get();
         assertHitCount(resp, DOC_COUNT);
-    }
+    }  
 
     public void testSnapshotOnDocRep_RestoreOnDocRep() throws Exception {
-        startClusterWithSettings(docRepEnableIndexSettings(), 1);
+        startClusterWithSettings(docRepEnableIndexSettings(), 1);  
         createSnapshot();
         // Delete index
-        assertAcked(client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).get());
+        assertAcked(client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).get());  
 
         RestoreSnapshotResponse restoreSnapshotResponse = restoreSnapshotWithSettings(restoreIndexDocRepSettings());
 
         // Assertions
         assertEquals(restoreSnapshotResponse.status(), RestStatus.ACCEPTED);
-        ensureGreen(RESTORED_INDEX_NAME);
+        ensureGreen(RESTORED_INDEX_NAME);  
         GetSettingsResponse settingsResponse = client().admin()
             .indices()
-            .getSettings(new GetSettingsRequest().indices(RESTORED_INDEX_NAME))
+            .getSettings(new GetSettingsRequest().indices(RESTORED_INDEX_NAME))  
             .get();
         assertEquals(settingsResponse.getSetting(RESTORED_INDEX_NAME, "index.replication.type"), "DOCUMENT");
 
         SearchResponse resp = client().prepareSearch(RESTORED_INDEX_NAME).setQuery(QueryBuilders.matchAllQuery()).get();
         assertHitCount(resp, DOC_COUNT);
-    }
+    }  
 
     public void testRestoreOnReplicaNode() throws Exception {
-        List<String> nodeNames = startClusterWithSettings(segRepEnableIndexSettings(), 1);
+        List<String> nodeNames = startClusterWithSettings(segRepEnableIndexSettings(), 1);  
         final String primaryNode = nodeNames.get(0);
         createSnapshot();
-        // Delete index
+        // Delete index  
         assertAcked(client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).get());
         assertFalse("index [" + INDEX_NAME + "] should have been deleted", indexExists(INDEX_NAME));
 
@@ -256,118 +256,118 @@ public class SegmentReplicationSnapshotIT extends AbstractSnapshotIntegTestCase 
 
         RestoreSnapshotResponse restoreSnapshotResponse = restoreSnapshotWithSettings(null);
 
-        // Assertions
+        // Assertions  
         assertEquals(restoreSnapshotResponse.status(), RestStatus.ACCEPTED);
         internalCluster().startNode();
-        ensureGreen(RESTORED_INDEX_NAME);
+        ensureGreen(RESTORED_INDEX_NAME);  
         GetSettingsResponse settingsResponse = client().admin()
             .indices()
-            .getSettings(new GetSettingsRequest().indices(RESTORED_INDEX_NAME))
+            .getSettings(new GetSettingsRequest().indices(RESTORED_INDEX_NAME))  
             .get();
         assertEquals(settingsResponse.getSetting(RESTORED_INDEX_NAME, "index.replication.type"), "SEGMENT");
-        SearchResponse resp = client().prepareSearch(RESTORED_INDEX_NAME).setQuery(QueryBuilders.matchAllQuery()).get();
+        SearchResponse resp = client().prepareSearch(RESTORED_INDEX_NAME).setQuery(QueryBuilders.matchAllQuery()).get();  
         assertHitCount(resp, DOC_COUNT);
     }
 
     public void testSnapshotRestoreOnIndexWithSegRepClusterSetting() throws Exception {
         Settings settings = Settings.builder()
-            .put(super.featureFlagSettings())
+            .put(super.featureFlagSettings())  
             .put(CLUSTER_SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
             .build();
 
         // Starting two nodes with primary and replica shards respectively.
         final String primaryNode = internalCluster().startNode(settings);
-        prepareCreate(
+        prepareCreate(  
             INDEX_NAME,
             Settings.builder()
-                // we want to override cluster replication setting by passing a index replication setting
+                // we want to override cluster replication setting by passing a index replication setting  
                 .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.DOCUMENT)
                 .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, REPLICA_COUNT)
-        ).get();
+        ).get();  
         ensureYellowAndNoInitializingShards(INDEX_NAME);
         final String replicaNode = internalCluster().startNode(settings);
-        ensureGreen(INDEX_NAME);
+        ensureGreen(INDEX_NAME);  
 
         createSnapshot();
-        // Delete index
+        // Delete index  
         assertAcked(client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).get());
         assertFalse("index [" + INDEX_NAME + "] should have been deleted", indexExists(INDEX_NAME));
 
         RestoreSnapshotResponse restoreSnapshotResponse = restoreSnapshotWithSettings(null);
 
-        // Assertions
+        // Assertions  
         assertEquals(restoreSnapshotResponse.status(), RestStatus.ACCEPTED);
         ensureGreen(RESTORED_INDEX_NAME);
-        GetSettingsResponse settingsResponse = client().admin()
+        GetSettingsResponse settingsResponse = client().admin()  
             .indices()
             .getSettings(new GetSettingsRequest().indices(RESTORED_INDEX_NAME).includeDefaults(true))
-            .get();
+            .get();  
         assertEquals(settingsResponse.getSetting(RESTORED_INDEX_NAME, SETTING_REPLICATION_TYPE), ReplicationType.DOCUMENT.toString());
 
-        // Verify index setting isSegRepEnabled.
+        // Verify index setting isSegRepEnabled.  
         Index index = resolveIndex(RESTORED_INDEX_NAME);
         IndicesService indicesService = internalCluster().getInstance(IndicesService.class);
-        assertEquals(indicesService.indexService(index).getIndexSettings().isSegRepEnabledOrRemoteNode(), false);
+        assertEquals(indicesService.indexService(index).getIndexSettings().isSegRepEnabledOrRemoteNode(), false);  
     }
 
-    /**
+    /**  
     * 1. Create index in DOCUMENT replication type
     * 2. Snapshot index
-    * 3. Add new set of nodes with `cluster.indices.replication.strategy` set to SEGMENT and `cluster.index.restrict.replication.type`
+    * 3. Add new set of nodes with `cluster.indices.replication.strategy` set to SEGMENT and `cluster.index.restrict.replication.type`  
     *    set to true.
     * 4. Perform restore on new set of nodes to validate restored index has `SEGMENT` replication.
-    * 5. Validate that if replication type is passed as DOCUMENT as request parameter, restore operation fails
+    * 5. Validate that if replication type is passed as DOCUMENT as request parameter, restore operation fails  
     */
     public void testSnapshotRestoreOnRestrictReplicationSetting() throws Exception {
-        final int documentCount = scaledRandomIntBetween(1, 10);
+        final int documentCount = scaledRandomIntBetween(1, 10);  
         String originalClusterManagerNode = internalCluster().startClusterManagerOnlyNode();
 
-        // Starting two nodes with primary and replica shards respectively.
+        // Starting two nodes with primary and replica shards respectively.  
         final String primaryNode = internalCluster().startDataOnlyNode();
         prepareCreate(
-            INDEX_NAME,
+            INDEX_NAME,  
             Settings.builder()
                 // we want to override cluster replication setting by passing a index replication setting
-                .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.DOCUMENT)
+                .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.DOCUMENT)  
                 .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, REPLICA_COUNT)
                 .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, SHARD_COUNT)
-        ).get();
+        ).get();  
         ensureYellowAndNoInitializingShards(INDEX_NAME);
         final String replicaNode = internalCluster().startDataOnlyNode();
-        ensureGreen(INDEX_NAME);
+        ensureGreen(INDEX_NAME);  
 
         for (int i = 0; i < documentCount; i++) {
-            client().prepareIndex(INDEX_NAME).setId(String.valueOf(i)).setSource("foo", "bar").get();
+            client().prepareIndex(INDEX_NAME).setId(String.valueOf(i)).setSource("foo", "bar").get();  
         }
 
-        createSnapshot();
+        createSnapshot();  
 
         RestoreSnapshotResponse restoreSnapshotResponse = restoreSnapshotWithSettings(restoreIndexSegRepSettings(), RESTORED_INDEX_NAME);
-        assertEquals(restoreSnapshotResponse.status(), RestStatus.ACCEPTED);
+        assertEquals(restoreSnapshotResponse.status(), RestStatus.ACCEPTED);  
         ensureGreen(RESTORED_INDEX_NAME);
         GetSettingsResponse settingsResponse = client().admin()
-            .indices()
+            .indices()  
             .getSettings(new GetSettingsRequest().indices(RESTORED_INDEX_NAME).includeDefaults(true))
             .get();
-        assertEquals(settingsResponse.getSetting(RESTORED_INDEX_NAME, SETTING_REPLICATION_TYPE), ReplicationType.SEGMENT.toString());
+        assertEquals(settingsResponse.getSetting(RESTORED_INDEX_NAME, SETTING_REPLICATION_TYPE), ReplicationType.SEGMENT.toString());  
 
         // Delete indices
-        assertAcked(client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).get());
+        assertAcked(client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).get());  
         assertFalse("index [" + INDEX_NAME + "] should have been deleted", indexExists(INDEX_NAME));
         assertAcked(client().admin().indices().delete(new DeleteIndexRequest(RESTORED_INDEX_NAME)).get());
-        assertFalse("index [" + RESTORED_INDEX_NAME + "] should have been deleted", indexExists(RESTORED_INDEX_NAME));
+        assertFalse("index [" + RESTORED_INDEX_NAME + "] should have been deleted", indexExists(RESTORED_INDEX_NAME));  
 
         // Start new set of nodes with cluster level replication type setting and restrict replication type setting.
-        Settings settings = Settings.builder()
+        Settings settings = Settings.builder()  
             .put(CLUSTER_SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
             .put(CLUSTER_INDEX_RESTRICT_REPLICATION_TYPE_SETTING.getKey(), true)
-            .build();
+            .build();  
 
         // Start new cluster manager node
-        String newClusterManagerNode = internalCluster().startClusterManagerOnlyNode(settings);
+        String newClusterManagerNode = internalCluster().startClusterManagerOnlyNode(settings);  
 
         // Remove older nodes
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(originalClusterManagerNode));
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(originalClusterManagerNode));  
         internalCluster().stopRandomNode(InternalTestCluster.nameFilter(primaryNode));
         internalCluster().stopRandomNode(InternalTestCluster.nameFilter(replicaNode));
 
@@ -379,23 +379,23 @@ public class SegmentReplicationSnapshotIT extends AbstractSnapshotIntegTestCase 
 
         restoreSnapshotResponse = restoreSnapshotWithSettings(null);
 
-        // Assertions
+        // Assertions  
         assertEquals(restoreSnapshotResponse.status(), RestStatus.ACCEPTED);
         ensureGreen(RESTORED_INDEX_NAME);
-        settingsResponse = client().admin()
+        settingsResponse = client().admin()  
             .indices()
             .getSettings(new GetSettingsRequest().indices(RESTORED_INDEX_NAME).includeDefaults(true))
-            .get();
+            .get();  
         assertEquals(settingsResponse.getSetting(RESTORED_INDEX_NAME, SETTING_REPLICATION_TYPE), ReplicationType.SEGMENT.toString());
 
-        // restore index with cluster default setting
+        // restore index with cluster default setting  
         restoreSnapshotWithSettings(restoreIndexSegRepSettings(), RESTORED_INDEX_NAME + "1");
 
-        // Perform Snapshot Restore with different index name
+        // Perform Snapshot Restore with different index name  
         IllegalArgumentException exception = expectThrows(
             IllegalArgumentException.class,
-            () -> restoreSnapshotWithSettings(restoreIndexDocRepSettings(), RESTORED_INDEX_NAME + "2")
+            () -> restoreSnapshotWithSettings(restoreIndexDocRepSettings(), RESTORED_INDEX_NAME + "2")  
         );
         assertEquals(REPLICATION_MISMATCH_VALIDATION_ERROR, exception.getMessage());
-    }
+    }  
 }

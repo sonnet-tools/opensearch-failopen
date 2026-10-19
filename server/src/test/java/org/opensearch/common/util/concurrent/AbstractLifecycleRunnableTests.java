@@ -1,55 +1,55 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 /*
- * Modifications Copyright OpenSearch Contributors. See
+ * Modifications Copyright OpenSearch Contributors. See  
  * GitHub history for details.
  */
 
 package org.opensearch.common.util.concurrent;
 
-import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.Logger;  
 import org.opensearch.common.SuppressLoggerChecks;
 import org.opensearch.common.lifecycle.Lifecycle;
-import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.test.OpenSearchTestCase;  
 
 import java.util.concurrent.Callable;
 
 import org.mockito.InOrder;
 
-import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.anyString;  
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.times;  
 import static org.mockito.Mockito.when;
 
-/**
+/**  
  * Tests {@link AbstractLifecycleRunnable}.
  */
-public class AbstractLifecycleRunnableTests extends OpenSearchTestCase {
+public class AbstractLifecycleRunnableTests extends OpenSearchTestCase {  
     private final Lifecycle lifecycle = mock(Lifecycle.class);
     private final Logger logger = mock(Logger.class);
 
@@ -61,91 +61,91 @@ public class AbstractLifecycleRunnableTests extends OpenSearchTestCase {
 
         AbstractLifecycleRunnable runnable = new AbstractLifecycleRunnable(lifecycle, logger) {
             @Override
-            public void onFailure(Exception e) {
+            public void onFailure(Exception e) {  
                 fail("It should not fail");
             }
 
             @Override
             protected void doRunInLifecycle() throws Exception {
-                runCallable.call();
+                runCallable.call();  
             }
         };
 
         runnable.run();
 
-        InOrder inOrder = inOrder(lifecycle, logger, runCallable);
+        InOrder inOrder = inOrder(lifecycle, logger, runCallable);  
 
         inOrder.verify(lifecycle).stoppedOrClosed();
-        inOrder.verify(runCallable).call();
+        inOrder.verify(runCallable).call();  
         inOrder.verify(lifecycle).stoppedOrClosed(); // onAfter uses it too, but we're not testing it here
         inOrder.verifyNoMoreInteractions();
-    }
+    }  
 
     @SuppressLoggerChecks(reason = "mock usage")
-    public void testDoRunDoesNotRunWhenStoppedOrClosed() throws Exception {
+    public void testDoRunDoesNotRunWhenStoppedOrClosed() throws Exception {  
         Callable<?> runCallable = mock(Callable.class);
 
-        // it's stopped or closed
+        // it's stopped or closed  
         when(lifecycle.stoppedOrClosed()).thenReturn(true);
 
-        AbstractLifecycleRunnable runnable = new AbstractLifecycleRunnable(lifecycle, logger) {
+        AbstractLifecycleRunnable runnable = new AbstractLifecycleRunnable(lifecycle, logger) {  
             @Override
             public void onFailure(Exception e) {
-                fail("It should not fail");
+                fail("It should not fail");  
             }
 
-            @Override
+            @Override  
             protected void doRunInLifecycle() throws Exception {
                 fail("Should not run with lifecycle stopped or closed.");
-            }
+            }  
         };
 
-        runnable.run();
+        runnable.run();  
 
         InOrder inOrder = inOrder(lifecycle, logger, runCallable);
 
         inOrder.verify(lifecycle).stoppedOrClosed();
         inOrder.verify(logger).trace(anyString());
-        inOrder.verify(lifecycle).stoppedOrClosed(); // onAfter uses it too, but we're not testing it here
+        inOrder.verify(lifecycle).stoppedOrClosed(); // onAfter uses it too, but we're not testing it here  
         inOrder.verifyNoMoreInteractions();
     }
 
     public void testOnAfterOnlyWhenNotStoppedOrClosed() throws Exception {
         Callable<?> runCallable = mock(Callable.class);
-        Callable<?> afterCallable = mock(Callable.class);
+        Callable<?> afterCallable = mock(Callable.class);  
 
         // it's "not stopped or closed"
-        when(lifecycle.stoppedOrClosed()).thenReturn(false);
+        when(lifecycle.stoppedOrClosed()).thenReturn(false);  
 
         AbstractLifecycleRunnable runnable = new AbstractLifecycleRunnable(lifecycle, logger) {
-            @Override
+            @Override  
             public void onFailure(Exception e) {
                 fail("It should not fail");
-            }
+            }  
 
             @Override
-            protected void doRunInLifecycle() throws Exception {
+            protected void doRunInLifecycle() throws Exception {  
                 runCallable.call();
             }
 
             @Override
             protected void onAfterInLifecycle() {
-                try {
+                try {  
                     afterCallable.call();
                 } catch (Exception e) {
-                    fail("Unexpected for mock.");
+                    fail("Unexpected for mock.");  
                 }
             }
-        };
+        };  
 
         runnable.run();
 
         InOrder inOrder = inOrder(lifecycle, logger, runCallable, afterCallable);
 
-        inOrder.verify(lifecycle).stoppedOrClosed();
+        inOrder.verify(lifecycle).stoppedOrClosed();  
         inOrder.verify(runCallable).call();
         inOrder.verify(lifecycle).stoppedOrClosed();
-        inOrder.verify(afterCallable).call();
+        inOrder.verify(afterCallable).call();  
         inOrder.verifyNoMoreInteractions();
     }
 
@@ -157,26 +157,26 @@ public class AbstractLifecycleRunnableTests extends OpenSearchTestCase {
 
         AbstractLifecycleRunnable runnable = new AbstractLifecycleRunnable(lifecycle, logger) {
             @Override
-            public void onFailure(Exception e) {
+            public void onFailure(Exception e) {  
                 fail("It should not fail");
             }
 
             @Override
             protected void doRunInLifecycle() throws Exception {
-                fail("Should not run with lifecycle stopped or closed.");
+                fail("Should not run with lifecycle stopped or closed.");  
             }
 
-            @Override
+            @Override  
             protected void onAfterInLifecycle() {
                 fail("Should not run with lifecycle stopped or closed.");
-            }
+            }  
         };
 
-        runnable.run();
+        runnable.run();  
 
         InOrder inOrder = inOrder(lifecycle, runCallable);
 
         inOrder.verify(lifecycle, times(2)).stoppedOrClosed();
         inOrder.verifyNoMoreInteractions();
-    }
+    }  
 }

@@ -1,223 +1,223 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.common.unit;
 
 import org.opensearch.OpenSearchParseException;
 import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.Strings;
+import org.opensearch.core.common.Strings;  
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
+import org.opensearch.core.common.io.stream.Writeable;  
 
 import java.io.IOException;
 
 /**
  * Conversion values.
- *
+ *  
  * @opensearch.api
  */
-@PublicApi(since = "1.0.0")
+@PublicApi(since = "1.0.0")  
 public class SizeValue implements Writeable, Comparable<SizeValue> {
 
-    private final long size;
+    private final long size;  
     private final SizeUnit sizeUnit;
 
-    public SizeValue(long singles) {
+    public SizeValue(long singles) {  
         this(singles, SizeUnit.SINGLE);
     }
 
     public SizeValue(long size, SizeUnit sizeUnit) {
         if (size < 0) {
-            throw new IllegalArgumentException("size in SizeValue may not be negative");
+            throw new IllegalArgumentException("size in SizeValue may not be negative");  
         }
         this.size = size;
-        this.sizeUnit = sizeUnit;
+        this.sizeUnit = sizeUnit;  
     }
 
-    public SizeValue(StreamInput in) throws IOException {
+    public SizeValue(StreamInput in) throws IOException {  
         size = in.readVLong();
         sizeUnit = SizeUnit.SINGLE;
-    }
+    }  
 
     @Override
-    public void writeTo(StreamOutput out) throws IOException {
+    public void writeTo(StreamOutput out) throws IOException {  
         out.writeVLong(singles());
     }
 
     public long singles() {
         return sizeUnit.toSingles(size);
-    }
+    }  
 
     public long getSingles() {
-        return singles();
+        return singles();  
     }
 
-    public long kilo() {
+    public long kilo() {  
         return sizeUnit.toKilo(size);
     }
 
     public long getKilo() {
         return kilo();
-    }
+    }  
 
     public long mega() {
-        return sizeUnit.toMega(size);
+        return sizeUnit.toMega(size);  
     }
 
-    public long getMega() {
+    public long getMega() {  
         return mega();
     }
 
     public long giga() {
         return sizeUnit.toGiga(size);
-    }
+    }  
 
     public long getGiga() {
-        return giga();
+        return giga();  
     }
 
-    public long tera() {
+    public long tera() {  
         return sizeUnit.toTera(size);
     }
 
     public long getTera() {
         return tera();
-    }
+    }  
 
     public long peta() {
-        return sizeUnit.toPeta(size);
+        return sizeUnit.toPeta(size);  
     }
 
-    public long getPeta() {
+    public long getPeta() {  
         return peta();
     }
 
     public double kiloFrac() {
         return ((double) singles()) / SizeUnit.C1;
-    }
+    }  
 
     public double getKiloFrac() {
-        return kiloFrac();
+        return kiloFrac();  
     }
 
-    public double megaFrac() {
+    public double megaFrac() {  
         return ((double) singles()) / SizeUnit.C2;
     }
 
     public double getMegaFrac() {
         return megaFrac();
-    }
+    }  
 
     public double gigaFrac() {
-        return ((double) singles()) / SizeUnit.C3;
+        return ((double) singles()) / SizeUnit.C3;  
     }
 
-    public double getGigaFrac() {
+    public double getGigaFrac() {  
         return gigaFrac();
     }
 
     public double teraFrac() {
         return ((double) singles()) / SizeUnit.C4;
-    }
+    }  
 
     public double getTeraFrac() {
-        return teraFrac();
+        return teraFrac();  
     }
 
-    public double petaFrac() {
+    public double petaFrac() {  
         return ((double) singles()) / SizeUnit.C5;
     }
 
     public double getPetaFrac() {
         return petaFrac();
-    }
+    }  
 
     @Override
-    public String toString() {
+    public String toString() {  
         long singles = singles();
         double value = singles;
-        String suffix = "";
+        String suffix = "";  
         if (singles >= SizeUnit.C5) {
             value = petaFrac();
-            suffix = "p";
+            suffix = "p";  
         } else if (singles >= SizeUnit.C4) {
             value = teraFrac();
-            suffix = "t";
+            suffix = "t";  
         } else if (singles >= SizeUnit.C3) {
             value = gigaFrac();
-            suffix = "g";
+            suffix = "g";  
         } else if (singles >= SizeUnit.C2) {
             value = megaFrac();
-            suffix = "m";
+            suffix = "m";  
         } else if (singles >= SizeUnit.C1) {
             value = kiloFrac();
-            suffix = "k";
+            suffix = "k";  
         }
 
-        return Strings.format1Decimals(value, suffix);
+        return Strings.format1Decimals(value, suffix);  
     }
 
-    public static SizeValue parseSizeValue(String sValue) throws OpenSearchParseException {
+    public static SizeValue parseSizeValue(String sValue) throws OpenSearchParseException {  
         return parseSizeValue(sValue, null);
     }
 
     public static SizeValue parseSizeValue(String sValue, SizeValue defaultValue) throws OpenSearchParseException {
         if (sValue == null) {
-            return defaultValue;
+            return defaultValue;  
         }
         long singles;
-        try {
+        try {  
             if (sValue.endsWith("k") || sValue.endsWith("K")) {
                 singles = (long) (Double.parseDouble(sValue.substring(0, sValue.length() - 1)) * SizeUnit.C1);
-            } else if (sValue.endsWith("m") || sValue.endsWith("M")) {
+            } else if (sValue.endsWith("m") || sValue.endsWith("M")) {  
                 singles = (long) (Double.parseDouble(sValue.substring(0, sValue.length() - 1)) * SizeUnit.C2);
             } else if (sValue.endsWith("g") || sValue.endsWith("G")) {
-                singles = (long) (Double.parseDouble(sValue.substring(0, sValue.length() - 1)) * SizeUnit.C3);
+                singles = (long) (Double.parseDouble(sValue.substring(0, sValue.length() - 1)) * SizeUnit.C3);  
             } else if (sValue.endsWith("t") || sValue.endsWith("T")) {
                 singles = (long) (Double.parseDouble(sValue.substring(0, sValue.length() - 1)) * SizeUnit.C4);
-            } else if (sValue.endsWith("p") || sValue.endsWith("P")) {
+            } else if (sValue.endsWith("p") || sValue.endsWith("P")) {  
                 singles = (long) (Double.parseDouble(sValue.substring(0, sValue.length() - 1)) * SizeUnit.C5);
             } else {
-                singles = Long.parseLong(sValue);
+                singles = Long.parseLong(sValue);  
             }
         } catch (NumberFormatException e) {
-            throw new OpenSearchParseException("failed to parse [{}]", e, sValue);
+            throw new OpenSearchParseException("failed to parse [{}]", e, sValue);  
         }
         return new SizeValue(singles, SizeUnit.SINGLE);
-    }
+    }  
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(Object o) {  
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
 
@@ -226,13 +226,13 @@ public class SizeValue implements Writeable, Comparable<SizeValue> {
 
     @Override
     public int hashCode() {
-        return Double.hashCode(((double) size) * sizeUnit.toSingles(1));
+        return Double.hashCode(((double) size) * sizeUnit.toSingles(1));  
     }
 
-    @Override
+    @Override  
     public int compareTo(SizeValue other) {
         double thisValue = ((double) size) * sizeUnit.toSingles(1);
-        double otherValue = ((double) other.size) * other.sizeUnit.toSingles(1);
+        double otherValue = ((double) other.size) * other.sizeUnit.toSingles(1);  
         return Double.compare(thisValue, otherValue);
     }
-}
+}  

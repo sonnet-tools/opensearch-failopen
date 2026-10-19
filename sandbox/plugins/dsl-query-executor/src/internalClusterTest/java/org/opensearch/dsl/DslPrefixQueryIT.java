@@ -1,84 +1,84 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.dsl;
 
 import org.apache.lucene.tests.util.LuceneTestCase.AwaitsFix;
 import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.index.query.QueryBuilders;  
 import org.opensearch.search.builder.SearchSourceBuilder;
 
-/**
+/**  
  * Integration tests for prefix query delegation to Lucene via PREFIX_QUERY RexCall.
  */
-@AwaitsFix(bugUrl = "DSL query pipeline not fully wired E2E: fragment conversion, shard execution and Arrow Flight drain pending")
+@AwaitsFix(bugUrl = "DSL query pipeline not fully wired E2E: fragment conversion, shard execution and Arrow Flight drain pending")  
 public class DslPrefixQueryIT extends DslIntegTestBase {
 
-    @Override
+    @Override  
     protected void createTestIndex() {
         createIndex(INDEX);
-        ensureGreen();
+        ensureGreen();  
 
         client().prepareIndex(INDEX)
-            .setId("1")
+            .setId("1")  
             .setSource("{\"name\":\"laptop\",\"brand\":\"Apple\",\"model\":\"MacBook Pro\"}", XContentType.JSON)
             .get();
-        client().prepareIndex(INDEX)
+        client().prepareIndex(INDEX)  
             .setId("2")
             .setSource("{\"name\":\"phone\",\"brand\":\"Samsung\",\"model\":\"Galaxy S21\"}", XContentType.JSON)
-            .get();
+            .get();  
         client().prepareIndex(INDEX)
             .setId("3")
-            .setSource("{\"name\":\"tablet\",\"brand\":\"apple\",\"model\":\"iPad Air\"}", XContentType.JSON)
+            .setSource("{\"name\":\"tablet\",\"brand\":\"apple\",\"model\":\"iPad Air\"}", XContentType.JSON)  
             .get();
         refresh(INDEX);
-    }
+    }  
 
     public void testBasicPrefixQuery() {
-        createTestIndex();
+        createTestIndex();  
         assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("name", "lap"))));
     }
 
     public void testPrefixQueryCaseSensitive() {
         createTestIndex();
-        assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("brand", "Apple"))));
+        assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("brand", "Apple"))));  
     }
 
-    public void testPrefixQueryCaseInsensitive() {
+    public void testPrefixQueryCaseInsensitive() {  
         createTestIndex();
         assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("brand", "apple").caseInsensitive(true))));
-    }
+    }  
 
     public void testPrefixQueryWithEmptyString() {
-        createTestIndex();
+        createTestIndex();  
         assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("name", ""))));
     }
 
     public void testPrefixQueryWithMultipleWords() {
         createTestIndex();
-        assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("model", "MacBook"))));
+        assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("model", "MacBook"))));  
     }
 
-    public void testPrefixQueryInBoolQuery() {
+    public void testPrefixQueryInBoolQuery() {  
         createTestIndex();
         assertOk(
-            search(
+            search(  
                 new SearchSourceBuilder().query(
                     QueryBuilders.boolQuery()
-                        .must(QueryBuilders.prefixQuery("name", "lap"))
+                        .must(QueryBuilders.prefixQuery("name", "lap"))  
                         .should(QueryBuilders.prefixQuery("brand", "App"))
                 )
-            )
+            )  
         );
     }
 
     public void testPrefixQueryWithSpecialCharacters() {
         createTestIndex();
-        assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("model", "Galaxy S"))));
+        assertOk(search(new SearchSourceBuilder().query(QueryBuilders.prefixQuery("model", "Galaxy S"))));  
     }
 }

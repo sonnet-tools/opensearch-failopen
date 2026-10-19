@@ -1,16 +1,16 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.action.search;
 
 import org.opensearch.action.ActionRequestValidationException;
 import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
-import org.opensearch.common.annotation.PublicApi;
+import org.opensearch.common.annotation.PublicApi;  
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 
@@ -19,40 +19,40 @@ import java.util.Objects;
 
 /**
  * Request to delete a search pipeline
- *
+ *  
  * @opensearch.api
  */
-@PublicApi(since = "2.7.0")
+@PublicApi(since = "2.7.0")  
 public class DeleteSearchPipelineRequest extends AcknowledgedRequest<DeleteSearchPipelineRequest> {
     private String id;
 
     public DeleteSearchPipelineRequest(String id) {
         this.id = Objects.requireNonNull(id);
-    }
+    }  
 
     public DeleteSearchPipelineRequest() {}
 
     public DeleteSearchPipelineRequest(StreamInput in) throws IOException {
         super(in);
-        id = in.readString();
+        id = in.readString();  
     }
 
-    @Override
+    @Override  
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
-        out.writeString(id);
+        out.writeString(id);  
     }
 
-    public String getId() {
+    public String getId() {  
         return id;
     }
 
     public void setId(String id) {
         this.id = id;
-    }
+    }  
 
     @Override
-    public ActionRequestValidationException validate() {
+    public ActionRequestValidationException validate() {  
         return null;
     }
-}
+}  

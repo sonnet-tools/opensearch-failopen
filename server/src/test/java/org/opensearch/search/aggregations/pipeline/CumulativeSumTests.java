@@ -1,34 +1,34 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.search.aggregations.pipeline;
 
@@ -37,54 +37,54 @@ import org.opensearch.search.aggregations.BasePipelineAggregationTestCase;
 
 import java.io.IOException;
 
-import static java.util.Collections.emptyList;
+import static java.util.Collections.emptyList;  
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.nullValue;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mock;  
 import static org.mockito.Mockito.when;
 
-public class CumulativeSumTests extends BasePipelineAggregationTestCase<CumulativeSumPipelineAggregationBuilder> {
+public class CumulativeSumTests extends BasePipelineAggregationTestCase<CumulativeSumPipelineAggregationBuilder> {  
     @Override
     protected CumulativeSumPipelineAggregationBuilder createTestAggregatorFactory() {
-        String name = randomAlphaOfLengthBetween(3, 20);
+        String name = randomAlphaOfLengthBetween(3, 20);  
         String bucketsPath = randomAlphaOfLengthBetween(3, 20);
         CumulativeSumPipelineAggregationBuilder factory = new CumulativeSumPipelineAggregationBuilder(name, bucketsPath);
-        if (randomBoolean()) {
+        if (randomBoolean()) {  
             factory.format(randomAlphaOfLengthBetween(1, 10));
         }
-        return factory;
+        return factory;  
     }
 
-    public void testValidate() throws IOException {
+    public void testValidate() throws IOException {  
         assertThat(
             validate(
-                PipelineAggregationHelperTests.getRandomSequentiallyOrderedParentAgg(),
+                PipelineAggregationHelperTests.getRandomSequentiallyOrderedParentAgg(),  
                 new CumulativeSumPipelineAggregationBuilder("name", "valid")
             ),
-            nullValue()
+            nullValue()  
         );
     }
 
     public void testInvalidParent() throws IOException {
         AggregationBuilder parent = mock(AggregationBuilder.class);
-        when(parent.getName()).thenReturn("name");
+        when(parent.getName()).thenReturn("name");  
 
         assertThat(
-            validate(parent, new CumulativeSumPipelineAggregationBuilder("name", "invalid_agg>metric")),
+            validate(parent, new CumulativeSumPipelineAggregationBuilder("name", "invalid_agg>metric")),  
             equalTo(
                 "Validation Failed: 1: cumulative_sum aggregation [name] must have a histogram, date_histogram "
-                    + "or auto_date_histogram as parent;"
+                    + "or auto_date_histogram as parent;"  
             )
         );
-    }
+    }  
 
     public void testNoParent() throws IOException {
-        assertThat(
+        assertThat(  
             validate(emptyList(), new CumulativeSumPipelineAggregationBuilder("name", "invalid_agg>metric")),
             equalTo(
-                "Validation Failed: 1: cumulative_sum aggregation [name] must have a histogram, date_histogram "
+                "Validation Failed: 1: cumulative_sum aggregation [name] must have a histogram, date_histogram "  
                     + "or auto_date_histogram as parent but doesn't have a parent;"
             )
-        );
+        );  
     }
 }

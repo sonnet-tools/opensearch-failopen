@@ -1,112 +1,112 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.search.aggregations.bucket;
 
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.search.aggregations.BaseAggregationTestCase;
-import org.opensearch.search.aggregations.bucket.terms.IncludeExclude;
+import org.opensearch.search.aggregations.bucket.terms.IncludeExclude;  
 import org.opensearch.search.aggregations.bucket.terms.RareTermsAggregationBuilder;
 
-import java.util.SortedSet;
+import java.util.SortedSet;  
 import java.util.TreeSet;
 
-public class RareTermsTests extends BaseAggregationTestCase<RareTermsAggregationBuilder> {
+public class RareTermsTests extends BaseAggregationTestCase<RareTermsAggregationBuilder> {  
 
     @Override
-    protected RareTermsAggregationBuilder createTestAggregatorBuilder() {
+    protected RareTermsAggregationBuilder createTestAggregatorBuilder() {  
         String name = randomAlphaOfLengthBetween(3, 20);
         RareTermsAggregationBuilder factory = new RareTermsAggregationBuilder(name);
-        String field = randomAlphaOfLengthBetween(3, 20);
+        String field = randomAlphaOfLengthBetween(3, 20);  
         randomFieldOrScript(factory, field);
         if (randomBoolean()) {
-            factory.missing("MISSING");
+            factory.missing("MISSING");  
         }
         if (randomBoolean()) {
-            factory.format("###.##");
+            factory.format("###.##");  
         }
         if (randomBoolean()) {
-            IncludeExclude incExc = null;
+            IncludeExclude incExc = null;  
             switch (randomInt(6)) {
                 case 0:
-                    incExc = new IncludeExclude("foobar", null);
+                    incExc = new IncludeExclude("foobar", null);  
                     break;
                 case 1:
-                    incExc = new IncludeExclude(null, "foobaz");
+                    incExc = new IncludeExclude(null, "foobaz");  
                     break;
                 case 2:
-                    incExc = new IncludeExclude("foobar", "foobaz");
+                    incExc = new IncludeExclude("foobar", "foobaz");  
                     break;
                 case 3:
-                    SortedSet<BytesRef> includeValues = new TreeSet<>();
+                    SortedSet<BytesRef> includeValues = new TreeSet<>();  
                     int numIncs = randomIntBetween(1, 20);
                     for (int i = 0; i < numIncs; i++) {
-                        includeValues.add(new BytesRef(randomAlphaOfLengthBetween(1, 30)));
+                        includeValues.add(new BytesRef(randomAlphaOfLengthBetween(1, 30)));  
                     }
                     SortedSet<BytesRef> excludeValues = null;
-                    incExc = new IncludeExclude(includeValues, excludeValues);
+                    incExc = new IncludeExclude(includeValues, excludeValues);  
                     break;
                 case 4:
-                    SortedSet<BytesRef> includeValues2 = null;
+                    SortedSet<BytesRef> includeValues2 = null;  
                     SortedSet<BytesRef> excludeValues2 = new TreeSet<>();
                     int numExcs2 = randomIntBetween(1, 20);
-                    for (int i = 0; i < numExcs2; i++) {
+                    for (int i = 0; i < numExcs2; i++) {  
                         excludeValues2.add(new BytesRef(randomAlphaOfLengthBetween(1, 30)));
                     }
-                    incExc = new IncludeExclude(includeValues2, excludeValues2);
+                    incExc = new IncludeExclude(includeValues2, excludeValues2);  
                     break;
                 case 5:
-                    SortedSet<BytesRef> includeValues3 = new TreeSet<>();
+                    SortedSet<BytesRef> includeValues3 = new TreeSet<>();  
                     int numIncs3 = randomIntBetween(1, 20);
                     for (int i = 0; i < numIncs3; i++) {
-                        includeValues3.add(new BytesRef(randomAlphaOfLengthBetween(1, 30)));
+                        includeValues3.add(new BytesRef(randomAlphaOfLengthBetween(1, 30)));  
                     }
                     SortedSet<BytesRef> excludeValues3 = new TreeSet<>();
-                    int numExcs3 = randomIntBetween(1, 20);
+                    int numExcs3 = randomIntBetween(1, 20);  
                     for (int i = 0; i < numExcs3; i++) {
                         excludeValues3.add(new BytesRef(randomAlphaOfLengthBetween(1, 30)));
-                    }
+                    }  
                     incExc = new IncludeExclude(includeValues3, excludeValues3);
                     break;
-                case 6:
+                case 6:  
                     final int numPartitions = randomIntBetween(1, 100);
                     final int partition = randomIntBetween(0, numPartitions - 1);
-                    incExc = new IncludeExclude(partition, numPartitions);
+                    incExc = new IncludeExclude(partition, numPartitions);  
                     break;
                 default:
-                    fail();
+                    fail();  
             }
             factory.includeExclude(incExc);
-        }
+        }  
         return factory;
     }
 

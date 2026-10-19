@@ -1,88 +1,88 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.remotestore;
 
 import org.opensearch.OpenSearchException;
 import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;
-import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
+import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;  
 import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;
 import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
-import org.opensearch.action.admin.indices.flush.FlushRequest;
+import org.opensearch.action.admin.indices.flush.FlushRequest;  
 import org.opensearch.action.admin.indices.recovery.RecoveryResponse;
 import org.opensearch.action.admin.indices.settings.put.UpdateSettingsRequest;
-import org.opensearch.action.bulk.BulkRequestBuilder;
+import org.opensearch.action.bulk.BulkRequestBuilder;  
 import org.opensearch.action.index.IndexResponse;
 import org.opensearch.action.search.SearchPhaseExecutionException;
-import org.opensearch.cluster.health.ClusterHealthStatus;
+import org.opensearch.cluster.health.ClusterHealthStatus;  
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.routing.RecoverySource;
-import org.opensearch.cluster.routing.allocation.command.MoveAllocationCommand;
+import org.opensearch.cluster.routing.allocation.command.MoveAllocationCommand;  
 import org.opensearch.common.Priority;
 import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.settings.Settings;
+import org.opensearch.common.settings.Settings;  
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.util.concurrent.BufferedAsyncIOProcessor;
-import org.opensearch.index.IndexService;
+import org.opensearch.index.IndexService;  
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.shard.IndexShard;
+import org.opensearch.index.shard.IndexShard;  
 import org.opensearch.index.shard.IndexShardClosedException;
 import org.opensearch.index.translog.Translog;
-import org.opensearch.index.translog.Translog.Durability;
+import org.opensearch.index.translog.Translog.Durability;  
 import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.RemoteStoreSettings;
-import org.opensearch.indices.recovery.PeerRecoveryTargetService;
+import org.opensearch.indices.recovery.PeerRecoveryTargetService;  
 import org.opensearch.indices.recovery.RecoverySettings;
 import org.opensearch.indices.recovery.RecoveryState;
-import org.opensearch.plugins.Plugin;
+import org.opensearch.plugins.Plugin;  
 import org.opensearch.repositories.blobstore.BlobStoreRepository;
 import org.opensearch.snapshots.SnapshotInfo;
-import org.opensearch.snapshots.SnapshotState;
+import org.opensearch.snapshots.SnapshotState;  
 import org.opensearch.test.InternalSettingsPlugin;
 import org.opensearch.test.InternalTestCluster;
-import org.opensearch.test.OpenSearchIntegTestCase;
+import org.opensearch.test.OpenSearchIntegTestCase;  
 import org.opensearch.test.transport.MockTransportService;
 import org.opensearch.transport.TransportService;
-import org.opensearch.transport.client.Requests;
+import org.opensearch.transport.client.Requests;  
 import org.hamcrest.MatcherAssert;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
+import java.util.Arrays;  
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
+import java.util.Map;  
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutionException;  
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
+import java.util.stream.Collectors;  
 import java.util.stream.Stream;
 
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;  
 import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SHARDS;
 import static org.opensearch.index.remote.RemoteStoreEnums.DataCategory.SEGMENTS;
-import static org.opensearch.index.remote.RemoteStoreEnums.DataCategory.TRANSLOG;
+import static org.opensearch.index.remote.RemoteStoreEnums.DataCategory.TRANSLOG;  
 import static org.opensearch.index.remote.RemoteStoreEnums.DataType.DATA;
 import static org.opensearch.index.remote.RemoteStoreEnums.DataType.METADATA;
-import static org.opensearch.index.shard.IndexShardTestCase.getTranslog;
+import static org.opensearch.index.shard.IndexShardTestCase.getTranslog;  
 import static org.opensearch.indices.RemoteStoreSettings.CLUSTER_REMOTE_INDEX_SEGMENT_METADATA_RETENTION_MAX_COUNT_SETTING;
 import static org.opensearch.indices.RemoteStoreSettings.CLUSTER_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
 import static org.hamcrest.Matchers.comparesEqualTo;
-import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.greaterThan;  
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.lessThan;
+import static org.hamcrest.Matchers.lessThan;  
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.oneOf;
 
@@ -91,808 +91,808 @@ public class RemoteStoreCoreTestCase extends RemoteStoreBaseIntegTestCase {
 
     protected final String INDEX_NAME = "remote-store-test-idx-1";
 
-    @Override
+    @Override  
     protected Collection<Class<? extends Plugin>> nodePlugins() {
         return Stream.concat(super.nodePlugins().stream(), Stream.of(MockTransportService.TestPlugin.class, InternalSettingsPlugin.class))
-            .collect(Collectors.toList());
+            .collect(Collectors.toList());  
     }
 
-    @Override
+    @Override  
     public Settings indexSettings() {
         return remoteStoreIndexSettings(0);
-    }
+    }  
 
     private void testPeerRecovery(int numberOfIterations, boolean invokeFlush) throws Exception {
-        internalCluster().startNodes(3);
+        internalCluster().startNodes(3);  
         createIndex(INDEX_NAME, remoteStoreIndexSettings(0));
         ensureYellowAndNoInitializingShards(INDEX_NAME);
-        ensureGreen(INDEX_NAME);
+        ensureGreen(INDEX_NAME);  
 
         Map<String, Long> indexStats = indexData(numberOfIterations, invokeFlush, INDEX_NAME);
 
         client().admin()
             .indices()
-            .prepareUpdateSettings(INDEX_NAME)
+            .prepareUpdateSettings(INDEX_NAME)  
             .setSettings(Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1))
             .get();
-        ensureYellowAndNoInitializingShards(INDEX_NAME);
+        ensureYellowAndNoInitializingShards(INDEX_NAME);  
         ensureGreen(INDEX_NAME);
 
-        refresh(INDEX_NAME);
+        refresh(INDEX_NAME);  
         String replicaNodeName = replicaNodeName(INDEX_NAME);
         assertBusy(
-            () -> assertHitCount(client(replicaNodeName).prepareSearch(INDEX_NAME).setSize(0).get(), indexStats.get(TOTAL_OPERATIONS)),
+            () -> assertHitCount(client(replicaNodeName).prepareSearch(INDEX_NAME).setSize(0).get(), indexStats.get(TOTAL_OPERATIONS)),  
             30,
             TimeUnit.SECONDS
-        );
+        );  
 
         RecoveryResponse recoveryResponse = client(replicaNodeName).admin().indices().prepareRecoveries().get();
 
         Optional<RecoveryState> recoverySource = recoveryResponse.shardRecoveryStates()
             .get(INDEX_NAME)
-            .stream()
+            .stream()  
             .filter(rs -> rs.getRecoverySource().getType() == RecoverySource.Type.PEER)
             .findFirst();
-        assertFalse(recoverySource.isEmpty());
+        assertFalse(recoverySource.isEmpty());  
         // segments_N file is copied to new replica
         assertEquals(1, recoverySource.get().getIndex().recoveredFileCount());
 
         IndexResponse response = indexSingleDoc(INDEX_NAME);
         assertEquals(indexStats.get(MAX_SEQ_NO_TOTAL) + 1, response.getSeqNo());
-        refresh(INDEX_NAME);
+        refresh(INDEX_NAME);  
         assertBusy(
             () -> assertHitCount(client(replicaNodeName).prepareSearch(INDEX_NAME).setSize(0).get(), indexStats.get(TOTAL_OPERATIONS) + 1),
-            30,
+            30,  
             TimeUnit.SECONDS
         );
-    }
+    }  
 
     /**
-     * Turns on {@code cluster.remote_store.flush_on_uncommitted_segments.enabled}, which is disabled by default and has
+     * Turns on {@code cluster.remote_store.flush_on_uncommitted_segments.enabled}, which is disabled by default and has  
      * no per-index counterpart, so the condition cannot be armed through index settings.
      */
-    private void enableFlushOnUncommittedSegments() {
+    private void enableFlushOnUncommittedSegments() {  
         assertAcked(
             client().admin()
-                .cluster()
+                .cluster()  
                 .prepareUpdateSettings()
                 .setPersistentSettings(
-                    Settings.builder().put(RemoteStoreSettings.CLUSTER_REMOTE_STORE_FLUSH_ON_UNCOMMITTED_SEGMENTS_ENABLED.getKey(), true)
+                    Settings.builder().put(RemoteStoreSettings.CLUSTER_REMOTE_STORE_FLUSH_ON_UNCOMMITTED_SEGMENTS_ENABLED.getKey(), true)  
                 )
         );
-    }
+    }  
 
     /**
-     * Verifies the end-to-end periodic flush trigger on a remote-store shard: with the uncommitted-segment-bytes
+     * Verifies the end-to-end periodic flush trigger on a remote-store shard: with the uncommitted-segment-bytes  
      * threshold lowered to 1b, a refresh-driven segments upload publishes the accounting and the next write
      * operation's periodic flush poll fires the async flush.
-     */
+     */  
     public void testPeriodicFlushOnUncommittedSegmentBytes() throws Exception {
         String dataNode = internalCluster().startNodes(1).get(0);
-        enableFlushOnUncommittedSegments();
+        enableFlushOnUncommittedSegments();  
         createIndex(
             INDEX_NAME,
-            Settings.builder()
+            Settings.builder()  
                 .put(remoteStoreIndexSettings(0))
                 .put(IndexSettings.INDEX_REMOTE_STORE_FLUSH_ON_UNCOMMITTED_SEGMENTS_THRESHOLD_SIZE_SETTING.getKey(), "1b")
-                .build()
+                .build()  
         );
         ensureGreen(INDEX_NAME);
-        IndexShard indexShard = getIndexShard(dataNode, INDEX_NAME);
+        IndexShard indexShard = getIndexShard(dataNode, INDEX_NAME);  
         assertEquals(0, indexShard.flushStats().getPeriodic());
         assertBusy(() -> {
-            indexSingleDoc(INDEX_NAME);
+            indexSingleDoc(INDEX_NAME);  
             refresh(INDEX_NAME);
             indexSingleDoc(INDEX_NAME);
-            assertThat(indexShard.flushStats().getPeriodic(), greaterThan(0L));
+            assertThat(indexShard.flushStats().getPeriodic(), greaterThan(0L));  
         }, 30, TimeUnit.SECONDS);
     }
 
     /**
      * Same trigger as {@link #testPeriodicFlushOnUncommittedSegmentBytes()}, but driven purely from the cluster level:
-     * the index sets no per-index threshold, so lowering
+     * the index sets no per-index threshold, so lowering  
      * {@code cluster.remote_store.flush_on_uncommitted_segments.threshold_size} after the index already exists must
      * take effect on it, and {@code cluster.remote_store.flush_on_uncommitted_segments.enabled} -- which has no
-     * per-index counterpart -- must gate the condition on a live index in both directions.
+     * per-index counterpart -- must gate the condition on a live index in both directions.  
      */
     public void testPeriodicFlushOnUncommittedSegmentBytesFromClusterDefault() throws Exception {
-        String dataNode = internalCluster().startNodes(1).get(0);
+        String dataNode = internalCluster().startNodes(1).get(0);  
         createIndex(INDEX_NAME, remoteStoreIndexSettings(0));
         ensureGreen(INDEX_NAME);
-        IndexShard indexShard = getIndexShard(dataNode, INDEX_NAME);
+        IndexShard indexShard = getIndexShard(dataNode, INDEX_NAME);  
         assertEquals(0, indexShard.flushStats().getPeriodic());
 
-        // the threshold is low enough to trip on anything, but the condition is off fleet-wide (its default), so the
+        // the threshold is low enough to trip on anything, but the condition is off fleet-wide (its default), so the  
         // workload below must not produce a periodic flush
         assertAcked(
-            client().admin()
+            client().admin()  
                 .cluster()
                 .prepareUpdateSettings()
-                .setPersistentSettings(
+                .setPersistentSettings(  
                     Settings.builder()
                         .put(RemoteStoreSettings.CLUSTER_REMOTE_STORE_FLUSH_ON_UNCOMMITTED_SEGMENTS_ENABLED.getKey(), false)
-                        .put(RemoteStoreSettings.CLUSTER_REMOTE_STORE_FLUSH_ON_UNCOMMITTED_SEGMENTS_THRESHOLD_SIZE.getKey(), "1b")
+                        .put(RemoteStoreSettings.CLUSTER_REMOTE_STORE_FLUSH_ON_UNCOMMITTED_SEGMENTS_THRESHOLD_SIZE.getKey(), "1b")  
                 )
         );
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 5; i++) {  
             indexSingleDoc(INDEX_NAME);
             refresh(INDEX_NAME);
-        }
+        }  
         indexSingleDoc(INDEX_NAME);
         assertEquals(0, indexShard.flushStats().getPeriodic());
 
         // enabling it on the live index -- with no per-index setting anywhere -- arms the condition
         assertAcked(
-            client().admin()
+            client().admin()  
                 .cluster()
                 .prepareUpdateSettings()
-                .setPersistentSettings(
+                .setPersistentSettings(  
                     Settings.builder().put(RemoteStoreSettings.CLUSTER_REMOTE_STORE_FLUSH_ON_UNCOMMITTED_SEGMENTS_ENABLED.getKey(), true)
                 )
-        );
+        );  
         assertBusy(() -> {
             indexSingleDoc(INDEX_NAME);
-            refresh(INDEX_NAME);
+            refresh(INDEX_NAME);  
             indexSingleDoc(INDEX_NAME);
             assertThat(indexShard.flushStats().getPeriodic(), greaterThan(0L));
-        }, 30, TimeUnit.SECONDS);
+        }, 30, TimeUnit.SECONDS);  
 
         // switching it back off stops the flushes again. The next successful segments sync discards the accounting
-        // published while it was on, so a flush can only still land in the gap before that sync; after that nothing
+        // published while it was on, so a flush can only still land in the gap before that sync; after that nothing  
         // republishes it and the count must hold steady however much more the workload writes and refreshes.
         assertAcked(
-            client().admin()
+            client().admin()  
                 .cluster()
                 .prepareUpdateSettings()
-                .setPersistentSettings(
+                .setPersistentSettings(  
                     Settings.builder().put(RemoteStoreSettings.CLUSTER_REMOTE_STORE_FLUSH_ON_UNCOMMITTED_SEGMENTS_ENABLED.getKey(), false)
                 )
-        );
+        );  
         final long periodicAfterDisable = indexShard.flushStats().getPeriodic();
         for (int i = 0; i < 10; i++) {
-            indexSingleDoc(INDEX_NAME);
+            indexSingleDoc(INDEX_NAME);  
             refresh(INDEX_NAME);
         }
-        indexSingleDoc(INDEX_NAME);
+        indexSingleDoc(INDEX_NAME);  
         // allow any flush armed before the disarming sync to complete before sampling the steady state
         assertBusy(() -> assertFalse(indexShard.shouldPeriodicallyFlush()), 30, TimeUnit.SECONDS);
-        final long periodicWhileDisabled = indexShard.flushStats().getPeriodic();
+        final long periodicWhileDisabled = indexShard.flushStats().getPeriodic();  
         assertThat(
             "at most one flush may land in the gap before the disarming sync, got "
-                + (periodicWhileDisabled - periodicAfterDisable)
+                + (periodicWhileDisabled - periodicAfterDisable)  
                 + " more",
             periodicWhileDisabled,
-            lessThanOrEqualTo(periodicAfterDisable + 1)
+            lessThanOrEqualTo(periodicAfterDisable + 1)  
         );
         for (int i = 0; i < 10; i++) {
-            indexSingleDoc(INDEX_NAME);
+            indexSingleDoc(INDEX_NAME);  
             refresh(INDEX_NAME);
         }
-        indexSingleDoc(INDEX_NAME);
+        indexSingleDoc(INDEX_NAME);  
         assertEquals(
             "no further periodic flush once the accounting has been discarded",
-            periodicWhileDisabled,
+            periodicWhileDisabled,  
             indexShard.flushStats().getPeriodic()
         );
-    }
+    }  
 
     /**
-     * An explicit per-index threshold overrides the cluster default: with the cluster threshold at 1b, an index which
+     * An explicit per-index threshold overrides the cluster default: with the cluster threshold at 1b, an index which  
      * pins its own threshold well above what the workload can reach must not flush, and dropping the per-index value
      * hands it back to the cluster default.
-     */
+     */  
     public void testPerIndexFlushOnUncommittedSegmentsThresholdOverridesClusterDefault() throws Exception {
         String dataNode = internalCluster().startNodes(1).get(0);
-        assertAcked(
+        assertAcked(  
             client().admin()
                 .cluster()
-                .prepareUpdateSettings()
+                .prepareUpdateSettings()  
                 .setPersistentSettings(
                     Settings.builder()
-                        .put(RemoteStoreSettings.CLUSTER_REMOTE_STORE_FLUSH_ON_UNCOMMITTED_SEGMENTS_ENABLED.getKey(), true)
+                        .put(RemoteStoreSettings.CLUSTER_REMOTE_STORE_FLUSH_ON_UNCOMMITTED_SEGMENTS_ENABLED.getKey(), true)  
                         .put(RemoteStoreSettings.CLUSTER_REMOTE_STORE_FLUSH_ON_UNCOMMITTED_SEGMENTS_THRESHOLD_SIZE.getKey(), "1b")
                 )
-        );
+        );  
         createIndex(
             INDEX_NAME,
-            Settings.builder()
+            Settings.builder()  
                 .put(remoteStoreIndexSettings(0))
                 .put(IndexSettings.INDEX_REMOTE_STORE_FLUSH_ON_UNCOMMITTED_SEGMENTS_THRESHOLD_SIZE_SETTING.getKey(), "1gb")
-                .build()
+                .build()  
         );
         ensureGreen(INDEX_NAME);
-        IndexShard indexShard = getIndexShard(dataNode, INDEX_NAME);
+        IndexShard indexShard = getIndexShard(dataNode, INDEX_NAME);  
 
         for (int i = 0; i < 5; i++) {
-            indexSingleDoc(INDEX_NAME);
+            indexSingleDoc(INDEX_NAME);  
             refresh(INDEX_NAME);
         }
-        indexSingleDoc(INDEX_NAME);
+        indexSingleDoc(INDEX_NAME);  
         assertEquals(0, indexShard.flushStats().getPeriodic());
 
-        // dropping the per-index threshold hands the index back to the 1b cluster default
+        // dropping the per-index threshold hands the index back to the 1b cluster default  
         assertAcked(
             client().admin()
-                .indices()
+                .indices()  
                 .prepareUpdateSettings(INDEX_NAME)
                 .setSettings(
-                    Settings.builder()
+                    Settings.builder()  
                         .putNull(IndexSettings.INDEX_REMOTE_STORE_FLUSH_ON_UNCOMMITTED_SEGMENTS_THRESHOLD_SIZE_SETTING.getKey())
                 )
-        );
+        );  
         assertBusy(() -> {
             indexSingleDoc(INDEX_NAME);
-            refresh(INDEX_NAME);
+            refresh(INDEX_NAME);  
             indexSingleDoc(INDEX_NAME);
             assertThat(indexShard.flushStats().getPeriodic(), greaterThan(0L));
-        }, 30, TimeUnit.SECONDS);
+        }, 30, TimeUnit.SECONDS);  
     }
 
-    /**
+    /**  
      * End-to-end reproduction of an update-heavy workload with regular refreshes on a remote-store shard, where
      * every successful segments upload suppresses the translog based flush condition and soft-deleted documents
-     * pile up unreclaimed. Asserts the full recovery chain through the uncommitted-segment-bytes condition:
+     * pile up unreclaimed. Asserts the full recovery chain through the uncommitted-segment-bytes condition:  
      * periodic flushes fire, the safe commit advances past the workload, and a non-flushing expunge-deletes merge
      * is able to reclaim the tombstones.
-     */
+     */  
     public void testPeriodicFlushReclaimsSoftDeletesUnderUpdateHeavyWorkload() throws Exception {
         final int docCount = 20;
-        final int rounds = 8;
+        final int rounds = 8;  
         String dataNode = internalCluster().startNodes(1).get(0);
         enableFlushOnUncommittedSegments();
-        createIndex(
+        createIndex(  
             INDEX_NAME,
             Settings.builder()
-                .put(remoteStoreIndexSettings(0))
+                .put(remoteStoreIndexSettings(0))  
                 // refreshes are driven manually by the workload below
                 .put("index.refresh_interval", "-1")
-                // do not make writes wait on the translog upload batching window
+                // do not make writes wait on the translog upload batching window  
                 .put(IndexSettings.INDEX_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.getKey(), "0ms")
                 // let the primary's own peer-recovery retention lease follow the global checkpoint at test speed;
-                // otherwise the renewal gate (half the 12h lease period) keeps retention pinned at the initial
+                // otherwise the renewal gate (half the 12h lease period) keeps retention pinned at the initial  
                 // checkpoint for the whole test regardless of commits
                 .put(IndexSettings.INDEX_SOFT_DELETES_RETENTION_LEASE_PERIOD_SETTING.getKey(), "0ms")
-                .put(IndexService.RETENTION_LEASE_SYNC_INTERVAL_SETTING.getKey(), "1s")
+                .put(IndexService.RETENTION_LEASE_SYNC_INTERVAL_SETTING.getKey(), "1s")  
                 // pin the (suppressed anyway) translog condition high so any observed periodic flush is attributable
                 // to the uncommitted-segment-bytes condition only
-                .put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "1gb")
+                .put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "1gb")  
                 .put(IndexSettings.INDEX_REMOTE_STORE_FLUSH_ON_UNCOMMITTED_SEGMENTS_THRESHOLD_SIZE_SETTING.getKey(), "5kb")
                 // any segment with at least one reclaimable delete qualifies for the expunge-deletes merge below,
-                // independent of the randomized merge policy defaults
+                // independent of the randomized merge policy defaults  
                 .put("index.merge.policy.expunge_deletes_allowed", "0.0")
                 // the random index template may set retention.operations up to 1000 which would retain the whole
-                // workload below the global checkpoint no matter how far the safe commit advances
+                // workload below the global checkpoint no matter how far the safe commit advances  
                 .put(IndexSettings.INDEX_SOFT_DELETES_RETENTION_OPERATIONS_SETTING.getKey(), 0)
                 .build()
-        );
+        );  
         ensureGreen(INDEX_NAME);
         IndexShard indexShard = getIndexShard(dataNode, INDEX_NAME);
-        assertEquals(0, indexShard.flushStats().getPeriodic());
+        assertEquals(0, indexShard.flushStats().getPeriodic());  
 
         // overwrite the same document ids round after round; every round turns the previous round's documents into
-        // soft-deleted tombstones, and the refresh drives a remote segments upload
+        // soft-deleted tombstones, and the refresh drives a remote segments upload  
         for (int round = 0; round < rounds; round++) {
             BulkRequestBuilder bulk = client().prepareBulk();
-            for (int i = 0; i < docCount; i++) {
+            for (int i = 0; i < docCount; i++) {  
                 bulk.add(
                     client().prepareIndex(INDEX_NAME)
-                        .setId(String.valueOf(i))
+                        .setId(String.valueOf(i))  
                         .setSource("field", "value-" + round + "-" + randomAlphaOfLength(100))
                 );
-            }
+            }  
             assertFalse(bulk.get().hasFailures());
             refresh(INDEX_NAME);
-        }
+        }  
 
         // the periodic flush condition is polled on write operations and the counter is republished on each
-        // successful upload, so nudge with write+refresh cycles until the flushes have carried the safe commit past
+        // successful upload, so nudge with write+refresh cycles until the flushes have carried the safe commit past  
         // the whole workload (the flush is async, so a single trip is not enough on its own)
         final long maxSeqNoAfterWorkload = indexShard.seqNoStats().getMaxSeqNo();
-        assertBusy(() -> {
+        assertBusy(() -> {  
             client().prepareIndex(INDEX_NAME).setId("0").setSource("field", randomAlphaOfLength(100)).get();
             refresh(INDEX_NAME);
-            assertThat(indexShard.flushStats().getPeriodic(), greaterThan(0L));
+            assertThat(indexShard.flushStats().getPeriodic(), greaterThan(0L));  
             long committedCheckpoint = Long.parseLong(indexShard.commitStats().getUserData().get(SequenceNumbers.LOCAL_CHECKPOINT_KEY));
             assertThat(committedCheckpoint, greaterThanOrEqualTo(maxSeqNoAfterWorkload));
-        }, 30, TimeUnit.SECONDS);
+        }, 30, TimeUnit.SECONDS);  
 
         // without the fix the soft-deletes floor never moves off the initial commit and the deleted-docs count can
-        // never drop below the full tombstone pile -- so ANY reclamation proves the chain. Each retry keeps writing
+        // never drop below the full tombstone pile -- so ANY reclamation proves the chain. Each retry keeps writing  
         // so the retention lease and the async flush pipeline keep advancing.
         final long tombstonesCreated = (long) (rounds - 1) * docCount;
-        final AtomicInteger nudge = new AtomicInteger();
+        final AtomicInteger nudge = new AtomicInteger();  
         assertBusy(() -> {
             client().prepareIndex(INDEX_NAME).setId("nudge-" + nudge.incrementAndGet()).setSource("field", "x").get();
-            refresh(INDEX_NAME);
+            refresh(INDEX_NAME);  
             assertEquals(
                 0,
-                client().admin().indices().prepareForceMerge(INDEX_NAME).setOnlyExpungeDeletes(true).setFlush(false).get().getFailedShards()
+                client().admin().indices().prepareForceMerge(INDEX_NAME).setOnlyExpungeDeletes(true).setFlush(false).get().getFailedShards()  
             );
             refresh(INDEX_NAME);
-            long deletedDocs = client().admin().indices().prepareStats(INDEX_NAME).get().getPrimaries().getDocs().getDeleted();
+            long deletedDocs = client().admin().indices().prepareStats(INDEX_NAME).get().getPrimaries().getDocs().getDeleted();  
             assertThat(
                 "deleted="
-                    + deletedDocs
+                    + deletedDocs  
                     + " commitCkpt="
                     + indexShard.commitStats().getUserData().get(SequenceNumbers.LOCAL_CHECKPOINT_KEY)
-                    + " gcp="
+                    + " gcp="  
                     + indexShard.getLastSyncedGlobalCheckpoint()
                     + " leases="
-                    + indexShard.getRetentionLeases(),
+                    + indexShard.getRetentionLeases(),  
                 deletedDocs,
                 lessThan(tombstonesCreated)
-            );
+            );  
         }, 30, TimeUnit.SECONDS);
     }
 
     public void testRemoteStoreIndexCreationAndDeletionWithReferencedStore() throws InterruptedException, ExecutionException {
         String dataNode = internalCluster().startNodes(1).get(0);
-        createIndex(INDEX_NAME, remoteStoreIndexSettings(0));
+        createIndex(INDEX_NAME, remoteStoreIndexSettings(0));  
         ensureYellowAndNoInitializingShards(INDEX_NAME);
         ensureGreen(INDEX_NAME);
 
         IndexShard indexShard = getIndexShard(dataNode, INDEX_NAME);
 
-        // Simulating a condition where store is already in use by increasing ref count, this helps in testing index
+        // Simulating a condition where store is already in use by increasing ref count, this helps in testing index  
         // deletion when refresh is in-progress.
         indexShard.store().incRef();
-        assertAcked(client().admin().indices().prepareDelete(INDEX_NAME));
+        assertAcked(client().admin().indices().prepareDelete(INDEX_NAME));  
         indexShard.store().decRef();
     }
 
     public void testPeerRecoveryWithRemoteStoreAndRemoteTranslogNoDataFlush() throws Exception {
         testPeerRecovery(1, true);
-    }
+    }  
 
     public void testPeerRecoveryWithRemoteStoreAndRemoteTranslogFlush() throws Exception {
-        testPeerRecovery(randomIntBetween(1, 2), true);
+        testPeerRecovery(randomIntBetween(1, 2), true);  
     }
 
-    public void testPeerRecoveryWithLowActivityTimeout() throws Exception {
+    public void testPeerRecoveryWithLowActivityTimeout() throws Exception {  
         ClusterUpdateSettingsRequest req = new ClusterUpdateSettingsRequest().persistentSettings(
             Settings.builder()
-                .put(RecoverySettings.INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey(), "20kb")
+                .put(RecoverySettings.INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey(), "20kb")  
                 .put(RecoverySettings.INDICES_RECOVERY_ACTIVITY_TIMEOUT_SETTING.getKey(), "1s")
         );
-        internalCluster().client().admin().cluster().updateSettings(req).get();
+        internalCluster().client().admin().cluster().updateSettings(req).get();  
         testPeerRecovery(randomIntBetween(1, 3), true);
     }
 
     public void testPeerRecoveryWithRemoteStoreAndRemoteTranslogNoDataRefresh() throws Exception {
         testPeerRecovery(1, false);
-    }
+    }  
 
     public void testPeerRecoveryWithRemoteStoreAndRemoteTranslogRefresh() throws Exception {
-        testPeerRecovery(randomIntBetween(1, 3), false);
+        testPeerRecovery(randomIntBetween(1, 3), false);  
     }
 
-    private void verifyRemoteStoreCleanup() throws Exception {
+    private void verifyRemoteStoreCleanup() throws Exception {  
         internalCluster().startNodes(3);
         createIndex(INDEX_NAME, remoteStoreIndexSettings(1));
 
         indexData(5, randomBoolean(), INDEX_NAME);
         String indexUUID = client().admin()
-            .indices()
+            .indices()  
             .prepareGetSettings(INDEX_NAME)
             .get()
-            .getSetting(INDEX_NAME, IndexMetadata.SETTING_INDEX_UUID);
+            .getSetting(INDEX_NAME, IndexMetadata.SETTING_INDEX_UUID);  
         Path indexPath = Path.of(String.valueOf(segmentRepoPath), indexUUID);
         assertTrue(getFileCount(indexPath) > 0);
-        assertAcked(client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).get());
+        assertAcked(client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).get());  
         // Delete is async. Give time for it
         assertBusy(() -> {
-            try {
+            try {  
                 assertThat(getFileCount(indexPath), comparesEqualTo(0));
             } catch (Exception e) {}
-        }, 30, TimeUnit.SECONDS);
+        }, 30, TimeUnit.SECONDS);  
     }
 
-    @AwaitsFix(bugUrl = "https://github.com/opensearch-project/OpenSearch/issues/9327")
+    @AwaitsFix(bugUrl = "https://github.com/opensearch-project/OpenSearch/issues/9327")  
     public void testRemoteTranslogCleanup() throws Exception {
         verifyRemoteStoreCleanup();
-    }
+    }  
 
     public void testStaleCommitDeletionWithInvokeFlush() throws Exception {
-        String clusterManagerName = internalCluster().startClusterManagerOnlyNode();
+        String clusterManagerName = internalCluster().startClusterManagerOnlyNode();  
         client(clusterManagerName).admin()
             .cluster()
-            .prepareUpdateSettings()
+            .prepareUpdateSettings()  
             .setTransientSettings(
                 Settings.builder().put(CLUSTER_REMOTE_INDEX_SEGMENT_METADATA_RETENTION_MAX_COUNT_SETTING.getKey(), randomIntBetween(2, 4))
-            )
+            )  
             .get();
         String dataNode = internalCluster().startDataOnlyNode();
-        createIndex(INDEX_NAME, remoteStoreIndexSettings(1, 10000L, -1));
+        createIndex(INDEX_NAME, remoteStoreIndexSettings(1, 10000L, -1));  
         int numberOfIterations = randomIntBetween(1, 5);
         indexData(numberOfIterations, true, INDEX_NAME);
-        String segmentsPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_SEGMENTS_PATH_PREFIX.get(getNodeSettings());
+        String segmentsPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_SEGMENTS_PATH_PREFIX.get(getNodeSettings());  
         String shardPath = getShardLevelBlobPath(
             client(),
-            INDEX_NAME,
+            INDEX_NAME,  
             getSegmentBasePath(),
             "0",
-            SEGMENTS,
+            SEGMENTS,  
             METADATA,
             segmentsPathFixedPrefix
-        ).buildAsString();
+        ).buildAsString();  
         IndexShard indexShard = getIndexShard(dataNode, INDEX_NAME);
         int lastNMetadataFilesToKeep = indexShard.getRemoteStoreSettings().getMinRemoteSegmentMetadataFiles();
-        // Delete is async.
+        // Delete is async.  
         assertBusy(() -> {
             int actualFileCount = getActualFileCount(segmentRepoPath, shardPath);
-            if (numberOfIterations <= lastNMetadataFilesToKeep) {
+            if (numberOfIterations <= lastNMetadataFilesToKeep) {  
                 MatcherAssert.assertThat(actualFileCount, is(oneOf(numberOfIterations - 1, numberOfIterations, numberOfIterations + 1)));
             } else {
-                // As delete is async its possible that the file gets created before the deletion or after
+                // As delete is async its possible that the file gets created before the deletion or after  
                 // deletion.
                 if (RemoteStoreSettings.isPinnedTimestampsEnabled()) {
-                    // With pinned timestamp, we also keep md files since last successful fetch
+                    // With pinned timestamp, we also keep md files since last successful fetch  
                     assertTrue(actualFileCount >= lastNMetadataFilesToKeep);
                 } else {
-                    MatcherAssert.assertThat(
+                    MatcherAssert.assertThat(  
                         actualFileCount,
                         is(oneOf(lastNMetadataFilesToKeep - 1, lastNMetadataFilesToKeep, lastNMetadataFilesToKeep + 1))
-                    );
+                    );  
                 }
             }
-        }, 30, TimeUnit.SECONDS);
+        }, 30, TimeUnit.SECONDS);  
     }
 
-    public void testStaleCommitDeletionWithoutInvokeFlush() throws Exception {
+    public void testStaleCommitDeletionWithoutInvokeFlush() throws Exception {  
         String clusterManagerName = internalCluster().startClusterManagerOnlyNode();
         client(clusterManagerName).admin()
-            .cluster()
+            .cluster()  
             .prepareUpdateSettings()
             .setTransientSettings(
-                Settings.builder().put(CLUSTER_REMOTE_INDEX_SEGMENT_METADATA_RETENTION_MAX_COUNT_SETTING.getKey(), randomIntBetween(2, 4))
+                Settings.builder().put(CLUSTER_REMOTE_INDEX_SEGMENT_METADATA_RETENTION_MAX_COUNT_SETTING.getKey(), randomIntBetween(2, 4))  
             )
             .get();
-        internalCluster().startDataOnlyNode();
+        internalCluster().startDataOnlyNode();  
         createIndex(INDEX_NAME, remoteStoreIndexSettings(1, 10000l, -1));
         int numberOfIterations = randomIntBetween(1, 5);
-        indexData(numberOfIterations, false, INDEX_NAME);
+        indexData(numberOfIterations, false, INDEX_NAME);  
         String segmentsPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_SEGMENTS_PATH_PREFIX.get(getNodeSettings());
         String shardPath = getShardLevelBlobPath(
-            client(),
+            client(),  
             INDEX_NAME,
             getSegmentBasePath(),
-            "0",
+            "0",  
             SEGMENTS,
             METADATA,
-            segmentsPathFixedPrefix
+            segmentsPathFixedPrefix  
         ).buildAsString();
         int actualFileCount = getActualFileCount(segmentRepoPath, shardPath);
-        // We also allow (numberOfIterations + 1) as index creation also triggers refresh.
+        // We also allow (numberOfIterations + 1) as index creation also triggers refresh.  
         MatcherAssert.assertThat(actualFileCount, is(oneOf(numberOfIterations - 1, numberOfIterations, numberOfIterations + 1)));
     }
 
     public void testStaleCommitDeletionWithMinSegmentFiles_3() throws Exception {
         Settings.Builder settings = Settings.builder()
-            .put(RemoteStoreSettings.CLUSTER_REMOTE_INDEX_SEGMENT_METADATA_RETENTION_MAX_COUNT_SETTING.getKey(), "3");
+            .put(RemoteStoreSettings.CLUSTER_REMOTE_INDEX_SEGMENT_METADATA_RETENTION_MAX_COUNT_SETTING.getKey(), "3");  
         internalCluster().startNode(settings);
         String segmentsPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_SEGMENTS_PATH_PREFIX.get(getNodeSettings());
-        createIndex(INDEX_NAME, remoteStoreIndexSettings(1, 10000l, -1));
+        createIndex(INDEX_NAME, remoteStoreIndexSettings(1, 10000l, -1));  
         int numberOfIterations = randomIntBetween(5, 15);
         indexData(numberOfIterations, true, INDEX_NAME);
-        String shardPath = getShardLevelBlobPath(
+        String shardPath = getShardLevelBlobPath(  
             client(),
             INDEX_NAME,
-            getSegmentBasePath(),
+            getSegmentBasePath(),  
             "0",
             SEGMENTS,
-            METADATA,
+            METADATA,  
             segmentsPathFixedPrefix
         ).buildAsString();
-        int actualFileCount = getActualFileCount(segmentRepoPath, shardPath);
+        int actualFileCount = getActualFileCount(segmentRepoPath, shardPath);  
         // We also allow (numberOfIterations + 1) as index creation also triggers refresh.
         if (RemoteStoreSettings.isPinnedTimestampsEnabled()) {
-            // With pinned timestamp, we also keep md files since last successful fetch
+            // With pinned timestamp, we also keep md files since last successful fetch  
             assertTrue(actualFileCount >= 4);
         } else {
-            assertEquals(4, actualFileCount);
+            assertEquals(4, actualFileCount);  
         }
     }
 
     protected BlobPath getSegmentBasePath() {
         return BlobPath.cleanPath();
-    }
+    }  
 
     public void testStaleCommitDeletionWithMinSegmentFiles_Disabled() throws Exception {
-        Settings.Builder settings = Settings.builder()
+        Settings.Builder settings = Settings.builder()  
             .put(RemoteStoreSettings.CLUSTER_REMOTE_INDEX_SEGMENT_METADATA_RETENTION_MAX_COUNT_SETTING.getKey(), "-1");
         internalCluster().startNode(settings);
 
         createIndex(INDEX_NAME, remoteStoreIndexSettings(1, 10000l, -1));
         int numberOfIterations = randomIntBetween(2, 5);
-        indexData(numberOfIterations, true, INDEX_NAME);
+        indexData(numberOfIterations, true, INDEX_NAME);  
         String segmentsPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_SEGMENTS_PATH_PREFIX.get(getNodeSettings());
         String shardPath = getShardLevelBlobPath(
-            client(),
+            client(),  
             INDEX_NAME,
             getSegmentBasePath(),
-            "0",
+            "0",  
             SEGMENTS,
             METADATA,
-            segmentsPathFixedPrefix
+            segmentsPathFixedPrefix  
         ).buildAsString();
         int actualFileCount = getActualFileCount(segmentRepoPath, shardPath);
-        // We also allow (numberOfIterations + 1) as index creation also triggers refresh.
+        // We also allow (numberOfIterations + 1) as index creation also triggers refresh.  
         MatcherAssert.assertThat(actualFileCount, is(oneOf(numberOfIterations, numberOfIterations + 1)));
     }
 
     protected int getActualFileCount(Path segmentRepoPath, String shardPath) throws IOException {
         Path indexPath = Path.of(segmentRepoPath + "/" + shardPath);
-        return getFileCount(indexPath);
+        return getFileCount(indexPath);  
     }
 
-    /**
+    /**  
      * Tests that when the index setting is not passed during index creation, the buffer interval picked up is the cluster
      * default.
-     */
+     */  
     public void testDefaultBufferInterval() throws ExecutionException, InterruptedException {
         internalCluster().startClusterManagerOnlyNode();
-        String clusterManagerName = internalCluster().getClusterManagerName();
+        String clusterManagerName = internalCluster().getClusterManagerName();  
         String dataNode = internalCluster().startDataOnlyNodes(1).get(0);
         createIndex(INDEX_NAME);
-        ensureYellowAndNoInitializingShards(INDEX_NAME);
+        ensureYellowAndNoInitializingShards(INDEX_NAME);  
         ensureGreen(INDEX_NAME);
         assertClusterRemoteBufferInterval(IndexSettings.DEFAULT_REMOTE_TRANSLOG_BUFFER_INTERVAL, dataNode);
 
         IndexShard indexShard = getIndexShard(dataNode, INDEX_NAME);
         assertTrue(indexShard.getTranslogSyncProcessor() instanceof BufferedAsyncIOProcessor);
-        assertBufferInterval(IndexSettings.DEFAULT_REMOTE_TRANSLOG_BUFFER_INTERVAL, indexShard);
+        assertBufferInterval(IndexSettings.DEFAULT_REMOTE_TRANSLOG_BUFFER_INTERVAL, indexShard);  
 
         // Next, we change the default buffer interval and the same should reflect in the buffer interval of the index created
-        TimeValue clusterBufferInterval = TimeValue.timeValueSeconds(randomIntBetween(100, 200));
+        TimeValue clusterBufferInterval = TimeValue.timeValueSeconds(randomIntBetween(100, 200));  
         client(clusterManagerName).admin()
             .cluster()
-            .prepareUpdateSettings()
+            .prepareUpdateSettings()  
             .setTransientSettings(Settings.builder().put(CLUSTER_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.getKey(), clusterBufferInterval))
             .get();
-        assertBufferInterval(clusterBufferInterval, indexShard);
+        assertBufferInterval(clusterBufferInterval, indexShard);  
         clearClusterBufferIntervalSetting(clusterManagerName);
     }
 
     /**
      * This tests multiple cases where the index setting is passed during the index creation with multiple combinations
-     * with and without cluster default.
+     * with and without cluster default.  
      */
     public void testOverriddenBufferInterval() throws ExecutionException, InterruptedException {
-        internalCluster().startClusterManagerOnlyNode();
+        internalCluster().startClusterManagerOnlyNode();  
         String clusterManagerName = internalCluster().getClusterManagerName();
         String dataNode = internalCluster().startDataOnlyNodes(1).get(0);
 
         TimeValue bufferInterval = TimeValue.timeValueSeconds(randomIntBetween(0, 100));
         Settings indexSettings = Settings.builder()
-            .put(indexSettings())
+            .put(indexSettings())  
             .put(IndexSettings.INDEX_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.getKey(), bufferInterval)
             .build();
-        createIndex(INDEX_NAME, indexSettings);
+        createIndex(INDEX_NAME, indexSettings);  
         ensureYellowAndNoInitializingShards(INDEX_NAME);
         ensureGreen(INDEX_NAME);
 
         IndexShard indexShard = getIndexShard(dataNode, INDEX_NAME);
         assertTrue(indexShard.getTranslogSyncProcessor() instanceof BufferedAsyncIOProcessor);
-        assertBufferInterval(bufferInterval, indexShard);
+        assertBufferInterval(bufferInterval, indexShard);  
 
         // Set the cluster default with a different value, validate that the buffer interval is still the overridden value
-        TimeValue clusterBufferInterval = TimeValue.timeValueSeconds(randomIntBetween(100, 200));
+        TimeValue clusterBufferInterval = TimeValue.timeValueSeconds(randomIntBetween(100, 200));  
         client(clusterManagerName).admin()
             .cluster()
-            .prepareUpdateSettings()
+            .prepareUpdateSettings()  
             .setTransientSettings(Settings.builder().put(CLUSTER_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.getKey(), clusterBufferInterval))
             .get();
-        assertBufferInterval(bufferInterval, indexShard);
+        assertBufferInterval(bufferInterval, indexShard);  
 
         // Set the index setting (index.remote_store.translog.buffer_interval) with a different value and validate that
-        // the buffer interval is updated
+        // the buffer interval is updated  
         bufferInterval = TimeValue.timeValueSeconds(bufferInterval.seconds() + randomIntBetween(1, 100));
         client(clusterManagerName).admin()
-            .indices()
+            .indices()  
             .updateSettings(
                 new UpdateSettingsRequest(INDEX_NAME).settings(
-                    Settings.builder().put(IndexSettings.INDEX_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.getKey(), bufferInterval)
+                    Settings.builder().put(IndexSettings.INDEX_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.getKey(), bufferInterval)  
                 )
             )
-            .get();
+            .get();  
         assertBufferInterval(bufferInterval, indexShard);
 
-        // Set the index setting (index.remote_store.translog.buffer_interval) with null and validate the buffer interval
+        // Set the index setting (index.remote_store.translog.buffer_interval) with null and validate the buffer interval  
         // which will be the cluster default now.
         client(clusterManagerName).admin()
-            .indices()
+            .indices()  
             .updateSettings(
                 new UpdateSettingsRequest(INDEX_NAME).settings(
-                    Settings.builder().putNull(IndexSettings.INDEX_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.getKey())
+                    Settings.builder().putNull(IndexSettings.INDEX_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.getKey())  
                 )
             )
-            .get();
+            .get();  
         assertBufferInterval(clusterBufferInterval, indexShard);
         clearClusterBufferIntervalSetting(clusterManagerName);
-    }
+    }  
 
     /**
-     * This tests validation which kicks in during index creation failing creation if the value is less than minimum allowed value.
+     * This tests validation which kicks in during index creation failing creation if the value is less than minimum allowed value.  
      */
     public void testOverriddenBufferIntervalValidation() {
-        internalCluster().startClusterManagerOnlyNode();
+        internalCluster().startClusterManagerOnlyNode();  
         TimeValue bufferInterval = TimeValue.timeValueSeconds(-1);
         Settings indexSettings = Settings.builder()
-            .put(indexSettings())
+            .put(indexSettings())  
             .put(IndexSettings.INDEX_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.getKey(), bufferInterval)
             .build();
-        IllegalArgumentException exceptionDuringCreateIndex = assertThrows(
+        IllegalArgumentException exceptionDuringCreateIndex = assertThrows(  
             IllegalArgumentException.class,
             () -> createIndex(INDEX_NAME, indexSettings)
-        );
+        );  
         assertEquals(
             "failed to parse value [-1] for setting [index.remote_store.translog.buffer_interval], must be >= [0ms]",
-            exceptionDuringCreateIndex.getMessage()
+            exceptionDuringCreateIndex.getMessage()  
         );
     }
 
     /**
      * This tests validation of the cluster setting when being set.
-     */
+     */  
     public void testClusterBufferIntervalValidation() {
         String clusterManagerName = internalCluster().startClusterManagerOnlyNode();
-        IllegalArgumentException exception = assertThrows(
+        IllegalArgumentException exception = assertThrows(  
             IllegalArgumentException.class,
             () -> client(clusterManagerName).admin()
-                .cluster()
+                .cluster()  
                 .prepareUpdateSettings()
                 .setTransientSettings(
-                    Settings.builder().put(CLUSTER_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(-1))
+                    Settings.builder().put(CLUSTER_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(-1))  
                 )
                 .get()
-        );
+        );  
         assertEquals(
             "failed to parse value [-1] for setting [cluster.remote_store.translog.buffer_interval], must be >= [0ms]",
-            exception.getMessage()
+            exception.getMessage()  
         );
     }
 
     public void testRequestDurabilityWhenRestrictSettingExplicitFalse() throws ExecutionException, InterruptedException {
         // Explicit node settings and request durability
-        testRestrictSettingFalse(true, Durability.REQUEST);
+        testRestrictSettingFalse(true, Durability.REQUEST);  
     }
 
-    public void testAsyncDurabilityWhenRestrictSettingExplicitFalse() throws ExecutionException, InterruptedException {
+    public void testAsyncDurabilityWhenRestrictSettingExplicitFalse() throws ExecutionException, InterruptedException {  
         // Explicit node settings and async durability
         testRestrictSettingFalse(true, Durability.ASYNC);
-    }
+    }  
 
     public void testRequestDurabilityWhenRestrictSettingImplicitFalse() throws ExecutionException, InterruptedException {
-        // No node settings and request durability
+        // No node settings and request durability  
         testRestrictSettingFalse(false, Durability.REQUEST);
     }
 
     public void testAsyncDurabilityWhenRestrictSettingImplicitFalse() throws ExecutionException, InterruptedException {
         // No node settings and async durability
-        testRestrictSettingFalse(false, Durability.ASYNC);
+        testRestrictSettingFalse(false, Durability.ASYNC);  
     }
 
-    private void testRestrictSettingFalse(boolean setRestrictFalse, Durability durability) throws ExecutionException, InterruptedException {
+    private void testRestrictSettingFalse(boolean setRestrictFalse, Durability durability) throws ExecutionException, InterruptedException {  
         String clusterManagerName;
         if (setRestrictFalse) {
-            clusterManagerName = internalCluster().startClusterManagerOnlyNode(
+            clusterManagerName = internalCluster().startClusterManagerOnlyNode(  
                 Settings.builder().put(IndicesService.CLUSTER_REMOTE_INDEX_RESTRICT_ASYNC_DURABILITY_SETTING.getKey(), false).build()
             );
-        } else {
+        } else {  
             clusterManagerName = internalCluster().startClusterManagerOnlyNode();
         }
-        String dataNode = internalCluster().startDataOnlyNodes(1).get(0);
+        String dataNode = internalCluster().startDataOnlyNodes(1).get(0);  
         Settings indexSettings = Settings.builder()
             .put(indexSettings())
-            .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), durability)
+            .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), durability)  
             .build();
         createIndex(INDEX_NAME, indexSettings);
-        IndexShard indexShard = getIndexShard(dataNode, INDEX_NAME);
+        IndexShard indexShard = getIndexShard(dataNode, INDEX_NAME);  
         assertEquals(durability, indexShard.indexSettings().getTranslogDurability());
 
-        durability = randomFrom(Durability.values());
+        durability = randomFrom(Durability.values());  
         client(clusterManagerName).admin()
             .indices()
-            .updateSettings(
+            .updateSettings(  
                 new UpdateSettingsRequest(INDEX_NAME).settings(
                     Settings.builder().put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), durability)
-                )
+                )  
             )
             .get();
-        assertEquals(durability, indexShard.indexSettings().getTranslogDurability());
+        assertEquals(durability, indexShard.indexSettings().getTranslogDurability());  
     }
 
-    public void testAsyncDurabilityThrowsExceptionWhenRestrictSettingTrue() throws ExecutionException, InterruptedException {
+    public void testAsyncDurabilityThrowsExceptionWhenRestrictSettingTrue() throws ExecutionException, InterruptedException {  
         String expectedExceptionMsg =
             "index setting [index.translog.durability=async] is not allowed as cluster setting [cluster.remote_store.index.restrict.async-durability=true]";
-        String clusterManagerName = internalCluster().startClusterManagerOnlyNode(
+        String clusterManagerName = internalCluster().startClusterManagerOnlyNode(  
             Settings.builder().put(IndicesService.CLUSTER_REMOTE_INDEX_RESTRICT_ASYNC_DURABILITY_SETTING.getKey(), true).build()
         );
-        String dataNode = internalCluster().startDataOnlyNodes(1).get(0);
+        String dataNode = internalCluster().startDataOnlyNodes(1).get(0);  
 
         // Case 1 - Test create index fails
-        Settings indexSettings = Settings.builder()
+        Settings indexSettings = Settings.builder()  
             .put(indexSettings())
             .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Durability.ASYNC)
-            .build();
+            .build();  
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> createIndex(INDEX_NAME, indexSettings));
         assertEquals(expectedExceptionMsg, exception.getMessage());
 
         // Case 2 - Test update index fails
         createIndex(INDEX_NAME);
-        IndexShard indexShard = getIndexShard(dataNode, INDEX_NAME);
+        IndexShard indexShard = getIndexShard(dataNode, INDEX_NAME);  
         assertEquals(Durability.REQUEST, indexShard.indexSettings().getTranslogDurability());
         exception = assertThrows(
-            IllegalArgumentException.class,
+            IllegalArgumentException.class,  
             () -> client(clusterManagerName).admin()
                 .indices()
-                .updateSettings(new UpdateSettingsRequest(INDEX_NAME).settings(indexSettings))
+                .updateSettings(new UpdateSettingsRequest(INDEX_NAME).settings(indexSettings))  
                 .actionGet()
         );
-        assertEquals(expectedExceptionMsg, exception.getMessage());
+        assertEquals(expectedExceptionMsg, exception.getMessage());  
     }
 
-    private void assertClusterRemoteBufferInterval(TimeValue expectedBufferInterval, String dataNode) {
+    private void assertClusterRemoteBufferInterval(TimeValue expectedBufferInterval, String dataNode) {  
         IndicesService indicesService = internalCluster().getInstance(IndicesService.class, dataNode);
         assertEquals(expectedBufferInterval, indicesService.getRemoteStoreSettings().getClusterRemoteTranslogBufferInterval());
-    }
+    }  
 
     private void assertBufferInterval(TimeValue expectedBufferInterval, IndexShard indexShard) {
-        assertEquals(
+        assertEquals(  
             expectedBufferInterval,
             ((BufferedAsyncIOProcessor<?>) indexShard.getTranslogSyncProcessor()).getBufferIntervalSupplier().get()
-        );
+        );  
     }
 
-    private void clearClusterBufferIntervalSetting(String clusterManagerName) {
+    private void clearClusterBufferIntervalSetting(String clusterManagerName) {  
         client(clusterManagerName).admin()
             .cluster()
-            .prepareUpdateSettings()
+            .prepareUpdateSettings()  
             .setTransientSettings(Settings.builder().putNull(CLUSTER_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.getKey()))
             .get();
-    }
+    }  
 
     public void testRestoreSnapshotToIndexWithSameNameDifferentUUID() throws Exception {
-        internalCluster().startClusterManagerOnlyNode();
+        internalCluster().startClusterManagerOnlyNode();  
         List<String> dataNodes = internalCluster().startDataOnlyNodes(2);
 
-        Path absolutePath = randomRepoPath().toAbsolutePath();
+        Path absolutePath = randomRepoPath().toAbsolutePath();  
         createRepository("test-repo", "fs", Settings.builder().put("location", absolutePath));
 
-        logger.info("--> Create index and ingest 50 docs");
+        logger.info("--> Create index and ingest 50 docs");  
         createIndex(INDEX_NAME, remoteStoreIndexSettings(1));
         indexBulk(INDEX_NAME, 50);
-        flushAndRefresh(INDEX_NAME);
+        flushAndRefresh(INDEX_NAME);  
 
         String originalIndexUUID = client().admin()
-            .indices()
+            .indices()  
             .prepareGetSettings(INDEX_NAME)
             .get()
-            .getSetting(INDEX_NAME, IndexMetadata.SETTING_INDEX_UUID);
+            .getSetting(INDEX_NAME, IndexMetadata.SETTING_INDEX_UUID);  
         assertNotNull(originalIndexUUID);
         assertNotEquals(IndexMetadata.INDEX_UUID_NA_VALUE, originalIndexUUID);
 
         ensureGreen();
 
-        logger.info("--> take a snapshot");
+        logger.info("--> take a snapshot");  
         client().admin().cluster().prepareCreateSnapshot("test-repo", "test-snap").setIndices(INDEX_NAME).setWaitForCompletion(true).get();
 
-        logger.info("--> wipe all indices");
+        logger.info("--> wipe all indices");  
         cluster().wipeIndices(INDEX_NAME);
 
-        logger.info("--> Create index with the same name, different UUID");
+        logger.info("--> Create index with the same name, different UUID");  
         assertAcked(
             prepareCreate(INDEX_NAME).setSettings(Settings.builder().put(SETTING_NUMBER_OF_SHARDS, 1).put(SETTING_NUMBER_OF_REPLICAS, 1))
-        );
+        );  
 
         ensureGreen(TimeValue.timeValueSeconds(30), INDEX_NAME);
 
         String newIndexUUID = client().admin()
             .indices()
-            .prepareGetSettings(INDEX_NAME)
+            .prepareGetSettings(INDEX_NAME)  
             .get()
             .getSetting(INDEX_NAME, IndexMetadata.SETTING_INDEX_UUID);
-        assertNotNull(newIndexUUID);
+        assertNotNull(newIndexUUID);  
         assertNotEquals(IndexMetadata.INDEX_UUID_NA_VALUE, newIndexUUID);
         assertNotEquals(newIndexUUID, originalIndexUUID);
 
@@ -901,490 +901,490 @@ public class RemoteStoreCoreTestCase extends RemoteStoreBaseIntegTestCase {
 
         logger.info("--> restore all indices from the snapshot");
         RestoreSnapshotResponse restoreSnapshotResponse = clusterAdmin().prepareRestoreSnapshot("test-repo", "test-snap")
-            .setWaitForCompletion(true)
+            .setWaitForCompletion(true)  
             .execute()
             .actionGet();
-        assertThat(restoreSnapshotResponse.getRestoreInfo().totalShards(), greaterThan(0));
+        assertThat(restoreSnapshotResponse.getRestoreInfo().totalShards(), greaterThan(0));  
 
         flushAndRefresh(INDEX_NAME);
 
         ensureGreen(INDEX_NAME);
         assertBusy(() -> {
-            assertHitCount(client(dataNodes.get(0)).prepareSearch(INDEX_NAME).setSize(0).get(), 50);
+            assertHitCount(client(dataNodes.get(0)).prepareSearch(INDEX_NAME).setSize(0).get(), 50);  
             assertHitCount(client(dataNodes.get(1)).prepareSearch(INDEX_NAME).setSize(0).get(), 50);
         });
-    }
+    }  
 
     public void testNoSearchIdleForAnyReplicaCount() throws ExecutionException, InterruptedException {
-        internalCluster().startClusterManagerOnlyNode();
+        internalCluster().startClusterManagerOnlyNode();  
         String primaryShardNode = internalCluster().startDataOnlyNodes(1).get(0);
 
-        createIndex(INDEX_NAME, remoteStoreIndexSettings(0));
+        createIndex(INDEX_NAME, remoteStoreIndexSettings(0));  
         ensureGreen(INDEX_NAME);
         IndexShard indexShard = getIndexShard(primaryShardNode, INDEX_NAME);
-        assertFalse(indexShard.isSearchIdleSupported());
+        assertFalse(indexShard.isSearchIdleSupported());  
 
         String replicaShardNode = internalCluster().startDataOnlyNodes(1).get(0);
-        assertAcked(
+        assertAcked(  
             client().admin()
                 .indices()
-                .prepareUpdateSettings(INDEX_NAME)
+                .prepareUpdateSettings(INDEX_NAME)  
                 .setSettings(Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1))
         );
-        ensureGreen(INDEX_NAME);
+        ensureGreen(INDEX_NAME);  
         assertFalse(indexShard.isSearchIdleSupported());
 
-        indexShard = getIndexShard(replicaShardNode, INDEX_NAME);
+        indexShard = getIndexShard(replicaShardNode, INDEX_NAME);  
         assertFalse(indexShard.isSearchIdleSupported());
     }
 
     public void testFallbackToNodeToNodeSegmentCopy() throws Exception {
         internalCluster().startClusterManagerOnlyNode();
-        List<String> dataNodes = internalCluster().startDataOnlyNodes(2);
+        List<String> dataNodes = internalCluster().startDataOnlyNodes(2);  
 
         // 1. Create index with 0 replica
-        createIndex(INDEX_NAME, remoteStoreIndexSettings(0, 10000L, -1));
+        createIndex(INDEX_NAME, remoteStoreIndexSettings(0, 10000L, -1));  
         ensureGreen(INDEX_NAME);
 
-        // 2. Index docs
+        // 2. Index docs  
         indexBulk(INDEX_NAME, 50);
         flushAndRefresh(INDEX_NAME);
 
         String segmentsPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_SEGMENTS_PATH_PREFIX.get(getNodeSettings());
         // 3. Delete data from remote segment store
-        String shardPath = getShardLevelBlobPath(client(), INDEX_NAME, getSegmentBasePath(), "0", SEGMENTS, DATA, segmentsPathFixedPrefix)
+        String shardPath = getShardLevelBlobPath(client(), INDEX_NAME, getSegmentBasePath(), "0", SEGMENTS, DATA, segmentsPathFixedPrefix)  
             .buildAsString();
         delete(segmentRepoPath, shardPath);
 
         // 4. Start recovery by changing number of replicas to 1
         assertAcked(
-            client().admin()
+            client().admin()  
                 .indices()
                 .prepareUpdateSettings(INDEX_NAME)
-                .setSettings(Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1))
+                .setSettings(Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1))  
         );
 
-        // 5. Ensure green and verify number of docs
+        // 5. Ensure green and verify number of docs  
         ensureGreen(INDEX_NAME);
         assertBusy(() -> {
-            assertHitCount(client(dataNodes.get(0)).prepareSearch(INDEX_NAME).setSize(0).get(), 50);
+            assertHitCount(client(dataNodes.get(0)).prepareSearch(INDEX_NAME).setSize(0).get(), 50);  
             assertHitCount(client(dataNodes.get(1)).prepareSearch(INDEX_NAME).setSize(0).get(), 50);
         });
-    }
+    }  
 
     protected void delete(Path baseRepoPath, String shardPath) throws IOException {
-        Path segmentDataPath = Path.of(baseRepoPath + "/" + shardPath);
+        Path segmentDataPath = Path.of(baseRepoPath + "/" + shardPath);  
         try (Stream<Path> files = Files.list(segmentDataPath)) {
             files.forEach(p -> {
-                try {
+                try {  
                     Files.delete(p);
                 } catch (IOException e) {
-                    // Ignore
+                    // Ignore  
                 }
             });
-        }
+        }  
     }
 
-    public void testNoMultipleWriterDuringPrimaryRelocation() throws ExecutionException, InterruptedException {
+    public void testNoMultipleWriterDuringPrimaryRelocation() throws ExecutionException, InterruptedException {  
         // In this test, we trigger a force flush on existing primary while the primary mode on new primary has been
         // activated. There was a bug in primary relocation of remote store enabled indexes where the new primary
-        // starts uploading translog and segments even before the cluster manager has started this shard. With this test,
+        // starts uploading translog and segments even before the cluster manager has started this shard. With this test,  
         // we check that we do not overwrite any file on remote store. Here we will also increase the replica count to
         // check that there are no duplicate metadata files for translog or upload.
 
         internalCluster().startClusterManagerOnlyNode();
         String oldPrimary = internalCluster().startDataOnlyNodes(1).get(0);
-        createIndex(INDEX_NAME, remoteStoreIndexSettings(0));
+        createIndex(INDEX_NAME, remoteStoreIndexSettings(0));  
         ensureGreen(INDEX_NAME);
         indexBulk(INDEX_NAME, randomIntBetween(5, 10));
-        String newPrimary = internalCluster().startDataOnlyNodes(1).get(0);
+        String newPrimary = internalCluster().startDataOnlyNodes(1).get(0);  
         ensureStableCluster(3);
 
-        IndexShard oldPrimaryIndexShard = getIndexShard(oldPrimary, INDEX_NAME);
+        IndexShard oldPrimaryIndexShard = getIndexShard(oldPrimary, INDEX_NAME);  
         CountDownLatch flushLatch = new CountDownLatch(1);
 
-        MockTransportService mockTargetTransportService = ((MockTransportService) internalCluster().getInstance(
+        MockTransportService mockTargetTransportService = ((MockTransportService) internalCluster().getInstance(  
             TransportService.class,
             oldPrimary
-        ));
+        ));  
         mockTargetTransportService.addSendBehavior((connection, requestId, action, request, options) -> {
             if (PeerRecoveryTargetService.Actions.HANDOFF_PRIMARY_CONTEXT.equals(action)) {
-                flushLatch.countDown();
+                flushLatch.countDown();  
             }
             connection.sendRequest(requestId, action, request, options);
-        });
+        });  
 
         logger.info("--> relocate the shard");
-        client().admin()
+        client().admin()  
             .cluster()
             .prepareReroute()
-            .add(new MoveAllocationCommand(INDEX_NAME, 0, oldPrimary, newPrimary))
+            .add(new MoveAllocationCommand(INDEX_NAME, 0, oldPrimary, newPrimary))  
             .execute()
             .actionGet();
 
         CountDownLatch flushDone = new CountDownLatch(1);
         Thread flushThread = new Thread(() -> {
-            try {
+            try {  
                 flushLatch.await(2, TimeUnit.SECONDS);
                 oldPrimaryIndexShard.flush(new FlushRequest().waitIfOngoing(true).force(true));
-                // newPrimaryTranslogRepo.setSleepSeconds(0);
+                // newPrimaryTranslogRepo.setSleepSeconds(0);  
             } catch (IndexShardClosedException e) {
                 // this is fine
-            } catch (InterruptedException e) {
+            } catch (InterruptedException e) {  
                 throw new AssertionError(e);
             } finally {
-                flushDone.countDown();
+                flushDone.countDown();  
             }
         });
-        flushThread.start();
+        flushThread.start();  
         flushDone.await(5, TimeUnit.SECONDS);
         flushThread.join();
 
         ClusterHealthResponse clusterHealthResponse = client().admin()
             .cluster()
-            .prepareHealth()
+            .prepareHealth()  
             .setWaitForStatus(ClusterHealthStatus.GREEN)
             .setWaitForEvents(Priority.LANGUID)
-            .setWaitForNoRelocatingShards(true)
+            .setWaitForNoRelocatingShards(true)  
             .setTimeout(TimeValue.timeValueSeconds(5))
             .execute()
-            .actionGet();
+            .actionGet();  
         assertFalse(clusterHealthResponse.isTimedOut());
 
-        client().admin()
+        client().admin()  
             .indices()
             .updateSettings(
-                new UpdateSettingsRequest(INDEX_NAME).settings(Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1))
+                new UpdateSettingsRequest(INDEX_NAME).settings(Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1))  
             )
             .get();
 
         clusterHealthResponse = client().admin()
             .cluster()
-            .prepareHealth()
+            .prepareHealth()  
             .setWaitForStatus(ClusterHealthStatus.GREEN)
             .setWaitForEvents(Priority.LANGUID)
-            .setWaitForNoRelocatingShards(true)
+            .setWaitForNoRelocatingShards(true)  
             .setTimeout(TimeValue.timeValueSeconds(5))
             .execute()
-            .actionGet();
+            .actionGet();  
         assertFalse(clusterHealthResponse.isTimedOut());
     }
 
     public void testResumeUploadAfterFailedPrimaryRelocation() throws ExecutionException, InterruptedException, IOException {
         // In this test, we fail the hand off during the primary relocation. This will undo the drainRefreshes and
-        // drainSync performed as part of relocation handoff (before performing the handoff transport action).
+        // drainSync performed as part of relocation handoff (before performing the handoff transport action).  
         // We validate the same here by failing the peer recovery and ensuring we can index afterward as well.
 
-        internalCluster().startClusterManagerOnlyNode();
+        internalCluster().startClusterManagerOnlyNode();  
         String oldPrimary = internalCluster().startDataOnlyNodes(1).get(0);
         createIndex(INDEX_NAME, remoteStoreIndexSettings(0));
-        ensureGreen(INDEX_NAME);
+        ensureGreen(INDEX_NAME);  
         int docs = randomIntBetween(5, 10);
         indexBulk(INDEX_NAME, docs);
-        flushAndRefresh(INDEX_NAME);
+        flushAndRefresh(INDEX_NAME);  
         assertHitCount(client(oldPrimary).prepareSearch(INDEX_NAME).setSize(0).setPreference("_only_local").get(), docs);
         String newPrimary = internalCluster().startDataOnlyNodes(1).get(0);
-        ensureStableCluster(3);
+        ensureStableCluster(3);  
 
         IndexShard oldPrimaryIndexShard = getIndexShard(oldPrimary, INDEX_NAME);
-        CountDownLatch handOffLatch = new CountDownLatch(1);
+        CountDownLatch handOffLatch = new CountDownLatch(1);  
 
         MockTransportService mockTargetTransportService = ((MockTransportService) internalCluster().getInstance(
-            TransportService.class,
+            TransportService.class,  
             oldPrimary
         ));
-        mockTargetTransportService.addSendBehavior((connection, requestId, action, request, options) -> {
+        mockTargetTransportService.addSendBehavior((connection, requestId, action, request, options) -> {  
             if (PeerRecoveryTargetService.Actions.HANDOFF_PRIMARY_CONTEXT.equals(action)) {
                 handOffLatch.countDown();
-                throw new OpenSearchException("failing recovery for test purposes");
+                throw new OpenSearchException("failing recovery for test purposes");  
             }
             connection.sendRequest(requestId, action, request, options);
-        });
+        });  
 
         logger.info("--> relocate the shard");
-        client().admin()
+        client().admin()  
             .cluster()
             .prepareReroute()
-            .add(new MoveAllocationCommand(INDEX_NAME, 0, oldPrimary, newPrimary))
+            .add(new MoveAllocationCommand(INDEX_NAME, 0, oldPrimary, newPrimary))  
             .execute()
             .actionGet();
 
         handOffLatch.await(30, TimeUnit.SECONDS);
 
-        assertTrue(oldPrimaryIndexShard.isStartedPrimary());
+        assertTrue(oldPrimaryIndexShard.isStartedPrimary());  
         assertEquals(oldPrimary, primaryNodeName(INDEX_NAME));
         assertHitCount(client(oldPrimary).prepareSearch(INDEX_NAME).setSize(0).setPreference("_only_local").get(), docs);
 
         SearchPhaseExecutionException ex = assertThrows(
             SearchPhaseExecutionException.class,
-            () -> client(newPrimary).prepareSearch(INDEX_NAME).setSize(0).setPreference("_only_local").get()
+            () -> client(newPrimary).prepareSearch(INDEX_NAME).setSize(0).setPreference("_only_local").get()  
         );
         assertEquals("all shards failed", ex.getMessage());
 
         int moreDocs = randomIntBetween(5, 10);
         indexBulk(INDEX_NAME, moreDocs);
-        flushAndRefresh(INDEX_NAME);
+        flushAndRefresh(INDEX_NAME);  
         int uncommittedOps = randomIntBetween(5, 10);
         indexBulk(INDEX_NAME, uncommittedOps);
-        assertHitCount(client(oldPrimary).prepareSearch(INDEX_NAME).setSize(0).setPreference("_only_local").get(), docs + moreDocs);
+        assertHitCount(client(oldPrimary).prepareSearch(INDEX_NAME).setSize(0).setPreference("_only_local").get(), docs + moreDocs);  
         internalCluster().stopRandomNode(InternalTestCluster.nameFilter(primaryNodeName(INDEX_NAME)));
 
-        restore(true, INDEX_NAME);
+        restore(true, INDEX_NAME);  
         ensureGreen(INDEX_NAME);
         assertHitCount(
-            client(newPrimary).prepareSearch(INDEX_NAME).setSize(0).setPreference("_only_local").get(),
+            client(newPrimary).prepareSearch(INDEX_NAME).setSize(0).setPreference("_only_local").get(),  
             docs + moreDocs + uncommittedOps
         );
 
         String newNode = internalCluster().startDataOnlyNodes(1).get(0);
         ensureStableCluster(3);
-        client().admin()
+        client().admin()  
             .cluster()
             .prepareReroute()
-            .add(new MoveAllocationCommand(INDEX_NAME, 0, newPrimary, newNode))
+            .add(new MoveAllocationCommand(INDEX_NAME, 0, newPrimary, newNode))  
             .execute()
             .actionGet();
 
         ClusterHealthResponse clusterHealthResponse = client().admin()
             .cluster()
-            .prepareHealth()
+            .prepareHealth()  
             .setWaitForStatus(ClusterHealthStatus.GREEN)
             .setWaitForEvents(Priority.LANGUID)
-            .setWaitForNoRelocatingShards(true)
+            .setWaitForNoRelocatingShards(true)  
             .setTimeout(TimeValue.timeValueSeconds(10))
             .execute()
-            .actionGet();
+            .actionGet();  
         assertFalse(clusterHealthResponse.isTimedOut());
 
-        ex = assertThrows(
+        ex = assertThrows(  
             SearchPhaseExecutionException.class,
             () -> client(newPrimary).prepareSearch(INDEX_NAME).setSize(0).setPreference("_only_local").get()
-        );
+        );  
         assertEquals("all shards failed", ex.getMessage());
         assertHitCount(
-            client(newNode).prepareSearch(INDEX_NAME).setSize(0).setPreference("_only_local").get(),
+            client(newNode).prepareSearch(INDEX_NAME).setSize(0).setPreference("_only_local").get(),  
             docs + moreDocs + uncommittedOps
         );
-    }
+    }  
 
     // Test local only translog files which are not uploaded to remote store (no metadata present in remote)
-    // Without the cleanup change in RemoteFsTranslog.createEmptyTranslog, this test fails with NPE.
+    // Without the cleanup change in RemoteFsTranslog.createEmptyTranslog, this test fails with NPE.  
     public void testLocalOnlyTranslogCleanupOnNodeRestart() throws Exception {
         internalCluster().startClusterManagerOnlyNode();
-        String dataNode = internalCluster().startDataOnlyNode();
+        String dataNode = internalCluster().startDataOnlyNode();  
 
         // 1. Create index with 0 replica
-        createIndex(INDEX_NAME, remoteStoreIndexSettings(0, 10000L, -1));
+        createIndex(INDEX_NAME, remoteStoreIndexSettings(0, 10000L, -1));  
         ensureGreen(INDEX_NAME);
 
-        // 2. Index docs
+        // 2. Index docs  
         int searchableDocs = 0;
         for (int i = 0; i < randomIntBetween(1, 3); i++) {
-            indexBulk(INDEX_NAME, 15);
+            indexBulk(INDEX_NAME, 15);  
             refresh(INDEX_NAME);
             searchableDocs += 15;
-        }
+        }  
         indexBulk(INDEX_NAME, 15);
 
-        assertHitCount(client(dataNode).prepareSearch(INDEX_NAME).setSize(0).get(), searchableDocs);
+        assertHitCount(client(dataNode).prepareSearch(INDEX_NAME).setSize(0).get(), searchableDocs);  
 
         // 3. Delete metadata from remote translog
-        String translogPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_TRANSLOG_PATH_PREFIX.get(getNodeSettings());
+        String translogPathFixedPrefix = RemoteStoreSettings.CLUSTER_REMOTE_STORE_TRANSLOG_PATH_PREFIX.get(getNodeSettings());  
         String shardPath = getShardLevelBlobPath(
             client(),
-            INDEX_NAME,
+            INDEX_NAME,  
             getSegmentBasePath(),
             "0",
-            TRANSLOG,
+            TRANSLOG,  
             METADATA,
             translogPathFixedPrefix
-        ).buildAsString();
+        ).buildAsString();  
         delete(translogRepoPath, shardPath);
 
-        internalCluster().restartNode(dataNode);
+        internalCluster().restartNode(dataNode);  
         ensureGreen(INDEX_NAME);
 
-        // For remote store, it is possible that the refreshes gets triggered and the refreshed segments for last 15 docs are uploaded
+        // For remote store, it is possible that the refreshes gets triggered and the refreshed segments for last 15 docs are uploaded  
         MatcherAssert.assertThat(
             (int) client(dataNode).prepareSearch(INDEX_NAME).setSize(0).get().getHits().getTotalHits().value(),
-            is(oneOf(searchableDocs, searchableDocs + 15))
+            is(oneOf(searchableDocs, searchableDocs + 15))  
         );
         indexBulk(INDEX_NAME, 15);
-        refresh(INDEX_NAME);
+        refresh(INDEX_NAME);  
         MatcherAssert.assertThat(
             (int) client(dataNode).prepareSearch(INDEX_NAME).setSize(0).get().getHits().getTotalHits().value(),
-            is(oneOf(searchableDocs + 15, searchableDocs + 30))
+            is(oneOf(searchableDocs + 15, searchableDocs + 30))  
         );
     }
 
     public void testFlushOnTooManyRemoteTranslogFiles() throws Exception {
         internalCluster().startClusterManagerOnlyNode();
-        String datanode = internalCluster().startDataOnlyNodes(1).get(0);
+        String datanode = internalCluster().startDataOnlyNodes(1).get(0);  
         createIndex(INDEX_NAME, remoteStoreIndexSettings(0, 10000L, -1));
         ensureGreen(INDEX_NAME);
 
         ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
         updateSettingsRequest.persistentSettings(
-            Settings.builder()
+            Settings.builder()  
                 .put(RemoteStoreSettings.CLUSTER_REMOTE_MAX_TRANSLOG_READERS.getKey(), "100")
                 .put(CLUSTER_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.getKey(), "0ms")
-        );
+        );  
         assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
 
-        IndexShard indexShard = getIndexShard(datanode, INDEX_NAME);
+        IndexShard indexShard = getIndexShard(datanode, INDEX_NAME);  
         Path translogLocation = getTranslog(indexShard).location();
         assertFalse(indexShard.shouldPeriodicallyFlush());
 
         try (Stream<Path> files = Files.list(translogLocation)) {
             long totalFiles = files.filter(f -> f.getFileName().toString().endsWith(Translog.TRANSLOG_FILE_SUFFIX)).count();
-            assertEquals(totalFiles, 1L);
+            assertEquals(totalFiles, 1L);  
         }
 
-        // indexing 100 documents (100 bulk requests), no flush will be triggered yet
+        // indexing 100 documents (100 bulk requests), no flush will be triggered yet  
         for (int i = 0; i < 100; i++) {
             indexBulk(INDEX_NAME, 1);
-        }
+        }  
 
         try (Stream<Path> files = Files.list(translogLocation)) {
-            long totalFiles = files.filter(f -> f.getFileName().toString().endsWith(Translog.TRANSLOG_FILE_SUFFIX)).count();
+            long totalFiles = files.filter(f -> f.getFileName().toString().endsWith(Translog.TRANSLOG_FILE_SUFFIX)).count();  
             assertEquals(totalFiles, 101L);
         }
-        // Will flush and trim the translog readers
+        // Will flush and trim the translog readers  
         indexBulk(INDEX_NAME, 1);
 
-        assertBusy(() -> {
+        assertBusy(() -> {  
             try (Stream<Path> files = Files.list(translogLocation)) {
                 long totalFiles = files.filter(f -> f.getFileName().toString().endsWith(Translog.TRANSLOG_FILE_SUFFIX)).count();
-                assertEquals(totalFiles, 1L);
+                assertEquals(totalFiles, 1L);  
             }
         }, 30, TimeUnit.SECONDS);
 
         // Disabling max translog readers
         assertAcked(
-            internalCluster().client()
+            internalCluster().client()  
                 .admin()
                 .cluster()
-                .prepareUpdateSettings()
+                .prepareUpdateSettings()  
                 .setPersistentSettings(Settings.builder().put(RemoteStoreSettings.CLUSTER_REMOTE_MAX_TRANSLOG_READERS.getKey(), "-1"))
                 .get()
-        );
+        );  
 
         // Indexing 500 more docs
-        for (int i = 0; i < 500; i++) {
+        for (int i = 0; i < 500; i++) {  
             indexBulk(INDEX_NAME, 1);
         }
 
         // No flush is triggered since max_translog_readers is set to -1
         // Total tlog files would be incremented by 500
-        try (Stream<Path> files = Files.list(translogLocation)) {
+        try (Stream<Path> files = Files.list(translogLocation)) {  
             long totalFiles = files.filter(f -> f.getFileName().toString().endsWith(Translog.TRANSLOG_FILE_SUFFIX)).count();
             assertEquals(totalFiles, 501L);
-        }
+        }  
     }
 
-    public void testAsyncTranslogDurabilityRestrictionsThroughIdxTemplates() throws Exception {
+    public void testAsyncTranslogDurabilityRestrictionsThroughIdxTemplates() throws Exception {  
         logger.info("Starting up cluster manager with cluster.remote_store.index.restrict.async-durability set to true");
         String cm1 = internalCluster().startClusterManagerOnlyNode(
-            Settings.builder().put(IndicesService.CLUSTER_REMOTE_INDEX_RESTRICT_ASYNC_DURABILITY_SETTING.getKey(), true).build()
+            Settings.builder().put(IndicesService.CLUSTER_REMOTE_INDEX_RESTRICT_ASYNC_DURABILITY_SETTING.getKey(), true).build()  
         );
         internalCluster().startDataOnlyNode();
-        ensureStableCluster(2);
+        ensureStableCluster(2);  
         assertThrows(
             IllegalArgumentException.class,
-            () -> internalCluster().client()
+            () -> internalCluster().client()  
                 .admin()
                 .indices()
-                .preparePutTemplate("test")
+                .preparePutTemplate("test")  
                 .setPatterns(Arrays.asList("test*"))
                 .setSettings(Settings.builder().put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), "async"))
-                .get()
+                .get()  
         );
         logger.info("Starting up another cluster manager with cluster.remote_store.index.restrict.async-durability set to false");
-        internalCluster().startClusterManagerOnlyNode(
+        internalCluster().startClusterManagerOnlyNode(  
             Settings.builder().put(IndicesService.CLUSTER_REMOTE_INDEX_RESTRICT_ASYNC_DURABILITY_SETTING.getKey(), false).build()
         );
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(cm1));
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(cm1));  
         ensureStableCluster(2);
         assertAcked(
-            internalCluster().client()
+            internalCluster().client()  
                 .admin()
                 .indices()
-                .preparePutTemplate("test")
+                .preparePutTemplate("test")  
                 .setPatterns(Arrays.asList("test*"))
                 .setSettings(Settings.builder().put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), "async"))
-                .get()
+                .get()  
         );
     }
 
     public void testCloseIndexWithNoOpSyncAndFlushForSyncTranslog() throws InterruptedException {
         internalCluster().startNodes(3);
-        client().admin()
+        client().admin()  
             .cluster()
             .prepareUpdateSettings()
-            .setTransientSettings(Settings.builder().put(CLUSTER_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.getKey(), "5s"))
+            .setTransientSettings(Settings.builder().put(CLUSTER_REMOTE_TRANSLOG_BUFFER_INTERVAL_SETTING.getKey(), "5s"))  
             .get();
         Settings.Builder settings = Settings.builder()
-            .put(remoteStoreIndexSettings(0, 10000L, -1))
+            .put(remoteStoreIndexSettings(0, 10000L, -1))  
             .put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), "1s");
         createIndex(INDEX_NAME, settings.build());
-        CountDownLatch latch = new CountDownLatch(1);
+        CountDownLatch latch = new CountDownLatch(1);  
         new Thread(() -> {
             if (randomBoolean()) {
-                for (int i = 0; i < randomIntBetween(1, 5); i++) {
+                for (int i = 0; i < randomIntBetween(1, 5); i++) {  
                     indexSingleDoc(INDEX_NAME);
                 }
-                flushAndRefresh(INDEX_NAME);
+                flushAndRefresh(INDEX_NAME);  
             }
             // Index single doc to start the asyn io processor to run which will lead to 10s wait time before the next sync.
-            indexSingleDoc(INDEX_NAME);
+            indexSingleDoc(INDEX_NAME);  
             // Reduce the latch for the main thread to flush after some sleep.
             latch.countDown();
-            // Index another doc and in this case the flush would have happened before the sync.
+            // Index another doc and in this case the flush would have happened before the sync.  
             indexSingleDoc(INDEX_NAME);
         }).start();
-        // Wait for atleast one doc to be ingested.
+        // Wait for atleast one doc to be ingested.  
         latch.await();
         // Sleep for some time for the next doc to be present in lucene buffer. If flush happens first before the doc #2
-        // gets indexed, then it goes into the happy case where the close index happens succefully.
+        // gets indexed, then it goes into the happy case where the close index happens succefully.  
         Thread.sleep(1000);
         // Flush so that the subsequent sync or flushes are no-op.
-        flush(INDEX_NAME);
+        flush(INDEX_NAME);  
         // Closing the index involves translog.sync and shard.flush which are now no-op.
         client().admin().indices().close(Requests.closeIndexRequest(INDEX_NAME)).actionGet();
-        Thread.sleep(10000);
+        Thread.sleep(10000);  
         ensureGreen(INDEX_NAME);
     }
 
     public void testCloseIndexWithNoOpSyncAndFlushForAsyncTranslog() throws InterruptedException {
         internalCluster().startNodes(3);
-        Settings.Builder settings = Settings.builder()
+        Settings.Builder settings = Settings.builder()  
             .put(remoteStoreIndexSettings(0, 10000L, -1))
             .put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), "1s")
-            .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Durability.ASYNC)
+            .put(IndexSettings.INDEX_TRANSLOG_DURABILITY_SETTING.getKey(), Durability.ASYNC)  
             .put(IndexSettings.INDEX_TRANSLOG_SYNC_INTERVAL_SETTING.getKey(), "10s");
         createIndex(INDEX_NAME, settings.build());
-        CountDownLatch latch = new CountDownLatch(1);
+        CountDownLatch latch = new CountDownLatch(1);  
         new Thread(() -> {
             // Index some docs to start the asyn io processor to run which will lead to 10s wait time before the next sync.
+            indexSingleDoc(INDEX_NAME);  
             indexSingleDoc(INDEX_NAME);
             indexSingleDoc(INDEX_NAME);
-            indexSingleDoc(INDEX_NAME);
-            // Reduce the latch for the main thread to flush after some sleep.
+            // Reduce the latch for the main thread to flush after some sleep.  
             latch.countDown();
         }).start();
-        // Wait for atleast one doc to be ingested.
+        // Wait for atleast one doc to be ingested.  
         latch.await();
         // Flush so that the subsequent sync or flushes are no-op.
-        flush(INDEX_NAME);
+        flush(INDEX_NAME);  
         // Closing the index involves translog.sync and shard.flush which are now no-op.
         client().admin().indices().close(Requests.closeIndexRequest(INDEX_NAME)).actionGet();
-        Thread.sleep(10000);
+        Thread.sleep(10000);  
         ensureGreen(INDEX_NAME);
     }
 
     public void testSuccessfulShallowV1SnapshotPostIndexClose() throws Exception {
         internalCluster().startClusterManagerOnlyNode();
-        String dataNode = internalCluster().startDataOnlyNodes(1).get(0);
+        String dataNode = internalCluster().startDataOnlyNodes(1).get(0);  
         createIndex(INDEX_NAME, remoteStoreIndexSettings(0, 10000L, -1));
         ensureGreen(INDEX_NAME);
 
@@ -1393,67 +1393,67 @@ public class RemoteStoreCoreTestCase extends RemoteStoreBaseIntegTestCase {
 
         assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
 
-        logger.info("Create shallow snapshot setting enabled repo");
+        logger.info("Create shallow snapshot setting enabled repo");  
         String shallowSnapshotRepoName = "shallow-snapshot-repo-name";
         Path shallowSnapshotRepoPath = randomRepoPath();
-        Settings.Builder settings = Settings.builder()
+        Settings.Builder settings = Settings.builder()  
             .put("location", shallowSnapshotRepoPath)
             .put(BlobStoreRepository.REMOTE_STORE_INDEX_SHALLOW_COPY.getKey(), Boolean.TRUE);
-        createRepository(shallowSnapshotRepoName, "fs", settings);
+        createRepository(shallowSnapshotRepoName, "fs", settings);  
 
         for (int i = 0; i < 3; i++) {
-            indexBulk(INDEX_NAME, 1);
+            indexBulk(INDEX_NAME, 1);  
         }
         flushAndRefresh(INDEX_NAME);
 
         logger.info("Verify shallow snapshot created before close");
         final String snapshot1 = "snapshot1";
-        SnapshotInfo snapshotInfo1 = internalCluster().client()
+        SnapshotInfo snapshotInfo1 = internalCluster().client()  
             .admin()
             .cluster()
-            .prepareCreateSnapshot(shallowSnapshotRepoName, snapshot1)
+            .prepareCreateSnapshot(shallowSnapshotRepoName, snapshot1)  
             .setIndices(INDEX_NAME)
             .setWaitForCompletion(true)
-            .get()
+            .get()  
             .getSnapshotInfo();
 
-        assertEquals(SnapshotState.SUCCESS, snapshotInfo1.state());
+        assertEquals(SnapshotState.SUCCESS, snapshotInfo1.state());  
         assertTrue(snapshotInfo1.successfulShards() > 0);
         assertEquals(0, snapshotInfo1.failedShards());
 
         for (int i = 0; i < 3; i++) {
             indexBulk(INDEX_NAME, 1);
-        }
+        }  
 
         // close index
-        client().admin().indices().close(Requests.closeIndexRequest(INDEX_NAME)).actionGet();
+        client().admin().indices().close(Requests.closeIndexRequest(INDEX_NAME)).actionGet();  
         Thread.sleep(1000);
         logger.info("Verify shallow snapshot created after close");
-        final String snapshot2 = "snapshot2";
+        final String snapshot2 = "snapshot2";  
 
         SnapshotInfo snapshotInfo2 = internalCluster().client()
-            .admin()
+            .admin()  
             .cluster()
             .prepareCreateSnapshot(shallowSnapshotRepoName, snapshot2)
-            .setIndices(INDEX_NAME)
+            .setIndices(INDEX_NAME)  
             .setWaitForCompletion(true)
             .get()
-            .getSnapshotInfo();
+            .getSnapshotInfo();  
 
         assertEquals(SnapshotState.SUCCESS, snapshotInfo2.state());
-        assertTrue(snapshotInfo2.successfulShards() > 0);
+        assertTrue(snapshotInfo2.successfulShards() > 0);  
         assertEquals(0, snapshotInfo2.failedShards());
 
-        // delete the index
+        // delete the index  
         cluster().wipeIndices(INDEX_NAME);
         // try restoring the snapshot
-        RestoreSnapshotResponse restoreSnapshotResponse = clusterAdmin().prepareRestoreSnapshot(shallowSnapshotRepoName, snapshot2)
+        RestoreSnapshotResponse restoreSnapshotResponse = clusterAdmin().prepareRestoreSnapshot(shallowSnapshotRepoName, snapshot2)  
             .setWaitForCompletion(true)
             .execute()
-            .actionGet();
+            .actionGet();  
         assertThat(restoreSnapshotResponse.getRestoreInfo().totalShards(), greaterThan(0));
         ensureGreen(INDEX_NAME);
-        flushAndRefresh(INDEX_NAME);
+        flushAndRefresh(INDEX_NAME);  
         assertBusy(() -> { assertHitCount(client(dataNode).prepareSearch(INDEX_NAME).setSize(0).get(), 6); });
     }
-}
+}  

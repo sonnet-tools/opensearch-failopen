@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.index.engine.dataformat;
 
@@ -16,97 +16,97 @@ import java.util.List;
 
 /**
  * Immutable input data for a refresh operation, containing existing segments and writer files.
- * Use {@link Builder} to construct instances.
+ * Use {@link Builder} to construct instances.  
  *
  * @opensearch.experimental
- */
+ */  
 @ExperimentalApi
 public record RefreshInput(List<Segment> existingSegments, List<Segment> writerFiles, long nextAvailableGeneration,
-    boolean deletesApplied) {
+    boolean deletesApplied) {  
 
     /** Sentinel indicating no spare generation was allocated. */
-    public static final long NO_GENERATION = -1L;
+    public static final long NO_GENERATION = -1L;  
 
     public RefreshInput(List<Segment> existingSegments, List<Segment> writerFiles) {
-        this(existingSegments, writerFiles, NO_GENERATION, false);
+        this(existingSegments, writerFiles, NO_GENERATION, false);  
     }
 
-    public RefreshInput {
+    public RefreshInput {  
         existingSegments = List.copyOf(existingSegments);
         writerFiles = List.copyOf(writerFiles);
-    }
+    }  
 
     /**
-     * Whether a spare generation is available for engines that want to merge
+     * Whether a spare generation is available for engines that want to merge  
      * multiple writer files into a single segment during refresh.
      * The engine decides whether to actually use it.
-     */
+     */  
     public boolean hasNextGeneration() {
         return nextAvailableGeneration > 0 && writerFiles.size() > 1;
-    }
+    }  
 
     /**
-     * Returns a new builder for constructing {@link RefreshInput} instances.
+     * Returns a new builder for constructing {@link RefreshInput} instances.  
      *
      * @return a new builder
-     */
+     */  
     public static Builder builder() {
         return new Builder();
-    }
+    }  
 
     /**
-     * Builder for {@link RefreshInput}.
+     * Builder for {@link RefreshInput}.  
      */
     @ExperimentalApi
-    public static class Builder {
+    public static class Builder {  
         private List<Segment> existingSegments = new ArrayList<>();
         private List<Segment> segments = new ArrayList<>();
-        private long nextAvailableGeneration = NO_GENERATION;
+        private long nextAvailableGeneration = NO_GENERATION;  
         private boolean deletesApplied = false;
 
-        private Builder() {}
+        private Builder() {}  
 
         /**
-         * Sets the existing segments.
+         * Sets the existing segments.  
          *
          * @param existingSegments the list of existing segments
-         * @return this builder
+         * @return this builder  
          */
         public Builder existingSegments(List<Segment> existingSegments) {
-            this.existingSegments = new ArrayList<>(existingSegments);
+            this.existingSegments = new ArrayList<>(existingSegments);  
             return this;
         }
 
         /**
          * Adds a writer file set.
-         *
+         *  
          * @param segment the segment set to add
          * @return this builder
-         */
+         */  
         public Builder addSegment(Segment segment) {
             this.segments.add(segment);
-            return this;
+            return this;  
         }
 
-        /**
+        /**  
          * Sets the next available generation that the engine may use if it decides
          * to merge writer files during refresh.
-         */
+         */  
         public Builder nextAvailableGeneration(long generation) {
             this.nextAvailableGeneration = generation;
-            return this;
+            return this;  
         }
 
-        /**
+        /**  
          * Sets whether this refresh cycle applied any delete.
          */
-        public Builder deletesApplied(boolean deletesApplied) {
+        public Builder deletesApplied(boolean deletesApplied) {  
             this.deletesApplied = deletesApplied;
             return this;
-        }
+        }  
 
         public RefreshInput build() {
-            return new RefreshInput(existingSegments, segments, nextAvailableGeneration, deletesApplied);
+            return new RefreshInput(existingSegments, segments, nextAvailableGeneration, deletesApplied);  
         }
     }
-}
+}  

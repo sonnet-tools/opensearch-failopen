@@ -1,40 +1,40 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.script.mustache;
 
 import org.opensearch.action.search.TransportSearchAction;
 import org.opensearch.action.support.ActionFilters;
-import org.opensearch.common.inject.Inject;
+import org.opensearch.common.inject.Inject;  
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.script.ScriptService;
-import org.opensearch.transport.TransportService;
+import org.opensearch.transport.TransportService;  
 import org.opensearch.transport.client.node.NodeClient;
 
-public class TransportRenderSearchTemplateAction extends TransportSearchTemplateAction {
+public class TransportRenderSearchTemplateAction extends TransportSearchTemplateAction {  
 
     @Inject
-    public TransportRenderSearchTemplateAction(
+    public TransportRenderSearchTemplateAction(  
         TransportService transportService,
         ActionFilters actionFilters,
-        ScriptService scriptService,
+        ScriptService scriptService,  
         NamedXContentRegistry xContentRegistry,
         NodeClient client,
-        TransportSearchAction transportSearchAction
+        TransportSearchAction transportSearchAction  
     ) {
         super(
-            RenderSearchTemplateAction.NAME,
+            RenderSearchTemplateAction.NAME,  
             transportService,
             actionFilters,
-            scriptService,
+            scriptService,  
             xContentRegistry,
             client,
-            transportSearchAction
+            transportSearchAction  
         );
     }
-}
+}  

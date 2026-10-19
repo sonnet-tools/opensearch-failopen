@@ -1,122 +1,122 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.grok;
 
 import org.opensearch.grok.GrokCaptureConfig.NativeExtracterMap;
 
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.StandardCharsets;  
 import java.util.function.Consumer;
 
-import org.joni.Region;
+import org.joni.Region;  
 
 /**
- * The type defined for the field in the pattern.
+ * The type defined for the field in the pattern.  
  */
 enum GrokCaptureType {
-    STRING {
+    STRING {  
         @Override
         <T> T nativeExtracter(int[] backRefs, NativeExtracterMap<T> map) {
-            return map.forString(emit -> rawExtracter(backRefs, emit));
+            return map.forString(emit -> rawExtracter(backRefs, emit));  
         }
     },
-    INTEGER {
+    INTEGER {  
         @Override
         <T> T nativeExtracter(int[] backRefs, NativeExtracterMap<T> map) {
-            return map.forInt(emit -> rawExtracter(backRefs, str -> emit.accept(Integer.parseInt(str))));
+            return map.forInt(emit -> rawExtracter(backRefs, str -> emit.accept(Integer.parseInt(str))));  
         }
     },
-    LONG {
+    LONG {  
         @Override
         <T> T nativeExtracter(int[] backRefs, NativeExtracterMap<T> map) {
-            return map.forLong(emit -> rawExtracter(backRefs, str -> emit.accept(Long.parseLong(str))));
+            return map.forLong(emit -> rawExtracter(backRefs, str -> emit.accept(Long.parseLong(str))));  
         }
     },
-    FLOAT {
+    FLOAT {  
         @Override
         <T> T nativeExtracter(int[] backRefs, NativeExtracterMap<T> map) {
-            return map.forFloat(emit -> rawExtracter(backRefs, str -> emit.accept(Float.parseFloat(str))));
+            return map.forFloat(emit -> rawExtracter(backRefs, str -> emit.accept(Float.parseFloat(str))));  
         }
     },
-    DOUBLE {
+    DOUBLE {  
         @Override
         <T> T nativeExtracter(int[] backRefs, NativeExtracterMap<T> map) {
-            return map.forDouble(emit -> rawExtracter(backRefs, str -> emit.accept(Double.parseDouble(str))));
+            return map.forDouble(emit -> rawExtracter(backRefs, str -> emit.accept(Double.parseDouble(str))));  
         }
     },
-    BOOLEAN {
+    BOOLEAN {  
         @Override
         <T> T nativeExtracter(int[] backRefs, NativeExtracterMap<T> map) {
-            return map.forBoolean(emit -> rawExtracter(backRefs, str -> emit.accept(Boolean.parseBoolean(str))));
+            return map.forBoolean(emit -> rawExtracter(backRefs, str -> emit.accept(Boolean.parseBoolean(str))));  
         }
     };
 
     abstract <T> T nativeExtracter(int[] backRefs, NativeExtracterMap<T> map);
 
-    static GrokCaptureType fromString(String str) {
+    static GrokCaptureType fromString(String str) {  
         switch (str) {
             case "string":
-                return STRING;
+                return STRING;  
             case "int":
                 return INTEGER;
-            case "long":
+            case "long":  
                 return LONG;
             case "float":
-                return FLOAT;
+                return FLOAT;  
             case "double":
                 return DOUBLE;
-            case "boolean":
+            case "boolean":  
                 return BOOLEAN;
             default:
-                return STRING;
+                return STRING;  
         }
     }
 
     protected final GrokCaptureExtracter rawExtracter(int[] backRefs, Consumer<? super String> emit) {
         return new GrokCaptureExtracter() {
-            @Override
+            @Override  
             void extract(byte[] utf8Bytes, int offset, Region region, boolean captureAllMatches) {
                 for (int number : backRefs) {
-                    if (region.getBeg(number) >= 0) {
+                    if (region.getBeg(number) >= 0) {  
                         int matchOffset = offset + region.getBeg(number);
                         int matchLength = region.getEnd(number) - region.getBeg(number);
-                        emit.accept(new String(utf8Bytes, matchOffset, matchLength, StandardCharsets.UTF_8));
+                        emit.accept(new String(utf8Bytes, matchOffset, matchLength, StandardCharsets.UTF_8));  
                         // return the first match value if captureAllMatches is false, else continue to capture all values
                         if (!captureAllMatches) {
-                            return;
+                            return;  
                         }
                     }
-                }
+                }  
             }
         };
-    }
+    }  
 }

@@ -1,84 +1,84 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.dsl;
 
 import org.apache.lucene.tests.util.LuceneTestCase.AwaitsFix;
 import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.index.query.QueryBuilders;  
 import org.opensearch.search.builder.SearchSourceBuilder;
 
-/**
+/**  
  * Integration tests for wildcard query delegation to Lucene via WILDCARD_QUERY_DSL RexCall.
  */
-@AwaitsFix(bugUrl = "DSL query pipeline not fully wired E2E: fragment conversion, shard execution and Arrow Flight drain pending")
+@AwaitsFix(bugUrl = "DSL query pipeline not fully wired E2E: fragment conversion, shard execution and Arrow Flight drain pending")  
 public class DslWildcardQueryIT extends DslIntegTestBase {
 
-    @Override
+    @Override  
     protected void createTestIndex() {
         createIndex(INDEX);
-        ensureGreen();
+        ensureGreen();  
 
         client().prepareIndex(INDEX)
-            .setId("1")
+            .setId("1")  
             .setSource("{\"name\":\"laptop\",\"model\":\"MacBook Pro\",\"sku\":\"MB-2021-001\"}", XContentType.JSON)
             .get();
-        client().prepareIndex(INDEX)
+        client().prepareIndex(INDEX)  
             .setId("2")
             .setSource("{\"name\":\"phone\",\"model\":\"Galaxy S21\",\"sku\":\"GS-2021-002\"}", XContentType.JSON)
-            .get();
+            .get();  
         client().prepareIndex(INDEX)
             .setId("3")
-            .setSource("{\"name\":\"tablet\",\"model\":\"iPad Air\",\"sku\":\"IP-2020-003\"}", XContentType.JSON)
+            .setSource("{\"name\":\"tablet\",\"model\":\"iPad Air\",\"sku\":\"IP-2020-003\"}", XContentType.JSON)  
             .get();
         refresh(INDEX);
-    }
+    }  
 
     public void testWildcardWithAsterisk() {
-        createTestIndex();
+        createTestIndex();  
         assertOk(search(new SearchSourceBuilder().query(QueryBuilders.wildcardQuery("name", "lap*"))));
     }
 
     public void testWildcardWithQuestionMark() {
         createTestIndex();
-        assertOk(search(new SearchSourceBuilder().query(QueryBuilders.wildcardQuery("name", "p?one"))));
+        assertOk(search(new SearchSourceBuilder().query(QueryBuilders.wildcardQuery("name", "p?one"))));  
     }
 
-    public void testWildcardWithBothWildcards() {
+    public void testWildcardWithBothWildcards() {  
         createTestIndex();
         assertOk(search(new SearchSourceBuilder().query(QueryBuilders.wildcardQuery("model", "?acBook*"))));
-    }
+    }  
 
     public void testWildcardCaseInsensitive() {
-        createTestIndex();
+        createTestIndex();  
         assertOk(search(new SearchSourceBuilder().query(QueryBuilders.wildcardQuery("model", "MACBOOK*").caseInsensitive(true))));
     }
 
     public void testWildcardWithMultipleAsterisks() {
         createTestIndex();
-        assertOk(search(new SearchSourceBuilder().query(QueryBuilders.wildcardQuery("sku", "*-2021-*"))));
+        assertOk(search(new SearchSourceBuilder().query(QueryBuilders.wildcardQuery("sku", "*-2021-*"))));  
     }
 
-    public void testWildcardMatchAll() {
+    public void testWildcardMatchAll() {  
         createTestIndex();
         assertOk(search(new SearchSourceBuilder().query(QueryBuilders.wildcardQuery("name", "*"))));
-    }
+    }  
 
     public void testWildcardInBoolQuery() {
-        createTestIndex();
+        createTestIndex();  
         assertOk(
             search(
-                new SearchSourceBuilder().query(
+                new SearchSourceBuilder().query(  
                     QueryBuilders.boolQuery()
                         .must(QueryBuilders.wildcardQuery("name", "lap*"))
-                        .should(QueryBuilders.wildcardQuery("model", "*Pro"))
+                        .should(QueryBuilders.wildcardQuery("model", "*Pro"))  
                 )
             )
-        );
+        );  
     }
 }

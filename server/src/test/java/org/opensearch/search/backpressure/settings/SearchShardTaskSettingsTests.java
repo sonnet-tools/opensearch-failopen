@@ -1,73 +1,73 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.search.backpressure.settings;
 
 import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.test.OpenSearchTestCase;  
 
 /**
- * Unit tests covering the native-memory threshold settings added to
+ * Unit tests covering the native-memory threshold settings added to  
  * {@link SearchShardTaskSettings}.
  */
-public class SearchShardTaskSettingsTests extends OpenSearchTestCase {
+public class SearchShardTaskSettingsTests extends OpenSearchTestCase {  
 
     public void testDefaultNativeMemoryPercentThresholdMatchesDefaults() {
-        // Production default: a small non-zero fraction so the tracker engages once a backend
+        // Production default: a small non-zero fraction so the tracker engages once a backend  
         // installs a non-zero budget. Test pinned to the same value as Defaults.NATIVE_MEMORY_PERCENT_THRESHOLD
         // so a default change here trips this assertion deliberately.
-        SearchShardTaskSettings settings = new SearchShardTaskSettings(
+        SearchShardTaskSettings settings = new SearchShardTaskSettings(  
             Settings.EMPTY,
             new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
-        );
+        );  
         assertEquals(0.05d, settings.getNativeMemoryPercentThreshold(), 0.0d);
     }
 
     public void testInitialNativeMemoryPercentThresholdRespectsSetting() {
         double fractionThreshold = 0.6d;
-        Settings raw = Settings.builder()
+        Settings raw = Settings.builder()  
             .put(SearchShardTaskSettings.SETTING_NATIVE_MEMORY_PERCENT_THRESHOLD.getKey(), fractionThreshold)
             .build();
-        SearchShardTaskSettings settings = new SearchShardTaskSettings(
+        SearchShardTaskSettings settings = new SearchShardTaskSettings(  
             raw,
             new ClusterSettings(raw, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
-        );
+        );  
         assertEquals(fractionThreshold, settings.getNativeMemoryPercentThreshold(), 0.0d);
     }
 
     public void testNativeMemoryPercentThresholdIsDynamic() {
         ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        SearchShardTaskSettings settings = new SearchShardTaskSettings(Settings.EMPTY, clusterSettings);
+        SearchShardTaskSettings settings = new SearchShardTaskSettings(Settings.EMPTY, clusterSettings);  
         clusterSettings.applySettings(
             Settings.builder().put(SearchShardTaskSettings.SETTING_NATIVE_MEMORY_PERCENT_THRESHOLD.getKey(), 0.25d).build()
-        );
+        );  
         assertEquals(0.25d, settings.getNativeMemoryPercentThreshold(), 0.0d);
     }
 
     public void testNativeMemoryPercentThresholdRejectsOutOfRange() {
         Settings raw = Settings.builder().put(SearchShardTaskSettings.SETTING_NATIVE_MEMORY_PERCENT_THRESHOLD.getKey(), 2.0d).build();
-        expectThrows(
+        expectThrows(  
             IllegalArgumentException.class,
             () -> new SearchShardTaskSettings(raw, new ClusterSettings(raw, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS))
-        );
+        );  
 
         Settings raw2 = Settings.builder().put(SearchShardTaskSettings.SETTING_NATIVE_MEMORY_PERCENT_THRESHOLD.getKey(), -0.5d).build();
-        expectThrows(
+        expectThrows(  
             IllegalArgumentException.class,
             () -> new SearchShardTaskSettings(raw2, new ClusterSettings(raw2, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS))
-        );
+        );  
     }
 
-    public void testHeapMovingAverageWindowSizeZeroRejectedAtValidation() {
+    public void testHeapMovingAverageWindowSizeZeroRejectedAtValidation() {  
         // A window size of 0 (or negative) makes the moving average reject a zero window at apply time; the parser lower
         // bound now rejects it at settings-update validation time instead.
-        ClusterSettings cs = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+        ClusterSettings cs = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);  
         Settings zero = Settings.builder().put(SearchShardTaskSettings.SETTING_HEAP_MOVING_AVERAGE_WINDOW_SIZE.getKey(), 0).build();
         expectThrows(IllegalArgumentException.class, () -> cs.validate(zero, true));
 
@@ -76,6 +76,6 @@ public class SearchShardTaskSettingsTests extends OpenSearchTestCase {
 
         // 1 is the smallest valid window and must be accepted.
         Settings one = Settings.builder().put(SearchShardTaskSettings.SETTING_HEAP_MOVING_AVERAGE_WINDOW_SIZE.getKey(), 1).build();
-        cs.validate(one, true);
+        cs.validate(one, true);  
     }
 }

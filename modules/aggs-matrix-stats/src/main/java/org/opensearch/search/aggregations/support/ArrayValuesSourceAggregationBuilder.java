@@ -1,52 +1,52 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 /*
- * Modifications Copyright OpenSearch Contributors. See
+ * Modifications Copyright OpenSearch Contributors. See  
  * GitHub history for details.
  */
 
 package org.opensearch.search.aggregations.support;
 
-import org.opensearch.core.ParseField;
+import org.opensearch.core.ParseField;  
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.xcontent.XContentBuilder;  
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.search.aggregations.AbstractAggregationBuilder;
-import org.opensearch.search.aggregations.AggregationInitializationException;
+import org.opensearch.search.aggregations.AggregationInitializationException;  
 import org.opensearch.search.aggregations.AggregatorFactories;
 import org.opensearch.search.aggregations.AggregatorFactories.Builder;
-import org.opensearch.search.aggregations.AggregatorFactory;
+import org.opensearch.search.aggregations.AggregatorFactory;  
 
 import java.io.IOException;
-import java.util.ArrayList;
+import java.util.ArrayList;  
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
+import java.util.List;  
 import java.util.Map;
 import java.util.Objects;
 
@@ -55,230 +55,230 @@ public abstract class ArrayValuesSourceAggregationBuilder<AB extends ArrayValues
 
     public static final ParseField MULTIVALUE_MODE_FIELD = new ParseField("mode");
 
-    public abstract static class LeafOnly<AB extends ArrayValuesSourceAggregationBuilder<AB>> extends ArrayValuesSourceAggregationBuilder<
+    public abstract static class LeafOnly<AB extends ArrayValuesSourceAggregationBuilder<AB>> extends ArrayValuesSourceAggregationBuilder<  
         AB> {
 
-        protected LeafOnly(String name) {
+        protected LeafOnly(String name) {  
             super(name);
         }
 
         protected LeafOnly(LeafOnly<AB> clone, Builder factoriesBuilder, Map<String, Object> metadata) {
             super(clone, factoriesBuilder, metadata);
-            if (factoriesBuilder.count() > 0) {
+            if (factoriesBuilder.count() > 0) {  
                 throw new AggregationInitializationException(
                     "Aggregator [" + name + "] of type [" + getType() + "] cannot accept sub-aggregations"
-                );
+                );  
             }
         }
 
         /**
          * Read from a stream
-         */
+         */  
         protected LeafOnly(StreamInput in) throws IOException {
             super(in);
-        }
+        }  
 
         @Override
-        public AB subAggregations(Builder subFactories) {
+        public AB subAggregations(Builder subFactories) {  
             throw new AggregationInitializationException(
                 "Aggregator [" + name + "] of type [" + getType() + "] cannot accept sub-aggregations"
-            );
+            );  
         }
 
-        @Override
+        @Override  
         public final BucketCardinality bucketCardinality() {
             return BucketCardinality.NONE;
-        }
+        }  
     }
 
-    private List<String> fields = Collections.emptyList();
+    private List<String> fields = Collections.emptyList();  
     /* The parser doesn't support setting userValueTypeHint (aka valueType), but we do serialize and deserialize it, so keeping it around
     for now so as to not break BWC.  Future refactors should feel free to remove this field. --Tozzi 2020-01-16
-     */
+     */  
     private ValueType userValueTypeHint = null;
     private String format = null;
-    private Object missing = null;
+    private Object missing = null;  
     private Map<String, Object> missingMap = Collections.emptyMap();
 
-    protected ArrayValuesSourceAggregationBuilder(String name) {
+    protected ArrayValuesSourceAggregationBuilder(String name) {  
         super(name);
     }
 
     protected ArrayValuesSourceAggregationBuilder(
         ArrayValuesSourceAggregationBuilder<AB> clone,
-        Builder factoriesBuilder,
+        Builder factoriesBuilder,  
         Map<String, Object> metadata
     ) {
-        super(clone, factoriesBuilder, metadata);
+        super(clone, factoriesBuilder, metadata);  
         this.fields = new ArrayList<>(clone.fields);
         this.userValueTypeHint = clone.userValueTypeHint;
-        this.format = clone.format;
+        this.format = clone.format;  
         this.missingMap = new HashMap<>(clone.missingMap);
         this.missing = clone.missing;
-    }
+    }  
 
     protected ArrayValuesSourceAggregationBuilder(StreamInput in) throws IOException {
-        super(in);
+        super(in);  
         read(in);
     }
 
     /**
      * Read from a stream.
-     */
+     */  
     @SuppressWarnings("unchecked")
     private void read(StreamInput in) throws IOException {
-        fields = (ArrayList<String>) in.readGenericValue();
+        fields = (ArrayList<String>) in.readGenericValue();  
         userValueTypeHint = in.readOptionalWriteable(ValueType::readFromStream);
         format = in.readOptionalString();
-        missingMap = in.readMap();
+        missingMap = in.readMap();  
     }
 
-    @Override
+    @Override  
     protected final void doWriteTo(StreamOutput out) throws IOException {
         out.writeGenericValue(fields);
-        out.writeOptionalWriteable(userValueTypeHint);
+        out.writeOptionalWriteable(userValueTypeHint);  
         out.writeOptionalString(format);
         out.writeMap(missingMap);
-        innerWriteTo(out);
+        innerWriteTo(out);  
     }
 
-    /**
+    /**  
      * Write subclass' state to the stream
      */
-    protected abstract void innerWriteTo(StreamOutput out) throws IOException;
+    protected abstract void innerWriteTo(StreamOutput out) throws IOException;  
 
     /**
-     * Sets the field to use for this aggregation.
+     * Sets the field to use for this aggregation.  
      */
     @SuppressWarnings("unchecked")
-    public AB fields(List<String> fields) {
+    public AB fields(List<String> fields) {  
         if (fields == null) {
             throw new IllegalArgumentException("[field] must not be null: [" + name + "]");
-        }
+        }  
         this.fields = fields;
         return (AB) this;
-    }
+    }  
 
     /**
-     * Gets the field to use for this aggregation.
+     * Gets the field to use for this aggregation.  
      */
     public List<String> fields() {
-        return fields;
+        return fields;  
     }
 
-    /**
+    /**  
      * Sets the format to use for the output of the aggregation.
      */
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings("unchecked")  
     public AB format(String format) {
         if (format == null) {
-            throw new IllegalArgumentException("[format] must not be null: [" + name + "]");
+            throw new IllegalArgumentException("[format] must not be null: [" + name + "]");  
         }
         this.format = format;
-        return (AB) this;
+        return (AB) this;  
     }
 
-    /**
+    /**  
      * Gets the format to use for the output of the aggregation.
      */
-    public String format() {
+    public String format() {  
         return format;
     }
 
     /**
      * Sets the value to use when the aggregation finds a missing value in a
-     * document
+     * document  
      */
     @SuppressWarnings("unchecked")
-    public AB missingMap(Map<String, Object> missingMap) {
+    public AB missingMap(Map<String, Object> missingMap) {  
         if (missingMap == null) {
             throw new IllegalArgumentException("[missing] must not be null: [" + name + "]");
-        }
+        }  
         this.missingMap = missingMap;
         return (AB) this;
-    }
+    }  
 
     /**
-     * Gets the value to use when the aggregation finds a missing value in a
+     * Gets the value to use when the aggregation finds a missing value in a  
      * document
      */
-    public Map<String, Object> missingMap() {
+    public Map<String, Object> missingMap() {  
         return missingMap;
     }
 
     @Override
     protected final ArrayValuesSourceAggregatorFactory doBuild(
-        QueryShardContext queryShardContext,
+        QueryShardContext queryShardContext,  
         AggregatorFactory parent,
         Builder subFactoriesBuilder
-    ) throws IOException {
+    ) throws IOException {  
         Map<String, ValuesSourceConfig> configs = resolveConfig(queryShardContext);
         ArrayValuesSourceAggregatorFactory factory = innerBuild(queryShardContext, configs, parent, subFactoriesBuilder);
-        return factory;
+        return factory;  
     }
 
-    protected Map<String, ValuesSourceConfig> resolveConfig(QueryShardContext queryShardContext) {
+    protected Map<String, ValuesSourceConfig> resolveConfig(QueryShardContext queryShardContext) {  
         HashMap<String, ValuesSourceConfig> configs = new HashMap<>();
         for (String field : fields) {
-            ValuesSourceConfig config = ValuesSourceConfig.resolveUnregistered(
+            ValuesSourceConfig config = ValuesSourceConfig.resolveUnregistered(  
                 queryShardContext,
                 userValueTypeHint,
-                field,
+                field,  
                 null,
                 missingMap.get(field),
-                null,
+                null,  
                 format,
                 CoreValuesSourceType.BYTES
-            );
+            );  
             configs.put(field, config);
         }
-        return configs;
+        return configs;  
     }
 
-    protected abstract ArrayValuesSourceAggregatorFactory innerBuild(
+    protected abstract ArrayValuesSourceAggregatorFactory innerBuild(  
         QueryShardContext queryShardContext,
         Map<String, ValuesSourceConfig> configs,
-        AggregatorFactory parent,
+        AggregatorFactory parent,  
         AggregatorFactories.Builder subFactoriesBuilder
     ) throws IOException;
 
     @Override
     public final XContentBuilder internalXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
+        builder.startObject();  
         // todo add ParseField support to XContentBuilder
         if (fields != null) {
-            builder.field(CommonFields.FIELDS.getPreferredName(), fields);
+            builder.field(CommonFields.FIELDS.getPreferredName(), fields);  
         }
         if (missing != null) {
-            builder.field(CommonFields.MISSING.getPreferredName(), missing);
+            builder.field(CommonFields.MISSING.getPreferredName(), missing);  
         }
         if (format != null) {
-            builder.field(CommonFields.FORMAT.getPreferredName(), format);
+            builder.field(CommonFields.FORMAT.getPreferredName(), format);  
         }
         if (userValueTypeHint != null) {
-            builder.field(CommonFields.VALUE_TYPE.getPreferredName(), userValueTypeHint.getPreferredName());
+            builder.field(CommonFields.VALUE_TYPE.getPreferredName(), userValueTypeHint.getPreferredName());  
         }
         doXContentBody(builder, params);
-        builder.endObject();
+        builder.endObject();  
         return builder;
     }
 
     protected abstract XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException;
 
-    @Override
+    @Override  
     public int hashCode() {
         return Objects.hash(super.hashCode(), fields, format, missing, userValueTypeHint);
-    }
+    }  
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equals(Object obj) {  
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;
+        if (super.equals(obj) == false) return false;  
         ArrayValuesSourceAggregationBuilder<?> other = (ArrayValuesSourceAggregationBuilder<?>) obj;
         return Objects.equals(fields, other.fields)
-            && Objects.equals(format, other.format)
+            && Objects.equals(format, other.format)  
             && Objects.equals(missing, other.missing)
             && Objects.equals(userValueTypeHint, other.userValueTypeHint);
-    }
+    }  
 }

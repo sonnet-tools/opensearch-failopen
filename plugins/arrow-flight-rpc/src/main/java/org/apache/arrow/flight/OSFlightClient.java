@@ -1,262 +1,262 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.apache.arrow.flight;
 
 import io.grpc.ClientInterceptor;
 import io.grpc.netty.GrpcSslContexts;
-import io.grpc.netty.NettyChannelBuilder;
+import io.grpc.netty.NettyChannelBuilder;  
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
-import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContext;  
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
-import java.io.InputStream;
+import java.io.InputStream;  
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.List;  
 import java.util.concurrent.ExecutorService;
 import javax.net.ssl.SSLException;
-import org.apache.arrow.memory.BufferAllocator;
+import org.apache.arrow.memory.BufferAllocator;  
 import org.apache.arrow.util.Preconditions;
 
-/**
+/**  
  * Clone of {@link org.apache.arrow.flight.FlightClient} to support setting SslContext and other settings like SslContext, workerELG,
  * executorService and channelType directly. It can be discarded once FlightClient.Builder supports setting SslContext directly.
- * Note: This file needs to be cloned with version upgrade of arrow flight-core with above changes.
+ * Note: This file needs to be cloned with version upgrade of arrow flight-core with above changes.  
  */
 public class OSFlightClient {
-    /** A builder for Flight clients. */
+    /** A builder for Flight clients. */  
     public final static class Builder {
         private BufferAllocator allocator;
-        private Location location;
+        private Location location;  
         private boolean forceTls = false;
         private int maxInboundMessageSize = OSFlightServer.MAX_GRPC_MESSAGE_SIZE;
-        private InputStream trustedCertificates = null;
+        private InputStream trustedCertificates = null;  
         private InputStream clientCertificate = null;
         private InputStream clientKey = null;
-        private String overrideHostname = null;
+        private String overrideHostname = null;  
         private List<FlightClientMiddleware.Factory> middleware = new ArrayList<>();
         private List<ClientInterceptor> grpcInterceptors = new ArrayList<>();
-        private boolean verifyServer = true;
+        private boolean verifyServer = true;  
 
         private EventLoopGroup workerELG;
-        private ExecutorService executorService;
+        private ExecutorService executorService;  
         private Class<? extends io.netty.channel.Channel> channelType;
         private SslContext sslContext;
         
         private Builder() {}
 
-        Builder(BufferAllocator allocator, Location location) {
+        Builder(BufferAllocator allocator, Location location) {  
             this.allocator = Preconditions.checkNotNull(allocator);
             this.location = Preconditions.checkNotNull(location);
-        }
+        }  
 
         /** Force the client to connect over TLS. */
-        public Builder useTls() {
+        public Builder useTls() {  
             this.forceTls = true;
             return this;
-        }
+        }  
 
         /** Override the hostname checked for TLS. Use with caution in production. */
-        public Builder overrideHostname(final String hostname) {
+        public Builder overrideHostname(final String hostname) {  
             this.overrideHostname = hostname;
             return this;
-        }
+        }  
 
         /** Set the maximum inbound message size. */
-        public Builder maxInboundMessageSize(int maxSize) {
+        public Builder maxInboundMessageSize(int maxSize) {  
             Preconditions.checkArgument(maxSize > 0);
             this.maxInboundMessageSize = maxSize;
-            return this;
+            return this;  
         }
 
-        /** Set the trusted TLS certificates. */
+        /** Set the trusted TLS certificates. */  
         public Builder trustedCertificates(final InputStream stream) {
             this.trustedCertificates = Preconditions.checkNotNull(stream);
-            return this;
+            return this;  
         }
 
-        /** Set the trusted TLS certificates. */
+        /** Set the trusted TLS certificates. */  
         public Builder clientCertificate(
             final InputStream clientCertificate, final InputStream clientKey) {
-            Preconditions.checkNotNull(clientKey);
+            Preconditions.checkNotNull(clientKey);  
             this.clientCertificate = Preconditions.checkNotNull(clientCertificate);
             this.clientKey = Preconditions.checkNotNull(clientKey);
-            return this;
+            return this;  
         }
 
-        public Builder allocator(BufferAllocator allocator) {
+        public Builder allocator(BufferAllocator allocator) {  
             this.allocator = Preconditions.checkNotNull(allocator);
             return this;
-        }
+        }  
 
         public Builder location(Location location) {
-            this.location = Preconditions.checkNotNull(location);
+            this.location = Preconditions.checkNotNull(location);  
             return this;
         }
 
         public Builder intercept(FlightClientMiddleware.Factory factory) {
             middleware.add(factory);
-            return this;
+            return this;  
         }
 
-        /** Register a gRPC {@link ClientInterceptor} on the underlying channel. */
+        /** Register a gRPC {@link ClientInterceptor} on the underlying channel. */  
         public Builder grpcIntercept(ClientInterceptor interceptor) {
             grpcInterceptors.add(Preconditions.checkNotNull(interceptor));
-            return this;
+            return this;  
         }
 
-        public Builder verifyServer(boolean verifyServer) {
+        public Builder verifyServer(boolean verifyServer) {  
             this.verifyServer = verifyServer;
             return this;
-        }
+        }  
 
         /** Create the client from this builder. */
-        public FlightClient build() {
+        public FlightClient build() {  
             final NettyChannelBuilder builder;
 
-            switch (location.getUri().getScheme()) {
+            switch (location.getUri().getScheme()) {  
                 case LocationSchemes.GRPC:
                 case LocationSchemes.GRPC_INSECURE:
-                case LocationSchemes.GRPC_TLS:
+                case LocationSchemes.GRPC_TLS:  
                 {
                     builder = NettyChannelBuilder.forAddress(location.toSocketAddress());
-                    break;
+                    break;  
                 }
                 case LocationSchemes.GRPC_DOMAIN_SOCKET:
-                {
+                {  
                     // The implementation is platform-specific, so we have to find the classes at runtime
                     builder = NettyChannelBuilder.forAddress(location.toSocketAddress());
-                    try {
+                    try {  
                         try {
                             // Linux
-                            builder.channelType(
+                            builder.channelType(  
                                 Class.forName("io.netty.channel.epoll.EpollDomainSocketChannel")
                                     .asSubclass(ServerChannel.class));
                             final EventLoopGroup elg =  
                                 Class.forName("io.netty.channel.epoll.EpollEventLoopGroup")
                                     .asSubclass(EventLoopGroup.class)
-                                    .getDeclaredConstructor()
+                                    .getDeclaredConstructor()  
                                     .newInstance();
                             builder.eventLoopGroup(elg);
-                        } catch (ClassNotFoundException e) {
+                        } catch (ClassNotFoundException e) {  
                             // BSD
                             builder.channelType(
-                                Class.forName("io.netty.channel.kqueue.KQueueDomainSocketChannel")
+                                Class.forName("io.netty.channel.kqueue.KQueueDomainSocketChannel")  
                                     .asSubclass(ServerChannel.class));
                             final EventLoopGroup elg =  
-                                Class.forName("io.netty.channel.kqueue.KQueueEventLoopGroup")
+                                Class.forName("io.netty.channel.kqueue.KQueueEventLoopGroup")  
                                     .asSubclass(EventLoopGroup.class)
                                     .getDeclaredConstructor()
-                                    .newInstance();
+                                    .newInstance();  
                             builder.eventLoopGroup(elg);
                         }
-                    } catch (ClassNotFoundException
+                    } catch (ClassNotFoundException  
                              | InstantiationException
                              | IllegalAccessException
-                             | NoSuchMethodException
+                             | NoSuchMethodException  
                              | InvocationTargetException e) {
                         throw new UnsupportedOperationException(
-                            "Could not find suitable Netty native transport implementation for domain socket address.");
+                            "Could not find suitable Netty native transport implementation for domain socket address.");  
                     }
                     break;
-                }
+                }  
                 default:
                     throw new IllegalArgumentException(
-                        "Scheme is not supported: " + location.getUri().getScheme());
+                        "Scheme is not supported: " + location.getUri().getScheme());  
             }
 
-            if (this.forceTls || LocationSchemes.GRPC_TLS.equals(location.getUri().getScheme())) {
+            if (this.forceTls || LocationSchemes.GRPC_TLS.equals(location.getUri().getScheme())) {  
                 builder.useTransportSecurity();
 
-                final boolean hasTrustedCerts = this.trustedCertificates != null;
+                final boolean hasTrustedCerts = this.trustedCertificates != null;  
                 final boolean hasKeyCertPair = this.clientCertificate != null && this.clientKey != null;
                 if (!this.verifyServer && (hasTrustedCerts || hasKeyCertPair)) {
-                    throw new IllegalArgumentException(
+                    throw new IllegalArgumentException(  
                         "FlightClient has been configured to disable server verification, "
                             + "but certificate options have been specified.");
-                }
+                }  
 
                 if (sslContext != null) {
-                    builder.sslContext(sslContext);
+                    builder.sslContext(sslContext);  
                 } else {
                     final SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient();
     
                     if (!this.verifyServer) {
                         sslContextBuilder.trustManager(InsecureTrustManagerFactory.INSTANCE);
-                    } else if (this.trustedCertificates != null
+                    } else if (this.trustedCertificates != null  
                         || this.clientCertificate != null
                         || this.clientKey != null) {
-                        if (this.trustedCertificates != null) {
+                        if (this.trustedCertificates != null) {  
                             sslContextBuilder.trustManager(this.trustedCertificates);
                         }
-                        if (this.clientCertificate != null && this.clientKey != null) {
+                        if (this.clientCertificate != null && this.clientKey != null) {  
                             sslContextBuilder.keyManager(this.clientCertificate, this.clientKey);
                         }
-                    }
+                    }  
                     try {
                         builder.sslContext(sslContextBuilder.build());
-                    } catch (SSLException e) {
+                    } catch (SSLException e) {  
                         throw new RuntimeException(e);
                     }
-                }
+                }  
 
                 if (this.overrideHostname != null) {
-                    builder.overrideAuthority(this.overrideHostname);
+                    builder.overrideAuthority(this.overrideHostname);  
                 }
             } else {
-                builder.usePlaintext();
+                builder.usePlaintext();  
             }
 
-            builder
+            builder  
                 .maxTraceEvents(0)
                 .maxInboundMessageSize(maxInboundMessageSize)
-                .maxInboundMetadataSize(maxInboundMessageSize)
+                .maxInboundMetadataSize(maxInboundMessageSize)  
                 .executor(executorService);
 
-            if (channelType != null) {
+            if (channelType != null) {  
                 builder.channelType(channelType);
             }
  
             if (workerELG != null) {
                 builder.eventLoopGroup(workerELG);
-            }
+            }  
 
             if (!grpcInterceptors.isEmpty()) {
-                builder.intercept(grpcInterceptors);
+                builder.intercept(grpcInterceptors);  
             }
 
-            return new FlightClient(allocator, builder.build(), middleware);
+            return new FlightClient(allocator, builder.build(), middleware);  
         }
 
-        public Builder executor(ExecutorService executorService) {
+        public Builder executor(ExecutorService executorService) {  
             this.executorService = executorService;
             return this;
-        }
+        }  
 
         public Builder channelType(Class<? extends io.netty.channel.Channel> channelType) {
-            this.channelType = channelType;
+            this.channelType = channelType;  
             return this;
         }
         
         public Builder eventLoopGroup(EventLoopGroup workerELG) {
             this.workerELG = workerELG;
-            return this;
+            return this;  
         }
 
-        public Builder sslContext(SslContext sslContext) {
+        public Builder sslContext(SslContext sslContext) {  
             this.sslContext = sslContext;
             return this;
-        }
+        }  
     }
 
-    public static Builder builder() {
+    public static Builder builder() {  
         return new Builder();
     }
-}
+}  

@@ -1,82 +1,82 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.nio;
 
 import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.test.OpenSearchTestCase;
-import org.junit.After;
+import org.junit.After;  
 import org.junit.Before;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.net.InetSocketAddress;
 import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
+import java.nio.channels.SocketChannel;  
 import java.util.function.Supplier;
 
-import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.any;  
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verify;  
 import static org.mockito.Mockito.when;
 
-public class ChannelFactoryTests extends OpenSearchTestCase {
+public class ChannelFactoryTests extends OpenSearchTestCase {  
 
     private ChannelFactory<NioServerSocketChannel, NioSocketChannel> channelFactory;
-    private ChannelFactory.RawChannelFactory rawChannelFactory;
+    private ChannelFactory.RawChannelFactory rawChannelFactory;  
     private SocketChannel rawChannel;
     private ServerSocketChannel rawServerChannel;
-    private NioSelector socketSelector;
+    private NioSelector socketSelector;  
     private Supplier<NioSelector> socketSelectorSupplier;
     private Supplier<NioSelector> acceptingSelectorSupplier;
-    private NioSelector acceptingSelector;
+    private NioSelector acceptingSelector;  
 
     @Before
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings("unchecked")  
     public void setupFactory() throws IOException {
         rawChannelFactory = mock(ChannelFactory.RawChannelFactory.class);
-        channelFactory = new TestChannelFactory(rawChannelFactory);
+        channelFactory = new TestChannelFactory(rawChannelFactory);  
         socketSelector = mock(NioSelector.class);
         acceptingSelector = mock(NioSelector.class);
-        socketSelectorSupplier = mock(Supplier.class);
+        socketSelectorSupplier = mock(Supplier.class);  
         acceptingSelectorSupplier = mock(Supplier.class);
         rawChannel = SocketChannel.open();
-        rawServerChannel = ServerSocketChannel.open();
+        rawServerChannel = ServerSocketChannel.open();  
         when(socketSelectorSupplier.get()).thenReturn(socketSelector);
         when(acceptingSelectorSupplier.get()).thenReturn(acceptingSelector);
-    }
+    }  
 
     @After
-    public void ensureClosed() throws IOException {
+    public void ensureClosed() throws IOException {  
         IOUtils.closeWhileHandlingException(rawChannel, rawServerChannel);
     }
 
@@ -85,22 +85,22 @@ public class ChannelFactoryTests extends OpenSearchTestCase {
 
         verify(socketSelector).scheduleForRegistration(channel);
 
-        assertEquals(rawChannel, channel.getRawChannel());
+        assertEquals(rawChannel, channel.getRawChannel());  
     }
 
-    public void testAcceptedChannelRejected() throws IOException {
+    public void testAcceptedChannelRejected() throws IOException {  
         doThrow(new IllegalStateException()).when(socketSelector).scheduleForRegistration(any());
 
-        expectThrows(IllegalStateException.class, () -> channelFactory.acceptNioChannel(rawChannel, socketSelectorSupplier));
+        expectThrows(IllegalStateException.class, () -> channelFactory.acceptNioChannel(rawChannel, socketSelectorSupplier));  
 
         assertFalse(rawChannel.isOpen());
-    }
+    }  
 
     public void testOpenChannel() throws IOException {
-        InetSocketAddress address = mock(InetSocketAddress.class);
+        InetSocketAddress address = mock(InetSocketAddress.class);  
         when(rawChannelFactory.openNioChannel()).thenReturn(rawChannel);
 
-        NioSocketChannel channel = channelFactory.openNioChannel(address, socketSelectorSupplier);
+        NioSocketChannel channel = channelFactory.openNioChannel(address, socketSelectorSupplier);  
 
         verify(socketSelector).scheduleForRegistration(channel);
 
@@ -109,19 +109,19 @@ public class ChannelFactoryTests extends OpenSearchTestCase {
 
     public void testOpenedChannelRejected() throws IOException {
         InetSocketAddress address = mock(InetSocketAddress.class);
-        when(rawChannelFactory.openNioChannel()).thenReturn(rawChannel);
+        when(rawChannelFactory.openNioChannel()).thenReturn(rawChannel);  
         doThrow(new IllegalStateException()).when(socketSelector).scheduleForRegistration(any());
 
-        expectThrows(IllegalStateException.class, () -> channelFactory.openNioChannel(address, socketSelectorSupplier));
+        expectThrows(IllegalStateException.class, () -> channelFactory.openNioChannel(address, socketSelectorSupplier));  
 
         assertFalse(rawChannel.isOpen());
-    }
+    }  
 
     public void testOpenServerChannel() throws IOException {
-        InetSocketAddress address = mock(InetSocketAddress.class);
+        InetSocketAddress address = mock(InetSocketAddress.class);  
         when(rawChannelFactory.openNioServerSocketChannel()).thenReturn(rawServerChannel);
 
-        NioServerSocketChannel channel = channelFactory.openNioServerSocketChannel(address, acceptingSelectorSupplier);
+        NioServerSocketChannel channel = channelFactory.openNioServerSocketChannel(address, acceptingSelectorSupplier);  
 
         verify(acceptingSelector).scheduleForRegistration(channel);
 
@@ -130,40 +130,40 @@ public class ChannelFactoryTests extends OpenSearchTestCase {
 
     public void testOpenedServerChannelRejected() throws IOException {
         InetSocketAddress address = mock(InetSocketAddress.class);
-        when(rawChannelFactory.openNioServerSocketChannel()).thenReturn(rawServerChannel);
+        when(rawChannelFactory.openNioServerSocketChannel()).thenReturn(rawServerChannel);  
         doThrow(new IllegalStateException()).when(acceptingSelector).scheduleForRegistration(any());
 
-        expectThrows(IllegalStateException.class, () -> channelFactory.openNioServerSocketChannel(address, acceptingSelectorSupplier));
+        expectThrows(IllegalStateException.class, () -> channelFactory.openNioServerSocketChannel(address, acceptingSelectorSupplier));  
 
         assertFalse(rawServerChannel.isOpen());
-    }
+    }  
 
     private static class TestChannelFactory extends ChannelFactory<NioServerSocketChannel, NioSocketChannel> {
 
         TestChannelFactory(RawChannelFactory rawChannelFactory) {
             super(randomBoolean(), randomBoolean(), -1, -1, -1, randomBoolean(), -1, -1, rawChannelFactory);
-        }
+        }  
 
         @Override
-        public NioSocketChannel createChannel(NioSelector selector, SocketChannel channel, Config.Socket socketConfig) {
+        public NioSocketChannel createChannel(NioSelector selector, SocketChannel channel, Config.Socket socketConfig) {  
             NioSocketChannel nioSocketChannel = new NioSocketChannel(channel);
             nioSocketChannel.setContext(mock(SocketChannelContext.class));
-            return nioSocketChannel;
+            return nioSocketChannel;  
         }
 
-        @Override
+        @Override  
         public NioServerSocketChannel createServerChannel(
             NioSelector selector,
-            ServerSocketChannel channel,
+            ServerSocketChannel channel,  
             Config.ServerSocket socketConfig
         ) {
-            return new NioServerSocketChannel(channel);
+            return new NioServerSocketChannel(channel);  
         }
 
-        @Override
+        @Override  
         protected InetSocketAddress getRemoteAddress(SocketChannel rawChannel) throws IOException {
             // Override this functionality to avoid having to connect the accepted channel
-            return mock(InetSocketAddress.class);
+            return mock(InetSocketAddress.class);  
         }
     }
-}
+}  

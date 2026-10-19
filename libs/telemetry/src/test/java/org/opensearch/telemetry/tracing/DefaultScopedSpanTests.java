@@ -1,34 +1,34 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.telemetry.tracing;
 
 import org.opensearch.test.OpenSearchTestCase;
 
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mock;  
 import static org.mockito.Mockito.verify;
 
-public class DefaultScopedSpanTests extends OpenSearchTestCase {
+public class DefaultScopedSpanTests extends OpenSearchTestCase {  
 
     @SuppressWarnings("unchecked")
-    public void testClose() {
+    public void testClose() {  
         Span mockSpan = mock(Span.class);
         SpanScope mockSpanScope = mock(SpanScope.class);
-        DefaultScopedSpan defaultSpanScope = new DefaultScopedSpan(mockSpan, mockSpanScope);
+        DefaultScopedSpan defaultSpanScope = new DefaultScopedSpan(mockSpan, mockSpanScope);  
         defaultSpanScope.close();
 
-        verify(mockSpan).endSpan();
+        verify(mockSpan).endSpan();  
         verify(mockSpanScope).close();
     }
 
     public void testAddSpanAttributeString() {
         Span mockSpan = mock(Span.class);
-        SpanScope mockSpanScope = mock(SpanScope.class);
+        SpanScope mockSpanScope = mock(SpanScope.class);  
         DefaultScopedSpan defaultSpanScope = new DefaultScopedSpan(mockSpan, mockSpanScope);
         defaultSpanScope.addAttribute("key", "value");
 
@@ -37,7 +37,7 @@ public class DefaultScopedSpanTests extends OpenSearchTestCase {
 
     public void testAddSpanAttributeLong() {
         Span mockSpan = mock(Span.class);
-        SpanScope mockSpanScope = mock(SpanScope.class);
+        SpanScope mockSpanScope = mock(SpanScope.class);  
         DefaultScopedSpan defaultSpanScope = new DefaultScopedSpan(mockSpan, mockSpanScope);
         defaultSpanScope.addAttribute("key", 1L);
 
@@ -46,7 +46,7 @@ public class DefaultScopedSpanTests extends OpenSearchTestCase {
 
     public void testAddSpanAttributeDouble() {
         Span mockSpan = mock(Span.class);
-        SpanScope mockSpanScope = mock(SpanScope.class);
+        SpanScope mockSpanScope = mock(SpanScope.class);  
         DefaultScopedSpan defaultSpanScope = new DefaultScopedSpan(mockSpan, mockSpanScope);
         defaultSpanScope.addAttribute("key", 1.0);
 
@@ -55,7 +55,7 @@ public class DefaultScopedSpanTests extends OpenSearchTestCase {
 
     public void testAddSpanAttributeBoolean() {
         Span mockSpan = mock(Span.class);
-        SpanScope mockSpanScope = mock(SpanScope.class);
+        SpanScope mockSpanScope = mock(SpanScope.class);  
         DefaultScopedSpan defaultSpanScope = new DefaultScopedSpan(mockSpan, mockSpanScope);
         defaultSpanScope.addAttribute("key", true);
 
@@ -64,7 +64,7 @@ public class DefaultScopedSpanTests extends OpenSearchTestCase {
 
     public void testAddEvent() {
         Span mockSpan = mock(Span.class);
-        SpanScope mockSpanScope = mock(SpanScope.class);
+        SpanScope mockSpanScope = mock(SpanScope.class);  
         DefaultScopedSpan defaultSpanScope = new DefaultScopedSpan(mockSpan, mockSpanScope);
         defaultSpanScope.addEvent("eventName");
 
@@ -73,12 +73,12 @@ public class DefaultScopedSpanTests extends OpenSearchTestCase {
 
     public void testSetError() {
         Span mockSpan = mock(Span.class);
-        SpanScope mockSpanScope = mock(SpanScope.class);
+        SpanScope mockSpanScope = mock(SpanScope.class);  
         DefaultScopedSpan defaultSpanScope = new DefaultScopedSpan(mockSpan, mockSpanScope);
         Exception ex = new Exception("error");
-        defaultSpanScope.setError(ex);
+        defaultSpanScope.setError(ex);  
 
         verify(mockSpan).setError(ex);
-    }
+    }  
 
 }

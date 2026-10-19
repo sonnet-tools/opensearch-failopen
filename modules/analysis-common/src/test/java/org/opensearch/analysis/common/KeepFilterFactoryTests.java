@@ -1,49 +1,49 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.analysis.common;
 
 import org.apache.lucene.analysis.Tokenizer;
 import org.apache.lucene.analysis.core.WhitespaceTokenizer;
-import org.opensearch.common.settings.Settings;
+import org.opensearch.common.settings.Settings;  
 import org.opensearch.env.Environment;
 import org.opensearch.index.analysis.AnalysisTestsHelper;
-import org.opensearch.index.analysis.TokenFilterFactory;
+import org.opensearch.index.analysis.TokenFilterFactory;  
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.test.OpenSearchTokenStreamTestCase;
-import org.junit.Assert;
+import org.junit.Assert;  
 
 import java.io.IOException;
-import java.io.StringReader;
+import java.io.StringReader;  
 
 import static org.hamcrest.Matchers.instanceOf;
 
@@ -52,81 +52,81 @@ public class KeepFilterFactoryTests extends OpenSearchTokenStreamTestCase {
 
     public void testLoadWithoutSettings() throws IOException {
         OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromClassPath(
-            createTempDir(),
+            createTempDir(),  
             RESOURCE,
             new CommonAnalysisModulePlugin()
-        );
+        );  
         TokenFilterFactory tokenFilter = analysis.tokenFilter.get("keep");
         Assert.assertNull(tokenFilter);
-    }
+    }  
 
     public void testLoadOverConfiguredSettings() {
-        Settings settings = Settings.builder()
+        Settings settings = Settings.builder()  
             .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
             .put("index.analysis.filter.broken_keep_filter.type", "keep")
-            .put("index.analysis.filter.broken_keep_filter.keep_words_path", "does/not/exists.txt")
+            .put("index.analysis.filter.broken_keep_filter.keep_words_path", "does/not/exists.txt")  
             .put("index.analysis.filter.broken_keep_filter.keep_words", "[\"Hello\", \"worlD\"]")
             .build();
-        try {
+        try {  
             AnalysisTestsHelper.createTestAnalysisFromSettings(settings, new CommonAnalysisModulePlugin());
             Assert.fail("path and array are configured");
-        } catch (IllegalArgumentException e) {} catch (IOException e) {
+        } catch (IllegalArgumentException e) {} catch (IOException e) {  
             fail("expected IAE");
         }
-    }
+    }  
 
     public void testKeepWordsPathSettings() {
-        Settings settings = Settings.builder()
+        Settings settings = Settings.builder()  
             .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
             .put("index.analysis.filter.non_broken_keep_filter.type", "keep")
-            .put("index.analysis.filter.non_broken_keep_filter.keep_words_path", "does/not/exists.txt")
+            .put("index.analysis.filter.non_broken_keep_filter.keep_words_path", "does/not/exists.txt")  
             .build();
         try {
-            // test our none existing setup is picked up
+            // test our none existing setup is picked up  
             AnalysisTestsHelper.createTestAnalysisFromSettings(settings, new CommonAnalysisModulePlugin());
             fail("expected an exception due to non existent keep_words_path");
-        } catch (IllegalArgumentException e) {} catch (IOException e) {
+        } catch (IllegalArgumentException e) {} catch (IOException e) {  
             fail("expected IAE");
         }
 
         settings = Settings.builder().put(settings).putList("index.analysis.filter.non_broken_keep_filter.keep_words", "test").build();
         try {
-            // test our none existing setup is picked up
+            // test our none existing setup is picked up  
             AnalysisTestsHelper.createTestAnalysisFromSettings(settings, new CommonAnalysisModulePlugin());
             fail("expected an exception indicating that you can't use [keep_words_path] with [keep_words] ");
-        } catch (IllegalArgumentException e) {} catch (IOException e) {
+        } catch (IllegalArgumentException e) {} catch (IOException e) {  
             fail("expected IAE");
         }
 
     }
 
-    public void testCaseInsensitiveMapping() throws IOException {
+    public void testCaseInsensitiveMapping() throws IOException {  
         OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromClassPath(
             createTempDir(),
-            RESOURCE,
+            RESOURCE,  
             new CommonAnalysisModulePlugin()
         );
-        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_keep_filter");
+        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_keep_filter");  
         assertThat(tokenFilter, instanceOf(KeepWordFilterFactory.class));
         String source = "hello small world";
-        String[] expected = new String[] { "hello", "world" };
+        String[] expected = new String[] { "hello", "world" };  
         Tokenizer tokenizer = new WhitespaceTokenizer();
         tokenizer.setReader(new StringReader(source));
-        assertTokenStreamContents(tokenFilter.create(tokenizer), expected, new int[] { 1, 2 });
+        assertTokenStreamContents(tokenFilter.create(tokenizer), expected, new int[] { 1, 2 });  
     }
 
-    public void testCaseSensitiveMapping() throws IOException {
+    public void testCaseSensitiveMapping() throws IOException {  
         OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromClassPath(
             createTempDir(),
-            RESOURCE,
+            RESOURCE,  
             new CommonAnalysisModulePlugin()
         );
-        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_case_sensitive_keep_filter");
+        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_case_sensitive_keep_filter");  
         assertThat(tokenFilter, instanceOf(KeepWordFilterFactory.class));
         String source = "Hello small world";
-        String[] expected = new String[] { "Hello" };
+        String[] expected = new String[] { "Hello" };  
         Tokenizer tokenizer = new WhitespaceTokenizer();
         tokenizer.setReader(new StringReader(source));
-        assertTokenStreamContents(tokenFilter.create(tokenizer), expected, new int[] { 1 });
+        assertTokenStreamContents(tokenFilter.create(tokenizer), expected, new int[] { 1 });  
     }
 }

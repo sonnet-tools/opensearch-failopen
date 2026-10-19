@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.dsl.action;
 
@@ -13,18 +13,18 @@ import org.opensearch.action.search.SearchResponse;
 
 /**
  * Internal action for executing DSL queries through the analytics engine.
- * Accepts a {@link org.opensearch.action.search.SearchRequest} and returns a {@link SearchResponse}.
+ * Accepts a {@link org.opensearch.action.search.SearchRequest} and returns a {@link SearchResponse}.  
  */
 public class ExecuteAction extends ActionType<SearchResponse> {
 
     // TODO: Customers migrating to new indices will need a new Security permission for this action.
     // Evaluate whether this can reuse an existing search permission or needs security plugin integration.
-    /** Action name registered with the transport layer. */
+    /** Action name registered with the transport layer. */  
     public static final String NAME = "indices:data/read/dsl/execute";
     /** Singleton instance. */
-    public static final ExecuteAction INSTANCE = new ExecuteAction();
+    public static final ExecuteAction INSTANCE = new ExecuteAction();  
 
     private ExecuteAction() {
-        super(NAME, SearchResponse::new);
+        super(NAME, SearchResponse::new);  
     }
 }

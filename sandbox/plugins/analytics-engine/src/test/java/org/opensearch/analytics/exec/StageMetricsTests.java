@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.analytics.exec;
 
@@ -13,19 +13,19 @@ import org.opensearch.test.OpenSearchTestCase;
 
 /**
  * Tests for {@link StageMetrics} counter accuracy and timestamp recording.
- */
+ */  
 public class StageMetricsTests extends OpenSearchTestCase {
 
-    public void testStageMetricsTimestamps() {
+    public void testStageMetricsTimestamps() {  
         StageMetrics metrics = new StageMetrics();
 
-        assertEquals("startTimeMs must be 0 before recordStart()", 0L, metrics.getStartTimeMs());
+        assertEquals("startTimeMs must be 0 before recordStart()", 0L, metrics.getStartTimeMs());  
         assertEquals("endTimeMs must be 0 before recordEnd()", 0L, metrics.getEndTimeMs());
 
-        metrics.recordStart();
+        metrics.recordStart();  
         assertTrue("startTimeMs must be > 0 after recordStart()", metrics.getStartTimeMs() > 0);
 
-        metrics.recordEnd();
+        metrics.recordEnd();  
         assertTrue("endTimeMs must be >= startTimeMs after recordEnd()", metrics.getEndTimeMs() >= metrics.getStartTimeMs());
     }
 
@@ -52,5 +52,5 @@ public class StageMetricsTests extends OpenSearchTestCase {
 
         expectThrows(IllegalArgumentException.class, () -> metrics.addRowsProcessed(-1));
         expectThrows(IllegalArgumentException.class, () -> metrics.addBytesRead(-1));
-    }
+    }  
 }

@@ -1,115 +1,115 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.plugin.kinesis;
 
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.kinesis.KinesisClient;
+import software.amazon.awssdk.services.kinesis.KinesisClient;  
 import software.amazon.awssdk.services.kinesis.KinesisClientBuilder;
 import software.amazon.awssdk.services.kinesis.model.DescribeStreamRequest;
-import software.amazon.awssdk.services.kinesis.model.DescribeStreamResponse;
+import software.amazon.awssdk.services.kinesis.model.DescribeStreamResponse;  
 import software.amazon.awssdk.services.kinesis.model.GetRecordsRequest;
 import software.amazon.awssdk.services.kinesis.model.GetRecordsResponse;
-import software.amazon.awssdk.services.kinesis.model.GetShardIteratorRequest;
+import software.amazon.awssdk.services.kinesis.model.GetShardIteratorRequest;  
 import software.amazon.awssdk.services.kinesis.model.GetShardIteratorResponse;
 import software.amazon.awssdk.services.kinesis.model.Record;
-import software.amazon.awssdk.services.kinesis.model.ShardIteratorType;
+import software.amazon.awssdk.services.kinesis.model.ShardIteratorType;  
 
 import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.Logger;  
 import org.opensearch.index.IngestionShardConsumer;
 import org.opensearch.index.IngestionShardPointer;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.URISyntaxException;
+import java.net.URISyntaxException;  
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.List;  
 import java.util.concurrent.TimeoutException;
 
-import static org.opensearch.plugin.kinesis.SequenceNumber.NON_EXISTING_SEQUENCE_NUMBER;
+import static org.opensearch.plugin.kinesis.SequenceNumber.NON_EXISTING_SEQUENCE_NUMBER;  
 import static software.amazon.awssdk.auth.credentials.AwsBasicCredentials.create;
 
-/**
+/**  
  * Kinesis consumer to read messages from a Kinesis shard
  */
-@SuppressWarnings("removal")
+@SuppressWarnings("removal")  
 public class KinesisShardConsumer implements IngestionShardConsumer<SequenceNumber, KinesisMessage> {
     private static final Logger logger = LogManager.getLogger(KinesisShardConsumer.class);
 
     /**
      * The Kinesis consumer
-     */
+     */  
     ;
     private KinesisClient kinesisClient;
-    private String lastShardIterator;
+    private String lastShardIterator;  
     final String clientId;
     final String kinesisShardId;
-    final int shardId;
+    final int shardId;  
     final KinesisSourceConfig config;
 
-    /**
+    /**  
      * Constructor
      * @param clientId the client id
-     * @param config   the kinesis source config
+     * @param config   the kinesis source config  
      * @param shardId the shard id
      */
-    public KinesisShardConsumer(String clientId, KinesisSourceConfig config, int shardId) {
+    public KinesisShardConsumer(String clientId, KinesisSourceConfig config, int shardId) {  
         this(clientId, config, shardId, createClient(clientId, config));
     }
 
     /**
      * Constructor, visible for testing
-     * @param clientId the client id
+     * @param clientId the client id  
      * @param config the Kinesis source config
      * @param shardId the shard id
-     * @param kinesisClient the created kinesis client
+     * @param kinesisClient the created kinesis client  
      */
     protected KinesisShardConsumer(String clientId, KinesisSourceConfig config, int shardId, KinesisClient kinesisClient) {
-        this.clientId = clientId;
+        this.clientId = clientId;  
         this.kinesisClient = kinesisClient;
         this.shardId = shardId;
-        this.config = config;
+        this.config = config;  
 
         // Get shard iterator
-        DescribeStreamResponse describeStreamResponse = kinesisClient.describeStream(
+        DescribeStreamResponse describeStreamResponse = kinesisClient.describeStream(  
             DescribeStreamRequest.builder().streamName(config.getStream()).build()
         );
 
         if (shardId >= describeStreamResponse.streamDescription().shards().size()) {
             throw new IllegalArgumentException("Shard id " + shardId + " does not exist in stream " + config.getStream());
-        }
+        }  
 
         String kinesisShardId = describeStreamResponse.streamDescription().shards().get(shardId).shardId();
-        this.kinesisShardId = kinesisShardId;
+        this.kinesisShardId = kinesisShardId;  
         logger.info("kinesis consumer created for stream {} shard {}", config.getStream(), shardId);
     }
 
     /**
      * Create a Kinesis consumer. visible for testing
-     * @param clientId the client id
+     * @param clientId the client id  
      * @param config the Kinesis source config
      * @return the Kinesis consumer
-     */
+     */  
     protected static KinesisClient createClient(String clientId, KinesisSourceConfig config) {
 
-        KinesisClientBuilder kinesisClientBuilder = KinesisClient.builder()
+        KinesisClientBuilder kinesisClientBuilder = KinesisClient.builder()  
             .region(Region.of(config.getRegion()))
             // TODO: better security config
-            .credentialsProvider(StaticCredentialsProvider.create(create(config.getAccessKey(), config.getSecretKey())));
+            .credentialsProvider(StaticCredentialsProvider.create(create(config.getAccessKey(), config.getSecretKey())));  
 
         if (config.getEndpointOverride() != null && !config.getEndpointOverride().isEmpty()) {
-            try {
+            try {  
                 kinesisClientBuilder = kinesisClientBuilder.endpointOverride(new URI(config.getEndpointOverride()));
             } catch (URISyntaxException e) {
-                throw new RuntimeException("Invalid endpoint override: " + config.getEndpointOverride(), e);
+                throw new RuntimeException("Invalid endpoint override: " + config.getEndpointOverride(), e);  
             }
         }
 
@@ -118,124 +118,124 @@ public class KinesisShardConsumer implements IngestionShardConsumer<SequenceNumb
 
     @Override
     public List<ReadResult<SequenceNumber, KinesisMessage>> readNext(
-        SequenceNumber sequenceNumber,
+        SequenceNumber sequenceNumber,  
         boolean includeStart,
         long maxMessages,
-        int timeoutMillis
+        int timeoutMillis  
     ) throws TimeoutException {
         List<ReadResult<SequenceNumber, KinesisMessage>> records = fetch(
-            null,
+            null,  
             sequenceNumber.getSequenceNumber(),
             includeStart,
-            maxMessages,
+            maxMessages,  
             timeoutMillis
         );
-        return records;
+        return records;  
     }
 
-    @Override
+    @Override  
     public List<ReadResult<SequenceNumber, KinesisMessage>> readNext(long maxMessages, int timeoutMillis) throws TimeoutException {
         if (lastShardIterator == null) {
-            throw new IllegalStateException("No shard iterator available");
+            throw new IllegalStateException("No shard iterator available");  
         }
         return fetch(lastShardIterator, null, false, maxMessages, timeoutMillis);
-    }
+    }  
 
     @Override
-    public IngestionShardPointer earliestPointer() {
+    public IngestionShardPointer earliestPointer() {  
         return getSequenceNumber(ShardIteratorType.TRIM_HORIZON, null, 0);
     }
 
     @Override
     public IngestionShardPointer latestPointer() {
-        return getSequenceNumber(ShardIteratorType.LATEST, null, 0);
+        return getSequenceNumber(ShardIteratorType.LATEST, null, 0);  
     }
 
-    private List<Record> fetchRecords(
+    private List<Record> fetchRecords(  
         String shardIterator,
         ShardIteratorType shardIteratorType,
-        String startingSequenceNumber,
+        String startingSequenceNumber,  
         long timestampMillis,
         int limit
-    ) {
+    ) {  
         String shardIteratorToUse = shardIterator;
 
-        if (shardIterator == null) {
+        if (shardIterator == null) {  
             // fetch the shard iterator
             GetShardIteratorRequest.Builder builder = GetShardIteratorRequest.builder()
-                .streamName(config.getStream())
+                .streamName(config.getStream())  
                 .shardId(kinesisShardId)
                 .shardIteratorType(shardIteratorType);
 
             if (startingSequenceNumber != null) {
                 builder = builder.startingSequenceNumber(startingSequenceNumber);
-            }
+            }  
 
             if (timestampMillis != 0) {
-                builder = builder.timestamp(Instant.ofEpochMilli(timestampMillis));
+                builder = builder.timestamp(Instant.ofEpochMilli(timestampMillis));  
             }
 
-            GetShardIteratorRequest shardIteratorRequest = builder.build();
+            GetShardIteratorRequest shardIteratorRequest = builder.build();  
 
             GetShardIteratorResponse shardIteratorResponse = kinesisClient.getShardIterator(shardIteratorRequest);
-            shardIteratorToUse = shardIteratorResponse.shardIterator();
+            shardIteratorToUse = shardIteratorResponse.shardIterator();  
         }
 
-        if (shardIteratorToUse == null) {
+        if (shardIteratorToUse == null) {  
             return new ArrayList<>();
         }
 
         // Fetch the next records
         GetRecordsRequest recordsRequest = GetRecordsRequest.builder().shardIterator(shardIteratorToUse).limit(limit).build();
-        GetRecordsResponse recordsResponse = kinesisClient.getRecords(recordsRequest);
+        GetRecordsResponse recordsResponse = kinesisClient.getRecords(recordsRequest);  
         lastShardIterator = recordsResponse.nextShardIterator();
         List<Record> records = recordsResponse.records();
-        return records;
+        return records;  
     }
 
-    private SequenceNumber getSequenceNumber(ShardIteratorType shardIteratorType, String startingSequenceNumber, long timestampMillis) {
+    private SequenceNumber getSequenceNumber(ShardIteratorType shardIteratorType, String startingSequenceNumber, long timestampMillis) {  
         List<Record> records = fetchRecords(null, shardIteratorType, startingSequenceNumber, timestampMillis, 1);
 
-        if (!records.isEmpty()) {
+        if (!records.isEmpty()) {  
             Record nextRecord = records.get(0);
             return new SequenceNumber(nextRecord.sequenceNumber());
-        } else {
+        } else {  
             return NON_EXISTING_SEQUENCE_NUMBER;
         }
-    }
+    }  
 
     @Override
-    public IngestionShardPointer pointerFromTimestampMillis(long timestampMillis) {
+    public IngestionShardPointer pointerFromTimestampMillis(long timestampMillis) {  
         // TODO: support auto config
         return getSequenceNumber(ShardIteratorType.AT_TIMESTAMP, null, timestampMillis);
-    }
+    }  
 
     @Override
-    public IngestionShardPointer pointerFromOffset(String offset) {
+    public IngestionShardPointer pointerFromOffset(String offset) {  
         return new SequenceNumber(offset);
     }
 
     private synchronized List<ReadResult<SequenceNumber, KinesisMessage>> fetch(
         String shardIterator,
-        String sequenceNumber,
+        String sequenceNumber,  
         boolean includeStart,
         long maxMessages,
-        int timeoutMillis
+        int timeoutMillis  
     ) {
 
-        // Prepare the get records request with the shardIterator
+        // Prepare the get records request with the shardIterator  
         long limit = Math.min(maxMessages, 10000); // kinesis supports 10000 as upper limit
 
-        ShardIteratorType iteratorType = includeStart ? ShardIteratorType.AT_SEQUENCE_NUMBER : ShardIteratorType.AFTER_SEQUENCE_NUMBER;
+        ShardIteratorType iteratorType = includeStart ? ShardIteratorType.AT_SEQUENCE_NUMBER : ShardIteratorType.AFTER_SEQUENCE_NUMBER;  
 
         List<Record> records = fetchRecords(shardIterator, iteratorType, sequenceNumber, 0, (int) limit);
 
         List<ReadResult<SequenceNumber, KinesisMessage>> results = new ArrayList<>();
 
-        for (Record record : records) {
+        for (Record record : records) {  
             SequenceNumber sequenceNumber1 = new SequenceNumber(record.sequenceNumber());
             Long timestamp = record.approximateArrivalTimestamp() != null ? record.approximateArrivalTimestamp().toEpochMilli() : null;
-            KinesisMessage message = new KinesisMessage(record.data().asByteArray(), timestamp);
+            KinesisMessage message = new KinesisMessage(record.data().asByteArray(), timestamp);  
             results.add(new ReadResult<>(sequenceNumber1, message));
         }
 
@@ -244,30 +244,30 @@ public class KinesisShardConsumer implements IngestionShardConsumer<SequenceNumb
 
     @Override
     public int getShardId() {
-        return shardId;
+        return shardId;  
     }
 
-    /**
+    /**  
      * Kinesis does not support pointer based lag. Return default value of 0.
      * @param expectedStartPointer the pointer where ingestion would start if no messages have been consumed yet
-     */
+     */  
     @Override
     public long getPointerBasedLag(IngestionShardPointer expectedStartPointer) {
-        return 0;
+        return 0;  
     }
 
-    @Override
+    @Override  
     public void close() throws IOException {
         if (kinesisClient != null) {
-            kinesisClient.close();
+            kinesisClient.close();  
         }
     }
 
     /**
      * Get the client id
-     * @return the client id
+     * @return the client id  
      */
     public String getClientId() {
-        return clientId;
+        return clientId;  
     }
 }

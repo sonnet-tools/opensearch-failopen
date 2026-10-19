@@ -1,101 +1,101 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.common.util.concurrent;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
+/**  
  * A basic RefCounted implementation that is initialized with a
  * ref count of 1 and calls {@link #closeInternal()} once it reaches
- * a 0 ref count
+ * a 0 ref count  
  *
  * @opensearch.api
- */
+ */  
 public abstract class AbstractRefCounted implements RefCounted {
     private final AtomicInteger refCount = new AtomicInteger(1);
-    private final String name;
+    private final String name;  
 
     public AbstractRefCounted(String name) {
-        this.name = name;
+        this.name = name;  
     }
 
-    @Override
+    @Override  
     public final void incRef() {
         if (tryIncRef() == false) {
-            alreadyClosed();
+            alreadyClosed();  
         }
     }
 
     @Override
     public final boolean tryIncRef() {
-        do {
+        do {  
             int i = refCount.get();
             if (i > 0) {
-                if (refCount.compareAndSet(i, i + 1)) {
+                if (refCount.compareAndSet(i, i + 1)) {  
                     return true;
                 }
-            } else {
+            } else {  
                 return false;
             }
-        } while (true);
+        } while (true);  
     }
 
-    @Override
+    @Override  
     public final boolean decRef() {
         int i = refCount.decrementAndGet();
-        assert i >= 0;
+        assert i >= 0;  
         if (i == 0) {
             closeInternal();
-            return true;
+            return true;  
         }
         return false;
-    }
+    }  
 
     protected void alreadyClosed() {
-        throw new IllegalStateException(name + " is already closed can't increment refCount current count [" + refCount.get() + "]");
+        throw new IllegalStateException(name + " is already closed can't increment refCount current count [" + refCount.get() + "]");  
     }
 
-    /**
+    /**  
      * Returns the current reference count.
      */
-    public int refCount() {
+    public int refCount() {  
         return this.refCount.get();
     }
 
     /** gets the name of this instance */
     public String getName() {
-        return name;
+        return name;  
     }
 
-    protected abstract void closeInternal();
+    protected abstract void closeInternal();  
 }

@@ -1,136 +1,136 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.client.indices;
 
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.core.ParseField;
-import org.opensearch.core.common.bytes.BytesReference;
+import org.opensearch.core.common.bytes.BytesReference;  
 import org.opensearch.core.xcontent.ConstructingObjectParser;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ObjectParser;
+import org.opensearch.core.xcontent.ObjectParser;  
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.mapper.Mapper;
+import org.opensearch.index.mapper.Mapper;  
 
 import java.io.IOException;
-import java.util.HashMap;
+import java.util.HashMap;  
 import java.util.Map;
 import java.util.Objects;
 
 import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
 import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;
-import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
+import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;  
 
 /** Response object for {@link GetFieldMappingsRequest} API */
-public class GetFieldMappingsResponse {
+public class GetFieldMappingsResponse {  
 
     private static final ParseField MAPPINGS = new ParseField("mappings");
 
     private static final ObjectParser<Map<String, FieldMappingMetadata>, String> PARSER = new ObjectParser<>(
         MAPPINGS.getPreferredName(),
-        true,
+        true,  
         HashMap::new
     );
 
     static {
         PARSER.declareField((p, fieldMappings, index) -> {
-            p.nextToken();
+            p.nextToken();  
             while (p.currentToken() == XContentParser.Token.FIELD_NAME) {
                 final String fieldName = p.currentName();
-                final FieldMappingMetadata fieldMappingMetadata = FieldMappingMetadata.fromXContent(p);
+                final FieldMappingMetadata fieldMappingMetadata = FieldMappingMetadata.fromXContent(p);  
                 fieldMappings.put(fieldName, fieldMappingMetadata);
                 p.nextToken();
-            }
+            }  
         }, MAPPINGS, ObjectParser.ValueType.OBJECT);
     }
 
     private Map<String, Map<String, FieldMappingMetadata>> mappings;
 
-    GetFieldMappingsResponse(Map<String, Map<String, FieldMappingMetadata>> mappings) {
+    GetFieldMappingsResponse(Map<String, Map<String, FieldMappingMetadata>> mappings) {  
         this.mappings = mappings;
     }
 
     /**
     * Returns the fields mapping. The return map keys are indexes and fields (as specified in the request).
-    */
+    */  
     public Map<String, Map<String, FieldMappingMetadata>> mappings() {
         return mappings;
-    }
+    }  
 
     /**
-     * Returns the mappings of a specific index and field.
+     * Returns the mappings of a specific index and field.  
      *
      * @param field field name as specified in the {@link GetFieldMappingsRequest}
-     * @return FieldMappingMetadata for the requested field or null if not found.
+     * @return FieldMappingMetadata for the requested field or null if not found.  
      */
     public FieldMappingMetadata fieldMappings(String index, String field) {
-        Map<String, FieldMappingMetadata> indexMapping = mappings.get(index);
+        Map<String, FieldMappingMetadata> indexMapping = mappings.get(index);  
         if (indexMapping == null) {
             return null;
-        }
+        }  
         return indexMapping.get(field);
     }
 
     public static GetFieldMappingsResponse fromXContent(XContentParser parser) throws IOException {
         ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-        final Map<String, Map<String, FieldMappingMetadata>> mappings = new HashMap<>();
+        final Map<String, Map<String, FieldMappingMetadata>> mappings = new HashMap<>();  
         if (parser.nextToken() == XContentParser.Token.FIELD_NAME) {
             while (parser.currentToken() == XContentParser.Token.FIELD_NAME) {
-                final String index = parser.currentName();
+                final String index = parser.currentName();  
                 final Map<String, FieldMappingMetadata> fieldMappings = PARSER.parse(parser, index);
                 mappings.put(index, fieldMappings);
-                parser.nextToken();
+                parser.nextToken();  
             }
         }
-        return new GetFieldMappingsResponse(mappings);
+        return new GetFieldMappingsResponse(mappings);  
     }
 
-    public static class FieldMappingMetadata {
+    public static class FieldMappingMetadata {  
         private static final ParseField FULL_NAME = new ParseField("full_name");
         private static final ParseField MAPPING = new ParseField("mapping");
 
         private static final ConstructingObjectParser<FieldMappingMetadata, String> PARSER = new ConstructingObjectParser<>(
             "field_mapping_meta_data",
-            true,
+            true,  
             a -> new FieldMappingMetadata((String) a[0], (BytesReference) a[1])
         );
 
         static {
             PARSER.declareField(optionalConstructorArg(), (p, c) -> p.text(), FULL_NAME, ObjectParser.ValueType.STRING);
-            PARSER.declareField(optionalConstructorArg(), (p, c) -> {
+            PARSER.declareField(optionalConstructorArg(), (p, c) -> {  
                 final XContentBuilder jsonBuilder = jsonBuilder().copyCurrentStructure(p);
                 final BytesReference bytes = BytesReference.bytes(jsonBuilder);
-                return bytes;
+                return bytes;  
             }, MAPPING, ObjectParser.ValueType.OBJECT);
         }
 
@@ -139,64 +139,64 @@ public class GetFieldMappingsResponse {
 
         public FieldMappingMetadata(String fullName, BytesReference source) {
             this.fullName = fullName;
-            this.source = source;
+            this.source = source;  
         }
 
-        public String fullName() {
+        public String fullName() {  
             return fullName;
         }
 
         /**
          * Returns the mappings as a map. Note that the returned map has a single key which is always the field's {@link Mapper#name}.
-         */
+         */  
         public Map<String, Object> sourceAsMap() {
             return XContentHelper.convertToMap(source, true, MediaTypeRegistry.JSON).v2();
-        }
+        }  
 
         // pkg-private for testing
-        BytesReference getSource() {
+        BytesReference getSource() {  
             return source;
         }
 
         public static FieldMappingMetadata fromXContent(XContentParser parser) throws IOException {
             return PARSER.parse(parser, null);
-        }
+        }  
 
         @Override
-        public String toString() {
+        public String toString() {  
             return "FieldMappingMetadata{fullName='" + fullName + '\'' + ", source=" + source + '}';
         }
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
+            if (this == o) return true;  
             if (!(o instanceof FieldMappingMetadata)) return false;
             FieldMappingMetadata that = (FieldMappingMetadata) o;
-            return Objects.equals(fullName, that.fullName) && Objects.equals(source, that.source);
+            return Objects.equals(fullName, that.fullName) && Objects.equals(source, that.source);  
         }
 
-        @Override
+        @Override  
         public int hashCode() {
             return Objects.hash(fullName, source);
-        }
+        }  
     }
 
-    @Override
+    @Override  
     public String toString() {
         return "GetFieldMappingsResponse{" + "mappings=" + mappings + '}';
-    }
+    }  
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(Object o) {  
         if (this == o) return true;
         if (!(o instanceof GetFieldMappingsResponse)) return false;
-        GetFieldMappingsResponse that = (GetFieldMappingsResponse) o;
+        GetFieldMappingsResponse that = (GetFieldMappingsResponse) o;  
         return Objects.equals(mappings, that.mappings);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(mappings);
+        return Objects.hash(mappings);  
     }
 
-}
+}  

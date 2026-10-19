@@ -1,146 +1,146 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.action.search;
 
 import org.opensearch.action.support.ActionFilters;
 import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;  
 import org.opensearch.cluster.routing.GroupShardsIterator;
 import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Nullable;
+import org.opensearch.common.Nullable;  
 import org.opensearch.common.inject.Inject;
 import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;  
 import org.opensearch.core.indices.breaker.CircuitBreakerService;
 import org.opensearch.indices.IndicesService;
-import org.opensearch.search.SearchPhaseResult;
+import org.opensearch.search.SearchPhaseResult;  
 import org.opensearch.search.SearchService;
 import org.opensearch.search.internal.AliasFilter;
-import org.opensearch.search.pipeline.SearchPipelineService;
+import org.opensearch.search.pipeline.SearchPipelineService;  
 import org.opensearch.tasks.TaskResourceTrackingService;
 import org.opensearch.telemetry.metrics.MetricsRegistry;
-import org.opensearch.telemetry.tracing.Tracer;
+import org.opensearch.telemetry.tracing.Tracer;  
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.StreamTransportService;
-import org.opensearch.transport.Transport;
+import org.opensearch.transport.Transport;  
 import org.opensearch.transport.client.node.NodeClient;
 import org.opensearch.wlm.WorkloadGroupService;
 
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Executor;
+import java.util.concurrent.Executor;  
 import java.util.function.BiFunction;
 
-/**
+/**  
  * Transport search action for streaming search
  * @opensearch.internal
- */
+ */  
 public class StreamTransportSearchAction extends TransportSearchAction {
     @Inject
-    public StreamTransportSearchAction(
+    public StreamTransportSearchAction(  
         NodeClient client,
         ThreadPool threadPool,
-        CircuitBreakerService circuitBreakerService,
+        CircuitBreakerService circuitBreakerService,  
         @Nullable StreamTransportService transportService,
         SearchService searchService,
-        @Nullable StreamSearchTransportService searchTransportService,
+        @Nullable StreamSearchTransportService searchTransportService,  
         SearchPhaseController searchPhaseController,
         ClusterService clusterService,
-        ActionFilters actionFilters,
+        ActionFilters actionFilters,  
         IndexNameExpressionResolver indexNameExpressionResolver,
         NamedWriteableRegistry namedWriteableRegistry,
-        SearchPipelineService searchPipelineService,
+        SearchPipelineService searchPipelineService,  
         MetricsRegistry metricsRegistry,
         SearchRequestOperationsCompositeListenerFactory searchRequestOperationsCompositeListenerFactory,
-        Tracer tracer,
+        Tracer tracer,  
         TaskResourceTrackingService taskResourceTrackingService,
         IndicesService indicesService,
-        WorkloadGroupService workloadGroupService
+        WorkloadGroupService workloadGroupService  
     ) {
         super(
-            client,
+            client,  
             threadPool,
             circuitBreakerService,
-            transportService,
+            transportService,  
             searchService,
             searchTransportService,
-            searchPhaseController,
+            searchPhaseController,  
             clusterService,
             actionFilters,
-            indexNameExpressionResolver,
+            indexNameExpressionResolver,  
             namedWriteableRegistry,
             searchPipelineService,
-            metricsRegistry,
+            metricsRegistry,  
             searchRequestOperationsCompositeListenerFactory,
             tracer,
-            taskResourceTrackingService,
+            taskResourceTrackingService,  
             indicesService,
             workloadGroupService
-        );
+        );  
     }
 
-    AbstractSearchAsyncAction<? extends SearchPhaseResult> searchAsyncAction(
+    AbstractSearchAsyncAction<? extends SearchPhaseResult> searchAsyncAction(  
         SearchTask task,
         SearchRequest searchRequest,
-        Executor executor,
+        Executor executor,  
         GroupShardsIterator<SearchShardIterator> shardIterators,
         SearchTimeProvider timeProvider,
-        BiFunction<String, String, Transport.Connection> connectionLookup,
+        BiFunction<String, String, Transport.Connection> connectionLookup,  
         ClusterState clusterState,
         Map<String, AliasFilter> aliasFilter,
-        Map<String, Float> concreteIndexBoosts,
+        Map<String, Float> concreteIndexBoosts,  
         Map<String, Set<String>> indexRoutings,
         ActionListener<SearchResponse> listener,
-        boolean preFilter,
+        boolean preFilter,  
         ThreadPool threadPool,
         SearchResponse.Clusters clusters,
-        SearchRequestContext searchRequestContext
+        SearchRequestContext searchRequestContext  
     ) {
         if (preFilter) {
-            throw new IllegalStateException("Search pre-filter is not supported in streaming");
+            throw new IllegalStateException("Search pre-filter is not supported in streaming");  
         } else {
             final QueryPhaseResultConsumer queryResultConsumer = searchPhaseController.newStreamSearchPhaseResults(
-                executor,
+                executor,  
                 circuitBreaker,
                 task.getProgressListener(),
-                searchRequest,
+                searchRequest,  
                 shardIterators.size(),
                 exc -> cancelTask(task, exc)
-            );
+            );  
             AbstractSearchAsyncAction<? extends SearchPhaseResult> searchAsyncAction;
             switch (searchRequest.searchType()) {
-                case QUERY_THEN_FETCH:
+                case QUERY_THEN_FETCH:  
                     searchAsyncAction = new StreamSearchQueryThenFetchAsyncAction(
                         logger,
-                        searchTransportService,
+                        searchTransportService,  
                         connectionLookup,
                         aliasFilter,
-                        concreteIndexBoosts,
+                        concreteIndexBoosts,  
                         indexRoutings,
                         searchPhaseController,
-                        executor,
+                        executor,  
                         queryResultConsumer,
                         searchRequest,
-                        listener,
+                        listener,  
                         shardIterators,
                         timeProvider,
-                        clusterState,
+                        clusterState,  
                         task,
                         clusters,
-                        searchRequestContext,
+                        searchRequestContext,  
                         tracer
                     );
-                    break;
+                    break;  
                 default:
                     throw new IllegalStateException("Unknown search type: [" + searchRequest.searchType() + "]");
-            }
+            }  
             return searchAsyncAction;
         }
-    }
+    }  
 }

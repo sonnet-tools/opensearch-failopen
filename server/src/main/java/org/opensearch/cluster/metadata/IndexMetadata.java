@@ -1,628 +1,628 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.cluster.metadata;
 
 import org.opensearch.Version;
 import org.opensearch.action.admin.indices.rollover.RolloverInfo;
-import org.opensearch.action.support.ActiveShardCount;
+import org.opensearch.action.support.ActiveShardCount;  
 import org.opensearch.cluster.Diff;
 import org.opensearch.cluster.Diffable;
-import org.opensearch.cluster.DiffableUtils;
+import org.opensearch.cluster.DiffableUtils;  
 import org.opensearch.cluster.block.ClusterBlock;
 import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.node.DiscoveryNodeFilters;
+import org.opensearch.cluster.node.DiscoveryNodeFilters;  
 import org.opensearch.cluster.routing.allocation.IndexMetadataUpdater;
 import org.opensearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider;
-import org.opensearch.common.Nullable;
+import org.opensearch.common.Nullable;  
 import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.collect.MapBuilder;
-import org.opensearch.common.compress.CompressedXContent;
+import org.opensearch.common.compress.CompressedXContent;  
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Setting.Property;
-import org.opensearch.common.settings.Settings;
+import org.opensearch.common.settings.Settings;  
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.core.common.Strings;
+import org.opensearch.core.common.Strings;  
 import org.opensearch.core.common.io.stream.BufferedChecksumStreamOutput;
 import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.common.io.stream.StreamOutput;  
 import org.opensearch.core.common.io.stream.VerifiableWriteable;
 import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.index.Index;
+import org.opensearch.core.index.Index;  
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.xcontent.XContentBuilder;  
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.gateway.MetadataStateFormat;
-import org.opensearch.index.IndexModule;
+import org.opensearch.index.IndexModule;  
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.seqno.SequenceNumbers;
+import org.opensearch.index.seqno.SequenceNumbers;  
 import org.opensearch.indices.pollingingest.IngestionErrorStrategy;
 import org.opensearch.indices.pollingingest.StreamPoller;
-import org.opensearch.indices.pollingingest.XContentIngestionPayloadDecoder;
+import org.opensearch.indices.pollingingest.XContentIngestionPayloadDecoder;  
 import org.opensearch.indices.pollingingest.mappers.IngestionMessageMapper;
 import org.opensearch.indices.replication.SegmentReplicationSource;
-import org.opensearch.indices.replication.common.ReplicationType;
+import org.opensearch.indices.replication.common.ReplicationType;  
 
 import java.io.IOException;
-import java.time.Instant;
+import java.time.Instant;  
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
-import java.util.ArrayList;
+import java.util.ArrayList;  
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.HashMap;
+import java.util.HashMap;  
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
+import java.util.List;  
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
+import java.util.Objects;  
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeUnit;  
 import java.util.function.Function;
 
-import static org.opensearch.cluster.metadata.Metadata.CONTEXT_MODE_PARAM;
+import static org.opensearch.cluster.metadata.Metadata.CONTEXT_MODE_PARAM;  
 import static org.opensearch.cluster.node.DiscoveryNodeFilters.IP_VALIDATOR;
 import static org.opensearch.cluster.node.DiscoveryNodeFilters.OpType.AND;
-import static org.opensearch.cluster.node.DiscoveryNodeFilters.OpType.OR;
+import static org.opensearch.cluster.node.DiscoveryNodeFilters.OpType.OR;  
 import static org.opensearch.common.settings.Settings.readSettingsFromStream;
 import static org.opensearch.common.settings.Settings.writeSettingsToStream;
 
 /**
  * Index metadata information
- *
+ *  
  * @opensearch.api
  */
-@PublicApi(since = "1.0.0")
+@PublicApi(since = "1.0.0")  
 public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragment, VerifiableWriteable {
 
-    public static final ClusterBlock INDEX_READ_ONLY_BLOCK = new ClusterBlock(
+    public static final ClusterBlock INDEX_READ_ONLY_BLOCK = new ClusterBlock(  
         5,
         "index read-only (api)",
+        false,  
         false,
         false,
-        false,
-        RestStatus.FORBIDDEN,
+        RestStatus.FORBIDDEN,  
         EnumSet.of(ClusterBlockLevel.WRITE, ClusterBlockLevel.METADATA_WRITE)
     );
-    public static final ClusterBlock INDEX_READ_BLOCK = new ClusterBlock(
+    public static final ClusterBlock INDEX_READ_BLOCK = new ClusterBlock(  
         7,
         "index read (api)",
+        false,  
         false,
         false,
-        false,
-        RestStatus.FORBIDDEN,
+        RestStatus.FORBIDDEN,  
         EnumSet.of(ClusterBlockLevel.READ)
     );
-    public static final ClusterBlock INDEX_WRITE_BLOCK = new ClusterBlock(
+    public static final ClusterBlock INDEX_WRITE_BLOCK = new ClusterBlock(  
         8,
         "index write (api)",
+        false,  
         false,
         false,
-        false,
-        RestStatus.FORBIDDEN,
+        RestStatus.FORBIDDEN,  
         EnumSet.of(ClusterBlockLevel.WRITE)
     );
-    public static final ClusterBlock INDEX_METADATA_BLOCK = new ClusterBlock(
+    public static final ClusterBlock INDEX_METADATA_BLOCK = new ClusterBlock(  
         9,
         "index metadata (api)",
+        false,  
         false,
         false,
-        false,
-        RestStatus.FORBIDDEN,
+        RestStatus.FORBIDDEN,  
         EnumSet.of(ClusterBlockLevel.METADATA_WRITE, ClusterBlockLevel.METADATA_READ)
     );
-    public static final ClusterBlock INDEX_READ_ONLY_ALLOW_DELETE_BLOCK = new ClusterBlock(
+    public static final ClusterBlock INDEX_READ_ONLY_ALLOW_DELETE_BLOCK = new ClusterBlock(  
         12,
         "disk usage exceeded flood-stage watermark, index has read-only-allow-delete block",
-        false,
+        false,  
         false,
         true,
-        RestStatus.TOO_MANY_REQUESTS,
+        RestStatus.TOO_MANY_REQUESTS,  
         EnumSet.of(ClusterBlockLevel.METADATA_WRITE, ClusterBlockLevel.WRITE)
     );
 
     public static final ClusterBlock REMOTE_READ_ONLY_ALLOW_DELETE = new ClusterBlock(
         13,
-        "remote index is read-only",
+        "remote index is read-only",  
         false,
         false,
-        true,
+        true,  
         RestStatus.FORBIDDEN,
         EnumSet.of(ClusterBlockLevel.METADATA_WRITE, ClusterBlockLevel.WRITE)
-    );
+    );  
 
     // Block ID and block for scale operations (IDs 20-29 reserved for scaling)
-    public static final int INDEX_SEARCH_ONLY_BLOCK_ID = 20;
+    public static final int INDEX_SEARCH_ONLY_BLOCK_ID = 20;  
 
     /**
-     * Permanent cluster block applied to indices in search-only mode.
+     * Permanent cluster block applied to indices in search-only mode.  
      * <p>
      * This block prevents write operations to the index while allowing read operations.
-     */
+     */  
     public static final ClusterBlock INDEX_SEARCH_ONLY_BLOCK = new ClusterBlock(
         INDEX_SEARCH_ONLY_BLOCK_ID,
-        "index scaled down",
+        "index scaled down",  
         false,
         false,
-        false,
+        false,  
         RestStatus.FORBIDDEN,
         EnumSet.of(ClusterBlockLevel.WRITE)
-    );
+    );  
 
     /**
-     * The state of the index.
+     * The state of the index.  
      *
      * @opensearch.api
-     */
+     */  
     @PublicApi(since = "1.0.0")
     public enum State {
-        OPEN((byte) 0),
+        OPEN((byte) 0),  
         CLOSE((byte) 1);
 
-        private final byte id;
+        private final byte id;  
 
         State(byte id) {
-            this.id = id;
+            this.id = id;  
         }
 
-        public byte id() {
+        public byte id() {  
             return this.id;
         }
 
         public static State fromId(byte id) {
             if (id == 0) {
-                return OPEN;
+                return OPEN;  
             } else if (id == 1) {
                 return CLOSE;
-            }
+            }  
             throw new IllegalStateException("No state match for id [" + id + "]");
         }
 
         public static State fromString(String state) {
             if ("open".equals(state)) {
-                return OPEN;
+                return OPEN;  
             } else if ("close".equals(state)) {
                 return CLOSE;
-            }
+            }  
             throw new IllegalStateException("No state match for [" + state + "]");
         }
-    }
+    }  
 
     static Setting<Integer> buildNumberOfShardsSetting() {
-        /* This is a safety limit that should only be exceeded in very rare and special cases. The assumption is that
+        /* This is a safety limit that should only be exceeded in very rare and special cases. The assumption is that  
          * 99% of the users have less than 1024 shards per index. We also make it a hard check that requires restart of nodes
          * if a cluster should allow to create more than 1024 shards per index. NOTE: this does not limit the number of shards
-         * per cluster. this also prevents creating stuff like a new index with millions of shards by accident which essentially
+         * per cluster. this also prevents creating stuff like a new index with millions of shards by accident which essentially  
          * kills the entire cluster with OOM on the spot.*/
         final int maxNumShards = Integer.parseInt(System.getProperty(MAX_NUMBER_OF_SHARDS, "1024"));
-        if (maxNumShards < 1) {
+        if (maxNumShards < 1) {  
             throw new IllegalArgumentException(MAX_NUMBER_OF_SHARDS + " must be > 0");
         }
-        /* This property should be provided if the default number of shards for any new index has to be changed to a value
+        /* This property should be provided if the default number of shards for any new index has to be changed to a value  
          * other than 1. This value is applicable only if the index.number_of_shards setting is not provided as part of the
          * index creation request. */
-        final int defaultNumShards = Integer.parseInt(System.getProperty(DEFAULT_NUMBER_OF_SHARDS, "1"));
+        final int defaultNumShards = Integer.parseInt(System.getProperty(DEFAULT_NUMBER_OF_SHARDS, "1"));  
         if (defaultNumShards < 1 || defaultNumShards > maxNumShards) {
             throw new IllegalArgumentException(
-                DEFAULT_NUMBER_OF_SHARDS
+                DEFAULT_NUMBER_OF_SHARDS  
                     + " value ["
                     + defaultNumShards
-                    + "] must between "
+                    + "] must between "  
                     + "1 and "
                     + MAX_NUMBER_OF_SHARDS
-                    + " ["
+                    + " ["  
                     + maxNumShards
                     + "]"
-            );
+            );  
         }
         return Setting.intSetting(
-            SETTING_NUMBER_OF_SHARDS,
+            SETTING_NUMBER_OF_SHARDS,  
             defaultNumShards,
             1,
-            maxNumShards,
+            maxNumShards,  
             Property.IndexScope,
             Property.Final,
-            Property.UnmodifiableOnRestore
+            Property.UnmodifiableOnRestore  
         );
     }
 
     public static final String INDEX_SETTING_PREFIX = "index.";
     public static final String SETTING_NUMBER_OF_SHARDS = "index.number_of_shards";
-    public static final String SETTING_NUMBER_OF_VIRTUAL_SHARDS = "index.number_of_virtual_shards";
+    public static final String SETTING_NUMBER_OF_VIRTUAL_SHARDS = "index.number_of_virtual_shards";  
     static final String DEFAULT_NUMBER_OF_SHARDS = "opensearch.index.default_number_of_shards";
     static final String MAX_NUMBER_OF_SHARDS = "opensearch.index.max_number_of_shards";
-    public static final Setting<Integer> INDEX_NUMBER_OF_SHARDS_SETTING = buildNumberOfShardsSetting();
+    public static final Setting<Integer> INDEX_NUMBER_OF_SHARDS_SETTING = buildNumberOfShardsSetting();  
     /**
      * Settings for configuring the number of virtual shards on an index.
-     * <p>
+     * <p>  
      * Note: Virtual Shards uses range-based mapping (e.g., {@code vShardId / (V / P)}) to route to
      * physical shards instead of default modulo hashing. This ensures contiguous bucket mapping
-     * and safe physical shard merging operations later in the lifecycle. The number of virtual shards
+     * and safe physical shard merging operations later in the lifecycle. The number of virtual shards  
      * must be a multiple of the number of physical shards {@code (V % P == 0)}.
      */
-    public static final Setting<Integer> INDEX_NUMBER_OF_VIRTUAL_SHARDS_SETTING = Setting.intSetting(
+    public static final Setting<Integer> INDEX_NUMBER_OF_VIRTUAL_SHARDS_SETTING = Setting.intSetting(  
         SETTING_NUMBER_OF_VIRTUAL_SHARDS,
         -1,
-        -1,
+        -1,  
         Property.IndexScope,
         Property.Final
-    );
+    );  
 
     public static final String SETTING_NUMBER_OF_REPLICAS = "index.number_of_replicas";
-    public static final Setting<Integer> INDEX_NUMBER_OF_REPLICAS_SETTING = Setting.intSetting(
+    public static final Setting<Integer> INDEX_NUMBER_OF_REPLICAS_SETTING = Setting.intSetting(  
         SETTING_NUMBER_OF_REPLICAS,
         1,
-        0,
+        0,  
         Property.Dynamic,
         Property.IndexScope
-    );
+    );  
 
     /**
-     * Setting to control the number of search only replicas for an index.
+     * Setting to control the number of search only replicas for an index.  
      * A search only replica exists solely to perform read operations for a shard and are designed to achieve
      * isolation from writers (primary shards).  This means they are not primary eligible and do not have any direct communication
-     * with their primary.  Search replicas require the use of Segment Replication on the index and poll their {@link SegmentReplicationSource} for
+     * with their primary.  Search replicas require the use of Segment Replication on the index and poll their {@link SegmentReplicationSource} for  
      * updates.  //TODO: Once physical isolation is introduced, reference the setting here.
      */
-    public static final String SETTING_NUMBER_OF_SEARCH_REPLICAS = "index.number_of_search_replicas";
+    public static final String SETTING_NUMBER_OF_SEARCH_REPLICAS = "index.number_of_search_replicas";  
     public static final Setting<Integer> INDEX_NUMBER_OF_SEARCH_REPLICAS_SETTING = Setting.intSetting(
         SETTING_NUMBER_OF_SEARCH_REPLICAS,
-        0,
+        0,  
         0,
         Property.Dynamic,
-        Property.IndexScope
+        Property.IndexScope  
     );
 
-    public static final String SETTING_ROUTING_PARTITION_SIZE = "index.routing_partition_size";
+    public static final String SETTING_ROUTING_PARTITION_SIZE = "index.routing_partition_size";  
     public static final Setting<Integer> INDEX_ROUTING_PARTITION_SIZE_SETTING = Setting.intSetting(
         SETTING_ROUTING_PARTITION_SIZE,
-        1,
+        1,  
         1,
         Property.IndexScope
-    );
+    );  
 
     public static final Setting<Integer> INDEX_NUMBER_OF_ROUTING_SHARDS_SETTING = Setting.intSetting(
-        "index.number_of_routing_shards",
+        "index.number_of_routing_shards",  
         INDEX_NUMBER_OF_SHARDS_SETTING,
         1,
-        new Setting.Validator<Integer>() {
+        new Setting.Validator<Integer>() {  
 
             @Override
-            public void validate(final Integer value) {
+            public void validate(final Integer value) {  
 
             }
 
             @Override
             public void validate(final Integer numRoutingShards, final Map<Setting<?>, Object> settings) {
-                int numShards = (int) settings.get(INDEX_NUMBER_OF_SHARDS_SETTING);
+                int numShards = (int) settings.get(INDEX_NUMBER_OF_SHARDS_SETTING);  
                 if (numRoutingShards < numShards) {
                     throw new IllegalArgumentException(
-                        "index.number_of_routing_shards [" + numRoutingShards + "] must be >= index.number_of_shards [" + numShards + "]"
+                        "index.number_of_routing_shards [" + numRoutingShards + "] must be >= index.number_of_shards [" + numShards + "]"  
                     );
                 }
-                getRoutingFactor(numShards, numRoutingShards);
+                getRoutingFactor(numShards, numRoutingShards);  
             }
 
-            @Override
+            @Override  
             public Iterator<Setting<?>> settings() {
                 final List<Setting<?>> settings = Collections.singletonList(INDEX_NUMBER_OF_SHARDS_SETTING);
-                return settings.iterator();
+                return settings.iterator();  
             }
 
-        },
+        },  
         Property.IndexScope,
         Property.NotCopyableOnResize
-    );
+    );  
 
     /**
-     * Used to specify the replication type for the index. By default, document replication is used.
+     * Used to specify the replication type for the index. By default, document replication is used.  
      */
     public static final String SETTING_REPLICATION_TYPE = "index.replication.type";
-    public static final Setting<ReplicationType> INDEX_REPLICATION_TYPE_SETTING = new Setting<>(
+    public static final Setting<ReplicationType> INDEX_REPLICATION_TYPE_SETTING = new Setting<>(  
         SETTING_REPLICATION_TYPE,
         ReplicationType.DOCUMENT.toString(),
-        ReplicationType::parseString,
+        ReplicationType::parseString,  
         new Setting.Validator<>() {
 
-            @Override
+            @Override  
             public void validate(final ReplicationType value) {}
 
-            @Override
+            @Override  
             public void validate(final ReplicationType value, final Map<Setting<?>, Object> settings) {
                 final Object remoteStoreEnabled = settings.get(INDEX_REMOTE_STORE_ENABLED_SETTING);
-                if (ReplicationType.SEGMENT.equals(value) == false && Objects.equals(remoteStoreEnabled, true)) {
+                if (ReplicationType.SEGMENT.equals(value) == false && Objects.equals(remoteStoreEnabled, true)) {  
                     throw new IllegalArgumentException(
                         "To enable "
-                            + INDEX_REMOTE_STORE_ENABLED_SETTING.getKey()
+                            + INDEX_REMOTE_STORE_ENABLED_SETTING.getKey()  
                             + ", "
                             + INDEX_REPLICATION_TYPE_SETTING.getKey()
-                            + " should be set to "
+                            + " should be set to "  
                             + ReplicationType.SEGMENT
                     );
-                }
+                }  
             }
 
-            @Override
+            @Override  
             public Iterator<Setting<?>> settings() {
                 final List<Setting<?>> settings = List.of(INDEX_REMOTE_STORE_ENABLED_SETTING);
-                return settings.iterator();
+                return settings.iterator();  
             }
         },
-        Property.IndexScope,
+        Property.IndexScope,  
         Property.Final
     );
 
     public static final String SETTING_REMOTE_STORE_ENABLED = "index.remote_store.enabled";
     public static final String SETTING_INDEX_APPEND_ONLY_ENABLED = "index.append_only.enabled";
-    public static final String SETTING_BULK_ADAPTIVE_SHARD_SELECTION_ENABLED = "index.bulk.adaptive_shard_selection.enabled";
+    public static final String SETTING_BULK_ADAPTIVE_SHARD_SELECTION_ENABLED = "index.bulk.adaptive_shard_selection.enabled";  
 
     public static final String SETTING_REMOTE_SEGMENT_STORE_REPOSITORY = "index.remote_store.segment.repository";
 
     public static final String SETTING_REMOTE_TRANSLOG_STORE_REPOSITORY = "index.remote_store.translog.repository";
 
-    /**
+    /**  
      * Used to specify if the index data should be persisted in the remote store.
      */
-    public static final Setting<Boolean> INDEX_REMOTE_STORE_ENABLED_SETTING = Setting.boolSetting(
+    public static final Setting<Boolean> INDEX_REMOTE_STORE_ENABLED_SETTING = Setting.boolSetting(  
         SETTING_REMOTE_STORE_ENABLED,
         false,
-        new Setting.Validator<>() {
+        new Setting.Validator<>() {  
 
             @Override
-            public void validate(final Boolean value) {}
+            public void validate(final Boolean value) {}  
 
             @Override
-            public void validate(final Boolean value, final Map<Setting<?>, Object> settings) {
+            public void validate(final Boolean value, final Map<Setting<?>, Object> settings) {  
                 final Object replicationType = settings.get(INDEX_REPLICATION_TYPE_SETTING);
                 if (ReplicationType.SEGMENT.equals(replicationType) == false && value) {
-                    throw new IllegalArgumentException(
+                    throw new IllegalArgumentException(  
                         "To enable "
                             + INDEX_REMOTE_STORE_ENABLED_SETTING.getKey()
-                            + ", "
+                            + ", "  
                             + INDEX_REPLICATION_TYPE_SETTING.getKey()
                             + " should be set to "
-                            + ReplicationType.SEGMENT
+                            + ReplicationType.SEGMENT  
                     );
                 }
-            }
+            }  
 
             @Override
-            public Iterator<Setting<?>> settings() {
+            public Iterator<Setting<?>> settings() {  
                 final List<Setting<?>> settings = List.of(INDEX_REPLICATION_TYPE_SETTING);
                 return settings.iterator();
-            }
+            }  
         },
         Property.IndexScope,
-        Property.PrivateIndex,
+        Property.PrivateIndex,  
         Property.Dynamic
     );
 
     /**
      * Used to specify if the index data should be persisted in the remote store.
-     */
+     */  
     public static final Setting<Boolean> INDEX_APPEND_ONLY_ENABLED_SETTING = Setting.boolSetting(
         SETTING_INDEX_APPEND_ONLY_ENABLED,
-        false,
+        false,  
         Property.IndexScope,
         Property.Final
-    );
+    );  
 
     public static final String SETTING_REMOTE_STORE_FENCING_ENABLED = "index.remote_store.fencing.enabled";
 
     /**
      * Used to enable object-store-backed primary fencing for remote-store-backed indices. When enabled, every
-     * translog upload on the acknowledgement path performs a compare-and-swap on a per-shard fence blob in the
+     * translog upload on the acknowledgement path performs a compare-and-swap on a per-shard fence blob in the  
      * translog repository, so a stale primary fails itself instead of acknowledging writes that would be lost on
      * failover. Requires the translog repository to support conditional writes.
-     * <p>
+     * <p>  
      * Must not be enabled for an index migrating between document replication and remote store: fencing assumes
      * every writer acknowledges through the remote translog upload path, and a docrep-backed writer during
-     * migration never touches the fence, so it could not be fenced by it. Enable only on indices that are
+     * migration never touches the fence, so it could not be fenced by it. Enable only on indices that are  
      * remote-store-backed end to end.
      */
-    public static final Setting<Boolean> INDEX_REMOTE_STORE_FENCING_ENABLED_SETTING = Setting.boolSetting(
+    public static final Setting<Boolean> INDEX_REMOTE_STORE_FENCING_ENABLED_SETTING = Setting.boolSetting(  
         SETTING_REMOTE_STORE_FENCING_ENABLED,
         false,
-        Property.IndexScope,
+        Property.IndexScope,  
         Property.Final
     );
 
     public static final String SETTING_REMOTE_STORE_AUTO_RESTORE_ENABLED = "index.remote_store.auto_restore.enabled";
 
-    /**
+    /**  
      * Used to enable automatic restore of a remote-store-backed primary whose last copy was lost with the node that
      * held it. When enabled, the allocator converts a primary it has proven unrecoverable from any live node's local
-     * store (the state that otherwise parks at {@code NO_VALID_SHARD_COPY}, RED) into a remote-store recovery on a
+     * store (the state that otherwise parks at {@code NO_VALID_SHARD_COPY}, RED) into a remote-store recovery on a  
      * live node, so the shard goes unassigned &rarr; recovering &rarr; started with no operator action.
      * <p>
-     * Requires {@link #INDEX_REMOTE_STORE_FENCING_ENABLED_SETTING}: the trigger fires on the cluster manager's
+     * Requires {@link #INDEX_REMOTE_STORE_FENCING_ENABLED_SETTING}: the trigger fires on the cluster manager's  
      * membership view, and the departed primary is typically still alive behind a partition, still able to reach the
      * object store. The fence's strictly-greater-term takeover is what makes acknowledging past the restored copy's
-     * restore point impossible; without it the trigger loses acknowledged writes
+     * restore point impossible; without it the trigger loses acknowledged writes  
      * ({@code FenceAutoRestore.tla} refutes the ungated design).
      */
-    public static final Setting<Boolean> INDEX_REMOTE_STORE_AUTO_RESTORE_ENABLED_SETTING = Setting.boolSetting(
+    public static final Setting<Boolean> INDEX_REMOTE_STORE_AUTO_RESTORE_ENABLED_SETTING = Setting.boolSetting(  
         SETTING_REMOTE_STORE_AUTO_RESTORE_ENABLED,
         false,
-        new Setting.Validator<>() {
+        new Setting.Validator<>() {  
 
             @Override
-            public void validate(final Boolean value) {}
+            public void validate(final Boolean value) {}  
 
             @Override
-            public void validate(final Boolean value, final Map<Setting<?>, Object> settings) {
+            public void validate(final Boolean value, final Map<Setting<?>, Object> settings) {  
                 if (value) {
                     final Boolean fencingEnabled = (Boolean) settings.get(INDEX_REMOTE_STORE_FENCING_ENABLED_SETTING);
-                    if (fencingEnabled == null || fencingEnabled == false) {
+                    if (fencingEnabled == null || fencingEnabled == false) {  
                         throw new IllegalArgumentException(
                             "Setting "
-                                + SETTING_REMOTE_STORE_AUTO_RESTORE_ENABLED
+                                + SETTING_REMOTE_STORE_AUTO_RESTORE_ENABLED  
                                 + " can only be enabled when "
                                 + SETTING_REMOTE_STORE_FENCING_ENABLED
-                                + " is enabled: the auto-restore trigger fires on the cluster manager's view of node"
+                                + " is enabled: the auto-restore trigger fires on the cluster manager's view of node"  
                                 + " membership while the departed primary may still be alive, and only the fence"
                                 + " prevents it from acknowledging writes the restored copy will never see"
-                        );
+                        );  
                     }
                 }
-            }
+            }  
 
             @Override
-            public Iterator<Setting<?>> settings() {
+            public Iterator<Setting<?>> settings() {  
                 final List<Setting<?>> settings = Collections.singletonList(INDEX_REMOTE_STORE_FENCING_ENABLED_SETTING);
                 return settings.iterator();
-            }
+            }  
         },
         Property.IndexScope,
-        Property.Final
+        Property.Final  
     );
 
-    /**
+    /**  
      * Used to specify if the bulk should use adaptive shard selection to select one shard.
      */
-    public static final Setting<Boolean> INDEX_BULK_ADAPTIVE_SHARD_SELECTION_ENABLED = Setting.boolSetting(
+    public static final Setting<Boolean> INDEX_BULK_ADAPTIVE_SHARD_SELECTION_ENABLED = Setting.boolSetting(  
         SETTING_BULK_ADAPTIVE_SHARD_SELECTION_ENABLED,
         false,
-        Setting.Property.Dynamic,
+        Setting.Property.Dynamic,  
         Setting.Property.IndexScope
     );
 
     /**
      * Used to specify remote store repository to use for this index.
-     */
+     */  
     public static final Setting<String> INDEX_REMOTE_SEGMENT_STORE_REPOSITORY_SETTING = Setting.simpleString(
         SETTING_REMOTE_SEGMENT_STORE_REPOSITORY,
-        new Setting.Validator<>() {
+        new Setting.Validator<>() {  
 
             @Override
-            public void validate(final String value) {}
+            public void validate(final String value) {}  
 
             @Override
-            public void validate(final String value, final Map<Setting<?>, Object> settings) {
+            public void validate(final String value, final Map<Setting<?>, Object> settings) {  
                 if (value == null || value.isEmpty()) {
                     throw new IllegalArgumentException(
-                        "Setting "
+                        "Setting "  
                             + INDEX_REMOTE_SEGMENT_STORE_REPOSITORY_SETTING.getKey()
                             + " should be provided with non-empty repository ID"
-                    );
+                    );  
                 } else {
                     validateRemoteStoreSettingEnabled(settings, INDEX_REMOTE_SEGMENT_STORE_REPOSITORY_SETTING);
-                }
+                }  
             }
 
-            @Override
+            @Override  
             public Iterator<Setting<?>> settings() {
                 final List<Setting<?>> settings = Collections.singletonList(INDEX_REMOTE_STORE_ENABLED_SETTING);
-                return settings.iterator();
+                return settings.iterator();  
             }
         },
-        Property.IndexScope,
+        Property.IndexScope,  
         Property.PrivateIndex,
         Property.Dynamic
-    );
+    );  
 
     /**
-     * Used to specify a custom path prefix for remote store segments. This allows injecting a unique identifier
+     * Used to specify a custom path prefix for remote store segments. This allows injecting a unique identifier  
      * (e.g., writer node ID) into the remote store path to support clusterless configurations where multiple
      * writers may write to the same shard.
-     */
+     */  
     public static final Setting<String> INDEX_REMOTE_STORE_SEGMENT_PATH_PREFIX = Setting.simpleString(
         "index.remote_store.segment.path_prefix",
-        "",
+        "",  
         new Setting.Validator<>() {
 
-            @Override
+            @Override  
             public void validate(final String value) {}
 
-            @Override
+            @Override  
             public void validate(final String value, final Map<Setting<?>, Object> settings) {
                 // Only validate if the value is not null and not empty
-                if (value != null && !value.trim().isEmpty()) {
+                if (value != null && !value.trim().isEmpty()) {  
                     // Validate that remote store is enabled when this setting is used
                     final Boolean isRemoteSegmentStoreEnabled = (Boolean) settings.get(INDEX_REMOTE_STORE_ENABLED_SETTING);
-                    if (isRemoteSegmentStoreEnabled == null || isRemoteSegmentStoreEnabled == false) {
+                    if (isRemoteSegmentStoreEnabled == null || isRemoteSegmentStoreEnabled == false) {  
                         throw new IllegalArgumentException(
                             "Setting "
-                                + INDEX_REMOTE_STORE_SEGMENT_PATH_PREFIX.getKey()
+                                + INDEX_REMOTE_STORE_SEGMENT_PATH_PREFIX.getKey()  
                                 + " can only be set when "
                                 + INDEX_REMOTE_STORE_ENABLED_SETTING.getKey()
-                                + " is set to true"
+                                + " is set to true"  
                         );
                     }
 
                     // Validate that the path prefix doesn't contain invalid characters for file paths
                     if (value.contains("/") || value.contains("\\") || value.contains(":")) {
-                        throw new IllegalArgumentException(
+                        throw new IllegalArgumentException(  
                             "Setting "
                                 + INDEX_REMOTE_STORE_SEGMENT_PATH_PREFIX.getKey()
-                                + " cannot contain path separators (/ or \\) or drive specifiers (:)"
+                                + " cannot contain path separators (/ or \\) or drive specifiers (:)"  
                         );
                     }
-                }
+                }  
             }
 
-            @Override
+            @Override  
             public Iterator<Setting<?>> settings() {
                 final List<Setting<?>> settings = Collections.singletonList(INDEX_REMOTE_STORE_ENABLED_SETTING);
-                return settings.iterator();
+                return settings.iterator();  
             }
         },
-        Property.IndexScope,
+        Property.IndexScope,  
         Property.PrivateIndex,
         Property.Dynamic
-    );
+    );  
 
     private static void validateRemoteStoreSettingEnabled(final Map<Setting<?>, Object> settings, Setting<?> setting) {
-        final Boolean isRemoteSegmentStoreEnabled = (Boolean) settings.get(INDEX_REMOTE_STORE_ENABLED_SETTING);
+        final Boolean isRemoteSegmentStoreEnabled = (Boolean) settings.get(INDEX_REMOTE_STORE_ENABLED_SETTING);  
         if (isRemoteSegmentStoreEnabled == false) {
             throw new IllegalArgumentException(
-                "Settings "
+                "Settings "  
                     + setting.getKey()
                     + " can only be set/enabled when "
-                    + INDEX_REMOTE_STORE_ENABLED_SETTING.getKey()
+                    + INDEX_REMOTE_STORE_ENABLED_SETTING.getKey()  
                     + " is set to true"
             );
-        }
+        }  
     }
 
-    public static final Setting<String> INDEX_REMOTE_TRANSLOG_REPOSITORY_SETTING = Setting.simpleString(
+    public static final Setting<String> INDEX_REMOTE_TRANSLOG_REPOSITORY_SETTING = Setting.simpleString(  
         SETTING_REMOTE_TRANSLOG_STORE_REPOSITORY,
         new Setting.Validator<>() {
 
@@ -631,103 +631,103 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
 
             @Override
             public void validate(final String value, final Map<Setting<?>, Object> settings) {
-                if (value == null || value.isEmpty()) {
+                if (value == null || value.isEmpty()) {  
                     throw new IllegalArgumentException(
                         "Setting " + INDEX_REMOTE_TRANSLOG_REPOSITORY_SETTING.getKey() + " should be provided with non-empty repository ID"
-                    );
+                    );  
                 } else {
                     final Boolean isRemoteTranslogStoreEnabled = (Boolean) settings.get(INDEX_REMOTE_STORE_ENABLED_SETTING);
-                    if (isRemoteTranslogStoreEnabled == null || isRemoteTranslogStoreEnabled == false) {
+                    if (isRemoteTranslogStoreEnabled == null || isRemoteTranslogStoreEnabled == false) {  
                         throw new IllegalArgumentException(
                             "Settings "
-                                + INDEX_REMOTE_TRANSLOG_REPOSITORY_SETTING.getKey()
+                                + INDEX_REMOTE_TRANSLOG_REPOSITORY_SETTING.getKey()  
                                 + " can only be set/enabled when "
                                 + INDEX_REMOTE_STORE_ENABLED_SETTING.getKey()
-                                + " is set to true"
+                                + " is set to true"  
                         );
                     }
-                }
+                }  
             }
 
-            @Override
+            @Override  
             public Iterator<Setting<?>> settings() {
                 final List<Setting<?>> settings = Collections.singletonList(INDEX_REMOTE_STORE_ENABLED_SETTING);
-                return settings.iterator();
+                return settings.iterator();  
             }
         },
-        Property.IndexScope,
+        Property.IndexScope,  
         Property.PrivateIndex,
         Property.Dynamic
-    );
+    );  
 
     public static final String SETTING_AUTO_EXPAND_REPLICAS = "index.auto_expand_replicas";
-    public static final String SETTING_AUTO_EXPAND_SEARCH_REPLICAS = "index.auto_expand_search_replicas";
+    public static final String SETTING_AUTO_EXPAND_SEARCH_REPLICAS = "index.auto_expand_search_replicas";  
     public static final Setting<AutoExpandReplicas> INDEX_AUTO_EXPAND_REPLICAS_SETTING = AutoExpandReplicas.SETTING;
     public static final Setting<AutoExpandSearchReplicas> INDEX_AUTO_EXPAND_SEARCH_REPLICAS_SETTING = AutoExpandSearchReplicas.SETTING;
 
     /**
      * Blocks the API.
-     *
+     *  
      * @opensearch.api
      */
-    @PublicApi(since = "1.0.0")
+    @PublicApi(since = "1.0.0")  
     public enum APIBlock implements Writeable {
         READ_ONLY("read_only", INDEX_READ_ONLY_BLOCK),
-        READ("read", INDEX_READ_BLOCK),
+        READ("read", INDEX_READ_BLOCK),  
         WRITE("write", INDEX_WRITE_BLOCK),
         METADATA("metadata", INDEX_METADATA_BLOCK),
-        READ_ONLY_ALLOW_DELETE("read_only_allow_delete", INDEX_READ_ONLY_ALLOW_DELETE_BLOCK),
+        READ_ONLY_ALLOW_DELETE("read_only_allow_delete", INDEX_READ_ONLY_ALLOW_DELETE_BLOCK),  
         SEARCH_ONLY("search_only", INDEX_SEARCH_ONLY_BLOCK);
 
-        final String name;
+        final String name;  
         final String settingName;
         final Setting<Boolean> setting;
-        final ClusterBlock block;
+        final ClusterBlock block;  
 
         APIBlock(String name, ClusterBlock block) {
-            this.name = name;
+            this.name = name;  
             this.settingName = "index.blocks." + name;
             this.setting = Setting.boolSetting(settingName, false, Property.Dynamic, Property.IndexScope);
-            this.block = block;
+            this.block = block;  
         }
 
-        public String settingName() {
+        public String settingName() {  
             return settingName;
         }
 
         public Setting<Boolean> setting() {
             return setting;
-        }
+        }  
 
         public ClusterBlock getBlock() {
-            return block;
+            return block;  
         }
 
-        public static APIBlock fromName(String name) {
+        public static APIBlock fromName(String name) {  
             for (APIBlock block : APIBlock.values()) {
                 if (block.name.equals(name)) {
-                    return block;
+                    return block;  
                 }
             }
-            throw new IllegalArgumentException("No block found with name " + name);
+            throw new IllegalArgumentException("No block found with name " + name);  
         }
 
-        public static APIBlock fromSetting(String settingName) {
+        public static APIBlock fromSetting(String settingName) {  
             for (APIBlock block : APIBlock.values()) {
                 if (block.settingName.equals(settingName)) {
-                    return block;
+                    return block;  
                 }
             }
-            throw new IllegalArgumentException("No block found with setting name " + settingName);
+            throw new IllegalArgumentException("No block found with setting name " + settingName);  
         }
 
-        @Override
+        @Override  
         public void writeTo(StreamOutput out) throws IOException {
             out.writeVInt(ordinal());
-        }
+        }  
 
         public static APIBlock readFrom(StreamInput input) throws IOException {
-            return APIBlock.values()[input.readVInt()];
+            return APIBlock.values()[input.readVInt()];  
         }
     }
 
@@ -748,2447 +748,2447 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
 
     public static final Setting<Boolean> INDEX_BLOCKS_SEARCH_ONLY_SETTING = APIBlock.SEARCH_ONLY.setting();
 
-    public static final String SETTING_VERSION_CREATED = "index.version.created";
+    public static final String SETTING_VERSION_CREATED = "index.version.created";  
 
     public static final Setting<Version> SETTING_INDEX_VERSION_CREATED = Setting.versionSetting(
-        SETTING_VERSION_CREATED,
+        SETTING_VERSION_CREATED,  
         Version.V_EMPTY,
         Property.IndexScope,
-        Property.PrivateIndex,
+        Property.PrivateIndex,  
         Property.UnmodifiableOnRestore
     );
 
     public static final String SETTING_VERSION_CREATED_STRING = "index.version.created_string";
     public static final String SETTING_VERSION_UPGRADED = "index.version.upgraded";
-    public static final String SETTING_VERSION_UPGRADED_STRING = "index.version.upgraded_string";
+    public static final String SETTING_VERSION_UPGRADED_STRING = "index.version.upgraded_string";  
     public static final String SETTING_CREATION_DATE = "index.creation_date";
 
-    public static final Setting<Long> SETTING_INDEX_CREATION_DATE = Setting.longSetting(
+    public static final Setting<Long> SETTING_INDEX_CREATION_DATE = Setting.longSetting(  
         SETTING_CREATION_DATE,
         -1,
-        -1,
+        -1,  
         Property.IndexScope,
         Property.Final
-    );
+    );  
 
     /**
-     * The user provided name for an index. This is the plain string provided by the user when the index was created.
+     * The user provided name for an index. This is the plain string provided by the user when the index was created.  
      * It might still contain date math expressions etc. (added in 5.0)
      */
-    public static final String SETTING_INDEX_PROVIDED_NAME = "index.provided_name";
+    public static final String SETTING_INDEX_PROVIDED_NAME = "index.provided_name";  
     public static final String SETTING_PRIORITY = "index.priority";
     public static final Setting<Integer> INDEX_PRIORITY_SETTING = Setting.intSetting(
-        "index.priority",
+        "index.priority",  
         1,
         0,
-        Property.Dynamic,
+        Property.Dynamic,  
         Property.IndexScope
     );
-    public static final String SETTING_CREATION_DATE_STRING = "index.creation_date_string";
+    public static final String SETTING_CREATION_DATE_STRING = "index.creation_date_string";  
     public static final String SETTING_INDEX_UUID = "index.uuid";
     public static final String SETTING_HISTORY_UUID = "index.history.uuid";
-    public static final String SETTING_DATA_PATH = "index.data_path";
+    public static final String SETTING_DATA_PATH = "index.data_path";  
     public static final Setting<String> INDEX_DATA_PATH_SETTING = new Setting<>(
         SETTING_DATA_PATH,
-        "",
+        "",  
         Function.identity(),
         Property.IndexScope
-    );
+    );  
 
     public static final String INDEX_UUID_NA_VALUE = Strings.UNKNOWN_UUID_VALUE;
 
     public static final Setting<String> INDEX_UUID_SETTING = Setting.simpleString(
         SETTING_INDEX_UUID,
-        INDEX_UUID_NA_VALUE,
+        INDEX_UUID_NA_VALUE,  
         Property.IndexScope,
         Property.PrivateIndex,
-        Property.UnmodifiableOnRestore
+        Property.UnmodifiableOnRestore  
     );
 
-    public static final Setting<String> SETTING_INDEX_HISTORY_UUID = Setting.simpleString(
+    public static final Setting<String> SETTING_INDEX_HISTORY_UUID = Setting.simpleString(  
         SETTING_HISTORY_UUID,
         INDEX_UUID_NA_VALUE,
-        Property.IndexScope,
+        Property.IndexScope,  
         Property.PrivateIndex,
         Property.UnmodifiableOnRestore
-    );
+    );  
 
     public static final String INDEX_ROUTING_REQUIRE_GROUP_PREFIX = "index.routing.allocation.require";
-    public static final String INDEX_ROUTING_INCLUDE_GROUP_PREFIX = "index.routing.allocation.include";
+    public static final String INDEX_ROUTING_INCLUDE_GROUP_PREFIX = "index.routing.allocation.include";  
     public static final String INDEX_ROUTING_EXCLUDE_GROUP_PREFIX = "index.routing.allocation.exclude";
     public static final Setting.AffixSetting<String> INDEX_ROUTING_REQUIRE_GROUP_SETTING = Setting.prefixKeySetting(
-        INDEX_ROUTING_REQUIRE_GROUP_PREFIX + ".",
+        INDEX_ROUTING_REQUIRE_GROUP_PREFIX + ".",  
         key -> Setting.simpleString(key, value -> IP_VALIDATOR.accept(key, value), Property.Dynamic, Property.IndexScope)
     );
-    public static final Setting.AffixSetting<String> INDEX_ROUTING_INCLUDE_GROUP_SETTING = Setting.prefixKeySetting(
+    public static final Setting.AffixSetting<String> INDEX_ROUTING_INCLUDE_GROUP_SETTING = Setting.prefixKeySetting(  
         INDEX_ROUTING_INCLUDE_GROUP_PREFIX + ".",
         key -> Setting.simpleString(key, value -> IP_VALIDATOR.accept(key, value), Property.Dynamic, Property.IndexScope)
-    );
+    );  
     public static final Setting.AffixSetting<String> INDEX_ROUTING_EXCLUDE_GROUP_SETTING = Setting.prefixKeySetting(
         INDEX_ROUTING_EXCLUDE_GROUP_PREFIX + ".",
-        key -> Setting.simpleString(key, value -> IP_VALIDATOR.accept(key, value), Property.Dynamic, Property.IndexScope)
+        key -> Setting.simpleString(key, value -> IP_VALIDATOR.accept(key, value), Property.Dynamic, Property.IndexScope)  
     );
     public static final Setting.AffixSetting<String> INDEX_ROUTING_INITIAL_RECOVERY_GROUP_SETTING = Setting.prefixKeySetting(
-        "index.routing.allocation.initial_recovery.",
+        "index.routing.allocation.initial_recovery.",  
         key -> Setting.simpleString(key)
     );
 
     /**
      * The number of active shard copies to check for before proceeding with a write operation.
-     */
+     */  
     public static final Setting<ActiveShardCount> SETTING_WAIT_FOR_ACTIVE_SHARDS = new Setting<>(
         "index.write.wait_for_active_shards",
-        "1",
+        "1",  
         ActiveShardCount::parseString,
         Setting.Property.Dynamic,
-        Setting.Property.IndexScope
+        Setting.Property.IndexScope  
     );
 
-    public static final String SETTING_INDEX_HIDDEN = "index.hidden";
+    public static final String SETTING_INDEX_HIDDEN = "index.hidden";  
     /**
      * Whether the index is considered hidden or not. A hidden index will not be resolved in
-     * normal wildcard searches unless explicitly allowed
+     * normal wildcard searches unless explicitly allowed  
      */
     public static final Setting<Boolean> INDEX_HIDDEN_SETTING = Setting.boolSetting(
-        SETTING_INDEX_HIDDEN,
+        SETTING_INDEX_HIDDEN,  
         false,
         Property.Dynamic,
-        Property.IndexScope
+        Property.IndexScope  
     );
 
-    /**
+    /**  
      * Used to specify the type for the ingestion index. If not specified, the ingestion source not enabled
      */
-    public static final String SETTING_INGESTION_SOURCE_TYPE = "index.ingestion_source.type";
+    public static final String SETTING_INGESTION_SOURCE_TYPE = "index.ingestion_source.type";  
     public static final String NONE_INGESTION_SOURCE_TYPE = "none";
     public static final Setting<String> INGESTION_SOURCE_TYPE_SETTING = Setting.simpleString(
-        SETTING_INGESTION_SOURCE_TYPE,
+        SETTING_INGESTION_SOURCE_TYPE,  
         NONE_INGESTION_SOURCE_TYPE,
         new Setting.Validator<>() {
 
             @Override
             public void validate(final String value) {
-                // TODO: validate this with the registered types in the ingestion source plugin
+                // TODO: validate this with the registered types in the ingestion source plugin  
             }
 
-            @Override
+            @Override  
             public void validate(final String value, final Map<Setting<?>, Object> settings) {
                 // TODO: validate this with the ingestion source params
-            }
+            }  
         },
         Property.IndexScope
-    );
+    );  
 
     /**
-     * Used to specify initial reset policy for the ingestion pointer. If not specified, default to the latest
+     * Used to specify initial reset policy for the ingestion pointer. If not specified, default to the latest  
      */
     public static final String SETTING_INGESTION_SOURCE_POINTER_INIT_RESET = "index.ingestion_source.pointer.init.reset";
-    public static final Setting<String> INGESTION_SOURCE_POINTER_INIT_RESET_SETTING = Setting.simpleString(
+    public static final Setting<String> INGESTION_SOURCE_POINTER_INIT_RESET_SETTING = Setting.simpleString(  
         SETTING_INGESTION_SOURCE_POINTER_INIT_RESET,
         StreamPoller.ResetState.LATEST.name(),
-        new Setting.Validator<>() {
+        new Setting.Validator<>() {  
 
             @Override
-            public void validate(final String value) {
+            public void validate(final String value) {  
                 if (!isValidResetState(value)) {
                     throw new IllegalArgumentException(
-                        "Invalid value for " + SETTING_INGESTION_SOURCE_POINTER_INIT_RESET + " [" + value + "]"
+                        "Invalid value for " + SETTING_INGESTION_SOURCE_POINTER_INIT_RESET + " [" + value + "]"  
                     );
                 }
-            }
+            }  
 
             @Override
-            public void validate(final String value, final Map<Setting<?>, Object> settings) {
+            public void validate(final String value, final Map<Setting<?>, Object> settings) {  
                 if (isResetState(value)) {
                     // Ensure the reset value setting is provided when resetting consumer position.
-                    final String resetValue = (String) settings.get(INGESTION_SOURCE_POINTER_INIT_RESET_VALUE_SETTING);
+                    final String resetValue = (String) settings.get(INGESTION_SOURCE_POINTER_INIT_RESET_VALUE_SETTING);  
                     if (resetValue == null || resetValue.isEmpty()) {
                         throw new IllegalArgumentException(
-                            "Setting "
+                            "Setting "  
                                 + INGESTION_SOURCE_POINTER_INIT_RESET_VALUE_SETTING.getKey()
                                 + " should be set when resetting consumer position"
-                        );
+                        );  
                     }
                 }
-            }
+            }  
 
             private boolean isValidResetState(String value) {
-                return StreamPoller.ResetState.LATEST.name().equalsIgnoreCase(value)
+                return StreamPoller.ResetState.LATEST.name().equalsIgnoreCase(value)  
                     || StreamPoller.ResetState.EARLIEST.name().equalsIgnoreCase(value)
                     || isResetState(value);
-            }
+            }  
 
             private boolean isResetState(String value) {
-                return StreamPoller.ResetState.RESET_BY_OFFSET.name().equalsIgnoreCase(value)
+                return StreamPoller.ResetState.RESET_BY_OFFSET.name().equalsIgnoreCase(value)  
                     || StreamPoller.ResetState.RESET_BY_TIMESTAMP.name().equalsIgnoreCase(value);
             }
 
             @Override
             public Iterator<Setting<?>> settings() {
-                final List<Setting<?>> settings = Collections.singletonList(INGESTION_SOURCE_POINTER_INIT_RESET_VALUE_SETTING);
+                final List<Setting<?>> settings = Collections.singletonList(INGESTION_SOURCE_POINTER_INIT_RESET_VALUE_SETTING);  
                 return settings.iterator();
             }
-        },
+        },  
         Property.IndexScope,
         Property.Final
-    );
+    );  
 
     /**
-     * Defines the setting for the value to be used when resetting by offset or timestamp.
+     * Defines the setting for the value to be used when resetting by offset or timestamp.  
      */
     public static final String SETTING_INGESTION_SOURCE_POINTER_INIT_RESET_VALUE = "index.ingestion_source.pointer.init.reset.value";
-    public static final Setting<String> INGESTION_SOURCE_POINTER_INIT_RESET_VALUE_SETTING = Setting.simpleString(
+    public static final Setting<String> INGESTION_SOURCE_POINTER_INIT_RESET_VALUE_SETTING = Setting.simpleString(  
         SETTING_INGESTION_SOURCE_POINTER_INIT_RESET_VALUE,
         "",
-        Property.IndexScope,
+        Property.IndexScope,  
         Property.Final
     );
 
     /**
      * Defines the error strategy for pull-based ingestion.
-     */
+     */  
     public static final String SETTING_INGESTION_SOURCE_ERROR_STRATEGY = "index.ingestion_source.error_strategy";
     public static final Setting<IngestionErrorStrategy.ErrorStrategy> INGESTION_SOURCE_ERROR_STRATEGY_SETTING = new Setting<>(
-        SETTING_INGESTION_SOURCE_ERROR_STRATEGY,
+        SETTING_INGESTION_SOURCE_ERROR_STRATEGY,  
         IngestionErrorStrategy.ErrorStrategy.DROP.name(),
         IngestionErrorStrategy.ErrorStrategy::parseFromString,
-        (errorStrategy) -> {},
+        (errorStrategy) -> {},  
         Property.IndexScope,
         Property.Dynamic
-    );
+    );  
 
     /**
-     * Defines the max poll size per batch for pull-based ingestion.
+     * Defines the max poll size per batch for pull-based ingestion.  
      */
     public static final String SETTING_INGESTION_SOURCE_MAX_POLL_SIZE = "index.ingestion_source.poll.max_batch_size";
-    public static final Setting<Long> INGESTION_SOURCE_MAX_POLL_SIZE = Setting.longSetting(
+    public static final Setting<Long> INGESTION_SOURCE_MAX_POLL_SIZE = Setting.longSetting(  
         SETTING_INGESTION_SOURCE_MAX_POLL_SIZE,
         1000,
-        0,
+        0,  
         Property.IndexScope,
         Property.Dynamic
-    );
+    );  
 
     /**
-     * Defines the poll timeout for pull-based ingestion in milliseconds.
+     * Defines the poll timeout for pull-based ingestion in milliseconds.  
      */
     public static final String SETTING_INGESTION_SOURCE_POLL_TIMEOUT = "index.ingestion_source.poll.timeout";
-    public static final Setting<Integer> INGESTION_SOURCE_POLL_TIMEOUT = Setting.intSetting(
+    public static final Setting<Integer> INGESTION_SOURCE_POLL_TIMEOUT = Setting.intSetting(  
         SETTING_INGESTION_SOURCE_POLL_TIMEOUT,
         1000,
-        0,
+        0,  
         Property.IndexScope,
         Property.Dynamic
-    );
+    );  
 
     /**
-     * Defines the number of processor threads that will write to the lucene index.
+     * Defines the number of processor threads that will write to the lucene index.  
      */
     public static final String SETTING_INGESTION_SOURCE_NUM_PROCESSOR_THREADS = "index.ingestion_source.num_processor_threads";
-    public static final Setting<Integer> INGESTION_SOURCE_NUM_PROCESSOR_THREADS_SETTING = Setting.intSetting(
+    public static final Setting<Integer> INGESTION_SOURCE_NUM_PROCESSOR_THREADS_SETTING = Setting.intSetting(  
         SETTING_INGESTION_SOURCE_NUM_PROCESSOR_THREADS,
         1,
-        1,
+        1,  
         Setting.Property.IndexScope,
         Setting.Property.Final
-    );
+    );  
 
     /**
-     * Defines the internal blocking queue size that is used to decouple poller and processor in pull-based ingestion.
+     * Defines the internal blocking queue size that is used to decouple poller and processor in pull-based ingestion.  
      */
     public static final String SETTING_INGESTION_SOURCE_INTERNAL_QUEUE_SIZE = "index.ingestion_source.internal_queue_size";
-    public static final Setting<Integer> INGESTION_SOURCE_INTERNAL_QUEUE_SIZE_SETTING = Setting.intSetting(
+    public static final Setting<Integer> INGESTION_SOURCE_INTERNAL_QUEUE_SIZE_SETTING = Setting.intSetting(  
         SETTING_INGESTION_SOURCE_INTERNAL_QUEUE_SIZE,
         100,
-        1,
+        1,  
         100000,
         Property.IndexScope,
-        Setting.Property.Final
+        Setting.Property.Final  
     );
 
-    /**
+    /**  
      * Defines the pointer-based lag update interval for pull-based ingestion.
      * This controls how frequently the lag between the latest available message and the last consumed message is calculated.
-     * Setting this to 0 disables pointer-based lag calculation entirely.
+     * Setting this to 0 disables pointer-based lag calculation entirely.  
      */
     public static final String SETTING_INGESTION_SOURCE_POINTER_BASED_LAG_UPDATE_INTERVAL =
-        "index.ingestion_source.pointer_based_lag_update_interval";
+        "index.ingestion_source.pointer_based_lag_update_interval";  
     public static final Setting<TimeValue> INGESTION_SOURCE_POINTER_BASED_LAG_UPDATE_INTERVAL_SETTING = Setting.positiveTimeSetting(
         SETTING_INGESTION_SOURCE_POINTER_BASED_LAG_UPDATE_INTERVAL,
-        new TimeValue(10, TimeUnit.SECONDS),
+        new TimeValue(10, TimeUnit.SECONDS),  
         Property.IndexScope,
         Property.Final
-    );
+    );  
 
     /**
-     * Defines how the incoming ingestion message payload is mapped to the internal message format.
+     * Defines how the incoming ingestion message payload is mapped to the internal message format.  
      */
     public static final String SETTING_INGESTION_SOURCE_MAPPER_TYPE = "index.ingestion_source.mapper_type";
-    public static final Setting<IngestionMessageMapper.MapperType> INGESTION_SOURCE_MAPPER_TYPE_SETTING = new Setting<>(
+    public static final Setting<IngestionMessageMapper.MapperType> INGESTION_SOURCE_MAPPER_TYPE_SETTING = new Setting<>(  
         SETTING_INGESTION_SOURCE_MAPPER_TYPE,
         IngestionMessageMapper.MapperType.DEFAULT.getName(),
-        IngestionMessageMapper.MapperType::fromString,
+        IngestionMessageMapper.MapperType::fromString,  
         Property.IndexScope,
         Property.Final
-    );
+    );  
 
     /**
-     * Defines the strategy for mapping source stream partitions to OpenSearch shards.
+     * Defines the strategy for mapping source stream partitions to OpenSearch shards.  
      * "simple" (default): 1:1 mapping where shard N consumes partition N.
      * "modulo": each shard consumes all partitions where partition % numShards == shardId.
-     */
+     */  
     public static final String SETTING_INGESTION_SOURCE_PARTITION_STRATEGY = "index.ingestion_source.source_partition_strategy";
     public static final Setting<IngestionSource.SourcePartitionStrategy> INGESTION_SOURCE_PARTITION_STRATEGY_SETTING = new Setting<>(
-        SETTING_INGESTION_SOURCE_PARTITION_STRATEGY,
+        SETTING_INGESTION_SOURCE_PARTITION_STRATEGY,  
         IngestionSource.SourcePartitionStrategy.SIMPLE.getName(),
         IngestionSource.SourcePartitionStrategy::fromString,
-        Property.IndexScope,
+        Property.IndexScope,  
         Property.Final
     );
 
     /**
      * Defines if all-active pull-based ingestion is enabled. In this mode, replicas will directly consume from the
-     * streaming source and process the updates. In the default document replication mode, this setting must be enabled.
+     * streaming source and process the updates. In the default document replication mode, this setting must be enabled.  
      * This mode is currently not supported with segment replication.
      */
-    public static final String SETTING_INGESTION_SOURCE_ALL_ACTIVE_INGESTION = "index.ingestion_source.all_active";
+    public static final String SETTING_INGESTION_SOURCE_ALL_ACTIVE_INGESTION = "index.ingestion_source.all_active";  
     public static final Setting<Boolean> INGESTION_SOURCE_ALL_ACTIVE_INGESTION_SETTING = Setting.boolSetting(
         SETTING_INGESTION_SOURCE_ALL_ACTIVE_INGESTION,
-        false,
+        false,  
         new Setting.Validator<>() {
 
-            @Override
+            @Override  
             public void validate(final Boolean value) {}
 
-            @Override
+            @Override  
             public void validate(final Boolean value, final Map<Setting<?>, Object> settings) {
                 final Object replicationType = settings.get(INDEX_REPLICATION_TYPE_SETTING);
-                final Object ingestionSourceType = settings.get(INGESTION_SOURCE_TYPE_SETTING);
+                final Object ingestionSourceType = settings.get(INGESTION_SOURCE_TYPE_SETTING);  
                 boolean isPullBasedIngestionEnabled = NONE_INGESTION_SOURCE_TYPE.equals(ingestionSourceType) == false;
 
-                if (isPullBasedIngestionEnabled && ReplicationType.SEGMENT.equals(replicationType) && value) {
+                if (isPullBasedIngestionEnabled && ReplicationType.SEGMENT.equals(replicationType) && value) {  
                     throw new IllegalArgumentException(
                         "Replication type "
-                            + ReplicationType.SEGMENT
+                            + ReplicationType.SEGMENT  
                             + " is not supported in pull-based ingestion when "
                             + INGESTION_SOURCE_ALL_ACTIVE_INGESTION_SETTING.getKey()
-                            + " is enabled"
+                            + " is enabled"  
                     );
                 }
 
                 if (isPullBasedIngestionEnabled && ReplicationType.DOCUMENT.equals(replicationType) && value == false) {
                     throw new IllegalArgumentException(
-                        "Replication type "
+                        "Replication type "  
                             + ReplicationType.DOCUMENT
                             + " is not supported in pull-based ingestion when "
-                            + INGESTION_SOURCE_ALL_ACTIVE_INGESTION_SETTING.getKey()
+                            + INGESTION_SOURCE_ALL_ACTIVE_INGESTION_SETTING.getKey()  
                             + " is not enabled"
                     );
-                }
+                }  
             }
 
-            @Override
+            @Override  
             public Iterator<Setting<?>> settings() {
                 final List<Setting<?>> settings = List.of(INDEX_REPLICATION_TYPE_SETTING, INGESTION_SOURCE_TYPE_SETTING);
-                return settings.iterator();
+                return settings.iterator();  
             }
         },
-        Property.IndexScope,
+        Property.IndexScope,  
         Setting.Property.Final
     );
 
     public static final Setting.AffixSetting<Object> INGESTION_SOURCE_PARAMS_SETTING = Setting.prefixKeySetting(
         "index.ingestion_source.param.",
-        key -> new Setting<>(key, "", (value) -> {
+        key -> new Setting<>(key, "", (value) -> {  
             // TODO: add ingestion source params validation
             return value;
-        }, Property.IndexScope, Property.Dynamic)
+        }, Property.IndexScope, Property.Dynamic)  
     );
 
-    /**
+    /**  
      * Prefix setting for mapper-specific options. These settings are passed to the configured mapper type.
      * For example, the {@code field_mapping} mapper type uses {@code id_field}, {@code version_field},
-     * and {@code op_type_field} settings.
+     * and {@code op_type_field} settings.  
      */
     public static final Setting.AffixSetting<Object> INGESTION_SOURCE_MAPPER_SETTINGS = Setting.prefixKeySetting(
-        "index.ingestion_source.mapper_settings.",
+        "index.ingestion_source.mapper_settings.",  
         key -> new Setting<>(key, "", (value) -> {
             return value;
-        }, Property.IndexScope, Property.Final)
+        }, Property.IndexScope, Property.Final)  
     );
 
-    /**
+    /**  
      * Setting for the payload decoder type.
      * The built-in decoder is {@code xcontent} (JSON). Plugins may register
-     * additional decoder names (e.g. {@code avro}).
+     * additional decoder names (e.g. {@code avro}).  
      */
     public static final String SETTING_INGESTION_SOURCE_DECODER_TYPE = "index.ingestion_source.decoder_type";
-    public static final Setting<String> INGESTION_SOURCE_DECODER_TYPE_SETTING = Setting.simpleString(
+    public static final Setting<String> INGESTION_SOURCE_DECODER_TYPE_SETTING = Setting.simpleString(  
         SETTING_INGESTION_SOURCE_DECODER_TYPE,
         XContentIngestionPayloadDecoder.NAME,
-        Property.IndexScope,
+        Property.IndexScope,  
         Property.Final
     );
 
     /**
      * Prefix setting for decoder-specific options. Each decoder factory validates
-     * supported and required keys. Example:
+     * supported and required keys. Example:  
      * {@code index.ingestion_source.decoder_settings.schema_registry_url: https://...}
      */
-    public static final Setting.AffixSetting<Object> INGESTION_SOURCE_DECODER_SETTINGS = Setting.prefixKeySetting(
+    public static final Setting.AffixSetting<Object> INGESTION_SOURCE_DECODER_SETTINGS = Setting.prefixKeySetting(  
         "index.ingestion_source.decoder_settings.",
         key -> new Setting<>(key, "", (value) -> value, Property.IndexScope, Property.Final)
-    );
+    );  
 
     /**
-     * Defines the maximum time to wait for lag to catch up during warmup phase.
+     * Defines the maximum time to wait for lag to catch up during warmup phase.  
      * A value of -1 means warmup is disabled (the default). A value >= 0 enables warmup with that timeout.
      */
-    public static final String SETTING_INGESTION_SOURCE_WARMUP_TIMEOUT = "index.ingestion_source.warmup.timeout";
+    public static final String SETTING_INGESTION_SOURCE_WARMUP_TIMEOUT = "index.ingestion_source.warmup.timeout";  
     public static final Setting<TimeValue> INGESTION_SOURCE_WARMUP_TIMEOUT_SETTING = Setting.timeSetting(
         SETTING_INGESTION_SOURCE_WARMUP_TIMEOUT,
-        TimeValue.timeValueMillis(-1),
+        TimeValue.timeValueMillis(-1),  
         TimeValue.timeValueMillis(-1),
         Property.IndexScope,
-        Property.Dynamic
+        Property.Dynamic  
     );
 
-    /**
+    /**  
      * Defines the acceptable pointer-based lag threshold. Warmup completes when lag is at or below this value.
      * A value of 0 means fully caught up (no lag).
-     */
+     */  
     public static final String SETTING_INGESTION_SOURCE_WARMUP_LAG_THRESHOLD = "index.ingestion_source.warmup.lag_threshold";
     public static final Setting<Long> INGESTION_SOURCE_WARMUP_LAG_THRESHOLD_SETTING = Setting.longSetting(
-        SETTING_INGESTION_SOURCE_WARMUP_LAG_THRESHOLD,
+        SETTING_INGESTION_SOURCE_WARMUP_LAG_THRESHOLD,  
         100L,
         0L,
-        Property.IndexScope,
+        Property.IndexScope,  
         Property.Dynamic
     );
 
     /**
      * an internal index format description, allowing us to find out if this index is upgraded or needs upgrading
-     */
+     */  
     private static final String INDEX_FORMAT = "index.format";
     public static final Setting<Integer> INDEX_FORMAT_SETTING = Setting.intSetting(
-        INDEX_FORMAT,
+        INDEX_FORMAT,  
         0,
         Setting.Property.IndexScope,
-        Setting.Property.Final
+        Setting.Property.Final  
     );
 
-    public static final String KEY_IN_SYNC_ALLOCATIONS = "in_sync_allocations";
+    public static final String KEY_IN_SYNC_ALLOCATIONS = "in_sync_allocations";  
     static final String KEY_VERSION = "version";
     static final String KEY_MAPPING_VERSION = "mapping_version";
-    static final String KEY_SETTINGS_VERSION = "settings_version";
+    static final String KEY_SETTINGS_VERSION = "settings_version";  
     static final String KEY_ALIASES_VERSION = "aliases_version";
     static final String KEY_ROUTING_NUM_SHARDS = "routing_num_shards";
-    static final String KEY_SETTINGS = "settings";
+    static final String KEY_SETTINGS = "settings";  
     static final String KEY_STATE = "state";
     static final String KEY_MAPPINGS = "mappings";
-    static final String KEY_ALIASES = "aliases";
+    static final String KEY_ALIASES = "aliases";  
     static final String KEY_ROLLOVER_INFOS = "rollover_info";
     static final String KEY_SYSTEM = "system";
-    static final String KEY_SPLIT_SHARDS_METADATA = "split_shards_metadata";
+    static final String KEY_SPLIT_SHARDS_METADATA = "split_shards_metadata";  
     public static final String KEY_PRIMARY_TERMS = "primary_terms";
     public static final String KEY_PRIMARY_TERMS_MAP = "primary_terms_map";
-    public static final String REMOTE_STORE_CUSTOM_KEY = "remote_store";
+    public static final String REMOTE_STORE_CUSTOM_KEY = "remote_store";  
     public static final String TRANSLOG_METADATA_KEY = "translog_metadata";
     public static final String REMOTE_STORE_SSE_ENABLED_INDEX_KEY = "sse_enabled_index";
-    public static final String CONTEXT_KEY = "context";
+    public static final String CONTEXT_KEY = "context";  
     public static final String INGESTION_SOURCE_KEY = "ingestion_source";
     public static final String INGESTION_STATUS_KEY = "ingestion_status";
 
     public static final String INDEX_STATE_FILE_PREFIX = "state-";
 
-    private final int routingNumShards;
+    private final int routingNumShards;  
     private final int routingFactor;
     private final int routingPartitionSize;
 
     private final int numberOfShards;
     private final int numberOfReplicas;
-    private final int numberOfSearchOnlyReplicas;
+    private final int numberOfSearchOnlyReplicas;  
 
     private final Index index;
-    private final long version;
+    private final long version;  
 
     private final long mappingVersion;
 
     private final long settingsVersion;
 
-    private final long aliasesVersion;
+    private final long aliasesVersion;  
 
     private final Map<Integer, Long> primaryTermsMap;
 
     private final State state;
 
-    private final Map<String, AliasMetadata> aliases;
+    private final Map<String, AliasMetadata> aliases;  
 
     private final Settings settings;
 
     private final Map<String, MappingMetadata> mappings;
 
-    private final Map<String, DiffableStringMap> customData;
+    private final Map<String, DiffableStringMap> customData;  
 
     private final Map<Integer, Set<String>> inSyncAllocationIds;
 
     private final transient int totalNumberOfShards;
 
-    private final DiscoveryNodeFilters requireFilters;
+    private final DiscoveryNodeFilters requireFilters;  
     private final DiscoveryNodeFilters includeFilters;
     private final DiscoveryNodeFilters excludeFilters;
-    private final DiscoveryNodeFilters initialRecoveryFilters;
+    private final DiscoveryNodeFilters initialRecoveryFilters;  
 
     private final Version indexCreatedVersion;
-    private final Version indexUpgradedVersion;
+    private final Version indexUpgradedVersion;  
 
     private final ActiveShardCount waitForActiveShards;
-    private final Map<String, RolloverInfo> rolloverInfos;
+    private final Map<String, RolloverInfo> rolloverInfos;  
     private final boolean isSystem;
     private final boolean isRemoteSnapshot;
 
     private final int indexTotalShardsPerNodeLimit;
     private final int indexTotalPrimaryShardsPerNodeLimit;
-    private final int indexTotalRemoteCapableShardsPerNodeLimit;
+    private final int indexTotalRemoteCapableShardsPerNodeLimit;  
     private final int indexTotalRemoteCapablePrimaryShardsPerNodeLimit;
     private final boolean isAppendOnlyIndex;
-    private final boolean bulkAdaptiveShardSelectionEnabled;
+    private final boolean bulkAdaptiveShardSelectionEnabled;  
 
     private final Context context;
-    private final IngestionStatus ingestionStatus;
+    private final IngestionStatus ingestionStatus;  
 
     private final SplitShardsMetadata splitShardsMetadata;
 
     private IndexMetadata(
         final Index index,
-        final long version,
+        final long version,  
         final long mappingVersion,
         final long settingsVersion,
-        final long aliasesVersion,
+        final long aliasesVersion,  
         final State state,
         final int numberOfShards,
-        final int numberOfReplicas,
+        final int numberOfReplicas,  
         final int numberOfSearchOnlyReplicas,
         final Settings settings,
-        final Map<String, MappingMetadata> mappings,
+        final Map<String, MappingMetadata> mappings,  
         final Map<String, AliasMetadata> aliases,
         final Map<String, DiffableStringMap> customData,
-        final Map<Integer, Set<String>> inSyncAllocationIds,
+        final Map<Integer, Set<String>> inSyncAllocationIds,  
         final DiscoveryNodeFilters requireFilters,
         final DiscoveryNodeFilters initialRecoveryFilters,
-        final DiscoveryNodeFilters includeFilters,
+        final DiscoveryNodeFilters includeFilters,  
         final DiscoveryNodeFilters excludeFilters,
         final Version indexCreatedVersion,
-        final Version indexUpgradedVersion,
+        final Version indexUpgradedVersion,  
         final int routingNumShards,
         final int routingPartitionSize,
-        final ActiveShardCount waitForActiveShards,
+        final ActiveShardCount waitForActiveShards,  
         final Map<String, RolloverInfo> rolloverInfos,
         final boolean isSystem,
-        final int indexTotalShardsPerNodeLimit,
+        final int indexTotalShardsPerNodeLimit,  
         final int indexTotalPrimaryShardsPerNodeLimit,
         final int indexTotalRemoteCapableShardsPerNodeLimit,
-        final int indexTotalRemoteCapablePrimaryShardsPerNodeLimit,
+        final int indexTotalRemoteCapablePrimaryShardsPerNodeLimit,  
         boolean isAppendOnlyIndex,
         final Context context,
-        final IngestionStatus ingestionStatus,
+        final IngestionStatus ingestionStatus,  
         final SplitShardsMetadata splitShardsMetadata,
         final Map<Integer, Long> primaryTermsMap
-    ) {
+    ) {  
 
         this.index = index;
-        this.version = version;
+        this.version = version;  
         assert mappingVersion >= 0 : mappingVersion;
         this.mappingVersion = mappingVersion;
-        assert settingsVersion >= 0 : settingsVersion;
+        assert settingsVersion >= 0 : settingsVersion;  
         this.settingsVersion = settingsVersion;
         assert aliasesVersion >= 0 : aliasesVersion;
-        this.aliasesVersion = aliasesVersion;
+        this.aliasesVersion = aliasesVersion;  
         assert primaryTermsMap.size() == numberOfShards;
         this.primaryTermsMap = Collections.unmodifiableMap(primaryTermsMap);
-        this.state = state;
+        this.state = state;  
         this.numberOfShards = numberOfShards;
         this.numberOfReplicas = numberOfReplicas;
-        this.numberOfSearchOnlyReplicas = numberOfSearchOnlyReplicas;
+        this.numberOfSearchOnlyReplicas = numberOfSearchOnlyReplicas;  
         this.totalNumberOfShards = numberOfShards * (numberOfReplicas + numberOfSearchOnlyReplicas + 1);
         this.settings = settings;
-        this.mappings = Collections.unmodifiableMap(mappings);
+        this.mappings = Collections.unmodifiableMap(mappings);  
         this.customData = Collections.unmodifiableMap(customData);
         this.aliases = Collections.unmodifiableMap(aliases);
-        this.inSyncAllocationIds = Collections.unmodifiableMap(inSyncAllocationIds);
+        this.inSyncAllocationIds = Collections.unmodifiableMap(inSyncAllocationIds);  
         this.requireFilters = requireFilters;
         this.includeFilters = includeFilters;
-        this.excludeFilters = excludeFilters;
+        this.excludeFilters = excludeFilters;  
         this.initialRecoveryFilters = initialRecoveryFilters;
         this.indexCreatedVersion = indexCreatedVersion;
-        this.indexUpgradedVersion = indexUpgradedVersion;
+        this.indexUpgradedVersion = indexUpgradedVersion;  
         this.routingNumShards = routingNumShards;
         this.routingFactor = routingNumShards / numberOfShards;
-        this.routingPartitionSize = routingPartitionSize;
+        this.routingPartitionSize = routingPartitionSize;  
         this.waitForActiveShards = waitForActiveShards;
         this.rolloverInfos = Collections.unmodifiableMap(rolloverInfos);
-        this.isSystem = isSystem;
+        this.isSystem = isSystem;  
         this.isRemoteSnapshot = IndexModule.Type.REMOTE_SNAPSHOT.match(this.settings);
         this.indexTotalShardsPerNodeLimit = indexTotalShardsPerNodeLimit;
-        this.indexTotalPrimaryShardsPerNodeLimit = indexTotalPrimaryShardsPerNodeLimit;
+        this.indexTotalPrimaryShardsPerNodeLimit = indexTotalPrimaryShardsPerNodeLimit;  
         this.indexTotalRemoteCapableShardsPerNodeLimit = indexTotalRemoteCapableShardsPerNodeLimit;
         this.indexTotalRemoteCapablePrimaryShardsPerNodeLimit = indexTotalRemoteCapablePrimaryShardsPerNodeLimit;
-        this.isAppendOnlyIndex = isAppendOnlyIndex;
+        this.isAppendOnlyIndex = isAppendOnlyIndex;  
         this.bulkAdaptiveShardSelectionEnabled = INDEX_BULK_ADAPTIVE_SHARD_SELECTION_ENABLED.get(settings);
         if (isAppendOnlyIndex == false && bulkAdaptiveShardSelectionEnabled) {
-            throw new IllegalArgumentException(
+            throw new IllegalArgumentException(  
                 "index ["
                     + index.getName()
-                    + "] is not append-only index, "
+                    + "] is not append-only index, "  
                     + "bulk adaptive shard selection is enabled, "
                     + "which is not supported. Please disable bulk adaptive shard selection or set index to append-only index."
-            );
+            );  
         }
         this.context = context;
-        this.ingestionStatus = ingestionStatus;
+        this.ingestionStatus = ingestionStatus;  
         this.splitShardsMetadata = splitShardsMetadata;
         assert numberOfShards * routingFactor == routingNumShards : routingNumShards + " must be a multiple of " + numberOfShards;
-    }
+    }  
 
     public Index getIndex() {
-        return index;
+        return index;  
     }
 
-    public String getIndexUUID() {
+    public String getIndexUUID() {  
         return index.getUUID();
     }
 
     /**
      * Test whether the current index UUID is the same as the given one. Returns true if either are _na_
-     */
+     */  
     public boolean isSameUUID(String otherUUID) {
         assert otherUUID != null;
-        assert getIndexUUID() != null;
+        assert getIndexUUID() != null;  
         if (INDEX_UUID_NA_VALUE.equals(otherUUID) || INDEX_UUID_NA_VALUE.equals(getIndexUUID())) {
             return true;
-        }
+        }  
         return otherUUID.equals(getIndexUUID());
     }
 
     public long getVersion() {
         return this.version;
-    }
+    }  
 
     public long getMappingVersion() {
-        return mappingVersion;
+        return mappingVersion;  
     }
 
-    public long getSettingsVersion() {
+    public long getSettingsVersion() {  
         return settingsVersion;
     }
 
     public long getAliasesVersion() {
         return aliasesVersion;
-    }
+    }  
 
     /**
-     * The term of the current selected primary. This is a non-negative number incremented when
+     * The term of the current selected primary. This is a non-negative number incremented when  
      * a primary shard is assigned after a full cluster restart or a replica shard is promoted to a primary.
      * <p>
-     * Note: since we increment the term every time a shard is assigned, the term for any operational shard (i.e., a shard
+     * Note: since we increment the term every time a shard is assigned, the term for any operational shard (i.e., a shard  
      * that can be indexed into) is larger than 0. See {@link IndexMetadataUpdater#applyChanges}.
      **/
-    public long primaryTerm(int shardId) {
+    public long primaryTerm(int shardId) {  
         Long pTerm = this.primaryTermsMap.get(shardId);
         if (pTerm == null) {
-            throw new IllegalArgumentException("No primary term available for shard " + shardId);
+            throw new IllegalArgumentException("No primary term available for shard " + shardId);  
         }
         return pTerm;
-    }
+    }  
 
     /**
-     * Return the {@link Version} on which this index has been created. This
+     * Return the {@link Version} on which this index has been created. This  
      * information is typically useful for backward compatibility.
      */
-    public Version getCreationVersion() {
+    public Version getCreationVersion() {  
         return indexCreatedVersion;
     }
 
     /**
      * Gets the ingestion source.
-     *
+     *  
      * @return ingestion source, or null if ingestion source is not enabled
      */
-    public IngestionSource getIngestionSource() {
+    public IngestionSource getIngestionSource() {  
         final String ingestionSourceType = INGESTION_SOURCE_TYPE_SETTING.get(settings);
         if (ingestionSourceType != null && !(NONE_INGESTION_SOURCE_TYPE.equals(ingestionSourceType))) {
-            final StreamPoller.ResetState pointerInitResetType = StreamPoller.ResetState.valueOf(
+            final StreamPoller.ResetState pointerInitResetType = StreamPoller.ResetState.valueOf(  
                 INGESTION_SOURCE_POINTER_INIT_RESET_SETTING.get(settings).toUpperCase(Locale.ROOT)
             );
-            final String pointerInitResetValue = INGESTION_SOURCE_POINTER_INIT_RESET_VALUE_SETTING.get(settings);
+            final String pointerInitResetValue = INGESTION_SOURCE_POINTER_INIT_RESET_VALUE_SETTING.get(settings);  
             IngestionSource.PointerInitReset pointerInitReset = new IngestionSource.PointerInitReset(
                 pointerInitResetType,
-                pointerInitResetValue
+                pointerInitResetValue  
             );
 
-            final IngestionErrorStrategy.ErrorStrategy errorStrategy = INGESTION_SOURCE_ERROR_STRATEGY_SETTING.get(settings);
+            final IngestionErrorStrategy.ErrorStrategy errorStrategy = INGESTION_SOURCE_ERROR_STRATEGY_SETTING.get(settings);  
             final Map<String, Object> ingestionSourceParams = INGESTION_SOURCE_PARAMS_SETTING.getAsMap(settings);
             final long maxPollSize = INGESTION_SOURCE_MAX_POLL_SIZE.get(settings);
-            final int pollTimeout = INGESTION_SOURCE_POLL_TIMEOUT.get(settings);
+            final int pollTimeout = INGESTION_SOURCE_POLL_TIMEOUT.get(settings);  
             final int numProcessorThreads = INGESTION_SOURCE_NUM_PROCESSOR_THREADS_SETTING.get(settings);
             final int blockingQueueSize = INGESTION_SOURCE_INTERNAL_QUEUE_SIZE_SETTING.get(settings);
-            final boolean allActiveIngestionEnabled = INGESTION_SOURCE_ALL_ACTIVE_INGESTION_SETTING.get(settings);
+            final boolean allActiveIngestionEnabled = INGESTION_SOURCE_ALL_ACTIVE_INGESTION_SETTING.get(settings);  
             final TimeValue pointerBasedLagUpdateInterval = INGESTION_SOURCE_POINTER_BASED_LAG_UPDATE_INTERVAL_SETTING.get(settings);
             final IngestionMessageMapper.MapperType mapperType = INGESTION_SOURCE_MAPPER_TYPE_SETTING.get(settings);
-            final Map<String, Object> mapperSettings = INGESTION_SOURCE_MAPPER_SETTINGS.getAsMap(settings);
+            final Map<String, Object> mapperSettings = INGESTION_SOURCE_MAPPER_SETTINGS.getAsMap(settings);  
             final String decoderType = INGESTION_SOURCE_DECODER_TYPE_SETTING.get(settings);
             final Map<String, Object> decoderSettings = INGESTION_SOURCE_DECODER_SETTINGS.getAsMap(settings);
-            final IngestionSource.SourcePartitionStrategy sourcePartitionStrategy = INGESTION_SOURCE_PARTITION_STRATEGY_SETTING.get(
+            final IngestionSource.SourcePartitionStrategy sourcePartitionStrategy = INGESTION_SOURCE_PARTITION_STRATEGY_SETTING.get(  
                 settings
             );
 
             // Warmup settings
             final IngestionSource.WarmupConfig warmupConfig = new IngestionSource.WarmupConfig(
-                INGESTION_SOURCE_WARMUP_TIMEOUT_SETTING.get(settings),
+                INGESTION_SOURCE_WARMUP_TIMEOUT_SETTING.get(settings),  
                 INGESTION_SOURCE_WARMUP_LAG_THRESHOLD_SETTING.get(settings)
             );
 
             return new IngestionSource.Builder(ingestionSourceType).setParams(ingestionSourceParams)
                 .setPointerInitReset(pointerInitReset)
-                .setErrorStrategy(errorStrategy)
+                .setErrorStrategy(errorStrategy)  
                 .setMaxPollSize(maxPollSize)
                 .setPollTimeout(pollTimeout)
-                .setNumProcessorThreads(numProcessorThreads)
+                .setNumProcessorThreads(numProcessorThreads)  
                 .setBlockingQueueSize(blockingQueueSize)
                 .setAllActiveIngestion(allActiveIngestionEnabled)
-                .setPointerBasedLagUpdateInterval(pointerBasedLagUpdateInterval)
+                .setPointerBasedLagUpdateInterval(pointerBasedLagUpdateInterval)  
                 .setMapperType(mapperType)
                 .setMapperSettings(mapperSettings)
-                .setDecoderType(decoderType)
+                .setDecoderType(decoderType)  
                 .setDecoderSettings(decoderSettings)
                 .setSourcePartitionStrategy(sourcePartitionStrategy)
-                .setWarmupConfig(warmupConfig)
+                .setWarmupConfig(warmupConfig)  
                 .build();
         }
-        return null;
+        return null;  
     }
 
-    public boolean useIngestionSource() {
+    public boolean useIngestionSource() {  
         final String ingestionSourceType = INGESTION_SOURCE_TYPE_SETTING.get(settings);
         return ingestionSourceType != null && !(NONE_INGESTION_SOURCE_TYPE.equals(ingestionSourceType));
-    }
+    }  
 
     public boolean isAllActiveIngestionEnabled() {
-        return INGESTION_SOURCE_ALL_ACTIVE_INGESTION_SETTING.get(settings);
+        return INGESTION_SOURCE_ALL_ACTIVE_INGESTION_SETTING.get(settings);  
     }
 
-    public IngestionStatus getIngestionStatus() {
+    public IngestionStatus getIngestionStatus() {  
         return ingestionStatus;
     }
 
     /**
      * Return the {@link Version} on which this index has been upgraded. This
-     * information is typically useful for backward compatibility.
+     * information is typically useful for backward compatibility.  
      */
     public Version getUpgradedVersion() {
-        return indexUpgradedVersion;
+        return indexUpgradedVersion;  
     }
 
-    public long getCreationDate() {
+    public long getCreationDate() {  
         return settings.getAsLong(SETTING_CREATION_DATE, -1L);
     }
 
     public State getState() {
         return this.state;
-    }
+    }  
 
     public int getNumberOfShards() {
-        return numberOfShards;
+        return numberOfShards;  
     }
 
-    /**
+    /**  
      * Returns the number of virtual shards for this index.
      * Returns -1 if virtual shards are disabled.
-     *
+     *  
      * @return the number of virtual shards or -1
      */
-    public int getNumberOfVirtualShards() {
+    public int getNumberOfVirtualShards() {  
         return settings.getAsInt(SETTING_NUMBER_OF_VIRTUAL_SHARDS, -1);
     }
 
     public int getNumberOfReplicas() {
         return numberOfReplicas;
-    }
+    }  
 
     public int getNumberOfSearchOnlyReplicas() {
-        return numberOfSearchOnlyReplicas;
+        return numberOfSearchOnlyReplicas;  
     }
 
-    public int getRoutingPartitionSize() {
+    public int getRoutingPartitionSize() {  
         return routingPartitionSize;
     }
 
     public boolean isRoutingPartitionedIndex() {
         return routingPartitionSize != 1;
-    }
+    }  
 
     public int getTotalNumberOfShards() {
-        return totalNumberOfShards;
+        return totalNumberOfShards;  
     }
 
-    /**
+    /**  
      * Returns the configured {@link #SETTING_WAIT_FOR_ACTIVE_SHARDS}, which defaults
      * to an active shard count of 1 if not specified.
-     */
+     */  
     public ActiveShardCount getWaitForActiveShards() {
         return waitForActiveShards;
-    }
+    }  
 
     public Settings getSettings() {
-        return settings;
+        return settings;  
     }
 
-    public Map<String, AliasMetadata> getAliases() {
+    public Map<String, AliasMetadata> getAliases() {  
         return this.aliases;
     }
 
     /**
      * Return the concrete mapping for this index or {@code null} if this index has no mappings at all.
-     */
+     */  
     @Nullable
     public MappingMetadata mapping() {
-        for (final MappingMetadata cursor : mappings.values()) {
+        for (final MappingMetadata cursor : mappings.values()) {  
             return cursor;
         }
-        return null;
+        return null;  
     }
 
-    public static final String INDEX_RESIZE_SOURCE_UUID_KEY = "index.resize.source.uuid";
+    public static final String INDEX_RESIZE_SOURCE_UUID_KEY = "index.resize.source.uuid";  
     public static final String INDEX_RESIZE_SOURCE_NAME_KEY = "index.resize.source.name";
     public static final Setting<String> INDEX_RESIZE_SOURCE_UUID = Setting.simpleString(INDEX_RESIZE_SOURCE_UUID_KEY);
-    public static final Setting<String> INDEX_RESIZE_SOURCE_NAME = Setting.simpleString(INDEX_RESIZE_SOURCE_NAME_KEY);
+    public static final Setting<String> INDEX_RESIZE_SOURCE_NAME = Setting.simpleString(INDEX_RESIZE_SOURCE_NAME_KEY);  
 
     public Index getResizeSourceIndex() {
-        return INDEX_RESIZE_SOURCE_UUID.exists(settings)
+        return INDEX_RESIZE_SOURCE_UUID.exists(settings)  
             ? new Index(INDEX_RESIZE_SOURCE_NAME.get(settings), INDEX_RESIZE_SOURCE_UUID.get(settings))
             : null;
-    }
+    }  
 
     Map<String, DiffableStringMap> getCustomData() {
-        return this.customData;
+        return this.customData;  
     }
 
-    public Map<String, String> getCustomData(final String key) {
+    public Map<String, String> getCustomData(final String key) {  
         return this.customData.get(key);
     }
 
     public Map<Integer, Set<String>> getInSyncAllocationIds() {
         return inSyncAllocationIds;
-    }
+    }  
 
     public Map<String, RolloverInfo> getRolloverInfos() {
-        return rolloverInfos;
+        return rolloverInfos;  
     }
 
-    public Set<String> inSyncAllocationIds(int shardId) {
+    public Set<String> inSyncAllocationIds(int shardId) {  
         assert shardId >= 0 && shardId < numberOfShards;
         return inSyncAllocationIds.get(shardId);
-    }
+    }  
 
     public SplitShardsMetadata getSplitShardsMetadata() {
-        return splitShardsMetadata;
+        return splitShardsMetadata;  
     }
 
-    public int getIndexTotalShardsPerNodeLimit() {
+    public int getIndexTotalShardsPerNodeLimit() {  
         return this.indexTotalShardsPerNodeLimit;
     }
 
     public int getIndexTotalRemoteCapableShardsPerNodeLimit() {
         return this.indexTotalRemoteCapableShardsPerNodeLimit;
-    }
+    }  
 
     public int getIndexTotalPrimaryShardsPerNodeLimit() {
-        return this.indexTotalPrimaryShardsPerNodeLimit;
+        return this.indexTotalPrimaryShardsPerNodeLimit;  
     }
 
-    public int getIndexTotalRemoteCapablePrimaryShardsPerNodeLimit() {
+    public int getIndexTotalRemoteCapablePrimaryShardsPerNodeLimit() {  
         return this.indexTotalRemoteCapablePrimaryShardsPerNodeLimit;
     }
 
     public boolean isAppendOnlyIndex() {
         return this.isAppendOnlyIndex;
-    }
+    }  
 
     public boolean bulkAdaptiveShardSelectionEnabled() {
-        return this.bulkAdaptiveShardSelectionEnabled;
+        return this.bulkAdaptiveShardSelectionEnabled;  
     }
 
-    @Nullable
+    @Nullable  
     public DiscoveryNodeFilters requireFilters() {
         return requireFilters;
-    }
+    }  
 
     @Nullable
-    public DiscoveryNodeFilters getInitialRecoveryFilters() {
+    public DiscoveryNodeFilters getInitialRecoveryFilters() {  
         return initialRecoveryFilters;
     }
 
     @Nullable
     public DiscoveryNodeFilters includeFilters() {
-        return includeFilters;
+        return includeFilters;  
     }
 
-    @Nullable
+    @Nullable  
     public DiscoveryNodeFilters excludeFilters() {
         return excludeFilters;
-    }
+    }  
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(Object o) {  
         if (this == o) {
             return true;
-        }
+        }  
         if (o == null || getClass() != o.getClass()) {
             return false;
-        }
+        }  
 
         IndexMetadata that = (IndexMetadata) o;
 
         if (version != that.version) {
             return false;
-        }
+        }  
 
         if (!aliases.equals(that.aliases)) {
-            return false;
+            return false;  
         }
         if (!index.equals(that.index)) {
-            return false;
+            return false;  
         }
         if (!mappings.equals(that.mappings)) {
-            return false;
+            return false;  
         }
         if (!settings.equals(that.settings)) {
-            return false;
+            return false;  
         }
         if (state != that.state) {
-            return false;
+            return false;  
         }
         if (!customData.equals(that.customData)) {
-            return false;
+            return false;  
         }
         if (routingNumShards != that.routingNumShards) {
-            return false;
+            return false;  
         }
         if (routingFactor != that.routingFactor) {
-            return false;
+            return false;  
         }
         if (!primaryTermsMap.equals(that.primaryTermsMap)) {
-            return false;
+            return false;  
         }
         if (!inSyncAllocationIds.equals(that.inSyncAllocationIds)) {
-            return false;
+            return false;  
         }
         if (rolloverInfos.equals(that.rolloverInfos) == false) {
-            return false;
+            return false;  
         }
         if (isSystem != that.isSystem) {
-            return false;
+            return false;  
         }
         if (!Objects.equals(context, that.context)) {
-            return false;
+            return false;  
         }
         if (Objects.equals(ingestionStatus, that.ingestionStatus) == false) {
-            return false;
+            return false;  
         }
         if (!Objects.equals(splitShardsMetadata, that.splitShardsMetadata)) {
-            return false;
+            return false;  
         }
         return true;
-    }
+    }  
 
     @Override
-    public int hashCode() {
+    public int hashCode() {  
         int result = index.hashCode();
         result = 31 * result + Long.hashCode(version);
-        result = 31 * result + state.hashCode();
+        result = 31 * result + state.hashCode();  
         result = 31 * result + aliases.hashCode();
         result = 31 * result + settings.hashCode();
-        result = 31 * result + mappings.hashCode();
+        result = 31 * result + mappings.hashCode();  
         result = 31 * result + customData.hashCode();
         result = 31 * result + Long.hashCode(routingFactor);
-        result = 31 * result + Long.hashCode(routingNumShards);
+        result = 31 * result + Long.hashCode(routingNumShards);  
         result = 31 * result + primaryTermsMap.hashCode();
         result = 31 * result + inSyncAllocationIds.hashCode();
-        result = 31 * result + rolloverInfos.hashCode();
+        result = 31 * result + rolloverInfos.hashCode();  
         result = 31 * result + Boolean.hashCode(isSystem);
         result = 31 * result + Objects.hashCode(context);
-        result = 31 * result + Objects.hashCode(ingestionStatus);
+        result = 31 * result + Objects.hashCode(ingestionStatus);  
         result = 31 * result + Objects.hashCode(splitShardsMetadata);
         return result;
-    }
+    }  
 
     @Override
-    public Diff<IndexMetadata> diff(IndexMetadata previousState) {
+    public Diff<IndexMetadata> diff(IndexMetadata previousState) {  
         return new IndexMetadataDiff(previousState, this);
     }
 
     public static Diff<IndexMetadata> readDiffFrom(StreamInput in) throws IOException {
         return new IndexMetadataDiff(in);
-    }
+    }  
 
     public static IndexMetadata fromXContent(XContentParser parser) throws IOException {
-        return Builder.fromXContent(parser);
+        return Builder.fromXContent(parser);  
     }
 
-    @Override
+    @Override  
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         Builder.toXContent(this, builder, params);
-        return builder;
+        return builder;  
     }
 
-    /**
+    /**  
      * A diff of index metadata.
      *
-     * @opensearch.internal
+     * @opensearch.internal  
      */
     static class IndexMetadataDiff implements Diff<IndexMetadata> {
 
         private final String index;
         private final int routingNumShards;
-        private final long version;
+        private final long version;  
         private final long mappingVersion;
         private final long settingsVersion;
-        private final long aliasesVersion;
+        private final long aliasesVersion;  
         private final State state;
         private final Settings settings;
-        private final Diff<Map<String, MappingMetadata>> mappings;
+        private final Diff<Map<String, MappingMetadata>> mappings;  
         private final Diff<Map<String, AliasMetadata>> aliases;
         private final Diff<Map<String, DiffableStringMap>> customData;
-        private final Diff<Map<Integer, Set<String>>> inSyncAllocationIds;
+        private final Diff<Map<Integer, Set<String>>> inSyncAllocationIds;  
         private final Diff<Map<String, RolloverInfo>> rolloverInfos;
         private final boolean isSystem;
-        private final Context context;
+        private final Context context;  
         private final IngestionStatus ingestionStatus;
         private final Diff<SplitShardsMetadata> splitMetadata;
-        private final Map<Integer, Long> primaryTermsMap;
+        private final Map<Integer, Long> primaryTermsMap;  
 
         IndexMetadataDiff(IndexMetadata before, IndexMetadata after) {
-            index = after.index.getName();
+            index = after.index.getName();  
             version = after.version;
             mappingVersion = after.mappingVersion;
-            settingsVersion = after.settingsVersion;
+            settingsVersion = after.settingsVersion;  
             aliasesVersion = after.aliasesVersion;
             routingNumShards = after.routingNumShards;
-            state = after.state;
+            state = after.state;  
             settings = after.settings;
             mappings = DiffableUtils.diff(before.mappings, after.mappings, DiffableUtils.getStringKeySerializer());
-            aliases = DiffableUtils.diff(before.aliases, after.aliases, DiffableUtils.getStringKeySerializer());
+            aliases = DiffableUtils.diff(before.aliases, after.aliases, DiffableUtils.getStringKeySerializer());  
             customData = DiffableUtils.diff(before.customData, after.customData, DiffableUtils.getStringKeySerializer());
             inSyncAllocationIds = DiffableUtils.diff(
-                before.inSyncAllocationIds,
+                before.inSyncAllocationIds,  
                 after.inSyncAllocationIds,
                 DiffableUtils.getVIntKeySerializer(),
-                DiffableUtils.StringSetValueSerializer.getInstance()
+                DiffableUtils.StringSetValueSerializer.getInstance()  
             );
             rolloverInfos = DiffableUtils.diff(before.rolloverInfos, after.rolloverInfos, DiffableUtils.getStringKeySerializer());
-            isSystem = after.isSystem;
+            isSystem = after.isSystem;  
             context = after.context;
             ingestionStatus = after.ingestionStatus;
-            splitMetadata = after.splitShardsMetadata.diff(before.splitShardsMetadata);
+            splitMetadata = after.splitShardsMetadata.diff(before.splitShardsMetadata);  
             primaryTermsMap = after.primaryTermsMap;
         }
 
         private static final DiffableUtils.DiffableValueReader<String, AliasMetadata> ALIAS_METADATA_DIFF_VALUE_READER =
             new DiffableUtils.DiffableValueReader<>(AliasMetadata::new, AliasMetadata::readDiffFrom);
-        private static final DiffableUtils.DiffableValueReader<String, MappingMetadata> MAPPING_DIFF_VALUE_READER =
+        private static final DiffableUtils.DiffableValueReader<String, MappingMetadata> MAPPING_DIFF_VALUE_READER =  
             new DiffableUtils.DiffableValueReader<>(MappingMetadata::new, MappingMetadata::readDiffFrom);
         private static final DiffableUtils.DiffableValueReader<String, DiffableStringMap> CUSTOM_DIFF_VALUE_READER =
-            new DiffableUtils.DiffableValueReader<>(DiffableStringMap::readFrom, DiffableStringMap::readDiffFrom);
+            new DiffableUtils.DiffableValueReader<>(DiffableStringMap::readFrom, DiffableStringMap::readDiffFrom);  
         private static final DiffableUtils.DiffableValueReader<String, RolloverInfo> ROLLOVER_INFO_DIFF_VALUE_READER =
             new DiffableUtils.DiffableValueReader<>(RolloverInfo::new, RolloverInfo::readDiffFrom);
 
         IndexMetadataDiff(StreamInput in) throws IOException {
             index = in.readString();
-            routingNumShards = in.readInt();
+            routingNumShards = in.readInt();  
             version = in.readLong();
             mappingVersion = in.readVLong();
-            settingsVersion = in.readVLong();
+            settingsVersion = in.readVLong();  
             aliasesVersion = in.readVLong();
             state = State.fromId(in.readByte());
-            settings = Settings.readSettingsFromStream(in);
+            settings = Settings.readSettingsFromStream(in);  
             long[] primaryTerms = null;
             if (in.getVersion().before(Version.V_3_6_0)) {
-                primaryTerms = in.readVLongArray();
+                primaryTerms = in.readVLongArray();  
             }
             mappings = DiffableUtils.readJdkMapDiff(in, DiffableUtils.getStringKeySerializer(), MAPPING_DIFF_VALUE_READER);
-            aliases = DiffableUtils.readJdkMapDiff(in, DiffableUtils.getStringKeySerializer(), ALIAS_METADATA_DIFF_VALUE_READER);
+            aliases = DiffableUtils.readJdkMapDiff(in, DiffableUtils.getStringKeySerializer(), ALIAS_METADATA_DIFF_VALUE_READER);  
             customData = DiffableUtils.readJdkMapDiff(in, DiffableUtils.getStringKeySerializer(), CUSTOM_DIFF_VALUE_READER);
             inSyncAllocationIds = DiffableUtils.readJdkMapDiff(
-                in,
+                in,  
                 DiffableUtils.getVIntKeySerializer(),
                 DiffableUtils.StringSetValueSerializer.getInstance()
-            );
+            );  
             rolloverInfos = DiffableUtils.readJdkMapDiff(in, DiffableUtils.getStringKeySerializer(), ROLLOVER_INFO_DIFF_VALUE_READER);
             isSystem = in.readBoolean();
-            if (in.getVersion().onOrAfter(Version.V_2_17_0)) {
+            if (in.getVersion().onOrAfter(Version.V_2_17_0)) {  
                 context = in.readOptionalWriteable(Context::new);
             } else {
-                context = null;
+                context = null;  
             }
             if (in.getVersion().onOrAfter(Version.V_3_0_0)) {
-                ingestionStatus = in.readOptionalWriteable(IngestionStatus::new);
+                ingestionStatus = in.readOptionalWriteable(IngestionStatus::new);  
             } else {
                 ingestionStatus = null;
-            }
+            }  
 
             if (in.getVersion().onOrAfter(Version.V_3_6_0)) {
-                splitMetadata = SplitShardsMetadata.readDiffFrom(in);
+                splitMetadata = SplitShardsMetadata.readDiffFrom(in);  
                 primaryTermsMap = in.readMap(StreamInput::readInt, StreamInput::readLong);
             } else {
-                assert primaryTerms != null;
+                assert primaryTerms != null;  
                 splitMetadata = null;
                 Map<Integer, Long> primaryTermsMap = new HashMap<>();
-                for (int shardId = 0; shardId < primaryTerms.length; shardId++) {
+                for (int shardId = 0; shardId < primaryTerms.length; shardId++) {  
                     primaryTermsMap.put(shardId, primaryTerms[shardId]);
                 }
-                this.primaryTermsMap = primaryTermsMap;
+                this.primaryTermsMap = primaryTermsMap;  
             }
         }
 
         @Override
         public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(index);
+            out.writeString(index);  
             out.writeInt(routingNumShards);
             out.writeLong(version);
-            out.writeVLong(mappingVersion);
+            out.writeVLong(mappingVersion);  
             out.writeVLong(settingsVersion);
             out.writeVLong(aliasesVersion);
-            out.writeByte(state.id);
+            out.writeByte(state.id);  
             Settings.writeSettingsToStream(settings, out);
             if (out.getVersion().before(Version.V_3_6_0)) {
-                int numShards = INDEX_NUMBER_OF_SHARDS_SETTING.get(settings);
+                int numShards = INDEX_NUMBER_OF_SHARDS_SETTING.get(settings);  
                 long[] primaryTermsArray = new long[numShards];
                 for (Map.Entry<Integer, Long> entry : primaryTermsMap.entrySet()) {
-                    if (entry.getKey() < numShards) {
+                    if (entry.getKey() < numShards) {  
                         primaryTermsArray[entry.getKey()] = entry.getValue();
                     }
-                }
+                }  
                 out.writeVLongArray(primaryTermsArray);
             }
-            mappings.writeTo(out);
+            mappings.writeTo(out);  
             aliases.writeTo(out);
             customData.writeTo(out);
-            inSyncAllocationIds.writeTo(out);
+            inSyncAllocationIds.writeTo(out);  
             rolloverInfos.writeTo(out);
             out.writeBoolean(isSystem);
-            if (out.getVersion().onOrAfter(Version.V_2_17_0)) {
+            if (out.getVersion().onOrAfter(Version.V_2_17_0)) {  
                 out.writeOptionalWriteable(context);
             }
-            if (out.getVersion().onOrAfter(Version.V_3_0_0)) {
+            if (out.getVersion().onOrAfter(Version.V_3_0_0)) {  
                 out.writeOptionalWriteable(ingestionStatus);
             }
 
             if (out.getVersion().onOrAfter(Version.V_3_6_0)) {
                 splitMetadata.writeTo(out);
-                out.writeMap(primaryTermsMap, StreamOutput::writeInt, StreamOutput::writeLong);
+                out.writeMap(primaryTermsMap, StreamOutput::writeInt, StreamOutput::writeLong);  
             }
         }
 
         @Override
         public IndexMetadata apply(IndexMetadata part) {
-            Builder builder = builder(index);
+            Builder builder = builder(index);  
             builder.version(version);
             builder.mappingVersion(mappingVersion);
-            builder.settingsVersion(settingsVersion);
+            builder.settingsVersion(settingsVersion);  
             builder.aliasesVersion(aliasesVersion);
             builder.setRoutingNumShards(routingNumShards);
-            builder.state(state);
+            builder.state(state);  
             builder.settings(settings);
             builder.primaryTermsMap(primaryTermsMap);
-            builder.mappings.putAll(mappings.apply(part.mappings));
+            builder.mappings.putAll(mappings.apply(part.mappings));  
             builder.aliases.putAll(aliases.apply(part.aliases));
             builder.customMetadata.putAll(customData.apply(part.customData));
-            builder.inSyncAllocationIds.putAll(inSyncAllocationIds.apply(part.inSyncAllocationIds));
+            builder.inSyncAllocationIds.putAll(inSyncAllocationIds.apply(part.inSyncAllocationIds));  
             builder.rolloverInfos.putAll(rolloverInfos.apply(part.rolloverInfos));
             builder.system(isSystem);
-            builder.context(context);
+            builder.context(context);  
             builder.ingestionStatus(ingestionStatus);
             if (splitMetadata != null) {
-                builder.splitShardsMetadata(splitMetadata.apply(part.splitShardsMetadata));
+                builder.splitShardsMetadata(splitMetadata.apply(part.splitShardsMetadata));  
             }
             // TODO: support ingestion source
-            return builder.build();
+            return builder.build();  
         }
     }
 
     public static IndexMetadata readFrom(StreamInput in) throws IOException {
         Builder builder = new Builder(in.readString());
-        builder.version(in.readLong());
+        builder.version(in.readLong());  
         builder.mappingVersion(in.readVLong());
         builder.settingsVersion(in.readVLong());
-        builder.aliasesVersion(in.readVLong());
+        builder.aliasesVersion(in.readVLong());  
         builder.setRoutingNumShards(in.readInt());
         builder.state(State.fromId(in.readByte()));
-        builder.settings(readSettingsFromStream(in));
+        builder.settings(readSettingsFromStream(in));  
         long[] primaryTerms = null;
         if (in.getVersion().before(Version.V_3_6_0)) {
-            primaryTerms = in.readVLongArray();
+            primaryTerms = in.readVLongArray();  
         }
         int mappingsSize = in.readVInt();
-        for (int i = 0; i < mappingsSize; i++) {
+        for (int i = 0; i < mappingsSize; i++) {  
             MappingMetadata mappingMd = new MappingMetadata(in);
             builder.putMapping(mappingMd);
-        }
+        }  
         int aliasesSize = in.readVInt();
         for (int i = 0; i < aliasesSize; i++) {
-            AliasMetadata aliasMd = new AliasMetadata(in);
+            AliasMetadata aliasMd = new AliasMetadata(in);  
             builder.putAlias(aliasMd);
         }
-        int customSize = in.readVInt();
+        int customSize = in.readVInt();  
         for (int i = 0; i < customSize; i++) {
             String key = in.readString();
-            DiffableStringMap custom = DiffableStringMap.readFrom(in);
+            DiffableStringMap custom = DiffableStringMap.readFrom(in);  
             builder.putCustom(key, custom);
         }
-        int inSyncAllocationIdsSize = in.readVInt();
+        int inSyncAllocationIdsSize = in.readVInt();  
         for (int i = 0; i < inSyncAllocationIdsSize; i++) {
             int key = in.readVInt();
-            Set<String> allocationIds = DiffableUtils.StringSetValueSerializer.getInstance().read(in, key);
+            Set<String> allocationIds = DiffableUtils.StringSetValueSerializer.getInstance().read(in, key);  
             builder.putInSyncAllocationIds(key, allocationIds);
         }
-        int rolloverAliasesSize = in.readVInt();
+        int rolloverAliasesSize = in.readVInt();  
         for (int i = 0; i < rolloverAliasesSize; i++) {
             builder.putRolloverInfo(new RolloverInfo(in));
-        }
+        }  
         builder.system(in.readBoolean());
 
-        if (in.getVersion().onOrAfter(Version.V_2_17_0)) {
+        if (in.getVersion().onOrAfter(Version.V_2_17_0)) {  
             builder.context(in.readOptionalWriteable(Context::new));
         }
 
         if (in.getVersion().onOrAfter(Version.V_3_0_0)) {
             builder.ingestionStatus(in.readOptionalWriteable(IngestionStatus::new));
-        }
+        }  
 
         if (in.getVersion().onOrAfter(Version.V_3_6_0)) {
-            builder.splitShardsMetadata(new SplitShardsMetadata(in));
+            builder.splitShardsMetadata(new SplitShardsMetadata(in));  
             builder.primaryTermsMap(in.readMap(StreamInput::readInt, StreamInput::readLong));
         } else {
-            assert primaryTerms != null;
+            assert primaryTerms != null;  
             Map<Integer, Long> primaryTermsMapFromArray = new HashMap<>();
             for (int shardId = 0; shardId < primaryTerms.length; shardId++) {
-                primaryTermsMapFromArray.put(shardId, primaryTerms[shardId]);
+                primaryTermsMapFromArray.put(shardId, primaryTerms[shardId]);  
             }
             builder.primaryTermsMap(primaryTermsMapFromArray);
-        }
+        }  
         return builder.build();
     }
 
     /**
      * Builds a primaryTerms long array from primaryTermsMap for backward-compatible wire serialization
-     * to pre-V_3_6_0 nodes.
+     * to pre-V_3_6_0 nodes.  
      */
     private long[] buildPrimaryTermsArray() {
-        long[] terms = new long[numberOfShards];
+        long[] terms = new long[numberOfShards];  
         for (Map.Entry<Integer, Long> entry : primaryTermsMap.entrySet()) {
             if (entry.getKey() < numberOfShards) {
-                terms[entry.getKey()] = entry.getValue();
+                terms[entry.getKey()] = entry.getValue();  
             }
         }
-        return terms;
+        return terms;  
     }
 
-    @Override
+    @Override  
     public void writeTo(StreamOutput out) throws IOException {
         out.writeString(index.getName()); // uuid will come as part of settings
-        out.writeLong(version);
+        out.writeLong(version);  
         out.writeVLong(mappingVersion);
         out.writeVLong(settingsVersion);
-        out.writeVLong(aliasesVersion);
+        out.writeVLong(aliasesVersion);  
         out.writeInt(routingNumShards);
         out.writeByte(state.id());
-        writeSettingsToStream(settings, out);
+        writeSettingsToStream(settings, out);  
         if (out.getVersion().before(Version.V_3_6_0)) {
             out.writeVLongArray(buildPrimaryTermsArray());
-        }
+        }  
         out.writeVInt(mappings.size());
         for (final MappingMetadata cursor : mappings.values()) {
-            cursor.writeTo(out);
+            cursor.writeTo(out);  
         }
         out.writeVInt(aliases.size());
-        for (final AliasMetadata cursor : aliases.values()) {
+        for (final AliasMetadata cursor : aliases.values()) {  
             cursor.writeTo(out);
         }
-        out.writeVInt(customData.size());
+        out.writeVInt(customData.size());  
         for (final Map.Entry<String, DiffableStringMap> cursor : customData.entrySet()) {
             out.writeString(cursor.getKey());
-            cursor.getValue().writeTo(out);
+            cursor.getValue().writeTo(out);  
         }
         out.writeVInt(inSyncAllocationIds.size());
-        for (final Map.Entry<Integer, Set<String>> cursor : inSyncAllocationIds.entrySet()) {
+        for (final Map.Entry<Integer, Set<String>> cursor : inSyncAllocationIds.entrySet()) {  
             out.writeVInt(cursor.getKey());
             DiffableUtils.StringSetValueSerializer.getInstance().write(cursor.getValue(), out);
-        }
+        }  
         out.writeVInt(rolloverInfos.size());
         for (final RolloverInfo cursor : rolloverInfos.values()) {
-            cursor.writeTo(out);
+            cursor.writeTo(out);  
         }
         out.writeBoolean(isSystem);
 
         if (out.getVersion().onOrAfter(Version.V_2_17_0)) {
             out.writeOptionalWriteable(context);
-        }
+        }  
 
         if (out.getVersion().onOrAfter(Version.V_3_0_0)) {
-            out.writeOptionalWriteable(ingestionStatus);
+            out.writeOptionalWriteable(ingestionStatus);  
         }
 
-        if (out.getVersion().onOrAfter(Version.V_3_6_0)) {
+        if (out.getVersion().onOrAfter(Version.V_3_6_0)) {  
             splitShardsMetadata.writeTo(out);
             out.writeMap(primaryTermsMap, StreamOutput::writeInt, StreamOutput::writeLong);
-        }
+        }  
     }
 
-    @Override
+    @Override  
     public void writeVerifiableTo(BufferedChecksumStreamOutput out) throws IOException {
         out.writeString(index.getName()); // uuid will come as part of settings
-        out.writeLong(version);
+        out.writeLong(version);  
         out.writeVLong(mappingVersion);
         out.writeVLong(settingsVersion);
-        out.writeVLong(aliasesVersion);
+        out.writeVLong(aliasesVersion);  
         out.writeInt(routingNumShards);
         out.writeByte(state.id());
-        writeSettingsToStream(settings, out);
+        writeSettingsToStream(settings, out);  
         if (out.getVersion().before(Version.V_3_6_0)) {
             out.writeVLongArray(buildPrimaryTermsArray());
-        }
+        }  
         out.writeMapValues(mappings, (stream, val) -> val.writeVerifiableTo((BufferedChecksumStreamOutput) stream));
         out.writeMapValues(aliases, (stream, val) -> val.writeTo(stream));
-        out.writeMap(customData, StreamOutput::writeString, (stream, val) -> val.writeTo(stream));
+        out.writeMap(customData, StreamOutput::writeString, (stream, val) -> val.writeTo(stream));  
         out.writeMap(
             inSyncAllocationIds,
-            StreamOutput::writeVInt,
+            StreamOutput::writeVInt,  
             (stream, val) -> DiffableUtils.StringSetValueSerializer.getInstance().write(new TreeSet<>(val), stream)
         );
-        out.writeMapValues(rolloverInfos, (stream, val) -> val.writeTo(stream));
+        out.writeMapValues(rolloverInfos, (stream, val) -> val.writeTo(stream));  
         out.writeBoolean(isSystem);
         if (out.getVersion().onOrAfter(Version.V_2_17_0)) {
-            out.writeOptionalWriteable(context);
+            out.writeOptionalWriteable(context);  
         }
 
-        if (out.getVersion().onOrAfter(Version.V_3_6_0)) {
+        if (out.getVersion().onOrAfter(Version.V_3_6_0)) {  
             splitShardsMetadata.writeTo(out);
             out.writeMap(primaryTermsMap, StreamOutput::writeInt, StreamOutput::writeLong);
-        }
+        }  
     }
 
-    @Override
+    @Override  
     public String toString() {
         return new StringBuilder().append("IndexMetadata{routingNumShards=")
-            .append(routingNumShards)
+            .append(routingNumShards)  
             .append(", index=")
             .append(index)
-            .append(", version=")
+            .append(", version=")  
             .append(version)
             .append(", state=")
-            .append(state)
+            .append(state)  
             .append(", settingsVersion=")
             .append(settingsVersion)
-            .append(", mappingVersion=")
+            .append(", mappingVersion=")  
             .append(mappingVersion)
             .append(", aliasesVersion=")
-            .append(aliasesVersion)
+            .append(aliasesVersion)  
             .append(", primaryTerms=")
             .append(primaryTermsMap)
-            .append(", aliases=")
+            .append(", aliases=")  
             .append(aliases)
             .append(", settings=")
-            .append(settings)
+            .append(settings)  
             .append(", mappings=")
             .append(mappings)
-            .append(", customData=")
+            .append(", customData=")  
             .append(customData)
             .append(", inSyncAllocationIds=")
-            .append(inSyncAllocationIds)
+            .append(inSyncAllocationIds)  
             .append(", rolloverInfos=")
             .append(rolloverInfos)
-            .append(", isSystem=")
+            .append(", isSystem=")  
             .append(isSystem)
             .append(", context=")
-            .append(context)
+            .append(context)  
             .append(", ingestionStatus=")
             .append(ingestionStatus)
-            .append(", splitShardsMetadata=")
+            .append(", splitShardsMetadata=")  
             .append(splitShardsMetadata)
             .append("}")
-            .toString();
+            .toString();  
     }
 
-    public boolean isSystem() {
+    public boolean isSystem() {  
         return isSystem;
     }
 
     public Context context() {
         return context;
-    }
+    }  
 
     public boolean isRemoteSnapshot() {
-        return isRemoteSnapshot;
+        return isRemoteSnapshot;  
     }
 
-    public static Builder builder(String index) {
+    public static Builder builder(String index) {  
         return new Builder(index);
     }
 
     public static Builder builder(IndexMetadata indexMetadata) {
         return new Builder(indexMetadata);
-    }
+    }  
 
     /**
-     * Builder of index metadata.
+     * Builder of index metadata.  
      *
      * @opensearch.api
-     */
+     */  
     @PublicApi(since = "1.0.0")
     public static class Builder {
 
         private String index;
         private State state = State.OPEN;
-        private long version = 1;
+        private long version = 1;  
         private long mappingVersion = 1;
         private long settingsVersion = 1;
-        private long aliasesVersion = 1;
+        private long aliasesVersion = 1;  
         private Map<Integer, Long> primaryTermsMap = new HashMap<>();
         private Settings settings = Settings.Builder.EMPTY_SETTINGS;
-        private final Map<String, MappingMetadata> mappings;
+        private final Map<String, MappingMetadata> mappings;  
         private final Map<String, AliasMetadata> aliases;
         private final Map<String, DiffableStringMap> customMetadata;
-        private final Map<Integer, Set<String>> inSyncAllocationIds;
+        private final Map<Integer, Set<String>> inSyncAllocationIds;  
         private final Map<String, RolloverInfo> rolloverInfos;
         private Integer routingNumShards;
-        private boolean isSystem;
+        private boolean isSystem;  
         private Context context;
         private IngestionStatus ingestionStatus;
-        private SplitShardsMetadata splitShardsMetadata;
+        private SplitShardsMetadata splitShardsMetadata;  
 
         public Builder(String index) {
-            this.index = index;
+            this.index = index;  
             this.mappings = new HashMap<>();
             this.aliases = new HashMap<>();
-            this.customMetadata = new HashMap<>();
+            this.customMetadata = new HashMap<>();  
             this.inSyncAllocationIds = new HashMap<>();
             this.rolloverInfos = new HashMap<>();
-            this.isSystem = false;
+            this.isSystem = false;  
         }
 
-        public Builder(IndexMetadata indexMetadata) {
+        public Builder(IndexMetadata indexMetadata) {  
             this.index = indexMetadata.getIndex().getName();
             this.state = indexMetadata.state;
-            this.version = indexMetadata.version;
+            this.version = indexMetadata.version;  
             this.mappingVersion = indexMetadata.mappingVersion;
             this.settingsVersion = indexMetadata.settingsVersion;
-            this.aliasesVersion = indexMetadata.aliasesVersion;
+            this.aliasesVersion = indexMetadata.aliasesVersion;  
             this.settings = indexMetadata.getSettings();
             this.primaryTermsMap = new HashMap<>(indexMetadata.primaryTermsMap);
-            this.mappings = new HashMap<>(indexMetadata.mappings);
+            this.mappings = new HashMap<>(indexMetadata.mappings);  
             this.aliases = new HashMap<>(indexMetadata.aliases);
             this.customMetadata = new HashMap<>(indexMetadata.customData);
-            this.routingNumShards = indexMetadata.routingNumShards;
+            this.routingNumShards = indexMetadata.routingNumShards;  
             this.inSyncAllocationIds = new HashMap<>(indexMetadata.inSyncAllocationIds);
             this.rolloverInfos = new HashMap<>(indexMetadata.rolloverInfos);
-            this.isSystem = indexMetadata.isSystem;
+            this.isSystem = indexMetadata.isSystem;  
             this.context = indexMetadata.context;
             this.ingestionStatus = indexMetadata.ingestionStatus;
-            this.splitShardsMetadata = indexMetadata.splitShardsMetadata;
+            this.splitShardsMetadata = indexMetadata.splitShardsMetadata;  
         }
 
-        public Builder index(String index) {
+        public Builder index(String index) {  
             this.index = index;
             return this;
-        }
+        }  
 
         public Builder numberOfShards(int numberOfShards) {
-            settings = Settings.builder().put(settings).put(SETTING_NUMBER_OF_SHARDS, numberOfShards).build();
+            settings = Settings.builder().put(settings).put(SETTING_NUMBER_OF_SHARDS, numberOfShards).build();  
             return this;
         }
 
         /**
          * Sets the number of shards that should be used for routing. This should only be used if the number of shards in
-         * an index has changed ie if the index is shrunk.
+         * an index has changed ie if the index is shrunk.  
          */
         public Builder setRoutingNumShards(int routingNumShards) {
-            this.routingNumShards = routingNumShards;
+            this.routingNumShards = routingNumShards;  
             return this;
         }
 
         /**
          * Returns number of shards that should be used for routing. By default this method will return the number of shards
-         * for this index.
+         * for this index.  
          *
          * @see #setRoutingNumShards(int)
-         * @see #numberOfShards()
+         * @see #numberOfShards()  
          */
         public int getRoutingNumShards() {
-            return routingNumShards == null ? numberOfShards() : routingNumShards;
+            return routingNumShards == null ? numberOfShards() : routingNumShards;  
         }
 
-        /**
+        /**  
          * Returns the number of shards.
          *
-         * @return the provided value or -1 if it has not been set.
+         * @return the provided value or -1 if it has not been set.  
          */
         public int numberOfShards() {
-            return settings.getAsInt(SETTING_NUMBER_OF_SHARDS, -1);
+            return settings.getAsInt(SETTING_NUMBER_OF_SHARDS, -1);  
         }
 
-        public Builder numberOfReplicas(int numberOfReplicas) {
+        public Builder numberOfReplicas(int numberOfReplicas) {  
             settings = Settings.builder().put(settings).put(SETTING_NUMBER_OF_REPLICAS, numberOfReplicas).build();
             return this;
-        }
+        }  
 
         public Builder numberOfSearchReplicas(int numberOfSearchReplicas) {
-            settings = Settings.builder().put(settings).put(SETTING_NUMBER_OF_SEARCH_REPLICAS, numberOfSearchReplicas).build();
+            settings = Settings.builder().put(settings).put(SETTING_NUMBER_OF_SEARCH_REPLICAS, numberOfSearchReplicas).build();  
             return this;
         }
 
         public Builder routingPartitionSize(int routingPartitionSize) {
             settings = Settings.builder().put(settings).put(SETTING_ROUTING_PARTITION_SIZE, routingPartitionSize).build();
-            return this;
+            return this;  
         }
 
-        public Builder creationDate(long creationDate) {
+        public Builder creationDate(long creationDate) {  
             settings = Settings.builder().put(settings).put(SETTING_CREATION_DATE, creationDate).build();
             return this;
-        }
+        }  
 
         public Builder settings(Settings.Builder settings) {
-            return settings(settings.build());
+            return settings(settings.build());  
         }
 
-        public Builder settings(Settings settings) {
+        public Builder settings(Settings settings) {  
             this.settings = settings;
             return this;
-        }
+        }  
 
         public MappingMetadata mapping() {
-            return mappings.get(MapperService.SINGLE_MAPPING_NAME);
+            return mappings.get(MapperService.SINGLE_MAPPING_NAME);  
         }
 
-        public Builder putMapping(String source) throws IOException {
+        public Builder putMapping(String source) throws IOException {  
             putMapping(
                 new MappingMetadata(
-                    MapperService.SINGLE_MAPPING_NAME,
+                    MapperService.SINGLE_MAPPING_NAME,  
                     XContentHelper.convertToMap(MediaTypeRegistry.xContent(source).xContent(), source, true)
                 )
-            );
+            );  
             return this;
         }
 
         public Builder putMapping(MappingMetadata mappingMd) {
             mappings.clear();
-            if (mappingMd != null) {
+            if (mappingMd != null) {  
                 mappings.put(mappingMd.type(), mappingMd);
             }
-            return this;
+            return this;  
         }
 
-        public Builder state(State state) {
+        public Builder state(State state) {  
             this.state = state;
             return this;
-        }
+        }  
 
         public Builder putAlias(AliasMetadata aliasMetadata) {
-            aliases.put(aliasMetadata.alias(), aliasMetadata);
+            aliases.put(aliasMetadata.alias(), aliasMetadata);  
             return this;
         }
 
         public Builder putAlias(AliasMetadata.Builder aliasMetadata) {
             aliases.put(aliasMetadata.alias(), aliasMetadata.build());
-            return this;
+            return this;  
         }
 
-        public Builder removeAlias(String alias) {
+        public Builder removeAlias(String alias) {  
             aliases.remove(alias);
             return this;
-        }
+        }  
 
         public Builder removeAllAliases() {
-            aliases.clear();
+            aliases.clear();  
             return this;
         }
 
         public Builder putCustom(String type, Map<String, String> customIndexMetadata) {
             this.customMetadata.put(type, new DiffableStringMap(customIndexMetadata));
-            return this;
+            return this;  
         }
 
-        public Map<String, String> removeCustom(String type) {
+        public Map<String, String> removeCustom(String type) {  
             return this.customMetadata.remove(type);
         }
 
         public Set<String> getInSyncAllocationIds(int shardId) {
             return inSyncAllocationIds.get(shardId);
-        }
+        }  
 
         public Builder putInSyncAllocationIds(int shardId, Set<String> allocationIds) {
-            inSyncAllocationIds.put(shardId, new HashSet<>(allocationIds));
+            inSyncAllocationIds.put(shardId, new HashSet<>(allocationIds));  
             return this;
         }
 
         public Builder putRolloverInfo(RolloverInfo rolloverInfo) {
             rolloverInfos.put(rolloverInfo.getAlias(), rolloverInfo);
-            return this;
+            return this;  
         }
 
-        public long version() {
+        public long version() {  
             return this.version;
         }
 
         public Builder version(long version) {
             this.version = version;
-            return this;
+            return this;  
         }
 
-        public long mappingVersion() {
+        public long mappingVersion() {  
             return mappingVersion;
         }
 
         public Builder mappingVersion(final long mappingVersion) {
             this.mappingVersion = mappingVersion;
-            return this;
+            return this;  
         }
 
-        public long settingsVersion() {
+        public long settingsVersion() {  
             return settingsVersion;
         }
 
         public Builder settingsVersion(final long settingsVersion) {
             this.settingsVersion = settingsVersion;
-            return this;
+            return this;  
         }
 
-        public long aliasesVersion() {
+        public long aliasesVersion() {  
             return aliasesVersion;
         }
 
         public Builder aliasesVersion(final long aliasesVersion) {
             this.aliasesVersion = aliasesVersion;
-            return this;
+            return this;  
         }
 
-        /**
+        /**  
          * returns the primary term for the given shard.
          * See {@link IndexMetadata#primaryTerm(int)} for more information.
-         */
+         */  
         public long primaryTerm(int shardId) {
             if (primaryTermsMap.isEmpty()) {
-                initializePrimaryTerms();
+                initializePrimaryTerms();  
             }
             return primaryTermsMap.getOrDefault(shardId, SequenceNumbers.UNASSIGNED_PRIMARY_TERM);
-        }
+        }  
 
         /**
-         * sets the primary term for the given shard.
+         * sets the primary term for the given shard.  
          * See {@link IndexMetadata#primaryTerm(int)} for more information.
          */
-        public Builder primaryTerm(int shardId, long primaryTerm) {
+        public Builder primaryTerm(int shardId, long primaryTerm) {  
             if (primaryTermsMap.isEmpty()) {
                 initializePrimaryTerms();
-            }
+            }  
             primaryTermsMap.put(shardId, primaryTerm);
             return this;
-        }
+        }  
 
         private void primaryTerms(long[] primaryTerms) {
-            for (int shard = 0; shard < primaryTerms.length; shard++) {
+            for (int shard = 0; shard < primaryTerms.length; shard++) {  
                 this.primaryTermsMap.put(shard, primaryTerms[shard]);
             }
-        }
+        }  
 
         private void primaryTermsMap(Map<Integer, Long> primaryTermsMap) {
-            this.primaryTermsMap = new HashMap<>(primaryTermsMap);
+            this.primaryTermsMap = new HashMap<>(primaryTermsMap);  
         }
 
-        private void initializePrimaryTerms() {
+        private void initializePrimaryTerms() {  
             assert primaryTermsMap.isEmpty();
             if (numberOfShards() < 0) {
-                throw new IllegalStateException("you must set the number of shards before setting/reading primary terms");
+                throw new IllegalStateException("you must set the number of shards before setting/reading primary terms");  
             }
             for (int i = 0; i < numberOfShards(); i++) {
-                this.primaryTermsMap.put(i, SequenceNumbers.UNASSIGNED_PRIMARY_TERM);
+                this.primaryTermsMap.put(i, SequenceNumbers.UNASSIGNED_PRIMARY_TERM);  
             }
         }
 
         public Builder system(boolean system) {
             this.isSystem = system;
-            return this;
+            return this;  
         }
 
-        public boolean isSystem() {
+        public boolean isSystem() {  
             return isSystem;
         }
 
         public Builder context(Context context) {
             this.context = context;
-            return this;
+            return this;  
         }
 
-        public Context context() {
+        public Context context() {  
             return context;
         }
 
         public Builder ingestionStatus(IngestionStatus ingestionStatus) {
             this.ingestionStatus = ingestionStatus;
-            return this;
+            return this;  
         }
 
-        public IngestionStatus getIngestionStatus() {
+        public IngestionStatus getIngestionStatus() {  
             return ingestionStatus;
         }
 
         public Builder splitShardsMetadata(SplitShardsMetadata splitShardsMetadata) {
             this.splitShardsMetadata = splitShardsMetadata;
-            return this;
+            return this;  
         }
 
-        public SplitShardsMetadata getSplitShardsMetadata() {
+        public SplitShardsMetadata getSplitShardsMetadata() {  
             return splitShardsMetadata;
         }
 
         public IndexMetadata build() {
             final Map<String, AliasMetadata> tmpAliases = aliases;
-            Settings tmpSettings = settings;
+            Settings tmpSettings = settings;  
 
             /*
-             * We expect that the metadata has been properly built to set the number of shards and the number of replicas, and do not rely
+             * We expect that the metadata has been properly built to set the number of shards and the number of replicas, and do not rely  
              * on the default values here. Those must have been set upstream.
              */
-            if (INDEX_NUMBER_OF_SHARDS_SETTING.exists(settings) == false) {
+            if (INDEX_NUMBER_OF_SHARDS_SETTING.exists(settings) == false) {  
                 throw new IllegalArgumentException("must specify number of shards for index [" + index + "]");
             }
-            final int numberOfShards = INDEX_NUMBER_OF_SHARDS_SETTING.get(settings);
+            final int numberOfShards = INDEX_NUMBER_OF_SHARDS_SETTING.get(settings);  
 
             if (splitShardsMetadata == null) {
-                splitShardsMetadata = new SplitShardsMetadata.Builder(numberOfShards).build();
+                splitShardsMetadata = new SplitShardsMetadata.Builder(numberOfShards).build();  
             }
 
-            if (INDEX_NUMBER_OF_REPLICAS_SETTING.exists(settings) == false) {
+            if (INDEX_NUMBER_OF_REPLICAS_SETTING.exists(settings) == false) {  
                 throw new IllegalArgumentException("must specify number of replicas for index [" + index + "]");
             }
-            final int numberOfReplicas = INDEX_NUMBER_OF_REPLICAS_SETTING.get(settings);
+            final int numberOfReplicas = INDEX_NUMBER_OF_REPLICAS_SETTING.get(settings);  
             final int numberOfSearchReplicas = INDEX_NUMBER_OF_SEARCH_REPLICAS_SETTING.get(settings);
 
-            int routingPartitionSize = INDEX_ROUTING_PARTITION_SIZE_SETTING.get(settings);
+            int routingPartitionSize = INDEX_ROUTING_PARTITION_SIZE_SETTING.get(settings);  
             if (routingPartitionSize != 1 && routingPartitionSize >= getRoutingNumShards()) {
                 throw new IllegalArgumentException(
-                    "routing partition size ["
+                    "routing partition size ["  
                         + routingPartitionSize
                         + "] should be a positive number"
-                        + " less than the number of shards ["
+                        + " less than the number of shards ["  
                         + getRoutingNumShards()
                         + "] for ["
-                        + index
+                        + index  
                         + "]"
                 );
-            }
+            }  
 
             final int numberOfVirtualShards = INDEX_NUMBER_OF_VIRTUAL_SHARDS_SETTING.get(settings);
-            if (numberOfVirtualShards != -1) {
+            if (numberOfVirtualShards != -1) {  
                 if (numberOfVirtualShards < numberOfShards) {
                     throw new IllegalArgumentException(
-                        "number of virtual shards ["
+                        "number of virtual shards ["  
                             + numberOfVirtualShards
                             + "] must be >= number of shards ["
-                            + numberOfShards
+                            + numberOfShards  
                             + "] for ["
                             + index
-                            + "]"
+                            + "]"  
                     );
                 }
-                if (numberOfVirtualShards % numberOfShards != 0) {
+                if (numberOfVirtualShards % numberOfShards != 0) {  
                     throw new IllegalArgumentException(
                         "number of virtual shards ["
-                            + numberOfVirtualShards
+                            + numberOfVirtualShards  
                             + "] must be a multiple of number of shards ["
                             + numberOfShards
-                            + "] for ["
+                            + "] for ["  
                             + index
                             + "]"
-                    );
+                    );  
                 }
             }
 
             // fill missing slots in inSyncAllocationIds with empty set if needed and make all entries immutable
             final Map<Integer, Set<String>> filledInSyncAllocationIds = new HashMap<>();
-            for (int i = 0; i < numberOfShards; i++) {
+            for (int i = 0; i < numberOfShards; i++) {  
                 if (inSyncAllocationIds.containsKey(i)) {
                     filledInSyncAllocationIds.put(i, Collections.unmodifiableSet(new HashSet<>(inSyncAllocationIds.get(i))));
-                } else {
+                } else {  
                     filledInSyncAllocationIds.put(i, Collections.emptySet());
                 }
-            }
+            }  
             final Map<String, String> requireMap = INDEX_ROUTING_REQUIRE_GROUP_SETTING.getAsMap(settings);
             final DiscoveryNodeFilters requireFilters;
-            if (requireMap.isEmpty()) {
+            if (requireMap.isEmpty()) {  
                 requireFilters = null;
             } else {
-                requireFilters = DiscoveryNodeFilters.buildOrUpdateFromKeyValue(null, AND, requireMap);
+                requireFilters = DiscoveryNodeFilters.buildOrUpdateFromKeyValue(null, AND, requireMap);  
             }
             Map<String, String> includeMap = INDEX_ROUTING_INCLUDE_GROUP_SETTING.getAsMap(settings);
-            final DiscoveryNodeFilters includeFilters;
+            final DiscoveryNodeFilters includeFilters;  
             if (includeMap.isEmpty()) {
                 includeFilters = null;
-            } else {
+            } else {  
                 includeFilters = DiscoveryNodeFilters.buildOrUpdateFromKeyValue(null, OR, includeMap);
             }
-            Map<String, String> excludeMap = INDEX_ROUTING_EXCLUDE_GROUP_SETTING.getAsMap(settings);
+            Map<String, String> excludeMap = INDEX_ROUTING_EXCLUDE_GROUP_SETTING.getAsMap(settings);  
             final DiscoveryNodeFilters excludeFilters;
             if (excludeMap.isEmpty()) {
-                excludeFilters = null;
+                excludeFilters = null;  
             } else {
                 excludeFilters = DiscoveryNodeFilters.buildOrUpdateFromKeyValue(null, OR, excludeMap);
-            }
+            }  
             Map<String, String> initialRecoveryMap = INDEX_ROUTING_INITIAL_RECOVERY_GROUP_SETTING.getAsMap(settings);
             final DiscoveryNodeFilters initialRecoveryFilters;
-            if (initialRecoveryMap.isEmpty()) {
+            if (initialRecoveryMap.isEmpty()) {  
                 initialRecoveryFilters = null;
             } else {
-                initialRecoveryFilters = DiscoveryNodeFilters.buildOrUpdateFromKeyValue(null, OR, initialRecoveryMap);
+                initialRecoveryFilters = DiscoveryNodeFilters.buildOrUpdateFromKeyValue(null, OR, initialRecoveryMap);  
             }
             Version indexCreatedVersion = indexCreated(settings);
-            Version indexUpgradedVersion = settings.getAsVersion(IndexMetadata.SETTING_VERSION_UPGRADED, indexCreatedVersion);
+            Version indexUpgradedVersion = settings.getAsVersion(IndexMetadata.SETTING_VERSION_UPGRADED, indexCreatedVersion);  
 
             if (primaryTermsMap.isEmpty()) {
-                for (int i = 0; i < numberOfShards; i++) {
+                for (int i = 0; i < numberOfShards; i++) {  
                     primaryTermsMap.put(i, SequenceNumbers.UNASSIGNED_PRIMARY_TERM);
                 }
-            } else if (primaryTermsMap.size() != numberOfShards) {
+            } else if (primaryTermsMap.size() != numberOfShards) {  
                 throw new IllegalStateException(
                     "primaryTerms length is ["
-                        + primaryTermsMap.size()
+                        + primaryTermsMap.size()  
                         + "] but should be equal to number of shards ["
                         + numberOfShards()
-                        + "]"
+                        + "]"  
                 );
             }
 
             final ActiveShardCount waitForActiveShards = SETTING_WAIT_FOR_ACTIVE_SHARDS.get(settings);
             if (waitForActiveShards.validate(numberOfReplicas) == false) {
-                throw new IllegalArgumentException(
+                throw new IllegalArgumentException(  
                     "invalid "
                         + SETTING_WAIT_FOR_ACTIVE_SHARDS.getKey()
-                        + "["
+                        + "["  
                         + waitForActiveShards
                         + "]: cannot be greater than "
-                        + "number of shard copies ["
+                        + "number of shard copies ["  
                         + (numberOfReplicas + 1)
                         + "]"
-                );
+                );  
             }
 
-            final int indexTotalShardsPerNodeLimit = ShardsLimitAllocationDecider.INDEX_TOTAL_SHARDS_PER_NODE_SETTING.get(settings);
+            final int indexTotalShardsPerNodeLimit = ShardsLimitAllocationDecider.INDEX_TOTAL_SHARDS_PER_NODE_SETTING.get(settings);  
             final int indexTotalPrimaryShardsPerNodeLimit = ShardsLimitAllocationDecider.INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.get(
                 settings
-            );
+            );  
             final int indexTotalRemoteCapableShardsPerNodeLimit =
                 ShardsLimitAllocationDecider.INDEX_TOTAL_REMOTE_CAPABLE_SHARDS_PER_NODE_SETTING.get(settings);
-            final int indexTotalRemoteCapablePrimaryShardsPerNodeLimit =
+            final int indexTotalRemoteCapablePrimaryShardsPerNodeLimit =  
                 ShardsLimitAllocationDecider.INDEX_TOTAL_REMOTE_CAPABLE_PRIMARY_SHARDS_PER_NODE_SETTING.get(settings);
             final boolean isAppendOnlyIndex = INDEX_APPEND_ONLY_ENABLED_SETTING.exists(settings)
-                ? INDEX_APPEND_ONLY_ENABLED_SETTING.get(settings)
+                ? INDEX_APPEND_ONLY_ENABLED_SETTING.get(settings)  
                 : IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(settings);
 
-            final String uuid = settings.get(SETTING_INDEX_UUID, INDEX_UUID_NA_VALUE);
+            final String uuid = settings.get(SETTING_INDEX_UUID, INDEX_UUID_NA_VALUE);  
 
             if (ingestionStatus == null) {
-                ingestionStatus = IngestionStatus.getDefaultValue();
+                ingestionStatus = IngestionStatus.getDefaultValue();  
             }
 
-            return new IndexMetadata(
+            return new IndexMetadata(  
                 new Index(index, uuid),
                 version,
-                mappingVersion,
+                mappingVersion,  
                 settingsVersion,
                 aliasesVersion,
-                state,
+                state,  
                 numberOfShards,
                 numberOfReplicas,
-                numberOfSearchReplicas,
+                numberOfSearchReplicas,  
                 tmpSettings,
                 mappings,
-                tmpAliases,
+                tmpAliases,  
                 customMetadata,
                 filledInSyncAllocationIds,
-                requireFilters,
+                requireFilters,  
                 initialRecoveryFilters,
                 includeFilters,
-                excludeFilters,
+                excludeFilters,  
                 indexCreatedVersion,
                 indexUpgradedVersion,
-                getRoutingNumShards(),
+                getRoutingNumShards(),  
                 routingPartitionSize,
                 waitForActiveShards,
-                rolloverInfos,
+                rolloverInfos,  
                 isSystem,
                 indexTotalShardsPerNodeLimit,
-                indexTotalPrimaryShardsPerNodeLimit,
+                indexTotalPrimaryShardsPerNodeLimit,  
                 indexTotalRemoteCapableShardsPerNodeLimit,
                 indexTotalRemoteCapablePrimaryShardsPerNodeLimit,
-                isAppendOnlyIndex,
+                isAppendOnlyIndex,  
                 context,
                 ingestionStatus,
-                splitShardsMetadata,
+                splitShardsMetadata,  
                 primaryTermsMap
             );
-        }
+        }  
 
         public static void toXContent(IndexMetadata indexMetadata, XContentBuilder builder, ToXContent.Params params) throws IOException {
-            Metadata.XContentContext context = Metadata.XContentContext.valueOf(
+            Metadata.XContentContext context = Metadata.XContentContext.valueOf(  
                 params.param(CONTEXT_MODE_PARAM, Metadata.CONTEXT_MODE_API)
             );
 
             builder.startObject(indexMetadata.getIndex().getName());
 
-            builder.field(KEY_VERSION, indexMetadata.getVersion());
+            builder.field(KEY_VERSION, indexMetadata.getVersion());  
             builder.field(KEY_MAPPING_VERSION, indexMetadata.getMappingVersion());
             builder.field(KEY_SETTINGS_VERSION, indexMetadata.getSettingsVersion());
-            builder.field(KEY_ALIASES_VERSION, indexMetadata.getAliasesVersion());
+            builder.field(KEY_ALIASES_VERSION, indexMetadata.getAliasesVersion());  
             builder.field(KEY_ROUTING_NUM_SHARDS, indexMetadata.getRoutingNumShards());
 
-            builder.field(KEY_STATE, indexMetadata.getState().toString().toLowerCase(Locale.ENGLISH));
+            builder.field(KEY_STATE, indexMetadata.getState().toString().toLowerCase(Locale.ENGLISH));  
 
             boolean binary = params.paramAsBoolean("binary", false);
 
             builder.startObject(KEY_SETTINGS);
             if (context != Metadata.XContentContext.API) {
-                indexMetadata.getSettings().toXContent(builder, new MapParams(Collections.singletonMap("flat_settings", "true")));
+                indexMetadata.getSettings().toXContent(builder, new MapParams(Collections.singletonMap("flat_settings", "true")));  
             } else {
                 indexMetadata.getSettings().toXContent(builder, params);
-            }
+            }  
             builder.endObject();
 
-            if (context != Metadata.XContentContext.API) {
+            if (context != Metadata.XContentContext.API) {  
                 builder.startArray(KEY_MAPPINGS);
                 MappingMetadata mmd = indexMetadata.mapping();
-                if (mmd != null) {
+                if (mmd != null) {  
                     if (binary) {
                         builder.value(mmd.source().compressed());
-                    } else {
+                    } else {  
                         builder.map(XContentHelper.convertToMap(mmd.source().uncompressed(), true).v2());
                     }
-                }
+                }  
                 builder.endArray();
             } else {
-                builder.startObject(KEY_MAPPINGS);
+                builder.startObject(KEY_MAPPINGS);  
                 MappingMetadata mmd = indexMetadata.mapping();
                 if (mmd != null) {
-                    Map<String, Object> mapping = XContentHelper.convertToMap(mmd.source().uncompressed(), false).v2();
+                    Map<String, Object> mapping = XContentHelper.convertToMap(mmd.source().uncompressed(), false).v2();  
                     if (mapping.size() == 1 && mapping.containsKey(mmd.type())) {
                         // the type name is the root value, reduce it
-                        mapping = (Map<String, Object>) mapping.get(mmd.type());
+                        mapping = (Map<String, Object>) mapping.get(mmd.type());  
                     }
                     builder.field(mmd.type());
-                    builder.map(mapping);
+                    builder.map(mapping);  
                 }
                 builder.endObject();
-            }
+            }  
 
             for (final Map.Entry<String, DiffableStringMap> cursor : indexMetadata.customData.entrySet()) {
-                builder.field(cursor.getKey());
+                builder.field(cursor.getKey());  
                 builder.map(cursor.getValue());
             }
 
             if (context != Metadata.XContentContext.API) {
                 builder.startObject(KEY_ALIASES);
-                for (final AliasMetadata cursor : indexMetadata.getAliases().values()) {
+                for (final AliasMetadata cursor : indexMetadata.getAliases().values()) {  
                     AliasMetadata.Builder.toXContent(cursor, builder, params);
                 }
-                builder.endObject();
+                builder.endObject();  
 
                 builder.startArray(KEY_PRIMARY_TERMS);
-                for (int i = 0; i < indexMetadata.getNumberOfShards(); i++) {
+                for (int i = 0; i < indexMetadata.getNumberOfShards(); i++) {  
                     builder.value(indexMetadata.primaryTerm(i));
                 }
-                builder.endArray();
+                builder.endArray();  
             } else {
                 builder.startArray(KEY_ALIASES);
-                for (final String cursor : indexMetadata.getAliases().keySet()) {
+                for (final String cursor : indexMetadata.getAliases().keySet()) {  
                     builder.value(cursor);
                 }
-                builder.endArray();
+                builder.endArray();  
 
                 builder.startObject(IndexMetadata.KEY_PRIMARY_TERMS);
-                for (int shard = 0; shard < indexMetadata.getNumberOfShards(); shard++) {
+                for (int shard = 0; shard < indexMetadata.getNumberOfShards(); shard++) {  
                     builder.field(Integer.toString(shard), indexMetadata.primaryTerm(shard));
                 }
-                builder.endObject();
+                builder.endObject();  
             }
 
-            builder.startObject(KEY_PRIMARY_TERMS_MAP);
+            builder.startObject(KEY_PRIMARY_TERMS_MAP);  
             for (final Map.Entry<Integer, Long> cursor : indexMetadata.primaryTermsMap.entrySet()) {
                 builder.field(String.valueOf(cursor.getKey()), cursor.getValue());
-            }
+            }  
             builder.endObject();
 
-            builder.startObject(KEY_IN_SYNC_ALLOCATIONS);
+            builder.startObject(KEY_IN_SYNC_ALLOCATIONS);  
             for (final Map.Entry<Integer, Set<String>> cursor : indexMetadata.inSyncAllocationIds.entrySet()) {
                 builder.startArray(String.valueOf(cursor.getKey()));
-                for (String allocationId : cursor.getValue()) {
+                for (String allocationId : cursor.getValue()) {  
                     builder.value(allocationId);
                 }
-                builder.endArray();
+                builder.endArray();  
             }
             builder.endObject();
 
             builder.startObject(KEY_ROLLOVER_INFOS);
             for (final RolloverInfo cursor : indexMetadata.getRolloverInfos().values()) {
-                cursor.toXContent(builder, params);
+                cursor.toXContent(builder, params);  
             }
             builder.endObject();
-            builder.field(KEY_SYSTEM, indexMetadata.isSystem);
+            builder.field(KEY_SYSTEM, indexMetadata.isSystem);  
 
             if (indexMetadata.context != null) {
-                builder.field(CONTEXT_KEY);
+                builder.field(CONTEXT_KEY);  
                 indexMetadata.context.toXContent(builder, params);
             }
 
             if (indexMetadata.getCreationVersion().onOrAfter(Version.V_3_3_0) && indexMetadata.ingestionStatus != null) {
                 // ingestionStatus field is introduced from OS 3.x. But this field is included in XContent serialization only from OS 3.3
-                // onwards.
+                // onwards.  
                 builder.field(INGESTION_STATUS_KEY);
                 indexMetadata.ingestionStatus.toXContent(builder, params);
-            }
+            }  
 
             if (indexMetadata.splitShardsMetadata != null) {
-                builder.startObject(KEY_SPLIT_SHARDS_METADATA);
+                builder.startObject(KEY_SPLIT_SHARDS_METADATA);  
                 indexMetadata.splitShardsMetadata.toXContent(builder, params);
                 builder.endObject();
-            }
+            }  
 
             builder.endObject();
-        }
+        }  
 
         public static IndexMetadata fromXContent(XContentParser parser) throws IOException {
-            if (parser.currentToken() == null) { // fresh parser? move to the first token
+            if (parser.currentToken() == null) { // fresh parser? move to the first token  
                 parser.nextToken();
             }
-            if (parser.currentToken() == XContentParser.Token.START_OBJECT) {  // on a start object move to next token
+            if (parser.currentToken() == XContentParser.Token.START_OBJECT) {  // on a start object move to next token  
                 parser.nextToken();
             }
-            if (parser.currentToken() != XContentParser.Token.FIELD_NAME) {
+            if (parser.currentToken() != XContentParser.Token.FIELD_NAME) {  
                 throw new IllegalArgumentException("expected field name but got a " + parser.currentToken());
             }
-            Builder builder = new Builder(parser.currentName());
+            Builder builder = new Builder(parser.currentName());  
 
             String currentFieldName = null;
-            XContentParser.Token token = parser.nextToken();
+            XContentParser.Token token = parser.nextToken();  
             if (token != XContentParser.Token.START_OBJECT) {
                 throw new IllegalArgumentException("expected object but got a " + token);
-            }
+            }  
             boolean mappingVersion = false;
             boolean settingsVersion = false;
-            boolean aliasesVersion = false;
+            boolean aliasesVersion = false;  
             while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
                 if (token == XContentParser.Token.FIELD_NAME) {
-                    currentFieldName = parser.currentName();
+                    currentFieldName = parser.currentName();  
                 } else if (token == XContentParser.Token.START_OBJECT) {
                     if (KEY_SETTINGS.equals(currentFieldName)) {
-                        builder.settings(Settings.fromXContent(parser));
+                        builder.settings(Settings.fromXContent(parser));  
                     } else if (KEY_MAPPINGS.equals(currentFieldName)) {
                         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                            if (token == XContentParser.Token.FIELD_NAME) {
+                            if (token == XContentParser.Token.FIELD_NAME) {  
                                 currentFieldName = parser.currentName();
                             } else if (token == XContentParser.Token.START_OBJECT) {
-                                String mappingType = currentFieldName;
+                                String mappingType = currentFieldName;  
                                 Map<String, Object> mappingSource = MapBuilder.<String, Object>newMapBuilder()
                                     .put(mappingType, parser.mapOrdered())
-                                    .map();
+                                    .map();  
                                 builder.putMapping(new MappingMetadata(mappingType, mappingSource));
                             } else {
-                                throw new IllegalArgumentException("Unexpected token: " + token);
+                                throw new IllegalArgumentException("Unexpected token: " + token);  
                             }
                         }
-                    } else if (KEY_ALIASES.equals(currentFieldName)) {
+                    } else if (KEY_ALIASES.equals(currentFieldName)) {  
                         while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
                             builder.putAlias(AliasMetadata.Builder.fromXContent(parser));
-                        }
+                        }  
                     } else if (KEY_IN_SYNC_ALLOCATIONS.equals(currentFieldName)) {
                         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                            if (token == XContentParser.Token.FIELD_NAME) {
+                            if (token == XContentParser.Token.FIELD_NAME) {  
                                 currentFieldName = parser.currentName();
                             } else if (token == XContentParser.Token.START_ARRAY) {
-                                String shardId = currentFieldName;
+                                String shardId = currentFieldName;  
                                 Set<String> allocationIds = new HashSet<>();
                                 while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
-                                    if (token == XContentParser.Token.VALUE_STRING) {
+                                    if (token == XContentParser.Token.VALUE_STRING) {  
                                         allocationIds.add(parser.text());
                                     }
-                                }
+                                }  
                                 builder.putInSyncAllocationIds(Integer.valueOf(shardId), allocationIds);
                             } else {
-                                throw new IllegalArgumentException("Unexpected token: " + token);
+                                throw new IllegalArgumentException("Unexpected token: " + token);  
                             }
                         }
-                    } else if (KEY_ROLLOVER_INFOS.equals(currentFieldName)) {
+                    } else if (KEY_ROLLOVER_INFOS.equals(currentFieldName)) {  
                         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
                             if (token == XContentParser.Token.FIELD_NAME) {
-                                currentFieldName = parser.currentName();
+                                currentFieldName = parser.currentName();  
                             } else if (token == XContentParser.Token.START_OBJECT) {
                                 builder.putRolloverInfo(RolloverInfo.parse(parser, currentFieldName));
-                            } else {
+                            } else {  
                                 throw new IllegalArgumentException("Unexpected token: " + token);
                             }
-                        }
+                        }  
                     } else if ("warmers".equals(currentFieldName)) {
                         // TODO: This was removed in 2015. We should throw an exception in OpenSearch 4.0.
-                        // throw new IllegalArgumentException("Warmers are not supported anymore");
+                        // throw new IllegalArgumentException("Warmers are not supported anymore");  
                         assert Version.CURRENT.major <= 5;
                         parser.skipChildren();
-                    } else if (CONTEXT_KEY.equals(currentFieldName)) {
+                    } else if (CONTEXT_KEY.equals(currentFieldName)) {  
                         builder.context(Context.fromXContent(parser));
                     } else if (INGESTION_STATUS_KEY.equals(currentFieldName)) {
-                        builder.ingestionStatus(IngestionStatus.fromXContent(parser));
+                        builder.ingestionStatus(IngestionStatus.fromXContent(parser));  
                     } else if (KEY_SPLIT_SHARDS_METADATA.equals(currentFieldName)) {
                         builder.splitShardsMetadata(SplitShardsMetadata.parse(parser));
-                    } else if (KEY_PRIMARY_TERMS_MAP.equals(currentFieldName)) {
+                    } else if (KEY_PRIMARY_TERMS_MAP.equals(currentFieldName)) {  
                         Map<Integer, Long> primaryTermsMap = new HashMap<>();
                         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                            if (token != XContentParser.Token.FIELD_NAME) {
+                            if (token != XContentParser.Token.FIELD_NAME) {  
                                 throw new IllegalArgumentException("Unexpected token: " + token);
                             }
-                            Integer shard = Integer.parseInt(parser.currentName());
+                            Integer shard = Integer.parseInt(parser.currentName());  
                             token = parser.nextToken();
                             if (token != XContentParser.Token.VALUE_NUMBER) {
-                                throw new IllegalArgumentException("Unexpected token: " + token);
+                                throw new IllegalArgumentException("Unexpected token: " + token);  
                             }
                             primaryTermsMap.put(shard, parser.longValue());
-                        }
+                        }  
                         builder.primaryTermsMap(primaryTermsMap);
                     } else {
-                        // assume it's custom index metadata
+                        // assume it's custom index metadata  
                         builder.putCustom(currentFieldName, parser.mapStrings());
                     }
-                } else if (token == XContentParser.Token.START_ARRAY) {
+                } else if (token == XContentParser.Token.START_ARRAY) {  
                     if (KEY_MAPPINGS.equals(currentFieldName)) {
                         while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
-                            if (token == XContentParser.Token.VALUE_EMBEDDED_OBJECT) {
+                            if (token == XContentParser.Token.VALUE_EMBEDDED_OBJECT) {  
                                 builder.putMapping(new MappingMetadata(new CompressedXContent(parser.binaryValue())));
                             } else {
-                                Map<String, Object> mapping = parser.mapOrdered();
+                                Map<String, Object> mapping = parser.mapOrdered();  
                                 if (mapping.size() == 1) {
                                     String mappingType = mapping.keySet().iterator().next();
-                                    builder.putMapping(new MappingMetadata(mappingType, mapping));
+                                    builder.putMapping(new MappingMetadata(mappingType, mapping));  
                                 }
                             }
-                        }
+                        }  
                     } else if (KEY_PRIMARY_TERMS.equals(currentFieldName)) {
                         final List<Long> list = new ArrayList<>();
-                        while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
+                        while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {  
                             if (token == XContentParser.Token.VALUE_NUMBER) {
                                 list.add(parser.longValue());
-                            } else {
+                            } else {  
                                 throw new IllegalStateException("found a non-numeric value under [" + KEY_PRIMARY_TERMS + "]");
                             }
-                        }
+                        }  
                         builder.primaryTerms(list.stream().mapToLong(i -> i).toArray());
                     } else {
-                        throw new IllegalArgumentException("Unexpected field for an array " + currentFieldName);
+                        throw new IllegalArgumentException("Unexpected field for an array " + currentFieldName);  
                     }
                 } else if (token.isValue()) {
-                    if (KEY_STATE.equals(currentFieldName)) {
+                    if (KEY_STATE.equals(currentFieldName)) {  
                         builder.state(State.fromString(parser.text()));
                     } else if (KEY_VERSION.equals(currentFieldName)) {
-                        builder.version(parser.longValue());
+                        builder.version(parser.longValue());  
                     } else if (KEY_MAPPING_VERSION.equals(currentFieldName)) {
                         mappingVersion = true;
-                        builder.mappingVersion(parser.longValue());
+                        builder.mappingVersion(parser.longValue());  
                     } else if (KEY_SETTINGS_VERSION.equals(currentFieldName)) {
                         settingsVersion = true;
-                        builder.settingsVersion(parser.longValue());
+                        builder.settingsVersion(parser.longValue());  
                     } else if (KEY_ALIASES_VERSION.equals(currentFieldName)) {
                         aliasesVersion = true;
-                        builder.aliasesVersion(parser.longValue());
+                        builder.aliasesVersion(parser.longValue());  
                     } else if (KEY_ROUTING_NUM_SHARDS.equals(currentFieldName)) {
                         builder.setRoutingNumShards(parser.intValue());
-                    } else if (KEY_SYSTEM.equals(currentFieldName)) {
+                    } else if (KEY_SYSTEM.equals(currentFieldName)) {  
                         builder.system(parser.booleanValue());
                     } else {
-                        throw new IllegalArgumentException("Unexpected field [" + currentFieldName + "]");
+                        throw new IllegalArgumentException("Unexpected field [" + currentFieldName + "]");  
                     }
                 } else {
-                    throw new IllegalArgumentException("Unexpected token " + token);
+                    throw new IllegalArgumentException("Unexpected token " + token);  
                 }
             }
 
             assert mappingVersion : "mapping version should be present for indices";
             assert settingsVersion : "settings version should be present for indices";
-            assert aliasesVersion : "aliases version should be present for indices";
+            assert aliasesVersion : "aliases version should be present for indices";  
             return builder.build();
         }
-    }
+    }  
 
     /**
-     * Adds human readable version and creation date settings.
+     * Adds human readable version and creation date settings.  
      * This method is used to display the settings in a human readable format in REST API
      */
-    public static Settings addHumanReadableSettings(Settings settings) {
+    public static Settings addHumanReadableSettings(Settings settings) {  
         Settings.Builder builder = Settings.builder().put(settings);
         Version version = SETTING_INDEX_VERSION_CREATED.get(settings);
-        if (version != Version.V_EMPTY) {
+        if (version != Version.V_EMPTY) {  
             builder.put(SETTING_VERSION_CREATED_STRING, version.toString());
         }
-        Version versionUpgraded = settings.getAsVersion(SETTING_VERSION_UPGRADED, null);
+        Version versionUpgraded = settings.getAsVersion(SETTING_VERSION_UPGRADED, null);  
         if (versionUpgraded != null) {
             builder.put(SETTING_VERSION_UPGRADED_STRING, versionUpgraded.toString());
-        }
+        }  
         Long creationDate = settings.getAsLong(SETTING_CREATION_DATE, null);
         if (creationDate != null) {
-            ZonedDateTime creationDateTime = ZonedDateTime.ofInstant(Instant.ofEpochMilli(creationDate), ZoneOffset.UTC);
+            ZonedDateTime creationDateTime = ZonedDateTime.ofInstant(Instant.ofEpochMilli(creationDate), ZoneOffset.UTC);  
             builder.put(SETTING_CREATION_DATE_STRING, creationDateTime.toString());
         }
-        return builder.build();
+        return builder.build();  
     }
 
-    private static final ToXContent.Params FORMAT_PARAMS;
+    private static final ToXContent.Params FORMAT_PARAMS;  
 
     static {
-        Map<String, String> params = new HashMap<>(2);
+        Map<String, String> params = new HashMap<>(2);  
         params.put("binary", "true");
         params.put(Metadata.CONTEXT_MODE_PARAM, Metadata.CONTEXT_MODE_GATEWAY);
-        FORMAT_PARAMS = new MapParams(params);
+        FORMAT_PARAMS = new MapParams(params);  
     }
 
-    /**
+    /**  
      * Return the version the index was created from the provided index settings
      * <p>
-     * This looks for the presence of the {@link Version} object with key {@link IndexMetadata#SETTING_VERSION_CREATED}
+     * This looks for the presence of the {@link Version} object with key {@link IndexMetadata#SETTING_VERSION_CREATED}  
      */
     public static Version indexCreated(final Settings indexSettings) {
-        final Version indexVersion;
+        final Version indexVersion;  
         try {
             indexVersion = SETTING_INDEX_VERSION_CREATED.get(indexSettings);
-        } catch (Version.UnsupportedVersionException e) {
+        } catch (Version.UnsupportedVersionException e) {  
             final String message = String.format(
                 Locale.ROOT,
-                "index with UUID [%s] created on version [%s] is not supported by version [%s]",
+                "index with UUID [%s] created on version [%s] is not supported by version [%s]",  
                 indexSettings.get(IndexMetadata.SETTING_INDEX_UUID),
                 e.getVersionString(),
-                Version.CURRENT.toString()
+                Version.CURRENT.toString()  
             );
             throw new IllegalArgumentException(message, e);
-        }
+        }  
         if (indexVersion.equals(Version.V_EMPTY)) {
             final String message = String.format(
-                Locale.ROOT,
+                Locale.ROOT,  
                 "[%s] is not present in the index settings for index with UUID [%s]",
                 SETTING_INDEX_VERSION_CREATED.getKey(),
-                indexSettings.get(IndexMetadata.SETTING_INDEX_UUID)
+                indexSettings.get(IndexMetadata.SETTING_INDEX_UUID)  
             );
             throw new IllegalStateException(message);
-        }
+        }  
         return indexVersion;
     }
 
     /**
      * State format for {@link IndexMetadata} to write to and load from disk
-     */
+     */  
     public static final MetadataStateFormat<IndexMetadata> FORMAT = new MetadataStateFormat<>(INDEX_STATE_FILE_PREFIX) {
 
-        @Override
+        @Override  
         public void toXContent(XContentBuilder builder, IndexMetadata state) throws IOException {
             Builder.toXContent(state, builder, FORMAT_PARAMS);
-        }
+        }  
 
         @Override
-        public IndexMetadata fromXContent(XContentParser parser) throws IOException {
+        public IndexMetadata fromXContent(XContentParser parser) throws IOException {  
             return Builder.fromXContent(parser);
         }
-    };
+    };  
 
     /**
-     * Returns the number of shards that should be used for routing. This basically defines the hash space we use in
+     * Returns the number of shards that should be used for routing. This basically defines the hash space we use in  
      * {@link org.opensearch.cluster.routing.OperationRouting#generateShardId(IndexMetadata, String, String)} to route documents
      * to shards based on their ID or their specific routing value. The default value is {@link #getNumberOfShards()}. This value only
-     * changes if and index is shrunk.
+     * changes if and index is shrunk.  
      */
     public int getRoutingNumShards() {
-        return routingNumShards;
+        return routingNumShards;  
     }
 
-    /**
+    /**  
      * Returns the routing factor for this index. The default is {@code 1}.
      *
-     * @see #getRoutingFactor(int, int) for details
+     * @see #getRoutingFactor(int, int) for details  
      */
     public int getRoutingFactor() {
-        return routingFactor;
+        return routingFactor;  
     }
 
-    /**
+    /**  
      * Returns the source shard ID to split the given target shard off
      *
-     * @param shardId             the id of the target shard to split into
+     * @param shardId             the id of the target shard to split into  
      * @param sourceIndexMetadata the source index metadata
      * @param numTargetShards     the total number of shards in the target index
-     * @return a the source shard ID to split off from
+     * @return a the source shard ID to split off from  
      */
     public static ShardId selectSplitShard(int shardId, IndexMetadata sourceIndexMetadata, int numTargetShards) {
-        int numSourceShards = sourceIndexMetadata.getNumberOfShards();
+        int numSourceShards = sourceIndexMetadata.getNumberOfShards();  
         if (shardId >= numTargetShards) {
             throw new IllegalArgumentException(
-                "the number of target shards (" + numTargetShards + ") must be greater than the shard id: " + shardId
+                "the number of target shards (" + numTargetShards + ") must be greater than the shard id: " + shardId  
             );
         }
-        final int routingFactor = getRoutingFactor(numSourceShards, numTargetShards);
+        final int routingFactor = getRoutingFactor(numSourceShards, numTargetShards);  
         assertSplitMetadata(numSourceShards, numTargetShards, sourceIndexMetadata);
         return new ShardId(sourceIndexMetadata.getIndex(), shardId / routingFactor);
-    }
+    }  
 
     /**
-     * Returns the source shard ID to clone the given target shard off
+     * Returns the source shard ID to clone the given target shard off  
      *
      * @param shardId             the id of the target shard to clone into
-     * @param sourceIndexMetadata the source index metadata
+     * @param sourceIndexMetadata the source index metadata  
      * @param numTargetShards     the total number of shards in the target index
      * @return a the source shard ID to clone from
-     */
+     */  
     public static ShardId selectCloneShard(int shardId, IndexMetadata sourceIndexMetadata, int numTargetShards) {
         int numSourceShards = sourceIndexMetadata.getNumberOfShards();
-        if (numSourceShards != numTargetShards) {
+        if (numSourceShards != numTargetShards) {  
             throw new IllegalArgumentException(
                 "the number of target shards ("
-                    + numTargetShards
+                    + numTargetShards  
                     + ") must be the same as the number of"
                     + " source shards ("
-                    + numSourceShards
+                    + numSourceShards  
                     + ")"
             );
-        }
+        }  
         return new ShardId(sourceIndexMetadata.getIndex(), shardId);
     }
 
     private static void assertSplitMetadata(int numSourceShards, int numTargetShards, IndexMetadata sourceIndexMetadata) {
         if (numSourceShards > numTargetShards) {
-            throw new IllegalArgumentException(
+            throw new IllegalArgumentException(  
                 "the number of source shards ["
                     + numSourceShards
-                    + "] must be less that the number of target shards ["
+                    + "] must be less that the number of target shards ["  
                     + numTargetShards
                     + "]"
-            );
+            );  
         }
         // now we verify that the numRoutingShards is valid in the source index
-        // note: if the number of shards is 1 in the source index we can just assume it's correct since from 1 we can split into anything
+        // note: if the number of shards is 1 in the source index we can just assume it's correct since from 1 we can split into anything  
         // this is important to special case here since we use this to validate this in various places in the code but allow to split form
         // 1 to N but we never modify the sourceIndexMetadata to accommodate for that
-        int routingNumShards = numSourceShards == 1 ? numTargetShards : sourceIndexMetadata.getRoutingNumShards();
+        int routingNumShards = numSourceShards == 1 ? numTargetShards : sourceIndexMetadata.getRoutingNumShards();  
         if (routingNumShards % numTargetShards != 0) {
             throw new IllegalStateException(
-                "the number of routing shards [" + routingNumShards + "] must be a multiple of the target shards [" + numTargetShards + "]"
+                "the number of routing shards [" + routingNumShards + "] must be a multiple of the target shards [" + numTargetShards + "]"  
             );
         }
-        // this is just an additional assertion that ensures we are a factor of the routing num shards.
+        // this is just an additional assertion that ensures we are a factor of the routing num shards.  
         assert sourceIndexMetadata.getNumberOfShards() == 1 // special case - we can split into anything from 1 shard
             || getRoutingFactor(numTargetShards, routingNumShards) >= 0;
-    }
+    }  
 
     /**
-     * Selects the source shards for a local shard recovery. This might either be a split or a shrink operation.
+     * Selects the source shards for a local shard recovery. This might either be a split or a shrink operation.  
      *
      * @param shardId             the target shard ID to select the source shards for
-     * @param sourceIndexMetadata the source metadata
+     * @param sourceIndexMetadata the source metadata  
      * @param numTargetShards     the number of target shards
      */
-    public static Set<ShardId> selectRecoverFromShards(int shardId, IndexMetadata sourceIndexMetadata, int numTargetShards) {
+    public static Set<ShardId> selectRecoverFromShards(int shardId, IndexMetadata sourceIndexMetadata, int numTargetShards) {  
         if (sourceIndexMetadata.getNumberOfShards() > numTargetShards) {
             return selectShrinkShards(shardId, sourceIndexMetadata, numTargetShards);
-        } else if (sourceIndexMetadata.getNumberOfShards() < numTargetShards) {
+        } else if (sourceIndexMetadata.getNumberOfShards() < numTargetShards) {  
             return Collections.singleton(selectSplitShard(shardId, sourceIndexMetadata, numTargetShards));
         } else {
-            return Collections.singleton(selectCloneShard(shardId, sourceIndexMetadata, numTargetShards));
+            return Collections.singleton(selectCloneShard(shardId, sourceIndexMetadata, numTargetShards));  
         }
     }
 
     /**
      * Returns the source shard ids to shrink into the given shard id.
-     *
+     *  
      * @param shardId             the id of the target shard to shrink to
      * @param sourceIndexMetadata the source index metadata
-     * @param numTargetShards     the total number of shards in the target index
+     * @param numTargetShards     the total number of shards in the target index  
      * @return a set of shard IDs to shrink into the given shard ID.
      */
-    public static Set<ShardId> selectShrinkShards(int shardId, IndexMetadata sourceIndexMetadata, int numTargetShards) {
+    public static Set<ShardId> selectShrinkShards(int shardId, IndexMetadata sourceIndexMetadata, int numTargetShards) {  
         if (shardId >= numTargetShards) {
             throw new IllegalArgumentException(
-                "the number of target shards (" + numTargetShards + ") must be greater than the shard id: " + shardId
+                "the number of target shards (" + numTargetShards + ") must be greater than the shard id: " + shardId  
             );
         }
-        if (sourceIndexMetadata.getNumberOfShards() < numTargetShards) {
+        if (sourceIndexMetadata.getNumberOfShards() < numTargetShards) {  
             throw new IllegalArgumentException(
                 "the number of target shards ["
-                    + numTargetShards
+                    + numTargetShards  
                     + "] must be less that the number of source shards ["
                     + sourceIndexMetadata.getNumberOfShards()
-                    + "]"
+                    + "]"  
             );
         }
-        int routingFactor = getRoutingFactor(sourceIndexMetadata.getNumberOfShards(), numTargetShards);
+        int routingFactor = getRoutingFactor(sourceIndexMetadata.getNumberOfShards(), numTargetShards);  
         Set<ShardId> shards = new HashSet<>(routingFactor);
         for (int i = shardId * routingFactor; i < routingFactor * shardId + routingFactor; i++) {
-            shards.add(new ShardId(sourceIndexMetadata.getIndex(), i));
+            shards.add(new ShardId(sourceIndexMetadata.getIndex(), i));  
         }
         return shards;
-    }
+    }  
 
     /**
-     * Returns the routing factor for and shrunk index with the given number of target shards.
+     * Returns the routing factor for and shrunk index with the given number of target shards.  
      * This factor is used in the hash function in
      * {@link org.opensearch.cluster.routing.OperationRouting#generateShardId(IndexMetadata, String, String)} to guarantee consistent
-     * hashing / routing of documents even if the number of shards changed (ie. a shrunk index).
+     * hashing / routing of documents even if the number of shards changed (ie. a shrunk index).  
      *
      * @param sourceNumberOfShards the total number of shards in the source index
-     * @param targetNumberOfShards the total number of shards in the target index
+     * @param targetNumberOfShards the total number of shards in the target index  
      * @return the routing factor for and shrunk index with the given number of target shards.
      * @throws IllegalArgumentException if the number of source shards is less than the number of target shards or if the source shards
-     *                                  are not divisible by the number of target shards.
+     *                                  are not divisible by the number of target shards.  
      */
     public static int getRoutingFactor(int sourceNumberOfShards, int targetNumberOfShards) {
-        final int factor;
+        final int factor;  
         if (sourceNumberOfShards < targetNumberOfShards) { // split
             factor = targetNumberOfShards / sourceNumberOfShards;
-            if (factor * sourceNumberOfShards != targetNumberOfShards || factor <= 1) {
+            if (factor * sourceNumberOfShards != targetNumberOfShards || factor <= 1) {  
                 throw new IllegalArgumentException(
                     "the number of source shards [" + sourceNumberOfShards + "] must be a " + "factor of [" + targetNumberOfShards + "]"
-                );
+                );  
             }
         } else if (sourceNumberOfShards > targetNumberOfShards) { // shrink
-            factor = sourceNumberOfShards / targetNumberOfShards;
+            factor = sourceNumberOfShards / targetNumberOfShards;  
             if (factor * targetNumberOfShards != sourceNumberOfShards || factor <= 1) {
                 throw new IllegalArgumentException(
-                    "the number of source shards [" + sourceNumberOfShards + "] must be a " + "multiple of [" + targetNumberOfShards + "]"
+                    "the number of source shards [" + sourceNumberOfShards + "] must be a " + "multiple of [" + targetNumberOfShards + "]"  
                 );
             }
-        } else {
+        } else {  
             factor = 1;
         }
-        return factor;
+        return factor;  
     }
 
-    /**
+    /**  
      * Parses the number from the rolled over index name. It also supports the date-math format (ie. index name is wrapped in &lt; and &gt;)
      * E.g.
-     * - For ".ds-logs-000002" it will return 2
+     * - For ".ds-logs-000002" it will return 2  
      * - For "&lt;logs-{now/d}-3&gt;" it'll return 3
      *
-     * @throws IllegalArgumentException if the index doesn't contain a "-" separator or if the last token after the separator is not a
+     * @throws IllegalArgumentException if the index doesn't contain a "-" separator or if the last token after the separator is not a  
      *                                  number
      */
-    public static int parseIndexNameCounter(String indexName) {
+    public static int parseIndexNameCounter(String indexName) {  
         int numberIndex = indexName.lastIndexOf("-");
         if (numberIndex == -1) {
-            throw new IllegalArgumentException("no - separator found in index name [" + indexName + "]");
+            throw new IllegalArgumentException("no - separator found in index name [" + indexName + "]");  
         }
         try {
-            return Integer.parseInt(
+            return Integer.parseInt(  
                 indexName.substring(numberIndex + 1, indexName.endsWith(">") ? indexName.length() - 1 : indexName.length())
             );
-        } catch (NumberFormatException e) {
+        } catch (NumberFormatException e) {  
             throw new IllegalArgumentException("unable to parse the index name [" + indexName + "] to extract the counter", e);
         }
-    }
+    }  
 }

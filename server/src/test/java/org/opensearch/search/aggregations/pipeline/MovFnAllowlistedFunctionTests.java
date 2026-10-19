@@ -1,34 +1,34 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.search.aggregations.pipeline;
 
@@ -37,91 +37,91 @@ import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.Arrays;
 
-import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.equalTo;  
 
 public class MovFnAllowlistedFunctionTests extends OpenSearchTestCase {
 
     public void testWindowMax() {
         int numValues = randomIntBetween(1, 100);
-        int windowSize = randomIntBetween(1, 50);
+        int windowSize = randomIntBetween(1, 50);  
 
         EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
-        for (int i = 0; i < numValues; i++) {
+        for (int i = 0; i < numValues; i++) {  
 
             double randValue = randomDouble();
-            double expected = -Double.MAX_VALUE;
+            double expected = -Double.MAX_VALUE;  
 
             if (i == 0) {
-                window.offer(randValue);
+                window.offer(randValue);  
                 continue;
             }
 
             for (double value : window) {
                 expected = Math.max(expected, value);
-            }
+            }  
 
             double actual = MovingFunctions.max(window.stream().mapToDouble(Double::doubleValue).toArray());
-            assertEquals(expected, actual, 0.01 * Math.abs(expected));
+            assertEquals(expected, actual, 0.01 * Math.abs(expected));  
             window.offer(randValue);
         }
-    }
+    }  
 
     public void testNullWindowMax() {
-        int numValues = randomIntBetween(1, 100);
+        int numValues = randomIntBetween(1, 100);  
         int windowSize = randomIntBetween(1, 50);
 
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);  
         for (int i = 0; i < numValues; i++) {
 
-            Double randValue = randomBoolean() ? Double.NaN : null;
+            Double randValue = randomBoolean() ? Double.NaN : null;  
 
             if (i == 0) {
-                if (randValue != null) {
+                if (randValue != null) {  
                     window.offer(randValue);
                 }
-                continue;
+                continue;  
             }
 
-            double actual = MovingFunctions.max(window.stream().mapToDouble(Double::doubleValue).toArray());
+            double actual = MovingFunctions.max(window.stream().mapToDouble(Double::doubleValue).toArray());  
             assertThat(actual, equalTo(Double.NaN));
             if (randValue != null) {
-                window.offer(randValue);
+                window.offer(randValue);  
             }
         }
-    }
+    }  
 
     public void testEmptyWindowMax() {
-        EvictingQueue<Double> window = new EvictingQueue<>(0);
+        EvictingQueue<Double> window = new EvictingQueue<>(0);  
         double actual = MovingFunctions.max(window.stream().mapToDouble(Double::doubleValue).toArray());
         assertThat(actual, equalTo(Double.NaN));
-    }
+    }  
 
     public void testWindowMin() {
-        int numValues = randomIntBetween(1, 100);
+        int numValues = randomIntBetween(1, 100);  
         int windowSize = randomIntBetween(1, 50);
 
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);  
         for (int i = 0; i < numValues; i++) {
 
-            double randValue = randomDouble();
+            double randValue = randomDouble();  
             double expected = Double.MAX_VALUE;
 
-            if (i == 0) {
+            if (i == 0) {  
                 window.offer(randValue);
                 continue;
-            }
+            }  
 
             for (double value : window) {
-                expected = Math.min(expected, value);
+                expected = Math.min(expected, value);  
             }
 
-            double actual = MovingFunctions.min(window.stream().mapToDouble(Double::doubleValue).toArray());
+            double actual = MovingFunctions.min(window.stream().mapToDouble(Double::doubleValue).toArray());  
             assertEquals(expected, actual, 0.01 * Math.abs(expected));
             window.offer(randValue);
-        }
+        }  
     }
 
-    public void testNullWindowMin() {
+    public void testNullWindowMin() {  
         int numValues = randomIntBetween(1, 100);
         int windowSize = randomIntBetween(1, 50);
 
@@ -130,28 +130,28 @@ public class MovFnAllowlistedFunctionTests extends OpenSearchTestCase {
 
             Double randValue = randomBoolean() ? Double.NaN : null;
 
-            if (i == 0) {
+            if (i == 0) {  
                 if (randValue != null) {
                     window.offer(randValue);
-                }
+                }  
                 continue;
             }
 
             double actual = MovingFunctions.min(window.stream().mapToDouble(Double::doubleValue).toArray());
             assertThat(actual, equalTo(Double.NaN));
-            if (randValue != null) {
+            if (randValue != null) {  
                 window.offer(randValue);
             }
-        }
+        }  
     }
 
-    public void testEmptyWindowMin() {
+    public void testEmptyWindowMin() {  
         EvictingQueue<Double> window = new EvictingQueue<>(0);
         double actual = MovingFunctions.min(window.stream().mapToDouble(Double::doubleValue).toArray());
-        assertThat(actual, equalTo(Double.NaN));
+        assertThat(actual, equalTo(Double.NaN));  
     }
 
-    public void testWindowSum() {
+    public void testWindowSum() {  
         int numValues = randomIntBetween(1, 100);
         int windowSize = randomIntBetween(1, 50);
 
@@ -163,76 +163,76 @@ public class MovFnAllowlistedFunctionTests extends OpenSearchTestCase {
 
             if (i == 0) {
                 window.offer(randValue);
-                continue;
+                continue;  
             }
 
-            for (double value : window) {
+            for (double value : window) {  
                 expected += value;
             }
 
             double actual = MovingFunctions.sum(window.stream().mapToDouble(Double::doubleValue).toArray());
             assertEquals(expected, actual, 0.01 * Math.abs(expected));
-            window.offer(randValue);
+            window.offer(randValue);  
         }
     }
 
     public void testNullWindowSum() {
         int numValues = randomIntBetween(1, 100);
-        int windowSize = randomIntBetween(1, 50);
+        int windowSize = randomIntBetween(1, 50);  
 
         EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
-        for (int i = 0; i < numValues; i++) {
+        for (int i = 0; i < numValues; i++) {  
 
             Double randValue = randomBoolean() ? Double.NaN : null;
 
             if (i == 0) {
                 if (randValue != null) {
-                    window.offer(randValue);
+                    window.offer(randValue);  
                 }
                 continue;
-            }
+            }  
 
             double actual = MovingFunctions.sum(window.stream().mapToDouble(Double::doubleValue).toArray());
-            assertThat(actual, equalTo(0.0));
+            assertThat(actual, equalTo(0.0));  
             if (randValue != null) {
                 window.offer(randValue);
-            }
+            }  
         }
     }
 
     public void testEmptyWindowSum() {
         EvictingQueue<Double> window = new EvictingQueue<>(0);
-        double actual = MovingFunctions.sum(window.stream().mapToDouble(Double::doubleValue).toArray());
+        double actual = MovingFunctions.sum(window.stream().mapToDouble(Double::doubleValue).toArray());  
         assertThat(actual, equalTo(0.0));
     }
 
     public void testSimpleMovAvg() {
         int numValues = randomIntBetween(1, 100);
-        int windowSize = randomIntBetween(1, 50);
+        int windowSize = randomIntBetween(1, 50);  
 
         EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
-        for (int i = 0; i < numValues; i++) {
+        for (int i = 0; i < numValues; i++) {  
 
             double randValue = randomDouble();
-            double expected = 0;
+            double expected = 0;  
 
             if (i == 0) {
-                window.offer(randValue);
+                window.offer(randValue);  
                 continue;
             }
 
             for (double value : window) {
                 expected += value;
-            }
+            }  
             expected /= window.size();
 
-            double actual = MovingFunctions.unweightedAvg(window.stream().mapToDouble(Double::doubleValue).toArray());
+            double actual = MovingFunctions.unweightedAvg(window.stream().mapToDouble(Double::doubleValue).toArray());  
             assertEquals(expected, actual, 0.01 * Math.abs(expected));
             window.offer(randValue);
-        }
+        }  
     }
 
-    public void testNullSimpleMovAvg() {
+    public void testNullSimpleMovAvg() {  
         int numValues = randomIntBetween(1, 100);
         int windowSize = randomIntBetween(1, 50);
 
@@ -241,28 +241,28 @@ public class MovFnAllowlistedFunctionTests extends OpenSearchTestCase {
 
             Double randValue = randomBoolean() ? Double.NaN : null;
 
-            if (i == 0) {
+            if (i == 0) {  
                 if (randValue != null) {
                     window.offer(randValue);
-                }
+                }  
                 continue;
             }
 
             double actual = MovingFunctions.unweightedAvg(window.stream().mapToDouble(Double::doubleValue).toArray());
             assertThat(actual, equalTo(Double.NaN));
-            if (randValue != null) {
+            if (randValue != null) {  
                 window.offer(randValue);
             }
-        }
+        }  
     }
 
-    public void testEmptySimpleMovAvg() {
+    public void testEmptySimpleMovAvg() {  
         EvictingQueue<Double> window = new EvictingQueue<>(0);
         double actual = MovingFunctions.unweightedAvg(window.stream().mapToDouble(Double::doubleValue).toArray());
-        assertThat(actual, equalTo(Double.NaN));
+        assertThat(actual, equalTo(Double.NaN));  
     }
 
-    public void testSimpleMovStdDev() {
+    public void testSimpleMovStdDev() {  
         int numValues = randomIntBetween(1, 100);
         int windowSize = randomIntBetween(1, 50);
 
@@ -274,97 +274,97 @@ public class MovFnAllowlistedFunctionTests extends OpenSearchTestCase {
 
             if (i == 0) {
                 window.offer(randValue);
-                continue;
+                continue;  
             }
 
-            for (double value : window) {
+            for (double value : window) {  
                 mean += value;
             }
-            mean /= window.size();
+            mean /= window.size();  
 
             double expected = 0.0;
-            for (double value : window) {
+            for (double value : window) {  
                 expected += Math.pow(value - mean, 2);
             }
-            expected = Math.sqrt(expected / window.size());
+            expected = Math.sqrt(expected / window.size());  
 
             double actual = MovingFunctions.stdDev(window.stream().mapToDouble(Double::doubleValue).toArray(), mean);
-            assertEquals(expected, actual, 0.01 * Math.abs(expected));
+            assertEquals(expected, actual, 0.01 * Math.abs(expected));  
             window.offer(randValue);
         }
-    }
+    }  
 
     public void testNullSimpleStdDev() {
-        int numValues = randomIntBetween(1, 100);
+        int numValues = randomIntBetween(1, 100);  
         int windowSize = randomIntBetween(1, 50);
 
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);  
         for (int i = 0; i < numValues; i++) {
 
-            Double randValue = randomBoolean() ? Double.NaN : null;
+            Double randValue = randomBoolean() ? Double.NaN : null;  
 
             if (i == 0) {
-                if (randValue != null) {
+                if (randValue != null) {  
                     window.offer(randValue);
                 }
-                continue;
+                continue;  
             }
 
-            double actual = MovingFunctions.stdDev(
+            double actual = MovingFunctions.stdDev(  
                 window.stream().mapToDouble(Double::doubleValue).toArray(),
                 MovingFunctions.unweightedAvg(window.stream().mapToDouble(Double::doubleValue).toArray())
-            );
+            );  
             assertThat(actual, equalTo(Double.NaN));
             if (randValue != null) {
-                window.offer(randValue);
+                window.offer(randValue);  
             }
         }
-    }
+    }  
 
     public void testEmptySimpleStdDev() {
-        EvictingQueue<Double> window = new EvictingQueue<>(0);
+        EvictingQueue<Double> window = new EvictingQueue<>(0);  
         double actual = MovingFunctions.stdDev(
             window.stream().mapToDouble(Double::doubleValue).toArray(),
-            MovingFunctions.unweightedAvg(window.stream().mapToDouble(Double::doubleValue).toArray())
+            MovingFunctions.unweightedAvg(window.stream().mapToDouble(Double::doubleValue).toArray())  
         );
         assertThat(actual, equalTo(Double.NaN));
-    }
+    }  
 
     public void testStdDevNaNAvg() {
-        assertThat(MovingFunctions.stdDev(new double[] { 1.0, 2.0, 3.0 }, Double.NaN), equalTo(Double.NaN));
+        assertThat(MovingFunctions.stdDev(new double[] { 1.0, 2.0, 3.0 }, Double.NaN), equalTo(Double.NaN));  
     }
 
-    public void testLinearMovAvg() {
+    public void testLinearMovAvg() {  
 
         int numValues = randomIntBetween(1, 100);
-        int windowSize = randomIntBetween(1, 50);
+        int windowSize = randomIntBetween(1, 50);  
 
         EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
-        for (int i = 0; i < numValues; i++) {
+        for (int i = 0; i < numValues; i++) {  
             double randValue = randomDouble();
 
-            if (i == 0) {
+            if (i == 0) {  
                 window.offer(randValue);
                 continue;
-            }
+            }  
 
             double avg = 0;
-            long totalWeight = 1;
+            long totalWeight = 1;  
             long current = 1;
 
-            for (double value : window) {
+            for (double value : window) {  
                 avg += value * current;
                 totalWeight += current;
-                current += 1;
+                current += 1;  
             }
             double expected = avg / totalWeight;
-            double actual = MovingFunctions.linearWeightedAvg(window.stream().mapToDouble(Double::doubleValue).toArray());
+            double actual = MovingFunctions.linearWeightedAvg(window.stream().mapToDouble(Double::doubleValue).toArray());  
             assertEquals(expected, actual, 0.01 * Math.abs(expected));
             window.offer(randValue);
-        }
+        }  
     }
 
-    public void testNullLinearMovAvg() {
+    public void testNullLinearMovAvg() {  
         int numValues = randomIntBetween(1, 100);
         int windowSize = randomIntBetween(1, 50);
 
@@ -373,142 +373,142 @@ public class MovFnAllowlistedFunctionTests extends OpenSearchTestCase {
 
             Double randValue = randomBoolean() ? Double.NaN : null;
 
-            if (i == 0) {
+            if (i == 0) {  
                 if (randValue != null) {
                     window.offer(randValue);
-                }
+                }  
                 continue;
             }
 
             double actual = MovingFunctions.linearWeightedAvg(window.stream().mapToDouble(Double::doubleValue).toArray());
             assertThat(actual, equalTo(Double.NaN));
-            if (randValue != null) {
+            if (randValue != null) {  
                 window.offer(randValue);
             }
-        }
+        }  
     }
 
-    public void testEmptyLinearMovAvg() {
+    public void testEmptyLinearMovAvg() {  
         EvictingQueue<Double> window = new EvictingQueue<>(0);
         double actual = MovingFunctions.linearWeightedAvg(window.stream().mapToDouble(Double::doubleValue).toArray());
-        assertThat(actual, equalTo(Double.NaN));
+        assertThat(actual, equalTo(Double.NaN));  
     }
 
-    public void testEWMAMovAvg() {
+    public void testEWMAMovAvg() {  
         double alpha = randomDouble();
 
-        int numValues = randomIntBetween(1, 100);
+        int numValues = randomIntBetween(1, 100);  
         int windowSize = randomIntBetween(1, 50);
 
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);  
         for (int i = 0; i < numValues; i++) {
             double randValue = randomDouble();
 
             if (i == 0) {
                 window.offer(randValue);
-                continue;
+                continue;  
             }
 
-            double avg = 0;
+            double avg = 0;  
             boolean first = true;
 
-            for (double value : window) {
+            for (double value : window) {  
                 if (first) {
                     avg = value;
-                    first = false;
+                    first = false;  
                 } else {
                     avg = (value * alpha) + (avg * (1 - alpha));
-                }
+                }  
             }
             double expected = avg;
-            double actual = MovingFunctions.ewma(window.stream().mapToDouble(Double::doubleValue).toArray(), alpha);
+            double actual = MovingFunctions.ewma(window.stream().mapToDouble(Double::doubleValue).toArray(), alpha);  
             assertEquals(expected, actual, 0.01 * Math.abs(expected));
             window.offer(randValue);
-        }
+        }  
     }
 
-    public void testNullEwmaMovAvg() {
+    public void testNullEwmaMovAvg() {  
         double alpha = randomDouble();
         int numValues = randomIntBetween(1, 100);
-        int windowSize = randomIntBetween(1, 50);
+        int windowSize = randomIntBetween(1, 50);  
 
         EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
-        for (int i = 0; i < numValues; i++) {
+        for (int i = 0; i < numValues; i++) {  
 
             Double randValue = randomBoolean() ? Double.NaN : null;
 
             if (i == 0) {
                 if (randValue != null) {
-                    window.offer(randValue);
+                    window.offer(randValue);  
                 }
                 continue;
-            }
+            }  
 
             double actual = MovingFunctions.ewma(window.stream().mapToDouble(Double::doubleValue).toArray(), alpha);
-            assertThat(actual, equalTo(Double.NaN));
+            assertThat(actual, equalTo(Double.NaN));  
             if (randValue != null) {
                 window.offer(randValue);
-            }
+            }  
         }
     }
 
     public void testEmptyEwmaMovAvg() {
         double alpha = randomDouble();
-        EvictingQueue<Double> window = new EvictingQueue<>(0);
+        EvictingQueue<Double> window = new EvictingQueue<>(0);  
         double actual = MovingFunctions.ewma(window.stream().mapToDouble(Double::doubleValue).toArray(), alpha);
         assertThat(actual, equalTo(Double.NaN));
-    }
+    }  
 
     public void testHoltLinearMovAvg() {
-        double alpha = randomDouble();
+        double alpha = randomDouble();  
         double beta = randomDouble();
 
-        int numValues = randomIntBetween(1, 100);
+        int numValues = randomIntBetween(1, 100);  
         int windowSize = randomIntBetween(1, 50);
 
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);  
         for (int i = 0; i < numValues; i++) {
             double randValue = randomDouble();
 
             if (i == 0) {
                 window.offer(randValue);
-                continue;
+                continue;  
             }
 
-            double s = 0;
+            double s = 0;  
             double last_s = 0;
 
-            // Trend value
+            // Trend value  
             double b = 0;
             double last_b = 0;
-            int counter = 0;
+            int counter = 0;  
 
             double last;
-            for (double value : window) {
+            for (double value : window) {  
                 last = value;
                 if (counter == 0) {
-                    s = value;
+                    s = value;  
                     b = value - last;
                 } else {
-                    s = alpha * value + (1.0d - alpha) * (last_s + last_b);
+                    s = alpha * value + (1.0d - alpha) * (last_s + last_b);  
                     b = beta * (s - last_s) + (1 - beta) * last_b;
                 }
 
                 counter += 1;
                 last_s = s;
-                last_b = b;
+                last_b = b;  
             }
 
-            double expected = s + (0 * b);
+            double expected = s + (0 * b);  
             double actual = MovingFunctions.holt(window.stream().mapToDouble(Double::doubleValue).toArray(), alpha, beta);
             assertEquals(expected, actual, 0.01 * Math.abs(expected));
-            window.offer(randValue);
+            window.offer(randValue);  
         }
     }
 
     public void testNullHoltMovAvg() {
         double alpha = randomDouble();
-        double beta = randomDouble();
+        double beta = randomDouble();  
         int numValues = randomIntBetween(1, 100);
         int windowSize = randomIntBetween(1, 50);
 
@@ -517,46 +517,46 @@ public class MovFnAllowlistedFunctionTests extends OpenSearchTestCase {
 
             Double randValue = randomBoolean() ? Double.NaN : null;
 
-            if (i == 0) {
+            if (i == 0) {  
                 if (randValue != null) {
                     window.offer(randValue);
-                }
+                }  
                 continue;
             }
 
             double actual = MovingFunctions.holt(window.stream().mapToDouble(Double::doubleValue).toArray(), alpha, beta);
             assertThat(actual, equalTo(Double.NaN));
-            if (randValue != null) {
+            if (randValue != null) {  
                 window.offer(randValue);
             }
-        }
+        }  
     }
 
-    public void testEmptyHoltMovAvg() {
+    public void testEmptyHoltMovAvg() {  
         double alpha = randomDouble();
         double beta = randomDouble();
-        EvictingQueue<Double> window = new EvictingQueue<>(0);
+        EvictingQueue<Double> window = new EvictingQueue<>(0);  
         double actual = MovingFunctions.holt(window.stream().mapToDouble(Double::doubleValue).toArray(), alpha, beta);
         assertThat(actual, equalTo(Double.NaN));
-    }
+    }  
 
     public void testHoltWintersMultiplicative() {
-        double alpha = randomDouble();
+        double alpha = randomDouble();  
         double beta = randomDouble();
         double gamma = randomDouble();
-        int period = randomIntBetween(1, 10);
+        int period = randomIntBetween(1, 10);  
         int windowSize = randomIntBetween(period * 2, 50); // HW requires at least two periods of data
 
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);  
         for (int i = 0; i < windowSize; i++) {
             window.offer(randomDouble());
-        }
+        }  
 
         // Smoothed value
-        double s = 0;
+        double s = 0;  
         double last_s = 0;
 
-        // Trend value
+        // Trend value  
         double b = 0;
         double last_b = 0;
 
@@ -565,165 +565,165 @@ public class MovFnAllowlistedFunctionTests extends OpenSearchTestCase {
 
         int counter = 0;
         double[] vs = new double[windowSize];
-        for (double v : window) {
+        for (double v : window) {  
             vs[counter] = v + 0.0000000001;
             counter += 1;
-        }
+        }  
 
         // Initial level value is average of first season
-        // Calculate the slopes between first and second season for each period
+        // Calculate the slopes between first and second season for each period  
         for (int i = 0; i < period; i++) {
             s += vs[i];
-            b += (vs[i + period] - vs[i]) / period;
+            b += (vs[i + period] - vs[i]) / period;  
         }
         s /= period;
-        b /= period;
+        b /= period;  
         last_s = s;
 
-        // Calculate first seasonal
+        // Calculate first seasonal  
         if (Double.compare(s, 0.0) == 0 || Double.compare(s, -0.0) == 0) {
             Arrays.fill(seasonal, 0.0);
-        } else {
+        } else {  
             for (int i = 0; i < period; i++) {
                 seasonal[i] = vs[i] / s;
-            }
+            }  
         }
 
-        for (int i = period; i < vs.length; i++) {
+        for (int i = period; i < vs.length; i++) {  
             s = alpha * (vs[i] / seasonal[i - period]) + (1.0d - alpha) * (last_s + last_b);
             b = beta * (s - last_s) + (1 - beta) * last_b;
 
             seasonal[i] = gamma * (vs[i] / (last_s + last_b)) + (1 - gamma) * seasonal[i - period];
             last_s = s;
-            last_b = b;
+            last_b = b;  
         }
 
-        int idx = window.size() - period + (0 % period);
+        int idx = window.size() - period + (0 % period);  
         double expected = (s + (1 * b)) * seasonal[idx];
         double actual = MovingFunctions.holtWinters(
-            window.stream().mapToDouble(Double::doubleValue).toArray(),
+            window.stream().mapToDouble(Double::doubleValue).toArray(),  
             alpha,
             beta,
-            gamma,
+            gamma,  
             period,
             true
-        );
+        );  
         assertEquals(expected, actual, 0.01 * Math.abs(expected));
     }
 
     public void testNullHoltWintersMovAvg() {
         double alpha = randomDouble();
-        double beta = randomDouble();
+        double beta = randomDouble();  
         double gamma = randomDouble();
         int period = randomIntBetween(1, 10);
-        int numValues = randomIntBetween(1, 100);
+        int numValues = randomIntBetween(1, 100);  
         int windowSize = randomIntBetween(period * 2, 50); // HW requires at least two periods of data
 
-        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
+        EvictingQueue<Double> window = new EvictingQueue<>(windowSize);  
         for (int i = 0; i < windowSize; i++) {
             window.offer(Double.NaN);
-        }
+        }  
 
         for (int i = 0; i < numValues; i++) {
-            double actual = MovingFunctions.holtWinters(
+            double actual = MovingFunctions.holtWinters(  
                 window.stream().mapToDouble(Double::doubleValue).toArray(),
                 alpha,
-                beta,
+                beta,  
                 gamma,
                 period,
-                false
+                false  
             );
             assertThat(actual, equalTo(Double.NaN));
-        }
+        }  
     }
 
-    public void testEmptyHoltWintersMovAvg() {
+    public void testEmptyHoltWintersMovAvg() {  
         double alpha = randomDouble();
         double beta = randomDouble();
-        double gamma = randomDouble();
+        double gamma = randomDouble();  
         int period = randomIntBetween(1, 10);
         EvictingQueue<Double> window = new EvictingQueue<>(0);
-        double actual = MovingFunctions.holtWinters(
+        double actual = MovingFunctions.holtWinters(  
             window.stream().mapToDouble(Double::doubleValue).toArray(),
             alpha,
-            beta,
+            beta,  
             gamma,
             period,
-            false
+            false  
         );
         assertThat(actual, equalTo(Double.NaN));
-    }
+    }  
 
     public void testHoltWintersAdditive() {
-        double alpha = randomDouble();
+        double alpha = randomDouble();  
         double beta = randomDouble();
         double gamma = randomDouble();
-        int period = randomIntBetween(1, 10);
+        int period = randomIntBetween(1, 10);  
 
         int windowSize = randomIntBetween(period * 2, 50); // HW requires at least two periods of data
 
         EvictingQueue<Double> window = new EvictingQueue<>(windowSize);
         for (int i = 0; i < windowSize; i++) {
-            window.offer(randomDouble());
+            window.offer(randomDouble());  
         }
 
-        // Smoothed value
+        // Smoothed value  
         double s = 0;
         double last_s = 0;
 
         // Trend value
         double b = 0;
-        double last_b = 0;
+        double last_b = 0;  
 
         // Seasonal value
-        double[] seasonal = new double[windowSize];
+        double[] seasonal = new double[windowSize];  
 
         int counter = 0;
-        double[] vs = new double[windowSize];
+        double[] vs = new double[windowSize];  
         for (double v : window) {
             vs[counter] = v;
-            counter += 1;
+            counter += 1;  
         }
 
-        // Initial level value is average of first season
+        // Initial level value is average of first season  
         // Calculate the slopes between first and second season for each period
         for (int i = 0; i < period; i++) {
-            s += vs[i];
+            s += vs[i];  
             b += (vs[i + period] - vs[i]) / period;
         }
-        s /= period;
+        s /= period;  
         b /= period;
         last_s = s;
 
         // Calculate first seasonal
         if (Double.compare(s, 0.0) == 0 || Double.compare(s, -0.0) == 0) {
-            Arrays.fill(seasonal, 0.0);
+            Arrays.fill(seasonal, 0.0);  
         } else {
             for (int i = 0; i < period; i++) {
-                seasonal[i] = vs[i] / s;
+                seasonal[i] = vs[i] / s;  
             }
         }
 
         for (int i = period; i < vs.length; i++) {
             s = alpha * (vs[i] - seasonal[i - period]) + (1.0d - alpha) * (last_s + last_b);
-            b = beta * (s - last_s) + (1 - beta) * last_b;
+            b = beta * (s - last_s) + (1 - beta) * last_b;  
 
             seasonal[i] = gamma * (vs[i] - (last_s - last_b)) + (1 - gamma) * seasonal[i - period];
-            last_s = s;
+            last_s = s;  
             last_b = b;
         }
 
         int idx = window.size() - period + (0 % period);
         double expected = s + (1 * b) + seasonal[idx];
-        double actual = MovingFunctions.holtWinters(
+        double actual = MovingFunctions.holtWinters(  
             window.stream().mapToDouble(Double::doubleValue).toArray(),
             alpha,
-            beta,
+            beta,  
             gamma,
             period,
-            false
+            false  
         );
         assertEquals(expected, actual, 0.01 * Math.abs(expected));
-    }
+    }  
 
 }

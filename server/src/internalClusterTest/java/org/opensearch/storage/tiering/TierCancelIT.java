@@ -1,67 +1,67 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.storage.tiering;
 
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 
-import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
+import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;  
 import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
 import org.opensearch.cluster.ClusterInfoService;
-import org.opensearch.cluster.ClusterState;
+import org.opensearch.cluster.ClusterState;  
 import org.opensearch.cluster.InternalClusterInfoService;
 import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.node.DiscoveryNode;
+import org.opensearch.cluster.node.DiscoveryNode;  
 import org.opensearch.cluster.node.DiscoveryNodeRole;
 import org.opensearch.cluster.routing.IndexRoutingTable;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
+import org.opensearch.cluster.routing.IndexShardRoutingTable;  
 import org.opensearch.cluster.routing.ShardRouting;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.FeatureFlags;
+import org.opensearch.common.util.FeatureFlags;  
 import org.opensearch.core.common.unit.ByteSizeUnit;
 import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.transport.TransportResponse;
+import org.opensearch.core.transport.TransportResponse;  
 import org.opensearch.index.IndexModule;
 import org.opensearch.indices.replication.SegmentReplicationSourceService;
-import org.opensearch.node.Node;
+import org.opensearch.node.Node;  
 import org.opensearch.plugins.Plugin;
 import org.opensearch.remotestore.RemoteStoreBaseIntegTestCase;
-import org.opensearch.storage.action.tiering.CancelTieringAction;
+import org.opensearch.storage.action.tiering.CancelTieringAction;  
 import org.opensearch.storage.action.tiering.CancelTieringRequest;
 import org.opensearch.storage.action.tiering.HotToWarmTierAction;
-import org.opensearch.storage.action.tiering.IndexTieringRequest;
+import org.opensearch.storage.action.tiering.IndexTieringRequest;  
 import org.opensearch.storage.action.tiering.WarmToHotTierAction;
 import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.transport.MockTransportService;
+import org.opensearch.test.transport.MockTransportService;  
 import org.opensearch.transport.TransportService;
 
-import java.util.ArrayList;
+import java.util.ArrayList;  
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
+import java.util.Map;  
 import java.util.concurrent.TimeUnit;
 
-import static org.opensearch.cluster.routing.allocation.DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING;
+import static org.opensearch.cluster.routing.allocation.DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING;  
 import static org.opensearch.cluster.routing.allocation.DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING;
 import static org.opensearch.cluster.routing.allocation.DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING;
-import static org.opensearch.cluster.routing.allocation.DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING;
+import static org.opensearch.cluster.routing.allocation.DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING;  
 import static org.opensearch.index.IndexModule.INDEX_TIERING_STATE;
 import static org.opensearch.index.IndexModule.IS_WARM_INDEX_SETTING;
-import static org.opensearch.index.store.remote.filecache.FileCacheSettings.DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING;
+import static org.opensearch.index.store.remote.filecache.FileCacheSettings.DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING;  
 import static org.opensearch.storage.tiering.TieringTestUtils.buildDisabledAllocationSettings;
 import static org.opensearch.storage.tiering.TieringTestUtils.buildEnabledAllocationSettings;
-import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.containsString;  
 
 /**
- * Integration tests for Tier Cancel API.
+ * Integration tests for Tier Cancel API.  
  * Tests end-to-end cancellation scenarios, error cases, and complex failure conditions.
  */
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)  
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
 public class TierCancelIT extends RemoteStoreBaseIntegTestCase {
 
@@ -70,34 +70,34 @@ public class TierCancelIT extends RemoteStoreBaseIntegTestCase {
 
     @Override
     protected boolean addMockIndexStorePlugin() {
-        return false;
+        return false;  
     }
 
-    @Override
+    @Override  
     protected boolean ignoreExternalCluster() {
         return true;
-    }
+    }  
 
     @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
+    protected Collection<Class<? extends Plugin>> nodePlugins() {  
         List<Class<? extends Plugin>> plugins = new ArrayList<>(super.nodePlugins());
         plugins.add(MockTransportService.TestPlugin.class);
-        return plugins;
+        return plugins;  
     }
 
-    @Override
+    @Override  
     protected Settings nodeSettings(int nodeOrdinal) {
         ByteSizeValue cacheSize = new ByteSizeValue(1, ByteSizeUnit.GB);
-        return Settings.builder()
+        return Settings.builder()  
             .put(super.nodeSettings(nodeOrdinal))
             .put(Node.NODE_SEARCH_CACHE_SIZE_SETTING.getKey(), cacheSize.toString())
-            .build();
+            .build();  
     }
 
-    @Override
+    @Override  
     protected Settings featureFlagSettings() {
         Settings.Builder featureSettings = Settings.builder();
-        featureSettings.put(FeatureFlags.WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG, true);
+        featureSettings.put(FeatureFlags.WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG, true);  
         return featureSettings.build();
     }
 
@@ -109,49 +109,49 @@ public class TierCancelIT extends RemoteStoreBaseIntegTestCase {
 
         // Index some documents
         Map<String, Long> indexStats = indexData(1, false, INDEX_NAME);
-        Long expectedDocCount = indexStats.get(TOTAL_OPERATIONS);
+        Long expectedDocCount = indexStats.get(TOTAL_OPERATIONS);  
         refresh(INDEX_NAME);
 
-        try {
+        try {  
             // Disable allocation to cause stuck migration
             client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildDisabledAllocationSettings()).get();
 
             // Start migration (it will be stuck due to disabled allocation)
             startMigrationToWarm(INDEX_NAME);
-            TieringTestUtils.safeSleep(2000); // Let migration attempt start
+            TieringTestUtils.safeSleep(2000); // Let migration attempt start  
 
             // Verify migration is in progress but stuck
-            assertBusy(() -> {
+            assertBusy(() -> {  
                 ClusterState state = client().admin().cluster().prepareState().get().getState();
                 Settings indexSettings = state.metadata().index(INDEX_NAME).getSettings();
-                assertEquals("Index should have warm setting", "true", indexSettings.get(IS_WARM_INDEX_SETTING.getKey()));
+                assertEquals("Index should have warm setting", "true", indexSettings.get(IS_WARM_INDEX_SETTING.getKey()));  
                 assertEquals(
                     "Index should be in HOT_TO_WARM state",
-                    IndexModule.TieringState.HOT_TO_WARM.toString(),
+                    IndexModule.TieringState.HOT_TO_WARM.toString(),  
                     indexSettings.get(INDEX_TIERING_STATE.getKey())
                 );
-            }, 10, TimeUnit.SECONDS);
+            }, 10, TimeUnit.SECONDS);  
 
             // Cancel the migration
-            cancelTiering(INDEX_NAME);
+            cancelTiering(INDEX_NAME);  
 
             // Enable allocation to see the effect
-            client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildEnabledAllocationSettings(2)).get();
+            client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildEnabledAllocationSettings(2)).get();  
 
             TieringTestUtils.safeSleep(2000);
-            // Verify index returns to hot tier
+            // Verify index returns to hot tier  
             verifyIndexInHotTier(INDEX_NAME);
 
-            // Verify document count unchanged
+            // Verify document count unchanged  
             refresh(INDEX_NAME);
             assertEquals(
-                "Document count should be preserved",
+                "Document count should be preserved",  
                 expectedDocCount.longValue(),
                 client().prepareSearch(INDEX_NAME).setSize(0).get().getHits().getTotalHits().value()
-            );
+            );  
 
         } finally {
-            client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
+            client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();  
         }
     }
 
@@ -160,31 +160,31 @@ public class TierCancelIT extends RemoteStoreBaseIntegTestCase {
 
         setupCluster(1);
         createTestIndex(INDEX_NAME, 1, 1);
-        startMigrationToWarm(INDEX_NAME);
+        startMigrationToWarm(INDEX_NAME);  
         TieringTestUtils.safeSleep(2000);
 
-        // Index some documents
+        // Index some documents  
         Map<String, Long> indexStats = indexData(1, false, INDEX_NAME);
         Long expectedDocCount = indexStats.get(TOTAL_OPERATIONS);
-        refresh(INDEX_NAME);
+        refresh(INDEX_NAME);  
 
         try {
-            // Disable allocation to cause stuck migration
+            // Disable allocation to cause stuck migration  
             client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildDisabledAllocationSettings()).get();
 
-            // Start migration (it will be stuck due to disabled allocation)
+            // Start migration (it will be stuck due to disabled allocation)  
             startMigrationToHot(INDEX_NAME);
             TieringTestUtils.safeSleep(2000); // Let migration attempt start
 
             // Verify migration is in progress but stuck
             assertBusy(() -> {
-                ClusterState state = client().admin().cluster().prepareState().get().getState();
+                ClusterState state = client().admin().cluster().prepareState().get().getState();  
                 Settings indexSettings = state.metadata().index(INDEX_NAME).getSettings();
                 assertFalse("Index should have warm setting", IS_WARM_INDEX_SETTING.get(indexSettings));
-                assertEquals(
+                assertEquals(  
                     "Index should be in WARM_TO_HOT state",
                     IndexModule.TieringState.WARM_TO_HOT.toString(),
-                    indexSettings.get(INDEX_TIERING_STATE.getKey())
+                    indexSettings.get(INDEX_TIERING_STATE.getKey())  
                 );
             }, 10, TimeUnit.SECONDS);
 
@@ -196,67 +196,67 @@ public class TierCancelIT extends RemoteStoreBaseIntegTestCase {
 
             TieringTestUtils.safeSleep(2000);
             // Verify index returns to hot tier
-            verifyIndexInWarmTier(INDEX_NAME);
+            verifyIndexInWarmTier(INDEX_NAME);  
 
             // Verify document count unchanged
-            refresh(INDEX_NAME);
+            refresh(INDEX_NAME);  
             assertEquals(
                 "Document count should be preserved",
-                expectedDocCount.longValue(),
+                expectedDocCount.longValue(),  
                 client().prepareSearch(INDEX_NAME).setSize(0).get().getHits().getTotalHits().value()
             );
 
         } finally {
             client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
-        }
+        }  
     }
 
-    public void testCancelIndexNotBeingTiered() {
+    public void testCancelIndexNotBeingTiered() {  
         logger.info("--> Testing cancellation of index not being tiered");
 
-        setupCluster(1);
+        setupCluster(1);  
         createTestIndex(INDEX_NAME, 1, 1);
 
-        try {
+        try {  
             // Try to cancel without starting migration
             verifyCancellationError(INDEX_NAME, "is not currently undergoing tiering operation");
-        } finally {
+        } finally {  
             client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
         }
-    }
+    }  
 
     public void testCancelAlreadyCompletedMigration() throws Exception {
-        logger.info("--> Testing cancellation of already completed migration");
+        logger.info("--> Testing cancellation of already completed migration");  
 
         setupCluster(1);
-        createTestIndex(INDEX_NAME, 1, 1);
+        createTestIndex(INDEX_NAME, 1, 1);  
 
         try {
-            // Complete a migration first
+            // Complete a migration first  
             startMigrationToWarm(INDEX_NAME);
             TieringTestUtils.safeSleep(2000);
-            verifyIndexInWarmTier(INDEX_NAME);
+            verifyIndexInWarmTier(INDEX_NAME);  
             // Wait for tiering to fully complete (tieringIndices cleanup)
             TieringTestUtils.safeSleep(5000);
-            // Try to cancel completed migration
+            // Try to cancel completed migration  
             verifyCancellationError(INDEX_NAME, "is not currently undergoing tiering operation");
 
-        } finally {
+        } finally {  
             client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
         }
-    }
+    }  
 
     public void testIdempotentCancellation() throws Exception {
-        logger.info("--> Testing idempotent cancellation (multiple cancels of same index)");
+        logger.info("--> Testing idempotent cancellation (multiple cancels of same index)");  
 
         setupCluster(1);
-        createTestIndex(INDEX_NAME, 1, 1);
+        createTestIndex(INDEX_NAME, 1, 1);  
 
         try {
-            // Disable allocation to cause stuck migration
+            // Disable allocation to cause stuck migration  
             client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildDisabledAllocationSettings()).get();
 
-            // Start migration
+            // Start migration  
             startMigrationToWarm(INDEX_NAME);
             TieringTestUtils.safeSleep(2000);
 
@@ -268,16 +268,16 @@ public class TierCancelIT extends RemoteStoreBaseIntegTestCase {
 
         } finally {
             client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
-        }
+        }  
     }
 
-    public void testCancelWithTimeoutParameters() throws Exception {
+    public void testCancelWithTimeoutParameters() throws Exception {  
         logger.info("--> Testing cancellation with custom timeout parameters");
 
-        setupCluster(1);
+        setupCluster(1);  
         createTestIndex(INDEX_NAME, 1, 1);
 
-        try {
+        try {  
             // Disable allocation to cause stuck migration
             client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildDisabledAllocationSettings()).get();
 
@@ -286,88 +286,88 @@ public class TierCancelIT extends RemoteStoreBaseIntegTestCase {
 
             TieringTestUtils.safeSleep(2000);
 
-            // Cancel with custom timeouts
+            // Cancel with custom timeouts  
             final CancelTieringRequest request = new CancelTieringRequest();
             request.setIndex(INDEX_NAME);
-            request.timeout("30s");
+            request.timeout("30s");  
             request.clusterManagerNodeTimeout("60s");
 
-            AcknowledgedResponse response = client().admin().indices().execute(CancelTieringAction.INSTANCE, request).actionGet();
+            AcknowledgedResponse response = client().admin().indices().execute(CancelTieringAction.INSTANCE, request).actionGet();  
             assertTrue("Cancellation with timeouts should be acknowledged", response.isAcknowledged());
 
-            // Enable allocation
+            // Enable allocation  
             client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildEnabledAllocationSettings(2)).get();
 
-            // Verify cancellation worked
+            // Verify cancellation worked  
             verifyIndexInHotTier(INDEX_NAME);
 
-        } finally {
+        } finally {  
             client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
         }
-    }
+    }  
 
     /**
-     * End-to-end: a hot-to-warm migration that is mid-flight (HOT_TO_WARM) must remain cancellable
+     * End-to-end: a hot-to-warm migration that is mid-flight (HOT_TO_WARM) must remain cancellable  
      * after the active cluster-manager dies. The new cluster-manager loses the in-memory tiering set,
      * but rebuilds it from the persisted INDEX_TIERING_STATE (reconstructInProgressTieringRequests on
-     * election) — and, as a safety net, getTieringServiceForIndex falls back to the persisted state.
+     * election) — and, as a safety net, getTieringServiceForIndex falls back to the persisted state.  
      * Either way, cancel must succeed and the index must roll back cleanly to the hot tier.
      */
-    public void testCancelHotToWarmMigrationSucceedsAfterClusterManagerFailover() throws Exception {
+    public void testCancelHotToWarmMigrationSucceedsAfterClusterManagerFailover() throws Exception {  
         logger.info("--> Testing hot-to-warm cancel after cluster-manager failover");
 
-        // Need >1 dedicated cluster-manager node so a new one can be elected after the active one is killed.
+        // Need >1 dedicated cluster-manager node so a new one can be elected after the active one is killed.  
         Settings.Builder settingsBuilder = Settings.builder()
             .put(CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "10b")
-            .put(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "10b")
+            .put(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "10b")  
             .put(CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "0b")
             .put(CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.getKey(), "0ms")
-            .put(DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), 5.0);
+            .put(DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), 5.0);  
 
         internalCluster().startClusterManagerOnlyNodes(3, settingsBuilder.build());
-        internalCluster().startDataOnlyNodes(2, settingsBuilder.build());
+        internalCluster().startDataOnlyNodes(2, settingsBuilder.build());  
         internalCluster().startWarmOnlyNodes(2, settingsBuilder.build());
         interceptCheckpointUpdates();
 
         createTestIndex(INDEX_NAME, 1, 1);
         Map<String, Long> indexStats = indexData(1, false, INDEX_NAME);
-        Long expectedDocCount = indexStats.get(TOTAL_OPERATIONS);
+        Long expectedDocCount = indexStats.get(TOTAL_OPERATIONS);  
         refresh(INDEX_NAME);
 
-        try {
+        try {  
             // Disable allocation so the migration gets stuck in HOT_TO_WARM (shards can't relocate to warm).
             client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildDisabledAllocationSettings()).get();
 
             startMigrationToWarm(INDEX_NAME);
 
-            // Confirm it is stuck mid-migration in HOT_TO_WARM before we kill the cluster-manager.
+            // Confirm it is stuck mid-migration in HOT_TO_WARM before we kill the cluster-manager.  
             assertBusy(() -> {
                 ClusterState state = client().admin().cluster().prepareState().get().getState();
-                Settings idxSettings = state.metadata().index(INDEX_NAME).getSettings();
+                Settings idxSettings = state.metadata().index(INDEX_NAME).getSettings();  
                 assertEquals("Index should have warm setting", "true", idxSettings.get(IS_WARM_INDEX_SETTING.getKey()));
                 assertEquals(
-                    "Index should be in HOT_TO_WARM state",
+                    "Index should be in HOT_TO_WARM state",  
                     IndexModule.TieringState.HOT_TO_WARM.toString(),
                     idxSettings.get(INDEX_TIERING_STATE.getKey())
-                );
+                );  
             }, 10, TimeUnit.SECONDS);
 
-            // Kill the active cluster-manager — this wipes its in-memory tieringIndices set.
+            // Kill the active cluster-manager — this wipes its in-memory tieringIndices set.  
             final String oldClusterManager = internalCluster().getClusterManagerName();
             internalCluster().stopCurrentClusterManagerNode();
 
             // A new cluster-manager must take over (started 7 nodes, killed 1 → 6 remain).
             ensureStableCluster(6);
-            final String newClusterManager = internalCluster().getClusterManagerName();
+            final String newClusterManager = internalCluster().getClusterManagerName();  
             assertNotEquals("A new cluster-manager must be elected", oldClusterManager, newClusterManager);
 
-            // The index is still persisted as HOT_TO_WARM in cluster state after failover.
+            // The index is still persisted as HOT_TO_WARM in cluster state after failover.  
             assertBusy(() -> {
                 ClusterState state = client().admin().cluster().prepareState().get().getState();
-                assertEquals(
+                assertEquals(  
                     "Index should still be HOT_TO_WARM after failover",
                     IndexModule.TieringState.HOT_TO_WARM.toString(),
-                    state.metadata().index(INDEX_NAME).getSettings().get(INDEX_TIERING_STATE.getKey())
+                    state.metadata().index(INDEX_NAME).getSettings().get(INDEX_TIERING_STATE.getKey())  
                 );
             }, 10, TimeUnit.SECONDS);
 
@@ -376,136 +376,136 @@ public class TierCancelIT extends RemoteStoreBaseIntegTestCase {
 
             // Re-enable allocation and confirm the index rolls back cleanly to the hot tier.
             client().admin().cluster().prepareUpdateSettings().setTransientSettings(buildEnabledAllocationSettings(2)).get();
-            verifyIndexInHotTier(INDEX_NAME);
+            verifyIndexInHotTier(INDEX_NAME);  
 
             // Data must be intact.
-            refresh(INDEX_NAME);
+            refresh(INDEX_NAME);  
             assertEquals(
                 "Document count should be preserved",
-                expectedDocCount.longValue(),
+                expectedDocCount.longValue(),  
                 client().prepareSearch(INDEX_NAME).setSize(0).get().getHits().getTotalHits().value()
             );
-        } finally {
+        } finally {  
             client().admin().indices().delete(new DeleteIndexRequest(INDEX_NAME)).actionGet();
         }
-    }
+    }  
 
     // Helper Methods
-    protected void setupCluster(int numberOfReplicas) {
+    protected void setupCluster(int numberOfReplicas) {  
         Settings.Builder settingsBuilder = Settings.builder()
             .put(CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "10b")
-            .put(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "10b")
+            .put(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "10b")  
             .put(CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "0b")
             .put(CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.getKey(), "0ms")
-            .put(DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), 5.0);
+            .put(DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), 5.0);  
 
         internalCluster().startClusterManagerOnlyNode(settingsBuilder.build());
-        internalCluster().startDataOnlyNodes(numberOfReplicas + 1, settingsBuilder.build());
+        internalCluster().startDataOnlyNodes(numberOfReplicas + 1, settingsBuilder.build());  
         internalCluster().startWarmOnlyNodes(2, settingsBuilder.build());
         interceptCheckpointUpdates();
-    }
+    }  
 
     protected void interceptCheckpointUpdates() {
-        for (String nodeName : internalCluster().getNodeNames()) {
+        for (String nodeName : internalCluster().getNodeNames()) {  
             MockTransportService mockTransportService = (MockTransportService) internalCluster().getInstance(
                 TransportService.class,
-                nodeName
+                nodeName  
             );
             mockTransportService.addRequestHandlingBehavior(
-                SegmentReplicationSourceService.Actions.UPDATE_VISIBLE_CHECKPOINT,
+                SegmentReplicationSourceService.Actions.UPDATE_VISIBLE_CHECKPOINT,  
                 (handler, request, channel, task) -> {
                     try {
-                        handler.messageReceived(request, channel, task);
+                        handler.messageReceived(request, channel, task);  
                     } catch (AssertionError e) {
                         channel.sendResponse(TransportResponse.Empty.INSTANCE);
-                    }
+                    }  
                 }
             );
-        }
+        }  
     }
 
-    protected void createTestIndex(String indexName, int numberOfShards, int numberOfReplicas) {
+    protected void createTestIndex(String indexName, int numberOfShards, int numberOfReplicas) {  
         Settings indexSettings = Settings.builder()
             .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, numberOfShards)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, numberOfReplicas)
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, numberOfReplicas)  
             .build();
 
-        createIndex(indexName, indexSettings);
+        createIndex(indexName, indexSettings);  
         refreshClusterInfo();
     }
 
     protected void startMigrationToWarm(String indexName) {
         final IndexTieringRequest request = new IndexTieringRequest("warm", indexName);
-        AcknowledgedResponse response = client().admin().indices().execute(HotToWarmTierAction.INSTANCE, request).actionGet();
+        AcknowledgedResponse response = client().admin().indices().execute(HotToWarmTierAction.INSTANCE, request).actionGet();  
         assertTrue("Migration should be acknowledged", response.isAcknowledged());
     }
 
     protected void startMigrationToHot(String indexName) {
         final IndexTieringRequest request = new IndexTieringRequest("hot", indexName);
-        AcknowledgedResponse response = client().admin().indices().execute(WarmToHotTierAction.INSTANCE, request).actionGet();
+        AcknowledgedResponse response = client().admin().indices().execute(WarmToHotTierAction.INSTANCE, request).actionGet();  
         assertTrue("Migration should be acknowledged", response.isAcknowledged());
     }
 
     protected void cancelTiering(String indexName) {
         final CancelTieringRequest request = new CancelTieringRequest();
-        request.setIndex(indexName);
+        request.setIndex(indexName);  
         AcknowledgedResponse response = client().admin().indices().execute(CancelTieringAction.INSTANCE, request).actionGet();
         assertTrue("Cancellation should be acknowledged", response.isAcknowledged());
-    }
+    }  
 
     protected void verifyCancellationError(String indexName, String expectedErrorMessage) {
-        final CancelTieringRequest request = new CancelTieringRequest();
+        final CancelTieringRequest request = new CancelTieringRequest();  
         request.setIndex(indexName);
         Exception e = expectThrows(
-            Exception.class,
+            Exception.class,  
             () -> client().admin().indices().execute(CancelTieringAction.INSTANCE, request).actionGet()
         );
-        assertThat(e.getMessage(), containsString(expectedErrorMessage));
+        assertThat(e.getMessage(), containsString(expectedErrorMessage));  
     }
 
-    protected void verifyIndexInHotTier(String indexName) throws Exception {
+    protected void verifyIndexInHotTier(String indexName) throws Exception {  
         assertBusy(() -> {
             ClusterState state = client().admin().cluster().prepareState().get().getState();
-            IndexRoutingTable indexRoutingTable = state.routingTable().index(indexName);
+            IndexRoutingTable indexRoutingTable = state.routingTable().index(indexName);  
 
             for (IndexShardRoutingTable shardRoutingTable : indexRoutingTable) {
-                ShardRouting shardRouting = shardRoutingTable.primaryShard();
+                ShardRouting shardRouting = shardRoutingTable.primaryShard();  
                 if (shardRouting.unassigned() && !shardRouting.primary()) {
                     continue;
-                }
+                }  
                 String assignedNodeId = shardRouting.currentNodeId();
                 DiscoveryNode assignedNode = state.nodes().get(assignedNodeId);
-                assertFalse("Shard should not be on warm node", assignedNode.getRoles().contains(DiscoveryNodeRole.WARM_ROLE));
+                assertFalse("Shard should not be on warm node", assignedNode.getRoles().contains(DiscoveryNodeRole.WARM_ROLE));  
             }
 
-            // Verify settings are reverted
+            // Verify settings are reverted  
             Settings indexSettings = state.metadata().index(indexName).getSettings();
             assertFalse("index.warm setting should be removed", IS_WARM_INDEX_SETTING.get(indexSettings));
-        }, DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        }, DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);  
     }
 
-    protected void verifyIndexInWarmTier(String indexName) throws Exception {
+    protected void verifyIndexInWarmTier(String indexName) throws Exception {  
         assertBusy(() -> {
             ClusterState state = client().admin().cluster().prepareState().get().getState();
-            IndexRoutingTable indexRoutingTable = state.routingTable().index(indexName);
+            IndexRoutingTable indexRoutingTable = state.routingTable().index(indexName);  
 
             for (IndexShardRoutingTable shardRoutingTable : indexRoutingTable) {
-                ShardRouting shardRouting = shardRoutingTable.primaryShard();
+                ShardRouting shardRouting = shardRoutingTable.primaryShard();  
                 if (shardRouting.unassigned() && !shardRouting.primary()) {
                     continue;
-                }
+                }  
                 String assignedNodeId = shardRouting.currentNodeId();
                 DiscoveryNode assignedNode = state.nodes().get(assignedNodeId);
-                assertTrue("Shard should be on warm node", assignedNode.getRoles().contains(DiscoveryNodeRole.WARM_ROLE));
+                assertTrue("Shard should be on warm node", assignedNode.getRoles().contains(DiscoveryNodeRole.WARM_ROLE));  
             }
         }, DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-    }
+    }  
 
     protected void refreshClusterInfo() {
-        InternalClusterInfoService infoService = (InternalClusterInfoService) internalCluster().getInstance(
+        InternalClusterInfoService infoService = (InternalClusterInfoService) internalCluster().getInstance(  
             ClusterInfoService.class,
             internalCluster().getClusterManagerName()
-        );
+        );  
         infoService.refresh();
     }
-}
+}  

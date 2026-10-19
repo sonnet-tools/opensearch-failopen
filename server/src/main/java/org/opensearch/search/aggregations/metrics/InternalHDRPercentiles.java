@@ -1,144 +1,144 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 /*
- * Modifications Copyright OpenSearch Contributors. See
+ * Modifications Copyright OpenSearch Contributors. See  
  * GitHub history for details.
  */
 
 package org.opensearch.search.aggregations.metrics;
 
-import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.common.io.stream.StreamInput;  
 import org.opensearch.search.DocValueFormat;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.util.Iterator;
 import java.util.Map;
 
 import org.HdrHistogram.DoubleHistogram;
 
-/**
+/**  
  * Implementation of HDR percentiles agg
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 public class InternalHDRPercentiles extends AbstractInternalHDRPercentiles implements Percentiles {
-    public static final String NAME = "hdr_percentiles";
+    public static final String NAME = "hdr_percentiles";  
 
     public InternalHDRPercentiles(
-        String name,
+        String name,  
         double[] percents,
         DoubleHistogram state,
-        boolean keyed,
+        boolean keyed,  
         DocValueFormat formatter,
         Map<String, Object> metadata
-    ) {
+    ) {  
         super(name, percents, state, keyed, formatter, metadata);
     }
 
     /**
      * Read from a stream.
-     */
+     */  
     public InternalHDRPercentiles(StreamInput in) throws IOException {
         super(in);
-    }
+    }  
 
     @Override
-    public String getWriteableName() {
+    public String getWriteableName() {  
         return NAME;
     }
 
     @Override
     public Iterator<Percentile> iterator() {
-        return new Iter(keys, state);
+        return new Iter(keys, state);  
     }
 
-    @Override
+    @Override  
     public double percentile(double percent) {
         if (state.getTotalCount() == 0) {
-            return Double.NaN;
+            return Double.NaN;  
         }
         return state.getValueAtPercentile(percent);
-    }
+    }  
 
     @Override
-    public String percentileAsString(double percent) {
+    public String percentileAsString(double percent) {  
         return valueAsString(String.valueOf(percent));
     }
 
     @Override
     public double value(double key) {
-        return percentile(key);
+        return percentile(key);  
     }
 
-    @Override
+    @Override  
     protected AbstractInternalHDRPercentiles createReduced(
         String name,
-        double[] keys,
+        double[] keys,  
         DoubleHistogram merged,
         boolean keyed,
-        Map<String, Object> metadata
+        Map<String, Object> metadata  
     ) {
         return new InternalHDRPercentiles(name, keys, merged, keyed, format, metadata);
-    }
+    }  
 
     /**
-     * Iterator for HDR percentiles
+     * Iterator for HDR percentiles  
      *
      * @opensearch.internal
-     */
+     */  
     public static class Iter implements Iterator<Percentile> {
 
-        private final double[] percents;
+        private final double[] percents;  
         private final DoubleHistogram state;
         private int i;
 
         public Iter(double[] percents, DoubleHistogram state) {
             this.percents = percents;
-            this.state = state;
+            this.state = state;  
             i = 0;
         }
 
         @Override
         public boolean hasNext() {
-            return i < percents.length;
+            return i < percents.length;  
         }
 
-        @Override
+        @Override  
         public Percentile next() {
             double percent = percents[i];
-            double value = (state.getTotalCount() == 0) ? Double.NaN : state.getValueAtPercentile(percent);
+            double value = (state.getTotalCount() == 0) ? Double.NaN : state.getValueAtPercentile(percent);  
             final Percentile next = new Percentile(percent, value);
             ++i;
-            return next;
+            return next;  
         }
 
-        @Override
+        @Override  
         public final void remove() {
             throw new UnsupportedOperationException();
-        }
+        }  
     }
 }

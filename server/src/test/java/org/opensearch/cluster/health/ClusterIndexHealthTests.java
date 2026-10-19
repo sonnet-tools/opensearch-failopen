@@ -1,55 +1,55 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 /*
- * Modifications Copyright OpenSearch Contributors. See
+ * Modifications Copyright OpenSearch Contributors. See  
  * GitHub history for details.
  */
 
 package org.opensearch.cluster.health;
 
-import org.opensearch.Version;
+import org.opensearch.Version;  
 import org.opensearch.action.admin.cluster.health.ClusterHealthRequest;
 import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.routing.IndexRoutingTable;
+import org.opensearch.cluster.routing.IndexRoutingTable;  
 import org.opensearch.cluster.routing.RoutingTableGenerator;
 import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContent;
+import org.opensearch.core.xcontent.ToXContent;  
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.test.AbstractSerializingTestCase;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.Collections;  
 import java.util.HashMap;
 import java.util.Locale;
-import java.util.Map;
+import java.util.Map;  
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
+import java.util.stream.Collectors;  
 
 import static org.hamcrest.CoreMatchers.equalTo;
 
@@ -58,13 +58,13 @@ public class ClusterIndexHealthTests extends AbstractSerializingTestCase<Cluster
 
     public void testClusterIndexHealth() {
         RoutingTableGenerator routingTableGenerator = new RoutingTableGenerator();
-        int numberOfShards = randomInt(3) + 1;
+        int numberOfShards = randomInt(3) + 1;  
         int numberOfReplicas = randomInt(4);
         IndexMetadata indexMetadata = IndexMetadata.builder("test1")
-            .settings(settings(Version.CURRENT))
+            .settings(settings(Version.CURRENT))  
             .numberOfShards(numberOfShards)
             .numberOfReplicas(numberOfReplicas)
-            .build();
+            .build();  
         RoutingTableGenerator.ShardCounter counter = new RoutingTableGenerator.ShardCounter();
         IndexRoutingTable indexRoutingTable = routingTableGenerator.genIndexRoutingTable(indexMetadata, counter);
 
@@ -76,247 +76,247 @@ public class ClusterIndexHealthTests extends AbstractSerializingTestCase<Cluster
 
         indexHealth = new ClusterIndexHealth(indexMetadata, indexRoutingTable, ClusterHealthRequest.Level.SHARDS);
         assertIndexHealth(indexHealth, counter, indexMetadata, ClusterHealthRequest.Level.SHARDS);
-    }
+    }  
 
     private void assertIndexHealth(
-        ClusterIndexHealth indexHealth,
+        ClusterIndexHealth indexHealth,  
         RoutingTableGenerator.ShardCounter counter,
         IndexMetadata indexMetadata,
-        ClusterHealthRequest.Level clusterHealthRequestLevel
+        ClusterHealthRequest.Level clusterHealthRequestLevel  
     ) {
         assertThat(indexHealth.getStatus(), equalTo(counter.status()));
-        assertThat(indexHealth.getNumberOfShards(), equalTo(indexMetadata.getNumberOfShards()));
+        assertThat(indexHealth.getNumberOfShards(), equalTo(indexMetadata.getNumberOfShards()));  
         assertThat(indexHealth.getNumberOfReplicas(), equalTo(indexMetadata.getNumberOfReplicas()));
         assertThat(indexHealth.getActiveShards(), equalTo(counter.active));
-        assertThat(indexHealth.getRelocatingShards(), equalTo(counter.relocating));
+        assertThat(indexHealth.getRelocatingShards(), equalTo(counter.relocating));  
         assertThat(indexHealth.getInitializingShards(), equalTo(counter.initializing));
         assertThat(indexHealth.getUnassignedShards(), equalTo(counter.unassigned));
-        if (ClusterHealthRequest.Level.SHARDS.equals(clusterHealthRequestLevel)) {
+        if (ClusterHealthRequest.Level.SHARDS.equals(clusterHealthRequestLevel)) {  
             assertThat(indexHealth.getShards().size(), equalTo(indexMetadata.getNumberOfShards()));
             int totalShards = 0;
-            for (ClusterShardHealth shardHealth : indexHealth.getShards().values()) {
+            for (ClusterShardHealth shardHealth : indexHealth.getShards().values()) {  
                 totalShards += shardHealth.getActiveShards() + shardHealth.getInitializingShards() + shardHealth.getUnassignedShards();
             }
 
             assertThat(totalShards, equalTo(indexMetadata.getNumberOfShards() * (1 + indexMetadata.getNumberOfReplicas())));
         } else {
-            assertTrue(indexHealth.getShards().isEmpty());
+            assertTrue(indexHealth.getShards().isEmpty());  
         }
     }
 
     @Override
     protected ClusterIndexHealth createTestInstance() {
-        return randomIndexHealth(randomAlphaOfLengthBetween(1, 10), level);
+        return randomIndexHealth(randomAlphaOfLengthBetween(1, 10), level);  
     }
 
-    public static ClusterIndexHealth randomIndexHealth(String indexName, ClusterHealthRequest.Level level) {
+    public static ClusterIndexHealth randomIndexHealth(String indexName, ClusterHealthRequest.Level level) {  
         Map<Integer, ClusterShardHealth> shards = new HashMap<>();
         if (level == ClusterHealthRequest.Level.SHARDS) {
-            for (int i = 0; i < randomInt(5); i++) {
+            for (int i = 0; i < randomInt(5); i++) {  
                 shards.put(i, ClusterShardHealthTests.randomShardHealth(i));
             }
-        }
+        }  
         return new ClusterIndexHealth(
             indexName,
+            randomInt(1000),  
             randomInt(1000),
             randomInt(1000),
+            randomInt(1000),  
             randomInt(1000),
             randomInt(1000),
-            randomInt(1000),
-            randomInt(1000),
-            randomInt(1000),
+            randomInt(1000),  
             randomFrom(ClusterHealthStatus.values()),
             shards
-        );
+        );  
     }
 
-    @Override
+    @Override  
     protected Writeable.Reader<ClusterIndexHealth> instanceReader() {
         return ClusterIndexHealth::new;
-    }
+    }  
 
     @Override
-    protected ClusterIndexHealth doParseInstance(XContentParser parser) throws IOException {
+    protected ClusterIndexHealth doParseInstance(XContentParser parser) throws IOException {  
         return ClusterIndexHealth.fromXContent(parser);
     }
 
     @Override
     protected ToXContent.Params getToXContentParams() {
-        return new ToXContent.MapParams(Collections.singletonMap("level", level.name().toLowerCase(Locale.ROOT)));
+        return new ToXContent.MapParams(Collections.singletonMap("level", level.name().toLowerCase(Locale.ROOT)));  
     }
 
-    @Override
+    @Override  
     protected boolean supportsUnknownFields() {
         return true;
-    }
+    }  
 
     // Ignore all paths which looks like "RANDOMINDEXNAME.shards"
-    private static final Pattern SHARDS_IN_XCONTENT = Pattern.compile("^\\w+\\.shards$");
+    private static final Pattern SHARDS_IN_XCONTENT = Pattern.compile("^\\w+\\.shards$");  
 
     @Override
-    protected Predicate<String> getRandomFieldsExcludeFilter() {
+    protected Predicate<String> getRandomFieldsExcludeFilter() {  
         return field -> "".equals(field) || SHARDS_IN_XCONTENT.matcher(field).find();
     }
 
     @Override
     protected ClusterIndexHealth mutateInstance(ClusterIndexHealth instance) throws IOException {
-        String mutate = randomFrom(
+        String mutate = randomFrom(  
             "index",
             "numberOfShards",
-            "numberOfReplicas",
+            "numberOfReplicas",  
             "activeShards",
             "relocatingShards",
-            "initializingShards",
+            "initializingShards",  
             "unassignedShards",
             "activePrimaryShards",
-            "status",
+            "status",  
             "shards"
         );
-        switch (mutate) {
+        switch (mutate) {  
             case "index":
                 return new ClusterIndexHealth(
-                    instance.getIndex() + randomAlphaOfLengthBetween(2, 5),
+                    instance.getIndex() + randomAlphaOfLengthBetween(2, 5),  
                     instance.getNumberOfShards(),
                     instance.getNumberOfReplicas(),
-                    instance.getActiveShards(),
+                    instance.getActiveShards(),  
                     instance.getRelocatingShards(),
                     instance.getInitializingShards(),
-                    instance.getUnassignedShards(),
+                    instance.getUnassignedShards(),  
                     instance.getActivePrimaryShards(),
                     instance.getStatus(),
-                    instance.getShards()
+                    instance.getShards()  
                 );
             case "numberOfShards":
-                return new ClusterIndexHealth(
+                return new ClusterIndexHealth(  
                     instance.getIndex(),
                     instance.getNumberOfShards() + between(1, 10),
-                    instance.getNumberOfReplicas(),
+                    instance.getNumberOfReplicas(),  
                     instance.getActiveShards(),
                     instance.getRelocatingShards(),
-                    instance.getInitializingShards(),
+                    instance.getInitializingShards(),  
                     instance.getUnassignedShards(),
                     instance.getActivePrimaryShards(),
-                    instance.getStatus(),
+                    instance.getStatus(),  
                     instance.getShards()
                 );
-            case "numberOfReplicas":
+            case "numberOfReplicas":  
                 return new ClusterIndexHealth(
                     instance.getIndex(),
-                    instance.getNumberOfShards(),
+                    instance.getNumberOfShards(),  
                     instance.getNumberOfReplicas() + between(1, 10),
                     instance.getActiveShards(),
-                    instance.getRelocatingShards(),
+                    instance.getRelocatingShards(),  
                     instance.getInitializingShards(),
                     instance.getUnassignedShards(),
-                    instance.getActivePrimaryShards(),
+                    instance.getActivePrimaryShards(),  
                     instance.getStatus(),
                     instance.getShards()
-                );
+                );  
             case "activeShards":
                 return new ClusterIndexHealth(
-                    instance.getIndex(),
+                    instance.getIndex(),  
                     instance.getNumberOfShards(),
                     instance.getNumberOfReplicas(),
-                    instance.getActiveShards() + between(1, 10),
+                    instance.getActiveShards() + between(1, 10),  
                     instance.getRelocatingShards(),
                     instance.getInitializingShards(),
-                    instance.getUnassignedShards(),
+                    instance.getUnassignedShards(),  
                     instance.getActivePrimaryShards(),
                     instance.getStatus(),
-                    instance.getShards()
+                    instance.getShards()  
                 );
             case "relocatingShards":
-                return new ClusterIndexHealth(
+                return new ClusterIndexHealth(  
                     instance.getIndex(),
                     instance.getNumberOfShards(),
-                    instance.getNumberOfReplicas(),
+                    instance.getNumberOfReplicas(),  
                     instance.getActiveShards(),
                     instance.getRelocatingShards() + between(1, 10),
-                    instance.getInitializingShards(),
+                    instance.getInitializingShards(),  
                     instance.getUnassignedShards(),
                     instance.getActivePrimaryShards(),
-                    instance.getStatus(),
+                    instance.getStatus(),  
                     instance.getShards()
                 );
-            case "initializingShards":
+            case "initializingShards":  
                 return new ClusterIndexHealth(
                     instance.getIndex(),
-                    instance.getNumberOfShards(),
+                    instance.getNumberOfShards(),  
                     instance.getNumberOfReplicas(),
                     instance.getActiveShards(),
-                    instance.getRelocatingShards(),
+                    instance.getRelocatingShards(),  
                     instance.getInitializingShards() + between(1, 10),
                     instance.getUnassignedShards(),
-                    instance.getActivePrimaryShards(),
+                    instance.getActivePrimaryShards(),  
                     instance.getStatus(),
                     instance.getShards()
-                );
+                );  
             case "unassignedShards":
                 return new ClusterIndexHealth(
-                    instance.getIndex(),
+                    instance.getIndex(),  
                     instance.getNumberOfShards(),
                     instance.getNumberOfReplicas(),
-                    instance.getActiveShards(),
+                    instance.getActiveShards(),  
                     instance.getRelocatingShards(),
                     instance.getInitializingShards(),
-                    instance.getUnassignedShards() + between(1, 10),
+                    instance.getUnassignedShards() + between(1, 10),  
                     instance.getActivePrimaryShards(),
                     instance.getStatus(),
-                    instance.getShards()
+                    instance.getShards()  
                 );
             case "activePrimaryShards":
-                return new ClusterIndexHealth(
+                return new ClusterIndexHealth(  
                     instance.getIndex(),
                     instance.getNumberOfShards(),
-                    instance.getNumberOfReplicas(),
+                    instance.getNumberOfReplicas(),  
                     instance.getActiveShards(),
                     instance.getRelocatingShards(),
-                    instance.getInitializingShards(),
+                    instance.getInitializingShards(),  
                     instance.getUnassignedShards(),
                     instance.getActivePrimaryShards() + between(1, 10),
-                    instance.getStatus(),
+                    instance.getStatus(),  
                     instance.getShards()
                 );
-            case "status":
+            case "status":  
                 ClusterHealthStatus status = randomFrom(
                     Arrays.stream(ClusterHealthStatus.values())
-                        .filter(value -> !value.equals(instance.getStatus()))
+                        .filter(value -> !value.equals(instance.getStatus()))  
                         .collect(Collectors.toList())
                 );
-                return new ClusterIndexHealth(
+                return new ClusterIndexHealth(  
                     instance.getIndex(),
                     instance.getNumberOfShards(),
-                    instance.getNumberOfReplicas(),
+                    instance.getNumberOfReplicas(),  
                     instance.getActiveShards(),
                     instance.getRelocatingShards(),
-                    instance.getInitializingShards(),
+                    instance.getInitializingShards(),  
                     instance.getUnassignedShards(),
                     instance.getActivePrimaryShards(),
-                    status,
+                    status,  
                     instance.getShards()
                 );
-            case "shards":
+            case "shards":  
                 Map<Integer, ClusterShardHealth> map;
                 if (instance.getShards().isEmpty()) {
-                    map = Collections.singletonMap(0, ClusterShardHealthTests.randomShardHealth(0));
+                    map = Collections.singletonMap(0, ClusterShardHealthTests.randomShardHealth(0));  
                 } else {
                     map = new HashMap<>(instance.getShards());
-                    map.remove(map.keySet().iterator().next());
+                    map.remove(map.keySet().iterator().next());  
                 }
                 return new ClusterIndexHealth(
-                    instance.getIndex(),
+                    instance.getIndex(),  
                     instance.getNumberOfShards(),
                     instance.getNumberOfReplicas(),
-                    instance.getActiveShards(),
+                    instance.getActiveShards(),  
                     instance.getRelocatingShards(),
                     instance.getInitializingShards(),
-                    instance.getUnassignedShards(),
+                    instance.getUnassignedShards(),  
                     instance.getActivePrimaryShards(),
                     instance.getStatus(),
-                    map
+                    map  
                 );
             default:
-                throw new UnsupportedOperationException();
+                throw new UnsupportedOperationException();  
         }
     }
-}
+}  

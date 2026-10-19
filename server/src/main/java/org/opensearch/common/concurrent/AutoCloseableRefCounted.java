@@ -1,25 +1,25 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Modifications Copyright OpenSearch Contributors. See
+ * Modifications Copyright OpenSearch Contributors. See  
  * GitHub history for details.
  */
 
 package org.opensearch.common.concurrent;
 
-import org.opensearch.common.util.concurrent.RefCounted;
+import org.opensearch.common.util.concurrent.RefCounted;  
 
 /**
- * Adapter class that enables a {@link RefCounted} implementation to function like an {@link AutoCloseable}.
+ * Adapter class that enables a {@link RefCounted} implementation to function like an {@link AutoCloseable}.  
  * The {@link #close()} API invokes {@link RefCounted#decRef()} and ensures idempotency using a {@link OneWayGate}.
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 public class AutoCloseableRefCounted<T extends RefCounted> implements AutoCloseable {
 
@@ -28,17 +28,17 @@ public class AutoCloseableRefCounted<T extends RefCounted> implements AutoClosea
 
     public AutoCloseableRefCounted(T ref) {
         this.ref = ref;
-        gate = new OneWayGate();
+        gate = new OneWayGate();  
     }
 
-    public T get() {
+    public T get() {  
         return ref;
     }
 
     @Override
     public void close() {
-        if (gate.close()) {
+        if (gate.close()) {  
             ref.decRef();
         }
-    }
+    }  
 }

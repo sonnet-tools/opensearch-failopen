@@ -1,49 +1,49 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.action.get;
 
 import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.common.io.stream.StreamOutput;  
 import org.opensearch.core.common.io.stream.Writeable;
 
-import java.io.IOException;
+import java.io.IOException;  
 
 /**
- * A single multi get response.
+ * A single multi get response.  
  *
  * @opensearch.api
- */
+ */  
 @PublicApi(since = "1.0.0")
 public class MultiGetItemResponse implements Writeable {
 
@@ -52,68 +52,68 @@ public class MultiGetItemResponse implements Writeable {
 
     public MultiGetItemResponse(GetResponse response, MultiGetResponse.Failure failure) {
         this.response = response;
-        this.failure = failure;
+        this.failure = failure;  
     }
 
-    MultiGetItemResponse(StreamInput in) throws IOException {
+    MultiGetItemResponse(StreamInput in) throws IOException {  
         if (in.readBoolean()) {
             failure = new MultiGetResponse.Failure(in);
-            response = null;
+            response = null;  
         } else {
             response = new GetResponse(in);
-            failure = null;
+            failure = null;  
         }
     }
 
     /**
      * The index name of the document.
-     */
+     */  
     public String getIndex() {
         if (failure != null) {
-            return failure.getIndex();
+            return failure.getIndex();  
         }
         return response.getIndex();
-    }
+    }  
 
     /**
-     * The id of the document.
+     * The id of the document.  
      */
     public String getId() {
-        if (failure != null) {
+        if (failure != null) {  
             return failure.getId();
         }
-        return response.getId();
+        return response.getId();  
     }
 
-    /**
+    /**  
      * Is this a failed execution?
      */
-    public boolean isFailed() {
+    public boolean isFailed() {  
         return failure != null;
     }
 
     /**
      * The actual get response, {@code null} if its a failure.
-     */
+     */  
     public GetResponse getResponse() {
         return this.response;
-    }
+    }  
 
     /**
-     * The failure if relevant.
+     * The failure if relevant.  
      */
     public MultiGetResponse.Failure getFailure() {
-        return this.failure;
+        return this.failure;  
     }
 
-    @Override
+    @Override  
     public void writeTo(StreamOutput out) throws IOException {
         if (failure != null) {
-            out.writeBoolean(true);
+            out.writeBoolean(true);  
             failure.writeTo(out);
         } else {
-            out.writeBoolean(false);
+            out.writeBoolean(false);  
             response.writeTo(out);
         }
-    }
+    }  
 }

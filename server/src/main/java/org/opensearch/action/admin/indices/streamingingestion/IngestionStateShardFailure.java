@@ -1,31 +1,31 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.action.admin.indices.streamingingestion;
 
 import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.common.io.stream.StreamOutput;  
 import org.opensearch.core.common.io.stream.Writeable;
 import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.xcontent.XContentBuilder;  
 
 import java.io.IOException;
-import java.util.ArrayList;
+import java.util.ArrayList;  
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Map;  
 
 /**
- * Indicates ingestion failures at index and shard level.
+ * Indicates ingestion failures at index and shard level.  
  *
  * @opensearch.api
- */
+ */  
 @PublicApi(since = "3.6.0")
 public record IngestionStateShardFailure(String index, int shard, String errorMessage) implements Writeable, ToXContentFragment {
 
@@ -34,34 +34,34 @@ public record IngestionStateShardFailure(String index, int shard, String errorMe
 
     public IngestionStateShardFailure(StreamInput in) throws IOException {
         this(in.readString(), in.readVInt(), in.readString());
-    }
+    }  
 
     @Override
-    public void writeTo(StreamOutput out) throws IOException {
+    public void writeTo(StreamOutput out) throws IOException {  
         out.writeString(index);
         out.writeVInt(shard);
-        out.writeString(errorMessage);
+        out.writeString(errorMessage);  
     }
 
-    @Override
+    @Override  
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject();
-        builder.field(SHARD, shard);
+        builder.field(SHARD, shard);  
         builder.field(ERROR, errorMessage);
         return builder.endObject();
-    }
+    }  
 
     /**
-     * Groups provided shard ingestion state failures by index name.
+     * Groups provided shard ingestion state failures by index name.  
      */
     public static Map<String, List<IngestionStateShardFailure>> groupShardFailuresByIndex(IngestionStateShardFailure[] shardFailures) {
-        Map<String, List<IngestionStateShardFailure>> shardFailuresByIndex = new HashMap<>();
+        Map<String, List<IngestionStateShardFailure>> shardFailuresByIndex = new HashMap<>();  
 
         for (IngestionStateShardFailure shardFailure : shardFailures) {
-            shardFailuresByIndex.computeIfAbsent(shardFailure.index(), (index) -> new ArrayList<>());
+            shardFailuresByIndex.computeIfAbsent(shardFailure.index(), (index) -> new ArrayList<>());  
             shardFailuresByIndex.get(shardFailure.index()).add(shardFailure);
         }
 
         return shardFailuresByIndex;
     }
-}
+}  

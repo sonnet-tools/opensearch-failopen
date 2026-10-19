@@ -1,31 +1,31 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Copyright (C) 2006 Google Inc.
+ * Copyright (C) 2006 Google Inc.  
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
+ * you may not use this file except in compliance with the License.  
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0  
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
+ * distributed under the License is distributed on an "AS IS" BASIS,  
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License.
+ * limitations under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.common.inject;
 
@@ -37,20 +37,20 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
 /**
  * Annotates annotations which are used for scoping. Only one such annotation
- * may apply to a single implementation class. You must also annotate scope
+ * may apply to a single implementation class. You must also annotate scope  
  * annotations with {@code @Retention(RUNTIME)}. For example:
  * <pre>
- *   {@code @}Retention(RUNTIME)
+ *   {@code @}Retention(RUNTIME)  
  *   {@code @}Target(TYPE)
  *   {@code @}ScopeAnnotation
- *   public {@code @}interface SessionScoped {}
+ *   public {@code @}interface SessionScoped {}  
  * </pre>
  *
- * @author crazybob@google.com (Bob Lee)
+ * @author crazybob@google.com (Bob Lee)  
  *
  * @opensearch.internal
- */
+ */  
 @Target(ANNOTATION_TYPE)
 @Retention(RUNTIME)
-public @interface ScopeAnnotation {
+public @interface ScopeAnnotation {  
 }

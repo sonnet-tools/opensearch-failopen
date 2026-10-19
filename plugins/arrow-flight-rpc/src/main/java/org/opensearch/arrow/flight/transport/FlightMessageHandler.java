@@ -1,97 +1,97 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.arrow.flight.transport;
 
 import org.opensearch.Version;
 import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.util.BigArrays;
+import org.opensearch.common.util.BigArrays;  
 import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.telemetry.tracing.Tracer;
-import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.threadpool.ThreadPool;  
 import org.opensearch.transport.Header;
 import org.opensearch.transport.NativeMessageHandler;
-import org.opensearch.transport.OutboundHandler;
+import org.opensearch.transport.OutboundHandler;  
 import org.opensearch.transport.ProtocolOutboundHandler;
 import org.opensearch.transport.StatsTracker;
-import org.opensearch.transport.TcpChannel;
+import org.opensearch.transport.TcpChannel;  
 import org.opensearch.transport.TcpTransportChannel;
 import org.opensearch.transport.Transport;
-import org.opensearch.transport.TransportHandshaker;
+import org.opensearch.transport.TransportHandshaker;  
 import org.opensearch.transport.TransportKeepAlive;
 
-class FlightMessageHandler extends NativeMessageHandler {
+class FlightMessageHandler extends NativeMessageHandler {  
 
     public FlightMessageHandler(
-        String nodeName,
+        String nodeName,  
         Version version,
         String[] features,
-        StatsTracker statsTracker,
+        StatsTracker statsTracker,  
         ThreadPool threadPool,
         BigArrays bigArrays,
-        OutboundHandler outboundHandler,
+        OutboundHandler outboundHandler,  
         NamedWriteableRegistry namedWriteableRegistry,
         TransportHandshaker handshaker,
-        Transport.RequestHandlers requestHandlers,
+        Transport.RequestHandlers requestHandlers,  
         Transport.ResponseHandlers responseHandlers,
         Tracer tracer,
-        TransportKeepAlive keepAlive
+        TransportKeepAlive keepAlive  
     ) {
         super(
-            nodeName,
+            nodeName,  
             version,
             features,
-            statsTracker,
+            statsTracker,  
             threadPool,
             bigArrays,
-            outboundHandler,
+            outboundHandler,  
             namedWriteableRegistry,
             handshaker,
-            requestHandlers,
+            requestHandlers,  
             responseHandlers,
             tracer,
-            keepAlive
+            keepAlive  
         );
     }
 
     @Override
     protected ProtocolOutboundHandler createNativeOutboundHandler(
-        String nodeName,
+        String nodeName,  
         Version version,
         String[] features,
-        StatsTracker statsTracker,
+        StatsTracker statsTracker,  
         ThreadPool threadPool,
         BigArrays bigArrays,
-        OutboundHandler outboundHandler
+        OutboundHandler outboundHandler  
     ) {
         return new FlightOutboundHandler(nodeName, version, features, statsTracker, threadPool);
-    }
+    }  
 
     @Override
-    protected TcpTransportChannel createTcpTransportChannel(
+    protected TcpTransportChannel createTcpTransportChannel(  
         ProtocolOutboundHandler outboundHandler,
         TcpChannel channel,
-        String action,
+        String action,  
         long requestId,
         Version version,
-        Header header,
+        Header header,  
         Releasable breakerRelease
     ) {
-        return new FlightTransportChannel(
+        return new FlightTransportChannel(  
             (FlightOutboundHandler) outboundHandler,
             channel,
-            action,
+            action,  
             requestId,
             version,
-            header.getFeatures(),
+            header.getFeatures(),  
             header.isCompressed(),
             header.isHandshake(),
-            breakerRelease
+            breakerRelease  
         );
     }
-}
+}  

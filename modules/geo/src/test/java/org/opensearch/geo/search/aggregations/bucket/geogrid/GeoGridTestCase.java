@@ -1,52 +1,52 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 /*
- * Modifications Copyright OpenSearch Contributors. See
+ * Modifications Copyright OpenSearch Contributors. See  
  * GitHub history for details.
  */
 
 package org.opensearch.geo.search.aggregations.bucket.geogrid;
 
-import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriter;  
 import org.opensearch.core.ParseField;
 import org.opensearch.core.xcontent.ContextParser;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
 import org.opensearch.geo.GeoModulePlugin;
 import org.opensearch.geo.search.aggregations.metrics.ParsedGeoBounds;
-import org.opensearch.plugins.SearchPlugin;
+import org.opensearch.plugins.SearchPlugin;  
 import org.opensearch.search.aggregations.Aggregation;
 import org.opensearch.search.aggregations.InternalAggregations;
-import org.opensearch.search.aggregations.ParsedMultiBucketAggregation;
+import org.opensearch.search.aggregations.ParsedMultiBucketAggregation;  
 import org.opensearch.test.InternalMultiBucketAggregationTestCase;
 
-import java.util.ArrayList;
+import java.util.ArrayList;  
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Map;  
 
 import static org.hamcrest.Matchers.equalTo;
 
@@ -55,158 +55,158 @@ public abstract class GeoGridTestCase<B extends BaseGeoGridBucket, T extends Bas
 
     /**
      * Instantiate a {@link BaseGeoGrid}-derived class using the same parameters as constructor.
-     */
+     */  
     protected abstract T createInternalGeoGrid(String name, int size, List<BaseGeoGridBucket> buckets, Map<String, Object> metadata);
 
-    /**
+    /**  
      * Instantiate a {@link BaseGeoGridBucket}-derived class using the same parameters as constructor.
      */
-    protected abstract B createInternalGeoGridBucket(Long key, long docCount, InternalAggregations aggregations);
+    protected abstract B createInternalGeoGridBucket(Long key, long docCount, InternalAggregations aggregations);  
 
     /**
-     * Encode longitude and latitude with a given precision as a long hash.
+     * Encode longitude and latitude with a given precision as a long hash.  
      */
     protected abstract long longEncode(double lng, double lat, int precision);
 
     /**
      * Generate a random precision according to the rules of the given aggregation.
-     */
+     */  
     protected abstract int randomPrecision();
 
-    @Override
+    @Override  
     protected int minNumberOfBuckets() {
         return 1;
-    }
+    }  
 
     @Override
-    protected int maxNumberOfBuckets() {
+    protected int maxNumberOfBuckets() {  
         return 3;
     }
 
     /**
      * Overriding the method so that tests can get the aggregation specs for namedWriteable.
-     *
+     *  
      * @return GeoPlugin
      */
-    @Override
+    @Override  
     protected SearchPlugin registerPlugin() {
         return new GeoModulePlugin();
-    }
+    }  
 
     /**
-     * Overriding with the {@link ParsedGeoBounds} so that it can be parsed. We need to do this as {@link GeoModulePlugin}
+     * Overriding with the {@link ParsedGeoBounds} so that it can be parsed. We need to do this as {@link GeoModulePlugin}  
      * is registering this Aggregation.
      *
-     * @return a List of {@link NamedXContentRegistry.Entry}
+     * @return a List of {@link NamedXContentRegistry.Entry}  
      */
     @Override
-    protected List<NamedXContentRegistry.Entry> getNamedXContents() {
+    protected List<NamedXContentRegistry.Entry> getNamedXContents() {  
         final List<NamedXContentRegistry.Entry> namedXContents = new ArrayList<>(getDefaultNamedXContents());
         final ContextParser<Object, Aggregation> hashGridParser = (p, c) -> ParsedGeoHashGrid.fromXContent(p, (String) c);
-        final ContextParser<Object, Aggregation> geoTileParser = (p, c) -> ParsedGeoTileGrid.fromXContent(p, (String) c);
+        final ContextParser<Object, Aggregation> geoTileParser = (p, c) -> ParsedGeoTileGrid.fromXContent(p, (String) c);  
         namedXContents.add(
             new NamedXContentRegistry.Entry(Aggregation.class, new ParseField(GeoHashGridAggregationBuilder.NAME), hashGridParser)
-        );
+        );  
         namedXContents.add(
             new NamedXContentRegistry.Entry(Aggregation.class, new ParseField(GeoTileGridAggregationBuilder.NAME), geoTileParser)
-        );
+        );  
         return namedXContents;
     }
 
     @Override
     protected T createTestInstance(String name, Map<String, Object> metadata, InternalAggregations aggregations) {
-        final int precision = randomPrecision();
+        final int precision = randomPrecision();  
         int size = randomNumberOfBuckets();
         List<BaseGeoGridBucket> buckets = new ArrayList<>(size);
-        for (int i = 0; i < size; i++) {
+        for (int i = 0; i < size; i++) {  
             double latitude = randomDoubleBetween(-90.0, 90.0, false);
             double longitude = randomDoubleBetween(-180.0, 180.0, false);
 
             long hashAsLong = longEncode(longitude, latitude, precision);
             buckets.add(createInternalGeoGridBucket(hashAsLong, randomInt(IndexWriter.MAX_DOCS), aggregations));
-        }
+        }  
         return createInternalGeoGrid(name, size, buckets, metadata);
     }
 
     @Override
     protected void assertReduced(T reduced, List<T> inputs) {
-        Map<Long, List<B>> map = new HashMap<>();
+        Map<Long, List<B>> map = new HashMap<>();  
         for (T input : inputs) {
             for (GeoGrid.Bucket bucketBase : input.getBuckets()) {
-                B bucket = (B) bucketBase;
+                B bucket = (B) bucketBase;  
                 List<B> buckets = map.get(bucket.hashAsLong);
                 if (buckets == null) {
-                    map.put(bucket.hashAsLong, buckets = new ArrayList<>());
+                    map.put(bucket.hashAsLong, buckets = new ArrayList<>());  
                 }
                 buckets.add(bucket);
-            }
+            }  
         }
         List<B> expectedBuckets = new ArrayList<>();
-        for (Map.Entry<Long, List<B>> entry : map.entrySet()) {
+        for (Map.Entry<Long, List<B>> entry : map.entrySet()) {  
             long docCount = 0;
             for (B bucket : entry.getValue()) {
-                docCount += bucket.docCount;
+                docCount += bucket.docCount;  
             }
             expectedBuckets.add(createInternalGeoGridBucket(entry.getKey(), docCount, InternalAggregations.EMPTY));
-        }
+        }  
         expectedBuckets.sort((first, second) -> {
             int cmp = Long.compare(second.docCount, first.docCount);
-            if (cmp == 0) {
+            if (cmp == 0) {  
                 return second.compareTo(first);
             }
-            return cmp;
+            return cmp;  
         });
         int requestedSize = inputs.get(0).getRequiredSize();
-        expectedBuckets = expectedBuckets.subList(0, Math.min(requestedSize, expectedBuckets.size()));
+        expectedBuckets = expectedBuckets.subList(0, Math.min(requestedSize, expectedBuckets.size()));  
         assertEquals(expectedBuckets.size(), reduced.getBuckets().size());
         for (int i = 0; i < reduced.getBuckets().size(); i++) {
-            GeoGrid.Bucket expected = expectedBuckets.get(i);
+            GeoGrid.Bucket expected = expectedBuckets.get(i);  
             GeoGrid.Bucket actual = reduced.getBuckets().get(i);
             assertEquals(expected.getDocCount(), actual.getDocCount());
-            assertEquals(expected.getKey(), actual.getKey());
+            assertEquals(expected.getKey(), actual.getKey());  
         }
     }
 
     @Override
     protected Class<? extends ParsedMultiBucketAggregation> implementationClass() {
-        return ParsedGeoGrid.class;
+        return ParsedGeoGrid.class;  
     }
 
-    @Override
+    @Override  
     protected T mutateInstance(T instance) {
         String name = instance.getName();
-        int size = instance.getRequiredSize();
+        int size = instance.getRequiredSize();  
         List<BaseGeoGridBucket> buckets = instance.getBuckets();
         Map<String, Object> metadata = instance.getMetadata();
-        switch (between(0, 3)) {
+        switch (between(0, 3)) {  
             case 0:
                 name += randomAlphaOfLength(5);
-                break;
+                break;  
             case 1:
                 buckets = new ArrayList<>(buckets);
-                buckets.add(
+                buckets.add(  
                     createInternalGeoGridBucket(randomNonNegativeLong(), randomInt(IndexWriter.MAX_DOCS), InternalAggregations.EMPTY)
                 );
-                break;
+                break;  
             case 2:
                 size = size + between(1, 10);
-                break;
+                break;  
             case 3:
                 if (metadata == null) {
-                    metadata = new HashMap<>(1);
+                    metadata = new HashMap<>(1);  
                 } else {
                     metadata = new HashMap<>(instance.getMetadata());
-                }
+                }  
                 metadata.put(randomAlphaOfLength(15), randomInt());
                 break;
-            default:
+            default:  
                 throw new AssertionError("Illegal randomisation branch");
         }
-        return createInternalGeoGrid(name, size, buckets, metadata);
+        return createInternalGeoGrid(name, size, buckets, metadata);  
     }
 
-    public void testCreateFromBuckets() {
+    public void testCreateFromBuckets() {  
         BaseGeoGrid original = createTestInstance();
         assertThat(original, equalTo(original.create(original.buckets)));
-    }
+    }  
 }

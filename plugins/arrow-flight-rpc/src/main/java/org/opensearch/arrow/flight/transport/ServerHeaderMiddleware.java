@@ -1,16 +1,16 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.arrow.flight.transport;
 
 import org.apache.arrow.flight.CallHeaders;
 import org.apache.arrow.flight.CallInfo;
-import org.apache.arrow.flight.CallStatus;
+import org.apache.arrow.flight.CallStatus;  
 import org.apache.arrow.flight.FlightServerMiddleware;
 import org.apache.arrow.flight.RequestContext;
 
@@ -22,37 +22,37 @@ import static org.opensearch.arrow.flight.transport.ClientHeaderMiddleware.RAW_H
 
 /**
  * ServerHeaderMiddleware is created per call to handle the response header
- * and add it to the outgoing headers. It also adds the request ID to the
+ * and add it to the outgoing headers. It also adds the request ID to the  
  * outgoing headers, retrieved from the incoming headers.
  */
-class ServerHeaderMiddleware implements FlightServerMiddleware {
+class ServerHeaderMiddleware implements FlightServerMiddleware {  
     private ByteBuffer headerBuffer;
     private final String requestId;
 
     ServerHeaderMiddleware(String requestId) {
         this.requestId = requestId;
-    }
+    }  
 
     void setHeader(ByteBuffer headerBuffer) {
-        this.headerBuffer = headerBuffer;
+        this.headerBuffer = headerBuffer;  
     }
 
-    String getCorrelationId() {
+    String getCorrelationId() {  
         return requestId;
     }
 
     @Override
     public void onBeforeSendingHeaders(CallHeaders outgoingHeaders) {
-        if (headerBuffer != null) {
+        if (headerBuffer != null) {  
             byte[] headerBytes = new byte[headerBuffer.remaining()];
             headerBuffer.get(headerBytes);
-            String encodedHeader = Base64.getEncoder().encodeToString(headerBytes);
+            String encodedHeader = Base64.getEncoder().encodeToString(headerBytes);  
             outgoingHeaders.insert(RAW_HEADER_KEY, encodedHeader);
             outgoingHeaders.insert(CORRELATION_ID_KEY, requestId);
-            headerBuffer.rewind();
+            headerBuffer.rewind();  
         } else {
             outgoingHeaders.insert(RAW_HEADER_KEY, "");
-            outgoingHeaders.insert(CORRELATION_ID_KEY, requestId);
+            outgoingHeaders.insert(CORRELATION_ID_KEY, requestId);  
         }
     }
 
@@ -64,9 +64,9 @@ class ServerHeaderMiddleware implements FlightServerMiddleware {
 
     public static class Factory implements FlightServerMiddleware.Factory<ServerHeaderMiddleware> {
         @Override
-        public ServerHeaderMiddleware onCallStarted(CallInfo callInfo, CallHeaders incomingHeaders, RequestContext context) {
+        public ServerHeaderMiddleware onCallStarted(CallInfo callInfo, CallHeaders incomingHeaders, RequestContext context) {  
             String requestId = incomingHeaders.get(CORRELATION_ID_KEY);
             return new ServerHeaderMiddleware(requestId);
-        }
+        }  
     }
 }

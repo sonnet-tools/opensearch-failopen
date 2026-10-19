@@ -1,115 +1,115 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.common.util.concurrent;
 
 import org.opensearch.test.OpenSearchTestCase;
 
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CountDownLatch;  
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class RunOnceTests extends OpenSearchTestCase {
+public class RunOnceTests extends OpenSearchTestCase {  
 
     public void testRunOnce() {
-        final AtomicInteger counter = new AtomicInteger(0);
+        final AtomicInteger counter = new AtomicInteger(0);  
         final RunOnce runOnce = new RunOnce(counter::incrementAndGet);
         assertFalse(runOnce.hasRun());
 
         runOnce.run();
         assertTrue(runOnce.hasRun());
-        assertEquals(1, counter.get());
+        assertEquals(1, counter.get());  
 
         runOnce.run();
-        assertTrue(runOnce.hasRun());
+        assertTrue(runOnce.hasRun());  
         assertEquals(1, counter.get());
     }
 
     public void testRunOnceConcurrently() throws InterruptedException {
         final AtomicInteger counter = new AtomicInteger(0);
-        final RunOnce runOnce = new RunOnce(counter::incrementAndGet);
+        final RunOnce runOnce = new RunOnce(counter::incrementAndGet);  
 
         final Thread[] threads = new Thread[between(3, 10)];
-        final CountDownLatch latch = new CountDownLatch(1 + threads.length);
+        final CountDownLatch latch = new CountDownLatch(1 + threads.length);  
         for (int i = 0; i < threads.length; i++) {
             threads[i] = new Thread(() -> {
-                latch.countDown();
+                latch.countDown();  
                 try {
                     latch.await();
-                } catch (InterruptedException e) {
+                } catch (InterruptedException e) {  
                     throw new RuntimeException(e);
                 }
-                runOnce.run();
+                runOnce.run();  
             });
             threads[i].start();
-        }
+        }  
 
         latch.countDown();
-        for (Thread thread : threads) {
+        for (Thread thread : threads) {  
             thread.join();
         }
-        assertTrue(runOnce.hasRun());
+        assertTrue(runOnce.hasRun());  
         assertEquals(1, counter.get());
     }
 
     public void testRunOnceWithAbstractRunnable() {
         final AtomicInteger onRun = new AtomicInteger(0);
-        final AtomicInteger onFailure = new AtomicInteger(0);
+        final AtomicInteger onFailure = new AtomicInteger(0);  
         final AtomicInteger onAfter = new AtomicInteger(0);
 
-        final RunOnce runOnce = new RunOnce(new AbstractRunnable() {
+        final RunOnce runOnce = new RunOnce(new AbstractRunnable() {  
             @Override
             protected void doRun() throws Exception {
-                onRun.incrementAndGet();
+                onRun.incrementAndGet();  
                 throw new RuntimeException("failure");
             }
 
             @Override
             public void onFailure(Exception e) {
-                onFailure.incrementAndGet();
+                onFailure.incrementAndGet();  
             }
 
-            @Override
+            @Override  
             public void onAfter() {
                 onAfter.incrementAndGet();
-            }
+            }  
         });
 
-        final int iterations = randomIntBetween(1, 10);
+        final int iterations = randomIntBetween(1, 10);  
         for (int i = 0; i < iterations; i++) {
             runOnce.run();
-            assertEquals(1, onRun.get());
+            assertEquals(1, onRun.get());  
             assertEquals(1, onFailure.get());
             assertEquals(1, onAfter.get());
-            assertTrue(runOnce.hasRun());
+            assertTrue(runOnce.hasRun());  
         }
     }
-}
+}  

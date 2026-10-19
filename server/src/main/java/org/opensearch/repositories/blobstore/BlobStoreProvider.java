@@ -1,121 +1,121 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.repositories.blobstore;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.opensearch.cluster.metadata.RepositoryMetadata;
+import org.opensearch.cluster.metadata.RepositoryMetadata;  
 import org.opensearch.common.SetOnce;
 import org.opensearch.common.blobstore.BlobStore;
-import org.opensearch.common.blobstore.EncryptedBlobStore;
+import org.opensearch.common.blobstore.EncryptedBlobStore;  
 import org.opensearch.common.lifecycle.Lifecycle;
 import org.opensearch.common.unit.TimeValue;
-import org.opensearch.repositories.RepositoryException;
+import org.opensearch.repositories.RepositoryException;  
 
 import java.util.Objects;
 
 /**
  * Provide for the BlobStore class
- *
+ *  
  * @opensearch.internal
  */
-public class BlobStoreProvider {
+public class BlobStoreProvider {  
     private static final Logger logger = LogManager.getLogger(BlobStoreProvider.class);
     protected final Lifecycle lifecycle;
-    protected final RepositoryMetadata metadata;
+    protected final RepositoryMetadata metadata;  
     protected final Object lock;
     protected final BlobStoreRepository repository;
-    private final SetOnce<BlobStore> blobStore = new SetOnce<>();
+    private final SetOnce<BlobStore> blobStore = new SetOnce<>();  
     private final SetOnce<BlobStore> serverSideEncryptedBlobStore = new SetOnce<>();
 
-    public BlobStoreProvider(BlobStoreRepository repository, RepositoryMetadata metadata, Lifecycle lifecycle, Object lock) {
+    public BlobStoreProvider(BlobStoreRepository repository, RepositoryMetadata metadata, Lifecycle lifecycle, Object lock) {  
         this.lifecycle = lifecycle;
         this.metadata = metadata;
-        this.lock = lock;
+        this.lock = lock;  
         this.repository = repository;
     }
 
     protected BlobStore blobStore(boolean serverSideEncryptionEnabled) {
         if (serverSideEncryptionEnabled) {
-            return createBlobStore(serverSideEncryptedBlobStore, true);
+            return createBlobStore(serverSideEncryptedBlobStore, true);  
         }
         return createBlobStore(blobStore, false);
-    }
+    }  
 
     protected BlobStore createBlobStore(SetOnce<BlobStore> blobStore, boolean serverSideEncryption) {
-        // assertSnapshotOrGenericThread();
+        // assertSnapshotOrGenericThread();  
         BlobStore store = blobStore.get();
         logger.debug("blob store fetched = " + store);
-        if (store == null) {
+        if (store == null) {  
             synchronized (lock) {
                 store = blobStore.get();
-                if (store == null) {
+                if (store == null) {  
                     store = initBlobStore();
                     if (!serverSideEncryption && metadata.cryptoMetadata() != null) {
-                        store = new EncryptedBlobStore(store, metadata.cryptoMetadata());
+                        store = new EncryptedBlobStore(store, metadata.cryptoMetadata());  
                     }
                     blobStore.set(store);
-                }
+                }  
             }
         }
-        return store;
+        return store;  
     }
 
-    public BlobStore getBlobStore(boolean serverSideEncryptionEnabled) {
+    public BlobStore getBlobStore(boolean serverSideEncryptionEnabled) {  
         if (serverSideEncryptionEnabled) {
             return serverSideEncryptedBlobStore.get();
-        }
+        }  
         return blobStore.get();
     }
 
     protected BlobStore initBlobStore() {
         if (lifecycle.started() == false) {
-            throw new RepositoryException(metadata.name(), "repository is not in started state" + lifecycle.state());
+            throw new RepositoryException(metadata.name(), "repository is not in started state" + lifecycle.state());  
         }
         final long startTimeNanos = System.nanoTime();
-        try {
+        try {  
             return repository.createBlobStore();
         } catch (RepositoryException e) {
-            throw e;
+            throw e;  
         } catch (Exception e) {
             throw new RepositoryException(metadata.name(), "cannot create blob store", e);
-        } finally {
+        } finally {  
             logger.info(
                 "initialized blob store for repository [{}][{}] in [{}]",
-                metadata.type(),
+                metadata.type(),  
                 metadata.name(),
                 TimeValue.timeValueNanos(System.nanoTime() - startTimeNanos)
-            );
+            );  
         }
     }
 
     public void reloadBlobStore(RepositoryMetadata metadata) {
         if (serverSideEncryptedBlobStore.get() != null) {
-            logger.info("Reloading repository metadata for SSE blob store");
+            logger.info("Reloading repository metadata for SSE blob store");  
             Objects.requireNonNull(serverSideEncryptedBlobStore.get()).reload(metadata);
         }
-        if (blobStore.get() != null) {
+        if (blobStore.get() != null) {  
             logger.info("Reloading repository metadata for non SSE blob store");
             Objects.requireNonNull(blobStore.get()).reload(metadata);
-        }
+        }  
     }
 
-    public void close() {
+    public void close() {  
         try {
             if (blobStore.get() != null) {
-                blobStore.get().close();
+                blobStore.get().close();  
             }
             if (serverSideEncryptedBlobStore.get() != null) {
-                serverSideEncryptedBlobStore.get().close();
+                serverSideEncryptedBlobStore.get().close();  
             }
         } catch (Exception t) {
-            logger.warn("cannot close blob store", t);
+            logger.warn("cannot close blob store", t);  
         }
     }
-}
+}  

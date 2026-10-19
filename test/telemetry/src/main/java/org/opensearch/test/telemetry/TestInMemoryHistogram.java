@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.test.telemetry;
 
@@ -13,13 +13,13 @@ import org.opensearch.telemetry.metrics.tags.Tags;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicInteger;  
 
 /**
- * This is a simple implementation of Histogram which is utilized by TestInMemoryMetricsRegistry for
+ * This is a simple implementation of Histogram which is utilized by TestInMemoryMetricsRegistry for  
  * Unit Tests. It initializes an atomic integer to record the value of histogram which doesn't have any tags
  * along with a map to store the values recorded against the tags.
- * The map and atomic integer can then be used to get the recorded values.
+ * The map and atomic integer can then be used to get the recorded values.  
  */
 public class TestInMemoryHistogram implements Histogram {
 
@@ -28,33 +28,33 @@ public class TestInMemoryHistogram implements Histogram {
 
     /**
      * Constructor.
-     */
+     */  
     public TestInMemoryHistogram() {}
 
-    /**
+    /**  
      * Returns the Histogram value.
      * @return
-     */
+     */  
     public Integer getHistogramValue() {
         return this.histogramValue.get();
-    }
+    }  
 
     /**
-     * Returns the Histogram value for tags
+     * Returns the Histogram value for tags  
      * @return
      */
-    public ConcurrentHashMap<Map<String, ?>, Double> getHistogramValueForTags() {
+    public ConcurrentHashMap<Map<String, ?>, Double> getHistogramValueForTags() {  
         return this.histogramValueForTags;
     }
 
     @Override
     public void record(double value) {
-        histogramValue.addAndGet((int) value);
+        histogramValue.addAndGet((int) value);  
     }
 
-    @Override
+    @Override  
     public synchronized void record(double value, Tags tags) {
         Map<String, ?> tagsMap = tags.getTagsMap();
-        histogramValueForTags.put(tagsMap, value);
+        histogramValueForTags.put(tagsMap, value);  
     }
 }

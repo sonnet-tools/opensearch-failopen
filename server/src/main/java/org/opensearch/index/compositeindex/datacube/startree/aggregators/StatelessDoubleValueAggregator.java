@@ -1,82 +1,82 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 package org.opensearch.index.compositeindex.datacube.startree.aggregators;
 
-import org.opensearch.index.mapper.FieldValueConverter;
+import org.opensearch.index.mapper.FieldValueConverter;  
 import org.opensearch.index.mapper.NumberFieldMapper;
 
-/**
+/**  
  * This is an abstract class that defines the common methods for all double value aggregators
  * It is stateless.
- *
+ *  
  * @opensearch.experimental
  */
-abstract class StatelessDoubleValueAggregator implements ValueAggregator<Double> {
+abstract class StatelessDoubleValueAggregator implements ValueAggregator<Double> {  
 
     protected final FieldValueConverter fieldValueConverter;
-    protected final Double identityValue;
+    protected final Double identityValue;  
     private static final FieldValueConverter VALUE_AGGREGATOR_TYPE = NumberFieldMapper.NumberType.DOUBLE;
 
-    public StatelessDoubleValueAggregator(FieldValueConverter fieldValueConverter, Double identityValue) {
+    public StatelessDoubleValueAggregator(FieldValueConverter fieldValueConverter, Double identityValue) {  
         this.fieldValueConverter = fieldValueConverter;
         this.identityValue = identityValue;
-    }
+    }  
 
     @Override
-    public FieldValueConverter getAggregatedValueType() {
+    public FieldValueConverter getAggregatedValueType() {  
         return VALUE_AGGREGATOR_TYPE;
     }
 
     @Override
     public Double getInitialAggregatedValueForSegmentDocValue(Long segmentDocValue) {
-        if (segmentDocValue == null) {
+        if (segmentDocValue == null) {  
             return getIdentityMetricValue();
         }
-        return fieldValueConverter.toDoubleValue(segmentDocValue);
+        return fieldValueConverter.toDoubleValue(segmentDocValue);  
     }
 
-    @Override
+    @Override  
     public Double mergeAggregatedValues(Double value, Double aggregatedValue) {
         if (value == null && aggregatedValue != null) {
-            return aggregatedValue;
+            return aggregatedValue;  
         } else if (value != null && aggregatedValue == null) {
             return value;
-        } else if (value == null) {
+        } else if (value == null) {  
             return getIdentityMetricValue();
         }
-        return performValueAggregation(value, aggregatedValue);
+        return performValueAggregation(value, aggregatedValue);  
     }
 
-    @Override
+    @Override  
     public Double toAggregatedValueType(Long value) {
         try {
-            if (value == null) {
+            if (value == null) {  
                 return getIdentityMetricValue();
             }
-            return VALUE_AGGREGATOR_TYPE.toDoubleValue(value);
+            return VALUE_AGGREGATOR_TYPE.toDoubleValue(value);  
         } catch (Exception e) {
             throw new IllegalStateException("Cannot convert " + value + " to sortable aggregation type", e);
-        }
+        }  
     }
 
-    @Override
+    @Override  
     public Double getIdentityMetricValue() {
         // the identity value that we return should be inline with the existing aggregations
-        return identityValue;
+        return identityValue;  
     }
 
-    /**
+    /**  
      * Performs stateless aggregation on the value and the segmentDocValue based on the implementation
      *
-     * @param aggregatedValue aggregated value for the segment so far
+     * @param aggregatedValue aggregated value for the segment so far  
      * @param segmentDocValue current segment doc value
      * @return aggregated value
-     */
+     */  
     protected abstract Double performValueAggregation(Double aggregatedValue, Double segmentDocValue);
 
-}
+}  

@@ -1,22 +1,22 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.be.datafusion.action.stats;
 
 import org.opensearch.action.ActionType;
 
-/**
+/**  
  * Action type for the DataFusion cluster stats transport action.
  *
- * <p>Singleton constant identifying the transport action that collects
+ * <p>Singleton constant identifying the transport action that collects  
  * DataFusion runtime statistics from all (or specific) nodes in the cluster.
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 public class DataFusionStatsActionType extends ActionType<DataFusionStatsNodesResponse> {
 
@@ -25,5 +25,5 @@ public class DataFusionStatsActionType extends ActionType<DataFusionStatsNodesRe
 
     private DataFusionStatsActionType() {
         super(NAME, DataFusionStatsNodesResponse::new);
-    }
+    }  
 }

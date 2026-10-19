@@ -1,25 +1,25 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.transport.grpc.listeners;
 
 import org.opensearch.action.search.CreatePitResponse;
 import org.opensearch.action.search.ShardSearchFailure;
-import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.test.OpenSearchTestCase;  
 
 import io.grpc.StatusRuntimeException;
-import io.grpc.stub.StreamObserver;
+import io.grpc.stub.StreamObserver;  
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verify;  
 
 public class CreatePitRequestActionListenerTests extends OpenSearchTestCase {
 
@@ -28,10 +28,10 @@ public class CreatePitRequestActionListenerTests extends OpenSearchTestCase {
 
     private CreatePitRequestActionListener listener;
 
-    @Override
+    @Override  
     public void setUp() throws Exception {
         super.setUp();
-        MockitoAnnotations.openMocks(this);
+        MockitoAnnotations.openMocks(this);  
         listener = new CreatePitRequestActionListener(responseObserver);
     }
 
@@ -40,7 +40,7 @@ public class CreatePitRequestActionListenerTests extends OpenSearchTestCase {
 
         listener.onResponse(response);
 
-        verify(responseObserver, times(1)).onNext(any(org.opensearch.protobufs.CreatePITResponse.class));
+        verify(responseObserver, times(1)).onNext(any(org.opensearch.protobufs.CreatePITResponse.class));  
         verify(responseObserver, times(1)).onCompleted();
     }
 
@@ -49,4 +49,4 @@ public class CreatePitRequestActionListenerTests extends OpenSearchTestCase {
 
         verify(responseObserver, times(1)).onError(any(StatusRuntimeException.class));
     }
-}
+}  

@@ -1,241 +1,241 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.common.blobstore.stream.write;
 
 import org.opensearch.cluster.metadata.CryptoMetadata;
 import org.opensearch.common.CheckedConsumer;
-import org.opensearch.common.Nullable;
+import org.opensearch.common.Nullable;  
 import org.opensearch.common.StreamContext;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.util.Map;
 
-/**
+/**  
  * WriteContext is used to encapsulate all data needed by <code>BlobContainer#writeStreams</code>
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 public class WriteContext {
 
     private final String fileName;
     private final StreamContextSupplier streamContextSupplier;
-    private final long fileSize;
+    private final long fileSize;  
     private final boolean failIfAlreadyExists;
     private final WritePriority writePriority;
-    private final CheckedConsumer<Boolean, IOException> uploadFinalizer;
+    private final CheckedConsumer<Boolean, IOException> uploadFinalizer;  
     private final boolean doRemoteDataIntegrityCheck;
     private final Long expectedChecksum;
-    private final Map<String, String> metadata;
+    private final Map<String, String> metadata;  
     private final CryptoMetadata cryptoMetadata;
 
-    /**
+    /**  
      * Construct a new WriteContext object
      *
-     * @param fileName                   The name of the file being uploaded
+     * @param fileName                   The name of the file being uploaded  
      * @param streamContextSupplier      A supplier that will provide StreamContext to the plugin
      * @param fileSize                   The total size of the file being uploaded
-     * @param failIfAlreadyExists        A boolean to fail the upload is the file exists
+     * @param failIfAlreadyExists        A boolean to fail the upload is the file exists  
      * @param writePriority              The <code>WritePriority</code> of this upload
      * @param doRemoteDataIntegrityCheck A boolean to inform vendor plugins whether remote data integrity checks need to be done
-     * @param expectedChecksum           This parameter expected only when the vendor plugin is expected to do server side data integrity verification
+     * @param expectedChecksum           This parameter expected only when the vendor plugin is expected to do server side data integrity verification  
      */
     private WriteContext(
-        String fileName,
+        String fileName,  
         StreamContextSupplier streamContextSupplier,
         long fileSize,
-        boolean failIfAlreadyExists,
+        boolean failIfAlreadyExists,  
         WritePriority writePriority,
         CheckedConsumer<Boolean, IOException> uploadFinalizer,
-        boolean doRemoteDataIntegrityCheck,
+        boolean doRemoteDataIntegrityCheck,  
         @Nullable Long expectedChecksum,
         @Nullable Map<String, String> metadata,
-        @Nullable CryptoMetadata cryptoMetadata
+        @Nullable CryptoMetadata cryptoMetadata  
     ) {
         this.fileName = fileName;
-        this.streamContextSupplier = streamContextSupplier;
+        this.streamContextSupplier = streamContextSupplier;  
         this.fileSize = fileSize;
         this.failIfAlreadyExists = failIfAlreadyExists;
-        this.writePriority = writePriority;
+        this.writePriority = writePriority;  
         this.uploadFinalizer = uploadFinalizer;
         this.doRemoteDataIntegrityCheck = doRemoteDataIntegrityCheck;
-        this.expectedChecksum = expectedChecksum;
+        this.expectedChecksum = expectedChecksum;  
         this.metadata = metadata;
         this.cryptoMetadata = cryptoMetadata;
-    }
+    }  
 
     /**
-     * Copy constructor used by overriding class
+     * Copy constructor used by overriding class  
      */
     protected WriteContext(WriteContext writeContext) {
-        this.fileName = writeContext.fileName;
+        this.fileName = writeContext.fileName;  
         this.streamContextSupplier = writeContext.streamContextSupplier;
         this.fileSize = writeContext.fileSize;
-        this.failIfAlreadyExists = writeContext.failIfAlreadyExists;
+        this.failIfAlreadyExists = writeContext.failIfAlreadyExists;  
         this.writePriority = writeContext.writePriority;
         this.uploadFinalizer = writeContext.uploadFinalizer;
-        this.doRemoteDataIntegrityCheck = writeContext.doRemoteDataIntegrityCheck;
+        this.doRemoteDataIntegrityCheck = writeContext.doRemoteDataIntegrityCheck;  
         this.expectedChecksum = writeContext.expectedChecksum;
         this.metadata = writeContext.metadata;
-        this.cryptoMetadata = writeContext.cryptoMetadata;
+        this.cryptoMetadata = writeContext.cryptoMetadata;  
     }
 
-    /**
+    /**  
      * @return The file name
      */
-    public String getFileName() {
+    public String getFileName() {  
         return fileName;
     }
 
     /**
      * @return The boolean representing whether to fail the file upload if it exists
-     */
+     */  
     public boolean isFailIfAlreadyExists() {
         return failIfAlreadyExists;
-    }
+    }  
 
     /**
-     * @param partSize The size of a single part to be uploaded
+     * @param partSize The size of a single part to be uploaded  
      * @return The stream context which will be used by the plugin to initialize streams from the file
      */
-    public StreamContext getStreamProvider(long partSize) {
+    public StreamContext getStreamProvider(long partSize) {  
         return streamContextSupplier.supplyStreamContext(partSize);
     }
 
     /**
      * @return The total size of the file
-     */
+     */  
     public long getFileSize() {
         return fileSize;
-    }
+    }  
 
     /**
-     * @return The <code>WritePriority</code> of the upload
+     * @return The <code>WritePriority</code> of the upload  
      */
     public WritePriority getWritePriority() {
-        return writePriority;
+        return writePriority;  
     }
 
-    /**
+    /**  
      * @return The <code>UploadFinalizer</code> for this upload
      */
-    public CheckedConsumer<Boolean, IOException> getUploadFinalizer() {
+    public CheckedConsumer<Boolean, IOException> getUploadFinalizer() {  
         return uploadFinalizer;
     }
 
     /**
      * @return A boolean for whether remote data integrity check has to be done for this upload or not
-     */
+     */  
     public boolean doRemoteDataIntegrityCheck() {
         return doRemoteDataIntegrityCheck;
-    }
+    }  
 
     /**
-     * @return The CRC32 checksum associated with this file
+     * @return The CRC32 checksum associated with this file  
      */
     public Long getExpectedChecksum() {
-        return expectedChecksum;
+        return expectedChecksum;  
     }
 
-    /**
+    /**  
      * @return the upload metadata.
      */
-    public Map<String, String> getMetadata() {
+    public Map<String, String> getMetadata() {  
         return metadata;
     }
 
     /**
      * @return the CryptoMetadata for index-level encryption settings.
-     */
+     */  
     public CryptoMetadata getCryptoMetadata() {
         return cryptoMetadata;
-    }
+    }  
 
     /**
-     * Builder for {@link WriteContext}.
+     * Builder for {@link WriteContext}.  
      *
      * @opensearch.internal
-     */
+     */  
     public static class Builder {
         private String fileName;
-        private StreamContextSupplier streamContextSupplier;
+        private StreamContextSupplier streamContextSupplier;  
         private long fileSize;
         private boolean failIfAlreadyExists;
-        private WritePriority writePriority;
+        private WritePriority writePriority;  
         private CheckedConsumer<Boolean, IOException> uploadFinalizer;
         private boolean doRemoteDataIntegrityCheck;
-        private Long expectedChecksum;
+        private Long expectedChecksum;  
         private Map<String, String> metadata;
         private CryptoMetadata cryptoMetadata;
 
         public Builder fileName(String fileName) {
             this.fileName = fileName;
-            return this;
+            return this;  
         }
 
-        public Builder streamContextSupplier(StreamContextSupplier streamContextSupplier) {
+        public Builder streamContextSupplier(StreamContextSupplier streamContextSupplier) {  
             this.streamContextSupplier = streamContextSupplier;
             return this;
-        }
+        }  
 
         public Builder fileSize(long fileSize) {
-            this.fileSize = fileSize;
+            this.fileSize = fileSize;  
             return this;
         }
 
         public Builder writePriority(WritePriority writePriority) {
             this.writePriority = writePriority;
-            return this;
+            return this;  
         }
 
-        public Builder failIfAlreadyExists(boolean failIfAlreadyExists) {
+        public Builder failIfAlreadyExists(boolean failIfAlreadyExists) {  
             this.failIfAlreadyExists = failIfAlreadyExists;
             return this;
-        }
+        }  
 
         public Builder uploadFinalizer(CheckedConsumer<Boolean, IOException> uploadFinalizer) {
-            this.uploadFinalizer = uploadFinalizer;
+            this.uploadFinalizer = uploadFinalizer;  
             return this;
         }
 
         public Builder doRemoteDataIntegrityCheck(boolean doRemoteDataIntegrityCheck) {
             this.doRemoteDataIntegrityCheck = doRemoteDataIntegrityCheck;
-            return this;
+            return this;  
         }
 
-        public Builder expectedChecksum(Long expectedChecksum) {
+        public Builder expectedChecksum(Long expectedChecksum) {  
             this.expectedChecksum = expectedChecksum;
             return this;
-        }
+        }  
 
         public Builder metadata(Map<String, String> metadata) {
-            this.metadata = metadata;
+            this.metadata = metadata;  
             return this;
         }
 
         public Builder cryptoMetadata(CryptoMetadata cryptoMetadata) {
             this.cryptoMetadata = cryptoMetadata;
-            return this;
+            return this;  
         }
 
-        public WriteContext build() {
+        public WriteContext build() {  
             return new WriteContext(
                 fileName,
-                streamContextSupplier,
+                streamContextSupplier,  
                 fileSize,
                 failIfAlreadyExists,
-                writePriority,
+                writePriority,  
                 uploadFinalizer,
                 doRemoteDataIntegrityCheck,
-                expectedChecksum,
+                expectedChecksum,  
                 metadata,
                 cryptoMetadata
-            );
+            );  
         }
     }
-}
+}  

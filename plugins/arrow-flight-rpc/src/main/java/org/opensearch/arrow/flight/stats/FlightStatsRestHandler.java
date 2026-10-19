@@ -1,25 +1,25 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.arrow.flight.stats;
 
 import org.opensearch.rest.BaseRestHandler;
 import org.opensearch.rest.RestRequest;
-import org.opensearch.rest.action.RestToXContentListener;
+import org.opensearch.rest.action.RestToXContentListener;  
 import org.opensearch.transport.client.node.NodeClient;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.util.List;
 
-import static org.opensearch.rest.RestRequest.Method.GET;
+import static org.opensearch.rest.RestRequest.Method.GET;  
 
 /**
- * REST handler for Flight transport statistics
+ * REST handler for Flight transport statistics  
  */
 public class FlightStatsRestHandler extends BaseRestHandler {
 
@@ -28,25 +28,25 @@ public class FlightStatsRestHandler extends BaseRestHandler {
 
     /** {@inheritDoc} */
     @Override
-    public String getName() {
+    public String getName() {  
         return "flight_stats";
     }
 
     /** {@inheritDoc} */
     @Override
-    public List<Route> routes() {
+    public List<Route> routes() {  
         return List.of(
             new Route(GET, "/_flight/stats"),
-            new Route(GET, "/_flight/stats/{nodeId}"),
+            new Route(GET, "/_flight/stats/{nodeId}"),  
             new Route(GET, "/_nodes/flight/stats"),
             new Route(GET, "/_nodes/{nodeId}/flight/stats")
-        );
+        );  
     }
 
-    /** {@inheritDoc}
+    /** {@inheritDoc}  
      * @param request the REST request
      * @param client the node client */
-    @Override
+    @Override  
     protected RestChannelConsumer prepareRequest(RestRequest request, NodeClient client) throws IOException {
         String[] nodeIds = request.paramAsStringArray("nodeId", null);
 
@@ -55,8 +55,8 @@ public class FlightStatsRestHandler extends BaseRestHandler {
 
         return channel -> client.execute(
             FlightStatsAction.INSTANCE,
-            flightStatsRequest,
+            flightStatsRequest,  
             new RestToXContentListener<FlightStatsResponse>(channel)
         );
-    }
+    }  
 }

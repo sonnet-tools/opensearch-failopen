@@ -1,126 +1,126 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.dsl;
 
 import org.apache.lucene.tests.util.LuceneTestCase.AwaitsFix;
 import org.opensearch.search.aggregations.AggregationBuilders;
-import org.opensearch.search.aggregations.BucketOrder;
+import org.opensearch.search.aggregations.BucketOrder;  
 import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
 import org.opensearch.search.builder.SearchSourceBuilder;
 
 /**
  * Integration tests for DSL aggregation conversion.
- * Uses matchAllQuery; focus is on aggregation plan building.
+ * Uses matchAllQuery; focus is on aggregation plan building.  
  */
 @AwaitsFix(bugUrl = "analytics engine pipeline not E2E complete: fragment conversion + shard execution + Arrow Flight drain not yet wired")
-public class DslAggregationIT extends DslIntegTestBase {
+public class DslAggregationIT extends DslIntegTestBase {  
 
     public void testMetricOnly() {
-        createTestIndex();
+        createTestIndex();  
         assertOk(search(new SearchSourceBuilder().size(0).aggregation(AggregationBuilders.avg("avg_price").field("price"))));
     }
 
     public void testMultipleMetrics() {
         createTestIndex();
-        assertOk(
+        assertOk(  
             search(
                 new SearchSourceBuilder().size(0)
-                    .aggregation(AggregationBuilders.avg("avg_price").field("price"))
+                    .aggregation(AggregationBuilders.avg("avg_price").field("price"))  
                     .aggregation(AggregationBuilders.sum("total_price").field("price"))
                     .aggregation(AggregationBuilders.min("min_price").field("price"))
-                    .aggregation(AggregationBuilders.max("max_price").field("price"))
+                    .aggregation(AggregationBuilders.max("max_price").field("price"))  
             )
         );
-    }
+    }  
 
     public void testTermsBucket() {
-        createTestIndex();
+        createTestIndex();  
         assertOk(search(new SearchSourceBuilder().size(0).aggregation(new TermsAggregationBuilder("by_brand").field("brand"))));
     }
 
     public void testTermsBucketWithMetric() {
         createTestIndex();
-        assertOk(
+        assertOk(  
             search(
                 new SearchSourceBuilder().size(0)
-                    .aggregation(
+                    .aggregation(  
                         new TermsAggregationBuilder("by_brand").field("brand")
                             .subAggregation(AggregationBuilders.avg("avg_price").field("price"))
-                    )
+                    )  
             )
         );
-    }
+    }  
 
     public void testNestedBuckets() {
-        createTestIndex();
+        createTestIndex();  
         assertOk(
             search(
-                new SearchSourceBuilder().size(0)
+                new SearchSourceBuilder().size(0)  
                     .aggregation(
                         new TermsAggregationBuilder("by_brand").field("brand")
-                            .subAggregation(AggregationBuilders.sum("total").field("price"))
+                            .subAggregation(AggregationBuilders.sum("total").field("price"))  
                             .subAggregation(
                                 new TermsAggregationBuilder("by_name").field("name")
-                                    .subAggregation(AggregationBuilders.avg("avg_price").field("price"))
+                                    .subAggregation(AggregationBuilders.avg("avg_price").field("price"))  
                             )
                     )
-            )
+            )  
         );
     }
 
     public void testAggsWithHits() {
         createTestIndex();
-        // size > 0 with aggs produces both HITS + AGGREGATION plans
+        // size > 0 with aggs produces both HITS + AGGREGATION plans  
         assertOk(search(new SearchSourceBuilder().size(10).aggregation(AggregationBuilders.avg("avg_price").field("price"))));
     }
 
     public void testTermsBucketOrderByKeyAsc() {
         createTestIndex();
-        assertOk(
+        assertOk(  
             search(
                 new SearchSourceBuilder().size(0)
-                    .aggregation(new TermsAggregationBuilder("by_brand").field("brand").order(BucketOrder.key(true)))
+                    .aggregation(new TermsAggregationBuilder("by_brand").field("brand").order(BucketOrder.key(true)))  
             )
         );
-    }
+    }  
 
     public void testTermsBucketOrderByKeyDesc() {
-        createTestIndex();
+        createTestIndex();  
         assertOk(
             search(
-                new SearchSourceBuilder().size(0)
+                new SearchSourceBuilder().size(0)  
                     .aggregation(new TermsAggregationBuilder("by_brand").field("brand").order(BucketOrder.key(false)))
             )
-        );
+        );  
     }
 
-    public void testTermsBucketOrderByCountAsc() {
+    public void testTermsBucketOrderByCountAsc() {  
         createTestIndex();
         assertOk(
-            search(
+            search(  
                 new SearchSourceBuilder().size(0)
                     .aggregation(new TermsAggregationBuilder("by_brand").field("brand").order(BucketOrder.count(true)))
-            )
+            )  
         );
     }
 
     public void testTermsBucketOrderByMetric() {
         createTestIndex();
-        assertOk(
+        assertOk(  
             search(
                 new SearchSourceBuilder().size(0)
-                    .aggregation(
+                    .aggregation(  
                         new TermsAggregationBuilder("by_brand").field("brand")
                             .order(BucketOrder.aggregation("avg_price", false))
-                            .subAggregation(AggregationBuilders.avg("avg_price").field("price"))
+                            .subAggregation(AggregationBuilders.avg("avg_price").field("price"))  
                     )
             )
-        );
+        );  
     }
 }

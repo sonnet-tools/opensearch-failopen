@@ -1,49 +1,49 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.search.aggregations.bucket.terms;
 
 import org.opensearch.common.CheckedBiConsumer;
 import org.opensearch.common.CheckedFunction;
-import org.opensearch.core.xcontent.ObjectParser;
+import org.opensearch.core.xcontent.ObjectParser;  
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.core.xcontent.XContentParserUtils;
+import org.opensearch.core.xcontent.XContentParserUtils;  
 import org.opensearch.search.aggregations.Aggregation;
 import org.opensearch.search.aggregations.Aggregations;
-import org.opensearch.search.aggregations.ParsedMultiBucketAggregation;
+import org.opensearch.search.aggregations.ParsedMultiBucketAggregation;  
 
 import java.io.IOException;
-import java.util.ArrayList;
+import java.util.ArrayList;  
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -52,67 +52,67 @@ import static org.opensearch.search.aggregations.bucket.terms.InternalTerms.SUM_
 
 /**
  * A terms result parsed between nodes
- *
+ *  
  * @opensearch.internal
  */
-public abstract class ParsedTerms extends ParsedMultiBucketAggregation<ParsedTerms.ParsedBucket> implements Terms {
+public abstract class ParsedTerms extends ParsedMultiBucketAggregation<ParsedTerms.ParsedBucket> implements Terms {  
 
     protected long docCountErrorUpperBound;
-    protected long sumOtherDocCount;
+    protected long sumOtherDocCount;  
 
     @Override
-    public long getDocCountError() {
+    public long getDocCountError() {  
         return docCountErrorUpperBound;
     }
 
     @Override
     public long getSumOfOtherDocCounts() {
-        return sumOtherDocCount;
+        return sumOtherDocCount;  
     }
 
-    @Override
+    @Override  
     public List<? extends Terms.Bucket> getBuckets() {
         return buckets;
-    }
+    }  
 
     @Override
-    public Terms.Bucket getBucketByKey(String term) {
+    public Terms.Bucket getBucketByKey(String term) {  
         for (Terms.Bucket bucket : getBuckets()) {
             if (bucket.getKeyAsString().equals(term)) {
-                return bucket;
+                return bucket;  
             }
         }
-        return null;
+        return null;  
     }
 
-    @Override
+    @Override  
     protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
         builder.field(DOC_COUNT_ERROR_UPPER_BOUND_FIELD_NAME.getPreferredName(), getDocCountError());
-        builder.field(SUM_OF_OTHER_DOC_COUNTS.getPreferredName(), getSumOfOtherDocCounts());
+        builder.field(SUM_OF_OTHER_DOC_COUNTS.getPreferredName(), getSumOfOtherDocCounts());  
         builder.startArray(CommonFields.BUCKETS.getPreferredName());
         for (Terms.Bucket bucket : getBuckets()) {
-            bucket.toXContent(builder, params);
+            bucket.toXContent(builder, params);  
         }
         builder.endArray();
-        return builder;
+        return builder;  
     }
 
-    static void declareParsedTermsFields(
+    static void declareParsedTermsFields(  
         final ObjectParser<? extends ParsedTerms, Void> objectParser,
         final CheckedFunction<XContentParser, ParsedBucket, IOException> bucketParser
-    ) {
+    ) {  
         declareMultiBucketAggregationFields(objectParser, bucketParser::apply, bucketParser::apply);
         objectParser.declareLong(
-            (parsedTerms, value) -> parsedTerms.docCountErrorUpperBound = value,
+            (parsedTerms, value) -> parsedTerms.docCountErrorUpperBound = value,  
             DOC_COUNT_ERROR_UPPER_BOUND_FIELD_NAME
         );
-        objectParser.declareLong((parsedTerms, value) -> parsedTerms.sumOtherDocCount = value, SUM_OF_OTHER_DOC_COUNTS);
+        objectParser.declareLong((parsedTerms, value) -> parsedTerms.sumOtherDocCount = value, SUM_OF_OTHER_DOC_COUNTS);  
     }
 
-    /**
+    /**  
      * Base parsed bucket
      *
-     * @opensearch.internal
+     * @opensearch.internal  
      */
     public abstract static class ParsedBucket extends ParsedMultiBucketAggregation.ParsedBucket implements Terms.Bucket {
 
@@ -121,25 +121,25 @@ public abstract class ParsedTerms extends ParsedMultiBucketAggregation<ParsedTer
 
         @Override
         public long getDocCountError() {
-            return docCountError;
+            return docCountError;  
         }
 
-        @Override
+        @Override  
         public final XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
             builder.startObject();
-            keyToXContent(builder);
+            keyToXContent(builder);  
             builder.field(CommonFields.DOC_COUNT.getPreferredName(), getDocCount());
             if (showDocCountError) {
-                builder.field(DOC_COUNT_ERROR_UPPER_BOUND_FIELD_NAME.getPreferredName(), getDocCountError());
+                builder.field(DOC_COUNT_ERROR_UPPER_BOUND_FIELD_NAME.getPreferredName(), getDocCountError());  
             }
             getAggregations().toXContentInternal(builder, params);
-            builder.endObject();
+            builder.endObject();  
             return builder;
         }
 
         static <B extends ParsedBucket> B parseTermsBucketXContent(
             final XContentParser parser,
-            final Supplier<B> bucketSupplier,
+            final Supplier<B> bucketSupplier,  
             final CheckedBiConsumer<XContentParser, B, IOException> keyConsumer
         ) throws IOException {
 
@@ -148,34 +148,34 @@ public abstract class ParsedTerms extends ParsedMultiBucketAggregation<ParsedTer
 
             XContentParser.Token token;
             String currentFieldName = parser.currentName();
-            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
                 // field value could be list, e.g. multi_terms aggregation.
                 if ((token.isValue() || token == XContentParser.Token.START_ARRAY)
-                    && CommonFields.KEY.getPreferredName().equals(currentFieldName)) {
+                    && CommonFields.KEY.getPreferredName().equals(currentFieldName)) {  
                     keyConsumer.accept(parser, bucket);
                 }
-                if (token == XContentParser.Token.FIELD_NAME) {
+                if (token == XContentParser.Token.FIELD_NAME) {  
                     currentFieldName = parser.currentName();
                 } else if (token.isValue()) {
-                    if (CommonFields.KEY_AS_STRING.getPreferredName().equals(currentFieldName)) {
+                    if (CommonFields.KEY_AS_STRING.getPreferredName().equals(currentFieldName)) {  
                         bucket.setKeyAsString(parser.text());
                     } else if (CommonFields.DOC_COUNT.getPreferredName().equals(currentFieldName)) {
-                        bucket.setDocCount(parser.longValue());
+                        bucket.setDocCount(parser.longValue());  
                     } else if (DOC_COUNT_ERROR_UPPER_BOUND_FIELD_NAME.getPreferredName().equals(currentFieldName)) {
                         bucket.docCountError = parser.longValue();
-                        bucket.showDocCountError = true;
+                        bucket.showDocCountError = true;  
                     }
                 } else if (token == XContentParser.Token.START_OBJECT) {
-                    XContentParserUtils.parseTypedKeysObject(
+                    XContentParserUtils.parseTypedKeysObject(  
                         parser,
                         Aggregation.TYPED_KEYS_DELIMITER,
-                        Aggregation.class,
+                        Aggregation.class,  
                         aggregations::add
                     );
-                }
+                }  
             }
             bucket.setAggregations(new Aggregations(aggregations));
-            return bucket;
+            return bucket;  
         }
     }
-}
+}  

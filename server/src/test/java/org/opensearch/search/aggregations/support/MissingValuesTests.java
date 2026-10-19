@@ -1,34 +1,34 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.search.aggregations.support;
 
@@ -37,388 +37,388 @@ import com.carrotsearch.randomizedtesting.generators.RandomStrings;
 
 import org.apache.lucene.index.SortedNumericDocValues;
 import org.apache.lucene.index.SortedSetDocValues;
-import org.apache.lucene.tests.util.TestUtil;
+import org.apache.lucene.tests.util.TestUtil;  
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.common.geo.GeoPoint;
-import org.opensearch.index.fielddata.AbstractSortedNumericDocValues;
+import org.opensearch.index.fielddata.AbstractSortedNumericDocValues;  
 import org.opensearch.index.fielddata.AbstractSortedSetDocValues;
 import org.opensearch.index.fielddata.MultiGeoPointValues;
-import org.opensearch.index.fielddata.SortedBinaryDocValues;
+import org.opensearch.index.fielddata.SortedBinaryDocValues;  
 import org.opensearch.index.fielddata.SortedNumericDoubleValues;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.HashSet;
+import java.util.HashSet;  
 import java.util.Set;
 import java.util.function.LongUnaryOperator;
 
 public class MissingValuesTests extends OpenSearchTestCase {
 
-    public void testMissingBytes() throws IOException {
+    public void testMissingBytes() throws IOException {  
         final int numDocs = TestUtil.nextInt(random(), 1, 100);
         final BytesRef[][] values = new BytesRef[numDocs][];
-        for (int i = 0; i < numDocs; ++i) {
+        for (int i = 0; i < numDocs; ++i) {  
             values[i] = new BytesRef[random().nextInt(4)];
             for (int j = 0; j < values[i].length; ++j) {
-                values[i][j] = new BytesRef(RandomStrings.randomAsciiOfLength(random(), 2));
+                values[i][j] = new BytesRef(RandomStrings.randomAsciiOfLength(random(), 2));  
             }
             Arrays.sort(values[i]);
-        }
+        }  
         SortedBinaryDocValues asBinaryValues = new SortedBinaryDocValues() {
 
-            int doc = -1;
+            int doc = -1;  
             int i;
 
-            @Override
+            @Override  
             public BytesRef nextValue() {
                 return values[doc][i++];
-            }
+            }  
 
             @Override
-            public boolean advanceExact(int docId) {
+            public boolean advanceExact(int docId) {  
                 doc = docId;
                 i = 0;
-                return values[doc].length > 0;
+                return values[doc].length > 0;  
             }
 
-            @Override
+            @Override  
             public int docValueCount() {
                 return values[doc].length;
-            }
+            }  
         };
         final BytesRef missing = new BytesRef(RandomStrings.randomAsciiOfLength(random(), 2));
-        SortedBinaryDocValues withMissingReplaced = MissingValues.replaceMissing(asBinaryValues, missing);
+        SortedBinaryDocValues withMissingReplaced = MissingValues.replaceMissing(asBinaryValues, missing);  
         for (int i = 0; i < numDocs; ++i) {
             assertTrue(withMissingReplaced.advanceExact(i));
-            if (values[i].length > 0) {
+            if (values[i].length > 0) {  
                 assertEquals(values[i].length, withMissingReplaced.docValueCount());
                 for (int j = 0; j < values[i].length; ++j) {
-                    assertEquals(values[i][j], withMissingReplaced.nextValue());
+                    assertEquals(values[i][j], withMissingReplaced.nextValue());  
                 }
             } else {
-                assertEquals(1, withMissingReplaced.docValueCount());
+                assertEquals(1, withMissingReplaced.docValueCount());  
                 assertEquals(missing, withMissingReplaced.nextValue());
             }
-        }
+        }  
     }
 
-    public void testMissingOrds() throws IOException {
+    public void testMissingOrds() throws IOException {  
         final int numDocs = TestUtil.nextInt(random(), 1, 100);
         final int numOrds = TestUtil.nextInt(random(), 1, 10);
 
         final Set<BytesRef> valueSet = new HashSet<>();
         while (valueSet.size() < numOrds) {
-            valueSet.add(new BytesRef(RandomStrings.randomAsciiOfLength(random(), 5)));
+            valueSet.add(new BytesRef(RandomStrings.randomAsciiOfLength(random(), 5)));  
         }
         final BytesRef[] values = valueSet.toArray(new BytesRef[numOrds]);
-        Arrays.sort(values);
+        Arrays.sort(values);  
 
         final int[][] ords = new int[numDocs][];
-        for (int i = 0; i < numDocs; ++i) {
+        for (int i = 0; i < numDocs; ++i) {  
             ords[i] = new int[random().nextInt(numOrds)];
             for (int j = 0; j < ords[i].length; ++j) {
-                ords[i][j] = j;
+                ords[i][j] = j;  
             }
             for (int j = ords[i].length - 1; j >= 0; --j) {
-                final int maxOrd = j == ords[i].length - 1 ? numOrds : ords[i][j + 1];
+                final int maxOrd = j == ords[i].length - 1 ? numOrds : ords[i][j + 1];  
                 ords[i][j] = TestUtil.nextInt(random(), ords[i][j], maxOrd - 1);
             }
-        }
+        }  
         SortedSetDocValues asSortedSet = new AbstractSortedSetDocValues() {
 
-            int doc = -1;
+            int doc = -1;  
             int i;
 
-            @Override
+            @Override  
             public boolean advanceExact(int docID) {
                 doc = docID;
-                i = 0;
+                i = 0;  
                 return ords[doc].length > 0;
             }
 
             @Override
             public BytesRef lookupOrd(long ord) {
-                return values[(int) ord];
+                return values[(int) ord];  
             }
 
-            @Override
+            @Override  
             public long getValueCount() {
                 return values.length;
-            }
+            }  
 
             @Override
-            public long nextOrd() {
+            public long nextOrd() {  
                 if (i < ords[doc].length) {
                     return ords[doc][i++];
-                } else {
+                } else {  
                     throw new IllegalStateException();
                 }
-            }
+            }  
 
             @Override
-            public int docValueCount() {
+            public int docValueCount() {  
                 return ords[doc].length;
             }
-        };
+        };  
 
         final BytesRef existingMissing = RandomPicks.randomFrom(random(), values);
-        final BytesRef missingMissing = new BytesRef(RandomStrings.randomAsciiOfLength(random(), 5));
+        final BytesRef missingMissing = new BytesRef(RandomStrings.randomAsciiOfLength(random(), 5));  
 
         for (BytesRef missing : Arrays.asList(existingMissing, missingMissing)) {
-            SortedSetDocValues withMissingReplaced = MissingValues.replaceMissing(asSortedSet, missing);
+            SortedSetDocValues withMissingReplaced = MissingValues.replaceMissing(asSortedSet, missing);  
             if (valueSet.contains(missing)) {
                 assertEquals(values.length, withMissingReplaced.getValueCount());
-            } else {
+            } else {  
                 assertEquals(values.length + 1, withMissingReplaced.getValueCount());
             }
-            for (int i = 0; i < numDocs; ++i) {
+            for (int i = 0; i < numDocs; ++i) {  
                 assertTrue(withMissingReplaced.advanceExact(i));
                 if (ords[i].length > 0) {
-                    assertEquals(ords[i].length, withMissingReplaced.docValueCount());
+                    assertEquals(ords[i].length, withMissingReplaced.docValueCount());  
                     for (int ord : ords[i]) {
                         assertEquals(values[ord], withMissingReplaced.lookupOrd(withMissingReplaced.nextOrd()));
-                    }
+                    }  
                 } else {
                     assertEquals(1, withMissingReplaced.docValueCount());
-                    assertEquals(missing, withMissingReplaced.lookupOrd(withMissingReplaced.nextOrd()));
+                    assertEquals(missing, withMissingReplaced.lookupOrd(withMissingReplaced.nextOrd()));  
                 }
             }
-        }
+        }  
     }
 
-    public void testGlobalMapping() throws IOException {
+    public void testGlobalMapping() throws IOException {  
         final int numOrds = TestUtil.nextInt(random(), 1, 10);
         final int numGlobalOrds = TestUtil.nextInt(random(), numOrds, numOrds + 3);
 
         final Set<BytesRef> valueSet = new HashSet<>();
         while (valueSet.size() < numOrds) {
-            valueSet.add(new BytesRef(RandomStrings.randomAsciiLettersOfLength(random(), 5)));
+            valueSet.add(new BytesRef(RandomStrings.randomAsciiLettersOfLength(random(), 5)));  
         }
         final BytesRef[] values = valueSet.toArray(new BytesRef[0]);
-        Arrays.sort(values);
+        Arrays.sort(values);  
 
         final Set<BytesRef> globalValueSet = new HashSet<>(valueSet);
-        while (globalValueSet.size() < numGlobalOrds) {
+        while (globalValueSet.size() < numGlobalOrds) {  
             globalValueSet.add(new BytesRef(RandomStrings.randomAsciiLettersOfLength(random(), 5)));
         }
-        final BytesRef[] globalValues = globalValueSet.toArray(new BytesRef[0]);
+        final BytesRef[] globalValues = globalValueSet.toArray(new BytesRef[0]);  
         Arrays.sort(globalValues);
 
-        // exists in the current segment
+        // exists in the current segment  
         BytesRef missing = RandomPicks.randomFrom(random(), values);
         doTestGlobalMapping(values, globalValues, missing);
 
         // missing in all segments
         do {
-            missing = new BytesRef(RandomStrings.randomAsciiLettersOfLength(random(), 5));
+            missing = new BytesRef(RandomStrings.randomAsciiLettersOfLength(random(), 5));  
         } while (globalValueSet.contains(missing));
         doTestGlobalMapping(values, globalValues, missing);
 
         if (globalValueSet.size() > valueSet.size()) {
             // exists in other segments only
-            Set<BytesRef> other = new HashSet<>(globalValueSet);
+            Set<BytesRef> other = new HashSet<>(globalValueSet);  
             other.removeAll(valueSet);
             missing = RandomPicks.randomFrom(random(), other.toArray(new BytesRef[0]));
-            doTestGlobalMapping(values, globalValues, missing);
+            doTestGlobalMapping(values, globalValues, missing);  
         }
     }
 
     private void doTestGlobalMapping(BytesRef[] values, BytesRef[] globalValues, BytesRef missing) throws IOException {
         LongUnaryOperator segmentToGlobalOrd = segmentOrd -> Arrays.binarySearch(globalValues, values[Math.toIntExact(segmentOrd)]);
-        SortedSetDocValues sortedValues = asOrds(values);
+        SortedSetDocValues sortedValues = asOrds(values);  
         SortedSetDocValues sortedGlobalValues = asOrds(globalValues);
 
-        LongUnaryOperator withMissingSegmentToGlobalOrd = MissingValues.getGlobalMapping(
+        LongUnaryOperator withMissingSegmentToGlobalOrd = MissingValues.getGlobalMapping(  
             sortedValues,
             sortedGlobalValues,
-            segmentToGlobalOrd,
+            segmentToGlobalOrd,  
             missing
         );
-        SortedSetDocValues withMissingValues = MissingValues.replaceMissing(sortedValues, missing);
+        SortedSetDocValues withMissingValues = MissingValues.replaceMissing(sortedValues, missing);  
         SortedSetDocValues withMissingGlobalValues = MissingValues.replaceMissing(sortedGlobalValues, missing);
 
-        for (long segmentOrd = 0; segmentOrd < withMissingValues.getValueCount(); ++segmentOrd) {
+        for (long segmentOrd = 0; segmentOrd < withMissingValues.getValueCount(); ++segmentOrd) {  
             long expectedGlobalOrd = withMissingSegmentToGlobalOrd.applyAsLong(segmentOrd);
             assertEquals(withMissingValues.lookupOrd(segmentOrd), withMissingGlobalValues.lookupOrd(expectedGlobalOrd));
-        }
+        }  
     }
 
-    private static SortedSetDocValues asOrds(BytesRef[] values) {
+    private static SortedSetDocValues asOrds(BytesRef[] values) {  
         return new AbstractSortedSetDocValues() {
 
-            @Override
+            @Override  
             public boolean advanceExact(int target) throws IOException {
                 throw new UnsupportedOperationException();
-            }
+            }  
 
             @Override
-            public long nextOrd() throws IOException {
+            public long nextOrd() throws IOException {  
                 throw new UnsupportedOperationException();
             }
 
             @Override
             public BytesRef lookupOrd(long ord) throws IOException {
-                return values[Math.toIntExact(ord)];
+                return values[Math.toIntExact(ord)];  
             }
 
-            @Override
+            @Override  
             public int docValueCount() {
                 throw new UnsupportedOperationException();
-            }
+            }  
 
             @Override
-            public long getValueCount() {
+            public long getValueCount() {  
                 return values.length;
             }
-        };
+        };  
     }
 
-    public void testMissingLongs() throws IOException {
+    public void testMissingLongs() throws IOException {  
         final int numDocs = TestUtil.nextInt(random(), 1, 100);
         final int[][] values = new int[numDocs][];
-        for (int i = 0; i < numDocs; ++i) {
+        for (int i = 0; i < numDocs; ++i) {  
             values[i] = new int[random().nextInt(4)];
             for (int j = 0; j < values[i].length; ++j) {
-                values[i][j] = randomInt();
+                values[i][j] = randomInt();  
             }
             Arrays.sort(values[i]);
-        }
+        }  
         SortedNumericDocValues asNumericValues = new AbstractSortedNumericDocValues() {
 
-            int doc = -1;
+            int doc = -1;  
             int i;
 
-            @Override
+            @Override  
             public long nextValue() {
                 return values[doc][i++];
-            }
+            }  
 
             @Override
-            public boolean advanceExact(int docId) {
+            public boolean advanceExact(int docId) {  
                 doc = docId;
                 i = 0;
-                return values[doc].length > 0;
+                return values[doc].length > 0;  
             }
 
-            @Override
+            @Override  
             public int docValueCount() {
                 return values[doc].length;
-            }
+            }  
         };
         final long missing = randomInt();
-        SortedNumericDocValues withMissingReplaced = MissingValues.replaceMissing(asNumericValues, missing);
+        SortedNumericDocValues withMissingReplaced = MissingValues.replaceMissing(asNumericValues, missing);  
         for (int i = 0; i < numDocs; ++i) {
             assertTrue(withMissingReplaced.advanceExact(i));
-            if (values[i].length > 0) {
+            if (values[i].length > 0) {  
                 assertEquals(values[i].length, withMissingReplaced.docValueCount());
                 for (int j = 0; j < values[i].length; ++j) {
-                    assertEquals(values[i][j], withMissingReplaced.nextValue());
+                    assertEquals(values[i][j], withMissingReplaced.nextValue());  
                 }
             } else {
-                assertEquals(1, withMissingReplaced.docValueCount());
+                assertEquals(1, withMissingReplaced.docValueCount());  
                 assertEquals(missing, withMissingReplaced.nextValue());
             }
-        }
+        }  
     }
 
-    public void testMissingDoubles() throws IOException {
+    public void testMissingDoubles() throws IOException {  
         final int numDocs = TestUtil.nextInt(random(), 1, 100);
         final double[][] values = new double[numDocs][];
-        for (int i = 0; i < numDocs; ++i) {
+        for (int i = 0; i < numDocs; ++i) {  
             values[i] = new double[random().nextInt(4)];
             for (int j = 0; j < values[i].length; ++j) {
-                values[i][j] = randomDouble();
+                values[i][j] = randomDouble();  
             }
             Arrays.sort(values[i]);
-        }
+        }  
         SortedNumericDoubleValues asNumericValues = new SortedNumericDoubleValues() {
 
-            int doc = -1;
+            int doc = -1;  
             int i;
 
-            @Override
+            @Override  
             public double nextValue() {
                 return values[doc][i++];
-            }
+            }  
 
             @Override
-            public boolean advanceExact(int docId) {
+            public boolean advanceExact(int docId) {  
                 doc = docId;
                 i = 0;
-                return true;
+                return true;  
             }
 
-            @Override
+            @Override  
             public int docValueCount() {
                 return values[doc].length;
-            }
+            }  
         };
         final long missing = randomInt();
-        SortedNumericDoubleValues withMissingReplaced = MissingValues.replaceMissing(asNumericValues, missing);
+        SortedNumericDoubleValues withMissingReplaced = MissingValues.replaceMissing(asNumericValues, missing);  
         for (int i = 0; i < numDocs; ++i) {
             assertTrue(withMissingReplaced.advanceExact(i));
-            if (values[i].length > 0) {
+            if (values[i].length > 0) {  
                 assertEquals(values[i].length, withMissingReplaced.docValueCount());
                 for (int j = 0; j < values[i].length; ++j) {
-                    assertEquals(values[i][j], withMissingReplaced.nextValue(), 0);
+                    assertEquals(values[i][j], withMissingReplaced.nextValue(), 0);  
                 }
             } else {
-                assertEquals(1, withMissingReplaced.docValueCount());
+                assertEquals(1, withMissingReplaced.docValueCount());  
                 assertEquals(missing, withMissingReplaced.nextValue(), 0);
             }
-        }
+        }  
     }
 
-    public void testMissingGeoPoints() throws IOException {
+    public void testMissingGeoPoints() throws IOException {  
         final int numDocs = TestUtil.nextInt(random(), 1, 100);
         final GeoPoint[][] values = new GeoPoint[numDocs][];
-        for (int i = 0; i < numDocs; ++i) {
+        for (int i = 0; i < numDocs; ++i) {  
             values[i] = new GeoPoint[random().nextInt(4)];
             for (int j = 0; j < values[i].length; ++j) {
-                values[i][j] = new GeoPoint(randomDouble() * 90, randomDouble() * 180);
+                values[i][j] = new GeoPoint(randomDouble() * 90, randomDouble() * 180);  
             }
         }
-        MultiGeoPointValues asGeoValues = new MultiGeoPointValues() {
+        MultiGeoPointValues asGeoValues = new MultiGeoPointValues() {  
 
             int doc = -1;
-            int i;
+            int i;  
 
             @Override
-            public GeoPoint nextValue() {
+            public GeoPoint nextValue() {  
                 return values[doc][i++];
             }
 
             @Override
             public boolean advanceExact(int docId) {
-                doc = docId;
+                doc = docId;  
                 i = 0;
                 return values[doc].length > 0;
-            }
+            }  
 
             @Override
-            public int docValueCount() {
+            public int docValueCount() {  
                 return values[doc].length;
             }
-        };
+        };  
         final GeoPoint missing = new GeoPoint(randomDouble() * 90, randomDouble() * 180);
         MultiGeoPointValues withMissingReplaced = MissingValues.replaceMissing(asGeoValues, missing);
-        for (int i = 0; i < numDocs; ++i) {
+        for (int i = 0; i < numDocs; ++i) {  
             assertTrue(withMissingReplaced.advanceExact(i));
             if (values[i].length > 0) {
-                assertEquals(values[i].length, withMissingReplaced.docValueCount());
+                assertEquals(values[i].length, withMissingReplaced.docValueCount());  
                 for (int j = 0; j < values[i].length; ++j) {
                     assertEquals(values[i][j], withMissingReplaced.nextValue());
-                }
+                }  
             } else {
                 assertEquals(1, withMissingReplaced.docValueCount());
-                assertEquals(missing, withMissingReplaced.nextValue());
+                assertEquals(missing, withMissingReplaced.nextValue());  
             }
         }
-    }
+    }  
 
     public void testFloatingPointDetection() {
-        assertFalse(MissingValues.replaceMissing(ValuesSource.Numeric.EMPTY, 3).isFloatingPoint());
+        assertFalse(MissingValues.replaceMissing(ValuesSource.Numeric.EMPTY, 3).isFloatingPoint());  
         assertTrue(MissingValues.replaceMissing(ValuesSource.Numeric.EMPTY, 3.5).isFloatingPoint());
     }
-}
+}  

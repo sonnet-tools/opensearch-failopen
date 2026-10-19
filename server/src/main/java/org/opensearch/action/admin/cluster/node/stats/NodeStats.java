@@ -1,76 +1,76 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.action.admin.cluster.node.stats;
 
 import org.opensearch.Version;
 import org.opensearch.action.ActionConcurrencyLimiterStats;
-import org.opensearch.action.support.nodes.BaseNodeResponse;
+import org.opensearch.action.support.nodes.BaseNodeResponse;  
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.cluster.routing.WeightedRoutingStats;
+import org.opensearch.cluster.routing.WeightedRoutingStats;  
 import org.opensearch.cluster.service.ClusterManagerThrottlingStats;
 import org.opensearch.common.Nullable;
-import org.opensearch.common.cache.service.NodeCacheStats;
+import org.opensearch.common.cache.service.NodeCacheStats;  
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.indices.breaker.AllCircuitBreakerStats;
+import org.opensearch.core.indices.breaker.AllCircuitBreakerStats;  
 import org.opensearch.core.xcontent.ToXContentFragment;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.discovery.DiscoveryStats;
+import org.opensearch.discovery.DiscoveryStats;  
 import org.opensearch.http.HttpStats;
 import org.opensearch.index.SegmentReplicationRejectionStats;
-import org.opensearch.index.stats.IndexingPressureStats;
+import org.opensearch.index.stats.IndexingPressureStats;  
 import org.opensearch.index.stats.ShardIndexingPressureStats;
 import org.opensearch.index.store.remote.filecache.AggregateFileCacheStats;
-import org.opensearch.indices.NodeIndicesStats;
+import org.opensearch.indices.NodeIndicesStats;  
 import org.opensearch.ingest.IngestStats;
 import org.opensearch.monitor.fs.FsInfo;
-import org.opensearch.monitor.jvm.JvmStats;
+import org.opensearch.monitor.jvm.JvmStats;  
 import org.opensearch.monitor.os.OsStats;
 import org.opensearch.monitor.process.ProcessStats;
-import org.opensearch.node.AdaptiveSelectionStats;
+import org.opensearch.node.AdaptiveSelectionStats;  
 import org.opensearch.node.NodesResourceUsageStats;
 import org.opensearch.node.remotestore.RemoteStoreNodeStats;
-import org.opensearch.plugin.stats.AnalyticsBackendNativeMemoryStats;
+import org.opensearch.plugin.stats.AnalyticsBackendNativeMemoryStats;  
 import org.opensearch.plugin.stats.NativeAllocatorPoolStats;
 import org.opensearch.plugins.BlockCacheStats;
-import org.opensearch.ratelimitting.admissioncontrol.stats.AdmissionControlStats;
+import org.opensearch.ratelimitting.admissioncontrol.stats.AdmissionControlStats;  
 import org.opensearch.repositories.RepositoriesStats;
 import org.opensearch.script.ScriptCacheStats;
-import org.opensearch.script.ScriptStats;
+import org.opensearch.script.ScriptStats;  
 import org.opensearch.search.backpressure.stats.SearchBackpressureStats;
 import org.opensearch.search.pipeline.SearchPipelineStats;
-import org.opensearch.tasks.TaskCancellationStats;
+import org.opensearch.tasks.TaskCancellationStats;  
 import org.opensearch.threadpool.ThreadPoolStats;
 import org.opensearch.transport.TransportStats;
 
@@ -79,10 +79,10 @@ import java.util.Map;
 
 /**
  * Node statistics (dynamic, changes depending on when created).
- *
+ *  
  * @opensearch.internal
  */
-public class NodeStats extends BaseNodeResponse implements ToXContentFragment {
+public class NodeStats extends BaseNodeResponse implements ToXContentFragment {  
 
     private long timestamp;
 
@@ -151,517 +151,517 @@ public class NodeStats extends BaseNodeResponse implements ToXContentFragment {
 
     /** Populated only when ?detailed is requested: FileCache-only stats (no block cache contribution). */
     @Nullable
-    private AggregateFileCacheStats fileCacheOnlyStats;
+    private AggregateFileCacheStats fileCacheOnlyStats;  
 
     /** Populated only when ?detailed is requested: combined rollup across all BlockCache implementations. */
-    @Nullable
+    @Nullable  
     private BlockCacheStats blockCacheOnlyStats;
 
-    @Nullable
+    @Nullable  
     private TaskCancellationStats taskCancellationStats;
 
-    @Nullable
+    @Nullable  
     private SearchPipelineStats searchPipelineStats;
 
-    @Nullable
+    @Nullable  
     private NodesResourceUsageStats resourceUsageStats;
 
-    @Nullable
+    @Nullable  
     private RepositoriesStats repositoriesStats;
 
-    @Nullable
+    @Nullable  
     private AdmissionControlStats admissionControlStats;
 
-    @Nullable
+    @Nullable  
     private NodeCacheStats nodeCacheStats;
 
-    @Nullable
+    @Nullable  
     private RemoteStoreNodeStats remoteStoreNodeStats;
 
-    @Nullable
+    @Nullable  
     private NativeAllocatorPoolStats nativeAllocatorStats;
 
-    @Nullable
+    @Nullable  
     private ActionConcurrencyLimiterStats concurrencyLimiterStats;
 
-    /**
+    /**  
      * Process-level native-memory estimate captured on the data node hosting this {@code NodeStats}.
      * Computed once in {@link org.opensearch.node.NodeService#stats} via
-     * {@code OsProbe.getProcessNativeMemoryBytes()} and serialized over the wire so the coordinator
+     * {@code OsProbe.getProcessNativeMemoryBytes()} and serialized over the wire so the coordinator  
      * renders the source node's value, not its own. {@code -1} when the probe could not read
      * {@code /proc/self/status} (non-Linux platforms or restricted environments).
-     */
+     */  
     private long totalEstimatedNativeBytes;
 
-    public NodeStats(StreamInput in) throws IOException {
+    public NodeStats(StreamInput in) throws IOException {  
         super(in);
         timestamp = in.readVLong();
-        if (in.readBoolean()) {
+        if (in.readBoolean()) {  
             indices = new NodeIndicesStats(in);
         }
-        os = in.readOptionalWriteable(OsStats::new);
+        os = in.readOptionalWriteable(OsStats::new);  
         process = in.readOptionalWriteable(ProcessStats::new);
         jvm = in.readOptionalWriteable(JvmStats::new);
-        threadPool = in.readOptionalWriteable(ThreadPoolStats::new);
+        threadPool = in.readOptionalWriteable(ThreadPoolStats::new);  
         fs = in.readOptionalWriteable(FsInfo::new);
         transport = in.readOptionalWriteable(TransportStats::new);
-        http = in.readOptionalWriteable(HttpStats::new);
+        http = in.readOptionalWriteable(HttpStats::new);  
         breaker = in.readOptionalWriteable(AllCircuitBreakerStats::new);
         scriptStats = in.readOptionalWriteable(ScriptStats::new);
-        discoveryStats = in.readOptionalWriteable(DiscoveryStats::new);
+        discoveryStats = in.readOptionalWriteable(DiscoveryStats::new);  
         ingestStats = in.readOptionalWriteable(IngestStats::new);
         adaptiveSelectionStats = in.readOptionalWriteable(AdaptiveSelectionStats::new);
-        scriptCacheStats = null;
+        scriptCacheStats = null;  
         if (scriptStats != null) {
             scriptCacheStats = scriptStats.toScriptCacheStats();
-        }
+        }  
         indexingPressureStats = in.readOptionalWriteable(IndexingPressureStats::new);
         shardIndexingPressureStats = in.readOptionalWriteable(ShardIndexingPressureStats::new);
 
         if (in.getVersion().onOrAfter(Version.V_2_4_0)) {
             searchBackpressureStats = in.readOptionalWriteable(SearchBackpressureStats::new);
-        } else {
+        } else {  
             searchBackpressureStats = null;
         }
 
         if (in.getVersion().onOrAfter(Version.V_2_6_0)) {
             clusterManagerThrottlingStats = in.readOptionalWriteable(ClusterManagerThrottlingStats::new);
-        } else {
+        } else {  
             clusterManagerThrottlingStats = null;
         }
-        if (in.getVersion().onOrAfter(Version.V_2_6_0)) {
+        if (in.getVersion().onOrAfter(Version.V_2_6_0)) {  
             weightedRoutingStats = in.readOptionalWriteable(WeightedRoutingStats::new);
         } else {
-            weightedRoutingStats = null;
+            weightedRoutingStats = null;  
         }
         if (in.getVersion().onOrAfter(Version.V_2_7_0)) {
-            fileCacheStats = in.readOptionalWriteable(AggregateFileCacheStats::new);
+            fileCacheStats = in.readOptionalWriteable(AggregateFileCacheStats::new);  
         } else {
             fileCacheStats = null;
-        }
+        }  
         if (in.getVersion().onOrAfter(Version.V_3_7_0)) {
             fileCacheOnlyStats = in.readOptionalWriteable(AggregateFileCacheStats::new);
-            blockCacheOnlyStats = in.readOptionalWriteable(BlockCacheStats::new);
+            blockCacheOnlyStats = in.readOptionalWriteable(BlockCacheStats::new);  
         } else {
             fileCacheOnlyStats = null;
-            blockCacheOnlyStats = null;
+            blockCacheOnlyStats = null;  
         }
         if (in.getVersion().onOrAfter(Version.V_2_9_0)) {
-            taskCancellationStats = in.readOptionalWriteable(TaskCancellationStats::new);
+            taskCancellationStats = in.readOptionalWriteable(TaskCancellationStats::new);  
         } else {
             taskCancellationStats = null;
-        }
+        }  
         if (in.getVersion().onOrAfter(Version.V_2_9_0)) {
             searchPipelineStats = in.readOptionalWriteable(SearchPipelineStats::new);
-        } else {
+        } else {  
             searchPipelineStats = null;
         }
-        if (in.getVersion().onOrAfter(Version.V_2_12_0)) {
+        if (in.getVersion().onOrAfter(Version.V_2_12_0)) {  
             resourceUsageStats = in.readOptionalWriteable(NodesResourceUsageStats::new);
         } else {
-            resourceUsageStats = null;
+            resourceUsageStats = null;  
         }
         if (in.getVersion().onOrAfter(Version.V_2_12_0)) {
-            segmentReplicationRejectionStats = in.readOptionalWriteable(SegmentReplicationRejectionStats::new);
+            segmentReplicationRejectionStats = in.readOptionalWriteable(SegmentReplicationRejectionStats::new);  
         } else {
             segmentReplicationRejectionStats = null;
-        }
+        }  
         if (in.getVersion().onOrAfter(Version.V_2_12_0)) {
             repositoriesStats = in.readOptionalWriteable(RepositoriesStats::new);
-        } else {
+        } else {  
             repositoriesStats = null;
         }
-        if (in.getVersion().onOrAfter(Version.V_2_12_0)) {
+        if (in.getVersion().onOrAfter(Version.V_2_12_0)) {  
             admissionControlStats = in.readOptionalWriteable(AdmissionControlStats::new);
         } else {
-            admissionControlStats = null;
+            admissionControlStats = null;  
         }
         if (in.getVersion().onOrAfter(Version.V_2_14_0)) {
-            nodeCacheStats = in.readOptionalWriteable(NodeCacheStats::new);
+            nodeCacheStats = in.readOptionalWriteable(NodeCacheStats::new);  
         } else {
             nodeCacheStats = null;
-        }
+        }  
         if (in.getVersion().onOrAfter(Version.V_2_18_0)) {
             remoteStoreNodeStats = in.readOptionalWriteable(RemoteStoreNodeStats::new);
-        } else {
+        } else {  
             remoteStoreNodeStats = null;
         }
-        if (in.getVersion().onOrAfter(Version.V_3_8_0)) {
+        if (in.getVersion().onOrAfter(Version.V_3_8_0)) {  
             nativeAllocatorStats = in.readOptionalWriteable(NativeAllocatorPoolStats::new);
         } else if (in.getVersion().onOrAfter(Version.V_3_7_0)) {
-            // BWC: V_3_7_0 wrote old-format NativeAllocatorPoolStats (3 VLongs + pools with 4 fields); read and discard.
+            // BWC: V_3_7_0 wrote old-format NativeAllocatorPoolStats (3 VLongs + pools with 4 fields); read and discard.  
             in.readOptionalWriteable(NativeAllocatorPoolStats::readAndDiscardV3_7);
             nativeAllocatorStats = null;
-        } else {
+        } else {  
             nativeAllocatorStats = null;
         }
-        if (in.getVersion().onOrAfter(Version.V_3_7_0)) {
+        if (in.getVersion().onOrAfter(Version.V_3_7_0)) {  
             // BWC: V_3_7_0 wrote AnalyticsBackendNativeMemoryStats here; read and discard.
             in.readOptionalWriteable(AnalyticsBackendNativeMemoryStats::new);
-        }
+        }  
         if (in.getVersion().onOrAfter(Version.V_3_9_0)) {
             concurrencyLimiterStats = in.readOptionalWriteable(ActionConcurrencyLimiterStats::new);
-        } else {
+        } else {  
             concurrencyLimiterStats = null;
         }
-        if (in.getVersion().onOrAfter(Version.V_3_7_0)) {
+        if (in.getVersion().onOrAfter(Version.V_3_7_0)) {  
             totalEstimatedNativeBytes = in.readLong();
         } else {
-            totalEstimatedNativeBytes = -1L;
+            totalEstimatedNativeBytes = -1L;  
         }
     }
 
     public NodeStats(
         DiscoveryNode node,
-        long timestamp,
+        long timestamp,  
         @Nullable NodeIndicesStats indices,
         @Nullable OsStats os,
-        @Nullable ProcessStats process,
+        @Nullable ProcessStats process,  
         @Nullable JvmStats jvm,
         @Nullable ThreadPoolStats threadPool,
-        @Nullable FsInfo fs,
+        @Nullable FsInfo fs,  
         @Nullable TransportStats transport,
         @Nullable HttpStats http,
-        @Nullable AllCircuitBreakerStats breaker,
+        @Nullable AllCircuitBreakerStats breaker,  
         @Nullable ScriptStats scriptStats,
         @Nullable DiscoveryStats discoveryStats,
-        @Nullable IngestStats ingestStats,
+        @Nullable IngestStats ingestStats,  
         @Nullable AdaptiveSelectionStats adaptiveSelectionStats,
         @Nullable NodesResourceUsageStats resourceUsageStats,
-        @Nullable ScriptCacheStats scriptCacheStats,
+        @Nullable ScriptCacheStats scriptCacheStats,  
         @Nullable IndexingPressureStats indexingPressureStats,
         @Nullable ShardIndexingPressureStats shardIndexingPressureStats,
-        @Nullable SearchBackpressureStats searchBackpressureStats,
+        @Nullable SearchBackpressureStats searchBackpressureStats,  
         @Nullable ClusterManagerThrottlingStats clusterManagerThrottlingStats,
         @Nullable WeightedRoutingStats weightedRoutingStats,
-        @Nullable AggregateFileCacheStats fileCacheStats,
+        @Nullable AggregateFileCacheStats fileCacheStats,  
         @Nullable AggregateFileCacheStats fileCacheOnlyStats,
         @Nullable BlockCacheStats blockCacheOnlyStats,
-        @Nullable TaskCancellationStats taskCancellationStats,
+        @Nullable TaskCancellationStats taskCancellationStats,  
         @Nullable SearchPipelineStats searchPipelineStats,
         @Nullable SegmentReplicationRejectionStats segmentReplicationRejectionStats,
-        @Nullable RepositoriesStats repositoriesStats,
+        @Nullable RepositoriesStats repositoriesStats,  
         @Nullable AdmissionControlStats admissionControlStats,
         @Nullable NodeCacheStats nodeCacheStats,
-        @Nullable RemoteStoreNodeStats remoteStoreNodeStats,
+        @Nullable RemoteStoreNodeStats remoteStoreNodeStats,  
         @Nullable NativeAllocatorPoolStats nativeAllocatorStats,
         @Nullable ActionConcurrencyLimiterStats concurrencyLimiterStats,
-        long totalEstimatedNativeBytes
+        long totalEstimatedNativeBytes  
     ) {
         super(node);
-        this.timestamp = timestamp;
+        this.timestamp = timestamp;  
         this.indices = indices;
         this.os = os;
-        this.process = process;
+        this.process = process;  
         this.jvm = jvm;
         this.threadPool = threadPool;
-        this.fs = fs;
+        this.fs = fs;  
         this.transport = transport;
         this.http = http;
-        this.breaker = breaker;
+        this.breaker = breaker;  
         this.scriptStats = scriptStats;
         this.discoveryStats = discoveryStats;
-        this.ingestStats = ingestStats;
+        this.ingestStats = ingestStats;  
         this.adaptiveSelectionStats = adaptiveSelectionStats;
         this.resourceUsageStats = resourceUsageStats;
-        this.scriptCacheStats = scriptCacheStats;
+        this.scriptCacheStats = scriptCacheStats;  
         this.indexingPressureStats = indexingPressureStats;
         this.shardIndexingPressureStats = shardIndexingPressureStats;
-        this.searchBackpressureStats = searchBackpressureStats;
+        this.searchBackpressureStats = searchBackpressureStats;  
         this.clusterManagerThrottlingStats = clusterManagerThrottlingStats;
         this.weightedRoutingStats = weightedRoutingStats;
-        this.fileCacheStats = fileCacheStats;
+        this.fileCacheStats = fileCacheStats;  
         this.fileCacheOnlyStats = fileCacheOnlyStats;
         this.blockCacheOnlyStats = blockCacheOnlyStats;
-        this.taskCancellationStats = taskCancellationStats;
+        this.taskCancellationStats = taskCancellationStats;  
         this.searchPipelineStats = searchPipelineStats;
         this.segmentReplicationRejectionStats = segmentReplicationRejectionStats;
-        this.repositoriesStats = repositoriesStats;
+        this.repositoriesStats = repositoriesStats;  
         this.admissionControlStats = admissionControlStats;
         this.nodeCacheStats = nodeCacheStats;
-        this.remoteStoreNodeStats = remoteStoreNodeStats;
+        this.remoteStoreNodeStats = remoteStoreNodeStats;  
         this.nativeAllocatorStats = nativeAllocatorStats;
         this.concurrencyLimiterStats = concurrencyLimiterStats;
-        this.totalEstimatedNativeBytes = totalEstimatedNativeBytes;
+        this.totalEstimatedNativeBytes = totalEstimatedNativeBytes;  
     }
 
-    public long getTimestamp() {
+    public long getTimestamp() {  
         return this.timestamp;
     }
 
     @Nullable
     public String getHostname() {
-        return getNode().getHostName();
+        return getNode().getHostName();  
     }
 
-    /**
+    /**  
      * Indices level stats.
      */
-    @Nullable
+    @Nullable  
     public NodeIndicesStats getIndices() {
         return this.indices;
-    }
+    }  
 
     /**
-     * Operating System level statistics.
+     * Operating System level statistics.  
      */
     @Nullable
-    public OsStats getOs() {
+    public OsStats getOs() {  
         return this.os;
     }
 
     /**
      * Process level statistics.
-     */
+     */  
     @Nullable
     public ProcessStats getProcess() {
-        return process;
+        return process;  
     }
 
-    /**
+    /**  
      * JVM level statistics.
      */
-    @Nullable
+    @Nullable  
     public JvmStats getJvm() {
         return jvm;
-    }
+    }  
 
     /**
-     * Thread Pool level statistics.
+     * Thread Pool level statistics.  
      */
     @Nullable
-    public ThreadPoolStats getThreadPool() {
+    public ThreadPoolStats getThreadPool() {  
         return this.threadPool;
     }
 
     /**
      * File system level stats.
-     */
+     */  
     @Nullable
     public FsInfo getFs() {
-        return fs;
+        return fs;  
     }
 
-    @Nullable
+    @Nullable  
     public TransportStats getTransport() {
         return this.transport;
-    }
+    }  
 
     @Nullable
-    public HttpStats getHttp() {
+    public HttpStats getHttp() {  
         return this.http;
     }
 
     @Nullable
     public AllCircuitBreakerStats getBreaker() {
-        return this.breaker;
+        return this.breaker;  
     }
 
-    @Nullable
+    @Nullable  
     public ScriptStats getScriptStats() {
         return this.scriptStats;
-    }
+    }  
 
     @Nullable
-    public DiscoveryStats getDiscoveryStats() {
+    public DiscoveryStats getDiscoveryStats() {  
         return this.discoveryStats;
     }
 
     @Nullable
     public IngestStats getIngestStats() {
-        return ingestStats;
+        return ingestStats;  
     }
 
-    @Nullable
+    @Nullable  
     public AdaptiveSelectionStats getAdaptiveSelectionStats() {
         return adaptiveSelectionStats;
-    }
+    }  
 
     @Nullable
-    public NodesResourceUsageStats getResourceUsageStats() {
+    public NodesResourceUsageStats getResourceUsageStats() {  
         return resourceUsageStats;
     }
 
     @Nullable
     public ScriptCacheStats getScriptCacheStats() {
-        return scriptCacheStats;
+        return scriptCacheStats;  
     }
 
-    @Nullable
+    @Nullable  
     public IndexingPressureStats getIndexingPressureStats() {
         return indexingPressureStats;
-    }
+    }  
 
     @Nullable
-    public ShardIndexingPressureStats getShardIndexingPressureStats() {
+    public ShardIndexingPressureStats getShardIndexingPressureStats() {  
         return shardIndexingPressureStats;
     }
 
     @Nullable
     public SearchBackpressureStats getSearchBackpressureStats() {
-        return searchBackpressureStats;
+        return searchBackpressureStats;  
     }
 
-    @Nullable
+    @Nullable  
     public ClusterManagerThrottlingStats getClusterManagerThrottlingStats() {
         return clusterManagerThrottlingStats;
-    }
+    }  
 
     public WeightedRoutingStats getWeightedRoutingStats() {
-        return weightedRoutingStats;
+        return weightedRoutingStats;  
     }
 
-    public AggregateFileCacheStats getFileCacheStats() {
+    public AggregateFileCacheStats getFileCacheStats() {  
         return fileCacheStats;
     }
 
     @Nullable
     public AggregateFileCacheStats getFileCacheOnlyStats() {
-        return fileCacheOnlyStats;
+        return fileCacheOnlyStats;  
     }
 
-    @Nullable
+    @Nullable  
     public BlockCacheStats getBlockCacheOnlyStats() {
         return blockCacheOnlyStats;
-    }
+    }  
 
     @Nullable
-    public TaskCancellationStats getTaskCancellationStats() {
+    public TaskCancellationStats getTaskCancellationStats() {  
         return taskCancellationStats;
     }
 
     @Nullable
     public SearchPipelineStats getSearchPipelineStats() {
-        return searchPipelineStats;
+        return searchPipelineStats;  
     }
 
-    @Nullable
+    @Nullable  
     public SegmentReplicationRejectionStats getSegmentReplicationRejectionStats() {
         return segmentReplicationRejectionStats;
-    }
+    }  
 
     @Nullable
-    public RepositoriesStats getRepositoriesStats() {
+    public RepositoriesStats getRepositoriesStats() {  
         return repositoriesStats;
     }
 
     @Nullable
     public AdmissionControlStats getAdmissionControlStats() {
-        return admissionControlStats;
+        return admissionControlStats;  
     }
 
-    @Nullable
+    @Nullable  
     public NodeCacheStats getNodeCacheStats() {
         return nodeCacheStats;
-    }
+    }  
 
     @Nullable
-    public RemoteStoreNodeStats getRemoteStoreNodeStats() {
+    public RemoteStoreNodeStats getRemoteStoreNodeStats() {  
         return remoteStoreNodeStats;
     }
 
     /**
      * Returns the native allocator pool stats (Arrow allocator), or {@code null} if not available.
-     */
+     */  
     @Nullable
     public NativeAllocatorPoolStats getNativeAllocatorStats() {
-        return nativeAllocatorStats;
+        return nativeAllocatorStats;  
     }
 
-    @Nullable
+    @Nullable  
     public ActionConcurrencyLimiterStats getConcurrencyLimiterStats() {
         return concurrencyLimiterStats;
-    }
+    }  
 
     /**
-     * Returns the process-level native-memory estimate captured on this node
+     * Returns the process-level native-memory estimate captured on this node  
      * (RssAnon - JVM heap committed - JVM non-heap committed), or {@code -1} when the probe
      * could not read {@code /proc/self/status}.
-     */
+     */  
     public long getTotalEstimatedNativeBytes() {
         return totalEstimatedNativeBytes;
-    }
+    }  
 
     @Override
-    public void writeTo(StreamOutput out) throws IOException {
+    public void writeTo(StreamOutput out) throws IOException {  
         super.writeTo(out);
         out.writeVLong(timestamp);
-        if (indices == null) {
+        if (indices == null) {  
             out.writeBoolean(false);
         } else {
-            out.writeBoolean(true);
+            out.writeBoolean(true);  
             indices.writeTo(out);
         }
-        out.writeOptionalWriteable(os);
+        out.writeOptionalWriteable(os);  
         out.writeOptionalWriteable(process);
         out.writeOptionalWriteable(jvm);
-        out.writeOptionalWriteable(threadPool);
+        out.writeOptionalWriteable(threadPool);  
         out.writeOptionalWriteable(fs);
         out.writeOptionalWriteable(transport);
-        out.writeOptionalWriteable(http);
+        out.writeOptionalWriteable(http);  
         out.writeOptionalWriteable(breaker);
         out.writeOptionalWriteable(scriptStats);
-        out.writeOptionalWriteable(discoveryStats);
+        out.writeOptionalWriteable(discoveryStats);  
         out.writeOptionalWriteable(ingestStats);
         out.writeOptionalWriteable(adaptiveSelectionStats);
-        out.writeOptionalWriteable(indexingPressureStats);
+        out.writeOptionalWriteable(indexingPressureStats);  
         out.writeOptionalWriteable(shardIndexingPressureStats);
 
-        if (out.getVersion().onOrAfter(Version.V_2_4_0)) {
+        if (out.getVersion().onOrAfter(Version.V_2_4_0)) {  
             out.writeOptionalWriteable(searchBackpressureStats);
         }
-        if (out.getVersion().onOrAfter(Version.V_2_6_0)) {
+        if (out.getVersion().onOrAfter(Version.V_2_6_0)) {  
             out.writeOptionalWriteable(clusterManagerThrottlingStats);
         }
-        if (out.getVersion().onOrAfter(Version.V_2_6_0)) {
+        if (out.getVersion().onOrAfter(Version.V_2_6_0)) {  
             out.writeOptionalWriteable(weightedRoutingStats);
         }
-        if (out.getVersion().onOrAfter(Version.V_2_7_0)) {
+        if (out.getVersion().onOrAfter(Version.V_2_7_0)) {  
             out.writeOptionalWriteable(fileCacheStats);
         }
-        if (out.getVersion().onOrAfter(Version.V_3_7_0)) {
+        if (out.getVersion().onOrAfter(Version.V_3_7_0)) {  
             out.writeOptionalWriteable(fileCacheOnlyStats);
             out.writeOptionalWriteable(blockCacheOnlyStats);
-        }
+        }  
         if (out.getVersion().onOrAfter(Version.V_2_9_0)) {
             out.writeOptionalWriteable(taskCancellationStats);
-        }
+        }  
         if (out.getVersion().onOrAfter(Version.V_2_9_0)) {
             out.writeOptionalWriteable(searchPipelineStats);
-        }
+        }  
         if (out.getVersion().onOrAfter(Version.V_2_12_0)) {
             out.writeOptionalWriteable(resourceUsageStats);
-        }
+        }  
         if (out.getVersion().onOrAfter(Version.V_2_12_0)) {
             out.writeOptionalWriteable(segmentReplicationRejectionStats);
-        }
+        }  
         if (out.getVersion().onOrAfter(Version.V_2_12_0)) {
             out.writeOptionalWriteable(repositoriesStats);
-        }
+        }  
         if (out.getVersion().onOrAfter(Version.V_2_12_0)) {
             out.writeOptionalWriteable(admissionControlStats);
-        }
+        }  
         if (out.getVersion().onOrAfter(Version.V_2_14_0)) {
             out.writeOptionalWriteable(nodeCacheStats);
-        }
+        }  
         if (out.getVersion().onOrAfter(Version.V_2_18_0)) {
             out.writeOptionalWriteable(remoteStoreNodeStats);
-        }
+        }  
         if (out.getVersion().onOrAfter(Version.V_3_8_0)) {
             out.writeOptionalWriteable(nativeAllocatorStats);
-        } else if (out.getVersion().onOrAfter(Version.V_3_7_0)) {
+        } else if (out.getVersion().onOrAfter(Version.V_3_7_0)) {  
             // BWC: write old-format NativeAllocatorPoolStats for V_3_7_0 nodes
             NativeAllocatorPoolStats.writeV3_7(out, nativeAllocatorStats);
-        }
+        }  
         if (out.getVersion().onOrAfter(Version.V_3_7_0)) {
             // BWC: V_3_7_0 expects AnalyticsBackendNativeMemoryStats here; write null.
-            out.writeOptionalWriteable(null);
+            out.writeOptionalWriteable(null);  
         }
         if (out.getVersion().onOrAfter(Version.V_3_9_0)) {
-            out.writeOptionalWriteable(concurrencyLimiterStats);
+            out.writeOptionalWriteable(concurrencyLimiterStats);  
         }
         if (out.getVersion().onOrAfter(Version.V_3_7_0)) {
-            out.writeLong(totalEstimatedNativeBytes);
+            out.writeLong(totalEstimatedNativeBytes);  
         }
     }
 
@@ -670,140 +670,140 @@ public class NodeStats extends BaseNodeResponse implements ToXContentFragment {
 
         builder.field("name", getNode().getName());
         builder.field("transport_address", getNode().getAddress().toString());
-        builder.field("host", getNode().getHostName());
+        builder.field("host", getNode().getHostName());  
         builder.field("ip", getNode().getAddress());
 
-        builder.startArray("roles");
+        builder.startArray("roles");  
         for (DiscoveryNodeRole role : getNode().getRoles()) {
             builder.value(role.roleName());
-        }
+        }  
         builder.endArray();
 
-        if (!getNode().getAttributes().isEmpty()) {
+        if (!getNode().getAttributes().isEmpty()) {  
             builder.startObject("attributes");
             for (Map.Entry<String, String> attrEntry : getNode().getAttributes().entrySet()) {
-                builder.field(attrEntry.getKey(), attrEntry.getValue());
+                builder.field(attrEntry.getKey(), attrEntry.getValue());  
             }
             builder.endObject();
-        }
+        }  
 
         if (getIndices() != null) {
-            getIndices().toXContent(builder, params);
+            getIndices().toXContent(builder, params);  
         }
         if (getOs() != null) {
-            getOs().toXContent(builder, params);
+            getOs().toXContent(builder, params);  
         }
         if (getProcess() != null) {
-            getProcess().toXContent(builder, params);
+            getProcess().toXContent(builder, params);  
         }
         if (getJvm() != null) {
-            getJvm().toXContent(builder, params);
+            getJvm().toXContent(builder, params);  
         }
         if (getThreadPool() != null) {
-            getThreadPool().toXContent(builder, params);
+            getThreadPool().toXContent(builder, params);  
         }
         if (getFs() != null) {
-            getFs().toXContent(builder, params);
+            getFs().toXContent(builder, params);  
         }
         if (getTransport() != null) {
-            getTransport().toXContent(builder, params);
+            getTransport().toXContent(builder, params);  
         }
         if (getHttp() != null) {
-            getHttp().toXContent(builder, params);
+            getHttp().toXContent(builder, params);  
         }
         if (getBreaker() != null) {
-            getBreaker().toXContent(builder, params);
+            getBreaker().toXContent(builder, params);  
         }
         if (getScriptStats() != null) {
-            getScriptStats().toXContent(builder, params);
+            getScriptStats().toXContent(builder, params);  
         }
         if (getDiscoveryStats() != null) {
-            getDiscoveryStats().toXContent(builder, params);
+            getDiscoveryStats().toXContent(builder, params);  
         }
         if (getIngestStats() != null) {
-            getIngestStats().toXContent(builder, params);
+            getIngestStats().toXContent(builder, params);  
         }
         if (getAdaptiveSelectionStats() != null) {
-            getAdaptiveSelectionStats().toXContent(builder, params);
+            getAdaptiveSelectionStats().toXContent(builder, params);  
         }
         if (getScriptCacheStats() != null) {
-            getScriptCacheStats().toXContent(builder, params);
+            getScriptCacheStats().toXContent(builder, params);  
         }
         if (getIndexingPressureStats() != null) {
-            getIndexingPressureStats().toXContent(builder, params);
+            getIndexingPressureStats().toXContent(builder, params);  
         }
         if (getShardIndexingPressureStats() != null) {
-            getShardIndexingPressureStats().toXContent(builder, params);
+            getShardIndexingPressureStats().toXContent(builder, params);  
         }
         if (getSearchBackpressureStats() != null) {
-            getSearchBackpressureStats().toXContent(builder, params);
+            getSearchBackpressureStats().toXContent(builder, params);  
         }
         if (getClusterManagerThrottlingStats() != null) {
-            getClusterManagerThrottlingStats().toXContent(builder, params);
+            getClusterManagerThrottlingStats().toXContent(builder, params);  
         }
         if (getWeightedRoutingStats() != null) {
-            getWeightedRoutingStats().toXContent(builder, params);
+            getWeightedRoutingStats().toXContent(builder, params);  
         }
         if (getFileCacheStats() != null) {
-            getFileCacheStats().toXContent(builder, params);
+            getFileCacheStats().toXContent(builder, params);  
         }
         if (getFileCacheOnlyStats() != null) {
-            builder.startObject("file_cache");
+            builder.startObject("file_cache");  
             getFileCacheOnlyStats().getOverallFileCacheStats().toXContent(builder, params);
             getFileCacheOnlyStats().getFullFileCacheStats().toXContent(builder, params);
-            getFileCacheOnlyStats().getBlockFileCacheStats().toXContent(builder, params);
+            getFileCacheOnlyStats().getBlockFileCacheStats().toXContent(builder, params);  
             getFileCacheOnlyStats().getPinnedFileCacheStats().toXContent(builder, params);
             builder.endObject();
-        }
+        }  
         if (getBlockCacheOnlyStats() != null) {
             getBlockCacheOnlyStats().toXContent(builder, params);
-        }
+        }  
         if (getTaskCancellationStats() != null) {
             getTaskCancellationStats().toXContent(builder, params);
-        }
+        }  
         if (getSearchPipelineStats() != null) {
             getSearchPipelineStats().toXContent(builder, params);
-        }
+        }  
         if (getResourceUsageStats() != null) {
             getResourceUsageStats().toXContent(builder, params);
-        }
+        }  
         if (getSegmentReplicationRejectionStats() != null) {
             getSegmentReplicationRejectionStats().toXContent(builder, params);
-        }
+        }  
 
         if (getRepositoriesStats() != null) {
-            getRepositoriesStats().toXContent(builder, params);
+            getRepositoriesStats().toXContent(builder, params);  
         }
         if (getAdmissionControlStats() != null) {
-            getAdmissionControlStats().toXContent(builder, params);
+            getAdmissionControlStats().toXContent(builder, params);  
         }
         if (getNodeCacheStats() != null) {
-            getNodeCacheStats().toXContent(builder, params);
+            getNodeCacheStats().toXContent(builder, params);  
         }
         if (getRemoteStoreNodeStats() != null) {
-            getRemoteStoreNodeStats().toXContent(builder, params);
+            getRemoteStoreNodeStats().toXContent(builder, params);  
         }
         if (getConcurrencyLimiterStats() != null) {
-            getConcurrencyLimiterStats().toXContent(builder, params);
+            getConcurrencyLimiterStats().toXContent(builder, params);  
         }
         // total_estimated_bytes ≈ RssAnon - JVM heap committed - JVM non-heap committed.
-        // native_memory: unified view of all native memory pools and jemalloc stats.
+        // native_memory: unified view of all native memory pools and jemalloc stats.  
         // NativeAllocatorPoolStats now includes jemalloc allocated/resident + all pools.
         builder.startObject("native_memory");
-        builder.field("total_estimated_bytes", totalEstimatedNativeBytes);
+        builder.field("total_estimated_bytes", totalEstimatedNativeBytes);  
         if (getNativeAllocatorStats() != null) {
             NativeAllocatorPoolStats stats = getNativeAllocatorStats();
-            builder.startObject("runtime");
+            builder.startObject("runtime");  
             builder.field("allocated_bytes", stats.getNativeAllocatedBytes());
             builder.field("resident_bytes", stats.getNativeResidentBytes());
-            builder.endObject();
+            builder.endObject();  
             builder.startObject("memory_pools");
             for (var entry : stats.getGroupedStats().entrySet()) {
-                entry.getValue().toXContent(builder, params);
+                entry.getValue().toXContent(builder, params);  
             }
             builder.endObject();
-        }
+        }  
         builder.endObject();
         return builder;
-    }
+    }  
 }

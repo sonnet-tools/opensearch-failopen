@@ -1,19 +1,19 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.arrow.flight.transport;
 
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.VarBinaryVector;
-import org.apache.arrow.vector.VectorSchemaRoot;
+import org.apache.arrow.vector.VectorSchemaRoot;  
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
-import org.apache.arrow.vector.types.pojo.FieldType;
+import org.apache.arrow.vector.types.pojo.FieldType;  
 import org.opensearch.arrow.transport.ArrowBatchResponse;
 import org.opensearch.core.common.io.stream.StreamOutput;
 
@@ -22,19 +22,19 @@ import java.util.List;
 
 /**
  * A {@link StreamOutput} that produces a {@link VectorSchemaRoot} for the Flight transport.
- *
+ *  
  * <p>Two factory methods create the appropriate instance:
  * <ul>
- *   <li>{@link #create(BufferAllocator, VectorSchemaRoot)} — byte serialization.
+ *   <li>{@link #create(BufferAllocator, VectorSchemaRoot)} — byte serialization.  
  *       {@code writeTo()} writes bytes into a VarBinary vector.</li>
  *   <li>{@link #forNativeArrow(VectorSchemaRoot)} — native Arrow.
- *       The root is already populated; writes are no-ops.</li>
+ *       The root is already populated; writes are no-ops.</li>  
  * </ul>
  *
- * <p>The framework selects the right factory based on whether the response
+ * <p>The framework selects the right factory based on whether the response  
  * is an {@link ArrowBatchResponse}.
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 abstract class VectorStreamOutput extends StreamOutput {
 
@@ -43,64 +43,64 @@ abstract class VectorStreamOutput extends StreamOutput {
 
     /**
      * Creates a byte-serialization output.
-     */
+     */  
     static VectorStreamOutput create(BufferAllocator allocator, VectorSchemaRoot existingRoot) {
         return new ByteSerialized(allocator, existingRoot);
-    }
+    }  
 
     /**
-     * Creates a native Arrow output. The root is already populated.
+     * Creates a native Arrow output. The root is already populated.  
      */
     static VectorStreamOutput forNativeArrow(VectorSchemaRoot root) {
-        return new NativeArrow(root);
+        return new NativeArrow(root);  
     }
 
-    /**
+    /**  
      * Returns the {@link VectorSchemaRoot} to send over Flight.
      */
-    public abstract VectorSchemaRoot getRoot();
+    public abstract VectorSchemaRoot getRoot();  
 
     // ── Byte serialization ──
 
     static final class ByteSerialized extends VectorStreamOutput {
         private int row = 0;
-        private final VarBinaryVector vector;
+        private final VarBinaryVector vector;  
         private VectorSchemaRoot root;
         private final byte[] tempBuffer = new byte[8192];
-        private int tempBufferPos = 0;
+        private int tempBufferPos = 0;  
 
         ByteSerialized(BufferAllocator allocator, VectorSchemaRoot existingRoot) {
-            if (existingRoot != null) {
+            if (existingRoot != null) {  
                 vector = (VarBinaryVector) existingRoot.getVector(0);
                 this.root = existingRoot;
-            } else {
+            } else {  
                 Field field = new Field("0", new FieldType(true, new ArrowType.Binary(), null, null), null);
                 vector = (VarBinaryVector) field.createVector(allocator);
-                vector.setInitialCapacity(16);
+                vector.setInitialCapacity(16);  
                 vector.allocateNew();
             }
-        }
+        }  
 
         @Override
-        public void writeByte(byte b) {
+        public void writeByte(byte b) {  
             if (tempBufferPos >= tempBuffer.length) flushTempBuffer();
             tempBuffer[tempBufferPos++] = b;
-        }
+        }  
 
         @Override
-        public void writeBytes(byte[] b, int offset, int length) {
+        public void writeBytes(byte[] b, int offset, int length) {  
             if (length == 0) return;
             if (b.length < (offset + length)) {
-                throw new IllegalArgumentException("Illegal offset " + offset + "/length " + length + " for byte[] of length " + b.length);
+                throw new IllegalArgumentException("Illegal offset " + offset + "/length " + length + " for byte[] of length " + b.length);  
             }
             if (tempBufferPos > 0) flushTempBuffer();
-            vector.setSafe(row++, b, offset, length);
+            vector.setSafe(row++, b, offset, length);  
         }
 
-        private void flushTempBuffer() {
+        private void flushTempBuffer() {  
             if (tempBufferPos > 0) {
                 vector.setSafe(row++, tempBuffer, 0, tempBufferPos);
-                tempBufferPos = 0;
+                tempBufferPos = 0;  
             }
         }
 
@@ -109,28 +109,28 @@ abstract class VectorStreamOutput extends StreamOutput {
 
         @Override
         public void close() throws IOException {
-            row = 0;
+            row = 0;  
             vector.close();
         }
 
         @Override
         public void reset() {
-            row = 0;
+            row = 0;  
             tempBufferPos = 0;
             vector.clear();
-        }
+        }  
 
         @Override
-        public VectorSchemaRoot getRoot() {
+        public VectorSchemaRoot getRoot() {  
             flushTempBuffer();
             vector.setValueCount(row);
-            if (root == null) {
+            if (root == null) {  
                 root = new VectorSchemaRoot(List.of(vector));
             }
-            root.setRowCount(row);
+            root.setRowCount(row);  
             return root;
         }
-    }
+    }  
 
     // ── Native Arrow ──
 
@@ -139,10 +139,10 @@ abstract class VectorStreamOutput extends StreamOutput {
 
         NativeArrow(VectorSchemaRoot root) {
             this.root = root;
-        }
+        }  
 
         @Override
-        public VectorSchemaRoot getRoot() {
+        public VectorSchemaRoot getRoot() {  
             return root;
         }
 
@@ -160,5 +160,5 @@ abstract class VectorStreamOutput extends StreamOutput {
 
         @Override
         public void reset() {}
-    }
+    }  
 }

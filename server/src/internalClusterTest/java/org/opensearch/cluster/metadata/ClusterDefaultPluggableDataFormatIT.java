@@ -1,22 +1,22 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.cluster.metadata;
 
 import org.opensearch.action.admin.indices.settings.get.GetSettingsResponse;
 import org.opensearch.common.settings.FeatureFlagSettings;
-import org.opensearch.common.settings.Setting;
+import org.opensearch.common.settings.Setting;  
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.index.IndexSettings;
+import org.opensearch.index.IndexSettings;  
 import org.opensearch.index.engine.dataformat.stub.MockCommitterEnginePlugin;
 import org.opensearch.index.engine.dataformat.stub.MockParquetDataFormatPlugin;
-import org.opensearch.indices.IndicesService;
+import org.opensearch.indices.IndicesService;  
 import org.opensearch.plugins.Plugin;
 import org.opensearch.test.OpenSearchIntegTestCase;
 
@@ -31,85 +31,85 @@ public class ClusterDefaultPluggableDataFormatIT extends OpenSearchIntegTestCase
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return List.of(MockCommitterEnginePlugin.class, MockParquetDataFormatPlugin.class);
+        return List.of(MockCommitterEnginePlugin.class, MockParquetDataFormatPlugin.class);  
     }
 
-    @Override
+    @Override  
     protected Settings nodeSettings(int nodeOrdinal) {
         return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
+            .put(super.nodeSettings(nodeOrdinal))  
             .putList(IndicesService.CLUSTER_PLUGGABLE_DATAFORMAT_RESTRICT_ALLOWLIST.getKey(), ".kibana")
             .build();
-    }
+    }  
 
     @Override
-    protected Settings featureFlagSettings() {
+    protected Settings featureFlagSettings() {  
         Settings.Builder builder = Settings.builder();
         for (Setting<?> builtInFlag : FeatureFlagSettings.BUILT_IN_FEATURE_FLAGS) {
-            builder.put(builtInFlag.getKey(), builtInFlag.getDefaultRaw(Settings.EMPTY));
+            builder.put(builtInFlag.getKey(), builtInFlag.getDefaultRaw(Settings.EMPTY));  
         }
         builder.put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true);
-        return builder.build();
+        return builder.build();  
     }
 
-    public void testClusterDefaultStampedIntoNewIndexWhenNoOverride() {
+    public void testClusterDefaultStampedIntoNewIndexWhenNoOverride() {  
         String indexName = "test-pluggable-cluster-default";
 
-        setClusterDefaults(true, "parquet");
+        setClusterDefaults(true, "parquet");  
         createIndex(indexName);
         ensureGreen(indexName);
 
         Settings effective = getIndexSettings(indexName);
         assertTrue(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(effective));
-        assertEquals("parquet", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(effective));
+        assertEquals("parquet", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(effective));  
     }
 
-    public void testExplicitIndexSettingOverridesClusterDefault() {
+    public void testExplicitIndexSettingOverridesClusterDefault() {  
         String indexName = "test-pluggable-request-override";
 
-        setClusterDefaults(true, "parquet");
+        setClusterDefaults(true, "parquet");  
         createIndex(
             indexName,
-            Settings.builder()
+            Settings.builder()  
                 .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), false)
                 .put(IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), "lucene")
-                .build()
+                .build()  
         );
         ensureGreen(indexName);
 
         Settings effective = getIndexSettings(indexName);
         assertFalse(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(effective));
-        assertEquals("lucene", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(effective));
+        assertEquals("lucene", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(effective));  
     }
 
-    public void testClusterDefaultUpdateAppliesToNewIndicesOnly() {
+    public void testClusterDefaultUpdateAppliesToNewIndicesOnly() {  
         String indexBefore = "test-pluggable-before-update";
         String indexAfter = "test-pluggable-after-update";
 
         setClusterDefaults(true, "parquet");
         createIndex(indexBefore);
-        ensureGreen(indexBefore);
+        ensureGreen(indexBefore);  
 
         Settings before = getIndexSettings(indexBefore);
-        assertTrue(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(before));
+        assertTrue(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(before));  
         assertEquals("parquet", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(before));
 
-        setClusterDefaults(false, "arrow");
+        setClusterDefaults(false, "arrow");  
         createIndex(indexAfter);
         ensureGreen(indexAfter);
 
         Settings after = getIndexSettings(indexAfter);
         assertFalse(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(after));
-        assertEquals("arrow", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(after));
+        assertEquals("arrow", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(after));  
 
         Settings beforeReread = getIndexSettings(indexBefore);
-        assertTrue(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(beforeReread));
+        assertTrue(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(beforeReread));  
         assertEquals("parquet", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(beforeReread));
     }
 
     public void testAllowlistBypassesClusterDefaultStamping() {
         String skippedIndex = ".kibana-01";
-        String normalIndex = "test-pluggable-normal";
+        String normalIndex = "test-pluggable-normal";  
 
         setClusterDefaults(true, "parquet");
 
@@ -121,31 +121,31 @@ public class ClusterDefaultPluggableDataFormatIT extends OpenSearchIntegTestCase
 
         // Skipped index should NOT have cluster defaults stamped
         Settings skippedSettings = getIndexSettings(skippedIndex);
-        assertFalse(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(skippedSettings));
+        assertFalse(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(skippedSettings));  
         assertEquals("", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(skippedSettings));
 
-        // Normal index should have cluster defaults stamped
+        // Normal index should have cluster defaults stamped  
         Settings normalSettings = getIndexSettings(normalIndex);
         assertTrue(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.get(normalSettings));
-        assertEquals("parquet", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(normalSettings));
+        assertEquals("parquet", IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.get(normalSettings));  
     }
 
-    private void setClusterDefaults(boolean enabled, String value) {
+    private void setClusterDefaults(boolean enabled, String value) {  
         client().admin()
             .cluster()
-            .prepareUpdateSettings()
+            .prepareUpdateSettings()  
             .setTransientSettings(
                 Settings.builder()
-                    .put(CLUSTER_PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), enabled)
+                    .put(CLUSTER_PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), enabled)  
                     .put(CLUSTER_PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), value)
             )
-            .get();
+            .get();  
     }
 
-    private Settings getIndexSettings(String indexName) {
+    private Settings getIndexSettings(String indexName) {  
         GetSettingsResponse resp = client().admin().indices().prepareGetSettings(indexName).get();
         Settings s = resp.getIndexToSettings().get(indexName);
-        assertNotNull(s);
+        assertNotNull(s);  
         return s;
     }
-}
+}  

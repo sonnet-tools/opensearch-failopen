@@ -1,74 +1,74 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.script;
 
 import java.util.Map;
 
-/**
+/**  
  * A script used in bucket aggregations that returns a {@code double} value.
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 public abstract class BucketAggregationScript {
 
     public static final String[] PARAMETERS = {};
 
-    public static final ScriptContext<Factory> CONTEXT = new ScriptContext<>("bucket_aggregation", Factory.class);
+    public static final ScriptContext<Factory> CONTEXT = new ScriptContext<>("bucket_aggregation", Factory.class);  
 
     /**
-     * The generic runtime parameters for the script.
+     * The generic runtime parameters for the script.  
      */
     private final Map<String, Object> params;
 
     public BucketAggregationScript(Map<String, Object> params) {
         this.params = params;
-    }
+    }  
 
     /**
-     * Return the parameters for this script.
+     * Return the parameters for this script.  
      */
     public Map<String, Object> getParams() {
-        return params;
+        return params;  
     }
 
-    public abstract Number execute();
+    public abstract Number execute();  
 
     /**
-     * Factory for bucket agg script
+     * Factory for bucket agg script  
      *
      * @opensearch.internal
-     */
+     */  
     public interface Factory extends ScriptFactory {
         BucketAggregationScript newInstance(Map<String, Object> params);
-    }
+    }  
 }

@@ -1,590 +1,590 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.test.rest.yaml.section;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.opensearch.Version;
+import org.opensearch.Version;  
 import org.opensearch.client.HasAttributeNodeSelector;
 import org.opensearch.client.Node;
-import org.opensearch.client.NodeSelector;
+import org.opensearch.client.NodeSelector;  
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.common.logging.HeaderWarning;
-import org.opensearch.common.xcontent.json.JsonXContent;
+import org.opensearch.common.xcontent.json.JsonXContent;  
 import org.opensearch.core.common.ParsingException;
 import org.opensearch.core.common.Strings;
-import org.opensearch.core.xcontent.DeprecationHandler;
+import org.opensearch.core.xcontent.DeprecationHandler;  
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.XContentLocation;
-import org.opensearch.core.xcontent.XContentParseException;
+import org.opensearch.core.xcontent.XContentParseException;  
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.test.hamcrest.RegexMatcher;
-import org.opensearch.test.rest.yaml.ClientYamlTestExecutionContext;
+import org.opensearch.test.rest.yaml.ClientYamlTestExecutionContext;  
 import org.opensearch.test.rest.yaml.ClientYamlTestResponse;
 import org.opensearch.test.rest.yaml.ClientYamlTestResponseException;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.HashMap;  
 import java.util.Iterator;
 import java.util.LinkedHashSet;
-import java.util.List;
+import java.util.List;  
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
+import java.util.Set;  
 import java.util.TreeMap;
 import java.util.regex.Matcher;
 
 import static java.util.Collections.emptyList;
 import static java.util.Collections.unmodifiableList;
-import static java.util.stream.Collectors.toCollection;
+import static java.util.stream.Collectors.toCollection;  
 import static java.util.stream.Collectors.toSet;
 import static org.opensearch.common.collect.Tuple.tuple;
-import static org.opensearch.test.hamcrest.RegexMatcher.matches;
+import static org.opensearch.test.hamcrest.RegexMatcher.matches;  
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;  
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
-import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertThat;  
 import static org.junit.Assert.fail;
 
-/**
+/**  
  * Represents a do section:
  * <p>
- *   - do:
+ *   - do:  
  *      catch:      missing
  *      headers:
- *          Authorization: Basic user:pass
+ *          Authorization: Basic user:pass  
  *          Content-Type: application/json
  *      warnings:
- *          - Stuff is deprecated, yo
+ *          - Stuff is deprecated, yo  
  *          - Don't use deprecated stuff
  *          - Please, stop. It hurts.
- *      allowed_warnings:
+ *      allowed_warnings:  
  *          - Maybe this warning shows up
  *          - But it isn't actually required for the test to pass.
- *      update:
+ *      update:  
  *          index:  test_1
  *          type:   test
- *          id:     1
+ *          id:     1  
  *          body:   { doc: { foo: bar } }
  *
- */
+ */  
 public class DoSection implements ExecutableSection {
     public static DoSection parse(XContentParser parser) throws IOException {
-        String currentFieldName = null;
+        String currentFieldName = null;  
         XContentParser.Token token;
 
-        DoSection doSection = new DoSection(parser.getTokenLocation());
+        DoSection doSection = new DoSection(parser.getTokenLocation());  
         ApiCallSection apiCallSection = null;
         NodeSelector nodeSelector = NodeSelector.ANY;
-        Map<String, String> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        Map<String, String> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);  
         List<String> expectedWarnings = new ArrayList<>();
         List<String> allowedWarnings = new ArrayList<>();
 
         if (parser.nextToken() != XContentParser.Token.START_OBJECT) {
             throw new IllegalArgumentException(
-                "expected ["
+                "expected ["  
                     + XContentParser.Token.START_OBJECT
                     + "], "
-                    + "found ["
+                    + "found ["  
                     + parser.currentToken()
                     + "], the do section is not properly indented"
-            );
+            );  
         }
 
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
             if (token == XContentParser.Token.FIELD_NAME) {
                 currentFieldName = parser.currentName();
-            } else if (token.isValue()) {
+            } else if (token.isValue()) {  
                 if ("catch".equals(currentFieldName)) {
                     doSection.setCatch(parser.text());
-                } else {
+                } else {  
                     throw new ParsingException(parser.getTokenLocation(), "unsupported field [" + currentFieldName + "]");
                 }
-            } else if (token == XContentParser.Token.START_ARRAY) {
+            } else if (token == XContentParser.Token.START_ARRAY) {  
                 if ("warnings".equals(currentFieldName)) {
                     while ((token = parser.nextToken()) == XContentParser.Token.VALUE_STRING) {
-                        expectedWarnings.add(parser.text());
+                        expectedWarnings.add(parser.text());  
                     }
                     if (token != XContentParser.Token.END_ARRAY) {
-                        throw new ParsingException(parser.getTokenLocation(), "[warnings] must be a string array but saw [" + token + "]");
+                        throw new ParsingException(parser.getTokenLocation(), "[warnings] must be a string array but saw [" + token + "]");  
                     }
                 } else if ("allowed_warnings".equals(currentFieldName)) {
-                    while ((token = parser.nextToken()) == XContentParser.Token.VALUE_STRING) {
+                    while ((token = parser.nextToken()) == XContentParser.Token.VALUE_STRING) {  
                         allowedWarnings.add(parser.text());
                     }
-                    if (token != XContentParser.Token.END_ARRAY) {
+                    if (token != XContentParser.Token.END_ARRAY) {  
                         throw new ParsingException(
                             parser.getTokenLocation(),
-                            "[allowed_warnings] must be a string array but saw [" + token + "]"
+                            "[allowed_warnings] must be a string array but saw [" + token + "]"  
                         );
                     }
-                } else {
+                } else {  
                     throw new ParsingException(parser.getTokenLocation(), "unknown array [" + currentFieldName + "]");
                 }
-            } else if (token == XContentParser.Token.START_OBJECT) {
+            } else if (token == XContentParser.Token.START_OBJECT) {  
                 if ("headers".equals(currentFieldName)) {
                     String headerName = null;
-                    while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                    while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
                         if (token == XContentParser.Token.FIELD_NAME) {
                             headerName = parser.currentName();
-                        } else if (token.isValue()) {
+                        } else if (token.isValue()) {  
                             headers.put(headerName, parser.text());
                         }
-                    }
+                    }  
                 } else if ("node_selector".equals(currentFieldName)) {
                     String selectorName = null;
-                    while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                    while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {  
                         if (token == XContentParser.Token.FIELD_NAME) {
                             selectorName = parser.currentName();
-                        } else {
+                        } else {  
                             NodeSelector newSelector = buildNodeSelector(selectorName, parser);
                             nodeSelector = nodeSelector == NodeSelector.ANY
-                                ? newSelector
+                                ? newSelector  
                                 : new ComposeNodeSelector(nodeSelector, newSelector);
                         }
-                    }
+                    }  
                 } else if (currentFieldName != null) { // must be part of API call then
                     apiCallSection = new ApiCallSection(currentFieldName);
-                    String paramName = null;
+                    String paramName = null;  
                     while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
                         if (token == XContentParser.Token.FIELD_NAME) {
-                            paramName = parser.currentName();
+                            paramName = parser.currentName();  
                         } else if (token.isValue()) {
                             if ("body".equals(paramName)) {
-                                String body = parser.text();
+                                String body = parser.text();  
                                 XContentParser bodyParser = JsonXContent.jsonXContent.createParser(
                                     NamedXContentRegistry.EMPTY,
-                                    DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+                                    DeprecationHandler.THROW_UNSUPPORTED_OPERATION,  
                                     body
                                 );
-                                // multiple bodies are supported e.g. in case of bulk provided as a whole string
+                                // multiple bodies are supported e.g. in case of bulk provided as a whole string  
                                 while (bodyParser.nextToken() != null) {
                                     apiCallSection.addBody(bodyParser.mapOrdered());
-                                }
+                                }  
                             } else {
                                 apiCallSection.addParam(paramName, parser.text());
-                            }
+                            }  
                         } else if (token == XContentParser.Token.START_OBJECT) {
                             if ("body".equals(paramName)) {
-                                apiCallSection.addBody(parser.mapOrdered());
+                                apiCallSection.addBody(parser.mapOrdered());  
                             }
                         }
-                    }
+                    }  
                 }
             }
-        }
+        }  
         try {
             if (apiCallSection == null) {
-                throw new IllegalArgumentException("client call section is mandatory within a do section");
+                throw new IllegalArgumentException("client call section is mandatory within a do section");  
             }
             for (String w : expectedWarnings) {
-                if (allowedWarnings.contains(w)) {
+                if (allowedWarnings.contains(w)) {  
                     throw new IllegalArgumentException("the warning [" + w + "] was both allowed and expected");
                 }
-            }
+            }  
             apiCallSection.addHeaders(headers);
             apiCallSection.setNodeSelector(nodeSelector);
-            doSection.setApiCallSection(apiCallSection);
+            doSection.setApiCallSection(apiCallSection);  
             doSection.setExpectedWarningHeaders(unmodifiableList(expectedWarnings));
             doSection.setAllowedWarningHeaders(unmodifiableList(allowedWarnings));
-        } finally {
+        } finally {  
             parser.nextToken();
         }
-        return doSection;
+        return doSection;  
     }
 
-    private static final Logger logger = LogManager.getLogger(DoSection.class);
+    private static final Logger logger = LogManager.getLogger(DoSection.class);  
 
     private final XContentLocation location;
-    private String catchParam;
+    private String catchParam;  
     private ApiCallSection apiCallSection;
     private List<String> expectedWarningHeaders = emptyList();
-    private List<String> allowedWarningHeaders = emptyList();
+    private List<String> allowedWarningHeaders = emptyList();  
 
     public DoSection(XContentLocation location) {
-        this.location = location;
+        this.location = location;  
     }
 
-    public String getCatch() {
+    public String getCatch() {  
         return catchParam;
     }
 
     public void setCatch(String catchParam) {
         this.catchParam = catchParam;
-    }
+    }  
 
     public ApiCallSection getApiCallSection() {
-        return apiCallSection;
+        return apiCallSection;  
     }
 
-    void setApiCallSection(ApiCallSection apiCallSection) {
+    void setApiCallSection(ApiCallSection apiCallSection) {  
         this.apiCallSection = apiCallSection;
     }
 
     /**
      * Warning headers that we expect from this response. If the headers don't match exactly this request is considered to have failed.
-     * Defaults to emptyList.
+     * Defaults to emptyList.  
      */
     List<String> getExpectedWarningHeaders() {
-        return expectedWarningHeaders;
+        return expectedWarningHeaders;  
     }
 
-    /**
+    /**  
      * Set the warning headers that we expect from this response. If the headers don't match exactly this request is considered to have
      * failed. Defaults to emptyList.
-     */
+     */  
     void setExpectedWarningHeaders(List<String> expectedWarningHeaders) {
         this.expectedWarningHeaders = expectedWarningHeaders;
-    }
+    }  
 
     /**
-     * Warning headers that we allow from this response. These warning
+     * Warning headers that we allow from this response. These warning  
      * headers don't cause the test to fail. Defaults to emptyList.
      */
-    List<String> getAllowedWarningHeaders() {
+    List<String> getAllowedWarningHeaders() {  
         return allowedWarningHeaders;
     }
 
     /**
      * Set the warning headers that we expect from this response. These
-     * warning headers don't cause the test to fail. Defaults to emptyList.
+     * warning headers don't cause the test to fail. Defaults to emptyList.  
      */
     void setAllowedWarningHeaders(List<String> allowedWarningHeaders) {
-        this.allowedWarningHeaders = allowedWarningHeaders;
+        this.allowedWarningHeaders = allowedWarningHeaders;  
     }
 
-    @Override
+    @Override  
     public XContentLocation getLocation() {
         return location;
-    }
+    }  
 
     @Override
-    public void execute(ClientYamlTestExecutionContext executionContext) throws IOException {
+    public void execute(ClientYamlTestExecutionContext executionContext) throws IOException {  
 
         if ("param".equals(catchParam)) {
-            // client should throw validation error before sending request
+            // client should throw validation error before sending request  
             // lets just return without doing anything as we don't have any client to test here
             logger.info("found [catch: param], no request sent");
-            return;
+            return;  
         }
 
-        try {
+        try {  
             ClientYamlTestResponse response = executionContext.callApi(
                 apiCallSection.getApi(),
-                apiCallSection.getParams(),
+                apiCallSection.getParams(),  
                 apiCallSection.getBodies(),
                 apiCallSection.getHeaders(),
-                apiCallSection.getNodeSelector()
+                apiCallSection.getNodeSelector()  
             );
             if (Strings.hasLength(catchParam)) {
-                String catchStatusCode;
+                String catchStatusCode;  
                 if (catches.containsKey(catchParam)) {
                     catchStatusCode = catches.get(catchParam).v1();
-                } else if (catchParam.startsWith("/") && catchParam.endsWith("/")) {
+                } else if (catchParam.startsWith("/") && catchParam.endsWith("/")) {  
                     catchStatusCode = "4xx|5xx";
                 } else {
-                    throw new UnsupportedOperationException("catch value [" + catchParam + "] not supported");
+                    throw new UnsupportedOperationException("catch value [" + catchParam + "] not supported");  
                 }
                 fail(formatStatusCodeMessage(response, catchStatusCode));
-            }
+            }  
             checkWarningHeaders(response.getWarningHeaders(), executionContext.clusterManagerVersion());
         } catch (ClientYamlTestResponseException e) {
-            ClientYamlTestResponse restTestResponse = e.getRestTestResponse();
+            ClientYamlTestResponse restTestResponse = e.getRestTestResponse();  
             if (!Strings.hasLength(catchParam)) {
                 fail(formatStatusCodeMessage(restTestResponse, "2xx"));
-            } else if (catches.containsKey(catchParam)) {
+            } else if (catches.containsKey(catchParam)) {  
                 assertStatusCode(restTestResponse);
             } else if (catchParam.length() > 2 && catchParam.startsWith("/") && catchParam.endsWith("/")) {
-                // the text of the error message matches regular expression
+                // the text of the error message matches regular expression  
                 assertThat(
                     formatStatusCodeMessage(restTestResponse, "4xx|5xx"),
-                    e.getResponseException().getResponse().getStatusLine().getStatusCode(),
+                    e.getResponseException().getResponse().getStatusLine().getStatusCode(),  
                     greaterThanOrEqualTo(400)
                 );
-                Object error = executionContext.response("error");
+                Object error = executionContext.response("error");  
                 assertThat("error was expected in the response", error, notNullValue());
                 // remove delimiters from regex
-                String regex = catchParam.substring(1, catchParam.length() - 1);
+                String regex = catchParam.substring(1, catchParam.length() - 1);  
                 assertThat(
                     "the error message was expected to match the provided regex but didn't",
-                    error.toString(),
+                    error.toString(),  
                     RegexMatcher.matches(regex)
                 );
-            } else {
+            } else {  
                 throw new UnsupportedOperationException("catch value [" + catchParam + "] not supported");
             }
-        }
+        }  
     }
 
-    /**
+    /**  
      * Check that the response contains only the warning headers that we expect.
      */
-    void checkWarningHeaders(final List<String> warningHeaders, final Version clusterManagerVersion) {
+    void checkWarningHeaders(final List<String> warningHeaders, final Version clusterManagerVersion) {  
         final List<String> unexpected = new ArrayList<>();
         final List<String> unmatched = new ArrayList<>();
-        final List<String> missing = new ArrayList<>();
+        final List<String> missing = new ArrayList<>();  
         Set<String> allowed = allowedWarningHeaders.stream().map(HeaderWarning::escapeAndEncode).collect(toSet());
         // LinkedHashSet so that missing expected warnings come back in a predictable order which is nice for testing
-        final Set<String> expected = expectedWarningHeaders.stream()
+        final Set<String> expected = expectedWarningHeaders.stream()  
             .map(HeaderWarning::escapeAndEncode)
             .collect(toCollection(LinkedHashSet::new));
-        for (final String header : warningHeaders) {
+        for (final String header : warningHeaders) {  
             final Matcher matcher = HeaderWarning.WARNING_HEADER_PATTERN.matcher(header);
             final boolean matches = matcher.matches();
-            if (matches) {
+            if (matches) {  
                 final String message = HeaderWarning.extractWarningValueFromWarningHeader(header, true);
                 if (message.startsWith("[types removal]")) {
-                    // We skip warnings related to types deprecation because they are *everywhere*.
+                    // We skip warnings related to types deprecation because they are *everywhere*.  
                     continue;
                 }
-                if (allowed.contains(message)) {
+                if (allowed.contains(message)) {  
                     continue;
                 }
-                if (expected.remove(message)) {
+                if (expected.remove(message)) {  
                     continue;
                 }
-                unexpected.add(header);
+                unexpected.add(header);  
             } else {
                 unmatched.add(header);
-            }
+            }  
         }
         if (expected.isEmpty() == false) {
-            for (final String header : expected) {
+            for (final String header : expected) {  
                 missing.add(header);
             }
-        }
+        }  
 
         if (unexpected.isEmpty() == false || unmatched.isEmpty() == false || missing.isEmpty() == false) {
-            final StringBuilder failureMessage = new StringBuilder();
+            final StringBuilder failureMessage = new StringBuilder();  
             appendBadHeaders(failureMessage, unexpected, "got unexpected warning header" + (unexpected.size() > 1 ? "s" : ""));
             appendBadHeaders(failureMessage, unmatched, "got unmatched warning header" + (unmatched.size() > 1 ? "s" : ""));
-            appendBadHeaders(failureMessage, missing, "did not get expected warning header" + (missing.size() > 1 ? "s" : ""));
+            appendBadHeaders(failureMessage, missing, "did not get expected warning header" + (missing.size() > 1 ? "s" : ""));  
             fail(failureMessage.toString());
         }
 
     }
 
-    private void appendBadHeaders(final StringBuilder sb, final List<String> headers, final String message) {
+    private void appendBadHeaders(final StringBuilder sb, final List<String> headers, final String message) {  
         if (headers.isEmpty() == false) {
             sb.append(message).append(" [\n");
-            for (final String header : headers) {
+            for (final String header : headers) {  
                 sb.append("\t").append(header).append("\n");
             }
-            sb.append("]\n");
+            sb.append("]\n");  
         }
     }
 
     private void assertStatusCode(ClientYamlTestResponse restTestResponse) {
         Tuple<String, org.hamcrest.Matcher<Integer>> stringMatcherTuple = catches.get(catchParam);
-        assertThat(
+        assertThat(  
             formatStatusCodeMessage(restTestResponse, stringMatcherTuple.v1()),
             restTestResponse.getStatusCode(),
-            stringMatcherTuple.v2()
+            stringMatcherTuple.v2()  
         );
     }
 
     private String formatStatusCodeMessage(ClientYamlTestResponse restTestResponse, String expected) {
         String api = apiCallSection.getApi();
-        if ("raw".equals(api)) {
+        if ("raw".equals(api)) {  
             api += "[method=" + apiCallSection.getParams().get("method") + " path=" + apiCallSection.getParams().get("path") + "]";
         }
-        return "expected ["
+        return "expected ["  
             + expected
             + "] status code but api ["
-            + api
+            + api  
             + "] returned ["
             + restTestResponse.getStatusCode()
-            + " "
+            + " "  
             + restTestResponse.getReasonPhrase()
             + "] ["
-            + restTestResponse.getBodyAsString()
+            + restTestResponse.getBodyAsString()  
             + "]";
     }
 
     private static Map<String, Tuple<String, org.hamcrest.Matcher<Integer>>> catches = new HashMap<>();
 
-    static {
+    static {  
         catches.put("bad_request", tuple("400", equalTo(400)));
         catches.put("unauthorized", tuple("401", equalTo(401)));
-        catches.put("forbidden", tuple("403", equalTo(403)));
+        catches.put("forbidden", tuple("403", equalTo(403)));  
         catches.put("missing", tuple("404", equalTo(404)));
         catches.put("request_timeout", tuple("408", equalTo(408)));
-        catches.put("conflict", tuple("409", equalTo(409)));
+        catches.put("conflict", tuple("409", equalTo(409)));  
         catches.put("unavailable", tuple("503", equalTo(503)));
         catches.put(
-            "request",
+            "request",  
             tuple(
                 "4xx|5xx",
-                allOf(
+                allOf(  
                     greaterThanOrEqualTo(400),
                     not(equalTo(400)),
-                    not(equalTo(401)),
+                    not(equalTo(401)),  
                     not(equalTo(403)),
                     not(equalTo(404)),
-                    not(equalTo(408)),
+                    not(equalTo(408)),  
                     not(equalTo(409))
                 )
-            )
+            )  
         );
     }
 
     private static NodeSelector buildNodeSelector(String name, XContentParser parser) throws IOException {
         switch (name) {
-            case "attribute":
+            case "attribute":  
                 return parseAttributeValuesSelector(parser);
             case "version":
-                return parseVersionSelector(parser);
+                return parseVersionSelector(parser);  
             default:
                 throw new XContentParseException(parser.getTokenLocation(), "unknown node_selector [" + name + "]");
-        }
+        }  
     }
 
-    private static NodeSelector parseAttributeValuesSelector(XContentParser parser) throws IOException {
+    private static NodeSelector parseAttributeValuesSelector(XContentParser parser) throws IOException {  
         if (parser.currentToken() != XContentParser.Token.START_OBJECT) {
             throw new XContentParseException(parser.getTokenLocation(), "expected START_OBJECT");
-        }
+        }  
         String key = null;
         XContentParser.Token token;
-        NodeSelector result = NodeSelector.ANY;
+        NodeSelector result = NodeSelector.ANY;  
         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
             if (token == XContentParser.Token.FIELD_NAME) {
-                key = parser.currentName();
+                key = parser.currentName();  
             } else if (token.isValue()) {
                 /*
-                 * HasAttributeNodeSelector selects nodes that do not have
+                 * HasAttributeNodeSelector selects nodes that do not have  
                  * attribute metadata set so it can be used against nodes that
                  * have not yet been sniffed. In these tests we expect the node
-                 * metadata to be explicitly sniffed if we need it and we'd
+                 * metadata to be explicitly sniffed if we need it and we'd  
                  * like to hard fail if it is not so we wrap the selector so we
                  * can assert that the data is sniffed.
-                 */
+                 */  
                 NodeSelector delegate = new HasAttributeNodeSelector(key, parser.text());
                 NodeSelector newSelector = new NodeSelector() {
-                    @Override
+                    @Override  
                     public void select(Iterable<Node> nodes) {
                         for (Node node : nodes) {
-                            if (node.getAttributes() == null) {
+                            if (node.getAttributes() == null) {  
                                 throw new IllegalStateException("expected [attributes] metadata to be set but got " + node);
                             }
-                        }
+                        }  
                         delegate.select(nodes);
                     }
 
                     @Override
                     public String toString() {
-                        return delegate.toString();
+                        return delegate.toString();  
                     }
                 };
-                result = result == NodeSelector.ANY ? newSelector : new ComposeNodeSelector(result, newSelector);
+                result = result == NodeSelector.ANY ? newSelector : new ComposeNodeSelector(result, newSelector);  
             } else {
                 throw new XContentParseException(parser.getTokenLocation(), "expected [" + key + "] to be a value");
-            }
+            }  
         }
         return result;
-    }
+    }  
 
     private static NodeSelector parseVersionSelector(XContentParser parser) throws IOException {
-        if (false == parser.currentToken().isValue()) {
+        if (false == parser.currentToken().isValue()) {  
             throw new XContentParseException(parser.getTokenLocation(), "expected [version] to be a value");
         }
-        List<VersionRange> skipVersionRanges = SkipSection.parseVersionRanges(parser.text());
+        List<VersionRange> skipVersionRanges = SkipSection.parseVersionRanges(parser.text());  
         return new NodeSelector() {
             @Override
-            public void select(Iterable<Node> nodes) {
+            public void select(Iterable<Node> nodes) {  
                 for (Iterator<Node> itr = nodes.iterator(); itr.hasNext();) {
                     Node node = itr.next();
-                    if (node.getVersion() == null) {
+                    if (node.getVersion() == null) {  
                         throw new IllegalStateException("expected [version] metadata to be set but got " + node);
                     }
-                    Version version = Version.fromString(node.getVersion());
+                    Version version = Version.fromString(node.getVersion());  
                     boolean skip = skipVersionRanges.stream().anyMatch(v -> v.contains(version));
                     if (false == skip) {
-                        itr.remove();
+                        itr.remove();  
                     }
                 }
-            }
+            }  
 
             @Override
-            public String toString() {
+            public String toString() {  
                 return "version ranges " + skipVersionRanges;
             }
-        };
+        };  
     }
 
-    /**
+    /**  
      * Selector that composes two selectors, running the "right" most selector
      * first and then running the "left" selector on the results of the "right"
-     * selector.
+     * selector.  
      */
     private static class ComposeNodeSelector implements NodeSelector {
-        private final NodeSelector lhs;
+        private final NodeSelector lhs;  
         private final NodeSelector rhs;
 
-        private ComposeNodeSelector(NodeSelector lhs, NodeSelector rhs) {
+        private ComposeNodeSelector(NodeSelector lhs, NodeSelector rhs) {  
             this.lhs = Objects.requireNonNull(lhs, "lhs is required");
             this.rhs = Objects.requireNonNull(rhs, "rhs is required");
-        }
+        }  
 
         @Override
-        public void select(Iterable<Node> nodes) {
+        public void select(Iterable<Node> nodes) {  
             rhs.select(nodes);
             lhs.select(nodes);
-        }
+        }  
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(Object o) {  
             if (this == o) {
                 return true;
-            }
+            }  
             if (o == null || getClass() != o.getClass()) {
                 return false;
-            }
+            }  
             ComposeNodeSelector that = (ComposeNodeSelector) o;
             return Objects.equals(lhs, that.lhs) && Objects.equals(rhs, that.rhs);
-        }
+        }  
 
         @Override
-        public int hashCode() {
+        public int hashCode() {  
             return Objects.hash(lhs, rhs);
         }
 
         @Override
         public String toString() {
-            // . as in haskell's "compose" operator
+            // . as in haskell's "compose" operator  
             return lhs + "." + rhs;
         }
-    }
+    }  
 }

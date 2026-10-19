@@ -1,19 +1,19 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 package org.opensearch.index.compositeindex.datacube.startree.aggregators;
 
-import org.opensearch.index.mapper.FieldValueConverter;
+import org.opensearch.index.mapper.FieldValueConverter;  
 import org.opensearch.index.mapper.NumberFieldMapper;
 
-/**
+/**  
  * Count value aggregator for star tree
  *
- * @opensearch.experimental
+ * @opensearch.experimental  
  */
 public class CountValueAggregator implements ValueAggregator<Long> {
 
@@ -22,49 +22,49 @@ public class CountValueAggregator implements ValueAggregator<Long> {
 
     public CountValueAggregator() {}
 
-    @Override
+    @Override  
     public FieldValueConverter getAggregatedValueType() {
         return VALUE_AGGREGATOR_TYPE;
-    }
+    }  
 
     @Override
-    public Long getInitialAggregatedValueForSegmentDocValue(Long segmentDocValue) {
+    public Long getInitialAggregatedValueForSegmentDocValue(Long segmentDocValue) {  
 
         if (segmentDocValue == null) {
-            return getIdentityMetricValue();
+            return getIdentityMetricValue();  
         }
 
-        return DEFAULT_INITIAL_VALUE;
+        return DEFAULT_INITIAL_VALUE;  
     }
 
-    @Override
+    @Override  
     public Long mergeAggregatedValueAndSegmentValue(Long value, Long segmentDocValue) {
         assert value != null;
-        if (segmentDocValue != null) {
+        if (segmentDocValue != null) {  
             return value + 1;
         }
-        return value;
+        return value;  
     }
 
-    @Override
+    @Override  
     public Long mergeAggregatedValues(Long value, Long aggregatedValue) {
         if (value == null) {
-            value = getIdentityMetricValue();
+            value = getIdentityMetricValue();  
         }
         if (aggregatedValue == null) {
-            aggregatedValue = getIdentityMetricValue();
+            aggregatedValue = getIdentityMetricValue();  
         }
         return value + aggregatedValue;
-    }
+    }  
 
     @Override
-    public Long toAggregatedValueType(Long value) {
+    public Long toAggregatedValueType(Long value) {  
         return value;
     }
 
     @Override
     public Long getIdentityMetricValue() {
-        // in present aggregations, if the metric behind count is missing, we treat it as 0
+        // in present aggregations, if the metric behind count is missing, we treat it as 0  
         return 0L;
     }
-}
+}  

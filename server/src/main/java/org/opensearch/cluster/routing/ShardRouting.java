@@ -1,1034 +1,1034 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.cluster.routing;
 
 import org.opensearch.Version;
 import org.opensearch.cluster.routing.RecoverySource.ExistingStoreRecoverySource;
-import org.opensearch.cluster.routing.RecoverySource.PeerRecoverySource;
+import org.opensearch.cluster.routing.RecoverySource.PeerRecoverySource;  
 import org.opensearch.cluster.routing.allocation.allocator.BalancedShardsAllocator;
 import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
+import org.opensearch.common.annotation.PublicApi;  
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
+import org.opensearch.core.common.io.stream.Writeable;  
 import org.opensearch.core.index.Index;
 import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.xcontent.ToXContentObject;
+import org.opensearch.core.xcontent.ToXContentObject;  
 import org.opensearch.core.xcontent.XContentBuilder;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.util.Collections;
 import java.util.List;
 
 /**
  * {@link ShardRouting} immutably encapsulates information about shard
- * indexRoutings like id, state, version, etc.
+ * indexRoutings like id, state, version, etc.  
  *
  * @opensearch.api
- */
+ */  
 @PublicApi(since = "1.0.0")
 public class ShardRouting implements Writeable, ToXContentObject {
 
     /**
      * Used if shard size is not available
-     */
+     */  
     public static final long UNAVAILABLE_EXPECTED_SHARD_SIZE = -1;
 
-    private final ShardId shardId;
+    private final ShardId shardId;  
     private final String currentNodeId;
     private final String relocatingNodeId;
-    private final boolean primary;
+    private final boolean primary;  
     private final boolean searchOnly;
     private final ShardRoutingState state;
-    private final RecoverySource recoverySource;
+    private final RecoverySource recoverySource;  
     private final UnassignedInfo unassignedInfo;
     private final AllocationId allocationId;
-    private final transient List<ShardRouting> asList;
+    private final transient List<ShardRouting> asList;  
     private final long expectedShardSize;
     @Nullable
-    private final ShardRouting targetRelocatingShard;
+    private final ShardRouting targetRelocatingShard;  
     @Nullable
     private final ShardRouting[] recoveringChildShards;
-    @Nullable
+    @Nullable  
     private final ShardId parentShardId;
 
-    /**
+    /**  
      * A constructor to internally create shard routing instances, note, the internal flag should only be set to true
      * by either this class or tests. Visible for testing.
-     */
+     */  
     protected ShardRouting(
         ShardId shardId,
-        String currentNodeId,
+        String currentNodeId,  
         String relocatingNodeId,
         boolean primary,
-        boolean searchOnly,
+        boolean searchOnly,  
         ShardRoutingState state,
         RecoverySource recoverySource,
-        UnassignedInfo unassignedInfo,
+        UnassignedInfo unassignedInfo,  
         AllocationId allocationId,
         long expectedShardSize
-    ) {
+    ) {  
         this(
             shardId,
-            currentNodeId,
+            currentNodeId,  
             relocatingNodeId,
             primary,
-            searchOnly,
+            searchOnly,  
             state,
             recoverySource,
-            unassignedInfo,
+            unassignedInfo,  
             allocationId,
             expectedShardSize,
-            null,
+            null,  
             null
         );
-    }
+    }  
 
     protected ShardRouting(
-        ShardId shardId,
+        ShardId shardId,  
         String currentNodeId,
         String relocatingNodeId,
-        boolean primary,
+        boolean primary,  
         boolean searchOnly,
         ShardRoutingState state,
-        RecoverySource recoverySource,
+        RecoverySource recoverySource,  
         UnassignedInfo unassignedInfo,
         AllocationId allocationId,
-        long expectedShardSize,
+        long expectedShardSize,  
         ShardRouting[] recoveringChildShards,
         ShardId parentShardId
-    ) {
+    ) {  
         this.shardId = shardId;
         this.currentNodeId = currentNodeId;
-        this.relocatingNodeId = relocatingNodeId;
+        this.relocatingNodeId = relocatingNodeId;  
         this.primary = primary;
         this.searchOnly = searchOnly;
-        this.state = state;
+        this.state = state;  
         this.recoverySource = recoverySource;
         this.unassignedInfo = unassignedInfo;
-        this.allocationId = allocationId;
+        this.allocationId = allocationId;  
         this.expectedShardSize = expectedShardSize;
         this.targetRelocatingShard = initializeTargetRelocatingShard();
-        this.recoveringChildShards = recoveringChildShards;
+        this.recoveringChildShards = recoveringChildShards;  
         this.parentShardId = parentShardId;
         this.asList = Collections.singletonList(this);
-        assert expectedShardSize == UNAVAILABLE_EXPECTED_SHARD_SIZE
+        assert expectedShardSize == UNAVAILABLE_EXPECTED_SHARD_SIZE  
             || state == ShardRoutingState.INITIALIZING
             || state == ShardRoutingState.RELOCATING
-            || state == ShardRoutingState.SPLITTING : expectedShardSize + " state: " + state;
+            || state == ShardRoutingState.SPLITTING : expectedShardSize + " state: " + state;  
         assert expectedShardSize >= 0
             || state != ShardRoutingState.INITIALIZING
-            || state != ShardRoutingState.RELOCATING
+            || state != ShardRoutingState.RELOCATING  
             || state != ShardRoutingState.SPLITTING : expectedShardSize + " state: " + state;
         assert !(state == ShardRoutingState.UNASSIGNED && unassignedInfo == null) : "unassigned shard must be created with meta";
-        assert (state == ShardRoutingState.UNASSIGNED || state == ShardRoutingState.INITIALIZING) == (recoverySource != null)
+        assert (state == ShardRoutingState.UNASSIGNED || state == ShardRoutingState.INITIALIZING) == (recoverySource != null)  
             : "recovery source only available on unassigned or initializing shard but was " + state;
         assert recoverySource == null
-            || recoverySource == PeerRecoverySource.INSTANCE
+            || recoverySource == PeerRecoverySource.INSTANCE  
             || primary
             || searchOnly
-            || recoverySource == RecoverySource.InPlaceSplitShardRecoverySource.INSTANCE : "replica shards always recover from primary";
+            || recoverySource == RecoverySource.InPlaceSplitShardRecoverySource.INSTANCE : "replica shards always recover from primary";  
         assert (currentNodeId == null) == (state == ShardRoutingState.UNASSIGNED) : "unassigned shard must not be assigned to a node "
             + this;
-    }
+    }  
 
     protected ShardRouting(
-        ShardId shardId,
+        ShardId shardId,  
         String currentNodeId,
         String relocatingNodeId,
-        boolean primary,
+        boolean primary,  
         ShardRoutingState shardRoutingState,
         RecoverySource recoverySource,
-        UnassignedInfo unassignedInfo,
+        UnassignedInfo unassignedInfo,  
         AllocationId allocationId,
         long expectedShardSize
-    ) {
+    ) {  
         this(
             shardId,
-            currentNodeId,
+            currentNodeId,  
             relocatingNodeId,
             primary,
-            false,
+            false,  
             shardRoutingState,
             recoverySource,
-            unassignedInfo,
+            unassignedInfo,  
             allocationId,
             expectedShardSize
-        );
+        );  
     }
 
-    @Nullable
+    @Nullable  
     private ShardRouting initializeTargetRelocatingShard() {
         if (state == ShardRoutingState.RELOCATING) {
-            return new ShardRouting(
+            return new ShardRouting(  
                 shardId,
                 relocatingNodeId,
-                currentNodeId,
+                currentNodeId,  
                 primary,
                 searchOnly,
-                ShardRoutingState.INITIALIZING,
+                ShardRoutingState.INITIALIZING,  
                 isSearchOnly() ? RecoverySource.EmptyStoreRecoverySource.INSTANCE : PeerRecoverySource.INSTANCE,
                 unassignedInfo,
-                AllocationId.newTargetRelocation(allocationId),
+                AllocationId.newTargetRelocation(allocationId),  
                 expectedShardSize
             );
-        } else {
+        } else {  
             return null;
         }
-    }
+    }  
 
     /**
-     * Creates a new unassigned shard.
+     * Creates a new unassigned shard.  
      */
     public static ShardRouting newUnassigned(
-        ShardId shardId,
+        ShardId shardId,  
         boolean primary,
         RecoverySource recoverySource,
-        UnassignedInfo unassignedInfo
+        UnassignedInfo unassignedInfo  
     ) {
         return newUnassigned(shardId, primary, false, recoverySource, unassignedInfo);
-    }
+    }  
 
     /**
-     * Creates a new unassigned shard, overloaded for bwc for searchOnly addition.
+     * Creates a new unassigned shard, overloaded for bwc for searchOnly addition.  
      */
     public static ShardRouting newUnassigned(
-        ShardId shardId,
+        ShardId shardId,  
         boolean primary,
         boolean search,
-        RecoverySource recoverySource,
+        RecoverySource recoverySource,  
         UnassignedInfo unassignedInfo
     ) {
-        return new ShardRouting(
+        return new ShardRouting(  
             shardId,
             null,
-            null,
+            null,  
             primary,
             search,
-            ShardRoutingState.UNASSIGNED,
+            ShardRoutingState.UNASSIGNED,  
             recoverySource,
             unassignedInfo,
-            null,
+            null,  
             UNAVAILABLE_EXPECTED_SHARD_SIZE
         );
-    }
+    }  
 
     public Index index() {
-        return shardId.getIndex();
+        return shardId.getIndex();  
     }
 
-    /**
+    /**  
      * The index name.
      */
-    public String getIndexName() {
+    public String getIndexName() {  
         return shardId.getIndexName();
     }
 
     /**
      * The shard id.
-     */
+     */  
     public int id() {
         return shardId.id();
-    }
+    }  
 
     /**
-     * The shard id.
+     * The shard id.  
      */
     public int getId() {
-        return id();
+        return id();  
     }
 
-    /**
+    /**  
      * The shard is unassigned (not allocated to any node).
      */
-    public boolean unassigned() {
+    public boolean unassigned() {  
         return state == ShardRoutingState.UNASSIGNED;
     }
 
     /**
      * The shard is initializing (usually recovering either from peer shard
-     * or from gateway).
+     * or from gateway).  
      */
     public boolean initializing() {
-        return state == ShardRoutingState.INITIALIZING;
+        return state == ShardRoutingState.INITIALIZING;  
     }
 
-    /**
+    /**  
      * Returns <code>true</code> iff the this shard is currently
      * {@link ShardRoutingState#STARTED started} or
-     * {@link ShardRoutingState#SPLITTING splitting} or
+     * {@link ShardRoutingState#SPLITTING splitting} or  
      * {@link ShardRoutingState#RELOCATING relocating} to another node.
      * Otherwise <code>false</code>
-     */
+     */  
     public boolean active() {
         return started() || relocating() || splitting();
-    }
+    }  
 
     /**
-     * The shard is in started mode.
+     * The shard is in started mode.  
      */
     public boolean started() {
-        return state == ShardRoutingState.STARTED;
+        return state == ShardRoutingState.STARTED;  
     }
 
-    /**
+    /**  
      * Returns <code>true</code> iff the this shard is currently relocating to
      * another node. Otherwise <code>false</code>
-     *
+     *  
      * @see ShardRoutingState#RELOCATING
      */
-    public boolean relocating() {
+    public boolean relocating() {  
         return state == ShardRoutingState.RELOCATING;
     }
 
     /**
      * Returns <code>true</code> iff the shard is in splitting state.
-     */
+     */  
     public boolean splitting() {
         return state == ShardRoutingState.SPLITTING;
-    }
+    }  
 
     /**
-     * Returns <code>true</code> if this shard is a child shard created by an in-place split.
+     * Returns <code>true</code> if this shard is a child shard created by an in-place split.  
      */
     public boolean isSplitTarget() {
-        return parentShardId != null;
+        return parentShardId != null;  
     }
 
-    /**
+    /**  
      * Returns a copy of the recovering child shards of this splitting shard, or null if not splitting.
      */
-    @Nullable
+    @Nullable  
     public ShardRouting[] getRecoveringChildShards() {
         return recoveringChildShards == null ? null : recoveringChildShards.clone();
-    }
+    }  
 
     /**
-     * Returns the parent shard id if this is a child shard created by split, or null otherwise.
+     * Returns the parent shard id if this is a child shard created by split, or null otherwise.  
      */
     public ShardId getParentShardId() {
-        return parentShardId;
+        return parentShardId;  
     }
 
-    /**
+    /**  
      * Returns <code>true</code> iff this shard is assigned to a node ie. not
      * {@link ShardRoutingState#UNASSIGNED unassigned}. Otherwise <code>false</code>
-     */
+     */  
     public boolean assignedToNode() {
         return currentNodeId != null;
-    }
+    }  
 
     /**
-     * The current node id the shard is allocated on.
+     * The current node id the shard is allocated on.  
      */
     public String currentNodeId() {
-        return this.currentNodeId;
+        return this.currentNodeId;  
     }
 
-    /**
+    /**  
      * The relocating node id the shard is either relocating to or relocating from.
      */
-    public String relocatingNodeId() {
+    public String relocatingNodeId() {  
         return this.relocatingNodeId;
     }
 
     /**
      * Returns a shard routing representing the target shard.
-     * The target shard routing will be the INITIALIZING state and have relocatingNodeId set to the
+     * The target shard routing will be the INITIALIZING state and have relocatingNodeId set to the  
      * source node.
      */
-    public ShardRouting getTargetRelocatingShard() {
+    public ShardRouting getTargetRelocatingShard() {  
         assert relocating();
         return targetRelocatingShard;
-    }
+    }  
 
     /**
-     * Additional metadata on why the shard is/was unassigned. The metadata is kept around
+     * Additional metadata on why the shard is/was unassigned. The metadata is kept around  
      * until the shard moves to STARTED.
      */
-    @Nullable
+    @Nullable  
     public UnassignedInfo unassignedInfo() {
         return unassignedInfo;
-    }
+    }  
 
     /**
-     * An id that uniquely identifies an allocation.
+     * An id that uniquely identifies an allocation.  
      */
     @Nullable
-    public AllocationId allocationId() {
+    public AllocationId allocationId() {  
         return this.allocationId;
     }
 
     /**
      * Returns <code>true</code> iff this shard is a primary.
-     */
+     */  
     public boolean primary() {
         return this.primary;
-    }
+    }  
 
     /**
-     * Returns <code>true</code> iff this shard is a search only replica.
+     * Returns <code>true</code> iff this shard is a search only replica.  
      */
     public boolean isSearchOnly() {
-        return searchOnly;
+        return searchOnly;  
     }
 
-    /**
+    /**  
      * The shard state.
      */
-    public ShardRoutingState state() {
+    public ShardRoutingState state() {  
         return this.state;
     }
 
     /**
      * The shard id.
-     */
+     */  
     public ShardId shardId() {
         return shardId;
-    }
+    }  
 
     /**
-     * A shard iterator with just this shard in it.
+     * A shard iterator with just this shard in it.  
      */
     public ShardIterator shardsIt() {
-        return new PlainShardIterator(shardId, asList);
+        return new PlainShardIterator(shardId, asList);  
     }
 
-    public ShardRouting(ShardId shardId, StreamInput in) throws IOException {
+    public ShardRouting(ShardId shardId, StreamInput in) throws IOException {  
         this.shardId = shardId;
         currentNodeId = in.readOptionalString();
-        relocatingNodeId = in.readOptionalString();
+        relocatingNodeId = in.readOptionalString();  
         primary = in.readBoolean();
         if (in.getVersion().onOrAfter(Version.V_2_17_0)) {
-            searchOnly = in.readBoolean();
+            searchOnly = in.readBoolean();  
         } else {
             searchOnly = false;
-        }
+        }  
         state = ShardRoutingState.fromValue(in.readByte());
         if (state == ShardRoutingState.UNASSIGNED || state == ShardRoutingState.INITIALIZING) {
-            recoverySource = RecoverySource.readFrom(in);
+            recoverySource = RecoverySource.readFrom(in);  
         } else {
             recoverySource = null;
-        }
+        }  
         unassignedInfo = in.readOptionalWriteable(UnassignedInfo::new);
         allocationId = in.readOptionalWriteable(AllocationId::new);
-        final long shardSize;
+        final long shardSize;  
         if (state == ShardRoutingState.RELOCATING || state == ShardRoutingState.INITIALIZING || state == ShardRoutingState.SPLITTING) {
             shardSize = in.readLong();
-        } else {
+        } else {  
             shardSize = UNAVAILABLE_EXPECTED_SHARD_SIZE;
         }
-        expectedShardSize = shardSize;
+        expectedShardSize = shardSize;  
         asList = Collections.singletonList(this);
         targetRelocatingShard = initializeTargetRelocatingShard();
-        // These fields are transient - populated by RoutingNodes constructor, not serialized on the wire.
+        // These fields are transient - populated by RoutingNodes constructor, not serialized on the wire.  
         recoveringChildShards = null;
         parentShardId = null;
-    }
+    }  
 
     public ShardRouting(StreamInput in) throws IOException {
-        this(new ShardId(in), in);
+        this(new ShardId(in), in);  
     }
 
-    /**
+    /**  
      * Writes shard information to {@link StreamOutput} without writing index name and shard id
      *
-     * @param out {@link StreamOutput} to write shard information to
+     * @param out {@link StreamOutput} to write shard information to  
      * @throws IOException if something happens during write
      */
-    public void writeToThin(StreamOutput out) throws IOException {
+    public void writeToThin(StreamOutput out) throws IOException {  
         out.writeOptionalString(currentNodeId);
         out.writeOptionalString(relocatingNodeId);
-        out.writeBoolean(primary);
+        out.writeBoolean(primary);  
         if (out.getVersion().onOrAfter(Version.V_2_17_0)) {
             out.writeBoolean(searchOnly);
-        }
+        }  
         out.writeByte(state.value());
         if (state == ShardRoutingState.UNASSIGNED || state == ShardRoutingState.INITIALIZING) {
-            recoverySource.writeTo(out);
+            recoverySource.writeTo(out);  
         }
         out.writeOptionalWriteable(unassignedInfo);
-        out.writeOptionalWriteable(allocationId);
+        out.writeOptionalWriteable(allocationId);  
         if (state == ShardRoutingState.RELOCATING || state == ShardRoutingState.INITIALIZING || state == ShardRoutingState.SPLITTING) {
             out.writeLong(expectedShardSize);
-        }
+        }  
     }
 
-    @Override
+    @Override  
     public void writeTo(StreamOutput out) throws IOException {
         shardId.writeTo(out);
-        writeToThin(out);
+        writeToThin(out);  
     }
 
-    public ShardRouting updateUnassigned(UnassignedInfo unassignedInfo, RecoverySource recoverySource) {
+    public ShardRouting updateUnassigned(UnassignedInfo unassignedInfo, RecoverySource recoverySource) {  
         assert this.unassignedInfo != null : "can only update unassign info if they are already set";
         assert this.unassignedInfo.isDelayed() || (unassignedInfo.isDelayed() == false) : "cannot transition from non-delayed to delayed";
-        return new ShardRouting(
+        return new ShardRouting(  
             shardId,
             currentNodeId,
-            relocatingNodeId,
+            relocatingNodeId,  
             primary,
             searchOnly,
-            state,
+            state,  
             recoverySource,
             unassignedInfo,
-            allocationId,
+            allocationId,  
             expectedShardSize
         );
-    }
+    }  
 
     /**
-     * Moves the shard to unassigned state.
+     * Moves the shard to unassigned state.  
      */
     public ShardRouting moveToUnassigned(UnassignedInfo unassignedInfo) {
-        assert state != ShardRoutingState.UNASSIGNED : this;
+        assert state != ShardRoutingState.UNASSIGNED : this;  
         final RecoverySource recoverySource;
         if (active()) {
-            if (primary() || isSearchOnly()) {
+            if (primary() || isSearchOnly()) {  
                 recoverySource = ExistingStoreRecoverySource.INSTANCE;
             } else {
-                recoverySource = PeerRecoverySource.INSTANCE;
+                recoverySource = PeerRecoverySource.INSTANCE;  
             }
         } else {
-            recoverySource = recoverySource();
+            recoverySource = recoverySource();  
         }
         return new ShardRouting(
-            shardId,
+            shardId,  
             null,
             null,
-            primary,
+            primary,  
             searchOnly,
             ShardRoutingState.UNASSIGNED,
-            recoverySource,
+            recoverySource,  
             unassignedInfo,
             null,
-            UNAVAILABLE_EXPECTED_SHARD_SIZE
+            UNAVAILABLE_EXPECTED_SHARD_SIZE  
         );
     }
 
     /**
      * Initializes an unassigned shard on a node.
-     *
+     *  
      * @param existingAllocationId allocation id to use. If null, a fresh allocation id is generated.
      */
-    public ShardRouting initialize(String nodeId, @Nullable String existingAllocationId, long expectedShardSize) {
+    public ShardRouting initialize(String nodeId, @Nullable String existingAllocationId, long expectedShardSize) {  
         assert state == ShardRoutingState.UNASSIGNED : this;
         assert relocatingNodeId == null : this;
-        final AllocationId allocationId;
+        final AllocationId allocationId;  
         if (existingAllocationId == null) {
             allocationId = AllocationId.newInitializing();
-        } else {
+        } else {  
             allocationId = AllocationId.newInitializing(existingAllocationId);
         }
-        return new ShardRouting(
+        return new ShardRouting(  
             shardId,
             nodeId,
-            null,
+            null,  
             primary,
             searchOnly,
-            ShardRoutingState.INITIALIZING,
+            ShardRoutingState.INITIALIZING,  
             recoverySource,
             unassignedInfo,
-            allocationId,
+            allocationId,  
             expectedShardSize
         );
-    }
+    }  
 
     /**
-     * Relocate the shard to another node.
+     * Relocate the shard to another node.  
      *
      * @param relocatingNodeId id of the node to relocate the shard
-     */
+     */  
     public ShardRouting relocate(String relocatingNodeId, long expectedShardSize) {
         assert state == ShardRoutingState.STARTED : "current shard has to be started in order to be relocated " + this;
-        return new ShardRouting(
+        return new ShardRouting(  
             shardId,
             currentNodeId,
-            relocatingNodeId,
+            relocatingNodeId,  
             primary,
             searchOnly,
-            ShardRoutingState.RELOCATING,
+            ShardRoutingState.RELOCATING,  
             recoverySource,
             null,
-            AllocationId.newRelocation(allocationId),
+            AllocationId.newRelocation(allocationId),  
             expectedShardSize
         );
-    }
+    }  
 
     /**
-     * Cancel relocation of a shard. The shards state must be set
+     * Cancel relocation of a shard. The shards state must be set  
      * to <code>RELOCATING</code>.
      */
-    public ShardRouting cancelRelocation() {
+    public ShardRouting cancelRelocation() {  
         assert state == ShardRoutingState.RELOCATING : this;
         assert assignedToNode() : this;
-        assert relocatingNodeId != null : this;
+        assert relocatingNodeId != null : this;  
         return new ShardRouting(
             shardId,
-            currentNodeId,
+            currentNodeId,  
             null,
             primary,
-            searchOnly,
+            searchOnly,  
             ShardRoutingState.STARTED,
             recoverySource,
-            null,
+            null,  
             AllocationId.cancelRelocation(allocationId),
             UNAVAILABLE_EXPECTED_SHARD_SIZE
-        );
+        );  
     }
 
-    /**
+    /**  
      * Removes relocation source of a non-primary shard. The shard state must be <code>INITIALIZING</code>.
      * This allows the non-primary shard to continue recovery from the primary even though its non-primary
-     * relocation source has failed.
+     * relocation source has failed.  
      */
     public ShardRouting removeRelocationSource() {
-        assert primary == false : this;
+        assert primary == false : this;  
         assert state == ShardRoutingState.INITIALIZING : this;
         assert assignedToNode() : this;
-        assert relocatingNodeId != null : this;
+        assert relocatingNodeId != null : this;  
         return new ShardRouting(
             shardId,
-            currentNodeId,
+            currentNodeId,  
             null,
             primary,
-            searchOnly,
+            searchOnly,  
             state,
             recoverySource,
-            unassignedInfo,
+            unassignedInfo,  
             AllocationId.finishRelocation(allocationId),
             expectedShardSize
-        );
+        );  
     }
 
-    /**
+    /**  
      * Reinitializes a replica shard, giving it a fresh allocation id
      */
-    public ShardRouting reinitializeReplicaShard() {
+    public ShardRouting reinitializeReplicaShard() {  
         assert state == ShardRoutingState.INITIALIZING : this;
         assert primary == false : this;
-        assert isRelocationTarget() == false : this;
+        assert isRelocationTarget() == false : this;  
         return new ShardRouting(
             shardId,
-            currentNodeId,
+            currentNodeId,  
             null,
             primary,
-            searchOnly,
+            searchOnly,  
             ShardRoutingState.INITIALIZING,
             recoverySource,
-            unassignedInfo,
+            unassignedInfo,  
             AllocationId.newInitializing(),
             expectedShardSize
-        );
+        );  
     }
 
-    /**
+    /**  
      * Set the shards state to <code>STARTED</code>. The shards state must be
      * <code>INITIALIZING</code> or <code>RELOCATING</code>. Any relocation will be
-     * canceled.
+     * canceled.  
      */
     public ShardRouting moveToStarted() {
-        assert state == ShardRoutingState.INITIALIZING : "expected an initializing shard " + this;
+        assert state == ShardRoutingState.INITIALIZING : "expected an initializing shard " + this;  
         AllocationId allocationId = this.allocationId;
         if (allocationId.getRelocationId() != null) {
-            // relocation target
+            // relocation target  
             allocationId = AllocationId.finishRelocation(allocationId);
         }
-        return new ShardRouting(
+        return new ShardRouting(  
             shardId,
             currentNodeId,
-            null,
+            null,  
             primary,
             searchOnly,
-            ShardRoutingState.STARTED,
+            ShardRoutingState.STARTED,  
             null,
             null,
-            allocationId,
+            allocationId,  
             UNAVAILABLE_EXPECTED_SHARD_SIZE
         );
-    }
+    }  
 
     /**
-     * Make the active primary shard as replica
+     * Make the active primary shard as replica  
      *
      * @throws IllegalShardRoutingStateException if shard is already a replica
-     */
+     */  
     public ShardRouting moveActivePrimaryToReplica() {
         assert active() : "expected an active shard " + this;
-        if (!primary) {
+        if (!primary) {  
             throw new IllegalShardRoutingStateException(this, "Not a primary shard, can't move to replica");
         }
-        if (searchOnly) {
+        if (searchOnly) {  
             throw new IllegalShardRoutingStateException(this, "Cannot move a primary to a search only replica");
         }
-        return new ShardRouting(
+        return new ShardRouting(  
             shardId,
             currentNodeId,
-            relocatingNodeId,
+            relocatingNodeId,  
             false,
             false,
-            state,
+            state,  
             recoverySource,
             unassignedInfo,
-            allocationId,
+            allocationId,  
             expectedShardSize
         );
-    }
+    }  
 
     /**
-     * Make the active shard primary unless it's not primary
+     * Make the active shard primary unless it's not primary  
      *
      * @throws IllegalShardRoutingStateException if shard is already a primary
-     */
+     */  
     public ShardRouting moveActiveReplicaToPrimary() {
         assert active() : "expected an active shard " + this;
-        if (primary) {
+        if (primary) {  
             throw new IllegalShardRoutingStateException(this, "Already primary, can't move to primary");
         }
-        if (searchOnly) {
+        if (searchOnly) {  
             throw new IllegalShardRoutingStateException(this, "Cannot move a search only replica to primary");
         }
-        return new ShardRouting(
+        return new ShardRouting(  
             shardId,
             currentNodeId,
-            relocatingNodeId,
+            relocatingNodeId,  
             true,
             false,
-            state,
+            state,  
             recoverySource,
             unassignedInfo,
-            allocationId,
+            allocationId,  
             expectedShardSize
         );
-    }
+    }  
 
     /**
-     * Set the unassigned primary shard to non-primary
+     * Set the unassigned primary shard to non-primary  
      *
      * @throws IllegalShardRoutingStateException if shard is already a replica
-     */
+     */  
     public ShardRouting moveUnassignedFromPrimary() {
         assert state == ShardRoutingState.UNASSIGNED : "expected an unassigned shard " + this;
-        if (!primary) {
+        if (!primary) {  
             throw new IllegalShardRoutingStateException(this, "Not primary, can't move to replica");
         }
-        return new ShardRouting(
+        return new ShardRouting(  
             shardId,
             currentNodeId,
-            relocatingNodeId,
+            relocatingNodeId,  
             false,
             state,
-            PeerRecoverySource.INSTANCE,
+            PeerRecoverySource.INSTANCE,  
             unassignedInfo,
             allocationId,
-            expectedShardSize
+            expectedShardSize  
         );
     }
 
     /**
      * returns true if this routing has the same allocation ID as another.
-     * <p>
+     * <p>  
      * Note: if both shard routing has a null as their {@link #allocationId()}, this method returns false as the routing describe
      * no allocation at all..
-     **/
+     **/  
     public boolean isSameAllocation(ShardRouting other) {
         boolean b = this.allocationId != null && other.allocationId != null && this.allocationId.getId().equals(other.allocationId.getId());
-        assert b == false || this.currentNodeId.equals(other.currentNodeId)
+        assert b == false || this.currentNodeId.equals(other.currentNodeId)  
             : "ShardRoutings have the same allocation id but not the same node. This [" + this + "], other [" + other + "]";
         return b;
-    }
+    }  
 
     /**
-     * Returns <code>true</code> if this shard is a relocation target for another shard
+     * Returns <code>true</code> if this shard is a relocation target for another shard  
      * (i.e., was created with {@link #initializeTargetRelocatingShard()}
      */
-    public boolean isRelocationTarget() {
+    public boolean isRelocationTarget() {  
         return state == ShardRoutingState.INITIALIZING && relocatingNodeId != null;
     }
 
     /** returns true if the routing is the relocation target of the given routing */
     public boolean isRelocationTargetOf(ShardRouting other) {
-        boolean b = this.allocationId != null
+        boolean b = this.allocationId != null  
             && other.allocationId != null
             && this.state == ShardRoutingState.INITIALIZING
-            && this.allocationId.getId().equals(other.allocationId.getRelocationId());
+            && this.allocationId.getId().equals(other.allocationId.getRelocationId());  
 
         assert b == false || other.state == ShardRoutingState.RELOCATING
-            : "ShardRouting is a relocation target but the source shard state isn't relocating. This [" + this + "], other [" + other + "]";
+            : "ShardRouting is a relocation target but the source shard state isn't relocating. This [" + this + "], other [" + other + "]";  
 
         assert b == false || other.allocationId.getId().equals(this.allocationId.getRelocationId())
-            : "ShardRouting is a relocation target but the source id isn't equal to source's allocationId.getRelocationId."
+            : "ShardRouting is a relocation target but the source id isn't equal to source's allocationId.getRelocationId."  
                 + " This ["
                 + this
-                + "], other ["
+                + "], other ["  
                 + other
                 + "]";
 
         assert b == false || other.currentNodeId().equals(this.relocatingNodeId)
             : "ShardRouting is a relocation target but source current node id isn't equal to target relocating node."
-                + " This ["
+                + " This ["  
                 + this
                 + "], other ["
-                + other
+                + other  
                 + "]";
 
-        assert b == false || this.currentNodeId().equals(other.relocatingNodeId)
+        assert b == false || this.currentNodeId().equals(other.relocatingNodeId)  
             : "ShardRouting is a relocation target but current node id isn't equal to source relocating node."
                 + " This ["
-                + this
+                + this  
                 + "], other ["
                 + other
-                + "]";
+                + "]";  
 
         assert b == false || this.shardId.equals(other.shardId)
-            : "ShardRouting is a relocation target but both indexRoutings are not of the same shard id."
+            : "ShardRouting is a relocation target but both indexRoutings are not of the same shard id."  
                 + " This ["
                 + this
-                + "], other ["
+                + "], other ["  
                 + other
                 + "]";
 
         assert b == false || this.primary == other.primary : "ShardRouting is a relocation target but primary flag is different."
             + " This ["
-            + this
+            + this  
             + "], target ["
             + other
-            + "]";
+            + "]";  
 
         return b;
-    }
+    }  
 
     /** returns true if the routing is the relocation source for the given routing */
-    public boolean isRelocationSourceOf(ShardRouting other) {
+    public boolean isRelocationSourceOf(ShardRouting other) {  
         boolean b = this.allocationId != null
             && other.allocationId != null
-            && other.state == ShardRoutingState.INITIALIZING
+            && other.state == ShardRoutingState.INITIALIZING  
             && other.allocationId.getId().equals(this.allocationId.getRelocationId());
 
-        assert b == false || this.state == ShardRoutingState.RELOCATING
+        assert b == false || this.state == ShardRoutingState.RELOCATING  
             : "ShardRouting is a relocation source but shard state isn't relocating. This [" + this + "], other [" + other + "]";
 
-        assert b == false || this.allocationId.getId().equals(other.allocationId.getRelocationId())
+        assert b == false || this.allocationId.getId().equals(other.allocationId.getRelocationId())  
             : "ShardRouting is a relocation source but the allocation id isn't equal to other.allocationId.getRelocationId."
                 + " This ["
-                + this
+                + this  
                 + "], other ["
                 + other
-                + "]";
+                + "]";  
 
         assert b == false || this.currentNodeId().equals(other.relocatingNodeId)
-            : "ShardRouting is a relocation source but current node isn't equal to other's relocating node."
+            : "ShardRouting is a relocation source but current node isn't equal to other's relocating node."  
                 + " This ["
                 + this
-                + "], other ["
+                + "], other ["  
                 + other
                 + "]";
 
         assert b == false || other.currentNodeId().equals(this.relocatingNodeId)
             : "ShardRouting is a relocation source but relocating node isn't equal to other's current node."
-                + " This ["
+                + " This ["  
                 + this
                 + "], other ["
-                + other
+                + other  
                 + "]";
 
-        assert b == false || this.shardId.equals(other.shardId)
+        assert b == false || this.shardId.equals(other.shardId)  
             : "ShardRouting is a relocation source but both indexRoutings are not of the same shard."
                 + " This ["
-                + this
+                + this  
                 + "], target ["
                 + other
-                + "]";
+                + "]";  
 
         assert b == false || this.primary == other.primary : "ShardRouting is a relocation source but primary flag is different. This ["
-            + this
+            + this  
             + "], target ["
             + other
-            + "]";
+            + "]";  
 
         return b;
-    }
+    }  
 
     /** returns true if the current routing is identical to the other routing in all but meta fields, i.e., unassigned info */
-    public boolean equalsIgnoringMetadata(ShardRouting other) {
+    public boolean equalsIgnoringMetadata(ShardRouting other) {  
         if (primary != other.primary) {
             return false;
-        }
+        }  
         if (shardId != null ? !shardId.equals(other.shardId) : other.shardId != null) {
             return false;
-        }
+        }  
         if (currentNodeId != null ? !currentNodeId.equals(other.currentNodeId) : other.currentNodeId != null) {
             return false;
-        }
+        }  
         if (relocatingNodeId != null ? !relocatingNodeId.equals(other.relocatingNodeId) : other.relocatingNodeId != null) {
             return false;
-        }
+        }  
         if (allocationId != null ? !allocationId.equals(other.allocationId) : other.allocationId != null) {
             return false;
-        }
+        }  
         if (state != other.state) {
             return false;
-        }
+        }  
         if (recoverySource != null ? !recoverySource.equals(other.recoverySource) : other.recoverySource != null) {
             return false;
-        }
+        }  
         return true;
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) {
+        if (this == o) {  
             return true;
         }
-        if (o == null || !(o instanceof ShardRouting)) {
+        if (o == null || !(o instanceof ShardRouting)) {  
             return false;
         }
-        ShardRouting that = (ShardRouting) o;
+        ShardRouting that = (ShardRouting) o;  
         if (unassignedInfo != null ? !unassignedInfo.equals(that.unassignedInfo) : that.unassignedInfo != null) {
             return false;
-        }
+        }  
         return equalsIgnoringMetadata(that);
     }
 
     /**
      * Cache hash code in the same way as {@link String#hashCode()}) using racy single-check idiom
-     * as it is mainly used in single-threaded code ({@link BalancedShardsAllocator}).
+     * as it is mainly used in single-threaded code ({@link BalancedShardsAllocator}).  
      */
     private int hashCode; // default to 0
 
     @Override
     public int hashCode() {
-        int h = hashCode;
+        int h = hashCode;  
         if (h == 0) {
             h = shardId.hashCode();
-            h = 31 * h + (currentNodeId != null ? currentNodeId.hashCode() : 0);
+            h = 31 * h + (currentNodeId != null ? currentNodeId.hashCode() : 0);  
             h = 31 * h + (relocatingNodeId != null ? relocatingNodeId.hashCode() : 0);
             h = 31 * h + (primary ? 1 : 0);
-            h = 31 * h + (state != null ? state.hashCode() : 0);
+            h = 31 * h + (state != null ? state.hashCode() : 0);  
             h = 31 * h + (recoverySource != null ? recoverySource.hashCode() : 0);
             h = 31 * h + (allocationId != null ? allocationId.hashCode() : 0);
-            h = 31 * h + (unassignedInfo != null ? unassignedInfo.hashCode() : 0);
+            h = 31 * h + (unassignedInfo != null ? unassignedInfo.hashCode() : 0);  
             hashCode = h;
         }
-        return h;
+        return h;  
     }
 
-    @Override
+    @Override  
     public String toString() {
         return shortSummary();
-    }
+    }  
 
     /**
-     * A short description of the shard.
+     * A short description of the shard.  
      */
     public String shortSummary() {
-        StringBuilder sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder();  
         sb.append('[').append(shardId.getIndexName()).append(']').append('[').append(shardId.getId()).append(']');
         sb.append(", node[").append(currentNodeId).append("], ");
-        if (relocatingNodeId != null) {
+        if (relocatingNodeId != null) {  
             sb.append("relocating [").append(relocatingNodeId).append("], ");
         }
-        if (primary) {
+        if (primary) {  
             sb.append("[P]");
         } else {
-            if (searchOnly) {
+            if (searchOnly) {  
                 sb.append("[S]");
             } else {
-                sb.append("[R]");
+                sb.append("[R]");  
             }
         }
-        if (recoverySource != null) {
+        if (recoverySource != null) {  
             sb.append(", recovery_source[").append(recoverySource).append("]");
         }
-        sb.append(", s[").append(state).append("]");
+        sb.append(", s[").append(state).append("]");  
         if (allocationId != null) {
             sb.append(", a").append(allocationId);
-        }
+        }  
         if (this.unassignedInfo != null) {
             sb.append(", ").append(unassignedInfo.toString());
-        }
+        }  
         if (expectedShardSize != UNAVAILABLE_EXPECTED_SHARD_SIZE) {
             sb.append(", expected_shard_size[").append(expectedShardSize).append("]");
-        }
+        }  
         return sb.toString();
     }
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        XContentBuilder fieldBuilder = builder.startObject().field("state", state()).field("primary", primary());
+        XContentBuilder fieldBuilder = builder.startObject().field("state", state()).field("primary", primary());  
         fieldBuilder.field("searchOnly", isSearchOnly());
         fieldBuilder.field("node", currentNodeId())
-            .field("relocating_node", relocatingNodeId())
+            .field("relocating_node", relocatingNodeId())  
             .field("shard", id())
             .field("index", getIndexName());
-        if (expectedShardSize != UNAVAILABLE_EXPECTED_SHARD_SIZE) {
+        if (expectedShardSize != UNAVAILABLE_EXPECTED_SHARD_SIZE) {  
             builder.field("expected_shard_size_in_bytes", expectedShardSize);
         }
-        if (recoverySource != null) {
+        if (recoverySource != null) {  
             builder.field("recovery_source", recoverySource);
         }
-        if (allocationId != null) {
+        if (allocationId != null) {  
             builder.field("allocation_id");
             allocationId.toXContent(builder, params);
-        }
+        }  
         if (unassignedInfo != null) {
             unassignedInfo.toXContent(builder, params);
-        }
+        }  
         return builder.endObject();
     }
 
     /**
      * Returns the expected shard size for {@link ShardRoutingState#RELOCATING} and {@link ShardRoutingState#INITIALIZING}
-     * shards. If it's size is not available {@value #UNAVAILABLE_EXPECTED_SHARD_SIZE} will be returned.
+     * shards. If it's size is not available {@value #UNAVAILABLE_EXPECTED_SHARD_SIZE} will be returned.  
      */
     public long getExpectedShardSize() {
-        return expectedShardSize;
+        return expectedShardSize;  
     }
 
-    /**
+    /**  
      * Returns recovery source for the given shard. Replica shards always recover from the primary {@link PeerRecoverySource}.
      *
-     * @return recovery source or null if shard is {@link #active()}
+     * @return recovery source or null if shard is {@link #active()}  
      */
     @Nullable
-    public RecoverySource recoverySource() {
+    public RecoverySource recoverySource() {  
         return recoverySource;
     }
 
     public boolean unassignedReasonIndexCreated() {
         if (unassignedInfo != null) {
-            return unassignedInfo.getReason() == UnassignedInfo.Reason.INDEX_CREATED;
+            return unassignedInfo.getReason() == UnassignedInfo.Reason.INDEX_CREATED;  
         }
         return false;
-    }
+    }  
 }

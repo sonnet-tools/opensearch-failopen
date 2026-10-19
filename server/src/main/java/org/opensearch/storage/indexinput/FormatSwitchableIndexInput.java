@@ -1,208 +1,208 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.storage.indexinput;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.lucene.store.IOContext;
+import org.apache.lucene.store.IOContext;  
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.RandomAccessInput;
-import org.apache.lucene.util.IORunnable;
+import org.apache.lucene.util.IORunnable;  
 import org.opensearch.common.annotation.ExperimentalApi;
 import org.opensearch.common.util.concurrent.ConcurrentCollections;
-import org.opensearch.index.store.RemoteSegmentStoreDirectory;
+import org.opensearch.index.store.RemoteSegmentStoreDirectory;  
 
 import java.io.IOException;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentMap;  
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReadWriteLock;  
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.function.Supplier;
+import java.util.function.Supplier;  
 
 /**
- * A switchable IndexInput for format files (e.g., parquet) that can transition
+ * A switchable IndexInput for format files (e.g., parquet) that can transition  
  * from local to remote without FileCache.
  *
- * <p>Mirrors the locking semantics of {@link SwitchableIndexInput}:
+ * <p>Mirrors the locking semantics of {@link SwitchableIndexInput}:  
  * <ul>
  *   <li>A shared {@link ReadWriteLock} coordinates switch (write lock) with
- *       clone/slice (read lock) across the original and all its clones.</li>
+ *       clone/slice (read lock) across the original and all its clones.</li>  
  *   <li>A per-instance {@link Lock} serializes concurrent reads on the same
  *       instance. Once switched, reads bypass the lock (volatile fast-path).</li>
- * </ul>
+ * </ul>  
  *
  * <p>Unlike {@link SwitchableIndexInput}, this does NOT use FileCache or
- * block-based remote reads. The remote input is obtained directly from the
+ * block-based remote reads. The remote input is obtained directly from the  
  * supplied factory (typically {@code remoteDirectory.openInput}).
  *
- * @opensearch.experimental
+ * @opensearch.experimental  
  */
 @ExperimentalApi
-public class FormatSwitchableIndexInput extends IndexInput implements RandomAccessInput, Runnable {
+public class FormatSwitchableIndexInput extends IndexInput implements RandomAccessInput, Runnable {  
 
     private static final Logger logger = LogManager.getLogger(FormatSwitchableIndexInput.class);
 
     private final AtomicReference<IndexInput> underlyingIndexInput = new AtomicReference<>();
     private final AtomicReference<IndexInput> localIndexInput = new AtomicReference<>();
-    private final AtomicReference<IndexInput> remoteIndexInput = new AtomicReference<>();
+    private final AtomicReference<IndexInput> remoteIndexInput = new AtomicReference<>();  
     private final Supplier<IndexInput> remoteInputSupplier;
     private final RemoteSegmentStoreDirectory remoteDirectory;
-    private final String fileName;
+    private final String fileName;  
     private final long fileLength;
     private final boolean isClone;
-    private volatile boolean isClosed;
+    private volatile boolean isClosed;  
     private volatile boolean hasSwitchedToRemote;
     private final ConcurrentMap<FormatSwitchableIndexInput, Boolean> clones;
 
     /**
      * Shared lock between original and all clones/slices.
-     * Write lock: switchToRemote. Read lock: clone/slice.
+     * Write lock: switchToRemote. Read lock: clone/slice.  
      */
     private ReadWriteLock sharedLock;
 
     /**
      * Per-instance lock serializing reads on the same instance.
-     * Bypassed once switched (volatile fast-path).
+     * Bypassed once switched (volatile fast-path).  
      */
     private Lock objectLock;
 
     /**
      * Creates a new FormatSwitchableIndexInput starting from a local input.
-     *
+     *  
      * @param resourceDescription description for debugging
      * @param fileName            the file name (for logging and remote lookup)
-     * @param localInput          the initial local IndexInput (already opened)
+     * @param localInput          the initial local IndexInput (already opened)  
      * @param remoteDirectory     the remote directory to open remote input from on switch
      */
-    public FormatSwitchableIndexInput(
+    public FormatSwitchableIndexInput(  
         String resourceDescription,
         String fileName,
-        IndexInput localInput,
+        IndexInput localInput,  
         RemoteSegmentStoreDirectory remoteDirectory
     ) {
-        super(resourceDescription);
+        super(resourceDescription);  
         this.fileName = fileName;
         this.fileLength = localInput.length();
-        this.remoteDirectory = remoteDirectory;
+        this.remoteDirectory = remoteDirectory;  
         this.remoteInputSupplier = null;
         this.isClone = false;
-        this.isClosed = false;
+        this.isClosed = false;  
         this.hasSwitchedToRemote = false;
         this.sharedLock = new ReentrantReadWriteLock();
-        this.objectLock = new ReentrantLock();
+        this.objectLock = new ReentrantLock();  
         this.clones = ConcurrentCollections.newConcurrentMapWithAggressiveConcurrency();
         this.localIndexInput.set(localInput);
-        this.underlyingIndexInput.set(localInput);
+        this.underlyingIndexInput.set(localInput);  
     }
 
-    /**
+    /**  
      * Creates a new FormatSwitchableIndexInput starting from a local input (supplier-based, for testing).
      *
-     * @param resourceDescription description for debugging
+     * @param resourceDescription description for debugging  
      * @param fileName            the file name (for logging)
      * @param localInput          the initial local IndexInput (already opened)
-     * @param remoteInputSupplier supplier that creates the remote IndexInput on demand
+     * @param remoteInputSupplier supplier that creates the remote IndexInput on demand  
      */
     public FormatSwitchableIndexInput(
-        String resourceDescription,
+        String resourceDescription,  
         String fileName,
         IndexInput localInput,
-        Supplier<IndexInput> remoteInputSupplier
+        Supplier<IndexInput> remoteInputSupplier  
     ) {
         super(resourceDescription);
-        this.fileName = fileName;
+        this.fileName = fileName;  
         this.fileLength = localInput.length();
         this.remoteDirectory = null;
-        this.remoteInputSupplier = remoteInputSupplier;
+        this.remoteInputSupplier = remoteInputSupplier;  
         this.isClone = false;
         this.isClosed = false;
-        this.hasSwitchedToRemote = false;
+        this.hasSwitchedToRemote = false;  
         this.sharedLock = new ReentrantReadWriteLock();
         this.objectLock = new ReentrantLock();
-        this.clones = ConcurrentCollections.newConcurrentMapWithAggressiveConcurrency();
+        this.clones = ConcurrentCollections.newConcurrentMapWithAggressiveConcurrency();  
         this.localIndexInput.set(localInput);
         this.underlyingIndexInput.set(localInput);
-    }
+    }  
 
     /**
-     * Clone/slice constructor — shares sharedLock and clones map with the original.
+     * Clone/slice constructor — shares sharedLock and clones map with the original.  
      */
     private FormatSwitchableIndexInput(
-        String resourceDescription,
+        String resourceDescription,  
         String fileName,
         long fileLength,
-        RemoteSegmentStoreDirectory remoteDirectory,
+        RemoteSegmentStoreDirectory remoteDirectory,  
         Supplier<IndexInput> remoteInputSupplier,
         boolean hasSwitchedToRemote,
-        IndexInput clonedLocal,
+        IndexInput clonedLocal,  
         IndexInput clonedRemote,
         ConcurrentMap<FormatSwitchableIndexInput, Boolean> clones,
-        ReadWriteLock sharedLock
+        ReadWriteLock sharedLock  
     ) {
         super(resourceDescription);
-        this.fileName = fileName;
+        this.fileName = fileName;  
         this.fileLength = fileLength;
         this.remoteDirectory = remoteDirectory;
-        this.remoteInputSupplier = remoteInputSupplier;
+        this.remoteInputSupplier = remoteInputSupplier;  
         this.isClone = true;
         this.isClosed = false;
-        this.hasSwitchedToRemote = hasSwitchedToRemote;
+        this.hasSwitchedToRemote = hasSwitchedToRemote;  
         this.sharedLock = sharedLock;
         this.objectLock = new ReentrantLock();
-        this.clones = clones;
+        this.clones = clones;  
         if (hasSwitchedToRemote == false) {
             this.localIndexInput.set(clonedLocal);
-            this.underlyingIndexInput.set(clonedLocal);
+            this.underlyingIndexInput.set(clonedLocal);  
         } else {
             this.remoteIndexInput.set(clonedRemote);
-            this.underlyingIndexInput.set(clonedRemote);
+            this.underlyingIndexInput.set(clonedRemote);  
         }
     }
 
     /**
      * Switch all reads (this instance + all clones) to remote.
-     * Takes the shared write lock — blocks concurrent clone/slice.
+     * Takes the shared write lock — blocks concurrent clone/slice.  
      * No-op if already switched or closed.
      *
-     * <p>Edge cases handled:
+     * <p>Edge cases handled:  
      * <ul>
      *   <li>Already switched or closed → no-op</li>
-     *   <li>File not present in remote metadata → throws IllegalStateException (same as SwitchableIndexInput)</li>
+     *   <li>File not present in remote metadata → throws IllegalStateException (same as SwitchableIndexInput)</li>  
      *   <li>Remote input creation fails → exception propagated, state unchanged (still on local)</li>
      *   <li>Clone already closed → skipped during cascade</li>
-     *   <li>Clone switch fails → logged, other clones still switched, exception not propagated</li>
+     *   <li>Clone switch fails → logged, other clones still switched, exception not propagated</li>  
      *   <li>oldLocal is null (defensive) → skip seek, skip close</li>
      *   <li>oldLocal.close() throws → logged, switch still completes</li>
-     * </ul>
+     * </ul>  
      */
     public void switchToRemote() throws IOException {
-        sharedLock.writeLock().lock();
+        sharedLock.writeLock().lock();  
         try {
             objectLock.lock();
-            try {
+            try {  
                 if (isClosed || hasSwitchedToRemote) return;
 
-                // Validate file is present in remote — same guard as SwitchableIndexInput.validateFilePresentInRemote()
+                // Validate file is present in remote — same guard as SwitchableIndexInput.validateFilePresentInRemote()  
                 validateFilePresentInRemote();
 
-                // Create remote input — if this fails, state is unchanged (still on local).
+                // Create remote input — if this fails, state is unchanged (still on local).  
                 IndexInput remoteInput = getRemoteIndexInput();
                 if (remoteInput == null) {
-                    throw new IOException("Failed to create remote input for file=" + fileName);
+                    throw new IOException("Failed to create remote input for file=" + fileName);  
                 }
                 remoteIndexInput.set(remoteInput);
 
                 // Preserve file pointer position across the switch.
                 IndexInput oldLocal = underlyingIndexInput.get();
-                if (isClone && oldLocal != null) {
+                if (isClone && oldLocal != null) {  
                     remoteInput.seek(oldLocal.getFilePointer());
                 }
 
@@ -211,288 +211,288 @@ public class FormatSwitchableIndexInput extends IndexInput implements RandomAcce
 
                 // Cascade to all clones (parent only). Each clone switches independently.
                 if (isClone == false) {
-                    for (FormatSwitchableIndexInput clone : clones.keySet()) {
+                    for (FormatSwitchableIndexInput clone : clones.keySet()) {  
                         try {
                             clone.switchToRemote();
-                        } catch (Exception e) {
+                        } catch (Exception e) {  
                             // Clone may be closed or supplier may fail for clone — log and continue.
                             logger.error(
-                                () -> new org.apache.logging.log4j.message.ParameterizedMessage(
+                                () -> new org.apache.logging.log4j.message.ParameterizedMessage(  
                                     "Failed to switch clone to remote for file={}",
                                     fileName
-                                ),
+                                ),  
                                 e
                             );
-                        }
+                        }  
                     }
                 }
 
                 // Close old local input — release file handle.
                 if (oldLocal != null) {
-                    try {
+                    try {  
                         oldLocal.close();
                     } catch (Exception e) {
-                        // Local file may already be deleted — that's fine.
+                        // Local file may already be deleted — that's fine.  
                         logger.debug(
                             () -> new org.apache.logging.log4j.message.ParameterizedMessage(
-                                "Failed to close local input during switch for file={}",
+                                "Failed to close local input during switch for file={}",  
                                 fileName
                             ),
-                            e
+                            e  
                         );
                     }
-                }
+                }  
 
                 hasSwitchedToRemote = true;
-            } finally {
+            } finally {  
                 objectLock.unlock();
             }
-        } finally {
+        } finally {  
             sharedLock.writeLock().unlock();
         }
-    }
+    }  
 
     /**
-     * Validates that the file exists in remote metadata before switching.
+     * Validates that the file exists in remote metadata before switching.  
      * Same pattern as .
      *
-     * @throws IllegalStateException if the file is not present in remote
+     * @throws IllegalStateException if the file is not present in remote  
      */
     private void validateFilePresentInRemote() {
-        if (remoteDirectory == null) {
+        if (remoteDirectory == null) {  
             // Supplier-based mode (tests) — skip validation, trust the caller.
             return;
-        }
+        }  
         if (remoteDirectory.getExistingRemoteFilename(fileName) == null) {
             throw new IllegalStateException("Cannot switch to remote — file " + fileName + " not present in remote metadata");
-        }
+        }  
     }
 
-    /**
+    /**  
      * Creates the remote IndexInput. Uses remoteDirectory if available (production),
      * falls back to supplier (tests).
-     */
+     */  
     private IndexInput getRemoteIndexInput() throws IOException {
         if (remoteDirectory != null) {
-            return remoteDirectory.openInput(fileName, IOContext.DEFAULT);
+            return remoteDirectory.openInput(fileName, IOContext.DEFAULT);  
         }
         if (remoteInputSupplier != null) {
-            return remoteInputSupplier.get();
+            return remoteInputSupplier.get();  
         }
         throw new IOException("No remote directory or supplier configured for file=" + fileName);
-    }
+    }  
 
     /**
-     * Returns true if this input has been switched to remote.
+     * Returns true if this input has been switched to remote.  
      */
     public boolean hasSwitchedToRemote() {
-        return hasSwitchedToRemote;
+        return hasSwitchedToRemote;  
     }
 
-    @Override
+    @Override  
     public void close() throws IOException {
         withOptionalLock(() -> {
-            if (isClosed == false) {
+            if (isClosed == false) {  
                 if (localIndexInput.get() != null) localIndexInput.get().close();
                 if (remoteIndexInput.get() != null) remoteIndexInput.get().close();
-                if (isClone) {
+                if (isClone) {  
                     clones.remove(this);
                 } else {
-                    clones.clear();
+                    clones.clear();  
                 }
                 isClosed = true;
-            }
+            }  
         });
     }
 
     @Override
     public byte readByte() throws IOException {
-        return withOptionalLock(() -> underlyingIndexInput.get().readByte());
+        return withOptionalLock(() -> underlyingIndexInput.get().readByte());  
     }
 
-    @Override
+    @Override  
     public void readBytes(byte[] b, int offset, int len) throws IOException {
         withOptionalLock(() -> underlyingIndexInput.get().readBytes(b, offset, len));
-    }
+    }  
 
     @Override
-    public short readShort() throws IOException {
+    public short readShort() throws IOException {  
         return withOptionalLock(() -> underlyingIndexInput.get().readShort());
     }
 
     @Override
     public int readInt() throws IOException {
-        return withOptionalLock(() -> underlyingIndexInput.get().readInt());
+        return withOptionalLock(() -> underlyingIndexInput.get().readInt());  
     }
 
-    @Override
+    @Override  
     public long readLong() throws IOException {
         return withOptionalLock(() -> underlyingIndexInput.get().readLong());
-    }
+    }  
 
     @Override
-    public int readVInt() throws IOException {
+    public int readVInt() throws IOException {  
         return withOptionalLock(() -> underlyingIndexInput.get().readVInt());
     }
 
     @Override
     public long readVLong() throws IOException {
-        return withOptionalLock(() -> underlyingIndexInput.get().readVLong());
+        return withOptionalLock(() -> underlyingIndexInput.get().readVLong());  
     }
 
-    @Override
+    @Override  
     public long getFilePointer() {
         return withOptionalLock(() -> underlyingIndexInput.get().getFilePointer());
-    }
+    }  
 
     @Override
-    public void seek(long pos) throws IOException {
+    public void seek(long pos) throws IOException {  
         withOptionalLock(() -> underlyingIndexInput.get().seek(pos));
     }
 
     @Override
     public long length() {
-        return fileLength;
+        return fileLength;  
     }
 
-    @Override
+    @Override  
     public byte readByte(long pos) throws IOException {
         return withOptionalLock(() -> ((RandomAccessInput) underlyingIndexInput.get()).readByte(pos));
-    }
+    }  
 
     @Override
-    public short readShort(long pos) throws IOException {
+    public short readShort(long pos) throws IOException {  
         return withOptionalLock(() -> ((RandomAccessInput) underlyingIndexInput.get()).readShort(pos));
     }
 
     @Override
     public int readInt(long pos) throws IOException {
-        return withOptionalLock(() -> ((RandomAccessInput) underlyingIndexInput.get()).readInt(pos));
+        return withOptionalLock(() -> ((RandomAccessInput) underlyingIndexInput.get()).readInt(pos));  
     }
 
-    @Override
+    @Override  
     public long readLong(long pos) throws IOException {
         return withOptionalLock(() -> ((RandomAccessInput) underlyingIndexInput.get()).readLong(pos));
-    }
+    }  
 
     @Override
-    public void prefetch(long offset, long length) throws IOException {
+    public void prefetch(long offset, long length) throws IOException {  
         underlyingIndexInput.get().prefetch(offset, length);
     }
 
     @Override
     public FormatSwitchableIndexInput clone() {
-        sharedLock.readLock().lock();
+        sharedLock.readLock().lock();  
         try {
             return withOptionalLock(() -> {
-                try {
+                try {  
                     FormatSwitchableIndexInput cloned = new FormatSwitchableIndexInput(
                         "FormatSwitchableIndexInput Clone (file=" + fileName + ")",
-                        fileName,
+                        fileName,  
                         fileLength,
                         remoteDirectory,
-                        remoteInputSupplier,
+                        remoteInputSupplier,  
                         hasSwitchedToRemote,
                         (hasSwitchedToRemote == false && localIndexInput.get() != null) ? localIndexInput.get().clone() : null,
-                        (hasSwitchedToRemote && remoteIndexInput.get() != null) ? remoteIndexInput.get().clone() : null,
+                        (hasSwitchedToRemote && remoteIndexInput.get() != null) ? remoteIndexInput.get().clone() : null,  
                         clones,
                         sharedLock
-                    );
+                    );  
                     cloned.seek(getFilePointer());
                     clones.put(cloned, true);
-                    return cloned;
+                    return cloned;  
                 } catch (IOException e) {
                     throw new RuntimeException(e);
-                }
+                }  
             });
         } finally {
-            sharedLock.readLock().unlock();
+            sharedLock.readLock().unlock();  
         }
     }
 
     @Override
     public IndexInput slice(String sliceDescription, long offset, long length) throws IOException {
-        sharedLock.readLock().lock();
+        sharedLock.readLock().lock();  
         try {
             return withOptionalLock(() -> {
-                try {
+                try {  
                     FormatSwitchableIndexInput sliced = new FormatSwitchableIndexInput(
                         "FormatSwitchableIndexInput Slice " + sliceDescription + " (file=" + fileName + ")",
-                        fileName,
+                        fileName,  
                         length,
                         remoteDirectory,
-                        remoteInputSupplier,
+                        remoteInputSupplier,  
                         hasSwitchedToRemote,
                         (hasSwitchedToRemote == false && localIndexInput.get() != null)
-                            ? localIndexInput.get().slice(sliceDescription, offset, length)
+                            ? localIndexInput.get().slice(sliceDescription, offset, length)  
                             : null,
                         (hasSwitchedToRemote && remoteIndexInput.get() != null)
-                            ? remoteIndexInput.get().slice(sliceDescription, offset, length)
+                            ? remoteIndexInput.get().slice(sliceDescription, offset, length)  
                             : null,
                         clones,
-                        sharedLock
+                        sharedLock  
                     );
                     sliced.seek(0);
-                    clones.put(sliced, true);
+                    clones.put(sliced, true);  
                     return sliced;
                 } catch (IOException e) {
-                    throw new RuntimeException(e);
+                    throw new RuntimeException(e);  
                 }
             });
-        } finally {
+        } finally {  
             sharedLock.readLock().unlock();
         }
-    }
+    }  
 
     /**
-     * Runnable implementation for use with {@link java.lang.ref.Cleaner}.
+     * Runnable implementation for use with {@link java.lang.ref.Cleaner}.  
      * Invoked when the object becomes phantom-reachable — ensures resources
      * are released even if the caller forgets to call {@link #close()}.
-     */
+     */  
     @Override
     public void run() {
-        try {
+        try {  
             close();
         } catch (Exception e) {
-            logger.error(
+            logger.error(  
                 () -> new org.apache.logging.log4j.message.ParameterizedMessage(
                     "Error while cleaning up FormatSwitchableIndexInput for file={}",
-                    fileName
+                    fileName  
                 ),
                 e
-            );
+            );  
         }
     }
 
     // -- withOptionalLock helpers (same pattern as SwitchableIndexInput) ------
 
-    private void withOptionalLock(IORunnable operation) throws IOException {
+    private void withOptionalLock(IORunnable operation) throws IOException {  
         if (hasSwitchedToRemote) {
             operation.run();
-            return;
+            return;  
         }
         objectLock.lock();
-        try {
+        try {  
             operation.run();
         } finally {
-            objectLock.unlock();
+            objectLock.unlock();  
         }
     }
 
     private <T, E extends Exception> T withOptionalLock(ThrowingSupplier<T, E> operation) throws E {
         if (hasSwitchedToRemote) {
-            return operation.get();
+            return operation.get();  
         }
         objectLock.lock();
-        try {
+        try {  
             return operation.get();
         } finally {
-            objectLock.unlock();
+            objectLock.unlock();  
         }
     }
 
     @FunctionalInterface
     private interface ThrowingSupplier<T, E extends Exception> {
-        T get() throws E;
+        T get() throws E;  
     }
 }

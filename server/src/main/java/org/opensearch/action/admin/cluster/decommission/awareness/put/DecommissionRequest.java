@@ -1,37 +1,37 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.action.admin.cluster.decommission.awareness.put;
 
 import org.opensearch.action.ActionRequestValidationException;
 import org.opensearch.action.support.clustermanager.ClusterManagerNodeRequest;
-import org.opensearch.cluster.decommission.DecommissionAttribute;
+import org.opensearch.cluster.decommission.DecommissionAttribute;  
 import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.Strings;
+import org.opensearch.core.common.Strings;  
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 
 import java.io.IOException;
 
-import static org.opensearch.action.ValidateActions.addValidationError;
+import static org.opensearch.action.ValidateActions.addValidationError;  
 
 /**
- * Registers a decommission request with decommission attribute and timeout
+ * Registers a decommission request with decommission attribute and timeout  
  *
  * @opensearch.api
- */
+ */  
 @PublicApi(since = "2.4.0")
 public class DecommissionRequest extends ClusterManagerNodeRequest<DecommissionRequest> {
 
     public static final TimeValue DEFAULT_NODE_DRAINING_TIMEOUT = TimeValue.timeValueSeconds(120);
 
-    private DecommissionAttribute decommissionAttribute;
+    private DecommissionAttribute decommissionAttribute;  
     private String requestID;
     private TimeValue delayTimeout = DEFAULT_NODE_DRAINING_TIMEOUT;
 
@@ -40,117 +40,117 @@ public class DecommissionRequest extends ClusterManagerNodeRequest<DecommissionR
 
     public DecommissionRequest() {}
 
-    public DecommissionRequest(DecommissionAttribute decommissionAttribute) {
+    public DecommissionRequest(DecommissionAttribute decommissionAttribute) {  
         this.decommissionAttribute = decommissionAttribute;
     }
 
     public DecommissionRequest(StreamInput in) throws IOException {
         super(in);
-        decommissionAttribute = new DecommissionAttribute(in);
+        decommissionAttribute = new DecommissionAttribute(in);  
         this.delayTimeout = in.readTimeValue();
         this.noDelay = in.readBoolean();
-        this.requestID = in.readOptionalString();
+        this.requestID = in.readOptionalString();  
     }
 
-    @Override
+    @Override  
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
-        decommissionAttribute.writeTo(out);
+        decommissionAttribute.writeTo(out);  
         out.writeTimeValue(delayTimeout);
         out.writeBoolean(noDelay);
-        out.writeOptionalString(requestID);
+        out.writeOptionalString(requestID);  
     }
 
-    /**
+    /**  
      * Sets decommission attribute for decommission request
      *
-     * @param decommissionAttribute attribute key-value that needs to be decommissioned
+     * @param decommissionAttribute attribute key-value that needs to be decommissioned  
      * @return this request
      */
-    public DecommissionRequest setDecommissionAttribute(DecommissionAttribute decommissionAttribute) {
+    public DecommissionRequest setDecommissionAttribute(DecommissionAttribute decommissionAttribute) {  
         this.decommissionAttribute = decommissionAttribute;
         return this;
-    }
+    }  
 
     /**
-     * @return Returns the decommission attribute key-value
+     * @return Returns the decommission attribute key-value  
      */
     public DecommissionAttribute getDecommissionAttribute() {
-        return this.decommissionAttribute;
+        return this.decommissionAttribute;  
     }
 
-    public DecommissionRequest setDelayTimeout(TimeValue delayTimeout) {
+    public DecommissionRequest setDelayTimeout(TimeValue delayTimeout) {  
         this.delayTimeout = delayTimeout;
         return this;
-    }
+    }  
 
     public TimeValue getDelayTimeout() {
-        return this.delayTimeout;
+        return this.delayTimeout;  
     }
 
-    public DecommissionRequest setNoDelay(boolean noDelay) {
+    public DecommissionRequest setNoDelay(boolean noDelay) {  
         if (noDelay) {
             this.delayTimeout = TimeValue.ZERO;
-        }
+        }  
         this.noDelay = noDelay;
         return this;
-    }
+    }  
 
     public boolean isNoDelay() {
-        return noDelay;
+        return noDelay;  
     }
 
-    /**
+    /**  
      * Sets id for decommission request
      *
-     * @param requestID uuid for request
+     * @param requestID uuid for request  
      * @return this request
      */
-    public DecommissionRequest setRequestID(String requestID) {
+    public DecommissionRequest setRequestID(String requestID) {  
         this.requestID = requestID;
         return this;
-    }
+    }  
 
     /**
-     * @return Returns id of decommission request
+     * @return Returns id of decommission request  
      */
     public String requestID() {
-        return requestID;
+        return requestID;  
     }
 
-    @Override
+    @Override  
     public ActionRequestValidationException validate() {
         ActionRequestValidationException validationException = null;
-        if (decommissionAttribute == null) {
+        if (decommissionAttribute == null) {  
             validationException = addValidationError("decommission attribute is missing", validationException);
             return validationException;
-        }
+        }  
         if (decommissionAttribute.attributeName() == null || Strings.isEmpty(decommissionAttribute.attributeName())) {
             validationException = addValidationError("attribute name is missing", validationException);
-        }
+        }  
         if (decommissionAttribute.attributeValue() == null || Strings.isEmpty(decommissionAttribute.attributeValue())) {
             validationException = addValidationError("attribute value is missing", validationException);
-        }
+        }  
         // This validation should not fail since we are not allowing delay timeout to be set externally.
         // Still keeping it for double check.
-        if (noDelay && delayTimeout.getSeconds() > 0) {
+        if (noDelay && delayTimeout.getSeconds() > 0) {  
             final String validationMessage = "Invalid decommission request. no_delay is true and delay_timeout is set to "
                 + delayTimeout.getSeconds()
-                + "] Seconds";
+                + "] Seconds";  
             validationException = addValidationError(validationMessage, validationException);
         }
-        return validationException;
+        return validationException;  
     }
 
-    @Override
+    @Override  
     public String toString() {
         return "DecommissionRequest{"
-            + "decommissionAttribute="
+            + "decommissionAttribute="  
             + decommissionAttribute
             + ", delayTimeout="
-            + delayTimeout
+            + delayTimeout  
             + ", noDelay="
             + noDelay
-            + '}';
+            + '}';  
     }
 }

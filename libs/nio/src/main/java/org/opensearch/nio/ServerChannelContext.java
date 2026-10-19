@@ -1,34 +1,34 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.nio;
 
@@ -37,103 +37,103 @@ import org.opensearch.secure_sm.AccessController;
 
 import java.io.IOException;
 import java.net.BindException;
-import java.net.InetSocketAddress;
+import java.net.InetSocketAddress;  
 import java.net.ServerSocket;
 import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
+import java.nio.channels.SocketChannel;  
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
+import java.util.function.Consumer;  
 import java.util.function.Supplier;
 
-public class ServerChannelContext extends ChannelContext<ServerSocketChannel> {
+public class ServerChannelContext extends ChannelContext<ServerSocketChannel> {  
 
     private final NioServerSocketChannel channel;
-    private final NioSelector selector;
+    private final NioSelector selector;  
     private final Config.ServerSocket config;
     private final Consumer<NioSocketChannel> acceptor;
-    private final AtomicBoolean isClosing = new AtomicBoolean(false);
+    private final AtomicBoolean isClosing = new AtomicBoolean(false);  
     private final ChannelFactory<?, ?> channelFactory;
     private final CompletableContext<Void> bindContext = new CompletableContext<>();
 
     public ServerChannelContext(
         NioServerSocketChannel channel,
-        ChannelFactory<?, ?> channelFactory,
+        ChannelFactory<?, ?> channelFactory,  
         NioSelector selector,
         Config.ServerSocket config,
-        Consumer<NioSocketChannel> acceptor,
+        Consumer<NioSocketChannel> acceptor,  
         Consumer<Exception> exceptionHandler
     ) {
-        super(channel.getRawChannel(), exceptionHandler);
+        super(channel.getRawChannel(), exceptionHandler);  
         this.channel = channel;
         this.channelFactory = channelFactory;
-        this.selector = selector;
+        this.selector = selector;  
         this.config = config;
         this.acceptor = acceptor;
-    }
+    }  
 
     public void acceptChannels(Supplier<NioSelector> selectorSupplier) throws IOException {
-        SocketChannel acceptedChannel = null;
+        SocketChannel acceptedChannel = null;  
         try {
             while ((acceptedChannel = accept(rawChannel)) != null) {
-                NioSocketChannel nioChannel = channelFactory.acceptNioChannel(acceptedChannel, selectorSupplier);
+                NioSocketChannel nioChannel = channelFactory.acceptNioChannel(acceptedChannel, selectorSupplier);  
                 acceptor.accept(nioChannel);
             }
-        } finally {
+        } finally {  
             if (acceptedChannel != null) acceptedChannel.close();
         }
-    }
+    }  
 
     public void addBindListener(BiConsumer<Void, Exception> listener) {
-        bindContext.addListener(listener);
+        bindContext.addListener(listener);  
     }
 
-    @Override
+    @Override  
     protected void register() throws IOException {
         super.register();
 
         configureSocket(rawChannel.socket());
 
-        InetSocketAddress localAddress = config.getLocalAddress();
+        InetSocketAddress localAddress = config.getLocalAddress();  
         try {
             rawChannel.bind(localAddress);
-            bindContext.complete(null);
+            bindContext.complete(null);  
         } catch (IOException e) {
             BindException exception = new BindException("Failed to bind server socket channel {localAddress=" + localAddress + "}.");
-            exception.initCause(e);
+            exception.initCause(e);  
             bindContext.completeExceptionally(exception);
             throw exception;
-        }
+        }  
     }
 
-    @Override
+    @Override  
     public void closeChannel() {
         if (isClosing.compareAndSet(false, true)) {
-            getSelector().queueChannelClose(channel);
+            getSelector().queueChannelClose(channel);  
         }
     }
 
     @Override
     public NioSelector getSelector() {
-        return selector;
+        return selector;  
     }
 
-    @Override
+    @Override  
     public NioServerSocketChannel getChannel() {
         return channel;
-    }
+    }  
 
     private void configureSocket(ServerSocket socket) throws IOException {
-        socket.setReuseAddress(config.tcpReuseAddress());
+        socket.setReuseAddress(config.tcpReuseAddress());  
     }
 
-    protected static SocketChannel accept(ServerSocketChannel serverSocketChannel) throws IOException {
+    protected static SocketChannel accept(ServerSocketChannel serverSocketChannel) throws IOException {  
         assert serverSocketChannel.isBlocking() == false;
         SocketChannel channel = AccessController.doPrivilegedChecked(serverSocketChannel::accept);
-        if (serverSocketChannel.isBlocking() == true) {
+        if (serverSocketChannel.isBlocking() == true) {  
             channel.close();
             throw new AssertionError("serverSocketChannel is blocking.");
-        }
+        }  
         return channel;
     }
-}
+}  

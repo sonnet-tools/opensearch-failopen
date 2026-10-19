@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.composite;
 
@@ -13,231 +13,231 @@ import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
 
 import org.opensearch.action.index.IndexResponse;
 import org.opensearch.arrow.allocator.ArrowBasePlugin;
-import org.opensearch.be.datafusion.DataFusionPlugin;
+import org.opensearch.be.datafusion.DataFusionPlugin;  
 import org.opensearch.be.lucene.LucenePlugin;
 import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.cluster.service.ClusterService;  
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.core.common.unit.ByteSizeUnit;
+import org.opensearch.core.common.unit.ByteSizeUnit;  
 import org.opensearch.core.common.unit.ByteSizeValue;
 import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
 import org.opensearch.env.Environment;
 import org.opensearch.index.IndexModule;
-import org.opensearch.index.shard.IndexShard;
+import org.opensearch.index.shard.IndexShard;  
 import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.indices.replication.common.ReplicationType;
+import org.opensearch.indices.replication.common.ReplicationType;  
 import org.opensearch.node.Node;
 import org.opensearch.parquet.ParquetDataFormatPlugin;
-import org.opensearch.plugins.Plugin;
+import org.opensearch.plugins.Plugin;  
 import org.opensearch.remotestore.RemoteStoreBaseIntegTestCase;
 import org.opensearch.remotestore.mocks.MockFsMetadataSupportedRepositoryPlugin;
-import org.opensearch.remotestore.multipart.mocks.MockFsRepository;
+import org.opensearch.remotestore.multipart.mocks.MockFsRepository;  
 import org.opensearch.remotestore.multipart.mocks.MockFsRepositoryPlugin;
 import org.opensearch.repositories.Repository;
-import org.opensearch.repositories.fs.FsRepository;
+import org.opensearch.repositories.fs.FsRepository;  
 import org.opensearch.repositories.fs.ReloadableFsRepository;
 import org.opensearch.repositories.fs.native_store.FsNativeObjectStorePlugin;
-import org.opensearch.test.OpenSearchIntegTestCase;
+import org.opensearch.test.OpenSearchIntegTestCase;  
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
+import java.io.UncheckedIOException;  
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Collection;  
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
+import java.util.Map;  
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
  * Base class for DataFormatAwareReadOnlyEngine integration tests.
- * Provides common cluster setup, index creation, and helper methods.
+ * Provides common cluster setup, index creation, and helper methods.  
  */
 @ThreadLeakFilters(filters = DataFormatAwareReadonlyEngineBaseIT.CleanerThreadFilter.class)
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0, supportsDedicatedMasters = false)
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0, supportsDedicatedMasters = false)  
 public abstract class DataFormatAwareReadonlyEngineBaseIT extends RemoteStoreBaseIntegTestCase {
 
-    protected static final String INDEX_NAME = "warm-readonly-idx";
+    protected static final String INDEX_NAME = "warm-readonly-idx";  
     protected static final int DOC_COUNT = 50;
 
-    /** Suppresses index-input-cleaner threads leaked by MMapDirectory. */
+    /** Suppresses index-input-cleaner threads leaked by MMapDirectory. */  
     public static class CleanerThreadFilter implements ThreadFilter {
         @Override
-        public boolean reject(Thread t) {
+        public boolean reject(Thread t) {  
             return t.getName().startsWith("index-input-cleaner");
         }
-    }
+    }  
 
     /**
-     * Replaces {@code MockFsMetadataSupportedRepositoryPlugin} from the base test class with a
+     * Replaces {@code MockFsMetadataSupportedRepositoryPlugin} from the base test class with a  
      * version that wires {@link FsNativeObjectStorePlugin} as the native store provider.
      * This allows warm parquet shards to obtain a live {@code NativeStoreRepository} from the
-     * {@code "fs_metadata_supported_repository"} repos used in remote-store integration tests.
+     * {@code "fs_metadata_supported_repository"} repos used in remote-store integration tests.  
      */
     public static class NativeAwareMockFsMetadataSupportedRepositoryPlugin extends Plugin
-        implements
+        implements  
             org.opensearch.plugins.RepositoryPlugin {
 
-        private final FsNativeObjectStorePlugin nativeProvider = new FsNativeObjectStorePlugin();
+        private final FsNativeObjectStorePlugin nativeProvider = new FsNativeObjectStorePlugin();  
 
         @Override
-        public Map<String, Repository.Factory> getRepositories(
+        public Map<String, Repository.Factory> getRepositories(  
             Environment env,
             NamedXContentRegistry namedXContentRegistry,
-            ClusterService clusterService,
+            ClusterService clusterService,  
             RecoverySettings recoverySettings
         ) {
-            return Collections.singletonMap(
+            return Collections.singletonMap(  
                 MockFsMetadataSupportedRepositoryPlugin.TYPE_MD,
                 metadata -> new ReloadableFsRepository(
-                    metadata,
+                    metadata,  
                     env,
                     namedXContentRegistry,
-                    clusterService,
+                    clusterService,  
                     recoverySettings,
                     nativeProvider
-                )
+                )  
             );
         }
-    }
+    }  
 
     /**
-     * Replaces {@code MockFsRepositoryPlugin} from the base test class with a version that wires
+     * Replaces {@code MockFsRepositoryPlugin} from the base test class with a version that wires  
      * {@link FsNativeObjectStorePlugin} as the native store provider.
      * This covers the {@code "fs_multipart_repository"} path, which is chosen when
-     * {@code metadataSupportedType == false} in {@code RemoteStoreBaseIntegTestCase}.
+     * {@code metadataSupportedType == false} in {@code RemoteStoreBaseIntegTestCase}.  
      *
      * <p>Keeps {@link MockFsRepository} as the implementation rather than a plain {@link FsRepository}:
-     * the mock's blob container is the only one of the two that reports store-enforced conditional
+     * the mock's blob container is the only one of the two that reports store-enforced conditional  
      * writes, which remote store fencing requires. Substituting {@code FsRepository} here made every
      * seed that picked {@code asyncUploadMockFsRepo=true}, {@code metadataSupportedType=false} and
-     * fencing-enabled fail shard recovery outright.
+     * fencing-enabled fail shard recovery outright.  
      */
     public static class NativeAwareMockFsRepositoryPlugin extends Plugin implements org.opensearch.plugins.RepositoryPlugin {
 
         private final FsNativeObjectStorePlugin nativeProvider = new FsNativeObjectStorePlugin();
 
-        @Override
+        @Override  
         public Map<String, Repository.Factory> getRepositories(
             Environment env,
-            NamedXContentRegistry namedXContentRegistry,
+            NamedXContentRegistry namedXContentRegistry,  
             ClusterService clusterService,
             RecoverySettings recoverySettings
-        ) {
+        ) {  
             return Collections.singletonMap(
                 MockFsRepositoryPlugin.TYPE,
-                metadata -> new MockFsRepository(metadata, env, namedXContentRegistry, clusterService, recoverySettings, nativeProvider)
+                metadata -> new MockFsRepository(metadata, env, namedXContentRegistry, clusterService, recoverySettings, nativeProvider)  
             );
         }
-    }
+    }  
 
     @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
+    protected Collection<Class<? extends Plugin>> nodePlugins() {  
         // Replace both mock repo plugins (from super) with native-provider-aware versions so that
         // warm Parquet shards can obtain a live NativeStoreRepository regardless of which repo type
-        // RemoteStoreBaseIntegTestCase randomly picks (metadataSupportedType = randomBoolean()).
+        // RemoteStoreBaseIntegTestCase randomly picks (metadataSupportedType = randomBoolean()).  
         return Stream.concat(
             super.nodePlugins().stream()
-                .filter(p -> p != MockFsMetadataSupportedRepositoryPlugin.class)
+                .filter(p -> p != MockFsMetadataSupportedRepositoryPlugin.class)  
                 .filter(p -> p != MockFsRepositoryPlugin.class),
             Stream.<Class<? extends Plugin>>of(
-                ArrowBasePlugin.class,
+                ArrowBasePlugin.class,  
                 ParquetDataFormatPlugin.class,
                 CompositeDataFormatPlugin.class,
-                LucenePlugin.class,
+                LucenePlugin.class,  
                 DataFusionPlugin.class,
                 FsNativeObjectStorePlugin.class,
-                NativeAwareMockFsMetadataSupportedRepositoryPlugin.class,
+                NativeAwareMockFsMetadataSupportedRepositoryPlugin.class,  
                 NativeAwareMockFsRepositoryPlugin.class
             )
-        ).collect(Collectors.toList());
+        ).collect(Collectors.toList());  
     }
 
-    @Override
+    @Override  
     protected boolean addMockIndexStorePlugin() {
         return false;
-    }
+    }  
 
     @Override
-    protected Settings featureFlagSettings() {
+    protected Settings featureFlagSettings() {  
         return Settings.builder()
             .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)
-            .put(FeatureFlags.WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG, true)
+            .put(FeatureFlags.WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG, true)  
             .build();
     }
 
     @Override
     protected Settings nodeSettings(int nodeOrdinal) {
-        // super.nodeSettings() populates segmentRepoPath / translogRepoPath via randomRepoPath().
+        // super.nodeSettings() populates segmentRepoPath / translogRepoPath via randomRepoPath().  
         // Those paths are not yet created on disk. Pre-create them here so that
         // FsNativeObjectStorePlugin (which calls fs_create_store → LocalFileSystem::new_with_prefix
-        // → canonicalize) can resolve the paths when repositories are registered at node startup.
+        // → canonicalize) can resolve the paths when repositories are registered at node startup.  
         final Settings settings = super.nodeSettings(nodeOrdinal);
         try {
-            if (segmentRepoPath != null) {
+            if (segmentRepoPath != null) {  
                 Files.createDirectories(segmentRepoPath);
             }
-            if (translogRepoPath != null) {
+            if (translogRepoPath != null) {  
                 Files.createDirectories(translogRepoPath);
             }
-        } catch (IOException e) {
+        } catch (IOException e) {  
             throw new UncheckedIOException("Failed to pre-create remote store repo directories", e);
         }
-        return Settings.builder()
+        return Settings.builder()  
             .put(settings)
             .put(Node.NODE_SEARCH_CACHE_SIZE_SETTING.getKey(), new ByteSizeValue(16, ByteSizeUnit.GB).toString())
-            .build();
+            .build();  
     }
 
-    protected Settings dfaIndexSettings(int replicaCount) {
+    protected Settings dfaIndexSettings(int replicaCount) {  
         return Settings.builder()
             .put(remoteStoreIndexSettings(replicaCount, 1))
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)  
             .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
             .put("index.pluggable.dataformat.enabled", true)
-            .put("index.pluggable.dataformat", "composite")
+            .put("index.pluggable.dataformat", "composite")  
             .put("index.composite.primary_data_format", "parquet")
             .putList("index.composite.secondary_data_formats", List.of("lucene"))
-            .build();
+            .build();  
     }
 
-    protected String primaryNodeName() {
+    protected String primaryNodeName() {  
         String nodeId = getClusterState().routingTable().index(INDEX_NAME).shard(0).primaryShard().currentNodeId();
         return getClusterState().nodes().get(nodeId).getName();
-    }
+    }  
 
     protected IndexShard getIndexShard(String nodeName) {
-        return internalCluster().getInstance(IndicesService.class, nodeName).indexServiceSafe(resolveIndex(INDEX_NAME)).getShard(0);
+        return internalCluster().getInstance(IndicesService.class, nodeName).indexServiceSafe(resolveIndex(INDEX_NAME)).getShard(0);  
     }
 
-    /** Create hot DFA index, index docs, flush, then tier to warm. */
+    /** Create hot DFA index, index docs, flush, then tier to warm. */  
     protected List<String> createHotIndexAndTierToWarm(int replicaCount) throws Exception {
         client().admin().indices().prepareCreate(INDEX_NAME).setSettings(dfaIndexSettings(replicaCount)).get();
-        ensureGreen(INDEX_NAME);
+        ensureGreen(INDEX_NAME);  
 
         List<String> docIds = new ArrayList<>();
-        for (int i = 0; i < DOC_COUNT; i++) {
+        for (int i = 0; i < DOC_COUNT; i++) {  
             IndexResponse indexResponse = client().prepareIndex(INDEX_NAME)
                 .setSource("field_text", "value_" + i, "field_number", (long) i)
-                .get();
+                .get();  
             assertEquals(RestStatus.CREATED, indexResponse.status());
             docIds.add(indexResponse.getId());
-        }
+        }  
         client().admin().indices().prepareFlush(INDEX_NAME).setForce(true).get();
 
-        // Tier to warm: close → mark warm → open
+        // Tier to warm: close → mark warm → open  
         client().admin().indices().prepareClose(INDEX_NAME).get();
         client().admin()
-            .indices()
+            .indices()  
             .prepareUpdateSettings(INDEX_NAME)
             .setSettings(Settings.builder().put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), true))
-            .get();
+            .get();  
         client().admin().indices().prepareOpen(INDEX_NAME).get();
         ensureGreen(INDEX_NAME);
-        return docIds;
+        return docIds;  
     }
 }

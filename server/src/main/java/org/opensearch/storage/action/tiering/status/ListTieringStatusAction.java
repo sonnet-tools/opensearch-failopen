@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.storage.action.tiering.status;
 
@@ -16,10 +16,10 @@ public class ListTieringStatusAction extends ActionType<ListTieringStatusRespons
 
     /** Singleton instance. */
     public static final ListTieringStatusAction INSTANCE = new ListTieringStatusAction();
-    /** Action name for listing tiering status. */
+    /** Action name for listing tiering status. */  
     public static final String NAME = "cluster:admin/_tier/all";
 
-    private ListTieringStatusAction() {
+    private ListTieringStatusAction() {  
         super(NAME, ListTieringStatusResponse::new);
     }
-}
+}  

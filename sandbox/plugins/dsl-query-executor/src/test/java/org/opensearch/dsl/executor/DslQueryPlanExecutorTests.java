@@ -1,28 +1,28 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.dsl.executor;
 
 import org.apache.calcite.rel.logical.LogicalTableScan;
 import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.dsl.TestUtils;
+import org.opensearch.dsl.TestUtils;  
 import org.opensearch.dsl.result.ExecutionResult;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.List;
 
-public class DslQueryPlanExecutorTests extends OpenSearchTestCase {
+public class DslQueryPlanExecutorTests extends OpenSearchTestCase {  
 
     private LogicalTableScan scan;
 
     @Override
     public void setUp() throws Exception {
-        super.setUp();
+        super.setUp();  
         scan = TestUtils.createTestRelNode();
     }
 
@@ -34,39 +34,39 @@ public class DslQueryPlanExecutorTests extends OpenSearchTestCase {
 
         PlainActionFuture<List<ExecutionResult>> future = new PlainActionFuture<>();
         executor.execute(plans, future);
-        List<ExecutionResult> results = future.actionGet();
+        List<ExecutionResult> results = future.actionGet();  
 
         assertEquals(1, results.size());
-        ExecutionResult result = results.get(0);
+        ExecutionResult result = results.get(0);  
         assertSame(expectedRows, result.getRows());
         assertEquals(QueryPlans.Type.HITS, result.getType());
-        assertNotNull(result.getPlan());
+        assertNotNull(result.getPlan());  
         assertSame(scan, result.getPlan().relNode());
         assertEquals(
-            List.of(
+            List.of(  
                 "name",
                 "price",
-                "brand",
+                "brand",  
                 "rating",
                 "created_date",
-                "is_active",
+                "is_active",  
                 "timestamp",
                 "location",
-                "status",
+                "status",  
                 "binary_data",
                 "event_time",
-                "ip_address",
+                "ip_address",  
                 "event_nanos",
                 "scaled_price",
-                "unsigned_counter",
+                "unsigned_counter",  
                 "tiny_val",
                 "small_val",
-                "float_val"
+                "float_val"  
             ),
             result.getFieldNames()
-        );
+        );  
     }
 
-    // TODO: add test with multiple plans (HITS + AGGREGATION) to verify iteration order
+    // TODO: add test with multiple plans (HITS + AGGREGATION) to verify iteration order  
     // TODO: add test for executor failure
 }

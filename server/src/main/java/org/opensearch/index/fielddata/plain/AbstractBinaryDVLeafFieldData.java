@@ -1,103 +1,103 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.index.fielddata.plain;
 
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.util.Accountable;
-import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.BytesRef;  
 import org.opensearch.core.common.io.stream.BytesStreamInput;
 import org.opensearch.index.fielddata.LeafFieldData;
-import org.opensearch.index.fielddata.SortedBinaryDocValues;
+import org.opensearch.index.fielddata.SortedBinaryDocValues;  
 
 import java.io.IOException;
-import java.util.Collection;
+import java.util.Collection;  
 import java.util.Collections;
 
-/**
+/**  
  * Base class for binary docvalue "field data"
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 abstract class AbstractBinaryDVLeafFieldData implements LeafFieldData {
-    private final BinaryDocValues values;
+    private final BinaryDocValues values;  
 
     AbstractBinaryDVLeafFieldData(BinaryDocValues values) {
-        super();
+        super();  
         this.values = values;
     }
 
     @Override
     public long ramBytesUsed() {
-        return 0; // not exposed by Lucene
+        return 0; // not exposed by Lucene  
     }
 
-    @Override
+    @Override  
     public Collection<Accountable> getChildResources() {
         return Collections.emptyList();
-    }
+    }  
 
     @Override
-    public SortedBinaryDocValues getBytesValues() {
+    public SortedBinaryDocValues getBytesValues() {  
         return new SortedBinaryDocValues() {
 
-            int count;
+            int count;  
             final BytesStreamInput in = new BytesStreamInput();
             final BytesRef scratch = new BytesRef();
 
             @Override
             public boolean advanceExact(int doc) throws IOException {
-                if (values.advanceExact(doc)) {
+                if (values.advanceExact(doc)) {  
                     final BytesRef bytes = values.binaryValue();
                     assert bytes.length > 0;
-                    in.reset(bytes.bytes, bytes.offset, bytes.length);
+                    in.reset(bytes.bytes, bytes.offset, bytes.length);  
                     count = in.readVInt();
                     scratch.bytes = bytes.bytes;
-                    return true;
+                    return true;  
                 } else {
                     return false;
-                }
+                }  
             }
 
-            @Override
+            @Override  
             public int docValueCount() {
                 return count;
-            }
+            }  
 
             @Override
-            public BytesRef nextValue() throws IOException {
+            public BytesRef nextValue() throws IOException {  
                 scratch.length = in.readVInt();
                 scratch.offset = in.getPosition();
-                in.setPosition(scratch.offset + scratch.length);
+                in.setPosition(scratch.offset + scratch.length);  
                 return scratch;
             }
 
@@ -106,6 +106,6 @@ abstract class AbstractBinaryDVLeafFieldData implements LeafFieldData {
 
     @Override
     public void close() {
-        // no-op
+        // no-op  
     }
 }

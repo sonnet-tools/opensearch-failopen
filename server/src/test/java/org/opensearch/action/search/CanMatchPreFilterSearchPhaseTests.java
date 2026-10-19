@@ -1,85 +1,85 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 /*
- * Modifications Copyright OpenSearch Contributors. See
+ * Modifications Copyright OpenSearch Contributors. See  
  * GitHub history for details.
  */
 
 package org.opensearch.action.search;
 
-import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.LogManager;  
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.util.BytesRef;
-import org.opensearch.Version;
+import org.opensearch.Version;  
 import org.opensearch.action.OriginalIndices;
 import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.node.DiscoveryNode;
+import org.opensearch.cluster.node.DiscoveryNode;  
 import org.opensearch.cluster.routing.GroupShardsIterator;
 import org.opensearch.common.util.concurrent.OpenSearchExecutors;
-import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.action.ActionListener;  
 import org.opensearch.core.common.Strings;
 import org.opensearch.core.common.breaker.CircuitBreaker;
-import org.opensearch.core.common.breaker.NoopCircuitBreaker;
+import org.opensearch.core.common.breaker.NoopCircuitBreaker;  
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.search.SearchPhaseResult;
-import org.opensearch.search.SearchService;
+import org.opensearch.search.SearchService;  
 import org.opensearch.search.SearchShardTarget;
 import org.opensearch.search.builder.SearchSourceBuilder;
-import org.opensearch.search.dfs.DfsSearchResult;
+import org.opensearch.search.dfs.DfsSearchResult;  
 import org.opensearch.search.internal.AliasFilter;
 import org.opensearch.search.internal.ShardSearchRequest;
-import org.opensearch.search.sort.MinAndMax;
+import org.opensearch.search.sort.MinAndMax;  
 import org.opensearch.search.sort.SortBuilders;
 import org.opensearch.search.sort.SortOrder;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
+import org.opensearch.telemetry.tracing.noop.NoopTracer;  
 import org.opensearch.test.InternalAggregationTestCase;
 import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.transport.Transport;
+import org.opensearch.transport.Transport;  
 import org.junit.After;
 import org.junit.Before;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Collections;  
 import java.util.Comparator;
 import java.util.HashSet;
-import java.util.List;
+import java.util.List;  
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentHashMap;  
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ExecutorService;  
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiFunction;
+import java.util.function.BiFunction;  
 import java.util.stream.IntStream;
 
-import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.is;  
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.Matchers.equalTo;
 
@@ -88,226 +88,226 @@ public class CanMatchPreFilterSearchPhaseTests extends OpenSearchTestCase {
 
     @Before
     public void setUp() throws Exception {
-        super.setUp();
+        super.setUp();  
 
         assertingListener = new SearchRequestOperationsListenerAssertingListener();
-    }
+    }  
 
     @After
-    public void tearDown() throws Exception {
+    public void tearDown() throws Exception {  
         super.tearDown();
 
-        assertingListener.assertFinished();
+        assertingListener.assertFinished();  
     }
 
-    public void testFilterShards() throws InterruptedException {
+    public void testFilterShards() throws InterruptedException {  
 
         final TransportSearchAction.SearchTimeProvider timeProvider = new TransportSearchAction.SearchTimeProvider(
-            0,
+            0,  
             System.nanoTime(),
             System::nanoTime
-        );
+        );  
 
         Map<String, Transport.Connection> lookup = new ConcurrentHashMap<>();
-        DiscoveryNode primaryNode = new DiscoveryNode("node_1", buildNewFakeTransportAddress(), Version.CURRENT);
+        DiscoveryNode primaryNode = new DiscoveryNode("node_1", buildNewFakeTransportAddress(), Version.CURRENT);  
         DiscoveryNode replicaNode = new DiscoveryNode("node_2", buildNewFakeTransportAddress(), Version.CURRENT);
         lookup.put("node1", new SearchAsyncActionTests.MockConnection(primaryNode));
-        lookup.put("node2", new SearchAsyncActionTests.MockConnection(replicaNode));
+        lookup.put("node2", new SearchAsyncActionTests.MockConnection(replicaNode));  
         final boolean shard1 = randomBoolean();
         final boolean shard2 = randomBoolean();
 
         SearchTransportService searchTransportService = new SearchTransportService(null, null) {
             @Override
-            public void sendCanMatch(
+            public void sendCanMatch(  
                 Transport.Connection connection,
                 ShardSearchRequest request,
-                SearchTask task,
+                SearchTask task,  
                 ActionListener<SearchService.CanMatchResponse> listener
             ) {
-                new Thread(
+                new Thread(  
                     () -> listener.onResponse(new SearchService.CanMatchResponse(request.shardId().id() == 0 ? shard1 : shard2, null))
                 ).start();
-            }
+            }  
         };
 
-        AtomicReference<GroupShardsIterator<SearchShardIterator>> result = new AtomicReference<>();
+        AtomicReference<GroupShardsIterator<SearchShardIterator>> result = new AtomicReference<>();  
         CountDownLatch latch = new CountDownLatch(1);
         GroupShardsIterator<SearchShardIterator> shardsIter = SearchAsyncActionTests.getShardsIter(
-            "idx",
+            "idx",  
             new OriginalIndices(new String[] { "idx" }, SearchRequest.DEFAULT_INDICES_OPTIONS),
             2,
-            randomBoolean(),
+            randomBoolean(),  
             primaryNode,
             replicaNode
-        );
+        );  
         final SearchRequest searchRequest = new SearchRequest();
         searchRequest.allowPartialSearchResults(true);
 
         final SearchRequestOperationsListener searchRequestOperationsListener = new SearchRequestOperationsListener.CompositeListener(
             List.of(assertingListener),
-            LogManager.getLogger()
+            LogManager.getLogger()  
         );
         CanMatchPreFilterSearchPhase canMatchPhase = new CanMatchPreFilterSearchPhase(
-            logger,
+            logger,  
             searchTransportService,
             (clusterAlias, node) -> lookup.get(node),
-            Collections.singletonMap("_na_", new AliasFilter(null, Strings.EMPTY_ARRAY)),
+            Collections.singletonMap("_na_", new AliasFilter(null, Strings.EMPTY_ARRAY)),  
             Collections.emptyMap(),
             Collections.emptyMap(),
-            OpenSearchExecutors.newDirectExecutorService(),
+            OpenSearchExecutors.newDirectExecutorService(),  
             searchRequest,
             null,
-            shardsIter,
+            shardsIter,  
             timeProvider,
             ClusterState.EMPTY_STATE,
-            null,
+            null,  
             (iter) -> new SearchPhase("test") {
                 @Override
-                public void run() throws IOException {
+                public void run() throws IOException {  
                     result.set(iter);
                     searchRequestOperationsListener.onPhaseEnd(new MockSearchPhaseContext(1, searchRequest, this), null);
-                    latch.countDown();
+                    latch.countDown();  
                 }
             },
-            SearchResponse.Clusters.EMPTY,
+            SearchResponse.Clusters.EMPTY,  
             new SearchRequestContext(searchRequestOperationsListener, searchRequest, () -> null),
             NoopTracer.INSTANCE
-        );
+        );  
 
         canMatchPhase.start();
-        latch.await();
+        latch.await();  
 
         if (shard1 && shard2) {
-            for (SearchShardIterator i : result.get()) {
+            for (SearchShardIterator i : result.get()) {  
                 assertFalse(i.skip());
             }
-        } else if (shard1 == false && shard2 == false) {
+        } else if (shard1 == false && shard2 == false) {  
             assertFalse(result.get().get(0).skip());
             assertTrue(result.get().get(1).skip());
-        } else {
+        } else {  
             assertEquals(0, result.get().get(0).shardId().id());
             assertEquals(1, result.get().get(1).shardId().id());
-            assertEquals(shard1, !result.get().get(0).skip());
+            assertEquals(shard1, !result.get().get(0).skip());  
             assertEquals(shard2, !result.get().get(1).skip());
         }
-    }
+    }  
 
     public void testSkippedShardGroupsAreNotSentToCanMatch() throws InterruptedException {
-        final TransportSearchAction.SearchTimeProvider timeProvider = new TransportSearchAction.SearchTimeProvider(
+        final TransportSearchAction.SearchTimeProvider timeProvider = new TransportSearchAction.SearchTimeProvider(  
             0,
             System.nanoTime(),
-            System::nanoTime
+            System::nanoTime  
         );
 
-        Map<String, Transport.Connection> lookup = new ConcurrentHashMap<>();
+        Map<String, Transport.Connection> lookup = new ConcurrentHashMap<>();  
         DiscoveryNode primaryNode = new DiscoveryNode("node_1", buildNewFakeTransportAddress(), Version.CURRENT);
         DiscoveryNode replicaNode = new DiscoveryNode("node_2", buildNewFakeTransportAddress(), Version.CURRENT);
-        lookup.put("node1", new SearchAsyncActionTests.MockConnection(primaryNode));
+        lookup.put("node1", new SearchAsyncActionTests.MockConnection(primaryNode));  
         lookup.put("node2", new SearchAsyncActionTests.MockConnection(replicaNode));
 
-        List<Integer> canMatchShardIds = Collections.synchronizedList(new ArrayList<>());
+        List<Integer> canMatchShardIds = Collections.synchronizedList(new ArrayList<>());  
         SearchTransportService searchTransportService = new SearchTransportService(null, null) {
             @Override
-            public void sendCanMatch(
+            public void sendCanMatch(  
                 Transport.Connection connection,
                 ShardSearchRequest request,
-                SearchTask task,
+                SearchTask task,  
                 ActionListener<SearchService.CanMatchResponse> listener
             ) {
-                canMatchShardIds.add(request.shardId().id());
+                canMatchShardIds.add(request.shardId().id());  
                 listener.onResponse(new SearchService.CanMatchResponse(true, null));
             }
-        };
+        };  
 
         AtomicReference<GroupShardsIterator<SearchShardIterator>> result = new AtomicReference<>();
-        CountDownLatch latch = new CountDownLatch(1);
+        CountDownLatch latch = new CountDownLatch(1);  
         GroupShardsIterator<SearchShardIterator> shardsIter = SearchAsyncActionTests.getShardsIter(
             "idx",
-            new OriginalIndices(new String[] { "idx" }, SearchRequest.DEFAULT_INDICES_OPTIONS),
+            new OriginalIndices(new String[] { "idx" }, SearchRequest.DEFAULT_INDICES_OPTIONS),  
             2,
             randomBoolean(),
-            primaryNode,
+            primaryNode,  
             replicaNode
         );
-        shardsIter.get(0).resetAndSkip();
+        shardsIter.get(0).resetAndSkip();  
 
         final SearchRequest searchRequest = new SearchRequest();
-        searchRequest.allowPartialSearchResults(true);
+        searchRequest.allowPartialSearchResults(true);  
 
         final SearchRequestOperationsListener searchRequestOperationsListener = new SearchRequestOperationsListener.CompositeListener(
-            List.of(assertingListener),
+            List.of(assertingListener),  
             LogManager.getLogger()
         );
-        CanMatchPreFilterSearchPhase canMatchPhase = new CanMatchPreFilterSearchPhase(
+        CanMatchPreFilterSearchPhase canMatchPhase = new CanMatchPreFilterSearchPhase(  
             logger,
             searchTransportService,
-            (clusterAlias, node) -> lookup.get(node),
+            (clusterAlias, node) -> lookup.get(node),  
             Collections.singletonMap("_na_", new AliasFilter(null, Strings.EMPTY_ARRAY)),
             Collections.emptyMap(),
-            Collections.emptyMap(),
+            Collections.emptyMap(),  
             OpenSearchExecutors.newDirectExecutorService(),
             searchRequest,
-            null,
+            null,  
             shardsIter,
             timeProvider,
-            ClusterState.EMPTY_STATE,
+            ClusterState.EMPTY_STATE,  
             null,
             (iter) -> new SearchPhase("test") {
-                @Override
+                @Override  
                 public void run() throws IOException {
                     result.set(iter);
-                    searchRequestOperationsListener.onPhaseEnd(new MockSearchPhaseContext(1, searchRequest, this), null);
+                    searchRequestOperationsListener.onPhaseEnd(new MockSearchPhaseContext(1, searchRequest, this), null);  
                     latch.countDown();
                 }
-            },
+            },  
             SearchResponse.Clusters.EMPTY,
             new SearchRequestContext(searchRequestOperationsListener, searchRequest, () -> null),
-            NoopTracer.INSTANCE
+            NoopTracer.INSTANCE  
         );
 
-        canMatchPhase.start();
+        canMatchPhase.start();  
         latch.await();
 
-        assertThat(canMatchShardIds, equalTo(List.of(1)));
+        assertThat(canMatchShardIds, equalTo(List.of(1)));  
         assertTrue(result.get().get(0).skip());
         assertFalse(result.get().get(1).skip());
-    }
+    }  
 
     public void testAllSkippedShardGroupsAreNotSentToCanMatch() throws InterruptedException {
-        final TransportSearchAction.SearchTimeProvider timeProvider = new TransportSearchAction.SearchTimeProvider(
+        final TransportSearchAction.SearchTimeProvider timeProvider = new TransportSearchAction.SearchTimeProvider(  
             0,
             System.nanoTime(),
-            System::nanoTime
+            System::nanoTime  
         );
 
-        Map<String, Transport.Connection> lookup = new ConcurrentHashMap<>();
+        Map<String, Transport.Connection> lookup = new ConcurrentHashMap<>();  
         DiscoveryNode primaryNode = new DiscoveryNode("node_1", buildNewFakeTransportAddress(), Version.CURRENT);
         DiscoveryNode replicaNode = new DiscoveryNode("node_2", buildNewFakeTransportAddress(), Version.CURRENT);
-        lookup.put("node1", new SearchAsyncActionTests.MockConnection(primaryNode));
+        lookup.put("node1", new SearchAsyncActionTests.MockConnection(primaryNode));  
         lookup.put("node2", new SearchAsyncActionTests.MockConnection(replicaNode));
 
-        SearchTransportService searchTransportService = new SearchTransportService(null, null) {
+        SearchTransportService searchTransportService = new SearchTransportService(null, null) {  
             @Override
             public void sendCanMatch(
-                Transport.Connection connection,
+                Transport.Connection connection,  
                 ShardSearchRequest request,
                 SearchTask task,
-                ActionListener<SearchService.CanMatchResponse> listener
+                ActionListener<SearchService.CanMatchResponse> listener  
             ) {
                 fail("can_match should not be sent to skipped shard groups");
-            }
+            }  
         };
 
-        AtomicReference<GroupShardsIterator<SearchShardIterator>> result = new AtomicReference<>();
+        AtomicReference<GroupShardsIterator<SearchShardIterator>> result = new AtomicReference<>();  
         CountDownLatch latch = new CountDownLatch(1);
         GroupShardsIterator<SearchShardIterator> shardsIter = SearchAsyncActionTests.getShardsIter(
-            "idx",
+            "idx",  
             new OriginalIndices(new String[] { "idx" }, SearchRequest.DEFAULT_INDICES_OPTIONS),
             2,
-            randomBoolean(),
+            randomBoolean(),  
             primaryNode,
             replicaNode
-        );
+        );  
         shardsIter.get(0).resetAndSkip();
         shardsIter.get(1).resetAndSkip();
 
@@ -316,85 +316,85 @@ public class CanMatchPreFilterSearchPhaseTests extends OpenSearchTestCase {
 
         final SearchRequestOperationsListener searchRequestOperationsListener = new SearchRequestOperationsListener.CompositeListener(
             List.of(assertingListener),
-            LogManager.getLogger()
+            LogManager.getLogger()  
         );
         CanMatchPreFilterSearchPhase canMatchPhase = new CanMatchPreFilterSearchPhase(
-            logger,
+            logger,  
             searchTransportService,
             (clusterAlias, node) -> lookup.get(node),
-            Collections.singletonMap("_na_", new AliasFilter(null, Strings.EMPTY_ARRAY)),
+            Collections.singletonMap("_na_", new AliasFilter(null, Strings.EMPTY_ARRAY)),  
             Collections.emptyMap(),
             Collections.emptyMap(),
-            OpenSearchExecutors.newDirectExecutorService(),
+            OpenSearchExecutors.newDirectExecutorService(),  
             searchRequest,
             null,
-            shardsIter,
+            shardsIter,  
             timeProvider,
             ClusterState.EMPTY_STATE,
-            null,
+            null,  
             (iter) -> new SearchPhase("test") {
                 @Override
-                public void run() throws IOException {
+                public void run() throws IOException {  
                     result.set(iter);
                     searchRequestOperationsListener.onPhaseEnd(new MockSearchPhaseContext(1, searchRequest, this), null);
-                    latch.countDown();
+                    latch.countDown();  
                 }
             },
-            SearchResponse.Clusters.EMPTY,
+            SearchResponse.Clusters.EMPTY,  
             new SearchRequestContext(searchRequestOperationsListener, searchRequest, () -> null),
             NoopTracer.INSTANCE
-        );
+        );  
 
         canMatchPhase.start();
-        latch.await();
+        latch.await();  
 
         assertTrue(result.get().get(0).skip());
-        assertTrue(result.get().get(1).skip());
+        assertTrue(result.get().get(1).skip());  
     }
 
-    public void testFilterWithFailure() throws InterruptedException {
+    public void testFilterWithFailure() throws InterruptedException {  
         final TransportSearchAction.SearchTimeProvider timeProvider = new TransportSearchAction.SearchTimeProvider(
             0,
-            System.nanoTime(),
+            System.nanoTime(),  
             System::nanoTime
         );
-        Map<String, Transport.Connection> lookup = new ConcurrentHashMap<>();
+        Map<String, Transport.Connection> lookup = new ConcurrentHashMap<>();  
         DiscoveryNode primaryNode = new DiscoveryNode("node_1", buildNewFakeTransportAddress(), Version.CURRENT);
         DiscoveryNode replicaNode = new DiscoveryNode("node_2", buildNewFakeTransportAddress(), Version.CURRENT);
-        lookup.put("node1", new SearchAsyncActionTests.MockConnection(primaryNode));
+        lookup.put("node1", new SearchAsyncActionTests.MockConnection(primaryNode));  
         lookup.put("node2", new SearchAsyncActionTests.MockConnection(replicaNode));
         final boolean shard1 = randomBoolean();
-        SearchTransportService searchTransportService = new SearchTransportService(null, null) {
+        SearchTransportService searchTransportService = new SearchTransportService(null, null) {  
             @Override
             public void sendCanMatch(
-                Transport.Connection connection,
+                Transport.Connection connection,  
                 ShardSearchRequest request,
                 SearchTask task,
-                ActionListener<SearchService.CanMatchResponse> listener
+                ActionListener<SearchService.CanMatchResponse> listener  
             ) {
                 boolean throwException = request.shardId().id() != 0;
-                if (throwException && randomBoolean()) {
+                if (throwException && randomBoolean()) {  
                     throw new IllegalArgumentException("boom");
                 } else {
-                    new Thread(() -> {
+                    new Thread(() -> {  
                         if (throwException == false) {
                             listener.onResponse(new SearchService.CanMatchResponse(shard1, null));
-                        } else {
+                        } else {  
                             listener.onFailure(new NullPointerException());
                         }
-                    }).start();
+                    }).start();  
                 }
             }
-        };
+        };  
 
         AtomicReference<GroupShardsIterator<SearchShardIterator>> result = new AtomicReference<>();
-        CountDownLatch latch = new CountDownLatch(1);
+        CountDownLatch latch = new CountDownLatch(1);  
         GroupShardsIterator<SearchShardIterator> shardsIter = SearchAsyncActionTests.getShardsIter(
             "idx",
-            new OriginalIndices(new String[] { "idx" }, SearchRequest.DEFAULT_INDICES_OPTIONS),
+            new OriginalIndices(new String[] { "idx" }, SearchRequest.DEFAULT_INDICES_OPTIONS),  
             2,
             randomBoolean(),
-            primaryNode,
+            primaryNode,  
             replicaNode
         );
 
@@ -403,160 +403,160 @@ public class CanMatchPreFilterSearchPhaseTests extends OpenSearchTestCase {
 
         final SearchRequestOperationsListener searchRequestOperationsListener = new SearchRequestOperationsListener.CompositeListener(
             List.of(assertingListener),
-            LogManager.getLogger()
+            LogManager.getLogger()  
         );
         CanMatchPreFilterSearchPhase canMatchPhase = new CanMatchPreFilterSearchPhase(
-            logger,
+            logger,  
             searchTransportService,
             (clusterAlias, node) -> lookup.get(node),
-            Collections.singletonMap("_na_", new AliasFilter(null, Strings.EMPTY_ARRAY)),
+            Collections.singletonMap("_na_", new AliasFilter(null, Strings.EMPTY_ARRAY)),  
             Collections.emptyMap(),
             Collections.emptyMap(),
-            OpenSearchExecutors.newDirectExecutorService(),
+            OpenSearchExecutors.newDirectExecutorService(),  
             searchRequest,
             null,
-            shardsIter,
+            shardsIter,  
             timeProvider,
             ClusterState.EMPTY_STATE,
-            null,
+            null,  
             (iter) -> new SearchPhase("test") {
                 @Override
-                public void run() throws IOException {
+                public void run() throws IOException {  
                     result.set(iter);
                     searchRequestOperationsListener.onPhaseEnd(new MockSearchPhaseContext(1, searchRequest, this), null);
-                    latch.countDown();
+                    latch.countDown();  
                 }
             },
-            SearchResponse.Clusters.EMPTY,
+            SearchResponse.Clusters.EMPTY,  
             new SearchRequestContext(searchRequestOperationsListener, searchRequest, () -> null),
             NoopTracer.INSTANCE
-        );
+        );  
 
         canMatchPhase.start();
-        latch.await();
+        latch.await();  
 
         assertEquals(0, result.get().get(0).shardId().id());
-        assertEquals(1, result.get().get(1).shardId().id());
+        assertEquals(1, result.get().get(1).shardId().id());  
         assertEquals(shard1, !result.get().get(0).skip());
         assertFalse(result.get().get(1).skip()); // never skip the failure
-    }
+    }  
 
     /*
-     * In cases that a query coordinating node held all the shards for a query, the can match phase would recurse and end in stack overflow
+     * In cases that a query coordinating node held all the shards for a query, the can match phase would recurse and end in stack overflow  
      * when subjected to max concurrent search requests. This test is a test for that situation.
      */
-    public void testLotsOfShards() throws InterruptedException {
+    public void testLotsOfShards() throws InterruptedException {  
         final TransportSearchAction.SearchTimeProvider timeProvider = new TransportSearchAction.SearchTimeProvider(
             0,
-            System.nanoTime(),
+            System.nanoTime(),  
             System::nanoTime
         );
 
         final Map<String, Transport.Connection> lookup = new ConcurrentHashMap<>();
         final DiscoveryNode primaryNode = new DiscoveryNode("node_1", buildNewFakeTransportAddress(), Version.CURRENT);
-        final DiscoveryNode replicaNode = new DiscoveryNode("node_2", buildNewFakeTransportAddress(), Version.CURRENT);
+        final DiscoveryNode replicaNode = new DiscoveryNode("node_2", buildNewFakeTransportAddress(), Version.CURRENT);  
         lookup.put("node1", new SearchAsyncActionTests.MockConnection(primaryNode));
         lookup.put("node2", new SearchAsyncActionTests.MockConnection(replicaNode));
 
         final SearchTransportService searchTransportService = new SearchTransportService(null, null) {
             @Override
-            public void sendCanMatch(
+            public void sendCanMatch(  
                 Transport.Connection connection,
                 ShardSearchRequest request,
-                SearchTask task,
+                SearchTask task,  
                 ActionListener<SearchService.CanMatchResponse> listener
             ) {
-                listener.onResponse(new SearchService.CanMatchResponse(randomBoolean(), null));
+                listener.onResponse(new SearchService.CanMatchResponse(randomBoolean(), null));  
             }
         };
 
         final CountDownLatch latch = new CountDownLatch(1);
         final OriginalIndices originalIndices = new OriginalIndices(new String[] { "idx" }, SearchRequest.DEFAULT_INDICES_OPTIONS);
-        final GroupShardsIterator<SearchShardIterator> shardsIter = SearchAsyncActionTests.getShardsIter(
+        final GroupShardsIterator<SearchShardIterator> shardsIter = SearchAsyncActionTests.getShardsIter(  
             "idx",
             originalIndices,
-            4096,
+            4096,  
             randomBoolean(),
             primaryNode,
-            replicaNode
+            replicaNode  
         );
         final ExecutorService executor = Executors.newFixedThreadPool(randomIntBetween(1, Runtime.getRuntime().availableProcessors()));
-        final SearchRequest searchRequest = new SearchRequest();
+        final SearchRequest searchRequest = new SearchRequest();  
         searchRequest.allowPartialSearchResults(true);
         SearchTransportService transportService = new SearchTransportService(null, null);
-        ActionListener<SearchResponse> responseListener = ActionListener.wrap(
+        ActionListener<SearchResponse> responseListener = ActionListener.wrap(  
             response -> {},
             (e) -> { throw new AssertionError("unexpected", e); }
-        );
+        );  
         Map<String, AliasFilter> aliasFilters = Collections.singletonMap("_na_", new AliasFilter(null, Strings.EMPTY_ARRAY));
         final SearchRequestOperationsListener searchRequestOperationsListener = new SearchRequestOperationsListener.CompositeListener(
-            List.of(assertingListener),
+            List.of(assertingListener),  
             LogManager.getLogger()
         );
-        final CanMatchPreFilterSearchPhase canMatchPhase = new CanMatchPreFilterSearchPhase(
+        final CanMatchPreFilterSearchPhase canMatchPhase = new CanMatchPreFilterSearchPhase(  
             logger,
             searchTransportService,
-            (clusterAlias, node) -> lookup.get(node),
+            (clusterAlias, node) -> lookup.get(node),  
             Collections.singletonMap("_na_", new AliasFilter(null, Strings.EMPTY_ARRAY)),
             Collections.emptyMap(),
-            Collections.emptyMap(),
+            Collections.emptyMap(),  
             OpenSearchExecutors.newDirectExecutorService(),
             searchRequest,
-            null,
+            null,  
             shardsIter,
             timeProvider,
-            ClusterState.EMPTY_STATE,
+            ClusterState.EMPTY_STATE,  
             null,
             (iter) -> {
-                return new WrappingSearchAsyncActionPhase(
+                return new WrappingSearchAsyncActionPhase(  
                     new AbstractSearchAsyncAction<SearchPhaseResult>("test", logger, transportService, (cluster, node) -> {
                         assert cluster == null : "cluster was not null: " + cluster;
-                        return lookup.get(node);
+                        return lookup.get(node);  
                     },
                         aliasFilters,
-                        Collections.emptyMap(),
+                        Collections.emptyMap(),  
                         Collections.emptyMap(),
                         executor,
-                        searchRequest,
+                        searchRequest,  
                         responseListener,
                         iter,
-                        new TransportSearchAction.SearchTimeProvider(0, 0, () -> 0),
+                        new TransportSearchAction.SearchTimeProvider(0, 0, () -> 0),  
                         ClusterState.EMPTY_STATE,
                         null,
-                        new ArraySearchPhaseResults<>(iter.size()),
+                        new ArraySearchPhaseResults<>(iter.size()),  
                         randomIntBetween(1, 32),
                         SearchResponse.Clusters.EMPTY,
-                        new SearchRequestContext(searchRequestOperationsListener, searchRequest, () -> null),
+                        new SearchRequestContext(searchRequestOperationsListener, searchRequest, () -> null),  
                         NoopTracer.INSTANCE
                     ) {
-                        @Override
+                        @Override  
                         protected SearchPhase getNextPhase(SearchPhaseResults<SearchPhaseResult> results, SearchPhaseContext context) {
                             return new WrappingSearchAsyncActionPhase(this) {
-                                @Override
+                                @Override  
                                 public void run() {
                                     latch.countDown();
-                                }
+                                }  
                             };
                         }
 
                         @Override
                         protected void executePhaseOnShard(
-                            final SearchShardIterator shardIt,
+                            final SearchShardIterator shardIt,  
                             final SearchShardTarget shard,
                             final SearchActionListener<SearchPhaseResult> listener
-                        ) {
+                        ) {  
                             if (randomBoolean()) {
                                 listener.onResponse(new SearchPhaseResult() {
-                                });
+                                });  
                             } else {
                                 listener.onFailure(new Exception("failure"));
-                            }
+                            }  
                         }
                     }
-                );
+                );  
             },
             SearchResponse.Clusters.EMPTY,
-            new SearchRequestContext(searchRequestOperationsListener, searchRequest, () -> null),
+            new SearchRequestContext(searchRequestOperationsListener, searchRequest, () -> null),  
             NoopTracer.INSTANCE
         );
 
@@ -568,394 +568,394 @@ public class CanMatchPreFilterSearchPhaseTests extends OpenSearchTestCase {
 
     public void testSortShards() throws InterruptedException {
         final TransportSearchAction.SearchTimeProvider timeProvider = new TransportSearchAction.SearchTimeProvider(
-            0,
+            0,  
             System.nanoTime(),
             System::nanoTime
-        );
+        );  
 
         Map<String, Transport.Connection> lookup = new ConcurrentHashMap<>();
-        DiscoveryNode primaryNode = new DiscoveryNode("node_1", buildNewFakeTransportAddress(), Version.CURRENT);
+        DiscoveryNode primaryNode = new DiscoveryNode("node_1", buildNewFakeTransportAddress(), Version.CURRENT);  
         DiscoveryNode replicaNode = new DiscoveryNode("node_2", buildNewFakeTransportAddress(), Version.CURRENT);
         lookup.put("node1", new SearchAsyncActionTests.MockConnection(primaryNode));
-        lookup.put("node2", new SearchAsyncActionTests.MockConnection(replicaNode));
+        lookup.put("node2", new SearchAsyncActionTests.MockConnection(replicaNode));  
 
         for (SortOrder order : SortOrder.values()) {
-            List<ShardId> shardIds = new ArrayList<>();
+            List<ShardId> shardIds = new ArrayList<>();  
             List<MinAndMax<?>> minAndMaxes = new ArrayList<>();
             Set<ShardId> shardToSkip = new HashSet<>();
 
             SearchTransportService searchTransportService = new SearchTransportService(null, null) {
                 @Override
-                public void sendCanMatch(
+                public void sendCanMatch(  
                     Transport.Connection connection,
                     ShardSearchRequest request,
-                    SearchTask task,
+                    SearchTask task,  
                     ActionListener<SearchService.CanMatchResponse> listener
                 ) {
-                    Long min = rarely() ? null : randomLong();
+                    Long min = rarely() ? null : randomLong();  
                     Long max = min == null ? null : randomLongBetween(min, Long.MAX_VALUE);
                     MinAndMax<?> minMax = min == null ? null : new MinAndMax<>(min, max);
-                    boolean canMatch = frequently();
+                    boolean canMatch = frequently();  
                     synchronized (shardIds) {
                         shardIds.add(request.shardId());
-                        minAndMaxes.add(minMax);
+                        minAndMaxes.add(minMax);  
                         if (canMatch == false) {
                             shardToSkip.add(request.shardId());
-                        }
+                        }  
                     }
                     new Thread(() -> listener.onResponse(new SearchService.CanMatchResponse(canMatch, minMax))).start();
-                }
+                }  
             };
 
-            AtomicReference<GroupShardsIterator<SearchShardIterator>> result = new AtomicReference<>();
+            AtomicReference<GroupShardsIterator<SearchShardIterator>> result = new AtomicReference<>();  
             CountDownLatch latch = new CountDownLatch(1);
             GroupShardsIterator<SearchShardIterator> shardsIter = SearchAsyncActionTests.getShardsIter(
-                "logs",
+                "logs",  
                 new OriginalIndices(new String[] { "logs" }, SearchRequest.DEFAULT_INDICES_OPTIONS),
                 randomIntBetween(2, 20),
-                randomBoolean(),
+                randomBoolean(),  
                 primaryNode,
                 replicaNode
-            );
+            );  
             final SearchRequest searchRequest = new SearchRequest();
             searchRequest.source(new SearchSourceBuilder().sort(SortBuilders.fieldSort("timestamp").order(order)));
-            searchRequest.allowPartialSearchResults(true);
+            searchRequest.allowPartialSearchResults(true);  
 
             final SearchRequestOperationsListener searchRequestOperationsListener = new SearchRequestOperationsListener.CompositeListener(
-                List.of(assertingListener),
+                List.of(assertingListener),  
                 LogManager.getLogger()
             );
-            CanMatchPreFilterSearchPhase canMatchPhase = new CanMatchPreFilterSearchPhase(
+            CanMatchPreFilterSearchPhase canMatchPhase = new CanMatchPreFilterSearchPhase(  
                 logger,
                 searchTransportService,
-                (clusterAlias, node) -> lookup.get(node),
+                (clusterAlias, node) -> lookup.get(node),  
                 Collections.singletonMap("_na_", new AliasFilter(null, Strings.EMPTY_ARRAY)),
                 Collections.emptyMap(),
-                Collections.emptyMap(),
+                Collections.emptyMap(),  
                 OpenSearchExecutors.newDirectExecutorService(),
                 searchRequest,
-                null,
+                null,  
                 shardsIter,
                 timeProvider,
-                ClusterState.EMPTY_STATE,
+                ClusterState.EMPTY_STATE,  
                 null,
                 (iter) -> new SearchPhase("test") {
-                    @Override
+                    @Override  
                     public void run() {
                         result.set(iter);
-                        searchRequestOperationsListener.onPhaseEnd(new MockSearchPhaseContext(1, searchRequest, this), null);
+                        searchRequestOperationsListener.onPhaseEnd(new MockSearchPhaseContext(1, searchRequest, this), null);  
                         latch.countDown();
                     }
-                },
+                },  
                 SearchResponse.Clusters.EMPTY,
                 new SearchRequestContext(searchRequestOperationsListener, searchRequest, () -> null),
-                NoopTracer.INSTANCE
+                NoopTracer.INSTANCE  
             );
 
-            canMatchPhase.start();
+            canMatchPhase.start();  
             latch.await();
 
-            ShardId[] expected = IntStream.range(0, shardIds.size())
+            ShardId[] expected = IntStream.range(0, shardIds.size())  
                 .boxed()
                 .sorted(Comparator.comparing(minAndMaxes::get, MinAndMax.getComparator(order)).thenComparing(shardIds::get))
-                .map(shardIds::get)
+                .map(shardIds::get)  
                 .toArray(ShardId[]::new);
 
-            int pos = 0;
+            int pos = 0;  
             for (SearchShardIterator i : result.get()) {
                 assertEquals(shardToSkip.contains(i.shardId()), i.skip());
-                assertEquals(expected[pos++], i.shardId());
+                assertEquals(expected[pos++], i.shardId());  
             }
         }
-    }
+    }  
 
     public void testInvalidSortShards() throws InterruptedException {
-        final TransportSearchAction.SearchTimeProvider timeProvider = new TransportSearchAction.SearchTimeProvider(
+        final TransportSearchAction.SearchTimeProvider timeProvider = new TransportSearchAction.SearchTimeProvider(  
             0,
             System.nanoTime(),
-            System::nanoTime
+            System::nanoTime  
         );
 
-        Map<String, Transport.Connection> lookup = new ConcurrentHashMap<>();
+        Map<String, Transport.Connection> lookup = new ConcurrentHashMap<>();  
         DiscoveryNode primaryNode = new DiscoveryNode("node_1", buildNewFakeTransportAddress(), Version.CURRENT);
         DiscoveryNode replicaNode = new DiscoveryNode("node_2", buildNewFakeTransportAddress(), Version.CURRENT);
-        lookup.put("node1", new SearchAsyncActionTests.MockConnection(primaryNode));
+        lookup.put("node1", new SearchAsyncActionTests.MockConnection(primaryNode));  
         lookup.put("node2", new SearchAsyncActionTests.MockConnection(replicaNode));
 
-        for (SortOrder order : SortOrder.values()) {
+        for (SortOrder order : SortOrder.values()) {  
             int numShards = randomIntBetween(2, 20);
             List<ShardId> shardIds = new ArrayList<>();
-            Set<ShardId> shardToSkip = new HashSet<>();
+            Set<ShardId> shardToSkip = new HashSet<>();  
 
             SearchTransportService searchTransportService = new SearchTransportService(null, null) {
-                @Override
+                @Override  
                 public void sendCanMatch(
                     Transport.Connection connection,
-                    ShardSearchRequest request,
+                    ShardSearchRequest request,  
                     SearchTask task,
                     ActionListener<SearchService.CanMatchResponse> listener
-                ) {
+                ) {  
                     final MinAndMax<?> minMax;
                     if (request.shardId().id() == numShards - 1) {
-                        minMax = new MinAndMax<>(new BytesRef("bar"), new BytesRef("baz"));
+                        minMax = new MinAndMax<>(new BytesRef("bar"), new BytesRef("baz"));  
                     } else {
                         Long min = randomLong();
-                        Long max = randomLongBetween(min, Long.MAX_VALUE);
+                        Long max = randomLongBetween(min, Long.MAX_VALUE);  
                         minMax = new MinAndMax<>(min, max);
                     }
-                    boolean canMatch = frequently();
+                    boolean canMatch = frequently();  
                     synchronized (shardIds) {
                         shardIds.add(request.shardId());
-                        if (canMatch == false) {
+                        if (canMatch == false) {  
                             shardToSkip.add(request.shardId());
                         }
-                    }
+                    }  
                     new Thread(() -> listener.onResponse(new SearchService.CanMatchResponse(canMatch, minMax))).start();
                 }
-            };
+            };  
 
             AtomicReference<GroupShardsIterator<SearchShardIterator>> result = new AtomicReference<>();
-            CountDownLatch latch = new CountDownLatch(1);
+            CountDownLatch latch = new CountDownLatch(1);  
             GroupShardsIterator<SearchShardIterator> shardsIter = SearchAsyncActionTests.getShardsIter(
                 "logs",
-                new OriginalIndices(new String[] { "logs" }, SearchRequest.DEFAULT_INDICES_OPTIONS),
+                new OriginalIndices(new String[] { "logs" }, SearchRequest.DEFAULT_INDICES_OPTIONS),  
                 numShards,
                 randomBoolean(),
-                primaryNode,
+                primaryNode,  
                 replicaNode
             );
-            final SearchRequest searchRequest = new SearchRequest();
+            final SearchRequest searchRequest = new SearchRequest();  
             searchRequest.source(new SearchSourceBuilder().sort(SortBuilders.fieldSort("timestamp").order(order)));
             searchRequest.allowPartialSearchResults(true);
 
             final SearchRequestOperationsListener searchRequestOperationsListener = new SearchRequestOperationsListener.CompositeListener(
                 List.of(assertingListener),
-                LogManager.getLogger()
+                LogManager.getLogger()  
             );
             CanMatchPreFilterSearchPhase canMatchPhase = new CanMatchPreFilterSearchPhase(
-                logger,
+                logger,  
                 searchTransportService,
                 (clusterAlias, node) -> lookup.get(node),
-                Collections.singletonMap("_na_", new AliasFilter(null, Strings.EMPTY_ARRAY)),
+                Collections.singletonMap("_na_", new AliasFilter(null, Strings.EMPTY_ARRAY)),  
                 Collections.emptyMap(),
                 Collections.emptyMap(),
-                OpenSearchExecutors.newDirectExecutorService(),
+                OpenSearchExecutors.newDirectExecutorService(),  
                 searchRequest,
                 null,
-                shardsIter,
+                shardsIter,  
                 timeProvider,
                 ClusterState.EMPTY_STATE,
-                null,
+                null,  
                 (iter) -> new SearchPhase("test") {
                     @Override
-                    public void run() {
+                    public void run() {  
                         result.set(iter);
                         searchRequestOperationsListener.onPhaseEnd(new MockSearchPhaseContext(1, searchRequest, this), null);
-                        latch.countDown();
+                        latch.countDown();  
                     }
                 },
-                SearchResponse.Clusters.EMPTY,
+                SearchResponse.Clusters.EMPTY,  
                 new SearchRequestContext(searchRequestOperationsListener, searchRequest, () -> null),
                 NoopTracer.INSTANCE
-            );
+            );  
 
             canMatchPhase.start();
-            latch.await();
+            latch.await();  
 
             int shardId = 0;
-            for (SearchShardIterator i : result.get()) {
+            for (SearchShardIterator i : result.get()) {  
                 assertThat(i.shardId().id(), equalTo(shardId++));
                 assertEquals(shardToSkip.contains(i.shardId()), i.skip());
-            }
+            }  
             assertThat(result.get().size(), equalTo(numShards));
         }
-    }
+    }  
 
     public void testAsyncAction() throws InterruptedException {
 
         final TransportSearchAction.SearchTimeProvider timeProvider = new TransportSearchAction.SearchTimeProvider(
             0,
-            System.nanoTime(),
+            System.nanoTime(),  
             System::nanoTime
         );
 
         Map<String, Transport.Connection> lookup = new ConcurrentHashMap<>();
         DiscoveryNode primaryNode = new DiscoveryNode("node_1", buildNewFakeTransportAddress(), Version.CURRENT);
-        DiscoveryNode replicaNode = new DiscoveryNode("node_2", buildNewFakeTransportAddress(), Version.CURRENT);
+        DiscoveryNode replicaNode = new DiscoveryNode("node_2", buildNewFakeTransportAddress(), Version.CURRENT);  
         lookup.put("node_1", new SearchAsyncActionTests.MockConnection(primaryNode));
         lookup.put("node_2", new SearchAsyncActionTests.MockConnection(replicaNode));
-        final boolean shard1 = randomBoolean();
+        final boolean shard1 = randomBoolean();  
         final boolean shard2 = randomBoolean();
 
-        SearchTransportService searchTransportService = new SearchTransportService(null, null) {
+        SearchTransportService searchTransportService = new SearchTransportService(null, null) {  
             @Override
             public void sendCanMatch(
-                Transport.Connection connection,
+                Transport.Connection connection,  
                 ShardSearchRequest request,
                 SearchTask task,
-                ActionListener<SearchService.CanMatchResponse> listener
+                ActionListener<SearchService.CanMatchResponse> listener  
             ) {
                 new Thread(
-                    () -> listener.onResponse(new SearchService.CanMatchResponse(request.shardId().id() == 0 ? shard1 : shard2, null))
+                    () -> listener.onResponse(new SearchService.CanMatchResponse(request.shardId().id() == 0 ? shard1 : shard2, null))  
                 ).start();
             }
-        };
+        };  
 
         AtomicReference<GroupShardsIterator<SearchShardIterator>> result = new AtomicReference<>();
-        CountDownLatch latch = new CountDownLatch(1);
+        CountDownLatch latch = new CountDownLatch(1);  
         GroupShardsIterator<SearchShardIterator> shardsIter = SearchAsyncActionTests.getShardsIter(
             "idx",
-            new OriginalIndices(new String[] { "idx" }, SearchRequest.DEFAULT_INDICES_OPTIONS),
+            new OriginalIndices(new String[] { "idx" }, SearchRequest.DEFAULT_INDICES_OPTIONS),  
             2,
             randomBoolean(),
-            primaryNode,
+            primaryNode,  
             replicaNode
         );
-        final SearchRequest searchRequest = new SearchRequest();
+        final SearchRequest searchRequest = new SearchRequest();  
         searchRequest.allowPartialSearchResults(true);
 
-        SearchTask task = new SearchTask(0, "n/a", "n/a", () -> "test", null, Collections.emptyMap());
+        SearchTask task = new SearchTask(0, "n/a", "n/a", () -> "test", null, Collections.emptyMap());  
         ExecutorService executor = OpenSearchExecutors.newDirectExecutorService();
         SearchRequestContext searchRequestContext = new SearchRequestContext(
-            new SearchRequestOperationsListener.CompositeListener(List.of(assertingListener), LogManager.getLogger()),
+            new SearchRequestOperationsListener.CompositeListener(List.of(assertingListener), LogManager.getLogger()),  
             searchRequest,
             () -> null
-        );
+        );  
 
         SearchPhaseController controller = new SearchPhaseController(
-            writableRegistry(),
+            writableRegistry(),  
             r -> InternalAggregationTestCase.emptyReduceContextBuilder()
         );
 
         QueryPhaseResultConsumer resultConsumer = new QueryPhaseResultConsumer(
             searchRequest,
-            executor,
+            executor,  
             new NoopCircuitBreaker(CircuitBreaker.REQUEST),
             controller,
-            task.getProgressListener(),
+            task.getProgressListener(),  
             writableRegistry(),
             shardsIter.size(),
-            exc -> {}
+            exc -> {}  
         );
 
-        CanMatchPreFilterSearchPhase canMatchPhase = new CanMatchPreFilterSearchPhase(
+        CanMatchPreFilterSearchPhase canMatchPhase = new CanMatchPreFilterSearchPhase(  
             logger,
             searchTransportService,
-            (clusterAlias, node) -> lookup.get(node),
+            (clusterAlias, node) -> lookup.get(node),  
             Collections.singletonMap("_na_", new AliasFilter(null, Strings.EMPTY_ARRAY)),
             Collections.emptyMap(),
-            Collections.emptyMap(),
+            Collections.emptyMap(),  
             executor,
             searchRequest,
-            null,
+            null,  
             shardsIter,
             timeProvider,
-            ClusterState.EMPTY_STATE,
+            ClusterState.EMPTY_STATE,  
             null,
             (iter) -> {
-                AbstractSearchAsyncAction<? extends SearchPhaseResult> action = new SearchDfsQueryAsyncAction(
+                AbstractSearchAsyncAction<? extends SearchPhaseResult> action = new SearchDfsQueryAsyncAction(  
                     logger,
                     searchTransportService,
-                    (clusterAlias, node) -> lookup.get(node),
+                    (clusterAlias, node) -> lookup.get(node),  
                     Collections.singletonMap("_na_", new AliasFilter(null, Strings.EMPTY_ARRAY)),
                     Collections.emptyMap(),
-                    Collections.emptyMap(),
+                    Collections.emptyMap(),  
                     controller,
                     executor,
-                    resultConsumer,
+                    resultConsumer,  
                     searchRequest,
                     null,
-                    shardsIter,
+                    shardsIter,  
                     timeProvider,
                     ClusterState.EMPTY_STATE,
-                    task,
+                    task,  
                     SearchResponse.Clusters.EMPTY,
                     searchRequestContext
-                );
+                );  
                 return new WrappingSearchAsyncActionPhase(action) {
                     @Override
-                    public void run() {
+                    public void run() {  
                         super.run();
                         latch.countDown();
-                    }
+                    }  
                 };
             },
-            SearchResponse.Clusters.EMPTY,
+            SearchResponse.Clusters.EMPTY,  
             searchRequestContext,
             NoopTracer.INSTANCE
-        );
+        );  
 
         canMatchPhase.start();
-        latch.await();
+        latch.await();  
 
         assertThat(result.get(), is(nullValue()));
-    }
+    }  
 
     private static final class SearchDfsQueryAsyncAction extends AbstractSearchAsyncAction<DfsSearchResult> {
-        private final SearchRequestOperationsListener listener;
+        private final SearchRequestOperationsListener listener;  
 
         SearchDfsQueryAsyncAction(
-            final Logger logger,
+            final Logger logger,  
             final SearchTransportService searchTransportService,
             final BiFunction<String, String, Transport.Connection> nodeIdToConnection,
-            final Map<String, AliasFilter> aliasFilter,
+            final Map<String, AliasFilter> aliasFilter,  
             final Map<String, Float> concreteIndexBoosts,
             final Map<String, Set<String>> indexRoutings,
-            final SearchPhaseController searchPhaseController,
+            final SearchPhaseController searchPhaseController,  
             final Executor executor,
             final QueryPhaseResultConsumer queryPhaseResultConsumer,
-            final SearchRequest request,
+            final SearchRequest request,  
             final ActionListener<SearchResponse> listener,
             final GroupShardsIterator<SearchShardIterator> shardsIts,
-            final TransportSearchAction.SearchTimeProvider timeProvider,
+            final TransportSearchAction.SearchTimeProvider timeProvider,  
             final ClusterState clusterState,
             final SearchTask task,
-            SearchResponse.Clusters clusters,
+            SearchResponse.Clusters clusters,  
             SearchRequestContext searchRequestContext
         ) {
-            super(
+            super(  
                 SearchPhaseName.DFS_PRE_QUERY.getName(),
                 logger,
-                searchTransportService,
+                searchTransportService,  
                 nodeIdToConnection,
                 aliasFilter,
-                concreteIndexBoosts,
+                concreteIndexBoosts,  
                 indexRoutings,
                 executor,
-                request,
+                request,  
                 listener,
                 shardsIts,
-                timeProvider,
+                timeProvider,  
                 clusterState,
                 task,
-                new ArraySearchPhaseResults<>(shardsIts.size()),
+                new ArraySearchPhaseResults<>(shardsIts.size()),  
                 request.getMaxConcurrentShardRequests(),
                 clusters,
-                searchRequestContext,
+                searchRequestContext,  
                 NoopTracer.INSTANCE
             );
-            this.listener = searchRequestContext.getSearchRequestOperationsListener();
+            this.listener = searchRequestContext.getSearchRequestOperationsListener();  
         }
 
-        @Override
+        @Override  
         protected void executePhaseOnShard(
             final SearchShardIterator shardIt,
-            final SearchShardTarget shard,
+            final SearchShardTarget shard,  
             final SearchActionListener<DfsSearchResult> listener
         ) {
-            final DfsSearchResult response = new DfsSearchResult(shardIt.getSearchContextId(), shard, null);
+            final DfsSearchResult response = new DfsSearchResult(shardIt.getSearchContextId(), shard, null);  
             response.setShardIndex(shard.getShardId().getId());
             listener.innerOnResponse(response);
-        }
+        }  
 
         @Override
-        protected SearchPhase getNextPhase(SearchPhaseResults<DfsSearchResult> results, SearchPhaseContext context) {
+        protected SearchPhase getNextPhase(SearchPhaseResults<DfsSearchResult> results, SearchPhaseContext context) {  
             return new SearchPhase("last") {
                 @Override
-                public void run() throws IOException {
+                public void run() throws IOException {  
                     listener.onPhaseEnd(context, null);
                 }
-            };
+            };  
         }
     }
 

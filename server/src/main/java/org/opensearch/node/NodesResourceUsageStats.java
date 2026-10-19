@@ -1,16 +1,16 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.node;
 
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
+import org.opensearch.core.common.io.stream.Writeable;  
 import org.opensearch.core.xcontent.ToXContentFragment;
 import org.opensearch.core.xcontent.XContentBuilder;
 
@@ -19,7 +19,7 @@ import java.util.Map;
 
 /**
  * This class represents resource usage stats such as CPU, Memory and IO resource usage of each node along with the
- * timestamp of the stats recorded.
+ * timestamp of the stats recorded.  
  */
 public class NodesResourceUsageStats implements Writeable, ToXContentFragment {
 
@@ -28,32 +28,32 @@ public class NodesResourceUsageStats implements Writeable, ToXContentFragment {
 
     public NodesResourceUsageStats(Map<String, NodeResourceUsageStats> nodeIdToResourceUsageStatsMap) {
         this.nodeIdToResourceUsageStatsMap = nodeIdToResourceUsageStatsMap;
-    }
+    }  
 
     public NodesResourceUsageStats(StreamInput in) throws IOException {
-        this.nodeIdToResourceUsageStatsMap = in.readMap(StreamInput::readString, NodeResourceUsageStats::new);
+        this.nodeIdToResourceUsageStatsMap = in.readMap(StreamInput::readString, NodeResourceUsageStats::new);  
     }
 
-    @Override
+    @Override  
     public void writeTo(StreamOutput out) throws IOException {
         out.writeMap(this.nodeIdToResourceUsageStatsMap, StreamOutput::writeString, (stream, stats) -> stats.writeTo(stream));
-    }
+    }  
 
     /**
-     * Returns map of node id to resource usage stats of the corresponding node.
+     * Returns map of node id to resource usage stats of the corresponding node.  
      */
     public Map<String, NodeResourceUsageStats> getNodeIdToResourceUsageStatsMap() {
-        return nodeIdToResourceUsageStatsMap;
+        return nodeIdToResourceUsageStatsMap;  
     }
 
-    @Override
+    @Override  
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject("resource_usage_stats");
-        for (String nodeId : nodeIdToResourceUsageStatsMap.keySet()) {
+        for (String nodeId : nodeIdToResourceUsageStatsMap.keySet()) {  
             NodeResourceUsageStats resourceUsageStats = nodeIdToResourceUsageStatsMap.get(nodeId);
             resourceUsageStats.toXContent(builder, params);
-        }
+        }  
         builder.endObject();
         return builder;
-    }
+    }  
 }

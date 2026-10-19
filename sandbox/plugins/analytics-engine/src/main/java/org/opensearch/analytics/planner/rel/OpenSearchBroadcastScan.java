@@ -1,156 +1,156 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.analytics.planner.rel;
 
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
-import org.apache.calcite.plan.RelOptPlanner;
+import org.apache.calcite.plan.RelOptPlanner;  
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.AbstractRelNode;
-import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.RelNode;  
 import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
-import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataType;  
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.opensearch.analytics.spi.FieldStorageInfo;
-import org.opensearch.analytics.spi.FieldType;
+import org.opensearch.analytics.spi.FieldType;  
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashSet;  
 import java.util.List;
 
-/**
+/**  
  * Leaf placeholder representing a broadcast-build input on the probe side of an M1 broadcast
  * join. Analogous to {@link OpenSearchStageInputScan} but for the broadcast-injection path:
- * rather than signalling where a child-stage's partition stream feeds in, it signals where the
+ * rather than signalling where a child-stage's partition stream feeds in, it signals where the  
  * probe-side {@code BroadcastInjectionHandler} has registered a {@code MemTable} that should
  * satisfy this scan at execution time.
- *
+ *  
  * <p>The build stage id determines the name used on the wire and in the Substrait plan —
  * {@code "broadcast-&lt;buildStageId&gt;"}. Both the coordinator (when constructing the
- * {@link org.opensearch.analytics.spi.BroadcastInjectionInstructionNode}) and the data node
+ * {@link org.opensearch.analytics.spi.BroadcastInjectionInstructionNode}) and the data node  
  * (when registering the memtable) agree on the string.
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 public class OpenSearchBroadcastScan extends AbstractRelNode implements OpenSearchRelNode {
 
     private final int buildStageId;
     private final List<String> viableBackends;
-    private final List<FieldStorageInfo> outputFieldStorage;
+    private final List<FieldStorageInfo> outputFieldStorage;  
 
     /**
-     * Convenience ctor: SYNTHESIZES per-column {@link FieldStorageInfo} from {@code rowType} (one
+     * Convenience ctor: SYNTHESIZES per-column {@link FieldStorageInfo} from {@code rowType} (one  
      * non-derived, materialized physical column per output field). A broadcast scan is a leaf whose
      * rows arrive fully materialized from the injected memtable, so each output column is a physical
-     * field identified by its own name — there are no derived columns and no upstream physical deps.
+     * field identified by its own name — there are no derived columns and no upstream physical deps.  
      *
      * <p>Reporting real per-column storage (not an empty list) is REQUIRED: when a Project or PARTIAL
-     * aggregate sits above a join that has a broadcast scan as one input (the distributed-agg-over-join
+     * aggregate sits above a join that has a broadcast scan as one input (the distributed-agg-over-join  
      * path), the consuming operator resolves {@code RexInputRef}s against the union of its inputs'
      * {@code getOutputFieldStorage()}. An empty list here truncates that union, so a ref to a column
-     * past the truncation throws "RexInputRef[N] has no matching FieldStorageInfo entry" at fragment
+     * past the truncation throws "RexInputRef[N] has no matching FieldStorageInfo entry" at fragment  
      * conversion (observed on TPC-H q5/q10). Use {@link #OpenSearchBroadcastScan(RelOptCluster,
      * RelTraitSet, int, RelDataType, List, List)} to pass the build subtree's exact storage instead.
-     */
+     */  
     public OpenSearchBroadcastScan(
         RelOptCluster cluster,
-        RelTraitSet traitSet,
+        RelTraitSet traitSet,  
         int buildStageId,
         RelDataType rowType,
-        List<String> viableBackends
+        List<String> viableBackends  
     ) {
         this(cluster, traitSet, buildStageId, rowType, viableBackends, synthesizeStorage(rowType));
-    }
+    }  
 
     public OpenSearchBroadcastScan(
-        RelOptCluster cluster,
+        RelOptCluster cluster,  
         RelTraitSet traitSet,
         int buildStageId,
-        RelDataType rowType,
+        RelDataType rowType,  
         List<String> viableBackends,
         List<FieldStorageInfo> outputFieldStorage
-    ) {
+    ) {  
         super(cluster, traitSet);
         this.buildStageId = buildStageId;
-        this.viableBackends = viableBackends;
+        this.viableBackends = viableBackends;  
         this.rowType = rowType;
         this.outputFieldStorage = outputFieldStorage;
-    }
+    }  
 
     /** One non-derived (physical, materialized) {@link FieldStorageInfo} per output field — used when
-     *  the caller has no upstream storage to thread through (the build subtree's own row type is the
+     *  the caller has no upstream storage to thread through (the build subtree's own row type is the  
      *  authority for a fully-materialized broadcast leaf). */
     private static List<FieldStorageInfo> synthesizeStorage(RelDataType rowType) {
-        List<FieldStorageInfo> storage = new ArrayList<>(rowType.getFieldCount());
+        List<FieldStorageInfo> storage = new ArrayList<>(rowType.getFieldCount());  
         for (RelDataTypeField field : rowType.getFieldList()) {
             storage.add(
-                new FieldStorageInfo(
+                new FieldStorageInfo(  
                     field.getName(),
                     field.getType().getSqlTypeName().getName(),
-                    FieldType.fromSqlTypeName(field.getType().getSqlTypeName()),
+                    FieldType.fromSqlTypeName(field.getType().getSqlTypeName()),  
                     List.of(),
                     List.of(),
-                    List.of(),
+                    List.of(),  
                     /* derived */ false,
                     new LinkedHashSet<>()
-                )
+                )  
             );
         }
-        return storage;
+        return storage;  
     }
 
-    public int getBuildStageId() {
+    public int getBuildStageId() {  
         return buildStageId;
     }
 
     /** Canonical name used by both sides of the wire — matches what the handler registers. */
     public String getNamedInputId() {
-        return namedInputIdFor(buildStageId);
+        return namedInputIdFor(buildStageId);  
     }
 
-    public static String namedInputIdFor(int buildStageId) {
+    public static String namedInputIdFor(int buildStageId) {  
         return "broadcast-" + buildStageId;
     }
 
     @Override
     public List<String> getViableBackends() {
-        return viableBackends;
+        return viableBackends;  
     }
 
-    @Override
+    @Override  
     public List<FieldStorageInfo> getOutputFieldStorage() {
         return outputFieldStorage;
-    }
+    }  
 
     @Override
-    public OpenSearchBroadcastScan copy(RelTraitSet traitSet, List<RelNode> inputs) {
+    public OpenSearchBroadcastScan copy(RelTraitSet traitSet, List<RelNode> inputs) {  
         return new OpenSearchBroadcastScan(getCluster(), traitSet, buildStageId, rowType, viableBackends, outputFieldStorage);
     }
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
-        return planner.getCostFactory().makeTinyCost();
+        return planner.getCostFactory().makeTinyCost();  
     }
 
-    @Override
+    @Override  
     public RelWriter explainTerms(RelWriter pw) {
         return pw.item("buildStageId", buildStageId).item("namedInputId", getNamedInputId()).item("viableBackends", viableBackends);
-    }
+    }  
 
     @Override
-    public RelNode copyResolved(String backend, List<RelNode> children, List<OperatorAnnotation> resolvedAnnotations) {
+    public RelNode copyResolved(String backend, List<RelNode> children, List<OperatorAnnotation> resolvedAnnotations) {  
         return new OpenSearchBroadcastScan(getCluster(), getTraitSet(), buildStageId, rowType, List.of(backend), outputFieldStorage);
     }
 
     @Override
     public RelNode stripAnnotations(List<RelNode> strippedChildren) {
-        return this; // Leaf placeholder — no annotations, no children to strip.
+        return this; // Leaf placeholder — no annotations, no children to strip.  
     }
 }

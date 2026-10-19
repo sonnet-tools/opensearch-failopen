@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.example.mappingtransformer;
 
@@ -16,12 +16,12 @@ import org.opensearch.test.rest.yaml.OpenSearchClientYamlSuiteTestCase;
 
 public class ExampleMappingTransformerClientYamlTestSuiteIT extends OpenSearchClientYamlSuiteTestCase {
 
-    public ExampleMappingTransformerClientYamlTestSuiteIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {
+    public ExampleMappingTransformerClientYamlTestSuiteIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {  
         super(testCandidate);
     }
 
     @ParametersFactory
     public static Iterable<Object[]> parameters() throws Exception {
-        return OpenSearchClientYamlSuiteTestCase.createParameters();
+        return OpenSearchClientYamlSuiteTestCase.createParameters();  
     }
 }

@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.analytics.planner.rel;
 
@@ -13,16 +13,16 @@ import org.apache.calcite.rex.RexNode;
 
 import java.util.List;
 
-/**
+/**  
  * Common interface for all annotation types (predicate, aggregate call,
  * project expression). Allows PlanForker to work generically without
- * knowing the specific annotation type.
+ * knowing the specific annotation type.  
  *
  * @opensearch.internal
- */
+ */  
 public interface OperatorAnnotation {
 
-    int getAnnotationId();
+    int getAnnotationId();  
 
     List<String> getViableBackends();
 
@@ -37,10 +37,10 @@ public interface OperatorAnnotation {
 
     /**
      * Returns a placeholder RexNode for this annotation when delegated.
-     * Each annotation type produces the appropriate placeholder shape:
+     * Each annotation type produces the appropriate placeholder shape:  
      * predicates return BOOLEAN, project expressions return their original type, etc.
      */
-    default RexNode makePlaceholder(RexBuilder rexBuilder) {
+    default RexNode makePlaceholder(RexBuilder rexBuilder) {  
         throw new UnsupportedOperationException("makePlaceholder not implemented for " + getClass().getSimpleName());
     }
-}
+}  

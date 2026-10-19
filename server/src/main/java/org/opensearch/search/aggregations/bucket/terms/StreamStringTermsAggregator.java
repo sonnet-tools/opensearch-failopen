@@ -1,509 +1,509 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.search.aggregations.bucket.terms;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.lucene.index.DocValues;
+import org.apache.lucene.index.DocValues;  
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.SortedDocValues;
-import org.apache.lucene.index.SortedSetDocValues;
+import org.apache.lucene.index.SortedSetDocValues;  
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.IntroSelector;
-import org.apache.lucene.util.IntroSorter;
+import org.apache.lucene.util.IntroSorter;  
 import org.opensearch.common.lease.Releasable;
 import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.util.LongArray;
+import org.opensearch.common.util.LongArray;  
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.AggregatorFactories;
+import org.opensearch.search.aggregations.AggregatorFactories;  
 import org.opensearch.search.aggregations.BucketOrder;
 import org.opensearch.search.aggregations.CardinalityUpperBound;
-import org.opensearch.search.aggregations.InternalAggregation;
+import org.opensearch.search.aggregations.InternalAggregation;  
 import org.opensearch.search.aggregations.InternalMultiBucketAggregation;
 import org.opensearch.search.aggregations.InternalOrder;
-import org.opensearch.search.aggregations.LeafBucketCollector;
+import org.opensearch.search.aggregations.LeafBucketCollector;  
 import org.opensearch.search.aggregations.LeafBucketCollectorBase;
 import org.opensearch.search.aggregations.bucket.LocalBucketCountThresholds;
-import org.opensearch.search.aggregations.support.ValuesSource;
+import org.opensearch.search.aggregations.support.ValuesSource;  
 import org.opensearch.search.internal.SearchContext;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
+import java.util.List;  
 import java.util.Map;
 import java.util.function.BiConsumer;
-import java.util.function.Function;
+import java.util.function.Function;  
 
 import static org.opensearch.search.aggregations.InternalOrder.isKeyOrder;
 
 /**
  * Stream search terms aggregation
- */
+ */  
 public class StreamStringTermsAggregator extends AbstractStringTermsAggregator {
     private static final Logger logger = LogManager.getLogger(StreamStringTermsAggregator.class);
-    private SortedSetDocValues sortedDocValuesPerBatch;
+    private SortedSetDocValues sortedDocValuesPerBatch;  
     private long valueCount;
     private final ValuesSource.Bytes.WithOrdinals valuesSource;
-    protected int segmentsWithSingleValuedOrds = 0;
+    protected int segmentsWithSingleValuedOrds = 0;  
     protected int segmentsWithMultiValuedOrds = 0;
     protected final ResultStrategy<?, ?> resultStrategy;
-    private boolean leafCollectorCreated = false;
+    private boolean leafCollectorCreated = false;  
     private final int segmentTopN;
 
-    // Keyed on (owningBucketOrd, segmentOrdinal) so each parent bucket owns a distinct
+    // Keyed on (owningBucketOrd, segmentOrdinal) so each parent bucket owns a distinct  
     // bucket ordinal for the same term. Without this, a streaming terms agg running as
     // a sub of another terms agg would collide every parent's doc counts into the same
-    // flat array, producing identical inner bucket lists for every parent bucket.
+    // flat array, producing identical inner bucket lists for every parent bucket.  
     private final LongKeyedBucketOrds bucketOrds;
 
-    private Aggregator.BucketComparator ordinalComparator;
+    private Aggregator.BucketComparator ordinalComparator;  
     private StringTerms.Bucket tempBucket1;
     private StringTerms.Bucket tempBucket2;
 
     public StreamStringTermsAggregator(
         String name,
-        AggregatorFactories factories,
+        AggregatorFactories factories,  
         Function<StreamStringTermsAggregator, ResultStrategy<?, ?>> resultStrategy,
         ValuesSource.Bytes.WithOrdinals valuesSource,
-        BucketOrder order,
+        BucketOrder order,  
         DocValueFormat format,
         BucketCountThresholds bucketCountThresholds,
-        SearchContext context,
+        SearchContext context,  
         Aggregator parent,
         SubAggCollectionMode collectionMode,
-        boolean showTermDocCountError,
+        boolean showTermDocCountError,  
         int segmentTopN,
         CardinalityUpperBound cardinality,
-        Map<String, Object> metadata
+        Map<String, Object> metadata  
     ) throws IOException {
         super(name, factories, context, parent, order, format, bucketCountThresholds, collectionMode, showTermDocCountError, metadata);
-        this.valuesSource = valuesSource;
+        this.valuesSource = valuesSource;  
         this.resultStrategy = resultStrategy.apply(this);
         this.segmentTopN = segmentTopN;
-        this.bucketOrds = LongKeyedBucketOrds.build(context.bigArrays(), cardinality);
+        this.bucketOrds = LongKeyedBucketOrds.build(context.bigArrays(), cardinality);  
     }
 
-    @Override
+    @Override  
     public void doReset() {
         super.doReset();
-        valueCount = 0;
+        valueCount = 0;  
         sortedDocValuesPerBatch = null;
         this.leafCollectorCreated = false;
-        this.ordinalComparator = null;
+        this.ordinalComparator = null;  
         this.tempBucket1 = null;
         this.tempBucket2 = null;
-    }
+    }  
 
     private void ensureOrdinalComparator() {
-        if (ordinalComparator == null) {
+        if (ordinalComparator == null) {  
             if (isKeyOrder(order)) {
                 // For key-based ordering the callers hand us segment ordinals, and those
-                // ordinals already reflect alphabetical order in the docvalues, so compare
+                // ordinals already reflect alphabetical order in the docvalues, so compare  
                 // them directly.
                 boolean ascending = InternalOrder.isKeyAsc(order);
-                ordinalComparator = (leftOrd, rightOrd) -> {
+                ordinalComparator = (leftOrd, rightOrd) -> {  
                     return ascending ? Long.compare(leftOrd, rightOrd) : Long.compare(rightOrd, leftOrd);
                 };
-            } else if (partiallyBuiltBucketComparator != null) {
+            } else if (partiallyBuiltBucketComparator != null) {  
                 // For sub-aggregation ordering, compare via the per-bucket comparator. The
                 // ordinals handed in here are composite bucket ords (already owning-bucket-
-                // scoped), so bucketDocCount reads the right value.
+                // scoped), so bucketDocCount reads the right value.  
                 tempBucket1 = new StringTerms.Bucket(null, 0, null, false, 0, format) {
                     @Override
-                    public int compareKey(StringTerms.Bucket other) {
+                    public int compareKey(StringTerms.Bucket other) {  
                         return Long.compare(this.bucketOrd, other.bucketOrd);
                     }
-                };
+                };  
                 tempBucket2 = new StringTerms.Bucket(null, 0, null, false, 0, format) {
                     @Override
-                    public int compareKey(StringTerms.Bucket other) {
+                    public int compareKey(StringTerms.Bucket other) {  
                         return Long.compare(this.bucketOrd, other.bucketOrd);
                     }
-                };
+                };  
                 ordinalComparator = (leftOrd, rightOrd) -> {
                     tempBucket1.bucketOrd = leftOrd;
-                    tempBucket1.docCount = bucketDocCount(leftOrd);
+                    tempBucket1.docCount = bucketDocCount(leftOrd);  
                     tempBucket2.bucketOrd = rightOrd;
                     tempBucket2.docCount = bucketDocCount(rightOrd);
-                    return partiallyBuiltBucketComparator.compare(tempBucket1, tempBucket2);
+                    return partiallyBuiltBucketComparator.compare(tempBucket1, tempBucket2);  
                 };
             }
-        }
+        }  
     }
 
-    @Override
+    @Override  
     public InternalAggregation[] buildAggregations(long[] owningBucketOrds) throws IOException {
         return resultStrategy.buildAggregationsBatch(owningBucketOrds);
-    }
+    }  
 
     @Override
-    public InternalAggregation buildEmptyAggregation() {
+    public InternalAggregation buildEmptyAggregation() {  
         return resultStrategy.buildEmptyResult();
     }
 
     @Override
     public LeafBucketCollector getLeafCollector(LeafReaderContext ctx, LeafBucketCollector sub) throws IOException {
-        if (this.leafCollectorCreated) {
+        if (this.leafCollectorCreated) {  
             throw new IllegalStateException(
                 "Calling " + StreamStringTermsAggregator.class.getSimpleName() + " for the second segment: " + ctx
-            );
+            );  
         } else {
             this.leafCollectorCreated = true;
-        }
+        }  
         this.sortedDocValuesPerBatch = valuesSource.ordinalsValues(ctx);
         this.valueCount = sortedDocValuesPerBatch.getValueCount();
 
         SortedDocValues singleValues = DocValues.unwrapSingleton(sortedDocValuesPerBatch);
         if (singleValues != null) {
-            segmentsWithSingleValuedOrds++;
+            segmentsWithSingleValuedOrds++;  
             return resultStrategy.wrapCollector(new LeafBucketCollectorBase(sub, sortedDocValuesPerBatch) {
                 @Override
-                public void collect(int doc, long owningBucketOrd) throws IOException {
+                public void collect(int doc, long owningBucketOrd) throws IOException {  
                     if (false == singleValues.advanceExact(doc)) {
                         return;
-                    }
+                    }  
                     int ordinal = singleValues.ordValue();
                     collectInto(sub, doc, owningBucketOrd, ordinal);
-                }
+                }  
             });
         }
-        segmentsWithMultiValuedOrds++;
+        segmentsWithMultiValuedOrds++;  
         return resultStrategy.wrapCollector(new LeafBucketCollectorBase(sub, sortedDocValuesPerBatch) {
             @Override
-            public void collect(int doc, long owningBucketOrd) throws IOException {
+            public void collect(int doc, long owningBucketOrd) throws IOException {  
                 if (false == sortedDocValuesPerBatch.advanceExact(doc)) {
                     return;
-                }
+                }  
                 int count = sortedDocValuesPerBatch.docValueCount();
                 long ordinal;
-                while ((count-- > 0) && (ordinal = sortedDocValuesPerBatch.nextOrd()) != SortedSetDocValues.NO_MORE_DOCS) {
+                while ((count-- > 0) && (ordinal = sortedDocValuesPerBatch.nextOrd()) != SortedSetDocValues.NO_MORE_DOCS) {  
                     collectInto(sub, doc, owningBucketOrd, ordinal);
                 }
-            }
+            }  
         });
     }
 
     private void collectInto(LeafBucketCollector sub, int doc, long owningBucketOrd, long segmentOrdinal) throws IOException {
         long bucketOrd = bucketOrds.add(owningBucketOrd, segmentOrdinal);
-        if (bucketOrd < 0) {
+        if (bucketOrd < 0) {  
             bucketOrd = -1 - bucketOrd;
             collectExistingBucket(sub, doc, bucketOrd);
-        } else {
+        } else {  
             collectBucket(sub, doc, bucketOrd);
         }
-    }
+    }  
 
     /**
-     * Strategy for building results.
+     * Strategy for building results.  
      */
     public abstract class ResultStrategy<R extends InternalAggregation, B extends InternalMultiBucketAggregation.InternalBucket>
-        implements
+        implements  
             Releasable {
 
-        protected ResultStrategy() {}
+        protected ResultStrategy() {}  
 
         InternalAggregation[] buildAggregationsBatch(long[] owningBucketOrds) throws IOException {
-            LocalBucketCountThresholds localBucketCountThresholds = context.asLocalBucketCountThresholds(bucketCountThresholds);
+            LocalBucketCountThresholds localBucketCountThresholds = context.asLocalBucketCountThresholds(bucketCountThresholds);  
             if (valueCount == 0) {
                 InternalAggregation[] results = new InternalAggregation[owningBucketOrds.length];
-                for (int ordIdx = 0; ordIdx < owningBucketOrds.length; ordIdx++) {
+                for (int ordIdx = 0; ordIdx < owningBucketOrds.length; ordIdx++) {  
                     results[ordIdx] = buildNoValuesResult(owningBucketOrds[ordIdx]);
                 }
-                return results;
+                return results;  
             }
 
-            B[][] topBucketsPerOwningOrd = buildTopBucketsPerOrd(owningBucketOrds.length);
+            B[][] topBucketsPerOwningOrd = buildTopBucketsPerOrd(owningBucketOrds.length);  
             long[] otherDocCount = new long[owningBucketOrds.length];
 
-            for (int ordIdx = 0; ordIdx < owningBucketOrds.length; ordIdx++) {
+            for (int ordIdx = 0; ordIdx < owningBucketOrds.length; ordIdx++) {  
                 checkCancelled();
                 logger.debug("Cardinality post collection for ordIdx {}: {}", ordIdx, valueCount);
-                SelectionResult<B> selectionResult = selectTopBuckets(owningBucketOrds[ordIdx], segmentTopN, bucketCountThresholds);
+                SelectionResult<B> selectionResult = selectTopBuckets(owningBucketOrds[ordIdx], segmentTopN, bucketCountThresholds);  
 
                 topBucketsPerOwningOrd[ordIdx] = buildBuckets(selectionResult.buckets.size());
-                for (int i = 0; i < topBucketsPerOwningOrd[ordIdx].length; i++) {
+                for (int i = 0; i < topBucketsPerOwningOrd[ordIdx].length; i++) {  
                     topBucketsPerOwningOrd[ordIdx][i] = selectionResult.buckets.get(i);
                 }
-                otherDocCount[ordIdx] = selectionResult.otherDocCount;
+                otherDocCount[ordIdx] = selectionResult.otherDocCount;  
             }
 
-            buildSubAggs(topBucketsPerOwningOrd);
+            buildSubAggs(topBucketsPerOwningOrd);  
 
             InternalAggregation[] results = new InternalAggregation[owningBucketOrds.length];
-            for (int ordIdx = 0; ordIdx < owningBucketOrds.length; ordIdx++) {
+            for (int ordIdx = 0; ordIdx < owningBucketOrds.length; ordIdx++) {  
                 results[ordIdx] = buildResult(owningBucketOrds[ordIdx], otherDocCount[ordIdx], topBucketsPerOwningOrd[ordIdx]);
             }
-            return results;
+            return results;  
         }
 
-        private static class SelectionResult<B> {
+        private static class SelectionResult<B> {  
             final List<B> buckets;
             final long otherDocCount;
 
             SelectionResult(List<B> buckets, long otherDocCount) {
                 this.buckets = buckets;
-                this.otherDocCount = otherDocCount;
+                this.otherDocCount = otherDocCount;  
             }
         }
 
         /**
          * Collect candidate bucket ords for {@code owningBucketOrd}, pick the top
-         * {@code segmentSize} according to the active ordering, and emit final buckets.
+         * {@code segmentSize} according to the active ordering, and emit final buckets.  
          */
         private SelectionResult<B> selectTopBuckets(long owningBucketOrd, int segmentSize, BucketCountThresholds thresholds)
-            throws IOException {
+            throws IOException {  
             long bucketsForOwner = bucketOrds.bucketsInOrd(owningBucketOrd);
             if (bucketsForOwner == 0) {
-                return new SelectionResult<>(new ArrayList<>(), 0L);
+                return new SelectionResult<>(new ArrayList<>(), 0L);  
             }
 
-            try (LongArray candidateBucketOrds = context.bigArrays().newLongArray(Math.toIntExact(bucketsForOwner), false)) {
+            try (LongArray candidateBucketOrds = context.bigArrays().newLongArray(Math.toIntExact(bucketsForOwner), false)) {  
                 int cnt = 0;
                 long totalDocCount = 0;
-                LongKeyedBucketOrds.BucketOrdsEnum enumerator = bucketOrds.ordsEnum(owningBucketOrd);
+                LongKeyedBucketOrds.BucketOrdsEnum enumerator = bucketOrds.ordsEnum(owningBucketOrd);  
                 while (enumerator.next()) {
                     long bucketOrd = enumerator.ord();
-                    long docCount = bucketDocCount(bucketOrd);
+                    long docCount = bucketDocCount(bucketOrd);  
                     totalDocCount += docCount;
                     if (docCount >= thresholds.getMinDocCount()) {
-                        candidateBucketOrds.set(cnt++, bucketOrd);
+                        candidateBucketOrds.set(cnt++, bucketOrd);  
                     }
                 }
 
                 int effectiveSegmentSize = Math.min(segmentSize, cnt);
 
-                if (cnt <= effectiveSegmentSize) {
+                if (cnt <= effectiveSegmentSize) {  
                     List<B> result = new ArrayList<>(cnt);
                     long selectedDocCount = 0;
-                    for (int i = 0; i < cnt; i++) {
+                    for (int i = 0; i < cnt; i++) {  
                         long bucketOrd = candidateBucketOrds.get(i);
                         long docCount = bucketDocCount(bucketOrd);
-                        result.add(buildFinalBucket(bucketOrd, bucketOrds.get(bucketOrd), docCount));
+                        result.add(buildFinalBucket(bucketOrd, bucketOrds.get(bucketOrd), docCount));  
                         selectedDocCount += docCount;
                     }
-                    return new SelectionResult<>(result, totalDocCount - selectedDocCount);
+                    return new SelectionResult<>(result, totalDocCount - selectedDocCount);  
                 }
 
-                ensureOrdinalComparator();
+                ensureOrdinalComparator();  
                 new IntroSelector() {
                     long pivotBucketOrd;
-                    long pivotSegmentOrd;
+                    long pivotSegmentOrd;  
 
                     @Override
-                    protected void swap(int i, int j) {
+                    protected void swap(int i, int j) {  
                         long tmp = candidateBucketOrds.get(i);
                         candidateBucketOrds.set(i, candidateBucketOrds.get(j));
-                        candidateBucketOrds.set(j, tmp);
+                        candidateBucketOrds.set(j, tmp);  
                     }
 
-                    @Override
+                    @Override  
                     protected void setPivot(int i) {
                         pivotBucketOrd = candidateBucketOrds.get(i);
-                        pivotSegmentOrd = bucketOrds.get(pivotBucketOrd);
+                        pivotSegmentOrd = bucketOrds.get(pivotBucketOrd);  
                     }
 
-                    @Override
+                    @Override  
                     protected int comparePivot(int j) {
                         long candidateBucketOrd = candidateBucketOrds.get(j);
-                        long left;
+                        long left;  
                         long right;
                         if (isKeyOrder(order)) {
-                            left = bucketOrds.get(candidateBucketOrd);
+                            left = bucketOrds.get(candidateBucketOrd);  
                             right = pivotSegmentOrd;
                         } else {
-                            left = candidateBucketOrd;
+                            left = candidateBucketOrd;  
                             right = pivotBucketOrd;
                         }
-                        if (ordinalComparator != null) {
+                        if (ordinalComparator != null) {  
                             return -ordinalComparator.compare(left, right);
                         }
-                        return Long.compare(bucketDocCount(candidateBucketOrd), bucketDocCount(pivotBucketOrd));
+                        return Long.compare(bucketDocCount(candidateBucketOrd), bucketDocCount(pivotBucketOrd));  
                     }
                 }.select(0, cnt, effectiveSegmentSize);
 
                 // Match the historical emit order (ascending by segment ordinal, i.e.
                 // alphabetical) so downstream reduce ordering assumptions hold.
-                new IntroSorter() {
+                new IntroSorter() {  
                     long pivotBucketOrd;
 
-                    @Override
+                    @Override  
                     protected void swap(int i, int j) {
                         long tmp = candidateBucketOrds.get(i);
-                        candidateBucketOrds.set(i, candidateBucketOrds.get(j));
+                        candidateBucketOrds.set(i, candidateBucketOrds.get(j));  
                         candidateBucketOrds.set(j, tmp);
                     }
 
                     @Override
                     protected void setPivot(int i) {
-                        pivotBucketOrd = candidateBucketOrds.get(i);
+                        pivotBucketOrd = candidateBucketOrds.get(i);  
                     }
 
-                    @Override
+                    @Override  
                     protected int comparePivot(int j) {
                         return Long.compare(bucketOrds.get(pivotBucketOrd), bucketOrds.get(candidateBucketOrds.get(j)));
-                    }
+                    }  
                 }.sort(0, effectiveSegmentSize);
 
-                List<B> result = new ArrayList<>(effectiveSegmentSize);
+                List<B> result = new ArrayList<>(effectiveSegmentSize);  
                 long selectedDocCount = 0;
                 for (int i = 0; i < effectiveSegmentSize; i++) {
-                    long bucketOrd = candidateBucketOrds.get(i);
+                    long bucketOrd = candidateBucketOrds.get(i);  
                     long docCount = bucketDocCount(bucketOrd);
                     result.add(buildFinalBucket(bucketOrd, bucketOrds.get(bucketOrd), docCount));
-                    selectedDocCount += docCount;
+                    selectedDocCount += docCount;  
                 }
                 return new SelectionResult<>(result, totalDocCount - selectedDocCount);
-            }
+            }  
         }
 
-        @Override
+        @Override  
         public void close() {}
 
-        abstract String describe();
+        abstract String describe();  
 
         /**
-         * Wrap the "standard" numeric terms collector to collect any more
+         * Wrap the "standard" numeric terms collector to collect any more  
          * information that this result type may need.
          */
-        abstract LeafBucketCollector wrapCollector(LeafBucketCollector primary);
+        abstract LeafBucketCollector wrapCollector(LeafBucketCollector primary);  
 
         /**
-         * Build an array to hold the "top" buckets for each ordinal.
+         * Build an array to hold the "top" buckets for each ordinal.  
          */
         abstract B[][] buildTopBucketsPerOrd(int size);
 
         /**
          * Build an array of buckets for a particular ordinal to collect the
-         * results. The populated list is passed to {@link #buildResult}.
+         * results. The populated list is passed to {@link #buildResult}.  
          */
         abstract B[] buildBuckets(int size);
 
         /**
          * Build the sub-aggregations into the buckets. This will usually
-         * delegate to {@link #buildSubAggsForAllBuckets}.
+         * delegate to {@link #buildSubAggsForAllBuckets}.  
          */
         abstract void buildSubAggs(B[][] topBucketsPreOrd) throws IOException;
 
         /**
          * Turn the buckets into an aggregation result.
-         */
+         */  
         abstract R buildResult(long owningBucketOrd, long otherDocCount, B[] topBuckets);
 
-        /**
+        /**  
          * Build an "empty" result. Only called if there isn't any data on this
          * shard.
-         */
+         */  
         abstract R buildEmptyResult();
 
-        /**
+        /**  
          * Build an "empty" result for a particular bucket ordinal. Called when
          * there aren't any values for the field on this shard.
-         */
+         */  
         abstract R buildNoValuesResult(long owningBucketOrdinal);
 
-        /**
+        /**  
          * Build a final bucket. {@code bucketOrd} is the composite bucket ordinal
          * (used for sub-aggregation wiring and doc count lookups); {@code segmentOrd}
-         * is the underlying segment-local ordinal used to materialize the term bytes.
+         * is the underlying segment-local ordinal used to materialize the term bytes.  
          */
         abstract B buildFinalBucket(long bucketOrd, long segmentOrd, long docCount) throws IOException;
-    }
+    }  
 
     /**
-     * StandardTermsResults for string terms
+     * StandardTermsResults for string terms  
      *
      * @opensearch.internal
-     */
+     */  
     public class StandardTermsResults extends ResultStrategy<StringTerms, StringTerms.Bucket> {
         @Override
-        String describe() {
+        String describe() {  
             return "streaming_terms";
         }
 
         @Override
         LeafBucketCollector wrapCollector(LeafBucketCollector primary) {
-            return primary;
+            return primary;  
         }
 
-        @Override
+        @Override  
         StringTerms.Bucket[][] buildTopBucketsPerOrd(int size) {
             return new StringTerms.Bucket[size][];
-        }
+        }  
 
         @Override
-        StringTerms.Bucket[] buildBuckets(int size) {
+        StringTerms.Bucket[] buildBuckets(int size) {  
             return new StringTerms.Bucket[size];
         }
 
         @Override
         void buildSubAggs(StringTerms.Bucket[][] topBucketsPerOrd) throws IOException {
-            buildSubAggsForAllBuckets(topBucketsPerOrd, b -> b.bucketOrd, (b, aggs) -> b.aggregations = aggs);
+            buildSubAggsForAllBuckets(topBucketsPerOrd, b -> b.bucketOrd, (b, aggs) -> b.aggregations = aggs);  
         }
 
-        @Override
+        @Override  
         StringTerms buildResult(long owningBucketOrd, long otherDocCount, StringTerms.Bucket[] topBuckets) {
             final BucketOrder reduceOrder;
-            if (isKeyOrder(order) == false) {
+            if (isKeyOrder(order) == false) {  
                 reduceOrder = InternalOrder.key(true);
                 Arrays.sort(topBuckets, reduceOrder.comparator());
-            } else {
+            } else {  
                 reduceOrder = order;
             }
-            return new StringTerms(
+            return new StringTerms(  
                 name,
                 reduceOrder,
-                order,
+                order,  
                 metadata(),
                 format,
-                bucketCountThresholds.getShardSize(),
+                bucketCountThresholds.getShardSize(),  
                 showTermDocCountError,
                 otherDocCount,
-                Arrays.asList(topBuckets),
+                Arrays.asList(topBuckets),  
                 0,
                 bucketCountThresholds
-            );
+            );  
         }
 
-        @Override
+        @Override  
         StringTerms buildEmptyResult() {
             return buildEmptyTermsAggregation();
-        }
+        }  
 
         @Override
-        StringTerms buildNoValuesResult(long owningBucketOrdinal) {
+        StringTerms buildNoValuesResult(long owningBucketOrdinal) {  
             return buildEmptyResult();
         }
 
         @Override
         StringTerms.Bucket buildFinalBucket(long bucketOrd, long segmentOrd, long docCount) throws IOException {
-            // Recreate DocValues as needed for concurrent segment search.
+            // Recreate DocValues as needed for concurrent segment search.  
             BytesRef term = BytesRef.deepCopyOf(sortedDocValuesPerBatch.lookupOrd(segmentOrd));
 
-            StringTerms.Bucket result = new StringTerms.Bucket(term, docCount, null, showTermDocCountError, 0, format);
+            StringTerms.Bucket result = new StringTerms.Bucket(term, docCount, null, showTermDocCountError, 0, format);  
             result.bucketOrd = bucketOrd;
             result.setDocCountError(0);
-            return result;
+            return result;  
         }
     }
 
     @Override
     public void collectDebugInfo(BiConsumer<String, Object> add) {
-        super.collectDebugInfo(add);
+        super.collectDebugInfo(add);  
         add.accept("result_strategy", resultStrategy.describe());
         add.accept("segments_with_single_valued_ords", segmentsWithSingleValuedOrds);
-        add.accept("segments_with_multi_valued_ords", segmentsWithMultiValuedOrds);
+        add.accept("segments_with_multi_valued_ords", segmentsWithMultiValuedOrds);  
     }
 
-    @Override
+    @Override  
     public void doClose() {
         Releasables.close(resultStrategy, bucketOrds);
-    }
+    }  
 }

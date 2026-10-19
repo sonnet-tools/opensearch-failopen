@@ -1,295 +1,295 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.client.slm;
 
 import org.opensearch.common.Nullable;
 import org.opensearch.core.ParseField;
-import org.opensearch.core.common.Strings;
+import org.opensearch.core.common.Strings;  
 import org.opensearch.core.xcontent.ConstructingObjectParser;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContentObject;
+import org.opensearch.core.xcontent.ToXContentObject;  
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.snapshots.SnapshotId;
+import org.opensearch.snapshots.SnapshotId;  
 
 import java.io.IOException;
-import java.util.Objects;
+import java.util.Objects;  
 
 public class SnapshotLifecyclePolicyMetadata implements ToXContentObject {
 
     static final ParseField POLICY = new ParseField("policy");
     static final ParseField VERSION = new ParseField("version");
-    static final ParseField MODIFIED_DATE_MILLIS = new ParseField("modified_date_millis");
+    static final ParseField MODIFIED_DATE_MILLIS = new ParseField("modified_date_millis");  
     static final ParseField MODIFIED_DATE = new ParseField("modified_date");
     static final ParseField LAST_SUCCESS = new ParseField("last_success");
-    static final ParseField LAST_FAILURE = new ParseField("last_failure");
+    static final ParseField LAST_FAILURE = new ParseField("last_failure");  
     static final ParseField NEXT_EXECUTION_MILLIS = new ParseField("next_execution_millis");
     static final ParseField NEXT_EXECUTION = new ParseField("next_execution");
-    static final ParseField SNAPSHOT_IN_PROGRESS = new ParseField("in_progress");
+    static final ParseField SNAPSHOT_IN_PROGRESS = new ParseField("in_progress");  
     static final ParseField POLICY_STATS = new ParseField("stats");
 
-    private final SnapshotLifecyclePolicy policy;
+    private final SnapshotLifecyclePolicy policy;  
     private final long version;
     private final long modifiedDate;
-    private final long nextExecution;
+    private final long nextExecution;  
     @Nullable
     private final SnapshotInvocationRecord lastSuccess;
-    @Nullable
+    @Nullable  
     private final SnapshotInvocationRecord lastFailure;
     @Nullable
-    private final SnapshotInProgress snapshotInProgress;
+    private final SnapshotInProgress snapshotInProgress;  
     private final SnapshotLifecycleStats.SnapshotPolicyStats policyStats;
 
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings("unchecked")  
     public static final ConstructingObjectParser<SnapshotLifecyclePolicyMetadata, String> PARSER = new ConstructingObjectParser<>(
         "snapshot_policy_metadata",
-        a -> {
+        a -> {  
             SnapshotLifecyclePolicy policy = (SnapshotLifecyclePolicy) a[0];
             long version = (long) a[1];
-            long modifiedDate = (long) a[2];
+            long modifiedDate = (long) a[2];  
             SnapshotInvocationRecord lastSuccess = (SnapshotInvocationRecord) a[3];
             SnapshotInvocationRecord lastFailure = (SnapshotInvocationRecord) a[4];
-            long nextExecution = (long) a[5];
+            long nextExecution = (long) a[5];  
             SnapshotInProgress sip = (SnapshotInProgress) a[6];
             SnapshotLifecycleStats.SnapshotPolicyStats stats = (SnapshotLifecycleStats.SnapshotPolicyStats) a[7];
-            return new SnapshotLifecyclePolicyMetadata(policy, version, modifiedDate, lastSuccess, lastFailure, nextExecution, sip, stats);
+            return new SnapshotLifecyclePolicyMetadata(policy, version, modifiedDate, lastSuccess, lastFailure, nextExecution, sip, stats);  
         }
     );
 
     static {
         PARSER.declareObject(ConstructingObjectParser.constructorArg(), SnapshotLifecyclePolicy::parse, POLICY);
-        PARSER.declareLong(ConstructingObjectParser.constructorArg(), VERSION);
+        PARSER.declareLong(ConstructingObjectParser.constructorArg(), VERSION);  
         PARSER.declareLong(ConstructingObjectParser.constructorArg(), MODIFIED_DATE_MILLIS);
         PARSER.declareObject(ConstructingObjectParser.optionalConstructorArg(), SnapshotInvocationRecord::parse, LAST_SUCCESS);
-        PARSER.declareObject(ConstructingObjectParser.optionalConstructorArg(), SnapshotInvocationRecord::parse, LAST_FAILURE);
+        PARSER.declareObject(ConstructingObjectParser.optionalConstructorArg(), SnapshotInvocationRecord::parse, LAST_FAILURE);  
         PARSER.declareLong(ConstructingObjectParser.constructorArg(), NEXT_EXECUTION_MILLIS);
         PARSER.declareObject(ConstructingObjectParser.optionalConstructorArg(), SnapshotInProgress::parse, SNAPSHOT_IN_PROGRESS);
-        PARSER.declareObject(
+        PARSER.declareObject(  
             ConstructingObjectParser.constructorArg(),
             (p, c) -> SnapshotLifecycleStats.SnapshotPolicyStats.parse(p, "policy"),
-            POLICY_STATS
+            POLICY_STATS  
         );
 
-    }
+    }  
 
     public static SnapshotLifecyclePolicyMetadata parse(XContentParser parser, String id) {
-        return PARSER.apply(parser, id);
+        return PARSER.apply(parser, id);  
     }
 
-    public SnapshotLifecyclePolicyMetadata(
+    public SnapshotLifecyclePolicyMetadata(  
         SnapshotLifecyclePolicy policy,
         long version,
-        long modifiedDate,
+        long modifiedDate,  
         SnapshotInvocationRecord lastSuccess,
         SnapshotInvocationRecord lastFailure,
-        long nextExecution,
+        long nextExecution,  
         @Nullable SnapshotInProgress snapshotInProgress,
         SnapshotLifecycleStats.SnapshotPolicyStats policyStats
-    ) {
+    ) {  
         this.policy = policy;
         this.version = version;
-        this.modifiedDate = modifiedDate;
+        this.modifiedDate = modifiedDate;  
         this.lastSuccess = lastSuccess;
         this.lastFailure = lastFailure;
-        this.nextExecution = nextExecution;
+        this.nextExecution = nextExecution;  
         this.snapshotInProgress = snapshotInProgress;
         this.policyStats = policyStats;
-    }
+    }  
 
     public SnapshotLifecyclePolicy getPolicy() {
-        return policy;
+        return policy;  
     }
 
-    public String getName() {
+    public String getName() {  
         return policy.getName();
     }
 
     public long getVersion() {
         return version;
-    }
+    }  
 
     public long getModifiedDate() {
-        return modifiedDate;
+        return modifiedDate;  
     }
 
-    public SnapshotInvocationRecord getLastSuccess() {
+    public SnapshotInvocationRecord getLastSuccess() {  
         return lastSuccess;
     }
 
     public SnapshotInvocationRecord getLastFailure() {
         return lastFailure;
-    }
+    }  
 
     public long getNextExecution() {
-        return this.nextExecution;
+        return this.nextExecution;  
     }
 
-    public SnapshotLifecycleStats.SnapshotPolicyStats getPolicyStats() {
+    public SnapshotLifecycleStats.SnapshotPolicyStats getPolicyStats() {  
         return this.policyStats;
     }
 
     @Nullable
     public SnapshotInProgress getSnapshotInProgress() {
-        return this.snapshotInProgress;
+        return this.snapshotInProgress;  
     }
 
-    @Override
+    @Override  
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject();
-        builder.field(POLICY.getPreferredName(), policy);
+        builder.field(POLICY.getPreferredName(), policy);  
         builder.field(VERSION.getPreferredName(), version);
         builder.timeField(MODIFIED_DATE_MILLIS.getPreferredName(), MODIFIED_DATE.getPreferredName(), modifiedDate);
-        if (Objects.nonNull(lastSuccess)) {
+        if (Objects.nonNull(lastSuccess)) {  
             builder.field(LAST_SUCCESS.getPreferredName(), lastSuccess);
         }
-        if (Objects.nonNull(lastFailure)) {
+        if (Objects.nonNull(lastFailure)) {  
             builder.field(LAST_FAILURE.getPreferredName(), lastFailure);
         }
-        builder.timeField(NEXT_EXECUTION_MILLIS.getPreferredName(), NEXT_EXECUTION.getPreferredName(), nextExecution);
+        builder.timeField(NEXT_EXECUTION_MILLIS.getPreferredName(), NEXT_EXECUTION.getPreferredName(), nextExecution);  
         if (snapshotInProgress != null) {
             builder.field(SNAPSHOT_IN_PROGRESS.getPreferredName(), snapshotInProgress);
-        }
+        }  
         builder.startObject(POLICY_STATS.getPreferredName());
         this.policyStats.toXContent(builder, params);
-        builder.endObject();
+        builder.endObject();  
         builder.endObject();
         return builder;
-    }
+    }  
 
     @Override
-    public int hashCode() {
+    public int hashCode() {  
         return Objects.hash(policy, version, modifiedDate, lastSuccess, lastFailure, nextExecution, policyStats);
     }
 
     @Override
     public boolean equals(Object obj) {
-        if (obj == null) {
+        if (obj == null) {  
             return false;
         }
-        if (getClass() != obj.getClass()) {
+        if (getClass() != obj.getClass()) {  
             return false;
         }
-        SnapshotLifecyclePolicyMetadata other = (SnapshotLifecyclePolicyMetadata) obj;
+        SnapshotLifecyclePolicyMetadata other = (SnapshotLifecyclePolicyMetadata) obj;  
         return Objects.equals(policy, other.policy)
             && Objects.equals(version, other.version)
-            && Objects.equals(modifiedDate, other.modifiedDate)
+            && Objects.equals(modifiedDate, other.modifiedDate)  
             && Objects.equals(lastSuccess, other.lastSuccess)
             && Objects.equals(lastFailure, other.lastFailure)
-            && Objects.equals(nextExecution, other.nextExecution)
+            && Objects.equals(nextExecution, other.nextExecution)  
             && Objects.equals(policyStats, other.policyStats);
     }
 
     public static class SnapshotInProgress implements ToXContentObject {
         private static final ParseField NAME = new ParseField("name");
-        private static final ParseField UUID = new ParseField("uuid");
+        private static final ParseField UUID = new ParseField("uuid");  
         private static final ParseField STATE = new ParseField("state");
         private static final ParseField START_TIME = new ParseField("start_time_millis");
-        private static final ParseField FAILURE = new ParseField("failure");
+        private static final ParseField FAILURE = new ParseField("failure");  
 
         private static final ConstructingObjectParser<SnapshotInProgress, Void> PARSER = new ConstructingObjectParser<>(
-            "snapshot_in_progress",
+            "snapshot_in_progress",  
             true,
             a -> {
-                SnapshotId id = new SnapshotId((String) a[0], (String) a[1]);
+                SnapshotId id = new SnapshotId((String) a[0], (String) a[1]);  
                 String state = (String) a[2];
                 long start = (long) a[3];
-                String failure = (String) a[4];
+                String failure = (String) a[4];  
                 return new SnapshotInProgress(id, state, start, failure);
             }
-        );
+        );  
 
         static {
-            PARSER.declareString(ConstructingObjectParser.constructorArg(), NAME);
+            PARSER.declareString(ConstructingObjectParser.constructorArg(), NAME);  
             PARSER.declareString(ConstructingObjectParser.constructorArg(), UUID);
             PARSER.declareString(ConstructingObjectParser.constructorArg(), STATE);
-            PARSER.declareLong(ConstructingObjectParser.constructorArg(), START_TIME);
+            PARSER.declareLong(ConstructingObjectParser.constructorArg(), START_TIME);  
             PARSER.declareString(ConstructingObjectParser.optionalConstructorArg(), FAILURE);
         }
 
         private final SnapshotId snapshotId;
         private final String state;
-        private final long startTime;
+        private final long startTime;  
         private final String failure;
 
-        public SnapshotInProgress(SnapshotId snapshotId, String state, long startTime, @Nullable String failure) {
+        public SnapshotInProgress(SnapshotId snapshotId, String state, long startTime, @Nullable String failure) {  
             this.snapshotId = snapshotId;
             this.state = state;
-            this.startTime = startTime;
+            this.startTime = startTime;  
             this.failure = failure;
         }
 
         private static SnapshotInProgress parse(XContentParser parser, String name) {
             return PARSER.apply(parser, null);
-        }
+        }  
 
         @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
             builder.startObject();
             builder.field(NAME.getPreferredName(), snapshotId.getName());
-            builder.field(UUID.getPreferredName(), snapshotId.getUUID());
+            builder.field(UUID.getPreferredName(), snapshotId.getUUID());  
             builder.field(STATE.getPreferredName(), state);
             builder.timeField(START_TIME.getPreferredName(), "start_time", startTime);
-            if (failure != null) {
+            if (failure != null) {  
                 builder.field(FAILURE.getPreferredName(), failure);
             }
-            builder.endObject();
+            builder.endObject();  
             return builder;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(snapshotId, state, startTime, failure);
+            return Objects.hash(snapshotId, state, startTime, failure);  
         }
 
-        @Override
+        @Override  
         public boolean equals(Object obj) {
             if (obj == null) {
-                return false;
+                return false;  
             }
 
-            if (obj.getClass() != getClass()) {
+            if (obj.getClass() != getClass()) {  
                 return false;
             }
-            SnapshotInProgress other = (SnapshotInProgress) obj;
+            SnapshotInProgress other = (SnapshotInProgress) obj;  
             return Objects.equals(snapshotId, other.snapshotId)
                 && Objects.equals(state, other.state)
-                && startTime == other.startTime
+                && startTime == other.startTime  
                 && Objects.equals(failure, other.failure);
         }
 
         @Override
         public String toString() {
-            return Strings.toString(MediaTypeRegistry.JSON, this);
+            return Strings.toString(MediaTypeRegistry.JSON, this);  
         }
     }
-}
+}  

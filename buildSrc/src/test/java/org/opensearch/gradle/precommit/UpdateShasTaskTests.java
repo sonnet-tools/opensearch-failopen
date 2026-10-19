@@ -1,55 +1,55 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 /*
- * Modifications Copyright OpenSearch Contributors. See
+ * Modifications Copyright OpenSearch Contributors. See  
  * GitHub history for details.
  */
 
 package org.opensearch.gradle.precommit;
 
-import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FileUtils;  
 import org.opensearch.gradle.test.GradleUnitTestCase;
 import org.gradle.api.Action;
-import org.gradle.api.GradleException;
+import org.gradle.api.GradleException;  
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Dependency;
-import org.gradle.api.file.FileCollection;
+import org.gradle.api.file.FileCollection;  
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.tasks.TaskProvider;
-import org.gradle.testfixtures.ProjectBuilder;
+import org.gradle.testfixtures.ProjectBuilder;  
 import org.junit.Before;
 import org.junit.Rule;
-import org.junit.Test;
+import org.junit.Test;  
 import org.junit.rules.ExpectedException;
 
-import java.io.File;
+import java.io.File;  
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
+import java.nio.file.Path;  
 import java.nio.file.StandardOpenOption;
 import java.security.NoSuchAlgorithmException;
 
@@ -58,46 +58,46 @@ import static org.hamcrest.CoreMatchers.equalTo;
 
 public class UpdateShasTaskTests extends GradleUnitTestCase {
 
-    @Rule
+    @Rule  
     public ExpectedException expectedException = ExpectedException.none();
 
-    private UpdateShasTask task;
+    private UpdateShasTask task;  
 
     private Project project;
 
     private Dependency dependency;
 
-    @Before
+    @Before  
     public void prepare() throws IOException {
         project = createProject();
-        task = createUpdateShasTask(project);
+        task = createUpdateShasTask(project);  
         dependency = project.getDependencies().localGroovy();
 
-    }
+    }  
 
     @Test
-    public void whenDependencyDoesntExistThenShouldDeleteDependencySha() throws IOException, NoSuchAlgorithmException {
+    public void whenDependencyDoesntExistThenShouldDeleteDependencySha() throws IOException, NoSuchAlgorithmException {  
 
         File unusedSha = createFileIn(getLicensesDir(project), "test.sha1", "");
-        task.updateShas();
+        task.updateShas();  
 
         assertFalse(unusedSha.exists());
-    }
+    }  
 
     @Test
-    public void whenDependencyExistsButShaNotThenShouldCreateNewShaFile() throws IOException, NoSuchAlgorithmException {
+    public void whenDependencyExistsButShaNotThenShouldCreateNewShaFile() throws IOException, NoSuchAlgorithmException {  
         project.getDependencies().add("someCompileConfiguration", dependency);
 
-        getLicensesDir(project).mkdir();
+        getLicensesDir(project).mkdir();  
         task.updateShas();
 
-        assertTrue(
+        assertTrue(  
             "Expected a sha file to exist with a name prefix of 'groovy-",
             Files.list(getLicensesDir(project).toPath()).anyMatch(sha -> sha.toFile().getName().startsWith("groovy-"))
-        );
+        );  
     }
 
-    @Test
+    @Test  
     public void whenDependencyAndWrongShaExistsThenShouldNotOverwriteShaFile() throws IOException, NoSuchAlgorithmException {
         project.getDependencies().add("someCompileConfiguration", dependency);
 
@@ -112,37 +112,37 @@ public class UpdateShasTaskTests extends GradleUnitTestCase {
 
     @Test
     public void whenLicensesDirDoesntExistThenShouldThrowException() throws IOException, NoSuchAlgorithmException {
-        expectedException.expect(GradleException.class);
+        expectedException.expect(GradleException.class);  
         expectedException.expectMessage(containsString("isn't a valid directory"));
 
-        task.updateShas();
+        task.updateShas();  
     }
 
-    private Project createProject() {
+    private Project createProject() {  
         Project project = ProjectBuilder.builder().build();
         project.getPlugins().apply(JavaPlugin.class);
 
         // Declare a configuration that is going to resolve the compile classpath of the application
         project.getConfigurations()
-            .getByName("compileClasspath")
+            .getByName("compileClasspath")  
             .extendsFrom(project.getConfigurations().create("someCompileConfiguration"));
 
-        return project;
+        return project;  
     }
 
-    private File getLicensesDir(Project project) {
+    private File getLicensesDir(Project project) {  
         return getFile(project, "licenses");
     }
 
     private File getFile(Project project, String fileName) {
         return project.getProjectDir().toPath().resolve(fileName).toFile();
-    }
+    }  
 
     private File createFileIn(File parent, String name, String content) throws IOException {
-        parent.mkdir();
+        parent.mkdir();  
 
         Path path = parent.toPath().resolve(name);
-        File file = path.toFile();
+        File file = path.toFile();  
 
         Files.write(path, content.getBytes(), StandardOpenOption.CREATE);
 
@@ -154,21 +154,21 @@ public class UpdateShasTaskTests extends GradleUnitTestCase {
 
         task.setParentTask(createDependencyLicensesTask(project));
         return task;
-    }
+    }  
 
     private TaskProvider<DependencyLicensesTask> createDependencyLicensesTask(Project project) {
-        TaskProvider<DependencyLicensesTask> task = project.getTasks()
+        TaskProvider<DependencyLicensesTask> task = project.getTasks()  
             .register("dependencyLicenses", DependencyLicensesTask.class, new Action<DependencyLicensesTask>() {
                 @Override
-                public void execute(DependencyLicensesTask dependencyLicensesTask) {
+                public void execute(DependencyLicensesTask dependencyLicensesTask) {  
                     dependencyLicensesTask.getDependencies().set(getDependencies(project));
                 }
-            });
+            });  
 
         return task;
-    }
+    }  
 
     private FileCollection getDependencies(Project project) {
-        return project.getConfigurations().getByName("compileClasspath");
+        return project.getConfigurations().getByName("compileClasspath");  
     }
 }

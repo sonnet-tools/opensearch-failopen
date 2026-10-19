@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.core.common.io.stream;
 
@@ -16,10 +16,10 @@ import java.nio.ByteBuffer;
 
 /** test the ByteBufferStreamInput using the same BaseStreamTests */
 public class ByteBufferStreamInputTests extends BaseStreamTests {
-    @Override
+    @Override  
     protected StreamInput getStreamInput(BytesReference bytesReference) throws IOException {
         BytesRef br = bytesReference.toBytesRef();
-        ByteBuffer bb = ByteBuffer.wrap(br.bytes, br.offset, br.length);
+        ByteBuffer bb = ByteBuffer.wrap(br.bytes, br.offset, br.length);  
         return new ByteBufferStreamInput(bb);
     }
-}
+}  

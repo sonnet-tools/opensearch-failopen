@@ -1,34 +1,34 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.analysis.common;
 
@@ -37,76 +37,76 @@ import java.util.Set;
 
 /**
  * A class to match character code points.
- */
+ */  
 public interface CharMatcher {
 
-    class ByUnicodeCategory implements CharMatcher {
+    class ByUnicodeCategory implements CharMatcher {  
 
         public static CharMatcher of(byte unicodeCategory) {
-            return new ByUnicodeCategory(unicodeCategory);
+            return new ByUnicodeCategory(unicodeCategory);  
         }
 
-        private final byte unicodeType;
+        private final byte unicodeType;  
 
         ByUnicodeCategory(byte unicodeType) {
-            this.unicodeType = unicodeType;
+            this.unicodeType = unicodeType;  
         }
 
-        @Override
+        @Override  
         public boolean isTokenChar(int c) {
             return Character.getType(c) == unicodeType;
-        }
+        }  
     }
 
-    enum Basic implements CharMatcher {
+    enum Basic implements CharMatcher {  
         LETTER {
             @Override
-            public boolean isTokenChar(int c) {
+            public boolean isTokenChar(int c) {  
                 return Character.isLetter(c);
             }
-        },
+        },  
         DIGIT {
             @Override
-            public boolean isTokenChar(int c) {
+            public boolean isTokenChar(int c) {  
                 return Character.isDigit(c);
             }
-        },
+        },  
         WHITESPACE {
             @Override
-            public boolean isTokenChar(int c) {
+            public boolean isTokenChar(int c) {  
                 return Character.isWhitespace(c);
             }
-        },
+        },  
         PUNCTUATION {
             @Override
-            public boolean isTokenChar(int c) {
+            public boolean isTokenChar(int c) {  
                 switch (Character.getType(c)) {
                     case Character.START_PUNCTUATION:
-                    case Character.END_PUNCTUATION:
+                    case Character.END_PUNCTUATION:  
                     case Character.OTHER_PUNCTUATION:
                     case Character.CONNECTOR_PUNCTUATION:
-                    case Character.DASH_PUNCTUATION:
+                    case Character.DASH_PUNCTUATION:  
                     case Character.INITIAL_QUOTE_PUNCTUATION:
                     case Character.FINAL_QUOTE_PUNCTUATION:
-                        return true;
+                        return true;  
                     default:
                         return false;
-                }
+                }  
             }
         },
-        SYMBOL {
+        SYMBOL {  
             @Override
             public boolean isTokenChar(int c) {
-                switch (Character.getType(c)) {
+                switch (Character.getType(c)) {  
                     case Character.CURRENCY_SYMBOL:
                     case Character.MATH_SYMBOL:
-                    case Character.OTHER_SYMBOL:
+                    case Character.OTHER_SYMBOL:  
                     case Character.MODIFIER_SYMBOL:
                         return true;
-                    default:
+                    default:  
                         return false;
                 }
-            }
+            }  
         }
     }
 
@@ -115,40 +115,40 @@ public interface CharMatcher {
 
         Builder() {
             matchers = new HashSet<>();
-        }
+        }  
 
         public Builder or(CharMatcher matcher) {
-            matchers.add(matcher);
+            matchers.add(matcher);  
             return this;
         }
 
         public CharMatcher build() {
             switch (matchers.size()) {
-                case 0:
+                case 0:  
                     return new CharMatcher() {
                         @Override
-                        public boolean isTokenChar(int c) {
+                        public boolean isTokenChar(int c) {  
                             return false;
                         }
-                    };
+                    };  
                 case 1:
                     return matchers.iterator().next();
-                default:
+                default:  
                     return new CharMatcher() {
                         @Override
-                        public boolean isTokenChar(int c) {
+                        public boolean isTokenChar(int c) {  
                             for (CharMatcher matcher : matchers) {
                                 if (matcher.isTokenChar(c)) {
-                                    return true;
+                                    return true;  
                                 }
                             }
-                            return false;
+                            return false;  
                         }
                     };
-            }
+            }  
         }
     }
 
     /** Returns true if, and only if, the provided character matches this character class. */
     boolean isTokenChar(int c);
-}
+}  

@@ -1,43 +1,43 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 /*
- * Modifications Copyright OpenSearch Contributors. See
+ * Modifications Copyright OpenSearch Contributors. See  
  * GitHub history for details.
  */
 
 package org.opensearch.test.rest.yaml;
 
-import org.opensearch.test.rest.yaml.section.ClientYamlTestSection;
+import org.opensearch.test.rest.yaml.section.ClientYamlTestSection;  
 import org.opensearch.test.rest.yaml.section.ClientYamlTestSuite;
 import org.opensearch.test.rest.yaml.section.SetupSection;
-import org.opensearch.test.rest.yaml.section.TeardownSection;
+import org.opensearch.test.rest.yaml.section.TeardownSection;  
 
 /**
- * Wraps {@link ClientYamlTestSection}s ready to be run. Each test section is associated to its {@link ClientYamlTestSuite}.
+ * Wraps {@link ClientYamlTestSection}s ready to be run. Each test section is associated to its {@link ClientYamlTestSuite}.  
  */
 public class ClientYamlTestCandidate {
 
@@ -46,39 +46,39 @@ public class ClientYamlTestCandidate {
 
     public ClientYamlTestCandidate(ClientYamlTestSuite restTestSuite, ClientYamlTestSection testSection) {
         this.restTestSuite = restTestSuite;
-        this.testSection = testSection;
+        this.testSection = testSection;  
     }
 
-    public String getApi() {
+    public String getApi() {  
         return restTestSuite.getApi();
     }
 
     public String getName() {
         return restTestSuite.getName();
-    }
+    }  
 
     public String getSuitePath() {
-        return restTestSuite.getPath();
+        return restTestSuite.getPath();  
     }
 
-    public String getTestPath() {
+    public String getTestPath() {  
         return restTestSuite.getPath() + "/" + testSection.getName();
     }
 
     public SetupSection getSetupSection() {
         return restTestSuite.getSetupSection();
-    }
+    }  
 
     public TeardownSection getTeardownSection() {
-        return restTestSuite.getTeardownSection();
+        return restTestSuite.getTeardownSection();  
     }
 
-    public ClientYamlTestSection getTestSection() {
+    public ClientYamlTestSection getTestSection() {  
         return testSection;
     }
 
     @Override
     public String toString() {
-        return getTestPath();
+        return getTestPath();  
     }
 }

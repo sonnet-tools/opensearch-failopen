@@ -1,40 +1,40 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.cluster.metadata;
 
 import org.opensearch.Version;
 import org.opensearch.common.Nullable;
-import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.test.OpenSearchTestCase;  
 
 import java.util.Objects;
 
@@ -43,31 +43,31 @@ import static org.hamcrest.Matchers.containsString;
 
 public class IndexAbstractionTests extends OpenSearchTestCase {
 
-    public void testHiddenAliasValidation() {
+    public void testHiddenAliasValidation() {  
         final String hiddenAliasName = "hidden_alias";
         AliasMetadata hiddenAliasMetadata = new AliasMetadata.Builder(hiddenAliasName).isHidden(true).build();
 
         IndexMetadata hidden1 = buildIndexWithAlias("hidden1", hiddenAliasName, true, Version.CURRENT, false);
         IndexMetadata hidden2 = buildIndexWithAlias("hidden2", hiddenAliasName, true, Version.CURRENT, false);
-        IndexMetadata hidden3 = buildIndexWithAlias("hidden3", hiddenAliasName, true, Version.CURRENT, false);
+        IndexMetadata hidden3 = buildIndexWithAlias("hidden3", hiddenAliasName, true, Version.CURRENT, false);  
 
         IndexMetadata indexWithNonHiddenAlias = buildIndexWithAlias("nonhidden1", hiddenAliasName, false, Version.CURRENT, false);
-        IndexMetadata indexWithUnspecifiedAlias = buildIndexWithAlias("nonhidden2", hiddenAliasName, null, Version.CURRENT, false);
+        IndexMetadata indexWithUnspecifiedAlias = buildIndexWithAlias("nonhidden2", hiddenAliasName, null, Version.CURRENT, false);  
 
         {
-            IndexAbstraction.Alias allHidden = new IndexAbstraction.Alias(hiddenAliasMetadata, hidden1);
+            IndexAbstraction.Alias allHidden = new IndexAbstraction.Alias(hiddenAliasMetadata, hidden1);  
             allHidden.addIndex(hidden2);
             allHidden.addIndex(hidden3);
-            allHidden.computeAndValidateAliasProperties(); // Should be ok
+            allHidden.computeAndValidateAliasProperties(); // Should be ok  
         }
 
-        {
+        {  
             IndexAbstraction.Alias allVisible;
             if (randomBoolean()) {
-                allVisible = new IndexAbstraction.Alias(hiddenAliasMetadata, indexWithNonHiddenAlias);
+                allVisible = new IndexAbstraction.Alias(hiddenAliasMetadata, indexWithNonHiddenAlias);  
                 allVisible.addIndex(indexWithUnspecifiedAlias);
             } else {
-                allVisible = new IndexAbstraction.Alias(hiddenAliasMetadata, indexWithUnspecifiedAlias);
+                allVisible = new IndexAbstraction.Alias(hiddenAliasMetadata, indexWithUnspecifiedAlias);  
                 allVisible.addIndex(indexWithNonHiddenAlias);
             }
 
@@ -76,114 +76,114 @@ public class IndexAbstractionTests extends OpenSearchTestCase {
 
         {
             IndexAbstraction.Alias oneNonHidden = new IndexAbstraction.Alias(hiddenAliasMetadata, hidden1);
-            oneNonHidden.addIndex(hidden2);
+            oneNonHidden.addIndex(hidden2);  
             oneNonHidden.addIndex(hidden3);
             oneNonHidden.addIndex(indexWithNonHiddenAlias);
-            IllegalStateException exception = expectThrows(
+            IllegalStateException exception = expectThrows(  
                 IllegalStateException.class,
                 () -> oneNonHidden.computeAndValidateAliasProperties()
-            );
+            );  
             assertThat(exception.getMessage(), containsString("alias [" + hiddenAliasName + "] has is_hidden set to true on indices ["));
             assertThat(
-                exception.getMessage(),
+                exception.getMessage(),  
                 allOf(
                     containsString(hidden1.getIndex().getName()),
-                    containsString(hidden2.getIndex().getName()),
+                    containsString(hidden2.getIndex().getName()),  
                     containsString(hidden3.getIndex().getName())
                 )
-            );
+            );  
             assertThat(
                 exception.getMessage(),
-                containsString(
+                containsString(  
                     "but does not have is_hidden set to true on indices ["
                         + indexWithNonHiddenAlias.getIndex().getName()
-                        + "]; alias must have the same is_hidden setting on all indices"
+                        + "]; alias must have the same is_hidden setting on all indices"  
                 )
             );
-        }
+        }  
 
         {
-            IndexAbstraction.Alias oneUnspecified = new IndexAbstraction.Alias(hiddenAliasMetadata, hidden1);
+            IndexAbstraction.Alias oneUnspecified = new IndexAbstraction.Alias(hiddenAliasMetadata, hidden1);  
             oneUnspecified.addIndex(hidden2);
             oneUnspecified.addIndex(hidden3);
-            oneUnspecified.addIndex(indexWithUnspecifiedAlias);
+            oneUnspecified.addIndex(indexWithUnspecifiedAlias);  
             IllegalStateException exception = expectThrows(
                 IllegalStateException.class,
-                () -> oneUnspecified.computeAndValidateAliasProperties()
+                () -> oneUnspecified.computeAndValidateAliasProperties()  
             );
             assertThat(exception.getMessage(), containsString("alias [" + hiddenAliasName + "] has is_hidden set to true on indices ["));
-            assertThat(
+            assertThat(  
                 exception.getMessage(),
                 allOf(
-                    containsString(hidden1.getIndex().getName()),
+                    containsString(hidden1.getIndex().getName()),  
                     containsString(hidden2.getIndex().getName()),
                     containsString(hidden3.getIndex().getName())
-                )
+                )  
             );
             assertThat(
-                exception.getMessage(),
+                exception.getMessage(),  
                 containsString(
                     "but does not have is_hidden set to true on indices ["
-                        + indexWithUnspecifiedAlias.getIndex().getName()
+                        + indexWithUnspecifiedAlias.getIndex().getName()  
                         + "]; alias must have the same is_hidden setting on all indices"
                 )
-            );
+            );  
         }
 
-        {
+        {  
             IndexAbstraction.Alias mostlyVisibleOneHidden;
             if (randomBoolean()) {
-                mostlyVisibleOneHidden = new IndexAbstraction.Alias(hiddenAliasMetadata, indexWithNonHiddenAlias);
+                mostlyVisibleOneHidden = new IndexAbstraction.Alias(hiddenAliasMetadata, indexWithNonHiddenAlias);  
                 mostlyVisibleOneHidden.addIndex(indexWithUnspecifiedAlias);
             } else {
-                mostlyVisibleOneHidden = new IndexAbstraction.Alias(hiddenAliasMetadata, indexWithUnspecifiedAlias);
+                mostlyVisibleOneHidden = new IndexAbstraction.Alias(hiddenAliasMetadata, indexWithUnspecifiedAlias);  
                 mostlyVisibleOneHidden.addIndex(indexWithNonHiddenAlias);
             }
-            final IndexMetadata hiddenIndex = randomFrom(hidden1, hidden2, hidden3);
+            final IndexMetadata hiddenIndex = randomFrom(hidden1, hidden2, hidden3);  
             mostlyVisibleOneHidden.addIndex(hiddenIndex);
             IllegalStateException exception = expectThrows(
-                IllegalStateException.class,
+                IllegalStateException.class,  
                 () -> mostlyVisibleOneHidden.computeAndValidateAliasProperties()
             );
-            assertThat(
+            assertThat(  
                 exception.getMessage(),
                 containsString(
-                    "alias ["
+                    "alias ["  
                         + hiddenAliasName
                         + "] has is_hidden set to true on "
-                        + "indices ["
+                        + "indices ["  
                         + hiddenIndex.getIndex().getName()
                         + "] but does not have is_hidden set to true on indices ["
-                )
+                )  
             );
             assertThat(
-                exception.getMessage(),
+                exception.getMessage(),  
                 allOf(
                     containsString(indexWithUnspecifiedAlias.getIndex().getName()),
-                    containsString(indexWithNonHiddenAlias.getIndex().getName())
+                    containsString(indexWithNonHiddenAlias.getIndex().getName())  
                 )
             );
-            assertThat(exception.getMessage(), containsString("but does not have is_hidden set to true on indices ["));
+            assertThat(exception.getMessage(), containsString("but does not have is_hidden set to true on indices ["));  
         }
     }
 
     private IndexMetadata buildIndexWithAlias(
         String indexName,
-        String aliasName,
+        String aliasName,  
         @Nullable Boolean aliasIsHidden,
         Version indexCreationVersion,
-        boolean isSystem
+        boolean isSystem  
     ) {
         final AliasMetadata.Builder aliasMetadata = new AliasMetadata.Builder(aliasName);
-        if (Objects.nonNull(aliasIsHidden) || randomBoolean()) {
+        if (Objects.nonNull(aliasIsHidden) || randomBoolean()) {  
             aliasMetadata.isHidden(aliasIsHidden);
         }
-        return new IndexMetadata.Builder(indexName).settings(settings(indexCreationVersion))
+        return new IndexMetadata.Builder(indexName).settings(settings(indexCreationVersion))  
             .system(isSystem)
             .numberOfShards(1)
-            .numberOfReplicas(0)
+            .numberOfReplicas(0)  
             .putAlias(aliasMetadata)
             .build();
-    }
+    }  
 
 }

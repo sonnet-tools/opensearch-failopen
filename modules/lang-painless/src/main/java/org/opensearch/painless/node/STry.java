@@ -1,34 +1,34 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.painless.node;
 
@@ -37,10 +37,10 @@ import org.opensearch.painless.phase.UserTreeVisitor;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
+import java.util.Objects;  
 
 /**
- * Represents the try block as part of a try-catch block.
+ * Represents the try block as part of a try-catch block.  
  */
 public class STry extends AStatement {
 
@@ -52,29 +52,29 @@ public class STry extends AStatement {
 
         this.blockNode = blockNode;
         this.catchNodes = Collections.unmodifiableList(Objects.requireNonNull(catchNodes));
-    }
+    }  
 
     public SBlock getBlockNode() {
-        return blockNode;
+        return blockNode;  
     }
 
-    public List<SCatch> getCatchNodes() {
+    public List<SCatch> getCatchNodes() {  
         return catchNodes;
     }
 
     @Override
     public <Scope> void visit(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {
-        userTreeVisitor.visitTry(this, scope);
+        userTreeVisitor.visitTry(this, scope);  
     }
 
-    @Override
+    @Override  
     public <Scope> void visitChildren(UserTreeVisitor<Scope> userTreeVisitor, Scope scope) {
         if (blockNode != null) {
-            blockNode.visit(userTreeVisitor, scope);
+            blockNode.visit(userTreeVisitor, scope);  
         }
 
-        for (SCatch catchNode : catchNodes) {
+        for (SCatch catchNode : catchNodes) {  
             catchNode.visit(userTreeVisitor, scope);
         }
-    }
+    }  
 }

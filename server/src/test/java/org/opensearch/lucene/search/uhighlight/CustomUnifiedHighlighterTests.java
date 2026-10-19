@@ -1,373 +1,373 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.lucene.search.uhighlight;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.custom.CustomAnalyzer;
-import org.apache.lucene.analysis.ngram.EdgeNGramTokenizerFactory;
+import org.apache.lucene.analysis.ngram.EdgeNGramTokenizerFactory;  
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
+import org.apache.lucene.document.Field;  
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.TextField;
-import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.DirectoryReader;  
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.index.LeafReaderContext;  
 import org.apache.lucene.index.Term;
 import org.apache.lucene.queries.CommonTermsQuery;
-import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanClause;  
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.FuzzyQuery;
-import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.IndexSearcher;  
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.PhraseQuery;
-import org.apache.lucene.search.Query;
+import org.apache.lucene.search.Query;  
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.TopDocs;  
 import org.apache.lucene.search.highlight.DefaultEncoder;
 import org.apache.lucene.search.join.BitSetProducer;
-import org.apache.lucene.search.join.ScoreMode;
+import org.apache.lucene.search.join.ScoreMode;  
 import org.apache.lucene.search.uhighlight.UnifiedHighlighter;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.index.RandomIndexWriter;
+import org.apache.lucene.tests.index.RandomIndexWriter;  
 import org.apache.lucene.util.BitSet;
 import org.apache.lucene.util.FixedBitSet;
-import org.opensearch.common.lucene.search.MultiPhrasePrefixQuery;
+import org.opensearch.common.lucene.search.MultiPhrasePrefixQuery;  
 import org.opensearch.core.common.Strings;
 import org.opensearch.index.search.OpenSearchToParentBlockJoinQuery;
-import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.test.OpenSearchTestCase;  
 
 import java.io.IOException;
-import java.text.BreakIterator;
+import java.text.BreakIterator;  
 import java.util.Locale;
 
-import static org.opensearch.lucene.search.uhighlight.CustomUnifiedHighlighter.MULTIVAL_SEP_CHAR;
+import static org.opensearch.lucene.search.uhighlight.CustomUnifiedHighlighter.MULTIVAL_SEP_CHAR;  
 import static org.hamcrest.CoreMatchers.equalTo;
 
-public class CustomUnifiedHighlighterTests extends OpenSearchTestCase {
+public class CustomUnifiedHighlighterTests extends OpenSearchTestCase {  
     private void assertHighlightOneDoc(
         String fieldName,
-        String[] inputs,
+        String[] inputs,  
         Analyzer analyzer,
         Query query,
-        Locale locale,
+        Locale locale,  
         BreakIterator breakIterator,
         int noMatchSize,
-        String[] expectedPassages
+        String[] expectedPassages  
     ) throws Exception {
         try (Directory dir = newDirectory()) {
-            IndexWriterConfig iwc = newIndexWriterConfig(analyzer);
+            IndexWriterConfig iwc = newIndexWriterConfig(analyzer);  
             iwc.setMergePolicy(newTieredMergePolicy(random()));
             RandomIndexWriter iw = new RandomIndexWriter(random(), dir, iwc);
-            FieldType ft = new FieldType(TextField.TYPE_STORED);
+            FieldType ft = new FieldType(TextField.TYPE_STORED);  
             ft.setIndexOptions(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS);
             ft.freeze();
-            Document doc = new Document();
+            Document doc = new Document();  
             for (String input : inputs) {
                 Field field = new Field(fieldName, "", ft);
-                field.setStringValue(input);
+                field.setStringValue(input);  
                 doc.add(field);
             }
-            iw.addDocument(doc);
+            iw.addDocument(doc);  
             try (DirectoryReader reader = iw.getReader()) {
                 IndexSearcher searcher = newSearcher(reader);
-                iw.close();
+                iw.close();  
                 TopDocs topDocs = searcher.search(new MatchAllDocsQuery(), 1, Sort.INDEXORDER);
                 assertThat(topDocs.totalHits.value(), equalTo(1L));
-                String rawValue = Strings.arrayToDelimitedString(inputs, String.valueOf(MULTIVAL_SEP_CHAR));
+                String rawValue = Strings.arrayToDelimitedString(inputs, String.valueOf(MULTIVAL_SEP_CHAR));  
                 UnifiedHighlighter.Builder builder = UnifiedHighlighter.builder(searcher, analyzer);
                 builder.withFieldMatcher("text"::equals);
-                CustomUnifiedHighlighter highlighter = new CustomUnifiedHighlighter(
+                CustomUnifiedHighlighter highlighter = new CustomUnifiedHighlighter(  
                     builder,
                     UnifiedHighlighter.OffsetSource.ANALYSIS,
-                    new CustomPassageFormatter("<b>", "</b>", new DefaultEncoder()),
+                    new CustomPassageFormatter("<b>", "</b>", new DefaultEncoder()),  
                     locale,
                     breakIterator,
-                    "index",
+                    "index",  
                     "text",
                     query,
-                    noMatchSize,
+                    noMatchSize,  
                     expectedPassages.length,
                     Integer.MAX_VALUE,
-                    null
+                    null  
                 );
                 final Snippet[] snippets = highlighter.highlightField(getOnlyLeafReader(reader), topDocs.scoreDocs[0].doc, () -> rawValue);
-                assertEquals(snippets.length, expectedPassages.length);
+                assertEquals(snippets.length, expectedPassages.length);  
                 for (int i = 0; i < snippets.length; i++) {
                     assertEquals(snippets[i].getText(), expectedPassages[i]);
-                }
+                }  
             }
         }
-    }
+    }  
 
     public void testSimple() throws Exception {
-        final String[] inputs = {
+        final String[] inputs = {  
             "This is a test. Just a test1 highlighting from unified highlighter.",
             "This is the second highlighting value to perform highlighting on a longer text that gets scored lower.",
-            "This is highlighting the third short highlighting value.",
+            "This is highlighting the third short highlighting value.",  
             "Just a test4 highlighting from unified highlighter." };
 
-        String[] expectedPassages = {
+        String[] expectedPassages = {  
             "Just a test1 <b>highlighting</b> from unified highlighter.",
             "This is the second <b>highlighting</b> value to perform <b>highlighting</b> on a" + " longer text that gets scored lower.",
-            "This is <b>highlighting</b> the third short <b>highlighting</b> value.",
+            "This is <b>highlighting</b> the third short <b>highlighting</b> value.",  
             "Just a test4 <b>highlighting</b> from unified highlighter." };
         Query query = new TermQuery(new Term("text", "highlighting"));
-        assertHighlightOneDoc(
+        assertHighlightOneDoc(  
             "text",
             inputs,
-            new StandardAnalyzer(),
+            new StandardAnalyzer(),  
             query,
             Locale.ROOT,
-            BreakIterator.getSentenceInstance(Locale.ROOT),
+            BreakIterator.getSentenceInstance(Locale.ROOT),  
             0,
             expectedPassages
-        );
+        );  
     }
 
-    public void testNoMatchSize() throws Exception {
+    public void testNoMatchSize() throws Exception {  
         final String[] inputs = { "This is a test. Just a test highlighting from unified. Feel free to ignore." };
         Query query = new TermQuery(new Term("body", "highlighting"));
-        assertHighlightOneDoc(
+        assertHighlightOneDoc(  
             "text",
             inputs,
-            new StandardAnalyzer(),
+            new StandardAnalyzer(),  
             query,
             Locale.ROOT,
-            BreakIterator.getSentenceInstance(Locale.ROOT),
+            BreakIterator.getSentenceInstance(Locale.ROOT),  
             100,
             inputs
-        );
+        );  
     }
 
-    public void testMultiPhrasePrefixQuerySingleTerm() throws Exception {
+    public void testMultiPhrasePrefixQuerySingleTerm() throws Exception {  
         final String[] inputs = { "The quick brown fox." };
         final String[] outputs = { "The quick <b>brown</b> fox." };
-        MultiPhrasePrefixQuery query = new MultiPhrasePrefixQuery("text");
+        MultiPhrasePrefixQuery query = new MultiPhrasePrefixQuery("text");  
         query.add(new Term("text", "bro"));
         assertHighlightOneDoc(
-            "text",
+            "text",  
             inputs,
             new StandardAnalyzer(),
-            query,
+            query,  
             Locale.ROOT,
             BreakIterator.getSentenceInstance(Locale.ROOT),
-            0,
+            0,  
             outputs
         );
-    }
+    }  
 
     public void testMultiPhrasePrefixQuery() throws Exception {
-        final String[] inputs = { "The quick brown fox." };
+        final String[] inputs = { "The quick brown fox." };  
         final String[] outputs = { "The <b>quick</b> <b>brown</b> <b>fox</b>." };
         MultiPhrasePrefixQuery query = new MultiPhrasePrefixQuery("text");
-        query.add(new Term("text", "quick"));
+        query.add(new Term("text", "quick"));  
         query.add(new Term("text", "brown"));
         query.add(new Term("text", "fo"));
-        assertHighlightOneDoc(
+        assertHighlightOneDoc(  
             "text",
             inputs,
-            new StandardAnalyzer(),
+            new StandardAnalyzer(),  
             query,
             Locale.ROOT,
-            BreakIterator.getSentenceInstance(Locale.ROOT),
+            BreakIterator.getSentenceInstance(Locale.ROOT),  
             0,
             outputs
-        );
+        );  
     }
 
-    public void testCommonTermsQuery() throws Exception {
+    public void testCommonTermsQuery() throws Exception {  
         final String[] inputs = { "The quick brown fox." };
         final String[] outputs = { "The <b>quick</b> <b>brown</b> <b>fox</b>." };
-        CommonTermsQuery query = new CommonTermsQuery(BooleanClause.Occur.SHOULD, BooleanClause.Occur.SHOULD, 128);
+        CommonTermsQuery query = new CommonTermsQuery(BooleanClause.Occur.SHOULD, BooleanClause.Occur.SHOULD, 128);  
         query.add(new Term("text", "quick"));
         query.add(new Term("text", "brown"));
-        query.add(new Term("text", "fox"));
+        query.add(new Term("text", "fox"));  
         assertHighlightOneDoc(
             "text",
-            inputs,
+            inputs,  
             new StandardAnalyzer(),
             query,
-            Locale.ROOT,
+            Locale.ROOT,  
             BreakIterator.getSentenceInstance(Locale.ROOT),
             0,
-            outputs
+            outputs  
         );
     }
 
     public void testSentenceBoundedBreakIterator() throws Exception {
         final String[] inputs = {
-            "The quick brown fox in a long sentence with another quick brown fox. " + "Another sentence with brown fox." };
+            "The quick brown fox in a long sentence with another quick brown fox. " + "Another sentence with brown fox." };  
         final String[] outputs = {
             "The <b>quick</b> <b>brown</b>",
-            "<b>fox</b> in a long",
+            "<b>fox</b> in a long",  
             "with another <b>quick</b>",
             "<b>brown</b> <b>fox</b>.",
-            "sentence with <b>brown</b>",
+            "sentence with <b>brown</b>",  
             "<b>fox</b>.", };
         BooleanQuery query = new BooleanQuery.Builder().add(new TermQuery(new Term("text", "quick")), BooleanClause.Occur.SHOULD)
-            .add(new TermQuery(new Term("text", "brown")), BooleanClause.Occur.SHOULD)
+            .add(new TermQuery(new Term("text", "brown")), BooleanClause.Occur.SHOULD)  
             .add(new TermQuery(new Term("text", "fox")), BooleanClause.Occur.SHOULD)
             .build();
-        assertHighlightOneDoc(
+        assertHighlightOneDoc(  
             "text",
             inputs,
-            new StandardAnalyzer(),
+            new StandardAnalyzer(),  
             query,
             Locale.ROOT,
-            BoundedBreakIteratorScanner.getSentence(Locale.ROOT, 10),
+            BoundedBreakIteratorScanner.getSentence(Locale.ROOT, 10),  
             0,
             outputs
-        );
+        );  
     }
 
-    public void testSmallSentenceBoundedBreakIterator() throws Exception {
+    public void testSmallSentenceBoundedBreakIterator() throws Exception {  
         final String[] inputs = { "A short sentence. Followed by a bigger sentence that should be truncated. And a last short sentence." };
         final String[] outputs = { "A short <b>sentence</b>.", "Followed by a bigger <b>sentence</b>", "And a last short <b>sentence</b>" };
-        TermQuery query = new TermQuery(new Term("text", "sentence"));
+        TermQuery query = new TermQuery(new Term("text", "sentence"));  
         assertHighlightOneDoc(
             "text",
-            inputs,
+            inputs,  
             new StandardAnalyzer(),
             query,
-            Locale.ROOT,
+            Locale.ROOT,  
             BoundedBreakIteratorScanner.getSentence(Locale.ROOT, 20),
             0,
-            outputs
+            outputs  
         );
     }
 
     public void testRepeat() throws Exception {
         final String[] inputs = { "Fun  fun fun  fun  fun  fun  fun  fun  fun  fun" };
-        final String[] outputs = {
+        final String[] outputs = {  
             "<b>Fun</b>  <b>fun</b> <b>fun</b>",
             "<b>fun</b>  <b>fun</b>",
-            "<b>fun</b>  <b>fun</b>  <b>fun</b>",
+            "<b>fun</b>  <b>fun</b>  <b>fun</b>",  
             "<b>fun</b>  <b>fun</b>" };
         Query query = new TermQuery(new Term("text", "fun"));
-        assertHighlightOneDoc(
+        assertHighlightOneDoc(  
             "text",
             inputs,
-            new StandardAnalyzer(),
+            new StandardAnalyzer(),  
             query,
             Locale.ROOT,
-            BoundedBreakIteratorScanner.getSentence(Locale.ROOT, 10),
+            BoundedBreakIteratorScanner.getSentence(Locale.ROOT, 10),  
             0,
             outputs
-        );
+        );  
 
         query = new PhraseQuery.Builder().add(new Term("text", "fun")).add(new Term("text", "fun")).build();
-        assertHighlightOneDoc(
+        assertHighlightOneDoc(  
             "text",
             inputs,
-            new StandardAnalyzer(),
+            new StandardAnalyzer(),  
             query,
             Locale.ROOT,
-            BoundedBreakIteratorScanner.getSentence(Locale.ROOT, 10),
+            BoundedBreakIteratorScanner.getSentence(Locale.ROOT, 10),  
             0,
             outputs
-        );
+        );  
     }
 
-    public void testGroupSentences() throws Exception {
+    public void testGroupSentences() throws Exception {  
         final String[] inputs = { "Two words. Followed by many words in a big sentence. One. Two. Three. And more words." };
         final String[] outputs = {
-            "<b>Two</b> <b>words</b>.",
+            "<b>Two</b> <b>words</b>.",  
             "Followed by many <b>words</b>",
             "<b>One</b>. <b>Two</b>. <b>Three</b>.",
-            "And more <b>words</b>.", };
+            "And more <b>words</b>.", };  
         BooleanQuery query = new BooleanQuery.Builder().add(new TermQuery(new Term("text", "one")), BooleanClause.Occur.SHOULD)
             .add(new TermQuery(new Term("text", "two")), BooleanClause.Occur.SHOULD)
-            .add(new TermQuery(new Term("text", "three")), BooleanClause.Occur.SHOULD)
+            .add(new TermQuery(new Term("text", "three")), BooleanClause.Occur.SHOULD)  
             .add(new TermQuery(new Term("text", "words")), BooleanClause.Occur.SHOULD)
             .build();
-        assertHighlightOneDoc(
+        assertHighlightOneDoc(  
             "text",
             inputs,
-            new StandardAnalyzer(),
+            new StandardAnalyzer(),  
             query,
             Locale.ROOT,
-            BoundedBreakIteratorScanner.getSentence(Locale.ROOT, 20),
+            BoundedBreakIteratorScanner.getSentence(Locale.ROOT, 20),  
             0,
             outputs
-        );
+        );  
     }
 
-    public void testOverlappingTerms() throws Exception {
+    public void testOverlappingTerms() throws Exception {  
         final String[] inputs = { "bro", "brown", "brownie", "browser" };
         final String[] outputs = { "<b>bro</b>", "<b>brown</b>", "<b>browni</b>e", "<b>browser</b>" };
-        BooleanQuery query = new BooleanQuery.Builder().add(new FuzzyQuery(new Term("text", "brow")), BooleanClause.Occur.SHOULD)
+        BooleanQuery query = new BooleanQuery.Builder().add(new FuzzyQuery(new Term("text", "brow")), BooleanClause.Occur.SHOULD)  
             .add(new TermQuery(new Term("text", "b")), BooleanClause.Occur.SHOULD)
             .add(new TermQuery(new Term("text", "br")), BooleanClause.Occur.SHOULD)
-            .add(new TermQuery(new Term("text", "bro")), BooleanClause.Occur.SHOULD)
+            .add(new TermQuery(new Term("text", "bro")), BooleanClause.Occur.SHOULD)  
             .add(new TermQuery(new Term("text", "brown")), BooleanClause.Occur.SHOULD)
             .add(new TermQuery(new Term("text", "browni")), BooleanClause.Occur.SHOULD)
-            .add(new TermQuery(new Term("text", "browser")), BooleanClause.Occur.SHOULD)
+            .add(new TermQuery(new Term("text", "browser")), BooleanClause.Occur.SHOULD)  
             .build();
         Analyzer analyzer = CustomAnalyzer.builder()
-            .withTokenizer(EdgeNGramTokenizerFactory.class, "minGramSize", "1", "maxGramSize", "7")
+            .withTokenizer(EdgeNGramTokenizerFactory.class, "minGramSize", "1", "maxGramSize", "7")  
             .build();
         assertHighlightOneDoc("text", inputs, analyzer, query, Locale.ROOT, BreakIterator.getSentenceInstance(Locale.ROOT), 0, outputs);
-    }
+    }  
 
     public void testOpenSearchToParentBlockJoinQuery() throws Exception {
-        final String[] inputs = { "Nested highlighting query." };
+        final String[] inputs = { "Nested highlighting query." };  
         final String[] outputs = { "Nested <b>highlighting</b> query." };
 
-        Query childQuery = new TermQuery(new Term("text", "highlighting"));
+        Query childQuery = new TermQuery(new Term("text", "highlighting"));  
         BitSetProducer parentsFilter = new BitSetProducer() {
             @Override
-            public BitSet getBitSet(LeafReaderContext context) throws IOException {
+            public BitSet getBitSet(LeafReaderContext context) throws IOException {  
                 FixedBitSet bits = new FixedBitSet(context.reader().maxDoc());
                 for (int i = 0; i < context.reader().maxDoc(); i++) {
-                    bits.set(i);
+                    bits.set(i);  
                 }
                 return bits;
-            }
+            }  
         };
 
-        Query parentQuery = new OpenSearchToParentBlockJoinQuery(childQuery, parentsFilter, ScoreMode.None, "foo");
+        Query parentQuery = new OpenSearchToParentBlockJoinQuery(childQuery, parentsFilter, ScoreMode.None, "foo");  
         assertHighlightOneDoc(
             "text",
-            inputs,
+            inputs,  
             new StandardAnalyzer(),
             parentQuery,
-            Locale.ROOT,
+            Locale.ROOT,  
             BreakIterator.getSentenceInstance(Locale.ROOT),
             0,
-            outputs
+            outputs  
         );
     }
 

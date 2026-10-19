@@ -1,19 +1,19 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.action.admin.indices.streamingingestion.state;
 
 import org.opensearch.action.ActionType;
 
-/**
+/**  
  * Transport action for getting ingestion state.
  *
- * @opensearch.api
+ * @opensearch.api  
  */
 public class GetIngestionStateAction extends ActionType<GetIngestionStateResponse> {
 
@@ -22,5 +22,5 @@ public class GetIngestionStateAction extends ActionType<GetIngestionStateRespons
 
     private GetIngestionStateAction() {
         super(NAME, GetIngestionStateResponse::new);
-    }
+    }  
 }

@@ -1,79 +1,79 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file to be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.analytics.planner.rel;
 
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelTraitSet;
-import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.RelNode;  
 import org.apache.calcite.rel.core.Uncollect;
 import org.opensearch.analytics.planner.RelNodeUtils;
-import org.opensearch.analytics.spi.FieldStorageInfo;
+import org.opensearch.analytics.spi.FieldStorageInfo;  
 
 import java.util.LinkedHashSet;
-import java.util.List;
+import java.util.List;  
 
 /** Marked Uncollect used by multi-value row expansion. */
-public class OpenSearchUncollect extends Uncollect implements OpenSearchRelNode {
+public class OpenSearchUncollect extends Uncollect implements OpenSearchRelNode {  
 
     private final List<String> viableBackends;
 
     public OpenSearchUncollect(
         RelOptCluster cluster,
-        RelTraitSet traitSet,
+        RelTraitSet traitSet,  
         RelNode input,
         boolean withOrdinality,
-        List<String> itemAliases,
+        List<String> itemAliases,  
         List<String> viableBackends
     ) {
-        super(cluster, traitSet, input, withOrdinality, itemAliases);
+        super(cluster, traitSet, input, withOrdinality, itemAliases);  
         this.viableBackends = viableBackends;
     }
 
     @Override
     public List<String> getViableBackends() {
-        return viableBackends;
+        return viableBackends;  
     }
 
-    @Override
+    @Override  
     public List<FieldStorageInfo> getOutputFieldStorage() {
         RelNode input = RelNodeUtils.unwrapHep(getInput());
-        LinkedHashSet<String> dependencies = new LinkedHashSet<>();
+        LinkedHashSet<String> dependencies = new LinkedHashSet<>();  
         if (input instanceof OpenSearchRelNode openSearchInput) {
             for (FieldStorageInfo field : openSearchInput.getOutputFieldStorage()) {
-                dependencies.add(field.getFieldName());
+                dependencies.add(field.getFieldName());  
             }
         }
-        return getRowType().getFieldList()
+        return getRowType().getFieldList()  
             .stream()
             .map(field -> FieldStorageInfo.derivedColumn(field.getName(), field.getType().getSqlTypeName(), dependencies))
-            .toList();
+            .toList();  
     }
 
-    @Override
+    @Override  
     public RelNode copy(RelTraitSet traitSet, RelNode input) {
         return new OpenSearchUncollect(getCluster(), traitSet, input, withOrdinality, getItemAliases(), viableBackends);
-    }
+    }  
 
     @Override
-    public RelNode copyResolved(String backend, List<RelNode> children, List<OperatorAnnotation> resolvedAnnotations) {
+    public RelNode copyResolved(String backend, List<RelNode> children, List<OperatorAnnotation> resolvedAnnotations) {  
         return new OpenSearchUncollect(
             getCluster(),
-            getTraitSet(),
+            getTraitSet(),  
             children.getFirst(),
             withOrdinality,
-            getItemAliases(),
+            getItemAliases(),  
             List.of(backend)
         );
-    }
+    }  
 
     @Override
-    public RelNode stripAnnotations(List<RelNode> strippedChildren) {
+    public RelNode stripAnnotations(List<RelNode> strippedChildren) {  
         return Uncollect.create(getTraitSet(), strippedChildren.getFirst(), withOrdinality, getItemAliases());
     }
-}
+}  

@@ -1,265 +1,265 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 /*
- * Modifications Copyright OpenSearch Contributors. See
+ * Modifications Copyright OpenSearch Contributors. See  
  * GitHub history for details.
  */
 
 package org.opensearch.test;
 
-import org.apache.lucene.search.Collector;
+import org.apache.lucene.search.Collector;  
 import org.apache.lucene.search.CollectorManager;
 import org.apache.lucene.search.FieldDoc;
-import org.apache.lucene.search.Query;
+import org.apache.lucene.search.Query;  
 import org.opensearch.action.OriginalIndices;
 import org.opensearch.action.search.SearchShardTask;
-import org.opensearch.action.search.SearchType;
+import org.opensearch.action.search.SearchType;  
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.util.BigArrays;
-import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.core.index.shard.ShardId;  
 import org.opensearch.index.IndexService;
 import org.opensearch.index.cache.bitset.BitsetFilterCache;
-import org.opensearch.index.mapper.MappedFieldType;
+import org.opensearch.index.mapper.MappedFieldType;  
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.mapper.ObjectMapper;
-import org.opensearch.index.query.ParsedQuery;
+import org.opensearch.index.query.ParsedQuery;  
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.similarity.SimilarityService;
+import org.opensearch.index.similarity.SimilarityService;  
 import org.opensearch.search.SearchExtBuilder;
 import org.opensearch.search.SearchShardTarget;
-import org.opensearch.search.aggregations.BucketCollectorProcessor;
+import org.opensearch.search.aggregations.BucketCollectorProcessor;  
 import org.opensearch.search.aggregations.InternalAggregation;
 import org.opensearch.search.aggregations.SearchContextAggregations;
-import org.opensearch.search.collapse.CollapseContext;
+import org.opensearch.search.collapse.CollapseContext;  
 import org.opensearch.search.dfs.DfsSearchResult;
 import org.opensearch.search.fetch.FetchPhase;
-import org.opensearch.search.fetch.FetchSearchResult;
+import org.opensearch.search.fetch.FetchSearchResult;  
 import org.opensearch.search.fetch.StoredFieldsContext;
 import org.opensearch.search.fetch.subphase.FetchDocValuesContext;
-import org.opensearch.search.fetch.subphase.FetchFieldsContext;
+import org.opensearch.search.fetch.subphase.FetchFieldsContext;  
 import org.opensearch.search.fetch.subphase.FetchSourceContext;
 import org.opensearch.search.fetch.subphase.ScriptFieldsContext;
-import org.opensearch.search.fetch.subphase.highlight.SearchHighlightContext;
+import org.opensearch.search.fetch.subphase.highlight.SearchHighlightContext;  
 import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.ReaderContext;
-import org.opensearch.search.internal.ScrollContext;
+import org.opensearch.search.internal.ScrollContext;  
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.internal.ShardSearchContextId;
-import org.opensearch.search.internal.ShardSearchRequest;
+import org.opensearch.search.internal.ShardSearchRequest;  
 import org.opensearch.search.profile.Profilers;
 import org.opensearch.search.query.QuerySearchResult;
-import org.opensearch.search.query.ReduceableSearchResult;
+import org.opensearch.search.query.ReduceableSearchResult;  
 import org.opensearch.search.rescore.RescoreContext;
 import org.opensearch.search.sort.SortAndFormats;
-import org.opensearch.search.suggest.SuggestionSearchContext;
+import org.opensearch.search.suggest.SuggestionSearchContext;  
 
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.HashMap;  
 import java.util.List;
 import java.util.Map;
 
 import static org.opensearch.test.OpenSearchTestCase.randomIntBetween;
 
-public class TestSearchContext extends SearchContext {
+public class TestSearchContext extends SearchContext {  
     public static final SearchShardTarget SHARD_TARGET = new SearchShardTarget(
         "test",
-        new ShardId("test", "test", 0),
+        new ShardId("test", "test", 0),  
         null,
         OriginalIndices.NONE
-    );
+    );  
 
     final BigArrays bigArrays;
-    final IndexService indexService;
+    final IndexService indexService;  
     final BitsetFilterCache fixedBitSetFilterCache;
     final Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers = new HashMap<>();
-    final IndexShard indexShard;
+    final IndexShard indexShard;  
     final QuerySearchResult queryResult = new QuerySearchResult();
     final QueryShardContext queryShardContext;
-    ParsedQuery originalQuery;
+    ParsedQuery originalQuery;  
     ParsedQuery postFilter;
     Query query;
-    Float minScore;
+    Float minScore;  
     SearchShardTask task;
     SortAndFormats sort;
-    boolean trackScores = false;
+    boolean trackScores = false;  
     boolean includeNamedQueriesScore = false;
     int trackTotalHitsUpTo = SearchContext.DEFAULT_TRACK_TOTAL_HITS_UP_TO;
 
     ContextIndexSearcher searcher;
     int from;
-    int size;
+    int size;  
     private int terminateAfter = DEFAULT_TERMINATE_AFTER;
     private SearchContextAggregations aggregations;
-    private ScrollContext scrollContext;
+    private ScrollContext scrollContext;  
     private FieldDoc searchAfter;
     private Profilers profilers;
-    private CollapseContext collapse;
+    private CollapseContext collapse;  
     protected boolean concurrentSegmentSearchEnabled;
     private BucketCollectorProcessor bucketCollectorProcessor = NO_OP_BUCKET_COLLECTOR_PROCESSOR;
-    private int maxSliceCount;
+    private int maxSliceCount;  
 
     /**
-     * Sets the concurrent segment search enabled field
+     * Sets the concurrent segment search enabled field  
      */
     public void setConcurrentSegmentSearchEnabled(boolean concurrentSegmentSearchEnabled) {
-        this.concurrentSegmentSearchEnabled = concurrentSegmentSearchEnabled;
+        this.concurrentSegmentSearchEnabled = concurrentSegmentSearchEnabled;  
     }
 
-    /**
+    /**  
      * Sets the maxSliceCount for concurrent search
      * @param sliceCount maxSliceCount
-     */
+     */  
     public void setMaxSliceCount(int sliceCount) {
         this.maxSliceCount = sliceCount;
-    }
+    }  
 
     private final Map<String, SearchExtBuilder> searchExtBuilders = new HashMap<>();
 
     public TestSearchContext(BigArrays bigArrays, IndexService indexService) {
         this.bigArrays = bigArrays.withCircuitBreaking();
-        this.indexService = indexService;
+        this.indexService = indexService;  
         this.fixedBitSetFilterCache = indexService.cache().bitsetFilterCache();
         this.indexShard = indexService.getShardOrNull(0);
-        queryShardContext = indexService.newQueryShardContext(0, null, () -> 0L, null);
+        queryShardContext = indexService.newQueryShardContext(0, null, () -> 0L, null);  
     }
 
-    public TestSearchContext(QueryShardContext queryShardContext) {
+    public TestSearchContext(QueryShardContext queryShardContext) {  
         this(queryShardContext, null);
     }
 
     public TestSearchContext(QueryShardContext queryShardContext, IndexShard indexShard) {
         this(queryShardContext, indexShard, null);
-    }
+    }  
 
     public TestSearchContext(QueryShardContext queryShardContext, IndexShard indexShard, ContextIndexSearcher searcher) {
-        this(queryShardContext, indexShard, searcher, null);
+        this(queryShardContext, indexShard, searcher, null);  
     }
 
-    public TestSearchContext(
+    public TestSearchContext(  
         QueryShardContext queryShardContext,
         IndexShard indexShard,
-        ContextIndexSearcher searcher,
+        ContextIndexSearcher searcher,  
         ScrollContext scrollContext
     ) {
-        this.bigArrays = null;
+        this.bigArrays = null;  
         this.indexService = null;
         this.fixedBitSetFilterCache = null;
-        this.indexShard = indexShard;
+        this.indexShard = indexShard;  
         this.queryShardContext = queryShardContext;
         this.searcher = searcher;
-        this.concurrentSegmentSearchEnabled = searcher != null; /* executor is always set */
+        this.concurrentSegmentSearchEnabled = searcher != null; /* executor is always set */  
         this.maxSliceCount = randomIntBetween(0, 2);
         this.scrollContext = scrollContext;
-    }
+    }  
 
     public void setSearcher(ContextIndexSearcher searcher) {
-        this.searcher = searcher;
+        this.searcher = searcher;  
     }
 
-    @Override
+    @Override  
     public void preProcess(boolean rewrite) {}
 
-    @Override
+    @Override  
     public Query buildFilteredQuery(Query query) {
         return null;
-    }
+    }  
 
     @Override
-    public ShardSearchContextId id() {
+    public ShardSearchContextId id() {  
         return new ShardSearchContextId("", 0);
     }
 
     @Override
     public String source() {
-        return null;
+        return null;  
     }
 
-    @Override
+    @Override  
     public ShardSearchRequest request() {
         return null;
-    }
+    }  
 
     @Override
-    public SearchType searchType() {
+    public SearchType searchType() {  
         return null;
     }
 
     @Override
     public SearchShardTarget shardTarget() {
-        return null;
+        return null;  
     }
 
-    @Override
+    @Override  
     public int numberOfShards() {
         return 1;
-    }
+    }  
 
     @Override
-    public float queryBoost() {
+    public float queryBoost() {  
         return 0;
     }
 
     @Override
     public ScrollContext scrollContext() {
-        return scrollContext;
+        return scrollContext;  
     }
 
-    @Override
+    @Override  
     public SearchContextAggregations aggregations() {
         return aggregations;
-    }
+    }  
 
     @Override
-    public SearchContext aggregations(SearchContextAggregations aggregations) {
+    public SearchContext aggregations(SearchContextAggregations aggregations) {  
         this.aggregations = aggregations;
         return this;
-    }
+    }  
 
     @Override
-    public void addSearchExt(SearchExtBuilder searchExtBuilder) {
+    public void addSearchExt(SearchExtBuilder searchExtBuilder) {  
         searchExtBuilders.put(searchExtBuilder.getWriteableName(), searchExtBuilder);
     }
 
     @Override
     public SearchExtBuilder getSearchExt(String name) {
-        return searchExtBuilders.get(name);
+        return searchExtBuilders.get(name);  
     }
 
-    @Override
+    @Override  
     public SearchHighlightContext highlight() {
         return null;
-    }
+    }  
 
     @Override
-    public void highlight(SearchHighlightContext highlight) {}
+    public void highlight(SearchHighlightContext highlight) {}  
 
     @Override
-    public SuggestionSearchContext suggest() {
+    public SuggestionSearchContext suggest() {  
         return null;
     }
 
@@ -268,94 +268,94 @@ public class TestSearchContext extends SearchContext {
 
     @Override
     public List<RescoreContext> rescore() {
-        return Collections.emptyList();
+        return Collections.emptyList();  
     }
 
-    @Override
+    @Override  
     public boolean hasScriptFields() {
         return false;
-    }
+    }  
 
     @Override
-    public ScriptFieldsContext scriptFields() {
+    public ScriptFieldsContext scriptFields() {  
         return null;
     }
 
     @Override
     public boolean sourceRequested() {
-        return false;
+        return false;  
     }
 
-    @Override
+    @Override  
     public boolean hasFetchSourceContext() {
         return false;
-    }
+    }  
 
     @Override
-    public FetchSourceContext fetchSourceContext() {
+    public FetchSourceContext fetchSourceContext() {  
         return null;
     }
 
     @Override
     public SearchContext fetchSourceContext(FetchSourceContext fetchSourceContext) {
-        return null;
+        return null;  
     }
 
-    @Override
+    @Override  
     public FetchDocValuesContext docValuesContext() {
         return null;
-    }
+    }  
 
     @Override
-    public SearchContext docValuesContext(FetchDocValuesContext docValuesContext) {
+    public SearchContext docValuesContext(FetchDocValuesContext docValuesContext) {  
         return null;
     }
 
     @Override
     public FetchFieldsContext fetchFieldsContext() {
-        return null;
+        return null;  
     }
 
-    @Override
+    @Override  
     public SearchContext fetchFieldsContext(FetchFieldsContext fetchFieldsContext) {
         return null;
-    }
+    }  
 
     @Override
-    public ContextIndexSearcher searcher() {
+    public ContextIndexSearcher searcher() {  
         return searcher;
     }
 
     @Override
     public IndexShard indexShard() {
-        return indexShard;
+        return indexShard;  
     }
 
-    @Override
+    @Override  
     public MapperService mapperService() {
         if (indexService != null) {
-            return indexService.mapperService();
+            return indexService.mapperService();  
         }
         return null;
-    }
+    }  
 
     @Override
-    public SimilarityService similarityService() {
+    public SimilarityService similarityService() {  
         return null;
     }
 
     @Override
     public BigArrays bigArrays() {
-        return bigArrays;
+        return bigArrays;  
     }
 
-    @Override
+    @Override  
     public BitsetFilterCache bitsetFilterCache() {
         return fixedBitSetFilterCache;
-    }
+    }  
 
     @Override
-    public TimeValue timeout() {
+    public TimeValue timeout() {  
         return TimeValue.ZERO;
     }
 
@@ -364,181 +364,181 @@ public class TestSearchContext extends SearchContext {
 
     @Override
     public int terminateAfter() {
-        return terminateAfter;
+        return terminateAfter;  
     }
 
-    @Override
+    @Override  
     public void terminateAfter(int terminateAfter) {
         this.terminateAfter = terminateAfter;
-    }
+    }  
 
     @Override
-    public boolean lowLevelCancellation() {
+    public boolean lowLevelCancellation() {  
         return false;
     }
 
     @Override
     public SearchContext minimumScore(float minimumScore) {
-        this.minScore = minimumScore;
+        this.minScore = minimumScore;  
         return this;
     }
 
     @Override
     public Float minimumScore() {
-        return minScore;
+        return minScore;  
     }
 
-    @Override
+    @Override  
     public SearchContext sort(SortAndFormats sort) {
         this.sort = sort;
-        return this;
+        return this;  
     }
 
-    @Override
+    @Override  
     public SortAndFormats sort() {
         return sort;
-    }
+    }  
 
     @Override
-    public SearchContext trackScores(boolean trackScores) {
+    public SearchContext trackScores(boolean trackScores) {  
         this.trackScores = trackScores;
         return this;
-    }
+    }  
 
     @Override
-    public boolean trackScores() {
+    public boolean trackScores() {  
         return trackScores;
     }
 
     @Override
     public SearchContext includeNamedQueriesScore(boolean includeNamedQueriesScore) {
-        this.includeNamedQueriesScore = includeNamedQueriesScore;
+        this.includeNamedQueriesScore = includeNamedQueriesScore;  
         return this;
     }
 
     @Override
     public boolean includeNamedQueriesScore() {
-        return includeNamedQueriesScore;
+        return includeNamedQueriesScore;  
     }
 
-    @Override
+    @Override  
     public SearchContext trackTotalHitsUpTo(int trackTotalHitsUpTo) {
         this.trackTotalHitsUpTo = trackTotalHitsUpTo;
-        return this;
+        return this;  
     }
 
-    @Override
+    @Override  
     public int trackTotalHitsUpTo() {
         return trackTotalHitsUpTo;
-    }
+    }  
 
     @Override
-    public SearchContext searchAfter(FieldDoc searchAfterDoc) {
+    public SearchContext searchAfter(FieldDoc searchAfterDoc) {  
         this.searchAfter = searchAfterDoc;
         return this;
-    }
+    }  
 
     @Override
-    public FieldDoc searchAfter() {
+    public FieldDoc searchAfter() {  
         return searchAfter;
     }
 
     @Override
     public SearchContext collapse(CollapseContext collapse) {
-        this.collapse = collapse;
+        this.collapse = collapse;  
         return this;
     }
 
     @Override
     public CollapseContext collapse() {
-        return collapse;
+        return collapse;  
     }
 
-    @Override
+    @Override  
     public SearchContext parsedPostFilter(ParsedQuery postFilter) {
         this.postFilter = postFilter;
-        return this;
+        return this;  
     }
 
-    @Override
+    @Override  
     public ParsedQuery parsedPostFilter() {
         return postFilter;
-    }
+    }  
 
     @Override
-    public Query aliasFilter() {
+    public Query aliasFilter() {  
         return null;
     }
 
     @Override
     public SearchContext parsedQuery(ParsedQuery query) {
-        this.originalQuery = query;
+        this.originalQuery = query;  
         this.query = query.query();
         return this;
-    }
+    }  
 
     @Override
-    public ParsedQuery parsedQuery() {
+    public ParsedQuery parsedQuery() {  
         return originalQuery;
     }
 
     @Override
     public Query query() {
-        return query;
+        return query;  
     }
 
-    @Override
+    @Override  
     public int from() {
         return from;
-    }
+    }  
 
     @Override
-    public SearchContext from(int from) {
+    public SearchContext from(int from) {  
         this.from = from;
         return this;
-    }
+    }  
 
     @Override
-    public int size() {
+    public int size() {  
         return size;
     }
 
     public void setSize(int size) {
         this.size = size;
-    }
+    }  
 
     @Override
-    public SearchContext size(int size) {
+    public SearchContext size(int size) {  
         return null;
     }
 
     @Override
     public boolean hasStoredFields() {
-        return false;
+        return false;  
     }
 
-    @Override
+    @Override  
     public boolean hasStoredFieldsContext() {
         return false;
-    }
+    }  
 
     @Override
-    public boolean storedFieldsRequested() {
+    public boolean storedFieldsRequested() {  
         return false;
     }
 
     @Override
     public StoredFieldsContext storedFieldsContext() {
-        return null;
+        return null;  
     }
 
-    @Override
+    @Override  
     public SearchContext storedFieldsContext(StoredFieldsContext storedFieldsContext) {
         return null;
-    }
+    }  
 
     @Override
-    public boolean explain() {
+    public boolean explain() {  
         return false;
     }
 
@@ -547,22 +547,22 @@ public class TestSearchContext extends SearchContext {
 
     @Override
     public List<String> groupStats() {
-        return null;
+        return null;  
     }
 
-    @Override
+    @Override  
     public void groupStats(List<String> groupStats) {}
 
-    @Override
+    @Override  
     public boolean version() {
         return false;
-    }
+    }  
 
     @Override
-    public void version(boolean version) {}
+    public void version(boolean version) {}  
 
     @Override
-    public boolean seqNoAndPrimaryTerm() {
+    public boolean seqNoAndPrimaryTerm() {  
         return false;
     }
 
@@ -571,172 +571,172 @@ public class TestSearchContext extends SearchContext {
 
     }
 
-    @Override
+    @Override  
     public int[] docIdsToLoad() {
         return new int[0];
-    }
+    }  
 
     @Override
-    public int docIdsToLoadFrom() {
+    public int docIdsToLoadFrom() {  
         return 0;
     }
 
     @Override
     public int docIdsToLoadSize() {
-        return 0;
+        return 0;  
     }
 
-    @Override
+    @Override  
     public SearchContext docIdsToLoad(int[] docIdsToLoad, int docsIdsToLoadFrom, int docsIdsToLoadSize) {
         return null;
-    }
+    }  
 
     @Override
-    public DfsSearchResult dfsResult() {
+    public DfsSearchResult dfsResult() {  
         return null;
     }
 
     @Override
     public QuerySearchResult queryResult() {
-        return queryResult;
+        return queryResult;  
     }
 
-    @Override
+    @Override  
     public FetchSearchResult fetchResult() {
         return null;
-    }
+    }  
 
     @Override
-    public FetchPhase fetchPhase() {
+    public FetchPhase fetchPhase() {  
         return null;
     }
 
     @Override
     public MappedFieldType fieldType(String name) {
-        if (mapperService() != null) {
+        if (mapperService() != null) {  
             return mapperService().fieldType(name);
         }
-        return null;
+        return null;  
     }
 
-    @Override
+    @Override  
     public ObjectMapper getObjectMapper(String name) {
         if (mapperService() != null) {
-            return mapperService().getObjectMapper(name);
+            return mapperService().getObjectMapper(name);  
         }
         return null;
-    }
+    }  
 
     @Override
-    public void doClose() {}
+    public void doClose() {}  
 
     @Override
-    public long getRelativeTimeInMillis() {
+    public long getRelativeTimeInMillis() {  
         return 0L;
     }
 
     @Override
     public Profilers getProfilers() {
-        return profilers;
+        return profilers;  
     }
 
-    /**
+    /**  
      * Returns concurrent segment search status for the search context
      */
-    @Override
+    @Override  
     public boolean shouldUseConcurrentSearch() {
         return concurrentSegmentSearchEnabled;
-    }
+    }  
 
     @Override
-    public Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers() {
+    public Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers() {  
         return queryCollectorManagers;
     }
 
     @Override
     public QueryShardContext getQueryShardContext() {
-        return queryShardContext;
+        return queryShardContext;  
     }
 
-    @Override
+    @Override  
     public void setTask(SearchShardTask task) {
         this.task = task;
-    }
+    }  
 
     @Override
-    public SearchShardTask getTask() {
+    public SearchShardTask getTask() {  
         return task;
     }
 
     @Override
     public boolean isCancelled() {
-        return task.isCancelled();
+        return task.isCancelled();  
     }
 
-    @Override
+    @Override  
     public void addRescore(RescoreContext rescore) {
 
-    }
+    }  
 
     @Override
-    public ReaderContext readerContext() {
+    public ReaderContext readerContext() {  
         throw new UnsupportedOperationException();
     }
 
     @Override
     public InternalAggregation.ReduceContext partialOnShard() {
-        return InternalAggregationTestCase.emptyReduceContextBuilder().forPartialReduction();
+        return InternalAggregationTestCase.emptyReduceContextBuilder().forPartialReduction();  
     }
 
-    @Override
+    @Override  
     public void setBucketCollectorProcessor(BucketCollectorProcessor bucketCollectorProcessor) {
         this.bucketCollectorProcessor = bucketCollectorProcessor;
-    }
+    }  
 
     @Override
-    public BucketCollectorProcessor bucketCollectorProcessor() {
+    public BucketCollectorProcessor bucketCollectorProcessor() {  
         return bucketCollectorProcessor;
     }
 
     @Override
     public int getTargetMaxSliceCount() {
-        assert concurrentSegmentSearchEnabled == true : "Please use concurrent search before fetching maxSliceCount";
+        assert concurrentSegmentSearchEnabled == true : "Please use concurrent search before fetching maxSliceCount";  
         return maxSliceCount;
     }
 
     @Override
     public boolean shouldUseTimeSeriesDescSortOptimization() {
-        return indexShard != null
+        return indexShard != null  
             && indexShard.isTimeSeriesDescSortOptimizationEnabled()
             && sort != null
-            && sort.isSortOnTimeSeriesField()
+            && sort.isSortOnTimeSeriesField()  
             && sort.sort.getSort()[0].getReverse() == false;
     }
 
     @Override
     public boolean getStarTreeIndexEnabled() {
-        return indexService != null && indexService.getIndexSettings().getStarTreeIndexEnabled();
+        return indexService != null && indexService.getIndexSettings().getStarTreeIndexEnabled();  
     }
 
-    @Override
+    @Override  
     public boolean shouldUseIntraSegmentSearch() {
         return false;
-    }
+    }  
 
     /**
-     * Clean the query results by consuming all of it
+     * Clean the query results by consuming all of it  
      */
     public TestSearchContext withCleanQueryResult() {
-        queryResult.consumeAll();
+        queryResult.consumeAll();  
         profilers = null;
         return this;
-    }
+    }  
 
     /**
-     * Add profilers to the query
+     * Add profilers to the query  
      */
     public TestSearchContext withProfilers() {
-        this.profilers = new Profilers(searcher, concurrentSegmentSearchEnabled, query -> List.of());
+        this.profilers = new Profilers(searcher, concurrentSegmentSearchEnabled, query -> List.of());  
         return this;
     }
-}
+}  

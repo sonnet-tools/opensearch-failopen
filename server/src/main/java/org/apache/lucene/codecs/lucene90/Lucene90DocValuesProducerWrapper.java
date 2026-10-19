@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.apache.lucene.codecs.lucene90;
 
@@ -16,41 +16,41 @@ import java.io.IOException;
 
 /**
  * This class is a custom abstraction of the {@link DocValuesProducer} for the Star Tree index structure.
- * It is responsible for providing access to various types of document values (numeric, binary, sorted, sorted numeric,
+ * It is responsible for providing access to various types of document values (numeric, binary, sorted, sorted numeric,  
  * and sorted set) for fields in the Star Tree index.
  *
- * @opensearch.experimental
+ * @opensearch.experimental  
  */
 public class Lucene90DocValuesProducerWrapper implements Closeable {
 
     private final Lucene90DocValuesProducer lucene90DocValuesProducer;
 
-    public Lucene90DocValuesProducerWrapper(
+    public Lucene90DocValuesProducerWrapper(  
         SegmentReadState state,
         String dataCodec,
-        String dataExtension,
+        String dataExtension,  
         String metaCodec,
         String metaExtension,
-        String skipIndexCodec,
+        String skipIndexCodec,  
         String skipIndexExtension
     ) throws IOException {
-        lucene90DocValuesProducer = new Lucene90DocValuesProducer(
+        lucene90DocValuesProducer = new Lucene90DocValuesProducer(  
             state,
             dataCodec,
-            dataExtension,
+            dataExtension,  
             metaCodec,
             metaExtension,
-            skipIndexCodec,
+            skipIndexCodec,  
             skipIndexExtension
         );
-    }
+    }  
 
     public DocValuesProducer getLucene90DocValuesProducer() {
-        return lucene90DocValuesProducer;
+        return lucene90DocValuesProducer;  
     }
 
-    @Override
+    @Override  
     public void close() throws IOException {
         lucene90DocValuesProducer.close();
-    }
+    }  
 }

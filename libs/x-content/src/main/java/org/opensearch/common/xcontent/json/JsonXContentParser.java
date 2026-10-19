@@ -1,352 +1,352 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.common.xcontent.json;
 
 import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.xcontent.AbstractXContentParser;
+import org.opensearch.core.xcontent.AbstractXContentParser;  
 import org.opensearch.core.xcontent.DeprecationHandler;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentLocation;
+import org.opensearch.core.xcontent.XContentLocation;  
 import org.opensearch.tools.jackson.core.JacksonExceptionTranslator;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.math.BigInteger;
 import java.nio.CharBuffer;
 
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.JsonParser;
-import tools.jackson.core.JsonToken;
+import tools.jackson.core.JsonToken;  
 import tools.jackson.core.TokenStreamLocation;
 
-public class JsonXContentParser extends AbstractXContentParser {
+public class JsonXContentParser extends AbstractXContentParser {  
 
     final JsonParser parser;
 
     public JsonXContentParser(NamedXContentRegistry xContentRegistry, DeprecationHandler deprecationHandler, JsonParser parser) {
         super(xContentRegistry, deprecationHandler);
-        this.parser = parser;
+        this.parser = parser;  
     }
 
-    @Override
+    @Override  
     public XContentType contentType() {
         return XContentType.JSON;
-    }
+    }  
 
     @Override
-    public Token nextToken() throws IOException {
+    public Token nextToken() throws IOException {  
         try {
             return convertToken(parser.nextToken());
-        } catch (final JacksonException ex) {
+        } catch (final JacksonException ex) {  
             throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);
         }
-    }
+    }  
 
     @Override
-    public void skipChildren() throws IOException {
+    public void skipChildren() throws IOException {  
         try {
             parser.skipChildren();
-        } catch (final JacksonException ex) {
+        } catch (final JacksonException ex) {  
             throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);
         }
-    }
+    }  
 
     @Override
-    public Token currentToken() {
+    public Token currentToken() {  
         return convertToken(parser.currentToken());
     }
 
     @Override
     public NumberType numberType() throws IOException {
-        try {
+        try {  
             return convertNumberType(parser.getNumberType());
         } catch (final JacksonException ex) {
-            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);
+            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);  
         }
     }
 
     @Override
     public String currentName() throws IOException {
-        return parser.currentName();
+        return parser.currentName();  
     }
 
-    @Override
+    @Override  
     protected boolean doBooleanValue() throws IOException {
         try {
-            return parser.getBooleanValue();
+            return parser.getBooleanValue();  
         } catch (final JacksonException ex) {
             throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);
-        }
+        }  
     }
 
-    @Override
+    @Override  
     public String text() throws IOException {
         if (currentToken().isValue()) {
-            try {
+            try {  
                 return parser.getString();
             } catch (final JacksonException ex) {
-                JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);
+                JacksonExceptionTranslator.translateToIOExceptionOrRethrow(ex);  
             }
         }
-        throw new IllegalStateException("Can't get text on a " + currentToken() + " at " + getTokenLocation());
+        throw new IllegalStateException("Can't get text on a " + currentToken() + " at " + getTokenLocation());  
     }
 
-    @Override
+    @Override  
     public CharBuffer charBuffer() throws IOException {
         try {
-            return CharBuffer.wrap(parser.getStringCharacters(), parser.getStringOffset(), parser.getStringLength());
+            return CharBuffer.wrap(parser.getStringCharacters(), parser.getStringOffset(), parser.getStringLength());  
         } catch (final JacksonException ex) {
             throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);
-        }
+        }  
     }
 
-    @Override
+    @Override  
     public Object objectText() throws IOException {
         try {
-            JsonToken currentToken = parser.currentToken();
+            JsonToken currentToken = parser.currentToken();  
             if (currentToken == JsonToken.VALUE_STRING) {
                 return text();
-            } else if (currentToken == JsonToken.VALUE_NUMBER_INT || currentToken == JsonToken.VALUE_NUMBER_FLOAT) {
+            } else if (currentToken == JsonToken.VALUE_NUMBER_INT || currentToken == JsonToken.VALUE_NUMBER_FLOAT) {  
                 return parser.getNumberValue();
             } else if (currentToken == JsonToken.VALUE_TRUE) {
-                return Boolean.TRUE;
+                return Boolean.TRUE;  
             } else if (currentToken == JsonToken.VALUE_FALSE) {
                 return Boolean.FALSE;
-            } else if (currentToken == JsonToken.VALUE_NULL) {
+            } else if (currentToken == JsonToken.VALUE_NULL) {  
                 return null;
             } else {
-                return text();
+                return text();  
             }
         } catch (final JacksonException ex) {
-            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);
+            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);  
         }
     }
 
     @Override
     public Object objectBytes() throws IOException {
-        try {
+        try {  
             JsonToken currentToken = parser.currentToken();
             if (currentToken == JsonToken.VALUE_STRING) {
-                return charBuffer();
+                return charBuffer();  
             } else if (currentToken == JsonToken.VALUE_NUMBER_INT || currentToken == JsonToken.VALUE_NUMBER_FLOAT) {
                 return parser.getNumberValue();
-            } else if (currentToken == JsonToken.VALUE_TRUE) {
+            } else if (currentToken == JsonToken.VALUE_TRUE) {  
                 return Boolean.TRUE;
             } else if (currentToken == JsonToken.VALUE_FALSE) {
-                return Boolean.FALSE;
+                return Boolean.FALSE;  
             } else if (currentToken == JsonToken.VALUE_NULL) {
                 return null;
-            } else {
+            } else {  
                 return charBuffer();
             }
-        } catch (final JacksonException ex) {
+        } catch (final JacksonException ex) {  
             throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);
         }
-    }
+    }  
 
     @Override
-    public boolean hasTextCharacters() {
+    public boolean hasTextCharacters() {  
         return parser.hasStringCharacters();
     }
 
     @Override
     public char[] textCharacters() throws IOException {
-        try {
+        try {  
             return parser.getStringCharacters();
         } catch (final JacksonException ex) {
-            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);
+            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);  
         }
     }
 
     @Override
     public int textLength() throws IOException {
-        try {
+        try {  
             return parser.getStringLength();
         } catch (final JacksonException ex) {
-            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);
+            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);  
         }
     }
 
     @Override
     public int textOffset() throws IOException {
-        try {
+        try {  
             return parser.getStringOffset();
         } catch (final JacksonException ex) {
-            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);
+            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);  
         }
     }
 
     @Override
     public Number numberValue() throws IOException {
-        try {
+        try {  
             return parser.getNumberValue();
         } catch (final JacksonException ex) {
-            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);
+            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);  
         }
     }
 
     @Override
     public short doShortValue() throws IOException {
-        try {
+        try {  
             return parser.getShortValue();
         } catch (final JacksonException ex) {
-            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);
+            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);  
         }
     }
 
     @Override
     public int doIntValue() throws IOException {
-        try {
+        try {  
             return parser.getIntValue();
         } catch (final JacksonException ex) {
-            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);
+            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);  
         }
     }
 
     @Override
     public long doLongValue() throws IOException {
-        try {
+        try {  
             return parser.getLongValue();
         } catch (final JacksonException ex) {
-            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);
+            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);  
         }
     }
 
     @Override
     public float doFloatValue() throws IOException {
-        try {
+        try {  
             return parser.getFloatValue();
         } catch (final JacksonException ex) {
-            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);
+            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);  
         }
     }
 
     @Override
     public double doDoubleValue() throws IOException {
-        try {
+        try {  
             return parser.getDoubleValue();
         } catch (final JacksonException ex) {
-            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);
+            throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);  
         }
     }
 
     @Override
     public BigInteger doBigIntegerValue() throws IOException {
-        try {
+        try {  
             if (parser.currentToken() == JsonToken.VALUE_NUMBER_FLOAT) {
                 return parser.getDecimalValue().toBigInteger();
-            } else {
+            } else {  
                 return parser.getBigIntegerValue();
             }
-        } catch (final JacksonException ex) {
+        } catch (final JacksonException ex) {  
             throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);
         }
-    }
+    }  
 
     @Override
-    public byte[] binaryValue() throws IOException {
+    public byte[] binaryValue() throws IOException {  
         try {
             return parser.getBinaryValue();
-        } catch (final JacksonException ex) {
+        } catch (final JacksonException ex) {  
             throw JacksonExceptionTranslator.translateToIOExceptionOrRethrowReturning(ex);
         }
-    }
+    }  
 
     @Override
-    public XContentLocation getTokenLocation() {
+    public XContentLocation getTokenLocation() {  
         TokenStreamLocation loc = parser.currentTokenLocation();
         if (loc == null) {
-            return null;
+            return null;  
         }
         return new XContentLocation(loc.getLineNr(), loc.getColumnNr());
-    }
+    }  
 
     @Override
-    public void close() {
+    public void close() {  
         IOUtils.closeWhileHandlingException(parser);
     }
 
     private NumberType convertNumberType(JsonParser.NumberType numberType) {
         switch (numberType) {
-            case INT:
+            case INT:  
                 return NumberType.INT;
             case BIG_INTEGER:
-                return NumberType.BIG_INTEGER;
+                return NumberType.BIG_INTEGER;  
             case LONG:
                 return NumberType.LONG;
-            case FLOAT:
+            case FLOAT:  
                 return NumberType.FLOAT;
             case DOUBLE:
-                return NumberType.DOUBLE;
+                return NumberType.DOUBLE;  
             case BIG_DECIMAL:
                 return NumberType.BIG_DECIMAL;
-        }
+        }  
         throw new IllegalStateException("No matching token for number_type [" + numberType + "]");
     }
 
     private Token convertToken(JsonToken token) {
         if (token == null) {
-            return null;
+            return null;  
         }
         switch (token) {
-            case PROPERTY_NAME:
+            case PROPERTY_NAME:  
                 return Token.FIELD_NAME;
             case VALUE_FALSE:
-            case VALUE_TRUE:
+            case VALUE_TRUE:  
                 return Token.VALUE_BOOLEAN;
             case VALUE_STRING:
-                return Token.VALUE_STRING;
+                return Token.VALUE_STRING;  
             case VALUE_NUMBER_INT:
             case VALUE_NUMBER_FLOAT:
-                return Token.VALUE_NUMBER;
+                return Token.VALUE_NUMBER;  
             case VALUE_NULL:
                 return Token.VALUE_NULL;
-            case START_OBJECT:
+            case START_OBJECT:  
                 return Token.START_OBJECT;
             case END_OBJECT:
-                return Token.END_OBJECT;
+                return Token.END_OBJECT;  
             case START_ARRAY:
                 return Token.START_ARRAY;
-            case END_ARRAY:
+            case END_ARRAY:  
                 return Token.END_ARRAY;
             case VALUE_EMBEDDED_OBJECT:
-                return Token.VALUE_EMBEDDED_OBJECT;
+                return Token.VALUE_EMBEDDED_OBJECT;  
         }
         throw new IllegalStateException("No matching token for json_token [" + token + "]");
-    }
+    }  
 
     @Override
-    public boolean isClosed() {
+    public boolean isClosed() {  
         return parser.isClosed();
     }
-}
+}  

@@ -1,22 +1,22 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.be.datafusion.action.stats;
 
 import org.opensearch.action.FailedNodeException;
 import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.nodes.TransportNodesAction;
+import org.opensearch.action.support.nodes.TransportNodesAction;  
 import org.opensearch.be.datafusion.DataFusionService;
 import org.opensearch.be.datafusion.cache.CacheManager;
-import org.opensearch.be.datafusion.cache.CacheUtils;
+import org.opensearch.be.datafusion.cache.CacheUtils;  
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.inject.Inject;
-import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.common.io.stream.StreamInput;  
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.TransportService;
 
@@ -25,77 +25,77 @@ import java.util.List;
 
 /**
  * Broadcast transport action that clears the DataFusion parquet caches on every
- * target node. Clearing is routed through the node-local {@link CacheManager},
+ * target node. Clearing is routed through the node-local {@link CacheManager},  
  * which holds the native runtime handle: the metadata (footer) and statistics
  * caches are runtime-scoped and can only be cleared through that handle, while
- * the ColumnIndex/OffsetIndex scoped caches are cleared alongside them.
+ * the ColumnIndex/OffsetIndex scoped caches are cleared alongside them.  
  *
  * @opensearch.internal
- */
+ */  
 public class TransportClearCacheAction extends TransportNodesAction<
     ClearCacheNodesRequest,
-    ClearCacheNodesResponse,
+    ClearCacheNodesResponse,  
     ClearCacheNodeRequest,
     ClearCacheNodeResponse> {
 
     private final DataFusionService dataFusionService;
 
-    @Inject
+    @Inject  
     public TransportClearCacheAction(
         ThreadPool threadPool,
-        ClusterService clusterService,
+        ClusterService clusterService,  
         TransportService transportService,
         ActionFilters actionFilters,
-        DataFusionService dataFusionService
+        DataFusionService dataFusionService  
     ) {
         super(
-            ClearCacheActionType.NAME,
+            ClearCacheActionType.NAME,  
             threadPool,
             clusterService,
-            transportService,
+            transportService,  
             actionFilters,
             ClearCacheNodesRequest::new,
-            ClearCacheNodeRequest::new,
+            ClearCacheNodeRequest::new,  
             ThreadPool.Names.MANAGEMENT,
             ClearCacheNodeResponse.class
-        );
+        );  
         this.dataFusionService = dataFusionService;
     }
 
     @Override
     protected ClearCacheNodesResponse newResponse(
-        ClearCacheNodesRequest request,
+        ClearCacheNodesRequest request,  
         List<ClearCacheNodeResponse> responses,
         List<FailedNodeException> failures
-    ) {
+    ) {  
         return new ClearCacheNodesResponse(clusterService.getClusterName(), responses, failures);
     }
 
     @Override
     protected ClearCacheNodeRequest newNodeRequest(ClearCacheNodesRequest request) {
-        return new ClearCacheNodeRequest(request.isFooter(), request.isColumn(), request.isOffset(), request.isStatistics());
+        return new ClearCacheNodeRequest(request.isFooter(), request.isColumn(), request.isOffset(), request.isStatistics());  
     }
 
-    @Override
+    @Override  
     protected ClearCacheNodeResponse newNodeResponse(StreamInput in) throws IOException {
         return new ClearCacheNodeResponse(in);
-    }
+    }  
 
     @Override
-    protected ClearCacheNodeResponse nodeOperation(ClearCacheNodeRequest request) {
+    protected ClearCacheNodeResponse nodeOperation(ClearCacheNodeRequest request) {  
         CacheManager cacheManager = dataFusionService.getCacheManager();
         // Caching may not be configured on this node (DataFusion not started or
-        // caches disabled). Nothing to clear in that case.
+        // caches disabled). Nothing to clear in that case.  
         if (cacheManager != null) {
             if (request.isClearAll()) {
-                cacheManager.clearAllCache();
+                cacheManager.clearAllCache();  
             } else {
                 if (request.isFooter()) cacheManager.clearCacheForCacheType(CacheUtils.CacheType.METADATA);
-                if (request.isColumn()) cacheManager.clearCacheForCacheType(CacheUtils.CacheType.COLUMN_INDEX);
+                if (request.isColumn()) cacheManager.clearCacheForCacheType(CacheUtils.CacheType.COLUMN_INDEX);  
                 if (request.isOffset()) cacheManager.clearCacheForCacheType(CacheUtils.CacheType.OFFSET_INDEX);
                 if (request.isStatistics()) cacheManager.clearCacheForCacheType(CacheUtils.CacheType.STATISTICS);
-            }
+            }  
         }
         return new ClearCacheNodeResponse(clusterService.localNode());
-    }
+    }  
 }

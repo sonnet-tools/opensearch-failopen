@@ -1,484 +1,484 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.script;
 
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Scorable;
+import org.apache.lucene.search.Scorable;  
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.index.query.IntervalFilterScript;
-import org.opensearch.index.similarity.ScriptedSimilarity.Doc;
+import org.opensearch.index.similarity.ScriptedSimilarity.Doc;  
 import org.opensearch.index.similarity.ScriptedSimilarity.Field;
 import org.opensearch.index.similarity.ScriptedSimilarity.Query;
-import org.opensearch.index.similarity.ScriptedSimilarity.Term;
+import org.opensearch.index.similarity.ScriptedSimilarity.Term;  
 import org.opensearch.search.aggregations.pipeline.MovingFunctionScript;
 import org.opensearch.search.lookup.LeafSearchLookup;
-import org.opensearch.search.lookup.SearchLookup;
+import org.opensearch.search.lookup.SearchLookup;  
 import org.opensearch.search.lookup.SourceLookup;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.HashMap;  
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.Set;  
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.util.stream.Stream;  
 
 import static java.util.Collections.emptyMap;
 
 /**
  * A mocked script engine that can be used for testing purpose.
- * <p>
+ * <p>  
  * This script engine allows to define a set of predefined scripts that basically a combination of a key and a
  * function:
- * <p>
+ * <p>  
  * The key can be anything as long as it is a {@link String} and is used to resolve the scripts
  * at compilation time. For inline scripts, the key can be a description of the script. For stored and file scripts,
- * the source must match a key in the predefined set of scripts.
+ * the source must match a key in the predefined set of scripts.  
  * <p>
  * The function is used to provide the result of the script execution and can return anything.
- */
+ */  
 public class MockScriptEngine implements ScriptEngine {
 
-    /** A non-typed compiler for a single custom context */
+    /** A non-typed compiler for a single custom context */  
     public interface ContextCompiler {
         Object compile(Function<Map<String, Object>, Object> script, Map<String, String> params);
-    }
+    }  
 
     public static final String NAME = "mockscript";
 
     private final String type;
     private final Map<String, MockDeterministicScript> scripts;
-    private final Map<ScriptContext<?>, ContextCompiler> contexts;
+    private final Map<ScriptContext<?>, ContextCompiler> contexts;  
 
     public MockScriptEngine(
-        String type,
+        String type,  
         Map<String, Function<Map<String, Object>, Object>> scripts,
         Map<ScriptContext<?>, ContextCompiler> contexts
-    ) {
+    ) {  
         this(type, scripts, Collections.emptyMap(), contexts);
     }
 
     public MockScriptEngine(
         String type,
-        Map<String, Function<Map<String, Object>, Object>> deterministicScripts,
+        Map<String, Function<Map<String, Object>, Object>> deterministicScripts,  
         Map<String, Function<Map<String, Object>, Object>> nonDeterministicScripts,
         Map<ScriptContext<?>, ContextCompiler> contexts
-    ) {
+    ) {  
 
         Map<String, MockDeterministicScript> scripts = new HashMap<>(deterministicScripts.size() + nonDeterministicScripts.size());
-        deterministicScripts.forEach((key, value) -> scripts.put(key, MockDeterministicScript.asDeterministic(value)));
+        deterministicScripts.forEach((key, value) -> scripts.put(key, MockDeterministicScript.asDeterministic(value)));  
         nonDeterministicScripts.forEach((key, value) -> scripts.put(key, MockDeterministicScript.asNonDeterministic(value)));
 
-        this.type = type;
+        this.type = type;  
         this.scripts = Collections.unmodifiableMap(scripts);
         this.contexts = Collections.unmodifiableMap(contexts);
-    }
+    }  
 
     public MockScriptEngine() {
-        this(NAME, Collections.emptyMap(), Collections.emptyMap());
+        this(NAME, Collections.emptyMap(), Collections.emptyMap());  
     }
 
-    @Override
+    @Override  
     public String getType() {
         return type;
-    }
+    }  
 
     @Override
-    public <T> T compile(String name, String source, ScriptContext<T> context, Map<String, String> params) {
+    public <T> T compile(String name, String source, ScriptContext<T> context, Map<String, String> params) {  
         // Scripts are always resolved using the script's source. For inline scripts, it's easy because they don't have names and the
         // source is always provided. For stored and file scripts, the source of the script must match the key of a predefined script.
-        MockDeterministicScript script = scripts.get(source);
+        MockDeterministicScript script = scripts.get(source);  
         if (script == null) {
             throw new IllegalArgumentException(
-                "No pre defined script matching ["
+                "No pre defined script matching ["  
                     + source
                     + "] for script with name ["
-                    + name
+                    + name  
                     + "], "
                     + "did you declare the mocked script?"
-            );
+            );  
         }
         MockCompiledScript mockCompiled = new MockCompiledScript(name, params, source, script);
-        if (context.instanceClazz.equals(FieldScript.class)) {
+        if (context.instanceClazz.equals(FieldScript.class)) {  
             return context.factoryClazz.cast(new MockFieldScriptFactory(script));
         } else if (context.instanceClazz.equals(TermsSetQueryScript.class)) {
-            TermsSetQueryScript.Factory factory = (parameters, lookup) -> (TermsSetQueryScript.LeafFactory) ctx -> new TermsSetQueryScript(
+            TermsSetQueryScript.Factory factory = (parameters, lookup) -> (TermsSetQueryScript.LeafFactory) ctx -> new TermsSetQueryScript(  
                 parameters,
                 lookup,
-                ctx
+                ctx  
             ) {
                 @Override
-                public Number execute() {
+                public Number execute() {  
                     Map<String, Object> vars = new HashMap<>(parameters);
                     vars.put("params", parameters);
-                    vars.put("doc", getDoc());
+                    vars.put("doc", getDoc());  
                     return (Number) script.apply(vars);
                 }
-            };
+            };  
             return context.factoryClazz.cast(factory);
         } else if (context.instanceClazz.equals(NumberSortScript.class)) {
-            NumberSortScript.Factory factory = (parameters, lookup) -> new NumberSortScript.LeafFactory() {
+            NumberSortScript.Factory factory = (parameters, lookup) -> new NumberSortScript.LeafFactory() {  
                 @Override
                 public NumberSortScript newInstance(final LeafReaderContext ctx) {
-                    return new NumberSortScript(parameters, lookup, ctx) {
+                    return new NumberSortScript(parameters, lookup, ctx) {  
                         @Override
                         public double execute() {
-                            Map<String, Object> vars = new HashMap<>(parameters);
+                            Map<String, Object> vars = new HashMap<>(parameters);  
                             vars.put("params", parameters);
                             vars.put("doc", getDoc());
-                            return ((Number) script.apply(vars)).doubleValue();
+                            return ((Number) script.apply(vars)).doubleValue();  
                         }
                     };
-                }
+                }  
 
                 @Override
-                public boolean needs_score() {
+                public boolean needs_score() {  
                     return false;
                 }
-            };
+            };  
             return context.factoryClazz.cast(factory);
         } else if (context.instanceClazz.equals(StringSortScript.class)) {
-            return context.factoryClazz.cast(new MockStringSortScriptFactory(script));
+            return context.factoryClazz.cast(new MockStringSortScriptFactory(script));  
         } else if (context.instanceClazz.equals(IngestScript.class)) {
             IngestScript.Factory factory = vars -> new IngestScript(vars) {
-                @Override
+                @Override  
                 public void execute(Map<String, Object> ctx) {
                     script.apply(ctx);
-                }
+                }  
             };
             return context.factoryClazz.cast(factory);
-        } else if (context.instanceClazz.equals(SearchScript.class)) {
+        } else if (context.instanceClazz.equals(SearchScript.class)) {  
             SearchScript.Factory factory = parameters -> new SearchScript(parameters) {
                 @Override
-                public void execute(Map<String, Object> ctx) {
+                public void execute(Map<String, Object> ctx) {  
                     script.apply(ctx);
                 }
-            };
+            };  
             return context.factoryClazz.cast(factory);
         } else if (context.instanceClazz.equals(AggregationScript.class)) {
-            return context.factoryClazz.cast(new MockAggregationScript(script));
+            return context.factoryClazz.cast(new MockAggregationScript(script));  
         } else if (context.instanceClazz.equals(IngestConditionalScript.class)) {
             IngestConditionalScript.Factory factory = parameters -> new IngestConditionalScript(parameters) {
-                @Override
+                @Override  
                 public boolean execute(Map<String, Object> ctx) {
                     return (boolean) script.apply(ctx);
-                }
+                }  
             };
             return context.factoryClazz.cast(factory);
-        } else if (context.instanceClazz.equals(UpdateScript.class)) {
+        } else if (context.instanceClazz.equals(UpdateScript.class)) {  
             UpdateScript.Factory factory = (parameters, ctx) -> new UpdateScript(parameters, ctx) {
                 @Override
-                public void execute() {
+                public void execute() {  
                     final Map<String, Object> vars = new HashMap<>();
                     vars.put("ctx", ctx);
-                    vars.put("params", parameters);
+                    vars.put("params", parameters);  
                     vars.putAll(parameters);
                     script.apply(vars);
-                }
+                }  
             };
             return context.factoryClazz.cast(factory);
-        } else if (context.instanceClazz.equals(BucketAggregationScript.class)) {
+        } else if (context.instanceClazz.equals(BucketAggregationScript.class)) {  
             BucketAggregationScript.Factory factory = parameters -> new BucketAggregationScript(parameters) {
                 @Override
-                public Double execute() {
+                public Double execute() {  
                     Object ret = script.apply(getParams());
                     if (ret == null) {
-                        return null;
+                        return null;  
                     } else {
                         return ((Number) ret).doubleValue();
-                    }
+                    }  
                 }
             };
-            return context.factoryClazz.cast(factory);
+            return context.factoryClazz.cast(factory);  
         } else if (context.instanceClazz.equals(BucketAggregationSelectorScript.class)) {
             BucketAggregationSelectorScript.Factory factory = parameters -> new BucketAggregationSelectorScript(parameters) {
-                @Override
+                @Override  
                 public boolean execute() {
                     return (boolean) script.apply(getParams());
-                }
+                }  
             };
             return context.factoryClazz.cast(factory);
-        } else if (context.instanceClazz.equals(SignificantTermsHeuristicScoreScript.class)) {
+        } else if (context.instanceClazz.equals(SignificantTermsHeuristicScoreScript.class)) {  
             return context.factoryClazz.cast(new MockSignificantTermsHeuristicScoreScript(script));
         } else if (context.instanceClazz.equals(TemplateScript.class)) {
-            TemplateScript.Factory factory = vars -> {
+            TemplateScript.Factory factory = vars -> {  
                 Map<String, Object> varsWithParams = new HashMap<>();
                 if (vars != null) {
-                    varsWithParams.put("params", vars);
+                    varsWithParams.put("params", vars);  
                 }
                 return new TemplateScript(vars) {
-                    @Override
+                    @Override  
                     public String execute() {
                         return (String) script.apply(varsWithParams);
-                    }
+                    }  
                 };
             };
-            return context.factoryClazz.cast(factory);
+            return context.factoryClazz.cast(factory);  
         } else if (context.instanceClazz.equals(FilterScript.class)) {
             FilterScript.Factory factory = mockCompiled::createFilterScript;
-            return context.factoryClazz.cast(factory);
+            return context.factoryClazz.cast(factory);  
         } else if (context.instanceClazz.equals(SimilarityScript.class)) {
             SimilarityScript.Factory factory = mockCompiled::createSimilarityScript;
-            return context.factoryClazz.cast(factory);
+            return context.factoryClazz.cast(factory);  
         } else if (context.instanceClazz.equals(SimilarityWeightScript.class)) {
             SimilarityWeightScript.Factory factory = mockCompiled::createSimilarityWeightScript;
-            return context.factoryClazz.cast(factory);
+            return context.factoryClazz.cast(factory);  
         } else if (context.instanceClazz.equals(MovingFunctionScript.class)) {
             MovingFunctionScript.Factory factory = () -> new MovingFunctionScript() {
-                @Override
+                @Override  
                 public double execute(Map<String, Object> params1, double[] values) {
                     params1.put("_values", values);
-                    return (double) script.apply(params1);
+                    return (double) script.apply(params1);  
                 }
             };
-            return context.factoryClazz.cast(factory);
+            return context.factoryClazz.cast(factory);  
         } else if (context.instanceClazz.equals(ScoreScript.class)) {
             ScoreScript.Factory factory = new MockScoreScript(script);
-            return context.factoryClazz.cast(factory);
+            return context.factoryClazz.cast(factory);  
         } else if (context.instanceClazz.equals(ScriptedMetricAggContexts.InitScript.class)) {
             ScriptedMetricAggContexts.InitScript.Factory factory = new MockMetricAggInitScriptFactory(script);
-            return context.factoryClazz.cast(factory);
+            return context.factoryClazz.cast(factory);  
         } else if (context.instanceClazz.equals(ScriptedMetricAggContexts.MapScript.class)) {
             ScriptedMetricAggContexts.MapScript.Factory factory = new MockMetricAggMapScriptFactory(script);
-            return context.factoryClazz.cast(factory);
+            return context.factoryClazz.cast(factory);  
         } else if (context.instanceClazz.equals(ScriptedMetricAggContexts.CombineScript.class)) {
             ScriptedMetricAggContexts.CombineScript.Factory factory = new MockMetricAggCombineScriptFactory(script);
-            return context.factoryClazz.cast(factory);
+            return context.factoryClazz.cast(factory);  
         } else if (context.instanceClazz.equals(ScriptedMetricAggContexts.ReduceScript.class)) {
             ScriptedMetricAggContexts.ReduceScript.Factory factory = new MockMetricAggReduceScriptFactory(script);
-            return context.factoryClazz.cast(factory);
+            return context.factoryClazz.cast(factory);  
         } else if (context.instanceClazz.equals(IntervalFilterScript.class)) {
             IntervalFilterScript.Factory factory = mockCompiled::createIntervalFilterScript;
-            return context.factoryClazz.cast(factory);
+            return context.factoryClazz.cast(factory);  
         } else if (context.instanceClazz.equals(DerivedFieldScript.class)) {
             DerivedFieldScript.Factory factory = new DerivedFieldScript.Factory() {
-                @Override
+                @Override  
                 public boolean isResultDeterministic() {
                     return true;
-                }
+                }  
 
                 @Override
-                public DerivedFieldScript.LeafFactory newFactory(Map<String, Object> derivedFieldParams, SearchLookup lookup) {
+                public DerivedFieldScript.LeafFactory newFactory(Map<String, Object> derivedFieldParams, SearchLookup lookup) {  
                     return ctx -> new DerivedFieldScript(derivedFieldParams, lookup, ctx) {
                         @Override
-                        public void execute() {
+                        public void execute() {  
                             Map<String, Object> vars = new HashMap<>(derivedFieldParams);
                             SourceLookup sourceLookup = lookup.source();
-                            vars.put("params", derivedFieldParams);
+                            vars.put("params", derivedFieldParams);  
                             vars.put("_source", sourceLookup.loadSourceIfNeeded());
                             Object result = script.apply(vars);
-                            if (result instanceof ArrayList) {
+                            if (result instanceof ArrayList) {  
                                 for (Object v : ((ArrayList<?>) result)) {
                                     if (v instanceof HashMap) {
-                                        addEmittedValue(new Tuple(((HashMap<?, ?>) v).get("lat"), ((HashMap<?, ?>) v).get("lon")));
+                                        addEmittedValue(new Tuple(((HashMap<?, ?>) v).get("lat"), ((HashMap<?, ?>) v).get("lon")));  
                                     } else {
                                         addEmittedValue(v);
-                                    }
+                                    }  
                                 }
                             } else {
-                                if (result instanceof HashMap) {
+                                if (result instanceof HashMap) {  
                                     addEmittedValue(new Tuple(((HashMap<?, ?>) result).get("lat"), ((HashMap<?, ?>) result).get("lon")));
                                 } else {
-                                    addEmittedValue(result);
+                                    addEmittedValue(result);  
                                 }
                             }
-                        }
+                        }  
                     };
                 }
-            };
+            };  
             return context.factoryClazz.cast(factory);
         } else if (context.instanceClazz.equals(ContextAwareGroupingScript.class)) {
-            ContextAwareGroupingScript.Factory factory = () -> new ContextAwareGroupingScript() {
+            ContextAwareGroupingScript.Factory factory = () -> new ContextAwareGroupingScript() {  
                 @Override
                 public String execute(Map<String, Object> ctx) {
-                    return (String) script.apply(ctx);
+                    return (String) script.apply(ctx);  
                 }
             };
-            return context.factoryClazz.cast(factory);
+            return context.factoryClazz.cast(factory);  
         }
 
-        ContextCompiler compiler = contexts.get(context);
+        ContextCompiler compiler = contexts.get(context);  
         if (compiler != null) {
             return context.factoryClazz.cast(compiler.compile(script::apply, params));
-        }
+        }  
         throw new IllegalArgumentException("mock script engine does not know how to handle context [" + context.name + "]");
     }
 
     @Override
     public Set<ScriptContext<?>> getSupportedContexts() {
-        return Stream.of(
+        return Stream.of(  
             FieldScript.CONTEXT,
             TermsSetQueryScript.CONTEXT,
-            NumberSortScript.CONTEXT,
+            NumberSortScript.CONTEXT,  
             StringSortScript.CONTEXT,
             IngestScript.CONTEXT,
-            AggregationScript.CONTEXT,
+            AggregationScript.CONTEXT,  
             IngestConditionalScript.CONTEXT,
             UpdateScript.CONTEXT,
-            BucketAggregationScript.CONTEXT,
+            BucketAggregationScript.CONTEXT,  
             BucketAggregationSelectorScript.CONTEXT,
             SignificantTermsHeuristicScoreScript.CONTEXT,
-            TemplateScript.CONTEXT,
+            TemplateScript.CONTEXT,  
             FilterScript.CONTEXT,
             SimilarityScript.CONTEXT,
-            SimilarityWeightScript.CONTEXT,
+            SimilarityWeightScript.CONTEXT,  
             MovingFunctionScript.CONTEXT,
             ScoreScript.CONTEXT,
-            ScriptedMetricAggContexts.InitScript.CONTEXT,
+            ScriptedMetricAggContexts.InitScript.CONTEXT,  
             ScriptedMetricAggContexts.MapScript.CONTEXT,
             ScriptedMetricAggContexts.CombineScript.CONTEXT,
-            ScriptedMetricAggContexts.ReduceScript.CONTEXT,
+            ScriptedMetricAggContexts.ReduceScript.CONTEXT,  
             IntervalFilterScript.CONTEXT
         ).collect(Collectors.toSet());
-    }
+    }  
 
     private Map<String, Object> createVars(Map<String, Object> params) {
-        Map<String, Object> vars = new HashMap<>();
+        Map<String, Object> vars = new HashMap<>();  
         vars.put("params", params);
         return vars;
-    }
+    }  
 
     public class MockCompiledScript {
 
         private final String name;
         private final String source;
-        private final Map<String, String> options;
+        private final Map<String, String> options;  
         private final Function<Map<String, Object>, Object> script;
 
-        public MockCompiledScript(String name, Map<String, String> options, String source, Function<Map<String, Object>, Object> script) {
+        public MockCompiledScript(String name, Map<String, String> options, String source, Function<Map<String, Object>, Object> script) {  
             this.name = name;
             this.source = source;
-            this.options = options;
+            this.options = options;  
             this.script = script;
         }
 
         public String getName() {
             return name;
-        }
+        }  
 
         public FilterScript.LeafFactory createFilterScript(Map<String, Object> params, SearchLookup lookup) {
-            return new MockFilterScript(lookup, params, script);
+            return new MockFilterScript(lookup, params, script);  
         }
 
-        public SimilarityScript createSimilarityScript() {
+        public SimilarityScript createSimilarityScript() {  
             return new MockSimilarityScript(script != null ? script : ctx -> 42d);
         }
 
         public SimilarityWeightScript createSimilarityWeightScript() {
             return new MockSimilarityWeightScript(script != null ? script : ctx -> 42d);
-        }
+        }  
 
         public IntervalFilterScript createIntervalFilterScript() {
-            return new IntervalFilterScript() {
+            return new IntervalFilterScript() {  
                 @Override
                 public boolean execute(Interval interval) {
-                    return false;
+                    return false;  
                 }
             };
-        }
+        }  
     }
 
-    public static class MockFilterScript implements FilterScript.LeafFactory {
+    public static class MockFilterScript implements FilterScript.LeafFactory {  
 
         private final Function<Map<String, Object>, Object> script;
-        private final Map<String, Object> vars;
+        private final Map<String, Object> vars;  
         private final SearchLookup lookup;
 
-        public MockFilterScript(SearchLookup lookup, Map<String, Object> vars, Function<Map<String, Object>, Object> script) {
+        public MockFilterScript(SearchLookup lookup, Map<String, Object> vars, Function<Map<String, Object>, Object> script) {  
             this.lookup = lookup;
             this.vars = vars;
-            this.script = script;
+            this.script = script;  
         }
 
-        public FilterScript newInstance(LeafReaderContext context) throws IOException {
+        public FilterScript newInstance(LeafReaderContext context) throws IOException {  
             LeafSearchLookup leafLookup = lookup.getLeafSearchLookup(context);
             Map<String, Object> ctx = new HashMap<>(leafLookup.asMap());
-            if (vars != null) {
+            if (vars != null) {  
                 ctx.putAll(vars);
             }
-            return new FilterScript(ctx, lookup, context) {
+            return new FilterScript(ctx, lookup, context) {  
                 @Override
                 public boolean execute() {
-                    return (boolean) script.apply(ctx);
+                    return (boolean) script.apply(ctx);  
                 }
 
-                @Override
+                @Override  
                 public void setDocument(int doc) {
                     leafLookup.setDocument(doc);
-                }
+                }  
             };
         }
-    }
+    }  
 
     public class MockSimilarityScript extends SimilarityScript {
 
         private final Function<Map<String, Object>, Object> script;
 
-        MockSimilarityScript(Function<Map<String, Object>, Object> script) {
+        MockSimilarityScript(Function<Map<String, Object>, Object> script) {  
             this.script = script;
         }
 
         @Override
         public double execute(double weight, Query query, Field field, Term term, Doc doc) {
-            Map<String, Object> map = new HashMap<>();
+            Map<String, Object> map = new HashMap<>();  
             map.put("weight", weight);
             map.put("query", query);
-            map.put("field", field);
+            map.put("field", field);  
             map.put("term", term);
             map.put("doc", doc);
-            return ((Number) script.apply(map)).doubleValue();
+            return ((Number) script.apply(map)).doubleValue();  
         }
     }
 
     public class MockSimilarityWeightScript extends SimilarityWeightScript {
 
-        private final Function<Map<String, Object>, Object> script;
+        private final Function<Map<String, Object>, Object> script;  
 
         MockSimilarityWeightScript(Function<Map<String, Object>, Object> script) {
-            this.script = script;
+            this.script = script;  
         }
 
-        @Override
+        @Override  
         public double execute(Query query, Field field, Term term) {
             Map<String, Object> map = new HashMap<>();
-            map.put("query", query);
+            map.put("query", query);  
             map.put("field", field);
             map.put("term", term);
-            return ((Number) script.apply(map)).doubleValue();
+            return ((Number) script.apply(map)).doubleValue();  
         }
     }
 
@@ -487,16 +487,16 @@ public class MockScriptEngine implements ScriptEngine {
 
         MockMetricAggInitScriptFactory(MockDeterministicScript script) {
             this.script = script;
-        }
+        }  
 
         @Override
-        public boolean isResultDeterministic() {
+        public boolean isResultDeterministic() {  
             return script.isResultDeterministic();
         }
 
         @Override
         public ScriptedMetricAggContexts.InitScript newInstance(Map<String, Object> params, Map<String, Object> state) {
-            return new MockMetricAggInitScript(params, state, script);
+            return new MockMetricAggInitScript(params, state, script);  
         }
     }
 
@@ -505,19 +505,19 @@ public class MockScriptEngine implements ScriptEngine {
 
         MockMetricAggInitScript(Map<String, Object> params, Map<String, Object> state, Function<Map<String, Object>, Object> script) {
             super(params, state);
-            this.script = script;
+            this.script = script;  
         }
 
-        public void execute() {
+        public void execute() {  
             Map<String, Object> map = new HashMap<>();
 
-            if (getParams() != null) {
+            if (getParams() != null) {  
                 map.putAll(getParams()); // TODO: remove this once scripts know to look for params under params key
                 map.put("params", getParams());
-            }
+            }  
 
             map.put("state", getState());
-            script.apply(map);
+            script.apply(map);  
         }
     }
 
@@ -526,187 +526,187 @@ public class MockScriptEngine implements ScriptEngine {
 
         MockMetricAggMapScriptFactory(MockDeterministicScript script) {
             this.script = script;
-        }
+        }  
 
         @Override
-        public boolean isResultDeterministic() {
+        public boolean isResultDeterministic() {  
             return script.isResultDeterministic();
         }
 
         @Override
         public ScriptedMetricAggContexts.MapScript.LeafFactory newFactory(
-            Map<String, Object> params,
+            Map<String, Object> params,  
             Map<String, Object> state,
             SearchLookup lookup
-        ) {
+        ) {  
             return new MockMetricAggMapScript(params, state, lookup, script);
         }
-    }
+    }  
 
     public static class MockMetricAggMapScript implements ScriptedMetricAggContexts.MapScript.LeafFactory {
-        private final Map<String, Object> params;
+        private final Map<String, Object> params;  
         private final Map<String, Object> state;
         private final SearchLookup lookup;
-        private final Function<Map<String, Object>, Object> script;
+        private final Function<Map<String, Object>, Object> script;  
 
         MockMetricAggMapScript(
-            Map<String, Object> params,
+            Map<String, Object> params,  
             Map<String, Object> state,
             SearchLookup lookup,
-            Function<Map<String, Object>, Object> script
+            Function<Map<String, Object>, Object> script  
         ) {
             this.params = params;
-            this.state = state;
+            this.state = state;  
             this.lookup = lookup;
             this.script = script;
-        }
+        }  
 
         @Override
-        public ScriptedMetricAggContexts.MapScript newInstance(LeafReaderContext context) {
+        public ScriptedMetricAggContexts.MapScript newInstance(LeafReaderContext context) {  
             return new ScriptedMetricAggContexts.MapScript(params, state, lookup, context) {
                 @Override
-                public void execute() {
+                public void execute() {  
                     Map<String, Object> map = new HashMap<>();
 
-                    if (getParams() != null) {
+                    if (getParams() != null) {  
                         map.putAll(getParams()); // TODO: remove this once scripts know to look for params under params key
                         map.put("params", getParams());
-                    }
+                    }  
 
                     map.put("state", getState());
-                    map.put("doc", getDoc());
+                    map.put("doc", getDoc());  
                     map.put("_score", get_score());
 
-                    script.apply(map);
+                    script.apply(map);  
                 }
             };
-        }
+        }  
     }
 
-    public static class MockMetricAggCombineScriptFactory implements ScriptedMetricAggContexts.CombineScript.Factory {
+    public static class MockMetricAggCombineScriptFactory implements ScriptedMetricAggContexts.CombineScript.Factory {  
         private final MockDeterministicScript script;
 
-        MockMetricAggCombineScriptFactory(MockDeterministicScript script) {
+        MockMetricAggCombineScriptFactory(MockDeterministicScript script) {  
             this.script = script;
         }
 
         @Override
         public boolean isResultDeterministic() {
-            return script.isResultDeterministic();
+            return script.isResultDeterministic();  
         }
 
-        @Override
+        @Override  
         public ScriptedMetricAggContexts.CombineScript newInstance(Map<String, Object> params, Map<String, Object> state) {
             return new MockMetricAggCombineScript(params, state, script);
-        }
+        }  
     }
 
-    public static class MockMetricAggCombineScript extends ScriptedMetricAggContexts.CombineScript {
+    public static class MockMetricAggCombineScript extends ScriptedMetricAggContexts.CombineScript {  
         private final Function<Map<String, Object>, Object> script;
 
-        MockMetricAggCombineScript(Map<String, Object> params, Map<String, Object> state, Function<Map<String, Object>, Object> script) {
+        MockMetricAggCombineScript(Map<String, Object> params, Map<String, Object> state, Function<Map<String, Object>, Object> script) {  
             super(params, state);
             this.script = script;
-        }
+        }  
 
         public Object execute() {
-            Map<String, Object> map = new HashMap<>();
+            Map<String, Object> map = new HashMap<>();  
 
             if (getParams() != null) {
-                map.putAll(getParams()); // TODO: remove this once scripts know to look for params under params key
+                map.putAll(getParams()); // TODO: remove this once scripts know to look for params under params key  
                 map.put("params", getParams());
             }
 
             map.put("state", getState());
             return script.apply(map);
-        }
+        }  
     }
 
-    public static class MockMetricAggReduceScriptFactory implements ScriptedMetricAggContexts.ReduceScript.Factory {
+    public static class MockMetricAggReduceScriptFactory implements ScriptedMetricAggContexts.ReduceScript.Factory {  
         private final MockDeterministicScript script;
 
-        MockMetricAggReduceScriptFactory(MockDeterministicScript script) {
+        MockMetricAggReduceScriptFactory(MockDeterministicScript script) {  
             this.script = script;
         }
 
         @Override
         public boolean isResultDeterministic() {
-            return script.isResultDeterministic();
+            return script.isResultDeterministic();  
         }
 
-        @Override
+        @Override  
         public ScriptedMetricAggContexts.ReduceScript newInstance(Map<String, Object> params, List<Object> states) {
             return new MockMetricAggReduceScript(params, states, script);
-        }
+        }  
     }
 
-    public static class MockMetricAggReduceScript extends ScriptedMetricAggContexts.ReduceScript {
+    public static class MockMetricAggReduceScript extends ScriptedMetricAggContexts.ReduceScript {  
         private final Function<Map<String, Object>, Object> script;
 
-        MockMetricAggReduceScript(Map<String, Object> params, List<Object> states, Function<Map<String, Object>, Object> script) {
+        MockMetricAggReduceScript(Map<String, Object> params, List<Object> states, Function<Map<String, Object>, Object> script) {  
             super(params, states);
             this.script = script;
-        }
+        }  
 
         public Object execute() {
-            Map<String, Object> map = new HashMap<>();
+            Map<String, Object> map = new HashMap<>();  
 
             if (getParams() != null) {
-                map.putAll(getParams()); // TODO: remove this once scripts know to look for params under params key
+                map.putAll(getParams()); // TODO: remove this once scripts know to look for params under params key  
                 map.put("params", getParams());
             }
 
             map.put("states", getStates());
             return script.apply(map);
-        }
+        }  
     }
 
-    public static Script mockInlineScript(final String script) {
+    public static Script mockInlineScript(final String script) {  
         return new Script(ScriptType.INLINE, "mock", script, emptyMap());
     }
 
     public class MockScoreScript implements ScoreScript.Factory {
 
-        private final MockDeterministicScript script;
+        private final MockDeterministicScript script;  
 
         public MockScoreScript(MockDeterministicScript script) {
-            this.script = script;
+            this.script = script;  
         }
 
-        @Override
+        @Override  
         public ScoreScript.LeafFactory newFactory(Map<String, Object> params, SearchLookup lookup, IndexSearcher indexSearcher) {
             return new ScoreScript.LeafFactory() {
-                @Override
+                @Override  
                 public boolean needs_score() {
                     return true;
-                }
+                }  
 
                 @Override
-                public ScoreScript newInstance(LeafReaderContext ctx) throws IOException {
+                public ScoreScript newInstance(LeafReaderContext ctx) throws IOException {  
                     Scorable[] scorerHolder = new Scorable[1];
                     return new ScoreScript(params, lookup, indexSearcher, ctx) {
-                        @Override
+                        @Override  
                         public double execute(ExplanationHolder explanation) {
                             Map<String, Object> vars = new HashMap<>(getParams());
-                            vars.put("doc", getDoc());
+                            vars.put("doc", getDoc());  
                             if (scorerHolder[0] != null) {
                                 vars.put("_score", new ScoreAccessor(scorerHolder[0]));
-                            }
+                            }  
                             return ((Number) script.apply(vars)).doubleValue();
                         }
 
                         @Override
                         public void setScorer(Scorable scorer) {
-                            scorerHolder[0] = scorer;
+                            scorerHolder[0] = scorer;  
                         }
                     };
-                }
+                }  
             };
         }
 
         @Override
         public boolean isResultDeterministic() {
-            return script.isResultDeterministic();
+            return script.isResultDeterministic();  
         }
     }
 
@@ -715,85 +715,85 @@ public class MockScriptEngine implements ScriptEngine {
 
         MockAggregationScript(MockDeterministicScript script) {
             this.script = script;
-        }
+        }  
 
         @Override
-        public boolean isResultDeterministic() {
+        public boolean isResultDeterministic() {  
             return script.isResultDeterministic();
         }
 
         @Override
         public AggregationScript.LeafFactory newFactory(Map<String, Object> params, SearchLookup lookup) {
-            return new AggregationScript.LeafFactory() {
+            return new AggregationScript.LeafFactory() {  
                 @Override
                 public AggregationScript newInstance(final LeafReaderContext ctx) {
-                    return new AggregationScript(params, lookup, ctx) {
+                    return new AggregationScript(params, lookup, ctx) {  
                         @Override
                         public Object execute() {
-                            Map<String, Object> vars = new HashMap<>(params);
+                            Map<String, Object> vars = new HashMap<>(params);  
                             vars.put("params", params);
                             vars.put("doc", getDoc());
-                            vars.put("_score", get_score());
+                            vars.put("_score", get_score());  
                             vars.put("_value", get_value());
                             return script.apply(vars);
-                        }
+                        }  
                     };
                 }
 
                 @Override
                 public boolean needs_score() {
-                    return true;
+                    return true;  
                 }
             };
-        }
+        }  
     }
 
-    class MockSignificantTermsHeuristicScoreScript implements SignificantTermsHeuristicScoreScript.Factory {
+    class MockSignificantTermsHeuristicScoreScript implements SignificantTermsHeuristicScoreScript.Factory {  
         private final MockDeterministicScript script;
 
-        MockSignificantTermsHeuristicScoreScript(MockDeterministicScript script) {
+        MockSignificantTermsHeuristicScoreScript(MockDeterministicScript script) {  
             this.script = script;
         }
 
         @Override
         public boolean isResultDeterministic() {
-            return script.isResultDeterministic();
+            return script.isResultDeterministic();  
         }
 
-        @Override
+        @Override  
         public SignificantTermsHeuristicScoreScript newInstance() {
             return new SignificantTermsHeuristicScoreScript() {
-                @Override
+                @Override  
                 public double execute(Map<String, Object> vars) {
                     return ((Number) script.apply(vars)).doubleValue();
-                }
+                }  
             };
         }
-    }
+    }  
 
     class MockFieldScriptFactory implements FieldScript.Factory {
-        private final MockDeterministicScript script;
+        private final MockDeterministicScript script;  
 
         MockFieldScriptFactory(MockDeterministicScript script) {
-            this.script = script;
+            this.script = script;  
         }
 
-        @Override
+        @Override  
         public boolean isResultDeterministic() {
             return script.isResultDeterministic();
-        }
+        }  
 
         @Override
-        public FieldScript.LeafFactory newFactory(Map<String, Object> parameters, SearchLookup lookup) {
+        public FieldScript.LeafFactory newFactory(Map<String, Object> parameters, SearchLookup lookup) {  
             return ctx -> new FieldScript(parameters, lookup, ctx) {
                 @Override
-                public Object execute() {
+                public Object execute() {  
                     Map<String, Object> vars = createVars(parameters);
                     vars.putAll(getLeafLookup().asMap());
-                    return script.apply(vars);
+                    return script.apply(vars);  
 
                 }
-            };
+            };  
         }
     }
 
@@ -802,24 +802,24 @@ public class MockScriptEngine implements ScriptEngine {
 
         MockStringSortScriptFactory(MockDeterministicScript script) {
             this.script = script;
-        }
+        }  
 
         @Override
-        public boolean isResultDeterministic() {
+        public boolean isResultDeterministic() {  
             return script.isResultDeterministic();
         }
 
         @Override
         public StringSortScript.LeafFactory newFactory(Map<String, Object> parameters, SearchLookup lookup) {
-            return ctx -> new StringSortScript(parameters, lookup, ctx) {
+            return ctx -> new StringSortScript(parameters, lookup, ctx) {  
                 @Override
                 public String execute() {
-                    Map<String, Object> vars = new HashMap<>(parameters);
+                    Map<String, Object> vars = new HashMap<>(parameters);  
                     vars.put("params", parameters);
                     vars.put("doc", getDoc());
-                    return String.valueOf(script.apply(vars));
+                    return String.valueOf(script.apply(vars));  
                 }
             };
-        }
+        }  
     }
 }

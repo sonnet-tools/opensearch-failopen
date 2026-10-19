@@ -1,148 +1,148 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Copyright (C) 2008 Google Inc.
+ * Copyright (C) 2008 Google Inc.  
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
+ * you may not use this file except in compliance with the License.  
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0  
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
+ * distributed under the License is distributed on an "AS IS" BASIS,  
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License.
+ * limitations under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.common.inject.util;
 
 import org.opensearch.common.inject.AbstractModule;
 import org.opensearch.common.inject.Binder;
-import org.opensearch.common.inject.Binding;
+import org.opensearch.common.inject.Binding;  
 import org.opensearch.common.inject.Key;
 import org.opensearch.common.inject.Module;
-import org.opensearch.common.inject.PrivateBinder;
+import org.opensearch.common.inject.PrivateBinder;  
 import org.opensearch.common.inject.Scope;
 import org.opensearch.common.inject.spi.DefaultBindingScopingVisitor;
-import org.opensearch.common.inject.spi.DefaultElementVisitor;
+import org.opensearch.common.inject.spi.DefaultElementVisitor;  
 import org.opensearch.common.inject.spi.Element;
 import org.opensearch.common.inject.spi.Elements;
-import org.opensearch.common.inject.spi.PrivateElements;
+import org.opensearch.common.inject.spi.PrivateElements;  
 import org.opensearch.common.inject.spi.ScopeBinding;
 
-import java.lang.annotation.Annotation;
+import java.lang.annotation.Annotation;  
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.HashMap;  
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Map;  
 import java.util.Set;
 
-import static java.util.Collections.unmodifiableSet;
+import static java.util.Collections.unmodifiableSet;  
 import static org.opensearch.common.util.set.Sets.newHashSet;
 
-/**
+/**  
  * Static utility methods for creating and working with instances of {@link Module}.
  *
- * @author jessewilson@google.com (Jesse Wilson)
+ * @author jessewilson@google.com (Jesse Wilson)  
  * @since 2.0
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 public final class Modules {
-    private Modules() {}
+    private Modules() {}  
 
     public static final Module EMPTY_MODULE = new Module() {
-        @Override
+        @Override  
         public void configure(Binder binder) {}
     };
 
     /**
      * Returns a builder that creates a module that overlays override modules over the given
-     * modules. If a key is bound in both sets of modules, only the binding from the override modules
+     * modules. If a key is bound in both sets of modules, only the binding from the override modules  
      * is kept. This can be used to replace the bindings of a production module with test bindings:
      * <pre>
-     * Module functionalTestModule
+     * Module functionalTestModule  
      *     = Modules.override(new ProductionModule()).with(new TestModule());
      * </pre>
-     * <p>
+     * <p>  
      * Prefer to write smaller modules that can be reused and tested without overrides.
      *
-     * @param modules the modules whose bindings are open to be overridden
+     * @param modules the modules whose bindings are open to be overridden  
      */
     public static OverriddenModuleBuilder override(Module... modules) {
-        return new RealOverriddenModuleBuilder(Arrays.asList(modules));
+        return new RealOverriddenModuleBuilder(Arrays.asList(modules));  
     }
 
-    /**
+    /**  
      * Returns a builder that creates a module that overlays override modules over the given
      * modules. If a key is bound in both sets of modules, only the binding from the override modules
-     * is kept. This can be used to replace the bindings of a production module with test bindings:
+     * is kept. This can be used to replace the bindings of a production module with test bindings:  
      * <pre>
      * Module functionalTestModule
-     *     = Modules.override(getProductionModules()).with(getTestModules());
+     *     = Modules.override(getProductionModules()).with(getTestModules());  
      * </pre>
      * <p>
-     * Prefer to write smaller modules that can be reused and tested without overrides.
+     * Prefer to write smaller modules that can be reused and tested without overrides.  
      *
      * @param modules the modules whose bindings are open to be overridden
-     */
+     */  
     public static OverriddenModuleBuilder override(Iterable<? extends Module> modules) {
         return new RealOverriddenModuleBuilder(modules);
-    }
+    }  
 
     /**
-     * Returns a new module that installs all of {@code modules}.
+     * Returns a new module that installs all of {@code modules}.  
      */
     public static Module combine(Module... modules) {
-        return combine(Arrays.asList(modules));
+        return combine(Arrays.asList(modules));  
     }
 
-    /**
+    /**  
      * Returns a new module that installs all of {@code modules}.
      */
-    public static Module combine(Iterable<? extends Module> modules) {
+    public static Module combine(Iterable<? extends Module> modules) {  
         final Set<? extends Module> modulesSet = newHashSet(modules);
         return new Module() {
-            @Override
+            @Override  
             public void configure(Binder binder) {
                 binder = binder.skipSources(getClass());
-                for (Module module : modulesSet) {
+                for (Module module : modulesSet) {  
                     binder.install(module);
                 }
-            }
+            }  
         };
     }
 
     /**
      * See the EDSL example at {@link Modules#override(Module[]) override()}.
-     *
+     *  
      * @opensearch.internal
      */
-    public interface OverriddenModuleBuilder {
+    public interface OverriddenModuleBuilder {  
 
         /**
-         * See the EDSL example at {@link Modules#override(Module[]) override()}.
+         * See the EDSL example at {@link Modules#override(Module[]) override()}.  
          */
         Module with(Module... overrides);
 
         /**
          * See the EDSL example at {@link Modules#override(Module[]) override()}.
-         */
+         */  
         Module with(Iterable<? extends Module> overrides);
     }
 
@@ -151,19 +151,19 @@ public final class Modules {
 
         private RealOverriddenModuleBuilder(Iterable<? extends Module> baseModules) {
             HashSet<? extends Module> modules = newHashSet(baseModules);
-            this.baseModules = unmodifiableSet(modules);
+            this.baseModules = unmodifiableSet(modules);  
         }
 
-        @Override
+        @Override  
         public Module with(Module... overrides) {
             return with(Arrays.asList(overrides));
-        }
+        }  
 
         @Override
-        public Module with(final Iterable<? extends Module> overrides) {
+        public Module with(final Iterable<? extends Module> overrides) {  
             return new AbstractModule() {
                 @Override
-                public void configure() {
+                public void configure() {  
                     final List<Element> elements = Elements.getElements(baseModules);
                     final List<Element> overrideElements = Elements.getElements(overrides);
 
@@ -172,40 +172,40 @@ public final class Modules {
 
                     // execute the overrides module, keeping track of which keys and scopes are bound
                     new ModuleWriter(binder()) {
-                        @Override
+                        @Override  
                         public <T> Void visit(Binding<T> binding) {
                             overriddenKeys.add(binding.getKey());
-                            return super.visit(binding);
+                            return super.visit(binding);  
                         }
 
-                        @Override
+                        @Override  
                         public Void visit(ScopeBinding scopeBinding) {
                             overridesScopeAnnotations.add(scopeBinding.getAnnotationType());
-                            return super.visit(scopeBinding);
+                            return super.visit(scopeBinding);  
                         }
 
-                        @Override
+                        @Override  
                         public Void visit(PrivateElements privateElements) {
                             overriddenKeys.addAll(privateElements.getExposedKeys());
-                            return super.visit(privateElements);
+                            return super.visit(privateElements);  
                         }
                     }.writeAll(overrideElements);
 
                     // execute the original module, skipping all scopes and overridden keys. We only skip each
                     // overridden binding once so things still blow up if the module binds the same thing
-                    // multiple times.
+                    // multiple times.  
                     final Map<Scope, Object> scopeInstancesInUse = new HashMap<>();
                     final List<ScopeBinding> scopeBindings = new ArrayList<>();
-                    new ModuleWriter(binder()) {
+                    new ModuleWriter(binder()) {  
                         @Override
                         public <T> Void visit(Binding<T> binding) {
-                            if (!overriddenKeys.remove(binding.getKey())) {
+                            if (!overriddenKeys.remove(binding.getKey())) {  
                                 super.visit(binding);
 
-                                // Record when a scope instance is used in a binding
+                                // Record when a scope instance is used in a binding  
                                 Scope scope = getScopeInstanceOrNull(binding);
                                 if (scope != null) {
-                                    scopeInstancesInUse.put(scope, binding.getSource());
+                                    scopeInstancesInUse.put(scope, binding.getSource());  
                                 }
                             }
 
@@ -214,55 +214,55 @@ public final class Modules {
 
                         @Override
                         public Void visit(PrivateElements privateElements) {
-                            PrivateBinder privateBinder = binder.withSource(privateElements.getSource()).newPrivateBinder();
+                            PrivateBinder privateBinder = binder.withSource(privateElements.getSource()).newPrivateBinder();  
 
                             Set<Key<?>> skippedExposes = new HashSet<>();
 
                             for (Key<?> key : privateElements.getExposedKeys()) {
                                 if (overriddenKeys.remove(key)) {
-                                    skippedExposes.add(key);
+                                    skippedExposes.add(key);  
                                 } else {
                                     privateBinder.withSource(privateElements.getExposedSource(key)).expose(key);
-                                }
+                                }  
                             }
 
-                            // we're not skipping deep exposes, but that should be okay. If we ever need to, we
+                            // we're not skipping deep exposes, but that should be okay. If we ever need to, we  
                             // have to search through this set of elements for PrivateElements, recursively
                             for (Element element : privateElements.getElements()) {
-                                if (element instanceof Binding && skippedExposes.contains(((Binding) element).getKey())) {
+                                if (element instanceof Binding && skippedExposes.contains(((Binding) element).getKey())) {  
                                     continue;
                                 }
-                                element.applyTo(privateBinder);
+                                element.applyTo(privateBinder);  
                             }
 
-                            return null;
+                            return null;  
                         }
 
-                        @Override
+                        @Override  
                         public Void visit(ScopeBinding scopeBinding) {
                             scopeBindings.add(scopeBinding);
-                            return null;
+                            return null;  
                         }
                     }.writeAll(elements);
 
                     // execute the scope bindings, skipping scopes that have been overridden. Any scope that
                     // is overridden and in active use will prompt an error
-                    new ModuleWriter(binder()) {
+                    new ModuleWriter(binder()) {  
                         @Override
                         public Void visit(ScopeBinding scopeBinding) {
-                            if (!overridesScopeAnnotations.remove(scopeBinding.getAnnotationType())) {
+                            if (!overridesScopeAnnotations.remove(scopeBinding.getAnnotationType())) {  
                                 super.visit(scopeBinding);
                             } else {
-                                Object source = scopeInstancesInUse.get(scopeBinding.getScope());
+                                Object source = scopeInstancesInUse.get(scopeBinding.getScope());  
                                 if (source != null) {
                                     binder().withSource(source)
-                                        .addError(
+                                        .addError(  
                                             "The scope for @%s is bound directly and cannot be overridden.",
                                             scopeBinding.getAnnotationType().getSimpleName()
-                                        );
+                                        );  
                                 }
                             }
-                            return null;
+                            return null;  
                         }
                     }.writeAll(scopeBindings);
 
@@ -271,38 +271,38 @@ public final class Modules {
 
                 private Scope getScopeInstanceOrNull(Binding<?> binding) {
                     return binding.acceptScopingVisitor(new DefaultBindingScopingVisitor<Scope>() {
-                        @Override
+                        @Override  
                         public Scope visitScope(Scope scope) {
                             return scope;
-                        }
+                        }  
                     });
                 }
-            };
+            };  
         }
     }
 
     /**
      * A module writer
-     *
+     *  
      * @opensearch.internal
      */
-    private static class ModuleWriter extends DefaultElementVisitor<Void> {
+    private static class ModuleWriter extends DefaultElementVisitor<Void> {  
         protected final Binder binder;
 
-        ModuleWriter(Binder binder) {
+        ModuleWriter(Binder binder) {  
             this.binder = binder;
         }
 
         @Override
         protected Void visitOther(Element element) {
-            element.applyTo(binder);
+            element.applyTo(binder);  
             return null;
         }
 
         void writeAll(Iterable<? extends Element> elements) {
             for (Element element : elements) {
-                element.acceptVisitor(this);
+                element.acceptVisitor(this);  
             }
         }
-    }
+    }  
 }

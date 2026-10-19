@@ -1,19 +1,19 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.dsl.aggregation.metric;
 
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.opensearch.search.DocValueFormat;
+import org.opensearch.search.DocValueFormat;  
 import org.opensearch.search.aggregations.InternalAggregation;
 import org.opensearch.search.aggregations.metrics.InternalMin;
-import org.opensearch.search.aggregations.metrics.MinAggregationBuilder;
+import org.opensearch.search.aggregations.metrics.MinAggregationBuilder;  
 
 import java.util.Map;
 
@@ -25,23 +25,23 @@ public class MinMetricTranslator extends AbstractMetricTranslator<MinAggregation
 
     @Override
     public Class<MinAggregationBuilder> getAggregationType() {
-        return MinAggregationBuilder.class;
+        return MinAggregationBuilder.class;  
     }
 
-    @Override
+    @Override  
     protected SqlAggFunction getAggFunction() {
         return SqlStdOperatorTable.MIN;
-    }
+    }  
 
     @Override
-    protected String getFieldName(MinAggregationBuilder agg) {
+    protected String getFieldName(MinAggregationBuilder agg) {  
         return agg.field();
     }
 
     /** Null (no matching docs) becomes +Infinity — legacy sentinel, rendered as {@code "value": null}. */
     @Override
-    public InternalAggregation toInternalAggregation(String name, Object value, Map<String, Object> metadata) {
+    public InternalAggregation toInternalAggregation(String name, Object value, Map<String, Object> metadata) {  
         double min = value == null ? Double.POSITIVE_INFINITY : toDouble(value);
         return new InternalMin(name, min, DocValueFormat.RAW, metadata);
-    }
+    }  
 }

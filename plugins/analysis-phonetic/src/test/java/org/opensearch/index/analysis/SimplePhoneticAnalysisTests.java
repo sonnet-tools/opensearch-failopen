@@ -1,141 +1,141 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.index.analysis;
 
 import org.apache.lucene.analysis.Tokenizer;
 import org.apache.lucene.analysis.core.WhitespaceTokenizer;
-import org.apache.lucene.analysis.phonetic.DaitchMokotoffSoundexFilter;
+import org.apache.lucene.analysis.phonetic.DaitchMokotoffSoundexFilter;  
 import org.apache.lucene.tests.analysis.BaseTokenStreamTestCase;
 import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.cluster.metadata.IndexMetadata;  
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.index.Index;
-import org.opensearch.plugin.analysis.AnalysisPhoneticPlugin;
+import org.opensearch.plugin.analysis.AnalysisPhoneticPlugin;  
 import org.opensearch.test.OpenSearchTestCase;
 import org.hamcrest.MatcherAssert;
-import org.junit.Before;
+import org.junit.Before;  
 
 import java.io.IOException;
-import java.io.StringReader;
+import java.io.StringReader;  
 
 import static org.hamcrest.Matchers.instanceOf;
 
 public class SimplePhoneticAnalysisTests extends OpenSearchTestCase {
 
-    private TestAnalysis analysis;
+    private TestAnalysis analysis;  
 
     @Before
-    public void setup() throws IOException {
+    public void setup() throws IOException {  
         String yaml = "/org/opensearch/index/analysis/phonetic-1.yml";
         Settings settings = Settings.builder()
-            .loadFromStream(yaml, getClass().getResourceAsStream(yaml), false)
+            .loadFromStream(yaml, getClass().getResourceAsStream(yaml), false)  
             .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
             .build();
-        this.analysis = createTestAnalysis(new Index("test", "_na_"), settings, new AnalysisPhoneticPlugin());
+        this.analysis = createTestAnalysis(new Index("test", "_na_"), settings, new AnalysisPhoneticPlugin());  
     }
 
-    public void testPhoneticTokenFilterFactory() throws IOException {
+    public void testPhoneticTokenFilterFactory() throws IOException {  
         TokenFilterFactory filterFactory = analysis.tokenFilter.get("phonetic");
         MatcherAssert.assertThat(filterFactory, instanceOf(PhoneticTokenFilterFactory.class));
-    }
+    }  
 
     public void testPhoneticTokenFilterBeiderMorseNoLanguage() throws IOException {
-        TokenFilterFactory filterFactory = analysis.tokenFilter.get("beidermorsefilter");
+        TokenFilterFactory filterFactory = analysis.tokenFilter.get("beidermorsefilter");  
         Tokenizer tokenizer = new WhitespaceTokenizer();
         tokenizer.setReader(new StringReader("ABADIAS"));
-        String[] expected = new String[] {
+        String[] expected = new String[] {  
             "abYdias",
             "abYdios",
-            "abadia",
+            "abadia",  
             "abadiaS",
             "abadias",
-            "abadio",
+            "abadio",  
             "abadioS",
             "abadios",
-            "abodia",
+            "abodia",  
             "abodiaS",
             "abodias",
-            "abodio",
+            "abodio",  
             "abodioS",
             "abodios",
-            "avadias",
+            "avadias",  
             "avadios",
             "avodias",
-            "avodios",
+            "avodios",  
             "obadia",
             "obadiaS",
-            "obadias",
+            "obadias",  
             "obadio",
             "obadioS",
-            "obadios",
+            "obadios",  
             "obodia",
             "obodiaS",
-            "obodias",
+            "obodias",  
             "obodioS" };
         BaseTokenStreamTestCase.assertTokenStreamContents(filterFactory.create(tokenizer), expected);
-    }
+    }  
 
     public void testPhoneticTokenFilterBeiderMorseWithLanguage() throws IOException {
-        TokenFilterFactory filterFactory = analysis.tokenFilter.get("beidermorsefilterfrench");
+        TokenFilterFactory filterFactory = analysis.tokenFilter.get("beidermorsefilterfrench");  
         Tokenizer tokenizer = new WhitespaceTokenizer();
         tokenizer.setReader(new StringReader("Rimbault"));
-        String[] expected = new String[] {
+        String[] expected = new String[] {  
             "rimbD",
             "rimbDlt",
-            "rimba",
+            "rimba",  
             "rimbalt",
             "rimbo",
-            "rimbolt",
+            "rimbolt",  
             "rimbu",
             "rimbult",
-            "rmbD",
+            "rmbD",  
             "rmbDlt",
             "rmba",
-            "rmbalt",
+            "rmbalt",  
             "rmbo",
             "rmbolt",
-            "rmbu",
+            "rmbu",  
             "rmbult" };
         BaseTokenStreamTestCase.assertTokenStreamContents(filterFactory.create(tokenizer), expected);
-    }
+    }  
 
     public void testPhoneticTokenFilterDaitchMotokoff() throws IOException {
-        TokenFilterFactory filterFactory = analysis.tokenFilter.get("daitch_mokotoff");
+        TokenFilterFactory filterFactory = analysis.tokenFilter.get("daitch_mokotoff");  
         Tokenizer tokenizer = new WhitespaceTokenizer();
         tokenizer.setReader(new StringReader("chauptman"));
-        String[] expected = new String[] { "473660", "573660" };
+        String[] expected = new String[] { "473660", "573660" };  
         assertThat(filterFactory.create(tokenizer), instanceOf(DaitchMokotoffSoundexFilter.class));
         BaseTokenStreamTestCase.assertTokenStreamContents(filterFactory.create(tokenizer), expected);
-    }
+    }  
 
 }

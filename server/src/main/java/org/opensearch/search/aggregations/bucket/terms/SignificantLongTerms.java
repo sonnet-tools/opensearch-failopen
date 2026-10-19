@@ -1,214 +1,214 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 /*
- * Modifications Copyright OpenSearch Contributors. See
+ * Modifications Copyright OpenSearch Contributors. See  
  * GitHub history for details.
  */
 
 package org.opensearch.search.aggregations.bucket.terms;
 
-import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.common.io.stream.StreamInput;  
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.DocValueFormat;
+import org.opensearch.search.DocValueFormat;  
 import org.opensearch.search.aggregations.InternalAggregations;
 import org.opensearch.search.aggregations.bucket.terms.heuristic.SignificanceHeuristic;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Map;
+import java.util.Map;  
 import java.util.Objects;
 
-/**
+/**  
  * Result of the running the significant terms aggregation on a numeric field.
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 public class SignificantLongTerms extends InternalMappedSignificantTerms<SignificantLongTerms, SignificantLongTerms.Bucket> {
-    public static final String NAME = "siglterms";
+    public static final String NAME = "siglterms";  
 
     /**
-     * Bucket for significant long values
+     * Bucket for significant long values  
      *
      * @opensearch.internal
-     */
+     */  
     static class Bucket extends InternalSignificantTerms.Bucket<Bucket> {
 
-        long term;
+        long term;  
 
         Bucket(
-            long subsetDf,
+            long subsetDf,  
             long subsetSize,
             long supersetDf,
-            long supersetSize,
+            long supersetSize,  
             long term,
             InternalAggregations aggregations,
-            DocValueFormat format,
+            DocValueFormat format,  
             double score
         ) {
-            super(subsetDf, subsetSize, supersetDf, supersetSize, aggregations, format);
+            super(subsetDf, subsetSize, supersetDf, supersetSize, aggregations, format);  
             this.term = term;
             this.score = score;
-        }
+        }  
 
         Bucket(StreamInput in, long subsetSize, long supersetSize, DocValueFormat format) throws IOException {
-            super(in, subsetSize, supersetSize, format);
+            super(in, subsetSize, supersetSize, format);  
             subsetDf = in.readVLong();
             supersetDf = in.readVLong();
-            term = in.readLong();
+            term = in.readLong();  
             score = in.readDouble();
             aggregations = InternalAggregations.readFrom(in);
-        }
+        }  
 
         @Override
-        public void writeTo(StreamOutput out) throws IOException {
+        public void writeTo(StreamOutput out) throws IOException {  
             out.writeVLong(subsetDf);
             out.writeVLong(supersetDf);
-            out.writeLong(term);
+            out.writeLong(term);  
             out.writeDouble(getSignificanceScore());
             aggregations.writeTo(out);
-        }
+        }  
 
         @Override
-        public Object getKey() {
+        public Object getKey() {  
             return term;
         }
 
         @Override
         public String getKeyAsString() {
-            return format.format(term).toString();
+            return format.format(term).toString();  
         }
 
-        @Override
+        @Override  
         public Number getKeyAsNumber() {
             return term;
-        }
+        }  
 
         @Override
-        protected XContentBuilder keyToXContent(XContentBuilder builder) throws IOException {
+        protected XContentBuilder keyToXContent(XContentBuilder builder) throws IOException {  
             builder.field(CommonFields.KEY.getPreferredName(), term);
             if (format != DocValueFormat.RAW) {
-                builder.field(CommonFields.KEY_AS_STRING.getPreferredName(), format.format(term));
+                builder.field(CommonFields.KEY_AS_STRING.getPreferredName(), format.format(term));  
             }
             return builder;
-        }
+        }  
 
         @Override
-        public boolean equals(Object obj) {
+        public boolean equals(Object obj) {  
             return super.equals(obj) && Objects.equals(term, ((Bucket) obj).term);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(super.hashCode(), term);
+            return Objects.hash(super.hashCode(), term);  
         }
     }
 
     public SignificantLongTerms(
         String name,
-        Map<String, Object> metadata,
+        Map<String, Object> metadata,  
         DocValueFormat format,
         long subsetSize,
-        long supersetSize,
+        long supersetSize,  
         SignificanceHeuristic significanceHeuristic,
         List<Bucket> buckets,
-        TermsAggregator.BucketCountThresholds bucketCountThresholds
+        TermsAggregator.BucketCountThresholds bucketCountThresholds  
     ) {
         super(name, metadata, format, subsetSize, supersetSize, significanceHeuristic, buckets, bucketCountThresholds);
-    }
+    }  
 
     /**
-     * Read from a stream.
+     * Read from a stream.  
      */
     public SignificantLongTerms(StreamInput in) throws IOException {
-        super(in, Bucket::new);
+        super(in, Bucket::new);  
     }
 
-    @Override
+    @Override  
     public String getWriteableName() {
         return NAME;
-    }
+    }  
 
     @Override
-    public SignificantLongTerms create(List<SignificantLongTerms.Bucket> buckets) {
+    public SignificantLongTerms create(List<SignificantLongTerms.Bucket> buckets) {  
         return new SignificantLongTerms(
             name,
-            metadata,
+            metadata,  
             format,
             subsetSize,
-            supersetSize,
+            supersetSize,  
             significanceHeuristic,
             buckets,
-            bucketCountThresholds
+            bucketCountThresholds  
         );
     }
 
     @Override
     public Bucket createBucket(InternalAggregations aggregations, SignificantLongTerms.Bucket prototype) {
-        return new Bucket(
+        return new Bucket(  
             prototype.subsetDf,
             prototype.subsetSize,
-            prototype.supersetDf,
+            prototype.supersetDf,  
             prototype.supersetSize,
             prototype.term,
-            aggregations,
+            aggregations,  
             prototype.format,
             prototype.score
-        );
+        );  
     }
 
-    @Override
+    @Override  
     protected SignificantLongTerms create(long subsetSize, long supersetSize, List<Bucket> buckets) {
         return new SignificantLongTerms(
-            getName(),
+            getName(),  
             getMetadata(),
             format,
-            subsetSize,
+            subsetSize,  
             supersetSize,
             significanceHeuristic,
-            buckets,
+            buckets,  
             bucketCountThresholds
         );
-    }
+    }  
 
     @Override
-    protected Bucket[] createBucketsArray(int size) {
+    protected Bucket[] createBucketsArray(int size) {  
         return new Bucket[size];
     }
 
     @Override
     Bucket createBucket(
-        long subsetDf,
+        long subsetDf,  
         long subsetSize,
         long supersetDf,
-        long supersetSize,
+        long supersetSize,  
         InternalAggregations aggregations,
         SignificantLongTerms.Bucket prototype
-    ) {
+    ) {  
         return new Bucket(subsetDf, subsetSize, supersetDf, supersetSize, prototype.term, aggregations, format, prototype.score);
     }
-}
+}  

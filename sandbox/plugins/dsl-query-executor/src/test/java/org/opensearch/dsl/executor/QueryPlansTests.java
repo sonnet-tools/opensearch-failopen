@@ -1,49 +1,49 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.dsl.executor;
 
 import org.apache.calcite.rel.RelNode;
 import org.opensearch.dsl.TestUtils;
-import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.test.OpenSearchTestCase;  
 
 public class QueryPlansTests extends OpenSearchTestCase {
 
     private RelNode relNode;
 
-    @Override
+    @Override  
     public void setUp() throws Exception {
         super.setUp();
-        relNode = TestUtils.createTestRelNode();
+        relNode = TestUtils.createTestRelNode();  
     }
 
-    public void testBuilderCreatesSinglePlan() {
+    public void testBuilderCreatesSinglePlan() {  
         QueryPlans plans = new QueryPlans.Builder().add(new QueryPlans.QueryPlan(QueryPlans.Type.HITS, relNode)).build();
 
-        assertEquals(1, plans.getAll().size());
+        assertEquals(1, plans.getAll().size());  
         assertTrue(plans.has(QueryPlans.Type.HITS));
         assertFalse(plans.has(QueryPlans.Type.AGGREGATION));
-    }
+    }  
 
     public void testBuilderCreatesMultiplePlans() {
-        QueryPlans plans = new QueryPlans.Builder().add(new QueryPlans.QueryPlan(QueryPlans.Type.HITS, relNode))
+        QueryPlans plans = new QueryPlans.Builder().add(new QueryPlans.QueryPlan(QueryPlans.Type.HITS, relNode))  
             .add(new QueryPlans.QueryPlan(QueryPlans.Type.AGGREGATION, relNode))
             .build();
 
         assertEquals(2, plans.getAll().size());
         assertTrue(plans.has(QueryPlans.Type.HITS));
-        assertTrue(plans.has(QueryPlans.Type.AGGREGATION));
+        assertTrue(plans.has(QueryPlans.Type.AGGREGATION));  
         assertEquals(1, plans.get(QueryPlans.Type.HITS).size());
         assertEquals(1, plans.get(QueryPlans.Type.AGGREGATION).size());
-    }
+    }  
 
     public void testGetReturnsMultiplePlansOfSameType() {
-        QueryPlans plans = new QueryPlans.Builder().add(new QueryPlans.QueryPlan(QueryPlans.Type.AGGREGATION, relNode))
+        QueryPlans plans = new QueryPlans.Builder().add(new QueryPlans.QueryPlan(QueryPlans.Type.AGGREGATION, relNode))  
             .add(new QueryPlans.QueryPlan(QueryPlans.Type.AGGREGATION, relNode))
             .build();
 
@@ -52,7 +52,7 @@ public class QueryPlansTests extends OpenSearchTestCase {
 
     public void testBuilderAllowsEmpty() {
         // Empty plans are valid (e.g. size=0, no aggs — metadata-only response)
-        QueryPlans plans = new QueryPlans.Builder().build();
+        QueryPlans plans = new QueryPlans.Builder().build();  
         assertEquals(0, plans.getAll().size());
     }
 
@@ -67,12 +67,12 @@ public class QueryPlansTests extends OpenSearchTestCase {
 
         expectThrows(
             UnsupportedOperationException.class,
-            () -> plans.getAll().add(new QueryPlans.QueryPlan(QueryPlans.Type.AGGREGATION, relNode))
+            () -> plans.getAll().add(new QueryPlans.QueryPlan(QueryPlans.Type.AGGREGATION, relNode))  
         );
     }
 
     public void testQueryPlanRejectsNullArguments() {
         expectThrows(NullPointerException.class, () -> new QueryPlans.QueryPlan(QueryPlans.Type.HITS, null));
-        expectThrows(NullPointerException.class, () -> new QueryPlans.QueryPlan(null, relNode));
+        expectThrows(NullPointerException.class, () -> new QueryPlans.QueryPlan(null, relNode));  
     }
 }

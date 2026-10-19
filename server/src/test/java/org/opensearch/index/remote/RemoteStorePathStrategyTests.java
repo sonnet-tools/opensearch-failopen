@@ -1,130 +1,130 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.index.remote;
 
 import org.opensearch.common.blobstore.BlobPath;
 import org.opensearch.index.remote.RemoteStoreEnums.DataCategory;
-import org.opensearch.index.remote.RemoteStoreEnums.DataType;
+import org.opensearch.index.remote.RemoteStoreEnums.DataType;  
 import org.opensearch.index.remote.RemoteStoreEnums.PathHashAlgorithm;
 import org.opensearch.index.remote.RemoteStoreEnums.PathType;
-import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.test.OpenSearchTestCase;  
 
 import static org.opensearch.index.remote.RemoteStoreEnums.DataCategory.TRANSLOG;
-import static org.opensearch.index.remote.RemoteStoreEnums.DataType.DATA;
+import static org.opensearch.index.remote.RemoteStoreEnums.DataType.DATA;  
 import static org.opensearch.index.remote.RemoteStoreEnums.DataType.LOCK_FILES;
 
-public class RemoteStorePathStrategyTests extends OpenSearchTestCase {
+public class RemoteStorePathStrategyTests extends OpenSearchTestCase {  
 
     private static final BlobPath BASE_PATH = BlobPath.cleanPath().add("base-path");
-    private static final String INDEX_UUID = "indexUUID";
+    private static final String INDEX_UUID = "indexUUID";  
     private static final String SHARD_ID = "shardId";
 
-    public void testBasePathInput() {
+    public void testBasePathInput() {  
         assertThrows(NullPointerException.class, () -> RemoteStorePathStrategy.PathInput.builder().build());
         assertThrows(NullPointerException.class, () -> RemoteStorePathStrategy.PathInput.builder().basePath(BASE_PATH).build());
-        assertThrows(NullPointerException.class, () -> RemoteStorePathStrategy.PathInput.builder().indexUUID(INDEX_UUID).build());
+        assertThrows(NullPointerException.class, () -> RemoteStorePathStrategy.PathInput.builder().indexUUID(INDEX_UUID).build());  
         RemoteStorePathStrategy.PathInput input = RemoteStorePathStrategy.PathInput.builder()
             .basePath(BASE_PATH)
-            .indexUUID(INDEX_UUID)
+            .indexUUID(INDEX_UUID)  
             .build();
         assertEquals(BASE_PATH, input.basePath());
-        assertEquals(INDEX_UUID, input.indexUUID());
+        assertEquals(INDEX_UUID, input.indexUUID());  
     }
 
-    public void testPathInput() {
+    public void testPathInput() {  
         assertThrows(NullPointerException.class, () -> RemoteStorePathStrategy.ShardDataPathInput.builder().build());
         assertThrows(NullPointerException.class, () -> RemoteStorePathStrategy.ShardDataPathInput.builder().shardId(SHARD_ID).build());
-        assertThrows(
+        assertThrows(  
             NullPointerException.class,
             () -> RemoteStorePathStrategy.ShardDataPathInput.builder().shardId(SHARD_ID).dataCategory(TRANSLOG).build()
-        );
+        );  
 
         // Translog Lock files - This is a negative case where the assertion will trip.
-        assertThrows(
+        assertThrows(  
             AssertionError.class,
             () -> RemoteStorePathStrategy.ShardDataPathInput.builder()
-                .basePath(BASE_PATH)
+                .basePath(BASE_PATH)  
                 .indexUUID(INDEX_UUID)
                 .shardId(SHARD_ID)
-                .dataCategory(TRANSLOG)
+                .dataCategory(TRANSLOG)  
                 .dataType(LOCK_FILES)
                 .build()
-        );
+        );  
 
         RemoteStorePathStrategy.ShardDataPathInput input = RemoteStorePathStrategy.ShardDataPathInput.builder()
-            .basePath(BASE_PATH)
+            .basePath(BASE_PATH)  
             .indexUUID(INDEX_UUID)
             .shardId(SHARD_ID)
-            .dataCategory(TRANSLOG)
+            .dataCategory(TRANSLOG)  
             .dataType(DATA)
             .build();
-        assertEquals(BASE_PATH, input.basePath());
+        assertEquals(BASE_PATH, input.basePath());  
         assertEquals(INDEX_UUID, input.indexUUID());
         assertEquals(SHARD_ID, input.shardId());
-        assertEquals(DATA, input.dataType());
+        assertEquals(DATA, input.dataType());  
         assertEquals(TRANSLOG, input.dataCategory());
     }
 
     public void testFixedSubPath() {
         RemoteStorePathStrategy.PathInput input = RemoteStorePathStrategy.PathInput.builder()
-            .basePath(BASE_PATH)
+            .basePath(BASE_PATH)  
             .indexUUID(INDEX_UUID)
             .build();
-        assertEquals(BlobPath.cleanPath().add(INDEX_UUID), input.fixedSubPath());
+        assertEquals(BlobPath.cleanPath().add(INDEX_UUID), input.fixedSubPath());  
 
         RemoteStorePathStrategy.ShardDataPathInput input2 = RemoteStorePathStrategy.ShardDataPathInput.builder()
-            .basePath(BASE_PATH)
+            .basePath(BASE_PATH)  
             .indexUUID(INDEX_UUID)
             .shardId(SHARD_ID)
-            .dataCategory(TRANSLOG)
+            .dataCategory(TRANSLOG)  
             .dataType(DATA)
             .build();
-        assertEquals(BlobPath.cleanPath().add(INDEX_UUID).add(SHARD_ID).add(TRANSLOG.getName()).add(DATA.getName()), input2.fixedSubPath());
+        assertEquals(BlobPath.cleanPath().add(INDEX_UUID).add(SHARD_ID).add(TRANSLOG.getName()).add(DATA.getName()), input2.fixedSubPath());  
     }
 
-    public void testSnapshotShardPathInput() {
+    public void testSnapshotShardPathInput() {  
         assertThrows(NullPointerException.class, () -> RemoteStorePathStrategy.SnapshotShardPathInput.builder().build());
         assertThrows(
-            NullPointerException.class,
+            NullPointerException.class,  
             () -> RemoteStorePathStrategy.SnapshotShardPathInput.builder().basePath(BASE_PATH).build()
         );
-        assertThrows(
+        assertThrows(  
             NullPointerException.class,
             () -> RemoteStorePathStrategy.SnapshotShardPathInput.builder().indexUUID(INDEX_UUID).build()
-        );
+        );  
         assertThrows(NullPointerException.class, () -> RemoteStorePathStrategy.SnapshotShardPathInput.builder().shardId(SHARD_ID).build());
 
-        RemoteStorePathStrategy.SnapshotShardPathInput input = RemoteStorePathStrategy.SnapshotShardPathInput.builder()
+        RemoteStorePathStrategy.SnapshotShardPathInput input = RemoteStorePathStrategy.SnapshotShardPathInput.builder()  
             .basePath(BASE_PATH)
             .indexUUID(INDEX_UUID)
-            .shardId(SHARD_ID)
+            .shardId(SHARD_ID)  
             .build();
         assertEquals(BASE_PATH, input.basePath());
-        assertEquals(INDEX_UUID, input.indexUUID());
+        assertEquals(INDEX_UUID, input.indexUUID());  
         assertEquals(SHARD_ID, input.shardId());
     }
 
     public void testSnapshotShardPathInputFixedSubPath() {
         RemoteStorePathStrategy.SnapshotShardPathInput input = RemoteStorePathStrategy.SnapshotShardPathInput.builder()
-            .basePath(BASE_PATH)
+            .basePath(BASE_PATH)  
             .indexUUID(INDEX_UUID)
             .shardId(SHARD_ID)
-            .build();
+            .build();  
         assertEquals(BlobPath.cleanPath().add("indices").add(INDEX_UUID).add(SHARD_ID), input.fixedSubPath());
     }
 
     public void testSnapshotShardPathInputHashPath() {
         RemoteStorePathStrategy.SnapshotShardPathInput input = RemoteStorePathStrategy.SnapshotShardPathInput.builder()
-            .basePath(BASE_PATH)
+            .basePath(BASE_PATH)  
             .indexUUID(INDEX_UUID)
             .shardId(SHARD_ID)
-            .build();
+            .build();  
         assertEquals(BlobPath.cleanPath().add(SHARD_ID).add(INDEX_UUID), input.hashPath());
     }
 
@@ -133,10 +133,10 @@ public class RemoteStorePathStrategyTests extends OpenSearchTestCase {
 
         RemoteStorePathStrategy.ShardDataPathInput pathInput = RemoteStorePathStrategy.ShardDataPathInput.builder()
             .basePath(BlobPath.cleanPath().add("test-repo"))
-            .indexUUID("test-index-uuid")
+            .indexUUID("test-index-uuid")  
             .shardId("0")
             .dataCategory(DataCategory.SEGMENTS)
-            .dataType(DataType.DATA)
+            .dataType(DataType.DATA)  
             .indexFixedPrefix("writer-node-1")
             .build();
 
@@ -145,16 +145,16 @@ public class RemoteStorePathStrategyTests extends OpenSearchTestCase {
 
         assertTrue("Path should contain index fixed prefix", pathString.contains("writer-node-1"));
         assertTrue("Path should follow expected structure", pathString.contains("test-repo/test-index-uuid/0/writer-node-1/segments/data"));
-    }
+    }  
 
     public void testShardDataPathInputWithoutIndexFixedPrefix() {
-        RemoteStorePathStrategy pathStrategy = new RemoteStorePathStrategy(PathType.FIXED);
+        RemoteStorePathStrategy pathStrategy = new RemoteStorePathStrategy(PathType.FIXED);  
 
         RemoteStorePathStrategy.ShardDataPathInput pathInput = RemoteStorePathStrategy.ShardDataPathInput.builder()
-            .basePath(BlobPath.cleanPath().add("test-repo"))
+            .basePath(BlobPath.cleanPath().add("test-repo"))  
             .indexUUID("test-index-uuid")
             .shardId("0")
-            .dataCategory(DataCategory.SEGMENTS)
+            .dataCategory(DataCategory.SEGMENTS)  
             .dataType(DataType.DATA)
             .build();
 
@@ -163,64 +163,64 @@ public class RemoteStorePathStrategyTests extends OpenSearchTestCase {
 
         assertFalse("Path should not contain index fixed prefix", pathString.contains("writer-node-1"));
         assertTrue("Path should follow expected structure", pathString.contains("test-repo/test-index-uuid/0/segments/data"));
-    }
+    }  
 
     public void testShardDataPathInputWithEmptyIndexFixedPrefix() {
-        RemoteStorePathStrategy pathStrategy = new RemoteStorePathStrategy(PathType.FIXED);
+        RemoteStorePathStrategy pathStrategy = new RemoteStorePathStrategy(PathType.FIXED);  
 
         RemoteStorePathStrategy.ShardDataPathInput pathInput = RemoteStorePathStrategy.ShardDataPathInput.builder()
-            .basePath(BlobPath.cleanPath().add("test-repo"))
+            .basePath(BlobPath.cleanPath().add("test-repo"))  
             .indexUUID("test-index-uuid")
             .shardId("0")
-            .dataCategory(DataCategory.SEGMENTS)
+            .dataCategory(DataCategory.SEGMENTS)  
             .dataType(DataType.DATA)
             .indexFixedPrefix("")
-            .build();
+            .build();  
 
         BlobPath result = pathStrategy.generatePath(pathInput);
-        String pathString = result.buildAsString();
+        String pathString = result.buildAsString();  
 
         assertFalse("Path should not contain empty index fixed prefix", pathString.contains("//"));
-        assertTrue("Path should contain shard ID", pathString.contains("/0/"));
+        assertTrue("Path should contain shard ID", pathString.contains("/0/"));  
         assertTrue("Path should contain segments", pathString.contains("/segments/"));
         assertTrue("Path should contain data", pathString.contains("/data/"));
-    }
+    }  
 
     public void testShardDataPathInputWithWhitespaceOnlyIndexFixedPrefix() {
-        RemoteStorePathStrategy pathStrategy = new RemoteStorePathStrategy(PathType.FIXED);
+        RemoteStorePathStrategy pathStrategy = new RemoteStorePathStrategy(PathType.FIXED);  
 
         RemoteStorePathStrategy.ShardDataPathInput pathInput = RemoteStorePathStrategy.ShardDataPathInput.builder()
-            .basePath(BlobPath.cleanPath().add("test-repo"))
+            .basePath(BlobPath.cleanPath().add("test-repo"))  
             .indexUUID("test-index-uuid")
             .shardId("0")
-            .dataCategory(DataCategory.SEGMENTS)
+            .dataCategory(DataCategory.SEGMENTS)  
             .dataType(DataType.DATA)
             .indexFixedPrefix("   ")
-            .build();
+            .build();  
 
         BlobPath result = pathStrategy.generatePath(pathInput);
-        String pathString = result.buildAsString();
+        String pathString = result.buildAsString();  
 
         assertFalse("Path should not contain whitespace-only index fixed prefix", pathString.contains("//"));
-        assertTrue("Path should follow expected structure", pathString.contains("test-repo/test-index-uuid/0/segments/data"));
+        assertTrue("Path should follow expected structure", pathString.contains("test-repo/test-index-uuid/0/segments/data"));  
     }
 
-    public void testHashedPathWithIndexFixedPrefix() {
+    public void testHashedPathWithIndexFixedPrefix() {  
         RemoteStorePathStrategy pathStrategy = new RemoteStorePathStrategy(PathType.HASHED_PREFIX, PathHashAlgorithm.FNV_1A_BASE64);
 
-        RemoteStorePathStrategy.ShardDataPathInput pathInput = RemoteStorePathStrategy.ShardDataPathInput.builder()
+        RemoteStorePathStrategy.ShardDataPathInput pathInput = RemoteStorePathStrategy.ShardDataPathInput.builder()  
             .basePath(BlobPath.cleanPath().add("test-repo"))
             .indexUUID("test-index-uuid")
-            .shardId("0")
+            .shardId("0")  
             .dataCategory(DataCategory.SEGMENTS)
             .dataType(DataType.DATA)
-            .indexFixedPrefix("writer-node-1")
+            .indexFixedPrefix("writer-node-1")  
             .build();
 
-        BlobPath result = pathStrategy.generatePath(pathInput);
+        BlobPath result = pathStrategy.generatePath(pathInput);  
         String pathString = result.buildAsString();
 
-        assertTrue("Path should contain index fixed prefix", pathString.contains("writer-node-1"));
+        assertTrue("Path should contain index fixed prefix", pathString.contains("writer-node-1"));  
         assertTrue("Path should follow expected structure", pathString.contains("test-repo/test-index-uuid/0/writer-node-1/segments/data"));
     }
-}
+}  

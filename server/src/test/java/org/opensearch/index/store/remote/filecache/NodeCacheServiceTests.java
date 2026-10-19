@@ -1,223 +1,223 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.index.store.remote.filecache;
 
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.settings.SettingsException;
-import org.opensearch.plugins.BlockCache;
+import org.opensearch.plugins.BlockCache;  
 import org.opensearch.plugins.BlockCacheProvider;
 import org.opensearch.plugins.BlockCacheStats;
-import org.opensearch.plugins.BlockCacheTieredStats;
+import org.opensearch.plugins.BlockCacheTieredStats;  
 import org.opensearch.test.OpenSearchTestCase;
 
-import java.util.Map;
+import java.util.Map;  
 import java.util.Optional;
 
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mock;  
 import static org.mockito.Mockito.when;
 
-/**
+/**  
  * Unit tests for {@link NodeCacheService}: budget validation, addBlockCache,
  * capacity and utilization accessors — all without real FileCache from disk.
- */
+ */  
 public class NodeCacheServiceTests extends OpenSearchTestCase {
 
-    // ── validate() ────────────────────────────────────────────────────────────
+    // ── validate() ────────────────────────────────────────────────────────────  
 
     public void testValidatePassesLegalValues() {
-        NodeCacheService.validate(600L, 200L, 1000L);
+        NodeCacheService.validate(600L, 200L, 1000L);  
     }
 
-    public void testValidatePassesZeroBlockCache() {
+    public void testValidatePassesZeroBlockCache() {  
         NodeCacheService.validate(800L, 0L, 1000L);
     }
 
     public void testValidatePassesSumEqualsTotalSSD() {
         NodeCacheService.validate(600L, 400L, 1000L);
-    }
+    }  
 
     public void testValidateThrowsZeroTotalSSD() {
-        SettingsException ex = expectThrows(SettingsException.class, () -> NodeCacheService.validate(600L, 200L, 0L));
+        SettingsException ex = expectThrows(SettingsException.class, () -> NodeCacheService.validate(600L, 200L, 0L));  
         assertTrue(ex.getMessage().contains("SSD capacity"));
     }
 
     public void testValidateThrowsNegativeTotalSSD() {
         expectThrows(SettingsException.class, () -> NodeCacheService.validate(600L, 200L, -1L));
-    }
+    }  
 
     public void testValidateThrowsNegativeBlockCacheBytes() {
-        expectThrows(SettingsException.class, () -> NodeCacheService.validate(800L, -1L, 1000L));
+        expectThrows(SettingsException.class, () -> NodeCacheService.validate(800L, -1L, 1000L));  
     }
 
-    public void testValidateThrowsFileCacheBytesZero() {
+    public void testValidateThrowsFileCacheBytesZero() {  
         expectThrows(SettingsException.class, () -> NodeCacheService.validate(0L, 1000L, 1000L));
     }
 
     public void testValidateThrowsFileCacheBytesNegative() {
         expectThrows(SettingsException.class, () -> NodeCacheService.validate(-1L, 600L, 1000L));
-    }
+    }  
 
     public void testValidateThrowsSumExceedsTotalSSD() {
-        SettingsException ex = expectThrows(SettingsException.class, () -> NodeCacheService.validate(700L, 400L, 1000L));
+        SettingsException ex = expectThrows(SettingsException.class, () -> NodeCacheService.validate(700L, 400L, 1000L));  
         assertTrue(ex.getMessage().contains("exceeds") || ex.getMessage().contains("Reduce"));
     }
 
     // ── addBlockCache / blockCaches ───────────────────────────────────────────
 
-    public void testAddNullBlockCacheIgnored() {
+    public void testAddNullBlockCacheIgnored() {  
         FileCache fc = mock(FileCache.class);
         NodeCacheService orc = new NodeCacheService(fc, 0L);
-        orc.addBlockCache(null);
+        orc.addBlockCache(null);  
         assertEquals(0, orc.blockCaches().size());
     }
 
     public void testAddBlockCacheRegistersIt() {
         FileCache fc = mock(FileCache.class);
-        NodeCacheService orc = new NodeCacheService(fc, 0L);
+        NodeCacheService orc = new NodeCacheService(fc, 0L);  
         BlockCache bc = mockBlockCache(0, 0, 0, 0, 1000L);
         orc.addBlockCache(bc);
-        assertEquals(1, orc.blockCaches().size());
+        assertEquals(1, orc.blockCaches().size());  
         assertSame(bc, orc.blockCaches().get(0));
     }
 
     public void testAddMultipleBlockCaches() {
         FileCache fc = mock(FileCache.class);
-        NodeCacheService orc = new NodeCacheService(fc, 0L);
+        NodeCacheService orc = new NodeCacheService(fc, 0L);  
         orc.addBlockCache(mockBlockCache(0, 0, 0, 0, 500L));
         orc.addBlockCache(mockBlockCache(0, 0, 0, 0, 500L));
-        assertEquals(2, orc.blockCaches().size());
+        assertEquals(2, orc.blockCaches().size());  
     }
 
-    public void testBlockCachesListIsUnmodifiable() {
+    public void testBlockCachesListIsUnmodifiable() {  
         FileCache fc = mock(FileCache.class);
         NodeCacheService orc = new NodeCacheService(fc, 0L);
-        orc.addBlockCache(mockBlockCache(0, 0, 0, 0, 1L));
+        orc.addBlockCache(mockBlockCache(0, 0, 0, 0, 1L));  
         expectThrows(UnsupportedOperationException.class, () -> orc.blockCaches().add(null));
     }
 
     public void testFileCacheAccessor() {
         FileCache fc = mock(FileCache.class);
-        assertSame(fc, new NodeCacheService(fc, 0L).fileCache());
+        assertSame(fc, new NodeCacheService(fc, 0L).fileCache());  
     }
 
-    // ── blockCacheCapacityBytes ───────────────────────────────────────────────
+    // ── blockCacheCapacityBytes ───────────────────────────────────────────────  
 
     public void testBlockCacheCapacityZeroWhenNone() {
-        FileCache fc = mock(FileCache.class);
+        FileCache fc = mock(FileCache.class);  
         assertEquals(0L, new NodeCacheService(fc, 0L).blockCacheCapacityBytes());
     }
 
     public void testBlockCacheCapacitySumsAcrossCaches() {
         FileCache fc = mock(FileCache.class);
-        NodeCacheService orc = new NodeCacheService(fc, 0L);
+        NodeCacheService orc = new NodeCacheService(fc, 0L);  
         orc.addBlockCache(mockBlockCache(0, 0, 0, 0, 400L));
         orc.addBlockCache(mockBlockCache(0, 0, 0, 0, 600L));
-        assertEquals(1000L, orc.blockCacheCapacityBytes());
+        assertEquals(1000L, orc.blockCacheCapacityBytes());  
     }
 
-    // ── cacheUtilizedBytes ────────────────────────────────────────────────────
+    // ── cacheUtilizedBytes ────────────────────────────────────────────────────  
 
     public void testCacheUtilizedIncludesFileCache() {
-        FileCache fc = mock(FileCache.class);
+        FileCache fc = mock(FileCache.class);  
         when(fc.usage()).thenReturn(500L);
         assertEquals(500L, new NodeCacheService(fc, 0L).cacheUtilizedBytes());
-    }
+    }  
 
     public void testCacheUtilizedIncludesBlockCacheDisk() {
-        FileCache fc = mock(FileCache.class);
+        FileCache fc = mock(FileCache.class);  
         when(fc.usage()).thenReturn(100L);
         NodeCacheService orc = new NodeCacheService(fc, 0L);
-        orc.addBlockCache(mockBlockCache(0, 0, 300L, 0, 0));
+        orc.addBlockCache(mockBlockCache(0, 0, 300L, 0, 0));  
         assertEquals(400L, orc.cacheUtilizedBytes());
     }
 
     public void testCacheUtilizedIncludesBlockCacheMemory() {
         FileCache fc = mock(FileCache.class);
-        when(fc.usage()).thenReturn(0L);
+        when(fc.usage()).thenReturn(0L);  
         NodeCacheService orc = new NodeCacheService(fc, 0L);
         BlockCacheStats stats = new BlockCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 50L, 200L, 0L, 0L);
-        BlockCache bc = mock(BlockCache.class);
+        BlockCache bc = mock(BlockCache.class);  
         when(bc.stats()).thenReturn(stats);
         orc.addBlockCache(bc);
-        assertEquals(250L, orc.cacheUtilizedBytes());
+        assertEquals(250L, orc.cacheUtilizedBytes());  
     }
 
-    // ── blockCacheDiskBytesUsed ───────────────────────────────────────────────
+    // ── blockCacheDiskBytesUsed ───────────────────────────────────────────────  
 
     public void testBlockCacheDiskBytesUsedZeroWhenNone() {
-        FileCache fc = mock(FileCache.class);
+        FileCache fc = mock(FileCache.class);  
         assertEquals(0L, new NodeCacheService(fc, 0L).blockCacheDiskBytesUsed());
     }
 
     public void testBlockCacheDiskBytesUsedSumsAcrossCaches() {
         FileCache fc = mock(FileCache.class);
-        NodeCacheService orc = new NodeCacheService(fc, 0L);
+        NodeCacheService orc = new NodeCacheService(fc, 0L);  
         orc.addBlockCache(mockBlockCache(0, 0, 300L, 0, 1000L));
         orc.addBlockCache(mockBlockCache(0, 0, 200L, 0, 1000L));
-        assertEquals(500L, orc.blockCacheDiskBytesUsed());
+        assertEquals(500L, orc.blockCacheDiskBytesUsed());  
     }
 
-    public void testBlockCacheDiskBytesUsedIgnoresMemory() {
+    public void testBlockCacheDiskBytesUsedIgnoresMemory() {  
         FileCache fc = mock(FileCache.class);
         NodeCacheService orc = new NodeCacheService(fc, 0L);
-        orc.addBlockCache(mockBlockCache(0, 0, 0L, 100L, 1000L));
+        orc.addBlockCache(mockBlockCache(0, 0, 0L, 100L, 1000L));  
         assertEquals(0L, orc.blockCacheDiskBytesUsed());
     }
 
     // ── computeBlockCacheBudget ───────────────────────────────────────────────
 
-    public void testComputeBlockCacheBudgetNoProviders() {
+    public void testComputeBlockCacheBudgetNoProviders() {  
         assertEquals(0L, NodeCacheService.computeBlockCacheBudget(Map.of(), Settings.EMPTY, 1000L));
     }
 
     public void testComputeBlockCacheBudgetSingleProvider() {
         var provider = mockProvider("25%", 1.0);
-        assertEquals(250L, NodeCacheService.computeBlockCacheBudget(Map.of("foyer", provider), Settings.EMPTY, 1000L));
+        assertEquals(250L, NodeCacheService.computeBlockCacheBudget(Map.of("foyer", provider), Settings.EMPTY, 1000L));  
     }
 
-    public void testComputeBlockCacheBudgetMultipleProviders() {
+    public void testComputeBlockCacheBudgetMultipleProviders() {  
         var p1 = mockProvider("25%", 1.0);  // 250 of 1000
         var p2 = mockProvider("10%", 1.0);  // 100 of 1000
-        assertEquals(350L, NodeCacheService.computeBlockCacheBudget(Map.of("p1", p1, "p2", p2), Settings.EMPTY, 1000L));
+        assertEquals(350L, NodeCacheService.computeBlockCacheBudget(Map.of("p1", p1, "p2", p2), Settings.EMPTY, 1000L));  
     }
 
-    public void testComputeBlockCacheBudgetZeroPercentProvider() {
+    public void testComputeBlockCacheBudgetZeroPercentProvider() {  
         var provider = mockProvider("0%", 1.0);
         assertEquals(0L, NodeCacheService.computeBlockCacheBudget(Map.of("foyer", provider), Settings.EMPTY, 1000L));
-    }
+    }  
 
     // ── computeVirtualBlockCacheBytes ─────────────────────────────────────────
 
     public void testComputeVirtualBlockCacheBytesNoProviders() {
         assertEquals(0L, NodeCacheService.computeVirtualBlockCacheBytes(Map.of(), Settings.EMPTY, 1000L));
-    }
+    }  
 
     public void testComputeVirtualBlockCacheBytesAppliesRatio() {
-        // 25% of 1000 = 250 bytes reserved × ratio 5.0 = 1250 virtual bytes
+        // 25% of 1000 = 250 bytes reserved × ratio 5.0 = 1250 virtual bytes  
         var provider = mockProvider("25%", 5.0);
         assertEquals(1250L, NodeCacheService.computeVirtualBlockCacheBytes(Map.of("foyer", provider), Settings.EMPTY, 1000L));
-    }
+    }  
 
     public void testComputeVirtualBlockCacheBytesSumsMultipleProviders() {
-        var p1 = mockProvider("20%", 4.0);  // 200 × 4 = 800
+        var p1 = mockProvider("20%", 4.0);  // 200 × 4 = 800  
         var p2 = mockProvider("10%", 2.0);  // 100 × 2 = 200
         assertEquals(1000L, NodeCacheService.computeVirtualBlockCacheBytes(Map.of("p1", p1, "p2", p2), Settings.EMPTY, 1000L));
-    }
+    }  
 
     public void testComputeVirtualBlockCacheBytesRatioOneEqualsReserved() {
-        var provider = mockProvider("30%", 1.0);  // 300 × 1 = 300
+        var provider = mockProvider("30%", 1.0);  // 300 × 1 = 300  
         assertEquals(300L, NodeCacheService.computeVirtualBlockCacheBytes(Map.of("foyer", provider), Settings.EMPTY, 1000L));
     }
 
     // ── registerProviders ─────────────────────────────────────────────────────
 
-    public void testRegisterProvidersWithEmptyOptionalSkipsCache() {
+    public void testRegisterProvidersWithEmptyOptionalSkipsCache() {  
         FileCache fc = mock(FileCache.class);
         NodeCacheService orc = new NodeCacheService(fc, 0L);
 
@@ -226,343 +226,343 @@ public class NodeCacheServiceTests extends OpenSearchTestCase {
 
         orc.registerProviders(Map.of("empty", emptyProvider));
         assertEquals(0, orc.blockCaches().size());
-    }
+    }  
 
     public void testRegisterProvidersWiresCacheFromProvider() {
-        FileCache fc = mock(FileCache.class);
+        FileCache fc = mock(FileCache.class);  
         NodeCacheService orc = new NodeCacheService(fc, 0L);
 
-        BlockCache bc = mockBlockCache(0, 0, 0, 0, 500L);
+        BlockCache bc = mockBlockCache(0, 0, 0, 0, 500L);  
         BlockCacheProvider provider = mock(BlockCacheProvider.class);
         when(provider.getBlockCache()).thenReturn(Optional.of(bc));
 
         orc.registerProviders(Map.of("foyer", provider));
         assertEquals(1, orc.blockCaches().size());
-        assertSame(bc, orc.blockCaches().get(0));
+        assertSame(bc, orc.blockCaches().get(0));  
     }
 
-    public void testRegisterProvidersMixedEmptyAndPresent() {
+    public void testRegisterProvidersMixedEmptyAndPresent() {  
         FileCache fc = mock(FileCache.class);
         NodeCacheService orc = new NodeCacheService(fc, 0L);
 
         BlockCache bc = mockBlockCache(0, 0, 0, 0, 100L);
 
-        BlockCacheProvider withCache = mock(BlockCacheProvider.class);
+        BlockCacheProvider withCache = mock(BlockCacheProvider.class);  
         when(withCache.getBlockCache()).thenReturn(Optional.of(bc));
 
-        BlockCacheProvider withoutCache = mock(BlockCacheProvider.class);
+        BlockCacheProvider withoutCache = mock(BlockCacheProvider.class);  
         when(withoutCache.getBlockCache()).thenReturn(Optional.empty());
 
-        orc.registerProviders(Map.of("foyer", withCache, "other", withoutCache));
+        orc.registerProviders(Map.of("foyer", withCache, "other", withoutCache));  
         assertEquals(1, orc.blockCaches().size());
     }
 
     // ── aggregateStats — mergeStats path (block cache present) ───────────────
 
-    public void testAggregateStatsMergesHitsFromBlockCache() {
+    public void testAggregateStatsMergesHitsFromBlockCache() {  
         FileCache fc = fileCacheWithStats(0, 0, 0, 0, 1000L, 0L, 0L);
         NodeCacheService orc = new NodeCacheService(fc, 0L);
-        orc.addBlockCache(mockBlockCacheWithFullStats(50L, 10L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 500L));
+        orc.addBlockCache(mockBlockCacheWithFullStats(50L, 10L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 500L));  
         AggregateFileCacheStats s = orc.aggregateStats();
         assertEquals(50L, s.getCacheHits());
-        assertEquals(10L, s.getCacheMisses());
+        assertEquals(10L, s.getCacheMisses());  
     }
 
-    public void testAggregateStatsMergesTotalCapacityFromBlockCache() {
+    public void testAggregateStatsMergesTotalCapacityFromBlockCache() {  
         FileCache fc = fileCacheWithStats(0, 0, 0, 0, 1000L, 0L, 0L);
         NodeCacheService orc = new NodeCacheService(fc, 0L);
-        orc.addBlockCache(mockBlockCacheWithFullStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 500L));
+        orc.addBlockCache(mockBlockCacheWithFullStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 500L));  
         AggregateFileCacheStats s = orc.aggregateStats();
         assertEquals(1500L, s.getTotal().getBytes());
-    }
+    }  
 
     public void testAggregateStatsMergesEvictionBytesFromBlockCache() {
-        FileCache fc = fileCacheWithStats(0, 0, 0, 0, 1000L, 100L, 0L);
+        FileCache fc = fileCacheWithStats(0, 0, 0, 0, 1000L, 100L, 0L);  
         NodeCacheService orc = new NodeCacheService(fc, 0L);
         orc.addBlockCache(mockBlockCacheWithFullStats(0, 0, 0, 0, 0, 200L, 0, 0, 0, 200L, 500L));
-        AggregateFileCacheStats s = orc.aggregateStats();
+        AggregateFileCacheStats s = orc.aggregateStats();  
         assertEquals(300L, s.getEvicted().getBytes());
     }
 
     public void testAggregateStatsMergesUsedBytesFromBlockCacheDisk() {
         FileCache fc = fileCacheWithStats(0, 0, 400L, 0, 1000L, 0L, 0L);
-        NodeCacheService orc = new NodeCacheService(fc, 0L);
+        NodeCacheService orc = new NodeCacheService(fc, 0L);  
         orc.addBlockCache(mockBlockCacheWithFullStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 200L, 500L));
         AggregateFileCacheStats s = orc.aggregateStats();
-        assertEquals(600L, s.getUsed().getBytes());
+        assertEquals(600L, s.getUsed().getBytes());  
     }
 
-    public void testAggregateStatsBlockSectionAlsoMerged() {
+    public void testAggregateStatsBlockSectionAlsoMerged() {  
         FileCache fc = fileCacheWithStats(0, 0, 0, 0, 1000L, 0L, 0L);
         NodeCacheService orc = new NodeCacheService(fc, 0L);
-        orc.addBlockCache(mockBlockCacheWithFullStats(7L, 3L, 0, 0, 0, 0, 0, 0, 0, 100L, 200L));
+        orc.addBlockCache(mockBlockCacheWithFullStats(7L, 3L, 0, 0, 0, 0, 0, 0, 0, 100L, 200L));  
         AggregateFileCacheStats s = orc.aggregateStats();
         assertEquals(7L, s.getBlockFileCacheStats().getCacheHits());
-    }
+    }  
 
     public void testAggregateStatsNoBlockCacheReturnsFileCacheStatsOnly() {
-        FileCache fc = fileCacheWithStats(0, 0, 500L, 0, 1000L, 50L, 0L);
+        FileCache fc = fileCacheWithStats(0, 0, 500L, 0, 1000L, 50L, 0L);  
         NodeCacheService orc = new NodeCacheService(fc, 0L);
         AggregateFileCacheStats s = orc.aggregateStats();
-        assertEquals(1000L, s.getTotal().getBytes());
+        assertEquals(1000L, s.getTotal().getBytes());  
         assertEquals(500L, s.getUsed().getBytes());
         assertEquals(50L, s.getEvicted().getBytes());
-    }
+    }  
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private BlockCacheProvider mockProvider(String sizePercent, double amplification) {
         BlockCacheProvider provider = mock(BlockCacheProvider.class);
-        String stripped = sizePercent.endsWith("%") ? sizePercent.substring(0, sizePercent.length() - 1) : sizePercent;
+        String stripped = sizePercent.endsWith("%") ? sizePercent.substring(0, sizePercent.length() - 1) : sizePercent;  
         double ratio = Double.parseDouble(stripped) / 100.0;
         when(provider.requestedCapacityBytes(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong())).thenAnswer(
-            inv -> Math.round((long) inv.getArgument(1) * ratio)
+            inv -> Math.round((long) inv.getArgument(1) * ratio)  
         );
         when(provider.dataToCapacityRatio(org.mockito.ArgumentMatchers.any())).thenReturn(amplification);
-        when(provider.getBlockCache()).thenReturn(Optional.empty());
+        when(provider.getBlockCache()).thenReturn(Optional.empty());  
         return provider;
     }
 
     private BlockCache mockBlockCache(long hits, long misses, long diskUsed, long memUsed, long total) {
         BlockCacheStats stats = new BlockCacheStats(hits, misses, 0, 0, 0, 0, 0, 0, memUsed, diskUsed, total, 0L);
-        BlockCache bc = mock(BlockCache.class);
+        BlockCache bc = mock(BlockCache.class);  
         when(bc.stats()).thenReturn(stats);
         return bc;
-    }
+    }  
 
     private BlockCache mockBlockCacheWithFullStats(
-        long hits,
+        long hits,  
         long misses,
         long hitBytes,
-        long missBytes,
+        long missBytes,  
         long evictions,
         long evictionBytes,
-        long removed,
+        long removed,  
         long removedBytes,
         long memBytesUsed,
-        long diskBytesUsed,
+        long diskBytesUsed,  
         long totalBytes
     ) {
-        BlockCacheStats stats = new BlockCacheStats(
+        BlockCacheStats stats = new BlockCacheStats(  
             hits,
             misses,
-            hitBytes,
+            hitBytes,  
             missBytes,
             evictions,
-            evictionBytes,
+            evictionBytes,  
             removed,
             removedBytes,
-            memBytesUsed,
+            memBytesUsed,  
             diskBytesUsed,
             totalBytes,
-            0L      // activeInBytes — not exercised in this helper; tests that need it set it directly
+            0L      // activeInBytes — not exercised in this helper; tests that need it set it directly  
         );
         BlockCache bc = mock(BlockCache.class);
-        when(bc.stats()).thenReturn(stats);
+        when(bc.stats()).thenReturn(stats);  
         return bc;
     }
 
     private FileCache fileCacheWithStats(long active, long hits, long used, long pinned, long total, long evicted, long removed) {
         FileCacheStats overall = new FileCacheStats(
-            active,
+            active,  
             total,
             used,
-            pinned,
+            pinned,  
             evicted,
             removed,
-            hits,
+            hits,  
             0L,
             AggregateFileCacheStats.FileCacheStatsType.OVER_ALL_STATS
-        );
+        );  
         FileCacheStats zero = new FileCacheStats(0, 0, 0, 0, 0, 0, 0, 0, AggregateFileCacheStats.FileCacheStatsType.BLOCK_FILE_STATS);
         FileCacheStats zeroPinned = new FileCacheStats(
+            0,  
             0,
             0,
+            0,  
             0,
             0,
-            0,
-            0,
-            0,
+            0,  
             0,
             AggregateFileCacheStats.FileCacheStatsType.PINNED_FILE_STATS
-        );
+        );  
         FileCacheStats zeroFull = new FileCacheStats(0, 0, 0, 0, 0, 0, 0, 0, AggregateFileCacheStats.FileCacheStatsType.FULL_FILE_STATS);
         AggregateFileCacheStats agg = new AggregateFileCacheStats(System.currentTimeMillis(), overall, zeroFull, zero, zeroPinned);
-        FileCache fc = mock(FileCache.class);
+        FileCache fc = mock(FileCache.class);  
         when(fc.fileCacheStats()).thenReturn(agg);
         when(fc.usage()).thenReturn(used);
-        return fc;
+        return fc;  
     }
 
-    // ── BlockCacheRegistry.get(name) ──────────────────────────────────────────
+    // ── BlockCacheRegistry.get(name) ──────────────────────────────────────────  
 
     public void testGetByNameReturnsRegisteredBlockCache() {
-        FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);  
         NodeCacheService orc = new NodeCacheService(fc, 0L);
 
-        BlockCache bc = mock(BlockCache.class);
+        BlockCache bc = mock(BlockCache.class);  
         BlockCacheStats stats = new BlockCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 512L, 0L);
         when(bc.stats()).thenReturn(stats);
-        when(bc.cacheName()).thenReturn("foyer");
+        when(bc.cacheName()).thenReturn("foyer");  
 
         orc.addBlockCache(bc);
 
         assertTrue("get(foyer) should return the registered cache", orc.get("foyer").isPresent());
         assertSame(bc, orc.get("foyer").get());
-    }
+    }  
 
     public void testGetByNameReturnsEmptyForUnknownName() {
-        FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);  
         NodeCacheService orc = new NodeCacheService(fc, 0L);
 
-        assertFalse("get(unknown) should return empty Optional", orc.get("unknown").isPresent());
+        assertFalse("get(unknown) should return empty Optional", orc.get("unknown").isPresent());  
     }
 
-    // ── close() propagation ───────────────────────────────────────────────────
+    // ── close() propagation ───────────────────────────────────────────────────  
 
     public void testClosePropagatesToAllBlockCaches() throws Exception {
-        FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);  
         NodeCacheService orc = new NodeCacheService(fc, 0L);
 
-        BlockCache bc1 = mock(BlockCache.class);
+        BlockCache bc1 = mock(BlockCache.class);  
         BlockCache bc2 = mock(BlockCache.class);
         BlockCacheStats s = new BlockCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1L, 0L);
-        when(bc1.stats()).thenReturn(s);
+        when(bc1.stats()).thenReturn(s);  
         when(bc2.stats()).thenReturn(s);
 
-        orc.addBlockCache(bc1);
+        orc.addBlockCache(bc1);  
         orc.addBlockCache(bc2);
 
-        orc.close();
+        orc.close();  
 
         org.mockito.Mockito.verify(bc1).close();
-        org.mockito.Mockito.verify(bc2).close();
+        org.mockito.Mockito.verify(bc2).close();  
     }
 
-    // ── aggregateStats: activeInBytes ──────────────────────────────────────────
+    // ── aggregateStats: activeInBytes ──────────────────────────────────────────  
 
     public void testAggregateStatsMergesActiveInBytesFromBlockCache() {
-        long fcActive = 100L;
+        long fcActive = 100L;  
         long bcActive = 50L;
         FileCache fc = fileCacheWithStats(fcActive, 0L, 0L, 0L, 1000L, 0L, 0L);
-        NodeCacheService orc = new NodeCacheService(fc, 0L);
+        NodeCacheService orc = new NodeCacheService(fc, 0L);  
 
         BlockCache bc = mock(BlockCache.class);
-        // Create a BlockCacheStats with activeInBytes=bcActive
+        // Create a BlockCacheStats with activeInBytes=bcActive  
         when(bc.stats()).thenReturn(new BlockCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0L, 0L, 100L, bcActive));
         orc.addBlockCache(bc);
 
         AggregateFileCacheStats stats = orc.aggregateStats();
         // merged active = file-cache active + block-cache activeInBytes
-        assertEquals(fcActive + bcActive, stats.getActive().getBytes());
+        assertEquals(fcActive + bcActive, stats.getActive().getBytes());  
     }
 
-    public void testAggregateStatsActiveInBytesZeroWithNoBlockCache() {
+    public void testAggregateStatsActiveInBytesZeroWithNoBlockCache() {  
         long fcActive = 75L;
         FileCache fc = fileCacheWithStats(fcActive, 0L, 0L, 0L, 1000L, 0L, 0L);
-        NodeCacheService orc = new NodeCacheService(fc, 0L);
+        NodeCacheService orc = new NodeCacheService(fc, 0L);  
         // No block cache registered
         AggregateFileCacheStats stats = orc.aggregateStats();
-        assertEquals(fcActive, stats.getActive().getBytes());
+        assertEquals(fcActive, stats.getActive().getBytes());  
     }
 
-    public void testAggregateStatsMergesActiveInBytesAcrossMultipleBlockCaches() {
+    public void testAggregateStatsMergesActiveInBytesAcrossMultipleBlockCaches() {  
         long fcActive = 200L;
         FileCache fc = fileCacheWithStats(fcActive, 0L, 0L, 0L, 1000L, 0L, 0L);
-        NodeCacheService orc = new NodeCacheService(fc, 0L);
+        NodeCacheService orc = new NodeCacheService(fc, 0L);  
 
         BlockCache bc1 = mock(BlockCache.class);
-        BlockCache bc2 = mock(BlockCache.class);
+        BlockCache bc2 = mock(BlockCache.class);  
         when(bc1.stats()).thenReturn(new BlockCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0L, 0L, 100L, 30L));
         when(bc2.stats()).thenReturn(new BlockCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0L, 0L, 100L, 20L));
-        orc.addBlockCache(bc1);
+        orc.addBlockCache(bc1);  
         orc.addBlockCache(bc2);
 
-        AggregateFileCacheStats stats = orc.aggregateStats();
+        AggregateFileCacheStats stats = orc.aggregateStats();  
         assertEquals(fcActive + 30L + 20L, stats.getActive().getBytes());
     }
 
     // ── aggregateStats: removed / removedBytes ─────────────────────────────────
 
-    public void testAggregateStatsMergesRemovedCountFromBlockCache() {
+    public void testAggregateStatsMergesRemovedCountFromBlockCache() {  
         long removed = 7L;
         long removedBytes = 3500L;
-        FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);  
         NodeCacheService orc = new NodeCacheService(fc, 0L);
 
-        BlockCache bc = mock(BlockCache.class);
+        BlockCache bc = mock(BlockCache.class);  
         when(bc.stats()).thenReturn(new BlockCacheStats(0, 0, 0, 0, 0, 0, removed, removedBytes, 0, 0, 100L, 0L));
         orc.addBlockCache(bc);
 
         AggregateFileCacheStats stats = orc.aggregateStats();
         // removedBytes from block cache must be folded into the overall removed_in_bytes field
-        assertEquals(removedBytes, stats.getRemoved().getBytes());
+        assertEquals(removedBytes, stats.getRemoved().getBytes());  
     }
 
-    // ── BlockCacheRegistry.all() ──────────────────────────────────────────────
+    // ── BlockCacheRegistry.all() ──────────────────────────────────────────────  
 
     public void testAllReturnsEmptyWhenNoBlockCaches() {
-        FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);  
         NodeCacheService orc = new NodeCacheService(fc, 0L);
         assertTrue(orc.all().isEmpty());
-    }
+    }  
 
     public void testAllReturnsAllRegisteredBlockCaches() {
-        FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);  
         NodeCacheService orc = new NodeCacheService(fc, 0L);
         BlockCache bc1 = mock(BlockCache.class);
-        when(bc1.stats()).thenReturn(new BlockCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
+        when(bc1.stats()).thenReturn(new BlockCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));  
         BlockCache bc2 = mock(BlockCache.class);
         when(bc2.stats()).thenReturn(new BlockCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
-        orc.addBlockCache(bc1);
+        orc.addBlockCache(bc1);  
         orc.addBlockCache(bc2);
         assertEquals(2, orc.all().size());
-        assertTrue(orc.all().contains(bc1));
+        assertTrue(orc.all().contains(bc1));  
         assertTrue(orc.all().contains(bc2));
     }
 
     // ── combinedBlockCacheStats() ─────────────────────────────────────────────
 
-    public void testCombinedBlockCacheStatsReturnsNullWhenNoBlockCaches() {
+    public void testCombinedBlockCacheStatsReturnsNullWhenNoBlockCaches() {  
         FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);
         NodeCacheService orc = new NodeCacheService(fc, 0L);
-        assertNull(orc.combinedBlockCacheStats());
+        assertNull(orc.combinedBlockCacheStats());  
     }
 
-    public void testCombinedBlockCacheStatsAggregatesAcrossMultipleCaches() {
+    public void testCombinedBlockCacheStatsAggregatesAcrossMultipleCaches() {  
         FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);
         NodeCacheService orc = new NodeCacheService(fc, 0L);
 
         BlockCache bc1 = mock(BlockCache.class);
         when(bc1.stats()).thenReturn(new BlockCacheStats(10, 5, 100, 50, 2, 200, 1, 10, 0, 1024, 2048, 0));
-        BlockCache bc2 = mock(BlockCache.class);
+        BlockCache bc2 = mock(BlockCache.class);  
         when(bc2.stats()).thenReturn(new BlockCacheStats(20, 3, 200, 30, 1, 100, 0, 0, 0, 512, 1024, 0));
         orc.addBlockCache(bc1);
-        orc.addBlockCache(bc2);
+        orc.addBlockCache(bc2);  
 
         BlockCacheStats combined = orc.combinedBlockCacheStats();
-        assertNotNull(combined);
+        assertNotNull(combined);  
         assertEquals(30, combined.hits());
         assertEquals(8, combined.misses());
-        assertEquals(300, combined.hitBytes());
+        assertEquals(300, combined.hitBytes());  
         assertEquals(80, combined.missBytes());
         assertEquals(3, combined.evictions());
-        assertEquals(300, combined.evictionBytes());
+        assertEquals(300, combined.evictionBytes());  
         assertEquals(1536, combined.diskBytesUsed());
         assertEquals(3072, combined.totalBytes());
-    }
+    }  
 
     public void testCombinedBlockCacheStatsPropagatesTieredStatsFromTieredCache() {
-        FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);  
         NodeCacheService orc = new NodeCacheService(fc, 0L);
 
-        // Non-tiered cache (default mock → tieredStats() == null).
+        // Non-tiered cache (default mock → tieredStats() == null).  
         BlockCache singleTier = mock(BlockCache.class);
         when(singleTier.stats()).thenReturn(new BlockCacheStats(10, 5, 0, 0, 0, 0, 0, 0, 0, 1024, 2048, 0));
 
         // Tiered cache exposing a per-tier breakdown.
         BlockCacheTieredStats tiered = sampleTieredStats();
-        BlockCache tieredCache = mock(BlockCache.class);
+        BlockCache tieredCache = mock(BlockCache.class);  
         when(tieredCache.stats()).thenReturn(new BlockCacheStats(20, 3, 0, 0, 0, 0, 0, 0, 0, 512, 1024, 0));
         when(tieredCache.tieredStats()).thenReturn(tiered);
 
@@ -571,28 +571,28 @@ public class NodeCacheServiceTests extends OpenSearchTestCase {
 
         BlockCacheStats combined = orc.combinedBlockCacheStats();
         assertNotNull(combined);
-        assertEquals("tiered breakdown must propagate into the combined stats", tiered, combined.tieredStats());
+        assertEquals("tiered breakdown must propagate into the combined stats", tiered, combined.tieredStats());  
     }
 
-    public void testCombinedBlockCacheStatsNullTieredWhenNoCacheIsTiered() {
+    public void testCombinedBlockCacheStatsNullTieredWhenNoCacheIsTiered() {  
         FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);
         NodeCacheService orc = new NodeCacheService(fc, 0L);
-        orc.addBlockCache(mockBlockCache(1, 0, 0, 0, 10L));
+        orc.addBlockCache(mockBlockCache(1, 0, 0, 0, 10L));  
         orc.addBlockCache(mockBlockCache(2, 0, 0, 0, 20L));
         assertNull("combined tieredStats must be null when no cache is tiered", orc.combinedBlockCacheStats().tieredStats());
-    }
+    }  
 
     public void testCombinedBlockCacheStatsPicksFirstTieredWhenMultiplePresent() {
-        FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);
+        FileCache fc = fileCacheWithStats(0L, 0L, 0L, 0L, 0L, 0L, 0L);  
         NodeCacheService orc = new NodeCacheService(fc, 0L);
 
-        // Two distinct (but equal-valued) instances — identity proves "first wins".
+        // Two distinct (but equal-valued) instances — identity proves "first wins".  
         BlockCacheTieredStats first = sampleTieredStats();
         BlockCacheTieredStats second = sampleTieredStats();
-        BlockCache bc1 = mock(BlockCache.class);
+        BlockCache bc1 = mock(BlockCache.class);  
         when(bc1.stats()).thenReturn(new BlockCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1L, 0));
         when(bc1.tieredStats()).thenReturn(first);
-        BlockCache bc2 = mock(BlockCache.class);
+        BlockCache bc2 = mock(BlockCache.class);  
         when(bc2.stats()).thenReturn(new BlockCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1L, 0));
         when(bc2.tieredStats()).thenReturn(second);
 
@@ -604,5 +604,5 @@ public class NodeCacheServiceTests extends OpenSearchTestCase {
 
     private BlockCacheTieredStats sampleTieredStats() {
         return new BlockCacheTieredStats(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22);
-    }
+    }  
 }

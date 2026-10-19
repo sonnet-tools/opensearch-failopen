@@ -1,109 +1,109 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.action.admin.indices.resolve;
 
 import org.opensearch.action.ActionRequest;
 import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.ActionType;
+import org.opensearch.action.ActionType;  
 import org.opensearch.action.IndicesRequest;
 import org.opensearch.action.OriginalIndices;
-import org.opensearch.action.support.ActionFilters;
+import org.opensearch.action.support.ActionFilters;  
 import org.opensearch.action.support.HandledTransportAction;
 import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.action.support.TransportIndicesResolvingAction;
+import org.opensearch.action.support.TransportIndicesResolvingAction;  
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.metadata.IndexAbstraction;
-import org.opensearch.cluster.metadata.IndexAbstractionResolver;
+import org.opensearch.cluster.metadata.IndexAbstractionResolver;  
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.Metadata;
+import org.opensearch.cluster.metadata.Metadata;  
 import org.opensearch.cluster.metadata.ResolvedIndices;
 import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Nullable;
+import org.opensearch.common.Nullable;  
 import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.inject.Inject;
-import org.opensearch.common.util.concurrent.CountDown;
+import org.opensearch.common.util.concurrent.CountDown;  
 import org.opensearch.core.ParseField;
 import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.action.ActionResponse;
+import org.opensearch.core.action.ActionResponse;  
 import org.opensearch.core.common.Strings;
 import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.common.io.stream.StreamOutput;  
 import org.opensearch.core.common.io.stream.Writeable;
 import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.xcontent.XContentBuilder;  
 import org.opensearch.tasks.Task;
 import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.RemoteClusterAware;
+import org.opensearch.transport.RemoteClusterAware;  
 import org.opensearch.transport.RemoteClusterService;
 import org.opensearch.transport.TransportService;
-import org.opensearch.transport.client.Client;
+import org.opensearch.transport.client.Client;  
 
 import java.io.IOException;
-import java.util.ArrayList;
+import java.util.ArrayList;  
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
+import java.util.Comparator;  
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+import java.util.Objects;  
 import java.util.SortedMap;
 import java.util.Spliterators;
-import java.util.TreeMap;
+import java.util.TreeMap;  
 import java.util.stream.StreamSupport;
 
-/**
+/**  
  * Transport action to resolve an index.
  *
- * @opensearch.api
+ * @opensearch.api  
  */
 @PublicApi(since = "1.0.0")
-public class ResolveIndexAction extends ActionType<ResolveIndexAction.Response> {
+public class ResolveIndexAction extends ActionType<ResolveIndexAction.Response> {  
 
     public static final ResolveIndexAction INSTANCE = new ResolveIndexAction();
-    public static final String NAME = "indices:admin/resolve/index";
+    public static final String NAME = "indices:admin/resolve/index";  
 
     private ResolveIndexAction() {
-        super(NAME, Response::new);
+        super(NAME, Response::new);  
     }
 
-    /**
+    /**  
      * Request for resolving an index
      *
-     * @opensearch.api
+     * @opensearch.api  
      */
     @PublicApi(since = "1.0.0")
-    public static class Request extends ActionRequest implements IndicesRequest.Replaceable {
+    public static class Request extends ActionRequest implements IndicesRequest.Replaceable {  
 
         public static final IndicesOptions DEFAULT_INDICES_OPTIONS = IndicesOptions.strictExpandOpen();
 
@@ -112,615 +112,615 @@ public class ResolveIndexAction extends ActionType<ResolveIndexAction.Response> 
 
         public Request(String[] names) {
             this.names = names;
-        }
+        }  
 
         public Request(String[] names, IndicesOptions indicesOptions) {
-            this.names = names;
+            this.names = names;  
             this.indicesOptions = indicesOptions;
         }
 
         @Override
         public ActionRequestValidationException validate() {
-            return null;
+            return null;  
         }
 
-        public Request(StreamInput in) throws IOException {
+        public Request(StreamInput in) throws IOException {  
             super(in);
             this.names = in.readStringArray();
-            this.indicesOptions = IndicesOptions.readIndicesOptions(in);
+            this.indicesOptions = IndicesOptions.readIndicesOptions(in);  
         }
 
-        @Override
+        @Override  
         public void writeTo(StreamOutput out) throws IOException {
             super.writeTo(out);
-            out.writeStringArray(names);
+            out.writeStringArray(names);  
             indicesOptions.writeIndicesOptions(out);
         }
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
+            if (this == o) return true;  
             if (o == null || getClass() != o.getClass()) return false;
             Request request = (Request) o;
-            return Arrays.equals(names, request.names);
+            return Arrays.equals(names, request.names);  
         }
 
-        @Override
+        @Override  
         public int hashCode() {
             return Arrays.hashCode(names);
-        }
+        }  
 
         @Override
-        public String[] indices() {
+        public String[] indices() {  
             return names;
         }
 
         @Override
         public IndicesOptions indicesOptions() {
-            return indicesOptions;
+            return indicesOptions;  
         }
 
-        @Override
+        @Override  
         public IndicesRequest indices(String... indices) {
             this.names = indices;
-            return this;
+            return this;  
         }
 
-        @Override
+        @Override  
         public boolean includeDataStreams() {
             return true;
-        }
+        }  
     }
 
-    /**
+    /**  
      * Abstraction class for resolving an index
      *
-     * @opensearch.internal
+     * @opensearch.internal  
      */
     public static class ResolvedIndexAbstraction {
 
         static final ParseField NAME_FIELD = new ParseField("name");
 
-        private String name;
+        private String name;  
 
         ResolvedIndexAbstraction() {}
 
         ResolvedIndexAbstraction(String name) {
             this.name = name;
-        }
+        }  
 
         protected void setName(String name) {
-            this.name = name;
+            this.name = name;  
         }
 
-        public String getName() {
+        public String getName() {  
             return name;
         }
-    }
+    }  
 
     /**
-     * The resolved index
+     * The resolved index  
      *
      * @opensearch.api
-     */
+     */  
     @PublicApi(since = "1.0.0")
     public static class ResolvedIndex extends ResolvedIndexAbstraction implements Writeable, ToXContentObject {
 
         static final ParseField ALIASES_FIELD = new ParseField("aliases");
         static final ParseField ATTRIBUTES_FIELD = new ParseField("attributes");
-        static final ParseField DATA_STREAM_FIELD = new ParseField("data_stream");
+        static final ParseField DATA_STREAM_FIELD = new ParseField("data_stream");  
 
         private final String[] aliases;
-        private final String[] attributes;
+        private final String[] attributes;  
         private final String dataStream;
 
-        ResolvedIndex(StreamInput in) throws IOException {
+        ResolvedIndex(StreamInput in) throws IOException {  
             setName(in.readString());
             this.aliases = in.readStringArray();
-            this.attributes = in.readStringArray();
+            this.attributes = in.readStringArray();  
             this.dataStream = in.readOptionalString();
         }
 
         ResolvedIndex(String name, String[] aliases, String[] attributes, @Nullable String dataStream) {
             super(name);
-            this.aliases = aliases;
+            this.aliases = aliases;  
             this.attributes = attributes;
             this.dataStream = dataStream;
-        }
+        }  
 
         public ResolvedIndex copy(String newName) {
-            return new ResolvedIndex(newName, aliases, attributes, dataStream);
+            return new ResolvedIndex(newName, aliases, attributes, dataStream);  
         }
 
-        public String[] getAliases() {
+        public String[] getAliases() {  
             return aliases;
         }
 
         public String[] getAttributes() {
             return attributes;
-        }
+        }  
 
         public String getDataStream() {
-            return dataStream;
+            return dataStream;  
         }
 
-        @Override
+        @Override  
         public void writeTo(StreamOutput out) throws IOException {
             out.writeString(getName());
-            out.writeStringArray(aliases);
+            out.writeStringArray(aliases);  
             out.writeStringArray(attributes);
             out.writeOptionalString(dataStream);
-        }
+        }  
 
         @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
             builder.startObject();
             builder.field(NAME_FIELD.getPreferredName(), getName());
-            if (aliases.length > 0) {
+            if (aliases.length > 0) {  
                 builder.array(ALIASES_FIELD.getPreferredName(), aliases);
             }
-            builder.array(ATTRIBUTES_FIELD.getPreferredName(), attributes);
+            builder.array(ATTRIBUTES_FIELD.getPreferredName(), attributes);  
             if (Strings.isNullOrEmpty(dataStream) == false) {
                 builder.field(DATA_STREAM_FIELD.getPreferredName(), dataStream);
-            }
+            }  
             builder.endObject();
             return builder;
-        }
+        }  
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(Object o) {  
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
-            ResolvedIndex index = (ResolvedIndex) o;
+            ResolvedIndex index = (ResolvedIndex) o;  
             return getName().equals(index.getName())
                 && Objects.equals(dataStream, index.dataStream)
-                && Arrays.equals(aliases, index.aliases)
+                && Arrays.equals(aliases, index.aliases)  
                 && Arrays.equals(attributes, index.attributes);
         }
 
         @Override
         public int hashCode() {
-            int result = Objects.hash(getName(), dataStream);
+            int result = Objects.hash(getName(), dataStream);  
             result = 31 * result + Arrays.hashCode(aliases);
             result = 31 * result + Arrays.hashCode(attributes);
-            return result;
+            return result;  
         }
     }
 
     /**
      * The resolved index alias
-     *
+     *  
      * @opensearch.api
      */
-    @PublicApi(since = "1.0.0")
+    @PublicApi(since = "1.0.0")  
     public static class ResolvedAlias extends ResolvedIndexAbstraction implements Writeable, ToXContentObject {
 
-        static final ParseField INDICES_FIELD = new ParseField("indices");
+        static final ParseField INDICES_FIELD = new ParseField("indices");  
 
         private final String[] indices;
 
         ResolvedAlias(StreamInput in) throws IOException {
             setName(in.readString());
-            this.indices = in.readStringArray();
+            this.indices = in.readStringArray();  
         }
 
-        ResolvedAlias(String name, String[] indices) {
+        ResolvedAlias(String name, String[] indices) {  
             super(name);
             this.indices = indices;
-        }
+        }  
 
         public ResolvedAlias copy(String newName) {
-            return new ResolvedAlias(newName, indices);
+            return new ResolvedAlias(newName, indices);  
         }
 
-        public String[] getIndices() {
+        public String[] getIndices() {  
             return indices;
         }
 
         @Override
         public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(getName());
+            out.writeString(getName());  
             out.writeStringArray(indices);
         }
 
         @Override
         public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();
+            builder.startObject();  
             builder.field(NAME_FIELD.getPreferredName(), getName());
             if (indices.length > 0) {
-                builder.array(INDICES_FIELD.getPreferredName(), indices);
+                builder.array(INDICES_FIELD.getPreferredName(), indices);  
             }
             builder.endObject();
-            return builder;
+            return builder;  
         }
 
-        @Override
+        @Override  
         public boolean equals(Object o) {
             if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
+            if (o == null || getClass() != o.getClass()) return false;  
             ResolvedAlias alias = (ResolvedAlias) o;
             return getName().equals(alias.getName()) && Arrays.equals(indices, alias.indices);
-        }
+        }  
 
         @Override
-        public int hashCode() {
+        public int hashCode() {  
             int result = Objects.hash(getName());
             result = 31 * result + Arrays.hashCode(indices);
-            return result;
+            return result;  
         }
     }
 
     /**
      * The resolved data stream
-     *
+     *  
      * @opensearch.api
      */
-    @PublicApi(since = "1.0.0")
+    @PublicApi(since = "1.0.0")  
     public static class ResolvedDataStream extends ResolvedIndexAbstraction implements Writeable, ToXContentObject {
 
-        static final ParseField BACKING_INDICES_FIELD = new ParseField("backing_indices");
+        static final ParseField BACKING_INDICES_FIELD = new ParseField("backing_indices");  
         static final ParseField TIMESTAMP_FIELD = new ParseField("timestamp_field");
 
-        private final String[] backingIndices;
+        private final String[] backingIndices;  
         private final String timestampField;
 
-        ResolvedDataStream(StreamInput in) throws IOException {
+        ResolvedDataStream(StreamInput in) throws IOException {  
             setName(in.readString());
             this.backingIndices = in.readStringArray();
-            this.timestampField = in.readString();
+            this.timestampField = in.readString();  
         }
 
-        ResolvedDataStream(String name, String[] backingIndices, String timestampField) {
+        ResolvedDataStream(String name, String[] backingIndices, String timestampField) {  
             super(name);
             this.backingIndices = backingIndices;
-            this.timestampField = timestampField;
+            this.timestampField = timestampField;  
         }
 
-        public ResolvedDataStream copy(String newName) {
+        public ResolvedDataStream copy(String newName) {  
             return new ResolvedDataStream(newName, backingIndices, timestampField);
         }
 
         public String[] getBackingIndices() {
             return backingIndices;
-        }
+        }  
 
         public String getTimestampField() {
-            return timestampField;
+            return timestampField;  
         }
 
-        @Override
+        @Override  
         public void writeTo(StreamOutput out) throws IOException {
             out.writeString(getName());
-            out.writeStringArray(backingIndices);
+            out.writeStringArray(backingIndices);  
             out.writeString(timestampField);
         }
 
         @Override
         public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();
+            builder.startObject();  
             builder.field(NAME_FIELD.getPreferredName(), getName());
             builder.array(BACKING_INDICES_FIELD.getPreferredName(), backingIndices);
-            builder.field(TIMESTAMP_FIELD.getPreferredName(), timestampField);
+            builder.field(TIMESTAMP_FIELD.getPreferredName(), timestampField);  
             builder.endObject();
             return builder;
-        }
+        }  
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(Object o) {  
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
-            ResolvedDataStream dataStream = (ResolvedDataStream) o;
+            ResolvedDataStream dataStream = (ResolvedDataStream) o;  
             return getName().equals(dataStream.getName())
                 && timestampField.equals(dataStream.timestampField)
-                && Arrays.equals(backingIndices, dataStream.backingIndices);
+                && Arrays.equals(backingIndices, dataStream.backingIndices);  
         }
 
-        @Override
+        @Override  
         public int hashCode() {
             int result = Objects.hash(getName(), timestampField);
-            result = 31 * result + Arrays.hashCode(backingIndices);
+            result = 31 * result + Arrays.hashCode(backingIndices);  
             return result;
         }
-    }
+    }  
 
     /**
-     * Response for resolving an index
+     * Response for resolving an index  
      *
      * @opensearch.api
-     */
+     */  
     @PublicApi(since = "1.0.0")
     public static class Response extends ActionResponse implements ToXContentObject {
 
         static final ParseField INDICES_FIELD = new ParseField("indices");
         static final ParseField ALIASES_FIELD = new ParseField("aliases");
-        static final ParseField DATA_STREAMS_FIELD = new ParseField("data_streams");
+        static final ParseField DATA_STREAMS_FIELD = new ParseField("data_streams");  
 
         private final List<ResolvedIndex> indices;
-        private final List<ResolvedAlias> aliases;
+        private final List<ResolvedAlias> aliases;  
         private final List<ResolvedDataStream> dataStreams;
 
-        public Response(List<ResolvedIndex> indices, List<ResolvedAlias> aliases, List<ResolvedDataStream> dataStreams) {
+        public Response(List<ResolvedIndex> indices, List<ResolvedAlias> aliases, List<ResolvedDataStream> dataStreams) {  
             this.indices = indices;
             this.aliases = aliases;
-            this.dataStreams = dataStreams;
+            this.dataStreams = dataStreams;  
         }
 
-        public Response(StreamInput in) throws IOException {
+        public Response(StreamInput in) throws IOException {  
             this.indices = in.readList(ResolvedIndex::new);
             this.aliases = in.readList(ResolvedAlias::new);
-            this.dataStreams = in.readList(ResolvedDataStream::new);
+            this.dataStreams = in.readList(ResolvedDataStream::new);  
         }
 
-        public List<ResolvedIndex> getIndices() {
+        public List<ResolvedIndex> getIndices() {  
             return indices;
         }
 
         public List<ResolvedAlias> getAliases() {
             return aliases;
-        }
+        }  
 
         public List<ResolvedDataStream> getDataStreams() {
-            return dataStreams;
+            return dataStreams;  
         }
 
-        @Override
+        @Override  
         public void writeTo(StreamOutput out) throws IOException {
             out.writeList(indices);
-            out.writeList(aliases);
+            out.writeList(aliases);  
             out.writeList(dataStreams);
         }
 
         @Override
         public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();
+            builder.startObject();  
             builder.field(INDICES_FIELD.getPreferredName(), indices);
             builder.field(ALIASES_FIELD.getPreferredName(), aliases);
-            builder.field(DATA_STREAMS_FIELD.getPreferredName(), dataStreams);
+            builder.field(DATA_STREAMS_FIELD.getPreferredName(), dataStreams);  
             builder.endObject();
             return builder;
-        }
+        }  
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(Object o) {  
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
-            Response response = (Response) o;
+            Response response = (Response) o;  
             return indices.equals(response.indices) && aliases.equals(response.aliases) && dataStreams.equals(response.dataStreams);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(indices, aliases, dataStreams);
+            return Objects.hash(indices, aliases, dataStreams);  
         }
     }
 
     /**
      * Transport action for resolving an index
-     *
+     *  
      * @opensearch.internal
      */
-    public static class TransportAction extends HandledTransportAction<Request, Response>
+    public static class TransportAction extends HandledTransportAction<Request, Response>  
         implements
             TransportIndicesResolvingAction<Request> {
 
         private final ThreadPool threadPool;
         private final ClusterService clusterService;
-        private final RemoteClusterService remoteClusterService;
+        private final RemoteClusterService remoteClusterService;  
         private final IndexNameExpressionResolver indexNameExpressionResolver;
         private final IndexAbstractionResolver indexAbstractionResolver;
 
         @Inject
         public TransportAction(
-            TransportService transportService,
+            TransportService transportService,  
             ClusterService clusterService,
             ThreadPool threadPool,
-            ActionFilters actionFilters,
+            ActionFilters actionFilters,  
             IndexNameExpressionResolver indexNameExpressionResolver
         ) {
-            super(NAME, transportService, actionFilters, Request::new);
+            super(NAME, transportService, actionFilters, Request::new);  
             this.threadPool = threadPool;
             this.clusterService = clusterService;
-            this.remoteClusterService = transportService.getRemoteClusterService();
+            this.remoteClusterService = transportService.getRemoteClusterService();  
             this.indexNameExpressionResolver = indexNameExpressionResolver;
             this.indexAbstractionResolver = new IndexAbstractionResolver(indexNameExpressionResolver);
-        }
+        }  
 
         @Override
-        protected void doExecute(Task task, Request request, final ActionListener<Response> listener) {
+        protected void doExecute(Task task, Request request, final ActionListener<Response> listener) {  
             final ClusterState clusterState = clusterService.state();
             final Map<String, OriginalIndices> remoteClusterIndices = remoteClusterService.groupIndices(
-                request.indicesOptions(),
+                request.indicesOptions(),  
                 request.indices(),
                 idx -> indexNameExpressionResolver.hasIndexAbstraction(idx, clusterState)
-            );
+            );  
             final OriginalIndices localIndices = remoteClusterIndices.remove(RemoteClusterAware.LOCAL_CLUSTER_GROUP_KEY);
             final Metadata metadata = clusterState.metadata();
-            List<ResolvedIndex> indices = new ArrayList<>();
+            List<ResolvedIndex> indices = new ArrayList<>();  
             List<ResolvedAlias> aliases = new ArrayList<>();
             List<ResolvedDataStream> dataStreams = new ArrayList<>();
-            if (localIndices != null) {
+            if (localIndices != null) {  
                 resolveIndices(
                     localIndices.indices(),
-                    request.indicesOptions,
+                    request.indicesOptions,  
                     metadata,
                     indexAbstractionResolver,
-                    indices,
+                    indices,  
                     aliases,
                     dataStreams,
-                    request.includeDataStreams()
+                    request.includeDataStreams()  
                 );
             }
 
             if (remoteClusterIndices.size() > 0) {
                 final int remoteRequests = remoteClusterIndices.size();
-                final CountDown completionCounter = new CountDown(remoteRequests);
+                final CountDown completionCounter = new CountDown(remoteRequests);  
                 final SortedMap<String, Response> remoteResponses = Collections.synchronizedSortedMap(new TreeMap<>());
                 final Runnable terminalHandler = () -> {
-                    if (completionCounter.countDown()) {
+                    if (completionCounter.countDown()) {  
                         mergeResults(remoteResponses, indices, aliases, dataStreams);
                         listener.onResponse(new Response(indices, aliases, dataStreams));
-                    }
+                    }  
                 };
 
-                // make the cross-cluster calls
+                // make the cross-cluster calls  
                 for (Map.Entry<String, OriginalIndices> remoteIndices : remoteClusterIndices.entrySet()) {
                     String clusterAlias = remoteIndices.getKey();
-                    OriginalIndices originalIndices = remoteIndices.getValue();
+                    OriginalIndices originalIndices = remoteIndices.getValue();  
                     Client remoteClusterClient = remoteClusterService.getRemoteClusterClient(threadPool, clusterAlias);
                     Request remoteRequest = new Request(originalIndices.indices(), originalIndices.indicesOptions());
-                    remoteClusterClient.admin().indices().resolveIndex(remoteRequest, ActionListener.wrap(response -> {
+                    remoteClusterClient.admin().indices().resolveIndex(remoteRequest, ActionListener.wrap(response -> {  
                         remoteResponses.put(clusterAlias, response);
                         terminalHandler.run();
-                    }, failure -> terminalHandler.run()));
+                    }, failure -> terminalHandler.run()));  
                 }
             } else {
-                listener.onResponse(new Response(indices, aliases, dataStreams));
+                listener.onResponse(new Response(indices, aliases, dataStreams));  
             }
         }
 
         @Override
         public ResolvedIndices resolveIndices(Request request) {
-            return resolvedIndices(request, clusterService.state());
+            return resolvedIndices(request, clusterService.state());  
         }
 
-        private ResolvedIndices resolvedIndices(Request request, ClusterState clusterState) {
+        private ResolvedIndices resolvedIndices(Request request, ClusterState clusterState) {  
             Map<String, OriginalIndices> remoteClusterIndices = remoteClusterService.groupIndices(
                 request.indicesOptions(),
-                request.indices(),
+                request.indices(),  
                 idx -> indexNameExpressionResolver.hasIndexAbstraction(idx, clusterState)
             );
-            OriginalIndices localIndices = remoteClusterIndices.remove(RemoteClusterAware.LOCAL_CLUSTER_GROUP_KEY);
+            OriginalIndices localIndices = remoteClusterIndices.remove(RemoteClusterAware.LOCAL_CLUSTER_GROUP_KEY);  
 
             if (localIndices != null) {
-                return ResolvedIndices.of(
+                return ResolvedIndices.of(  
                     indexAbstractionResolver.resolveIndexAbstractions(
                         localIndices.indices(),
-                        localIndices.indicesOptions(),
+                        localIndices.indicesOptions(),  
                         clusterState.metadata(),
                         request.includeDataStreams(),
-                        false
+                        false  
                     )
                 ).withRemoteIndices(remoteClusterIndices);
-            } else {
+            } else {  
                 return ResolvedIndices.of(Collections.emptySet()).withRemoteIndices(remoteClusterIndices);
             }
-        }
+        }  
 
         /**
-         * Resolves the specified names and/or wildcard expressions to index abstractions. Returns results in the supplied lists.
+         * Resolves the specified names and/or wildcard expressions to index abstractions. Returns results in the supplied lists.  
          *
          * @param names          The names and wildcard expressions to resolve
-         * @param indicesOptions Options for expanding wildcards to indices with different states
+         * @param indicesOptions Options for expanding wildcards to indices with different states  
          * @param metadata       Cluster metadata
          * @param resolver       Resolver instance for matching names
-         * @param indices        List containing any matching indices
+         * @param indices        List containing any matching indices  
          * @param aliases        List containing any matching aliases
          * @param dataStreams    List containing any matching data streams
-         */
+         */  
         // visible for testing
         static void resolveIndices(
-            String[] names,
+            String[] names,  
             IndicesOptions indicesOptions,
             Metadata metadata,
-            IndexAbstractionResolver resolver,
+            IndexAbstractionResolver resolver,  
             List<ResolvedIndex> indices,
             List<ResolvedAlias> aliases,
-            List<ResolvedDataStream> dataStreams,
+            List<ResolvedDataStream> dataStreams,  
             boolean includeDataStreams
         ) {
-            List<String> resolvedIndexAbstractions = resolver.resolveIndexAbstractions(names, indicesOptions, metadata, includeDataStreams);
+            List<String> resolvedIndexAbstractions = resolver.resolveIndexAbstractions(names, indicesOptions, metadata, includeDataStreams);  
             SortedMap<String, IndexAbstraction> lookup = metadata.getIndicesLookup();
             for (String s : resolvedIndexAbstractions) {
-                enrichIndexAbstraction(s, lookup, indices, aliases, dataStreams);
+                enrichIndexAbstraction(s, lookup, indices, aliases, dataStreams);  
             }
             indices.sort(Comparator.comparing(ResolvedIndexAbstraction::getName));
-            aliases.sort(Comparator.comparing(ResolvedIndexAbstraction::getName));
+            aliases.sort(Comparator.comparing(ResolvedIndexAbstraction::getName));  
             dataStreams.sort(Comparator.comparing(ResolvedIndexAbstraction::getName));
 
-        }
+        }  
 
         private static void mergeResults(
-            Map<String, Response> remoteResponses,
+            Map<String, Response> remoteResponses,  
             List<ResolvedIndex> indices,
             List<ResolvedAlias> aliases,
-            List<ResolvedDataStream> dataStreams
+            List<ResolvedDataStream> dataStreams  
         ) {
             for (Map.Entry<String, Response> responseEntry : remoteResponses.entrySet()) {
-                String clusterAlias = responseEntry.getKey();
+                String clusterAlias = responseEntry.getKey();  
                 Response response = responseEntry.getValue();
                 for (ResolvedIndex index : response.indices) {
-                    indices.add(index.copy(RemoteClusterAware.buildRemoteIndexName(clusterAlias, index.getName())));
+                    indices.add(index.copy(RemoteClusterAware.buildRemoteIndexName(clusterAlias, index.getName())));  
                 }
                 for (ResolvedAlias alias : response.aliases) {
-                    aliases.add(alias.copy(RemoteClusterAware.buildRemoteIndexName(clusterAlias, alias.getName())));
+                    aliases.add(alias.copy(RemoteClusterAware.buildRemoteIndexName(clusterAlias, alias.getName())));  
                 }
                 for (ResolvedDataStream dataStream : response.dataStreams) {
-                    dataStreams.add(dataStream.copy(RemoteClusterAware.buildRemoteIndexName(clusterAlias, dataStream.getName())));
+                    dataStreams.add(dataStream.copy(RemoteClusterAware.buildRemoteIndexName(clusterAlias, dataStream.getName())));  
                 }
             }
-        }
+        }  
 
         private static void enrichIndexAbstraction(
-            String indexAbstraction,
+            String indexAbstraction,  
             SortedMap<String, IndexAbstraction> lookup,
             List<ResolvedIndex> indices,
-            List<ResolvedAlias> aliases,
+            List<ResolvedAlias> aliases,  
             List<ResolvedDataStream> dataStreams
         ) {
-            IndexAbstraction ia = lookup.get(indexAbstraction);
+            IndexAbstraction ia = lookup.get(indexAbstraction);  
             if (ia != null) {
                 switch (ia.getType()) {
-                    case CONCRETE_INDEX:
+                    case CONCRETE_INDEX:  
                         IndexAbstraction.Index index = (IndexAbstraction.Index) ia;
 
-                        String[] aliasNames = StreamSupport.stream(
+                        String[] aliasNames = StreamSupport.stream(  
                             Spliterators.spliteratorUnknownSize(index.getWriteIndex().getAliases().keySet().iterator(), 0),
                             false
-                        ).toArray(String[]::new);
+                        ).toArray(String[]::new);  
                         Arrays.sort(aliasNames);
 
-                        List<String> attributes = new ArrayList<>();
+                        List<String> attributes = new ArrayList<>();  
                         attributes.add(index.getWriteIndex().getState() == IndexMetadata.State.OPEN ? "open" : "closed");
                         if (ia.isHidden()) {
-                            attributes.add("hidden");
+                            attributes.add("hidden");  
                         }
                         final boolean isFrozen = Boolean.parseBoolean(ia.getWriteIndex().getSettings().get("index.frozen"));
-                        if (isFrozen) {
+                        if (isFrozen) {  
                             attributes.add("frozen");
                         }
-                        attributes.sort(String::compareTo);
+                        attributes.sort(String::compareTo);  
 
                         indices.add(
-                            new ResolvedIndex(
+                            new ResolvedIndex(  
                                 index.getName(),
                                 aliasNames,
-                                attributes.toArray(Strings.EMPTY_ARRAY),
+                                attributes.toArray(Strings.EMPTY_ARRAY),  
                                 index.getParentDataStream() == null ? null : index.getParentDataStream().getName()
                             )
-                        );
+                        );  
                         break;
                     case ALIAS:
-                        IndexAbstraction.Alias alias = (IndexAbstraction.Alias) ia;
+                        IndexAbstraction.Alias alias = (IndexAbstraction.Alias) ia;  
                         String[] indexNames = alias.getIndices().stream().map(i -> i.getIndex().getName()).toArray(String[]::new);
                         Arrays.sort(indexNames);
-                        aliases.add(new ResolvedAlias(alias.getName(), indexNames));
+                        aliases.add(new ResolvedAlias(alias.getName(), indexNames));  
                         break;
                     case DATA_STREAM:
-                        IndexAbstraction.DataStream dataStream = (IndexAbstraction.DataStream) ia;
+                        IndexAbstraction.DataStream dataStream = (IndexAbstraction.DataStream) ia;  
                         String[] backingIndices = dataStream.getIndices().stream().map(i -> i.getIndex().getName()).toArray(String[]::new);
                         Arrays.sort(backingIndices);
-                        dataStreams.add(
+                        dataStreams.add(  
                             new ResolvedDataStream(
                                 dataStream.getName(),
-                                backingIndices,
+                                backingIndices,  
                                 dataStream.getDataStream().getTimeStampField().getName()
                             )
-                        );
+                        );  
                         break;
                     default:
-                        throw new IllegalStateException("unknown index abstraction type: " + ia.getType());
+                        throw new IllegalStateException("unknown index abstraction type: " + ia.getType());  
                 }
             }
-        }
+        }  
     }
 }

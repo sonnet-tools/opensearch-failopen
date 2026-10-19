@@ -1,764 +1,764 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.plugin.wlm;
 
 import org.apache.logging.log4j.LogManager;
 import org.opensearch.action.ActionRequest;
-import org.opensearch.action.DocWriteResponse;
+import org.opensearch.action.DocWriteResponse;  
 import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
 import org.opensearch.action.admin.cluster.wlm.WlmStatsAction;
-import org.opensearch.action.admin.cluster.wlm.WlmStatsRequest;
+import org.opensearch.action.admin.cluster.wlm.WlmStatsRequest;  
 import org.opensearch.action.admin.cluster.wlm.WlmStatsResponse;
 import org.opensearch.action.index.IndexResponse;
-import org.opensearch.action.search.SearchRequestBuilder;
+import org.opensearch.action.search.SearchRequestBuilder;  
 import org.opensearch.action.search.SearchRequestStats;
 import org.opensearch.action.search.SearchResponse;
-import org.opensearch.action.support.ActionFilter;
+import org.opensearch.action.support.ActionFilter;  
 import org.opensearch.action.support.ActionFilterChain;
 import org.opensearch.action.support.ActionRequestMetadata;
-import org.opensearch.action.support.WriteRequest;
+import org.opensearch.action.support.WriteRequest;  
 import org.opensearch.cluster.metadata.WorkloadGroup;
 import org.opensearch.common.action.ActionFuture;
-import org.opensearch.common.settings.Settings;
+import org.opensearch.common.settings.Settings;  
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.action.ActionResponse;
+import org.opensearch.core.action.ActionResponse;  
 import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
 import org.opensearch.core.rest.RestStatus;
-import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.index.query.QueryBuilders;  
 import org.opensearch.indices.TermsLookup;
 import org.opensearch.plugin.wlm.rule.WorkloadGroupFeatureType;
-import org.opensearch.plugins.ActionPlugin;
+import org.opensearch.plugins.ActionPlugin;  
 import org.opensearch.plugins.Plugin;
 import org.opensearch.plugins.PluginsService;
-import org.opensearch.rest.RestHeaderDefinition;
+import org.opensearch.rest.RestHeaderDefinition;  
 import org.opensearch.rule.RuleAttribute;
 import org.opensearch.rule.RuleFrameworkPlugin;
-import org.opensearch.rule.RulePersistenceServiceRegistry;
+import org.opensearch.rule.RulePersistenceServiceRegistry;  
 import org.opensearch.rule.RuleRoutingServiceRegistry;
 import org.opensearch.rule.action.CreateRuleAction;
-import org.opensearch.rule.action.CreateRuleRequest;
+import org.opensearch.rule.action.CreateRuleRequest;  
 import org.opensearch.rule.autotagging.AutoTaggingRegistry;
 import org.opensearch.rule.autotagging.FeatureType;
-import org.opensearch.rule.autotagging.Rule;
+import org.opensearch.rule.autotagging.Rule;  
 import org.opensearch.script.MockScriptPlugin;
 import org.opensearch.script.Script;
-import org.opensearch.script.ScriptType;
+import org.opensearch.script.ScriptType;  
 import org.opensearch.search.lookup.LeafFieldsLookup;
 import org.opensearch.tasks.Task;
-import org.opensearch.test.OpenSearchIntegTestCase;
+import org.opensearch.test.OpenSearchIntegTestCase;  
 import org.opensearch.transport.client.Client;
 import org.opensearch.wlm.MutableWorkloadGroupFragment;
-import org.opensearch.wlm.ResourceType;
+import org.opensearch.wlm.ResourceType;  
 import org.opensearch.wlm.WorkloadGroupTask;
 import org.opensearch.wlm.WorkloadGroupThrottleSettings;
-import org.opensearch.wlm.WorkloadManagementSettings;
+import org.opensearch.wlm.WorkloadManagementSettings;  
 import org.opensearch.wlm.stats.WlmStats;
 import org.opensearch.wlm.stats.WorkloadGroupStats.WorkloadGroupStatsHolder;
-import org.joda.time.Instant;
+import org.joda.time.Instant;  
 import org.junit.After;
 import org.junit.Before;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
+import java.util.Collections;  
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Map;  
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicBoolean;  
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
-import java.util.function.ToLongFunction;
+import java.util.function.ToLongFunction;  
 
 import static org.opensearch.index.query.QueryBuilders.scriptQuery;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
 import static org.hamcrest.Matchers.greaterThan;
 
-/**
+/**  
  * End-to-end integration test for per-node WLM request throttling ({@code node_limit}, with group scope by default).
  * <p>
- * The scripted-block plugin holds a search in-flight (occupying a throttle permit) so that a second concurrent
+ * The scripted-block plugin holds a search in-flight (occupying a throttle permit) so that a second concurrent  
  * search deterministically exceeds the node limit and must be rejected with a 429
  * ({@link OpenSearchRejectedExecutionException}). This exercises the real coordinator admission hook in
- * {@code TransportSearchAction} through auto-tagging, not a mocked service.
+ * {@code TransportSearchAction} through auto-tagging, not a mocked service.  
  */
 @OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 1, numClientNodes = 0, supportsDedicatedMasters = false)
-public class WlmNodeThrottlingIT extends OpenSearchIntegTestCase {
+public class WlmNodeThrottlingIT extends OpenSearchIntegTestCase {  
 
     private static final TimeValue TIMEOUT = new TimeValue(30, TimeUnit.SECONDS);
-    private static final String PUT = "PUT";
+    private static final String PUT = "PUT";  
 
     @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
+    protected Collection<Class<? extends Plugin>> nodePlugins() {  
         List<Class<? extends Plugin>> plugins = new ArrayList<>(super.nodePlugins());
         plugins.add(WlmAutoTaggingIT.TestWorkloadManagementPlugin.class);
-        plugins.add(RuleFrameworkPlugin.class);
+        plugins.add(RuleFrameworkPlugin.class);  
         plugins.add(ScriptedBlockPlugin.class);
         plugins.add(TestPrincipalPlugin.class);
-        return plugins;
+        return plugins;  
     }
 
-    @Before
+    @Before  
     public void registerFeatureTypeIfMissingOnAllNodes() {
         // The registry is JVM-static but each test gets a new cluster, so re-register this cluster's feature type.
-        AutoTaggingRegistry.featureTypesRegistryMap.remove(WorkloadGroupFeatureType.NAME);
+        AutoTaggingRegistry.featureTypesRegistryMap.remove(WorkloadGroupFeatureType.NAME);  
         FeatureType featureType = WlmAutoTaggingIT.TestWorkloadManagementPlugin.featureType;
         AutoTaggingRegistry.registerFeatureType(featureType);
 
         for (String node : internalCluster().getNodeNames()) {
             RulePersistenceServiceRegistry persistenceRegistry = internalCluster().getInstance(RulePersistenceServiceRegistry.class, node);
-            RuleRoutingServiceRegistry routingRegistry = internalCluster().getInstance(RuleRoutingServiceRegistry.class, node);
+            RuleRoutingServiceRegistry routingRegistry = internalCluster().getInstance(RuleRoutingServiceRegistry.class, node);  
             try {
                 routingRegistry.getRuleRoutingService(featureType);
-            } catch (IllegalArgumentException ex) {
+            } catch (IllegalArgumentException ex) {  
                 persistenceRegistry.register(featureType, WlmAutoTaggingIT.TestWorkloadManagementPlugin.rulePersistenceService);
                 routingRegistry.register(featureType, WlmAutoTaggingIT.TestWorkloadManagementPlugin.ruleRoutingService);
-            }
+            }  
         }
     }
 
     @After
     public void clearWlmModeSetting() throws Exception {
-        Settings.Builder builder = Settings.builder().putNull(WorkloadManagementSettings.WLM_MODE_SETTING.getKey());
+        Settings.Builder builder = Settings.builder().putNull(WorkloadManagementSettings.WLM_MODE_SETTING.getKey());  
         assertAcked(client().admin().cluster().prepareUpdateSettings().setPersistentSettings(builder).get());
     }
 
     public void testSecondConcurrentSearchRejectedWhenNodeLimitReached() throws Exception {
         String workloadGroupId = "wlm_throttle_group";
-        String ruleId = "wlm_throttle_rule";
+        String ruleId = "wlm_throttle_rule";  
         String indexName = "throttle_index";
 
-        setWlmMode("enabled");
+        setWlmMode("enabled");  
 
         WorkloadGroup workloadGroup = createThrottledWorkloadGroup("throttle_test_group", workloadGroupId, 1);
-        updateWorkloadGroupInClusterState(PUT, workloadGroup);
+        updateWorkloadGroupInClusterState(PUT, workloadGroup);  
 
         FeatureType featureType = AutoTaggingRegistry.getFeatureType(WorkloadGroupFeatureType.NAME);
-        createRule(ruleId, "throttle rule", indexName, featureType, workloadGroupId);
+        createRule(ruleId, "throttle rule", indexName, featureType, workloadGroupId);  
 
         indexDocument(indexName);
 
         // Rule propagation is async; wait until searches are tagged to the group.
         assertBusy(() -> {
-            int before = getCompletions(workloadGroupId);
+            int before = getCompletions(workloadGroupId);  
             client().prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery()).get();
             int after = getCompletions(workloadGroupId);
-            assertTrue("Expected search to be tagged to the throttled workload group", after > before);
+            assertTrue("Expected search to be tagged to the throttled workload group", after > before);  
         }, 30, TimeUnit.SECONDS);
 
-        List<ScriptedBlockPlugin> plugins = initBlockFactory();
+        List<ScriptedBlockPlugin> plugins = initBlockFactory();  
 
         ActionFuture<SearchResponse> blockedSearch;
-        try {
+        try {  
             // Holds the only permit.
             blockedSearch = blockingSearch(indexName).execute();
-            awaitForBlock(plugins);
+            awaitForBlock(plugins);  
 
             int throttledBefore = getThrottled(workloadGroupId);
-            long inFlightBefore = currentInFlightSearches();
+            long inFlightBefore = currentInFlightSearches();  
 
             // Second search while the first is still in-flight: must be rejected (429).
-            Throwable rejection = expectThrows(Throwable.class, () -> blockingSearch(indexName).execute().actionGet(TIMEOUT));
+            Throwable rejection = expectThrows(Throwable.class, () -> blockingSearch(indexName).execute().actionGet(TIMEOUT));  
             assertTrue(
                 "Expected an OpenSearchRejectedExecutionException in the cause chain but was: " + rejection,
-                hasRejectedExecutionCause(rejection)
+                hasRejectedExecutionCause(rejection)  
             );
 
-            assertEquals("total_throttled should increment by exactly one", throttledBefore + 1, getThrottled(workloadGroupId));
+            assertEquals("total_throttled should increment by exactly one", throttledBefore + 1, getThrottled(workloadGroupId));  
 
             // A rejected request must not leak the in-flight gauge. Poll, since background rule-sync searches also move it.
-            assertBusy(
+            assertBusy(  
                 () -> assertEquals(
                     "in-flight search gauge must exclude the throttle-rejected request",
-                    inFlightBefore,
+                    inFlightBefore,  
                     currentInFlightSearches()
                 ),
-                30,
+                30,  
                 TimeUnit.SECONDS
             );
-        } finally {
+        } finally {  
             disableBlocks(plugins);
         }
-        assertNotNull(blockedSearch.actionGet(TIMEOUT));
+        assertNotNull(blockedSearch.actionGet(TIMEOUT));  
 
         // Once the blocked search finishes, the gauge must drain back to zero (no leaked in-flight count).
-        assertBusy(() -> assertEquals("in-flight search gauge must drain to zero", 0L, currentInFlightSearches()), 30, TimeUnit.SECONDS);
+        assertBusy(() -> assertEquals("in-flight search gauge must drain to zero", 0L, currentInFlightSearches()), 30, TimeUnit.SECONDS);  
     }
 
-    public void testScrollContinuationIsThrottled() throws Exception {
+    public void testScrollContinuationIsThrottled() throws Exception {  
         String workloadGroupId = "wlm_scroll_throttle_group";
         String ruleId = "wlm_scroll_throttle_rule";
-        String indexName = "scroll_throttle_index";
+        String indexName = "scroll_throttle_index";  
 
         setWlmMode("enabled");
-        WorkloadGroup workloadGroup = createThrottledWorkloadGroup("scroll_throttle_test_group", workloadGroupId, 1);
+        WorkloadGroup workloadGroup = createThrottledWorkloadGroup("scroll_throttle_test_group", workloadGroupId, 1);  
         updateWorkloadGroupInClusterState(PUT, workloadGroup);
 
-        FeatureType featureType = AutoTaggingRegistry.getFeatureType(WorkloadGroupFeatureType.NAME);
+        FeatureType featureType = AutoTaggingRegistry.getFeatureType(WorkloadGroupFeatureType.NAME);  
         createRule(ruleId, "scroll throttle rule", indexName, featureType, workloadGroupId);
 
-        indexDocument(indexName);
+        indexDocument(indexName);  
 
         assertBusy(() -> {
-            int before = getCompletions(workloadGroupId);
+            int before = getCompletions(workloadGroupId);  
             client().prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery()).get();
             int after = getCompletions(workloadGroupId);
-            assertTrue("Expected search to be tagged to the throttled workload group", after > before);
+            assertTrue("Expected search to be tagged to the throttled workload group", after > before);  
         }, 30, TimeUnit.SECONDS);
 
-        // Open a scroll context with a cheap query so the initial search releases its permit immediately.
+        // Open a scroll context with a cheap query so the initial search releases its permit immediately.  
         String scrollId = client().prepareSearch(indexName)
             .setQuery(QueryBuilders.matchAllQuery())
-            .setSize(1)
+            .setSize(1)  
             .setScroll(TIMEOUT)
             .get()
-            .getScrollId();
+            .getScrollId();  
         try {
             List<ScriptedBlockPlugin> plugins = initBlockFactory();
-            ActionFuture<SearchResponse> blockedSearch;
+            ActionFuture<SearchResponse> blockedSearch;  
             final String sid = scrollId;
             try {
-                blockedSearch = blockingSearch(indexName).execute();
+                blockedSearch = blockingSearch(indexName).execute();  
                 awaitForBlock(plugins);
 
-                int throttledBefore = getThrottled(workloadGroupId);
+                int throttledBefore = getThrottled(workloadGroupId);  
 
                 // A scroll continuation must be throttled too, or ?scroll= would bypass node_limit.
-                Throwable rejection = expectThrows(
+                Throwable rejection = expectThrows(  
                     Throwable.class,
                     () -> client().prepareSearchScroll(sid).setScroll(TIMEOUT).execute().actionGet(TIMEOUT)
-                );
+                );  
                 assertTrue("Expected a scroll continuation to be throttled but was: " + rejection, hasRejectedExecutionCause(rejection));
                 assertEquals("a throttled scroll must be counted", throttledBefore + 1, getThrottled(workloadGroupId));
-            } finally {
+            } finally {  
                 disableBlocks(plugins);
             }
-            assertNotNull(blockedSearch.actionGet(TIMEOUT));
+            assertNotNull(blockedSearch.actionGet(TIMEOUT));  
 
             // Proves the rejection was the throttle, not a broken scroll context.
-            assertNotNull(client().prepareSearchScroll(sid).setScroll(TIMEOUT).get());
+            assertNotNull(client().prepareSearchScroll(sid).setScroll(TIMEOUT).get());  
         } finally {
             client().prepareClearScroll().addScrollId(scrollId).get();
-        }
+        }  
     }
 
-    public void testUsernameThrottlingKeepsPerUserBuckets() throws Exception {
+    public void testUsernameThrottlingKeepsPerUserBuckets() throws Exception {  
         String workloadGroupId = "wlm_user_throttle_group";
         String ruleId = "wlm_user_throttle_rule";
-        String indexName = "user_throttle_index";
+        String indexName = "user_throttle_index";  
 
         setWlmMode("enabled");
 
         // Group throttled per-username to a single in-flight request per node (by = username).
         WorkloadGroup workloadGroup = createThrottledWorkloadGroup("user_throttle_test_group", workloadGroupId, 1, "username");
-        updateWorkloadGroupInClusterState(PUT, workloadGroup);
+        updateWorkloadGroupInClusterState(PUT, workloadGroup);  
 
         FeatureType featureType = AutoTaggingRegistry.getFeatureType(WorkloadGroupFeatureType.NAME);
-        // Rule validation reads applied cluster state, so wait for the group before creating the rule.
+        // Rule validation reads applied cluster state, so wait for the group before creating the rule.  
         assertBusy(() -> {
             boolean present = client().admin()
-                .cluster()
+                .cluster()  
                 .prepareState()
                 .get()
-                .getState()
+                .getState()  
                 .metadata()
                 .workloadGroups()
-                .containsKey(workloadGroupId);
+                .containsKey(workloadGroupId);  
             assertTrue("workload group not yet applied in cluster state", present);
         }, 30, TimeUnit.SECONDS);
-        createRule(ruleId, "user throttle rule", indexName, featureType, workloadGroupId);
+        createRule(ruleId, "user throttle rule", indexName, featureType, workloadGroupId);  
 
         indexDocument(indexName);
 
         // Wait for rule propagation: a search tagged as alice must reach the group before the concurrency scenario.
         assertBusy(() -> {
-            int before = getCompletions(workloadGroupId);
+            int before = getCompletions(workloadGroupId);  
             searchAs("alice", indexName).setQuery(QueryBuilders.matchAllQuery()).get();
             int after = getCompletions(workloadGroupId);
-            assertTrue("Expected search to be tagged to the throttled workload group", after > before);
+            assertTrue("Expected search to be tagged to the throttled workload group", after > before);  
         }, 30, TimeUnit.SECONDS);
 
-        List<ScriptedBlockPlugin> plugins = initBlockFactory();
+        List<ScriptedBlockPlugin> plugins = initBlockFactory();  
 
         ActionFuture<SearchResponse> aliceBlocked;
-        ActionFuture<SearchResponse> bobBlocked;
+        ActionFuture<SearchResponse> bobBlocked;  
         try {
             // alice's first search blocks in the query phase, holding her single per-user permit.
-            aliceBlocked = blockingSearchAs("alice", indexName).execute();
+            aliceBlocked = blockingSearchAs("alice", indexName).execute();  
             awaitForBlock(plugins);
 
-            int throttledBefore = getThrottled(workloadGroupId);
+            int throttledBefore = getThrottled(workloadGroupId);  
 
             // alice's second concurrent search hits her per-user node_limit -> 429.
-            Throwable rejection = expectThrows(Throwable.class, () -> blockingSearchAs("alice", indexName).execute().actionGet(TIMEOUT));
+            Throwable rejection = expectThrows(Throwable.class, () -> blockingSearchAs("alice", indexName).execute().actionGet(TIMEOUT));  
             assertTrue(
                 "Expected an OpenSearchRejectedExecutionException in the cause chain but was: " + rejection,
-                hasRejectedExecutionCause(rejection)
+                hasRejectedExecutionCause(rejection)  
             );
             assertEquals("total_throttled should increment by exactly one", throttledBefore + 1, getThrottled(workloadGroupId));
 
             // bob is a different bucket, so he is admitted. His search blocks too, so run it async.
             bobBlocked = blockingSearchAs("bob", indexName).execute();
-            assertBusy(() -> {
+            assertBusy(() -> {  
                 int blocked = 0;
                 for (ScriptedBlockPlugin plugin : plugins) {
-                    blocked += plugin.hits.get();
+                    blocked += plugin.hits.get();  
                 }
                 assertThat("bob's search should have been admitted and reached the blocking script", blocked, greaterThan(1));
-            }, 30, TimeUnit.SECONDS);
+            }, 30, TimeUnit.SECONDS);  
             // bob was admitted, so no additional throttle beyond alice's one rejection.
             assertEquals("bob must not be throttled by alice's bucket", throttledBefore + 1, getThrottled(workloadGroupId));
-        } finally {
+        } finally {  
             disableBlocks(plugins);
         }
-        assertNotNull(aliceBlocked.actionGet(TIMEOUT));
+        assertNotNull(aliceBlocked.actionGet(TIMEOUT));  
         assertNotNull(bobBlocked.actionGet(TIMEOUT));
     }
 
     public void testRoleThrottlingKeepsPerRoleBuckets() throws Exception {
         String workloadGroupId = "wlm_role_throttle_group";
-        String ruleId = "wlm_role_throttle_rule";
+        String ruleId = "wlm_role_throttle_rule";  
         String indexName = "role_throttle_index";
 
-        setWlmMode("enabled");
+        setWlmMode("enabled");  
 
         WorkloadGroup workloadGroup = createThrottledWorkloadGroup("role_throttle_test_group", workloadGroupId, 1, "role");
-        updateWorkloadGroupInClusterState(PUT, workloadGroup);
+        updateWorkloadGroupInClusterState(PUT, workloadGroup);  
 
         FeatureType featureType = AutoTaggingRegistry.getFeatureType(WorkloadGroupFeatureType.NAME);
-        assertBusy(() -> {
+        assertBusy(() -> {  
             boolean present = client().admin()
                 .cluster()
-                .prepareState()
+                .prepareState()  
                 .get()
                 .getState()
-                .metadata()
+                .metadata()  
                 .workloadGroups()
                 .containsKey(workloadGroupId);
-            assertTrue("workload group not yet applied in cluster state", present);
+            assertTrue("workload group not yet applied in cluster state", present);  
         }, 30, TimeUnit.SECONDS);
         createRule(ruleId, "role throttle rule", indexName, featureType, workloadGroupId);
 
         indexDocument(indexName);
 
-        assertBusy(() -> {
+        assertBusy(() -> {  
             int before = getCompletions(workloadGroupId);
             clientWithPrincipal(principal("alice", "analyst")).prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery()).get();
-            int after = getCompletions(workloadGroupId);
+            int after = getCompletions(workloadGroupId);  
             assertTrue("Expected search to be tagged to the throttled workload group", after > before);
         }, 30, TimeUnit.SECONDS);
 
         List<ScriptedBlockPlugin> plugins = initBlockFactory();
 
-        ActionFuture<SearchResponse> aliceBlocked;
+        ActionFuture<SearchResponse> aliceBlocked;  
         ActionFuture<SearchResponse> carolBlocked;
         try {
-            aliceBlocked = blockingSearchWithPrincipal(principal("alice", "analyst"), indexName).execute();
+            aliceBlocked = blockingSearchWithPrincipal(principal("alice", "analyst"), indexName).execute();  
             awaitForBlock(plugins);
 
-            int throttledBefore = getThrottled(workloadGroupId);
+            int throttledBefore = getThrottled(workloadGroupId);  
 
             // Same role as alice, so same bucket.
-            Throwable rejection = expectThrows(
+            Throwable rejection = expectThrows(  
                 Throwable.class,
                 () -> blockingSearchWithPrincipal(principal("bob", "analyst"), indexName).execute().actionGet(TIMEOUT)
-            );
+            );  
             assertTrue(
                 "Expected an OpenSearchRejectedExecutionException in the cause chain but was: " + rejection,
-                hasRejectedExecutionCause(rejection)
+                hasRejectedExecutionCause(rejection)  
             );
             assertEquals("total_throttled should increment by exactly one", throttledBefore + 1, getThrottled(workloadGroupId));
 
             // carol also holds analyst, but is charged to her smallest role, admin.
             carolBlocked = blockingSearchWithPrincipal(principal("carol", "analyst", "admin"), indexName).execute();
-            assertBusy(() -> {
+            assertBusy(() -> {  
                 int blocked = 0;
                 for (ScriptedBlockPlugin plugin : plugins) {
-                    blocked += plugin.hits.get();
+                    blocked += plugin.hits.get();  
                 }
                 assertThat("carol's search should have been admitted and reached the blocking script", blocked, greaterThan(1));
-            }, 30, TimeUnit.SECONDS);
+            }, 30, TimeUnit.SECONDS);  
             assertEquals("carol must not be throttled by the analyst bucket", throttledBefore + 1, getThrottled(workloadGroupId));
         } finally {
-            disableBlocks(plugins);
+            disableBlocks(plugins);  
         }
         assertNotNull(aliceBlocked.actionGet(TIMEOUT));
-        assertNotNull(carolBlocked.actionGet(TIMEOUT));
+        assertNotNull(carolBlocked.actionGet(TIMEOUT));  
     }
 
-    // Helpers
+    // Helpers  
 
     private static boolean hasRejectedExecutionCause(Throwable t) {
-        for (Throwable cur = t; cur != null; cur = cur.getCause()) {
+        for (Throwable cur = t; cur != null; cur = cur.getCause()) {  
             if (cur instanceof OpenSearchRejectedExecutionException) {
                 return true;
-            }
+            }  
             if (cur.getCause() == cur) {
                 break;
-            }
+            }  
         }
         return false;
-    }
+    }  
 
     private int getCompletions(String groupId) throws Exception {
-        return sumGroupStat(groupId, WorkloadGroupStatsHolder::getCompletions);
+        return sumGroupStat(groupId, WorkloadGroupStatsHolder::getCompletions);  
     }
 
-    private int getThrottled(String groupId) throws Exception {
+    private int getThrottled(String groupId) throws Exception {  
         return sumGroupStat(groupId, WorkloadGroupStatsHolder::getThrottled);
     }
 
     /**
      * Sums one stat for a workload group across every node's WLM stats, read from the response objects directly. The
-     * group may be absent from a node that has not registered it yet, which contributes nothing.
+     * group may be absent from a node that has not registered it yet, which contributes nothing.  
      */
     private int sumGroupStat(String groupId, ToLongFunction<WorkloadGroupStatsHolder> extractor) throws Exception {
-        WlmStatsRequest request = new WlmStatsRequest(null, new HashSet<>(Collections.singletonList(groupId)), null);
+        WlmStatsRequest request = new WlmStatsRequest(null, new HashSet<>(Collections.singletonList(groupId)), null);  
         WlmStatsResponse response = client().execute(WlmStatsAction.INSTANCE, request).get();
         long total = 0;
-        for (WlmStats nodeStats : response.getNodes()) {
+        for (WlmStats nodeStats : response.getNodes()) {  
             WorkloadGroupStatsHolder holder = nodeStats.getWorkloadGroupStats().getStats().get(groupId);
             if (holder != null) {
-                total += extractor.applyAsLong(holder);
+                total += extractor.applyAsLong(holder);  
             }
         }
-        return Math.toIntExact(total);
+        return Math.toIntExact(total);  
     }
 
-    /**
+    /**  
      * Sums the current in-flight search gauge ({@link SearchRequestStats#getTookCurrent()})
      * across all data nodes. This is the counter incremented in {@code onRequestStart} and decremented in
-     * {@code onRequestEnd}/{@code onRequestFailure}; a throttle rejection must never touch it.
+     * {@code onRequestEnd}/{@code onRequestFailure}; a throttle rejection must never touch it.  
      */
     private long currentInFlightSearches() {
-        long total = 0;
+        long total = 0;  
         for (SearchRequestStats stats : internalCluster().getDataNodeInstances(SearchRequestStats.class)) {
             total += stats.getTookCurrent();
-        }
+        }  
         return total;
     }
 
     public void testNestedRewriteSearchIsNotChargedASecondPermit() throws Exception {
         String workloadGroupId = "wlm_nested_group";
-        String ruleId = "wlm_nested_rule";
+        String ruleId = "wlm_nested_rule";  
         String indexName = "orders";
         String lookupIndex = "lookupidx";
-        String secondLookupIndex = "lookupidx2";
+        String secondLookupIndex = "lookupidx2";  
 
         setWlmMode("enabled");
-        // node_limit=1: the outer search holds the only permit while its rewrite issues a nested search to the same bucket.
+        // node_limit=1: the outer search holds the only permit while its rewrite issues a nested search to the same bucket.  
         WorkloadGroup workloadGroup = createThrottledWorkloadGroup("nested_test_group", workloadGroupId, 1);
         updateWorkloadGroupInClusterState(PUT, workloadGroup);
-        assertBusy(
+        assertBusy(  
             () -> assertTrue(
                 "workload group not yet applied in cluster state",
-                client().admin().cluster().prepareState().get().getState().metadata().workloadGroups().containsKey(workloadGroupId)
+                client().admin().cluster().prepareState().get().getState().metadata().workloadGroups().containsKey(workloadGroupId)  
             ),
             30,
-            TimeUnit.SECONDS
+            TimeUnit.SECONDS  
         );
 
-        FeatureType featureType = AutoTaggingRegistry.getFeatureType(WorkloadGroupFeatureType.NAME);
+        FeatureType featureType = AutoTaggingRegistry.getFeatureType(WorkloadGroupFeatureType.NAME);  
         createRule(ruleId, "nested rule", indexName, featureType, workloadGroupId);
 
-        indexDocument(indexName);
+        indexDocument(indexName);  
         // Matches no rule, so the nested search inherits the outer request's group and bucket.
         assertAcked(
-            client().admin()
+            client().admin()  
                 .indices()
                 .prepareCreate(lookupIndex)
-                .setSettings(Settings.builder().put("index.number_of_shards", 1).put("index.number_of_replicas", 0))
+                .setSettings(Settings.builder().put("index.number_of_shards", 1).put("index.number_of_replicas", 0))  
         );
         client().prepareIndex(lookupIndex)
-            .setId("1")
+            .setId("1")  
             .setSource(Map.of("uid", "value"))
             .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)
-            .get();
+            .get();  
         // A second rule-free lookup index, so a terms lookup can nest inside a terms lookup and reach depth 2.
         assertAcked(
-            client().admin()
+            client().admin()  
                 .indices()
                 .prepareCreate(secondLookupIndex)
-                .setSettings(Settings.builder().put("index.number_of_shards", 1).put("index.number_of_replicas", 0))
+                .setSettings(Settings.builder().put("index.number_of_shards", 1).put("index.number_of_replicas", 0))  
         );
         client().prepareIndex(secondLookupIndex)
-            .setId("1")
+            .setId("1")  
             .setSource(Map.of("uid", "value"))
             .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)
-            .get();
+            .get();  
 
         assertBusy(() -> {
-            int before = getCompletions(workloadGroupId);
+            int before = getCompletions(workloadGroupId);  
             client().prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery()).get();
             assertTrue("Expected search to be tagged to the throttled workload group", getCompletions(workloadGroupId) > before);
-        }, 30, TimeUnit.SECONDS);
+        }, 30, TimeUnit.SECONDS);  
 
         int throttledBefore = getThrottled(workloadGroupId);
 
         // A terms lookup with a subquery runs a nested search during rewrite; the outer request already paid.
         TermsLookup lookup = new TermsLookup(lookupIndex, null, "uid", QueryBuilders.matchAllQuery());
-        SearchResponse response = client().prepareSearch(indexName)
+        SearchResponse response = client().prepareSearch(indexName)  
             .setQuery(QueryBuilders.termsLookupQuery("field", lookup))
             .execute()
-            .actionGet(TIMEOUT);
+            .actionGet(TIMEOUT);  
         assertEquals(RestStatus.OK, response.status());
         assertEquals("a nested rewrite search must not be counted as throttled", throttledBefore, getThrottled(workloadGroupId));
 
         // Two levels: the exempt middle search must pass its parent's charge on to the grandchild.
         TermsLookup innerLookup = new TermsLookup(secondLookupIndex, null, "uid", QueryBuilders.matchAllQuery());
-        TermsLookup outerLookup = new TermsLookup(lookupIndex, null, "uid", QueryBuilders.termsLookupQuery("uid", innerLookup));
+        TermsLookup outerLookup = new TermsLookup(lookupIndex, null, "uid", QueryBuilders.termsLookupQuery("uid", innerLookup));  
         SearchResponse twoLevel = client().prepareSearch(indexName)
             .setQuery(QueryBuilders.termsLookupQuery("field", outerLookup))
-            .execute()
+            .execute()  
             .actionGet(TIMEOUT);
         assertEquals(RestStatus.OK, twoLevel.status());
-        assertEquals(
+        assertEquals(  
             "no level of one request's own nested rewrite may be counted as throttled",
             throttledBefore,
-            getThrottled(workloadGroupId)
+            getThrottled(workloadGroupId)  
         );
 
-        // A genuinely concurrent request is still rejected, so the exemption didn't disable throttling.
+        // A genuinely concurrent request is still rejected, so the exemption didn't disable throttling.  
         List<ScriptedBlockPlugin> plugins = initBlockFactory();
         ActionFuture<SearchResponse> blocked;
-        try {
+        try {  
             blocked = blockingSearch(indexName).execute();
             awaitForBlock(plugins);
-            Throwable rejection = expectThrows(Throwable.class, () -> blockingSearch(indexName).execute().actionGet(TIMEOUT));
+            Throwable rejection = expectThrows(Throwable.class, () -> blockingSearch(indexName).execute().actionGet(TIMEOUT));  
             assertTrue(
                 "an independent concurrent request must still be throttled but was: " + rejection,
-                hasRejectedExecutionCause(rejection)
+                hasRejectedExecutionCause(rejection)  
             );
         } finally {
-            disableBlocks(plugins);
+            disableBlocks(plugins);  
         }
         assertNotNull(blocked.actionGet(TIMEOUT));
-    }
+    }  
 
     private SearchRequestBuilder blockingSearch(String indexName) {
-        return client().prepareSearch(indexName)
+        return client().prepareSearch(indexName)  
             .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap())));
     }
 
     // Principals come from a test-only header via TestPrincipalPlugin, standing in for the security plugin.
     private Client clientAs(String username) {
-        return clientWithPrincipal("username|" + username);
+        return clientWithPrincipal("username|" + username);  
     }
 
-    private Client clientWithPrincipal(String principal) {
+    private Client clientWithPrincipal(String principal) {  
         return client().filterWithHeader(Map.of(TestPrincipalPlugin.TEST_PRINCIPAL_HEADER, principal));
     }
 
     private static String principal(String username, String... roles) {
         StringBuilder sb = new StringBuilder("username|").append(username);
-        for (String role : roles) {
+        for (String role : roles) {  
             sb.append(WorkloadGroupTask.WORKLOAD_GROUP_PRINCIPAL_VALUE_DELIMITER).append("role|").append(role);
         }
-        return sb.toString();
+        return sb.toString();  
     }
 
-    private SearchRequestBuilder blockingSearchWithPrincipal(String principal, String indexName) {
+    private SearchRequestBuilder blockingSearchWithPrincipal(String principal, String indexName) {  
         return clientWithPrincipal(principal).prepareSearch(indexName)
             .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap())));
-    }
+    }  
 
     private SearchRequestBuilder searchAs(String username, String indexName) {
-        return clientAs(username).prepareSearch(indexName);
+        return clientAs(username).prepareSearch(indexName);  
     }
 
-    private SearchRequestBuilder blockingSearchAs(String username, String indexName) {
+    private SearchRequestBuilder blockingSearchAs(String username, String indexName) {  
         return clientAs(username).prepareSearch(indexName)
             .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap())));
-    }
+    }  
 
     private List<ScriptedBlockPlugin> initBlockFactory() {
-        List<ScriptedBlockPlugin> plugins = new ArrayList<>();
+        List<ScriptedBlockPlugin> plugins = new ArrayList<>();  
         for (PluginsService pluginsService : internalCluster().getDataNodeInstances(PluginsService.class)) {
             plugins.addAll(pluginsService.filterPlugins(ScriptedBlockPlugin.class));
-        }
+        }  
         for (ScriptedBlockPlugin plugin : plugins) {
             plugin.reset();
-            plugin.enableBlock();
+            plugin.enableBlock();  
         }
         return plugins;
-    }
+    }  
 
     private void awaitForBlock(List<ScriptedBlockPlugin> plugins) throws Exception {
-        assertBusy(() -> {
+        assertBusy(() -> {  
             int blocked = 0;
             for (ScriptedBlockPlugin plugin : plugins) {
-                blocked += plugin.hits.get();
+                blocked += plugin.hits.get();  
             }
             assertThat(blocked, greaterThan(0));
-        });
+        });  
     }
 
-    private void disableBlocks(List<ScriptedBlockPlugin> plugins) {
+    private void disableBlocks(List<ScriptedBlockPlugin> plugins) {  
         for (ScriptedBlockPlugin plugin : plugins) {
             plugin.disableBlock();
-        }
+        }  
     }
 
-    private void createRule(String ruleId, String ruleName, String indexPattern, FeatureType featureType, String workloadGroupId)
+    private void createRule(String ruleId, String ruleName, String indexPattern, FeatureType featureType, String workloadGroupId)  
         throws Exception {
         Rule rule = new Rule(
-            ruleId,
+            ruleId,  
             ruleName,
             Map.of(RuleAttribute.INDEX_PATTERN, Set.of(indexPattern)),
-            featureType,
+            featureType,  
             workloadGroupId,
             Instant.now().toString()
-        );
+        );  
         client().execute(CreateRuleAction.INSTANCE, new CreateRuleRequest(rule)).get();
     }
 
     private void setWlmMode(String mode) throws Exception {
         Settings.Builder settings = Settings.builder().put(WorkloadManagementSettings.WLM_MODE_SETTING.getKey(), mode);
-        ClusterUpdateSettingsRequest request = new ClusterUpdateSettingsRequest().persistentSettings(settings);
+        ClusterUpdateSettingsRequest request = new ClusterUpdateSettingsRequest().persistentSettings(settings);  
         assertAcked(client().admin().cluster().updateSettings(request).get());
     }
 
     private WorkloadGroup createThrottledWorkloadGroup(String name, String id, int nodeLimit) {
         return createThrottledWorkloadGroup(name, id, nodeLimit, null);
-    }
+    }  
 
     private WorkloadGroup createThrottledWorkloadGroup(String name, String id, int nodeLimit, String by) {
-        Settings.Builder throttling = Settings.builder().put(WorkloadGroupThrottleSettings.NODE_LIMIT.getKey(), nodeLimit);
+        Settings.Builder throttling = Settings.builder().put(WorkloadGroupThrottleSettings.NODE_LIMIT.getKey(), nodeLimit);  
         if (by != null) {
             throttling.put(WorkloadGroupThrottleSettings.BY.getKey(), by);
-        }
+        }  
         return new WorkloadGroup(
             name,
-            id,
+            id,  
             new MutableWorkloadGroupFragment(
                 MutableWorkloadGroupFragment.ResiliencyMode.SOFT,
-                Map.of(ResourceType.CPU, 0.9, ResourceType.MEMORY, 0.9),
+                Map.of(ResourceType.CPU, 0.9, ResourceType.MEMORY, 0.9),  
                 Settings.EMPTY,
                 throttling.build()
-            ),
+            ),  
             Instant.now().getMillis()
         );
-    }
+    }  
 
     private void indexDocument(String indexName) {
-        assertAcked(
+        assertAcked(  
             client().admin()
                 .indices()
-                .prepareCreate(indexName)
+                .prepareCreate(indexName)  
                 .setSettings(Settings.builder().put("index.number_of_shards", 1).put("index.number_of_replicas", 0))
         );
-        IndexResponse response = client().prepareIndex(indexName)
+        IndexResponse response = client().prepareIndex(indexName)  
             .setId("1")
             .setSource(Map.of("field", "value"))
-            .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)
+            .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)  
             .get();
         assertEquals(DocWriteResponse.Result.CREATED, response.getResult());
-    }
+    }  
 
     private void updateWorkloadGroupInClusterState(String method, WorkloadGroup workloadGroup) throws InterruptedException {
-        WlmAutoTaggingIT.ExceptionCatchingListener listener = new WlmAutoTaggingIT.ExceptionCatchingListener();
+        WlmAutoTaggingIT.ExceptionCatchingListener listener = new WlmAutoTaggingIT.ExceptionCatchingListener();  
         client().execute(
             WlmAutoTaggingIT.TestClusterUpdateTransportAction.ACTION,
-            new WlmAutoTaggingIT.TestClusterUpdateRequest(workloadGroup, method),
+            new WlmAutoTaggingIT.TestClusterUpdateRequest(workloadGroup, method),  
             listener
         );
-        boolean completed = listener.getLatch().await(TIMEOUT.getSeconds(), TimeUnit.SECONDS);
+        boolean completed = listener.getLatch().await(TIMEOUT.getSeconds(), TimeUnit.SECONDS);  
         assertTrue("cluster-state update did not complete in time", completed);
         if (listener.getException() != null) {
-            throw new AssertionError("cluster-state update failed", listener.getException());
+            throw new AssertionError("cluster-state update failed", listener.getException());  
         }
     }
 
     /**
      * Stands in for the security plugin's principal extractor. Registers a test-only header as both a REST header and a
-     * task header, then copies it onto the task's throttle principal exactly as the real auto-tagging filter does, so the
+     * task header, then copies it onto the task's throttle principal exactly as the real auto-tagging filter does, so the  
      * IT exercises the production plumbing (task field -&gt; throttle admission) instead of simulating it.
      */
-    public static class TestPrincipalPlugin extends Plugin implements ActionPlugin {
+    public static class TestPrincipalPlugin extends Plugin implements ActionPlugin {  
         static final String TEST_PRINCIPAL_HEADER = "test_throttle_principal";
 
-        @Override
+        @Override  
         public Collection<RestHeaderDefinition> getRestHeaders() {
             return List.of(new RestHeaderDefinition(TEST_PRINCIPAL_HEADER, false));
-        }
+        }  
 
         @Override
-        public Collection<String> getTaskHeaders() {
+        public Collection<String> getTaskHeaders() {  
             return List.of(TEST_PRINCIPAL_HEADER);
         }
 
         @Override
         public List<ActionFilter> getActionFilters() {
-            return List.of(new ActionFilter() {
+            return List.of(new ActionFilter() {  
                 @Override
                 public int order() {
-                    return 0;
+                    return 0;  
                 }
 
-                @Override
+                @Override  
                 public <Req extends ActionRequest, Resp extends ActionResponse> void apply(
                     Task task,
-                    String action,
+                    String action,  
                     Req request,
                     ActionRequestMetadata<Req, Resp> metadata,
-                    ActionListener<Resp> listener,
+                    ActionListener<Resp> listener,  
                     ActionFilterChain<Req, Resp> chain
                 ) {
-                    if (task instanceof WorkloadGroupTask) {
+                    if (task instanceof WorkloadGroupTask) {  
                         String principal = task.getHeader(TEST_PRINCIPAL_HEADER);
                         if (principal != null) {
-                            ((WorkloadGroupTask) task).setThrottlePrincipal(principal);
+                            ((WorkloadGroupTask) task).setThrottlePrincipal(principal);  
                         }
                     }
-                    chain.proceed(task, action, request, listener);
+                    chain.proceed(task, action, request, listener);  
                 }
             });
-        }
+        }  
     }
 
-    /**
+    /**  
      * Test script plugin that blocks during the query phase until released, keeping a search in-flight.
      */
-    public static class ScriptedBlockPlugin extends MockScriptPlugin {
+    public static class ScriptedBlockPlugin extends MockScriptPlugin {  
         static final String SCRIPT_NAME = "search_block";
 
-        private final AtomicInteger hits = new AtomicInteger();
+        private final AtomicInteger hits = new AtomicInteger();  
         private final AtomicBoolean shouldBlock = new AtomicBoolean(true);
 
-        public void reset() {
+        public void reset() {  
             hits.set(0);
         }
 
         public void disableBlock() {
             shouldBlock.set(false);
-        }
+        }  
 
         public void enableBlock() {
-            shouldBlock.set(true);
+            shouldBlock.set(true);  
         }
 
-        @Override
+        @Override  
         public Map<String, Function<Map<String, Object>, Object>> pluginScripts() {
             return Collections.singletonMap(SCRIPT_NAME, params -> {
-                LeafFieldsLookup fieldsLookup = (LeafFieldsLookup) params.get("_fields");
+                LeafFieldsLookup fieldsLookup = (LeafFieldsLookup) params.get("_fields");  
                 LogManager.getLogger(WlmNodeThrottlingIT.class).info("Blocking on the document {}", fieldsLookup.get("_id"));
                 hits.incrementAndGet();
-                try {
+                try {  
                     // Outlast callers' 30s assertBusy waits; the 10s default would fail inside an unrelated assertion.
                     assertBusy(() -> assertFalse(shouldBlock.get()), 120, TimeUnit.SECONDS);
-                } catch (Exception e) {
+                } catch (Exception e) {  
                     throw new RuntimeException(e);
                 }
-                return true;
+                return true;  
             });
         }
-    }
+    }  
 }

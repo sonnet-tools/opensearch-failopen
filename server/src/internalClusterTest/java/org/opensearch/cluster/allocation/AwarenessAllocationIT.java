@@ -1,100 +1,100 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.cluster.allocation;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;
+import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;  
 import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
 import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.cluster.metadata.IndexMetadata;  
 import org.opensearch.cluster.metadata.IndexMetadata.State;
 import org.opensearch.cluster.routing.IndexRoutingTable;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
+import org.opensearch.cluster.routing.IndexShardRoutingTable;  
 import org.opensearch.cluster.routing.ShardRouting;
 import org.opensearch.cluster.routing.allocation.AwarenessReplicaBalance;
-import org.opensearch.cluster.routing.allocation.decider.AwarenessAllocationDecider;
+import org.opensearch.cluster.routing.allocation.decider.AwarenessAllocationDecider;  
 import org.opensearch.common.Priority;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
+import org.opensearch.common.unit.TimeValue;  
 import org.opensearch.test.InternalTestCluster;
 import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
+import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;  
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Arrays;  
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Map;  
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.opensearch.cluster.routing.ShardRoutingState.STARTED;
 import static org.opensearch.cluster.routing.ShardRoutingState.UNASSIGNED;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
 import static org.hamcrest.Matchers.anyOf;
 import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.equalTo;  
 
 @ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0, minNumDataNodes = 2)
-public class AwarenessAllocationIT extends OpenSearchIntegTestCase {
+public class AwarenessAllocationIT extends OpenSearchIntegTestCase {  
 
     private final Logger logger = LogManager.getLogger(AwarenessAllocationIT.class);
 
     @Override
     protected int numberOfReplicas() {
-        return 1;
+        return 1;  
     }
 
-    public void testSimpleAwareness() throws Exception {
+    public void testSimpleAwareness() throws Exception {  
         Settings commonSettings = Settings.builder().put("cluster.routing.allocation.awareness.attributes", "rack_id").build();
 
-        logger.info("--> starting 2 nodes on the same rack");
+        logger.info("--> starting 2 nodes on the same rack");  
         internalCluster().startNodes(2, Settings.builder().put(commonSettings).put("node.attr.rack_id", "rack_1").build());
 
-        Settings settings = Settings.builder()
+        Settings settings = Settings.builder()  
             .put(AwarenessReplicaBalance.CLUSTER_ROUTING_ALLOCATION_AWARENESS_BALANCE_SETTING.getKey(), false)
             .build();
-        ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
+        ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();  
         updateSettingsRequest.persistentSettings(settings);
 
-        createIndex("test1");
+        createIndex("test1");  
         createIndex("test2");
 
-        NumShards test1 = getNumShards("test1");
+        NumShards test1 = getNumShards("test1");  
         NumShards test2 = getNumShards("test2");
         // no replicas will be allocated as both indices end up on a single node
-        final int totalPrimaries = test1.numPrimaries + test2.numPrimaries;
+        final int totalPrimaries = test1.numPrimaries + test2.numPrimaries;  
 
         ensureGreen();
 
@@ -106,16 +106,16 @@ public class AwarenessAllocationIT extends OpenSearchIntegTestCase {
 
         // On slow machines the initial relocation might be delayed
         assertBusy(() -> {
-            logger.info("--> waiting for no relocation");
+            logger.info("--> waiting for no relocation");  
             ClusterHealthResponse clusterHealth = client().admin()
                 .cluster()
-                .prepareHealth()
+                .prepareHealth()  
                 .setIndices("test1", "test2")
                 .setWaitForEvents(Priority.LANGUID)
-                .setWaitForGreenStatus()
+                .setWaitForGreenStatus()  
                 .setWaitForNodes("3")
                 .setWaitForNoRelocatingShards(true)
-                .get();
+                .get();  
 
             assertThat("Cluster health request timed out", clusterHealth.isTimedOut(), equalTo(false));
 
@@ -124,151 +124,151 @@ public class AwarenessAllocationIT extends OpenSearchIntegTestCase {
 
             // check that closed indices are effectively closed
             final List<String> notClosedIndices = indicesToClose.stream()
-                .filter(index -> clusterState.metadata().index(index).getState() != State.CLOSE)
+                .filter(index -> clusterState.metadata().index(index).getState() != State.CLOSE)  
                 .collect(Collectors.toList());
             assertThat("Some indices not closed", notClosedIndices, empty());
 
             // verify that we have all the primaries on node3
             final Map<String, Integer> counts = new HashMap<>();
-            for (IndexRoutingTable indexRoutingTable : clusterState.routingTable()) {
+            for (IndexRoutingTable indexRoutingTable : clusterState.routingTable()) {  
                 for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
                     for (ShardRouting shardRouting : indexShardRoutingTable) {
-                        counts.merge(clusterState.nodes().get(shardRouting.currentNodeId()).getName(), 1, Integer::sum);
+                        counts.merge(clusterState.nodes().get(shardRouting.currentNodeId()).getName(), 1, Integer::sum);  
                     }
                 }
-            }
+            }  
             assertThat(counts.get(node3), equalTo(totalPrimaries));
         }, 10, TimeUnit.SECONDS);
-    }
+    }  
 
     public void testAwarenessZones() {
-        Settings commonSettings = Settings.builder()
+        Settings commonSettings = Settings.builder()  
             .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_FORCE_GROUP_SETTING.getKey() + "zone.values", "a,b")
             .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.getKey(), "zone")
-            .build();
+            .build();  
 
         logger.info("--> starting 4 nodes on different zones");
-        List<String> nodes = internalCluster().startNodes(
+        List<String> nodes = internalCluster().startNodes(  
             Settings.builder().put(commonSettings).put("node.attr.zone", "a").build(),
             Settings.builder().put(commonSettings).put("node.attr.zone", "b").build(),
-            Settings.builder().put(commonSettings).put("node.attr.zone", "b").build(),
+            Settings.builder().put(commonSettings).put("node.attr.zone", "b").build(),  
             Settings.builder().put(commonSettings).put("node.attr.zone", "a").build()
         );
-        String A_0 = nodes.get(0);
+        String A_0 = nodes.get(0);  
         String B_0 = nodes.get(1);
         String B_1 = nodes.get(2);
-        String A_1 = nodes.get(3);
+        String A_1 = nodes.get(3);  
 
         logger.info("--> waiting for nodes to form a cluster");
-        ClusterHealthResponse health = client().admin().cluster().prepareHealth().setWaitForNodes("4").execute().actionGet();
+        ClusterHealthResponse health = client().admin().cluster().prepareHealth().setWaitForNodes("4").execute().actionGet();  
         assertThat(health.isTimedOut(), equalTo(false));
 
-        createIndex(
+        createIndex(  
             "test",
             Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 5).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1).build()
-        );
+        );  
 
         if (randomBoolean()) {
-            assertAcked(client().admin().indices().prepareClose("test"));
+            assertAcked(client().admin().indices().prepareClose("test"));  
         }
 
-        logger.info("--> waiting for shards to be allocated");
+        logger.info("--> waiting for shards to be allocated");  
         health = client().admin()
             .cluster()
-            .prepareHealth()
+            .prepareHealth()  
             .setIndices("test")
             .setWaitForEvents(Priority.LANGUID)
-            .setWaitForGreenStatus()
+            .setWaitForGreenStatus()  
             .setWaitForNoRelocatingShards(true)
             .execute()
-            .actionGet();
+            .actionGet();  
         assertThat(health.isTimedOut(), equalTo(false));
 
-        ClusterState clusterState = client().admin().cluster().prepareState().execute().actionGet().getState();
+        ClusterState clusterState = client().admin().cluster().prepareState().execute().actionGet().getState();  
         final Map<String, Integer> counts = new HashMap<>();
 
-        for (IndexRoutingTable indexRoutingTable : clusterState.routingTable()) {
+        for (IndexRoutingTable indexRoutingTable : clusterState.routingTable()) {  
             for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
                 for (ShardRouting shardRouting : indexShardRoutingTable) {
-                    counts.merge(clusterState.nodes().get(shardRouting.currentNodeId()).getName(), 1, Integer::sum);
+                    counts.merge(clusterState.nodes().get(shardRouting.currentNodeId()).getName(), 1, Integer::sum);  
                 }
             }
-        }
+        }  
         assertThat(counts.get(A_1), anyOf(equalTo(2), equalTo(3)));
         assertThat(counts.get(B_1), anyOf(equalTo(2), equalTo(3)));
-        assertThat(counts.get(A_0), anyOf(equalTo(2), equalTo(3)));
+        assertThat(counts.get(A_0), anyOf(equalTo(2), equalTo(3)));  
         assertThat(counts.get(B_0), anyOf(equalTo(2), equalTo(3)));
     }
 
     public void testAwarenessZonesIncrementalNodes() {
         Settings commonSettings = Settings.builder()
-            .put("cluster.routing.allocation.awareness.force.zone.values", "a,b")
+            .put("cluster.routing.allocation.awareness.force.zone.values", "a,b")  
             .put("cluster.routing.allocation.awareness.attributes", "zone")
             .build();
 
         logger.info("--> starting 2 nodes on zones 'a' & 'b'");
         List<String> nodes = internalCluster().startNodes(
-            Settings.builder().put(commonSettings).put("node.attr.zone", "a").build(),
+            Settings.builder().put(commonSettings).put("node.attr.zone", "a").build(),  
             Settings.builder().put(commonSettings).put("node.attr.zone", "b").build()
         );
-        String A_0 = nodes.get(0);
+        String A_0 = nodes.get(0);  
         String B_0 = nodes.get(1);
 
-        createIndex(
+        createIndex(  
             "test",
             Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 5).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1).build()
-        );
+        );  
 
         if (randomBoolean()) {
-            assertAcked(client().admin().indices().prepareClose("test"));
+            assertAcked(client().admin().indices().prepareClose("test"));  
         }
 
-        ClusterHealthResponse health = client().admin()
+        ClusterHealthResponse health = client().admin()  
             .cluster()
             .prepareHealth()
-            .setIndices("test")
+            .setIndices("test")  
             .setWaitForEvents(Priority.LANGUID)
             .setWaitForGreenStatus()
-            .setWaitForNodes("2")
+            .setWaitForNodes("2")  
             .setWaitForNoRelocatingShards(true)
             .execute()
-            .actionGet();
+            .actionGet();  
         assertThat(health.isTimedOut(), equalTo(false));
         ClusterState clusterState = client().admin().cluster().prepareState().execute().actionGet().getState();
-        Map<String, Integer> counts = new HashMap<>();
+        Map<String, Integer> counts = new HashMap<>();  
 
         for (IndexRoutingTable indexRoutingTable : clusterState.routingTable()) {
-            for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
+            for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {  
                 for (ShardRouting shardRouting : indexShardRoutingTable) {
                     counts.merge(clusterState.nodes().get(shardRouting.currentNodeId()).getName(), 1, Integer::sum);
-                }
+                }  
             }
         }
-        assertThat(counts.get(A_0), equalTo(5));
+        assertThat(counts.get(A_0), equalTo(5));  
         assertThat(counts.get(B_0), equalTo(5));
         logger.info("--> starting another node in zone 'b'");
 
         String B_1 = internalCluster().startNode(Settings.builder().put(commonSettings).put("node.attr.zone", "b").build());
         health = client().admin()
-            .cluster()
+            .cluster()  
             .prepareHealth()
             .setIndices("test")
-            .setWaitForEvents(Priority.LANGUID)
+            .setWaitForEvents(Priority.LANGUID)  
             .setWaitForGreenStatus()
             .setWaitForNodes("3")
-            .execute()
+            .execute()  
             .actionGet();
         assertThat(health.isTimedOut(), equalTo(false));
-        client().admin().cluster().prepareReroute().get();
+        client().admin().cluster().prepareReroute().get();  
         health = client().admin()
             .cluster()
-            .prepareHealth()
+            .prepareHealth()  
             .setIndices("test")
             .setWaitForEvents(Priority.LANGUID)
-            .setWaitForGreenStatus()
+            .setWaitForGreenStatus()  
             .setWaitForNodes("3")
             .setWaitForActiveShards(10)
-            .setWaitForNoRelocatingShards(true)
+            .setWaitForNoRelocatingShards(true)  
             .execute()
             .actionGet();
 
@@ -277,73 +277,73 @@ public class AwarenessAllocationIT extends OpenSearchIntegTestCase {
 
         counts = new HashMap<>();
 
-        for (IndexRoutingTable indexRoutingTable : clusterState.routingTable()) {
+        for (IndexRoutingTable indexRoutingTable : clusterState.routingTable()) {  
             for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
                 for (ShardRouting shardRouting : indexShardRoutingTable) {
-                    counts.merge(clusterState.nodes().get(shardRouting.currentNodeId()).getName(), 1, Integer::sum);
+                    counts.merge(clusterState.nodes().get(shardRouting.currentNodeId()).getName(), 1, Integer::sum);  
                 }
             }
-        }
+        }  
         assertThat(counts.get(A_0), equalTo(5));
         assertThat(counts.get(B_0), equalTo(3));
-        assertThat(counts.get(B_1), equalTo(2));
+        assertThat(counts.get(B_1), equalTo(2));  
 
         String noZoneNode = internalCluster().startNode();
-        health = client().admin()
+        health = client().admin()  
             .cluster()
             .prepareHealth()
-            .setIndices("test")
+            .setIndices("test")  
             .setWaitForEvents(Priority.LANGUID)
             .setWaitForGreenStatus()
-            .setWaitForNodes("4")
+            .setWaitForNodes("4")  
             .execute()
             .actionGet();
-        assertThat(health.isTimedOut(), equalTo(false));
+        assertThat(health.isTimedOut(), equalTo(false));  
         client().admin().cluster().prepareReroute().get();
         health = client().admin()
-            .cluster()
+            .cluster()  
             .prepareHealth()
             .setIndices("test")
-            .setWaitForEvents(Priority.LANGUID)
+            .setWaitForEvents(Priority.LANGUID)  
             .setWaitForGreenStatus()
             .setWaitForNodes("4")
-            .setWaitForActiveShards(10)
+            .setWaitForActiveShards(10)  
             .setWaitForNoRelocatingShards(true)
             .execute()
-            .actionGet();
+            .actionGet();  
 
         assertThat(health.isTimedOut(), equalTo(false));
-        clusterState = client().admin().cluster().prepareState().execute().actionGet().getState();
+        clusterState = client().admin().cluster().prepareState().execute().actionGet().getState();  
 
         counts = new HashMap<>();
 
         for (IndexRoutingTable indexRoutingTable : clusterState.routingTable()) {
             for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
-                for (ShardRouting shardRouting : indexShardRoutingTable) {
+                for (ShardRouting shardRouting : indexShardRoutingTable) {  
                     counts.merge(clusterState.nodes().get(shardRouting.currentNodeId()).getName(), 1, Integer::sum);
                 }
-            }
+            }  
         }
 
-        assertThat(counts.get(A_0), equalTo(5));
+        assertThat(counts.get(A_0), equalTo(5));  
         assertThat(counts.get(B_0), equalTo(3));
         assertThat(counts.get(B_1), equalTo(2));
-        assertThat(counts.containsKey(noZoneNode), equalTo(false));
+        assertThat(counts.containsKey(noZoneNode), equalTo(false));  
         client().admin()
             .cluster()
-            .prepareUpdateSettings()
+            .prepareUpdateSettings()  
             .setTransientSettings(Settings.builder().put("cluster.routing.allocation.awareness.attributes", "").build())
             .get();
 
         health = client().admin()
             .cluster()
-            .prepareHealth()
+            .prepareHealth()  
             .setIndices("test")
             .setWaitForEvents(Priority.LANGUID)
-            .setWaitForGreenStatus()
+            .setWaitForGreenStatus()  
             .setWaitForNodes("4")
             .setWaitForActiveShards(10)
-            .setWaitForNoRelocatingShards(true)
+            .setWaitForNoRelocatingShards(true)  
             .execute()
             .actionGet();
 
@@ -352,178 +352,178 @@ public class AwarenessAllocationIT extends OpenSearchIntegTestCase {
 
         counts = new HashMap<>();
 
-        for (IndexRoutingTable indexRoutingTable : clusterState.routingTable()) {
+        for (IndexRoutingTable indexRoutingTable : clusterState.routingTable()) {  
             for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
                 for (ShardRouting shardRouting : indexShardRoutingTable) {
-                    counts.merge(clusterState.nodes().get(shardRouting.currentNodeId()).getName(), 1, Integer::sum);
+                    counts.merge(clusterState.nodes().get(shardRouting.currentNodeId()).getName(), 1, Integer::sum);  
                 }
             }
-        }
+        }  
 
         assertThat(counts.get(A_0), equalTo(3));
-        assertThat(counts.get(B_0), equalTo(3));
+        assertThat(counts.get(B_0), equalTo(3));  
         assertThat(counts.get(B_1), equalTo(2));
         assertThat(counts.get(noZoneNode), equalTo(2));
-    }
+    }  
 
     public void testThreeZoneOneReplicaWithForceZoneValueAndLoadAwareness() throws Exception {
-        int nodeCountPerAZ = 5;
+        int nodeCountPerAZ = 5;  
         int numOfShards = 30;
         int numOfReplica = 1;
-        Settings commonSettings = Settings.builder()
+        Settings commonSettings = Settings.builder()  
             .put("cluster.routing.allocation.awareness.attributes", "zone")
             .put("cluster.routing.allocation.awareness.force.zone.values", "a,b,c")
-            .put("cluster.routing.allocation.load_awareness.skew_factor", "0.0")
+            .put("cluster.routing.allocation.load_awareness.skew_factor", "0.0")  
             .put("cluster.routing.allocation.load_awareness.provisioned_capacity", Integer.toString(nodeCountPerAZ * 3))
             .put("cluster.routing.allocation.allow_rebalance", "indices_primaries_active")
-            .build();
+            .build();  
 
         logger.info("--> starting a dedicated cluster manager node");
-        internalCluster().startClusterManagerOnlyNode();
+        internalCluster().startClusterManagerOnlyNode();  
 
         logger.info("--> starting 15 nodes on zones 'a' & 'b' & 'c'");
-        List<String> nodes_in_zone_a = internalCluster().startDataOnlyNodes(
+        List<String> nodes_in_zone_a = internalCluster().startDataOnlyNodes(  
             nodeCountPerAZ,
             Settings.builder().put(commonSettings).put("node.attr.zone", "a").build()
-        );
+        );  
         List<String> nodes_in_zone_b = internalCluster().startDataOnlyNodes(
             nodeCountPerAZ,
-            Settings.builder().put(commonSettings).put("node.attr.zone", "b").build()
+            Settings.builder().put(commonSettings).put("node.attr.zone", "b").build()  
         );
         List<String> nodes_in_zone_c = internalCluster().startDataOnlyNodes(
-            nodeCountPerAZ,
+            nodeCountPerAZ,  
             Settings.builder().put(commonSettings).put("node.attr.zone", "c").build()
         );
 
         // Creating index with 30 primary and 1 replica
         createIndex(
-            "test-1",
+            "test-1",  
             Settings.builder()
                 .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, numOfShards)
-                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, numOfReplica)
+                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, numOfReplica)  
                 .build()
         );
 
         ClusterHealthResponse health = client().admin()
             .cluster()
-            .prepareHealth()
+            .prepareHealth()  
             .setIndices("test-1")
             .setWaitForEvents(Priority.LANGUID)
-            .setWaitForGreenStatus()
+            .setWaitForGreenStatus()  
             .setWaitForNodes(Integer.toString(nodeCountPerAZ * 3 + 1))
             .setWaitForNoRelocatingShards(true)
-            .setWaitForNoInitializingShards(true)
+            .setWaitForNoInitializingShards(true)  
             .execute()
             .actionGet();
-        assertFalse(health.isTimedOut());
+        assertFalse(health.isTimedOut());  
 
         ClusterState clusterState = client().admin().cluster().prepareState().execute().actionGet().getState();
-        final Map<String, Integer> counts = new HashMap<>();
+        final Map<String, Integer> counts = new HashMap<>();  
 
         for (IndexRoutingTable indexRoutingTable : clusterState.routingTable()) {
-            for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
+            for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {  
                 for (ShardRouting shardRouting : indexShardRoutingTable) {
                     counts.merge(clusterState.nodes().get(shardRouting.currentNodeId()).getName(), 1, Integer::sum);
-                }
+                }  
             }
         }
 
         assertThat(counts.size(), equalTo(nodeCountPerAZ * 3));
         // All shards should be started
-        assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(numOfShards * (numOfReplica + 1)));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(numOfShards * (numOfReplica + 1)));  
 
         // stopping half nodes in zone a
-        int nodesToStop = nodeCountPerAZ / 2;
+        int nodesToStop = nodeCountPerAZ / 2;  
         List<Settings> nodeDataPathSettings = new ArrayList<>();
         for (int i = 0; i < nodesToStop; i++) {
-            nodeDataPathSettings.add(internalCluster().dataPathSettings(nodes_in_zone_a.get(i)));
+            nodeDataPathSettings.add(internalCluster().dataPathSettings(nodes_in_zone_a.get(i)));  
             internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodes_in_zone_a.get(i)));
         }
 
         client().admin().cluster().prepareReroute().setRetryFailed(true).get();
         health = client().admin()
-            .cluster()
+            .cluster()  
             .prepareHealth()
             .setIndices("test-1")
-            .setWaitForEvents(Priority.LANGUID)
+            .setWaitForEvents(Priority.LANGUID)  
             .setWaitForNodes(Integer.toString(nodeCountPerAZ * 3 - nodesToStop + 1))
             .setWaitForNoRelocatingShards(true)
-            .setWaitForNoInitializingShards(true)
+            .setWaitForNoInitializingShards(true)  
             .execute()
             .actionGet();
-        assertFalse(health.isTimedOut());
+        assertFalse(health.isTimedOut());  
 
         // Creating another index with 30 primary and 1 replica
-        createIndex(
+        createIndex(  
             "test-2",
             Settings.builder()
-                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, numOfShards)
+                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, numOfShards)  
                 .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, numOfReplica)
                 .build()
-        );
+        );  
 
         health = client().admin()
-            .cluster()
+            .cluster()  
             .prepareHealth()
             .setIndices("test-1", "test-2")
-            .setWaitForEvents(Priority.LANGUID)
+            .setWaitForEvents(Priority.LANGUID)  
             .setWaitForNodes(Integer.toString(nodeCountPerAZ * 3 - nodesToStop + 1))
             .setWaitForNoRelocatingShards(true)
-            .setWaitForNoInitializingShards(true)
+            .setWaitForNoInitializingShards(true)  
             .execute()
             .actionGet();
-        assertFalse(health.isTimedOut());
+        assertFalse(health.isTimedOut());  
 
         // Restarting the nodes back
-        for (int i = 0; i < nodesToStop; i++) {
+        for (int i = 0; i < nodesToStop; i++) {  
             internalCluster().startNode(
                 Settings.builder()
-                    .put("node.name", nodes_in_zone_a.get(i))
+                    .put("node.name", nodes_in_zone_a.get(i))  
                     .put(nodeDataPathSettings.get(i))
                     .put(commonSettings)
-                    .put("node.attr.zone", "a")
+                    .put("node.attr.zone", "a")  
                     .build()
             );
-        }
+        }  
         client().admin().cluster().prepareReroute().setRetryFailed(true).get();
 
-        health = client().admin()
+        health = client().admin()  
             .cluster()
             .prepareHealth()
-            .setIndices("test-1", "test-2")
+            .setIndices("test-1", "test-2")  
             .setWaitForEvents(Priority.LANGUID)
             .setWaitForNodes(Integer.toString(nodeCountPerAZ * 3 + 1))
-            .setWaitForGreenStatus()
+            .setWaitForGreenStatus()  
             .setWaitForActiveShards(2 * numOfShards * (numOfReplica + 1))
             .setWaitForNoRelocatingShards(true)
-            .setWaitForNoInitializingShards(true)
+            .setWaitForNoInitializingShards(true)  
             .setTimeout(TimeValue.timeValueMinutes(2))
             .execute()
-            .actionGet();
+            .actionGet();  
         clusterState = client().admin().cluster().prepareState().execute().actionGet().getState();
 
-        // All shards should be started now and cluster health should be green
+        // All shards should be started now and cluster health should be green  
         assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(2 * numOfShards * (numOfReplica + 1)));
         assertThat(health.isTimedOut(), equalTo(false));
-    }
+    }  
 
     public void testAwarenessBalanceWithForcedAwarenessCreateAndUpdateIndex() {
-        Settings settings = Settings.builder()
+        Settings settings = Settings.builder()  
             .put("cluster.routing.allocation.awareness.force.zone.values", "a,b,c")
             .put("cluster.routing.allocation.awareness.attributes", "zone")
-            .put("cluster.routing.allocation.awareness.balance", "true")
+            .put("cluster.routing.allocation.awareness.balance", "true")  
             .build();
 
-        logger.info("--> starting 3 nodes on zones a,b,c");
+        logger.info("--> starting 3 nodes on zones a,b,c");  
         internalCluster().startNodes(
             Settings.builder().put(settings).put("node.attr.zone", "a").build(),
-            Settings.builder().put(settings).put("node.attr.zone", "b").build(),
+            Settings.builder().put(settings).put("node.attr.zone", "b").build(),  
             Settings.builder().put(settings).put("node.attr.zone", "c").build()
         );
 
         // Create index with 2 replicas ie total 3 shards
         createIndex(
-            "test-idx",
+            "test-idx",  
             Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 2).build()
         );
 
@@ -532,49 +532,49 @@ public class AwarenessAllocationIT extends OpenSearchIntegTestCase {
 
         assertThrows(IllegalArgumentException.class, () -> {
             assertAcked(client().admin().indices().prepareUpdateSettings("test-idx").setSettings(newsettings));
-        });
+        });  
     }
 
-    public void testAwarenessZonesWithAutoExpand() {
+    public void testAwarenessZonesWithAutoExpand() {  
         Settings commonSettings = Settings.builder()
             .put(AwarenessReplicaBalance.CLUSTER_ROUTING_ALLOCATION_AWARENESS_BALANCE_SETTING.getKey(), true)
-            .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_FORCE_GROUP_SETTING.getKey() + "zone.values", "a")
+            .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_FORCE_GROUP_SETTING.getKey() + "zone.values", "a")  
             .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.getKey(), "zone")
             .build();
 
         logger.info("--> starting 2 nodes on same zone");
         List<String> nodes = internalCluster().startNodes(
-            Settings.builder().put(commonSettings).put("node.attr.zone", "a").build(),
+            Settings.builder().put(commonSettings).put("node.attr.zone", "a").build(),  
             Settings.builder().put(commonSettings).put("node.attr.zone", "a").build()
         );
-        String A = nodes.get(0);
+        String A = nodes.get(0);  
         String B = nodes.get(1);
 
-        logger.info("--> waiting for nodes to form a cluster");
+        logger.info("--> waiting for nodes to form a cluster");  
         ClusterHealthResponse health = client().admin().cluster().prepareHealth().setWaitForNodes("2").execute().actionGet();
         assertThat(health.isTimedOut(), equalTo(false));
 
         createIndex(
             "test",
-            Settings.builder()
+            Settings.builder()  
                 .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 2)
                 .put(IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS, "0-all")
-                .build()
+                .build()  
         );
 
-        if (randomBoolean()) {
+        if (randomBoolean()) {  
             assertAcked(client().admin().indices().prepareClose("test"));
         }
 
         logger.info("--> waiting for shards to be allocated");
         health = client().admin()
-            .cluster()
+            .cluster()  
             .prepareHealth()
             .setIndices("test")
-            .setWaitForEvents(Priority.LANGUID)
+            .setWaitForEvents(Priority.LANGUID)  
             .setWaitForGreenStatus()
             .setWaitForNoRelocatingShards(true)
-            .execute()
+            .execute()  
             .actionGet();
         assertThat(health.isTimedOut(), equalTo(false));
 
@@ -586,179 +586,179 @@ public class AwarenessAllocationIT extends OpenSearchIntegTestCase {
 
         for (IndexRoutingTable indexRoutingTable : clusterState.routingTable()) {
             for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
-                for (ShardRouting shardRouting : indexShardRoutingTable) {
+                for (ShardRouting shardRouting : indexShardRoutingTable) {  
                     if (!shardRouting.primary()) {
                         replicaCount++;
-                    }
+                    }  
                     counts.merge(clusterState.nodes().get(shardRouting.currentNodeId()).getName(), 1, Integer::sum);
                 }
-            }
+            }  
         }
         assertThat(counts.get(A), anyOf(equalTo(1), equalTo(2)));
-        assertThat(counts.get(B), anyOf(equalTo(1), equalTo(2)));
+        assertThat(counts.get(B), anyOf(equalTo(1), equalTo(2)));  
         assertThat(replicaCount, equalTo(2));
     }
 
     public void testShardsDrainOffFullyExcludedZone() {
         Settings commonSettings = Settings.builder()
-            .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.getKey(), "zone")
+            .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.getKey(), "zone")  
             .build();
 
-        logger.info("--> starting 6 nodes, 2 per zone across zones 'a', 'b' and 'c'");
+        logger.info("--> starting 6 nodes, 2 per zone across zones 'a', 'b' and 'c'");  
         List<String> nodesInA = internalCluster().startNodes(
             Settings.builder().put(commonSettings).put("node.attr.zone", "a").build(),
-            Settings.builder().put(commonSettings).put("node.attr.zone", "a").build()
+            Settings.builder().put(commonSettings).put("node.attr.zone", "a").build()  
         );
         List<String> nodesInB = internalCluster().startNodes(
-            Settings.builder().put(commonSettings).put("node.attr.zone", "b").build(),
+            Settings.builder().put(commonSettings).put("node.attr.zone", "b").build(),  
             Settings.builder().put(commonSettings).put("node.attr.zone", "b").build()
         );
-        List<String> nodesInC = internalCluster().startNodes(
+        List<String> nodesInC = internalCluster().startNodes(  
             Settings.builder().put(commonSettings).put("node.attr.zone", "c").build(),
             Settings.builder().put(commonSettings).put("node.attr.zone", "c").build()
-        );
+        );  
 
         ClusterHealthResponse health = client().admin().cluster().prepareHealth().setWaitForNodes("6").execute().actionGet();
-        assertThat(health.isTimedOut(), equalTo(false));
+        assertThat(health.isTimedOut(), equalTo(false));  
 
         // 1 primary + 2 replicas = 3 copies; with all three zones counted they spread one per zone
-        createIndex(
+        createIndex(  
             "test",
             Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 2).build()
-        );
+        );  
 
         health = client().admin()
-            .cluster()
+            .cluster()  
             .prepareHealth()
             .setIndices("test")
-            .setWaitForEvents(Priority.LANGUID)
+            .setWaitForEvents(Priority.LANGUID)  
             .setWaitForGreenStatus()
             .setWaitForNoRelocatingShards(true)
-            .execute()
+            .execute()  
             .actionGet();
         assertThat(health.isTimedOut(), equalTo(false));
 
         ClusterState clusterState = client().admin().cluster().prepareState().execute().actionGet().getState();
         int shardsInCBefore = shardsOn(clusterState, nodesInC.get(0)) + shardsOn(clusterState, nodesInC.get(1));
-        assertThat("one copy should start in zone 'c'", shardsInCBefore, equalTo(1));
+        assertThat("one copy should start in zone 'c'", shardsInCBefore, equalTo(1));  
 
         // Exclude zone 'c' by excluding both of its nodes by name. Zone 'c' only counts as excluded once every one of
-        // its nodes is excluded, so both names must be listed. This exercises the _name branch of the cluster exclude
+        // its nodes is excluded, so both names must be listed. This exercises the _name branch of the cluster exclude  
         // filter with a fully-drained zone.
         logger.info("--> excluding both nodes in zone 'c' by name");
-        assertAcked(
+        assertAcked(  
             client().admin()
                 .cluster()
-                .prepareUpdateSettings()
+                .prepareUpdateSettings()  
                 .setTransientSettings(
                     Settings.builder().put("cluster.routing.allocation.exclude._name", nodesInC.get(0) + "," + nodesInC.get(1)).build()
-                )
+                )  
                 .get()
         );
 
         // Zone 'c' is fully excluded, so awareness now balances across zones {a, b} only, raising the per-zone cap
         // from ceil(3/3)=1 to ceil(3/2)=2. The copy stranded in the excluded zone 'c' can therefore drain onto the
-        // remaining zones and the cluster returns to green with nothing left unassigned.
+        // remaining zones and the cluster returns to green with nothing left unassigned.  
         health = client().admin()
             .cluster()
-            .prepareHealth()
+            .prepareHealth()  
             .setIndices("test")
             .setWaitForEvents(Priority.LANGUID)
-            .setWaitForGreenStatus()
+            .setWaitForGreenStatus()  
             .setWaitForNoRelocatingShards(true)
             .execute()
-            .actionGet();
+            .actionGet();  
         assertThat(health.isTimedOut(), equalTo(false));
 
-        clusterState = client().admin().cluster().prepareState().execute().actionGet().getState();
+        clusterState = client().admin().cluster().prepareState().execute().actionGet().getState();  
         assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(3));
 
-        int shardsInC = shardsOn(clusterState, nodesInC.get(0)) + shardsOn(clusterState, nodesInC.get(1));
+        int shardsInC = shardsOn(clusterState, nodesInC.get(0)) + shardsOn(clusterState, nodesInC.get(1));  
         assertThat("no shards may remain on the excluded zone 'c' nodes", shardsInC, equalTo(0));
 
-        int shardsInA = shardsOn(clusterState, nodesInA.get(0)) + shardsOn(clusterState, nodesInA.get(1));
+        int shardsInA = shardsOn(clusterState, nodesInA.get(0)) + shardsOn(clusterState, nodesInA.get(1));  
         int shardsInB = shardsOn(clusterState, nodesInB.get(0)) + shardsOn(clusterState, nodesInB.get(1));
         assertThat("all three copies should consolidate onto zones 'a' and 'b'", shardsInA + shardsInB, equalTo(3));
-    }
+    }  
 
     public void testZoneStillCountedWhenOnlySomeOfItsNodesExcluded() {
-        Settings commonSettings = Settings.builder()
+        Settings commonSettings = Settings.builder()  
             .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.getKey(), "zone")
             .build();
 
         logger.info("--> starting 2 nodes in zone 'a' and 3 nodes in zone 'b'");
         List<String> nodesInA = internalCluster().startNodes(
-            Settings.builder().put(commonSettings).put("node.attr.zone", "a").build(),
+            Settings.builder().put(commonSettings).put("node.attr.zone", "a").build(),  
             Settings.builder().put(commonSettings).put("node.attr.zone", "a").build()
         );
-        List<String> nodesInB = internalCluster().startNodes(
+        List<String> nodesInB = internalCluster().startNodes(  
             Settings.builder().put(commonSettings).put("node.attr.zone", "b").build(),
             Settings.builder().put(commonSettings).put("node.attr.zone", "b").build(),
-            Settings.builder().put(commonSettings).put("node.attr.zone", "b").build()
+            Settings.builder().put(commonSettings).put("node.attr.zone", "b").build()  
         );
         String excludedInA = nodesInA.get(0);
-        String usableInA = nodesInA.get(1);
+        String usableInA = nodesInA.get(1);  
 
         ClusterHealthResponse health = client().admin().cluster().prepareHealth().setWaitForNodes("5").execute().actionGet();
-        assertThat(health.isTimedOut(), equalTo(false));
+        assertThat(health.isTimedOut(), equalTo(false));  
 
         logger.info("--> excluding a single node in zone 'a' by name; zone 'a' still has a usable node");
-        assertAcked(
+        assertAcked(  
             client().admin()
                 .cluster()
-                .prepareUpdateSettings()
+                .prepareUpdateSettings()  
                 .setTransientSettings(Settings.builder().put("cluster.routing.allocation.exclude._name", excludedInA).build())
                 .get()
-        );
+        );  
 
         // 1 primary + 3 replicas = 4 copies. Because zone 'a' keeps a usable node (excludedInA is excluded but
-        // usableInA is not), awareness still counts both zones {a, b}, so the per-zone cap is ceil(4/2)=2. Zone 'a'
+        // usableInA is not), awareness still counts both zones {a, b}, so the per-zone cap is ceil(4/2)=2. Zone 'a'  
         // can hold only one copy (its single usable node) and zone 'b' is capped at 2, so the fourth copy cannot be
         // placed and the cluster stays yellow with exactly one unassigned shard. Had zone 'a' been wrongly dropped,
-        // the cap would be ceil(4/1)=4 and all four copies would fit, so this asserts a value is dropped only when
+        // the cap would be ceil(4/1)=4 and all four copies would fit, so this asserts a value is dropped only when  
         // every one of its nodes is excluded.
         createIndex(
-            "test",
+            "test",  
             Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 3).build()
         );
 
         health = client().admin()
             .cluster()
-            .prepareHealth()
+            .prepareHealth()  
             .setIndices("test")
             .setWaitForEvents(Priority.LANGUID)
-            .setWaitForYellowStatus()
+            .setWaitForYellowStatus()  
             .setWaitForNoRelocatingShards(true)
             .setWaitForNoInitializingShards(true)
-            .execute()
+            .execute()  
             .actionGet();
         assertThat(health.isTimedOut(), equalTo(false));
 
         ClusterState clusterState = client().admin().cluster().prepareState().execute().actionGet().getState();
         assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(3));
-        assertThat(clusterState.getRoutingNodes().shardsWithState(UNASSIGNED).size(), equalTo(1));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(UNASSIGNED).size(), equalTo(1));  
         assertThat("the excluded node in zone 'a' must hold no shards", shardsOn(clusterState, excludedInA), equalTo(0));
         assertThat("zone 'a' still counts, so its usable node holds one copy", shardsOn(clusterState, usableInA), equalTo(1));
 
         int shardsInB = shardsOn(clusterState, nodesInB.get(0)) + shardsOn(clusterState, nodesInB.get(1)) + shardsOn(
             clusterState,
-            nodesInB.get(2)
+            nodesInB.get(2)  
         );
         assertThat("zone 'b' is capped at two copies", shardsInB, equalTo(2));
-    }
+    }  
 
     private static int shardsOn(ClusterState clusterState, String nodeName) {
-        int count = 0;
+        int count = 0;  
         for (IndexRoutingTable indexRoutingTable : clusterState.routingTable()) {
             for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
-                for (ShardRouting shardRouting : indexShardRoutingTable) {
+                for (ShardRouting shardRouting : indexShardRoutingTable) {  
                     if (shardRouting.currentNodeId() != null
                         && nodeName.equals(clusterState.nodes().get(shardRouting.currentNodeId()).getName())) {
-                        count++;
+                        count++;  
                     }
                 }
-            }
+            }  
         }
         return count;
-    }
+    }  
 }

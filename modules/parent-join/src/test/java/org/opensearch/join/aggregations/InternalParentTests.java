@@ -1,83 +1,83 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.join.aggregations;
 
 import org.opensearch.core.ParseField;
 import org.opensearch.core.xcontent.NamedXContentRegistry.Entry;
-import org.opensearch.join.ParentJoinModulePlugin;
+import org.opensearch.join.ParentJoinModulePlugin;  
 import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.search.aggregations.Aggregation;
-import org.opensearch.search.aggregations.InternalAggregations;
+import org.opensearch.search.aggregations.InternalAggregations;  
 import org.opensearch.search.aggregations.InternalSingleBucketAggregationTestCase;
 import org.opensearch.search.aggregations.bucket.ParsedSingleBucketAggregation;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.Map;  
 
 public class InternalParentTests extends InternalSingleBucketAggregationTestCase<InternalParent> {
 
     @Override
     protected SearchPlugin registerPlugin() {
-        return new ParentJoinModulePlugin();
+        return new ParentJoinModulePlugin();  
     }
 
-    @Override
+    @Override  
     protected List<Entry> getNamedXContents() {
         List<Entry> extendedNamedXContents = new ArrayList<>(super.getNamedXContents());
-        extendedNamedXContents.add(
+        extendedNamedXContents.add(  
             new Entry(Aggregation.class, new ParseField(ParentAggregationBuilder.NAME), (p, c) -> ParsedParent.fromXContent(p, (String) c))
         );
-        return extendedNamedXContents;
+        return extendedNamedXContents;  
     }
 
-    @Override
+    @Override  
     protected InternalParent createTestInstance(
         String name,
-        long docCount,
+        long docCount,  
         InternalAggregations aggregations,
         Map<String, Object> metadata
-    ) {
+    ) {  
         return new InternalParent(name, docCount, aggregations, metadata);
     }
 
     @Override
     protected void extraAssertReduced(InternalParent reduced, List<InternalParent> inputs) {
-        // Nothing extra to assert
+        // Nothing extra to assert  
     }
 
-    @Override
+    @Override  
     protected Class<? extends ParsedSingleBucketAggregation> implementationClass() {
         return ParsedParent.class;
-    }
+    }  
 }

@@ -1,447 +1,447 @@
-/*
+/*  
  * Copyright OpenSearch Contributors.
  * SPDX-License-Identifier: Apache-2.0
- */
+ */  
 
 package org.opensearch.index;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.opensearch.action.admin.indices.stats.CommonStatsFlags;
+import org.opensearch.action.admin.indices.stats.CommonStatsFlags;  
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.settings.ClusterSettings;
+import org.opensearch.common.settings.ClusterSettings;  
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
-import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.core.index.shard.ShardId;  
 import org.opensearch.index.ShardIndexingPressureTracker.CommonOperationTracker;
 import org.opensearch.index.ShardIndexingPressureTracker.OperationTracker;
-import org.opensearch.index.ShardIndexingPressureTracker.PerformanceTracker;
+import org.opensearch.index.ShardIndexingPressureTracker.PerformanceTracker;  
 import org.opensearch.index.ShardIndexingPressureTracker.RejectionTracker;
 import org.opensearch.index.ShardIndexingPressureTracker.StatsTracker;
-import org.opensearch.index.stats.IndexingPressurePerShardStats;
+import org.opensearch.index.stats.IndexingPressurePerShardStats;  
 import org.opensearch.index.stats.ShardIndexingPressureStats;
 
-import java.util.Collections;
+import java.util.Collections;  
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeUnit;  
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
+/**  
  * Shard Indexing Pressure is a framework level artefact build on top of IndexingPressure to track incoming indexing request, per shard.
  * The interfaces provided by this class will be used by Transport Action layers to start accounting for an incoming request.
- * Interfaces returns Releasable which when triggered will release the acquired accounting tokens values and also
+ * Interfaces returns Releasable which when triggered will release the acquired accounting tokens values and also  
  * perform necessary actions such as throughput evaluation once the request completes.
  * Consumers of these interfaces are expected to trigger close on releasable, reliably for consistency.
- * <p>
+ * <p>  
  * Overall ShardIndexingPressure provides:
  * 1. Memory Accounting at shard level. This can be enabled/disabled based on dynamic setting.
- * 2. Memory Accounting at Node level. Tracking is done using the IndexingPressure artefacts to support feature seamless toggling.
+ * 2. Memory Accounting at Node level. Tracking is done using the IndexingPressure artefacts to support feature seamless toggling.  
  * 3. Interfaces to access the statistics for shard trackers.
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 public class ShardIndexingPressure extends IndexingPressure {
 
     private static final Logger logger = LogManager.getLogger(ShardIndexingPressure.class);
     private final ShardIndexingPressureSettings shardIndexingPressureSettings;
-    private final ShardIndexingPressureMemoryManager memoryManager;
+    private final ShardIndexingPressureMemoryManager memoryManager;  
 
     ShardIndexingPressure(Settings settings, ClusterService clusterService) {
-        super(settings);
+        super(settings);  
         shardIndexingPressureSettings = new ShardIndexingPressureSettings(clusterService, settings, primaryAndCoordinatingLimits);
         ClusterSettings clusterSettings = clusterService.getClusterSettings();
-        this.memoryManager = new ShardIndexingPressureMemoryManager(shardIndexingPressureSettings, clusterSettings, settings);
+        this.memoryManager = new ShardIndexingPressureMemoryManager(shardIndexingPressureSettings, clusterSettings, settings);  
     }
 
-    public Releasable markCoordinatingOperationStarted(ShardId shardId, long bytes, boolean forceExecution) {
+    public Releasable markCoordinatingOperationStarted(ShardId shardId, long bytes, boolean forceExecution) {  
         if (0 == bytes) {
             return () -> {};
-        }
+        }  
 
         long requestStartTime = System.nanoTime();
-        ShardIndexingPressureTracker tracker = getShardIndexingPressureTracker(shardId);
+        ShardIndexingPressureTracker tracker = getShardIndexingPressureTracker(shardId);  
         long nodeCombinedBytes = currentCombinedCoordinatingAndPrimaryBytes.addAndGet(bytes);
         long nodeReplicaBytes = currentReplicaBytes.get();
-        long nodeTotalBytes = nodeCombinedBytes + nodeReplicaBytes;
+        long nodeTotalBytes = nodeCombinedBytes + nodeReplicaBytes;  
         long shardCombinedBytes = tracker.getCommonOperationTracker().incrementCurrentCombinedCoordinatingAndPrimaryBytes(bytes);
 
-        boolean shardLevelLimitBreached = false;
+        boolean shardLevelLimitBreached = false;  
         if (forceExecution == false) {
             boolean nodeLevelLimitBreached = memoryManager.isCoordinatingNodeLimitBreached(tracker, nodeTotalBytes);
-            if (nodeLevelLimitBreached == false) {
+            if (nodeLevelLimitBreached == false) {  
                 shardLevelLimitBreached = memoryManager.isCoordinatingShardLimitBreached(tracker, nodeTotalBytes, requestStartTime);
             }
 
             if (shouldRejectRequest(nodeLevelLimitBreached, shardLevelLimitBreached)) {
                 coordinatingRejections.getAndIncrement();
-                currentCombinedCoordinatingAndPrimaryBytes.addAndGet(-bytes);
+                currentCombinedCoordinatingAndPrimaryBytes.addAndGet(-bytes);  
                 tracker.getCommonOperationTracker().incrementCurrentCombinedCoordinatingAndPrimaryBytes(-bytes);
                 rejectShardRequest(
-                    tracker,
+                    tracker,  
                     bytes,
                     nodeTotalBytes,
-                    shardCombinedBytes,
+                    shardCombinedBytes,  
                     tracker.getCoordinatingOperationTracker().getRejectionTracker(),
                     "coordinating"
-                );
+                );  
             }
         }
-        currentCoordinatingBytes.addAndGet(bytes);
+        currentCoordinatingBytes.addAndGet(bytes);  
         totalCombinedCoordinatingAndPrimaryBytes.addAndGet(bytes);
         totalCoordinatingBytes.addAndGet(bytes);
 
         StatsTracker statsTracker = tracker.getCoordinatingOperationTracker().getStatsTracker();
         statsTracker.incrementCurrentBytes(bytes);
-        markShardOperationStarted(statsTracker, tracker.getCoordinatingOperationTracker().getPerformanceTracker());
+        markShardOperationStarted(statsTracker, tracker.getCoordinatingOperationTracker().getPerformanceTracker());  
         boolean isShadowModeBreach = shardLevelLimitBreached;
 
-        return wrapReleasable(() -> {
+        return wrapReleasable(() -> {  
             currentCombinedCoordinatingAndPrimaryBytes.addAndGet(-bytes);
             currentCoordinatingBytes.addAndGet(-bytes);
-            markShardOperationComplete(
+            markShardOperationComplete(  
                 bytes,
                 requestStartTime,
-                isShadowModeBreach,
+                isShadowModeBreach,  
                 tracker.getCoordinatingOperationTracker(),
                 tracker.getCommonOperationTracker()
-            );
+            );  
             memoryManager.decreaseShardPrimaryAndCoordinatingLimits(tracker);
             tryReleaseTracker(tracker);
-        });
+        });  
     }
 
-    public Releasable markPrimaryOperationLocalToCoordinatingNodeStarted(ShardId shardId, long bytes) {
+    public Releasable markPrimaryOperationLocalToCoordinatingNodeStarted(ShardId shardId, long bytes) {  
         if (bytes == 0) {
             return () -> {};
-        }
+        }  
 
         ShardIndexingPressureTracker tracker = getShardIndexingPressureTracker(shardId);
 
         currentPrimaryBytes.addAndGet(bytes);
         totalPrimaryBytes.addAndGet(bytes);
-        tracker.getPrimaryOperationTracker().getStatsTracker().incrementCurrentBytes(bytes);
+        tracker.getPrimaryOperationTracker().getStatsTracker().incrementCurrentBytes(bytes);  
         tracker.getPrimaryOperationTracker().getStatsTracker().incrementTotalBytes(bytes);
 
-        return wrapReleasable(() -> {
+        return wrapReleasable(() -> {  
             currentPrimaryBytes.addAndGet(-bytes);
             tracker.getPrimaryOperationTracker().getStatsTracker().incrementCurrentBytes(-bytes);
-        });
+        });  
     }
 
-    public Releasable markPrimaryOperationStarted(ShardId shardId, long bytes, boolean forceExecution) {
+    public Releasable markPrimaryOperationStarted(ShardId shardId, long bytes, boolean forceExecution) {  
         if (0 == bytes) {
             return () -> {};
-        }
+        }  
 
         long requestStartTime = System.nanoTime();
-        ShardIndexingPressureTracker tracker = getShardIndexingPressureTracker(shardId);
+        ShardIndexingPressureTracker tracker = getShardIndexingPressureTracker(shardId);  
         long nodeCombinedBytes = currentCombinedCoordinatingAndPrimaryBytes.addAndGet(bytes);
         long nodeReplicaBytes = currentReplicaBytes.get();
-        long nodeTotalBytes = nodeCombinedBytes + nodeReplicaBytes;
+        long nodeTotalBytes = nodeCombinedBytes + nodeReplicaBytes;  
         long shardCombinedBytes = tracker.getCommonOperationTracker().incrementCurrentCombinedCoordinatingAndPrimaryBytes(bytes);
 
-        boolean shardLevelLimitBreached = false;
+        boolean shardLevelLimitBreached = false;  
         if (forceExecution == false) {
             boolean nodeLevelLimitBreached = memoryManager.isPrimaryNodeLimitBreached(tracker, nodeTotalBytes);
-            if (nodeLevelLimitBreached == false) {
+            if (nodeLevelLimitBreached == false) {  
                 shardLevelLimitBreached = memoryManager.isPrimaryShardLimitBreached(tracker, nodeTotalBytes, requestStartTime);
             }
 
             if (shouldRejectRequest(nodeLevelLimitBreached, shardLevelLimitBreached)) {
                 primaryRejections.getAndIncrement();
-                currentCombinedCoordinatingAndPrimaryBytes.addAndGet(-bytes);
+                currentCombinedCoordinatingAndPrimaryBytes.addAndGet(-bytes);  
                 tracker.getCommonOperationTracker().incrementCurrentCombinedCoordinatingAndPrimaryBytes(-bytes);
                 rejectShardRequest(
-                    tracker,
+                    tracker,  
                     bytes,
                     nodeTotalBytes,
-                    shardCombinedBytes,
+                    shardCombinedBytes,  
                     tracker.getPrimaryOperationTracker().getRejectionTracker(),
                     "primary"
-                );
+                );  
             }
         }
-        currentPrimaryBytes.addAndGet(bytes);
+        currentPrimaryBytes.addAndGet(bytes);  
         totalCombinedCoordinatingAndPrimaryBytes.addAndGet(bytes);
         totalPrimaryBytes.addAndGet(bytes);
 
         StatsTracker statsTracker = tracker.getPrimaryOperationTracker().getStatsTracker();
         statsTracker.incrementCurrentBytes(bytes);
-        markShardOperationStarted(statsTracker, tracker.getPrimaryOperationTracker().getPerformanceTracker());
+        markShardOperationStarted(statsTracker, tracker.getPrimaryOperationTracker().getPerformanceTracker());  
         boolean isShadowModeBreach = shardLevelLimitBreached;
 
-        return wrapReleasable(() -> {
+        return wrapReleasable(() -> {  
             currentCombinedCoordinatingAndPrimaryBytes.addAndGet(-bytes);
             currentPrimaryBytes.addAndGet(-bytes);
-            markShardOperationComplete(
+            markShardOperationComplete(  
                 bytes,
                 requestStartTime,
-                isShadowModeBreach,
+                isShadowModeBreach,  
                 tracker.getPrimaryOperationTracker(),
                 tracker.getCommonOperationTracker()
-            );
+            );  
             memoryManager.decreaseShardPrimaryAndCoordinatingLimits(tracker);
             tryReleaseTracker(tracker);
-        });
+        });  
     }
 
-    public Releasable markReplicaOperationStarted(ShardId shardId, long bytes, boolean forceExecution) {
+    public Releasable markReplicaOperationStarted(ShardId shardId, long bytes, boolean forceExecution) {  
         if (0 == bytes) {
             return () -> {};
-        }
+        }  
 
         long requestStartTime = System.nanoTime();
-        ShardIndexingPressureTracker tracker = getShardIndexingPressureTracker(shardId);
+        ShardIndexingPressureTracker tracker = getShardIndexingPressureTracker(shardId);  
         long nodeReplicaBytes = currentReplicaBytes.addAndGet(bytes);
         long shardReplicaBytes = tracker.getReplicaOperationTracker().getStatsTracker().incrementCurrentBytes(bytes);
 
         boolean shardLevelLimitBreached = false;
         if (forceExecution == false) {
-            boolean nodeLevelLimitBreached = memoryManager.isReplicaNodeLimitBreached(tracker, nodeReplicaBytes);
+            boolean nodeLevelLimitBreached = memoryManager.isReplicaNodeLimitBreached(tracker, nodeReplicaBytes);  
             if (nodeLevelLimitBreached == false) {
                 shardLevelLimitBreached = memoryManager.isReplicaShardLimitBreached(tracker, nodeReplicaBytes, requestStartTime);
-            }
+            }  
 
             if (shouldRejectRequest(nodeLevelLimitBreached, shardLevelLimitBreached)) {
-                replicaRejections.getAndIncrement();
+                replicaRejections.getAndIncrement();  
                 currentReplicaBytes.addAndGet(-bytes);
                 tracker.getReplicaOperationTracker().getStatsTracker().incrementCurrentBytes(-bytes);
-                rejectShardRequest(
+                rejectShardRequest(  
                     tracker,
                     bytes,
-                    nodeReplicaBytes,
+                    nodeReplicaBytes,  
                     shardReplicaBytes,
                     tracker.getReplicaOperationTracker().getRejectionTracker(),
-                    "replica"
+                    "replica"  
                 );
             }
-        }
+        }  
         totalReplicaBytes.addAndGet(bytes);
 
-        StatsTracker statsTracker = tracker.getReplicaOperationTracker().getStatsTracker();
+        StatsTracker statsTracker = tracker.getReplicaOperationTracker().getStatsTracker();  
         markShardOperationStarted(statsTracker, tracker.getReplicaOperationTracker().getPerformanceTracker());
         boolean isShadowModeBreach = shardLevelLimitBreached;
 
         return wrapReleasable(() -> {
             currentReplicaBytes.addAndGet(-bytes);
-            markShardOperationComplete(bytes, requestStartTime, isShadowModeBreach, tracker.getReplicaOperationTracker());
+            markShardOperationComplete(bytes, requestStartTime, isShadowModeBreach, tracker.getReplicaOperationTracker());  
             memoryManager.decreaseShardReplicaLimits(tracker);
             tryReleaseTracker(tracker);
-        });
+        });  
     }
 
-    private static Releasable wrapReleasable(Releasable releasable) {
+    private static Releasable wrapReleasable(Releasable releasable) {  
         final AtomicBoolean called = new AtomicBoolean();
         return () -> {
-            if (called.compareAndSet(false, true)) {
+            if (called.compareAndSet(false, true)) {  
                 releasable.close();
             } else {
-                logger.error("ShardIndexingPressure Release is called twice", new IllegalStateException("Releasable is called twice"));
+                logger.error("ShardIndexingPressure Release is called twice", new IllegalStateException("Releasable is called twice"));  
                 assert false : "ShardIndexingPressure Release is called twice";
             }
-        };
+        };  
     }
 
-    private boolean shouldRejectRequest(boolean nodeLevelLimitBreached, boolean shardLevelLimitBreached) {
+    private boolean shouldRejectRequest(boolean nodeLevelLimitBreached, boolean shardLevelLimitBreached) {  
         return nodeLevelLimitBreached || (shardLevelLimitBreached && shardIndexingPressureSettings.isShardIndexingPressureEnforced());
     }
 
     private void markShardOperationStarted(StatsTracker statsTracker, PerformanceTracker performanceTracker) {
         statsTracker.incrementRequestCount();
-        performanceTracker.incrementTotalOutstandingRequests();
+        performanceTracker.incrementTotalOutstandingRequests();  
     }
 
-    private void adjustPerformanceUponCompletion(
+    private void adjustPerformanceUponCompletion(  
         long bytes,
         long requestStartTime,
-        StatsTracker statsTracker,
+        StatsTracker statsTracker,  
         PerformanceTracker performanceTracker
     ) {
-        long requestEndTime = System.nanoTime();
+        long requestEndTime = System.nanoTime();  
         long requestLatency = TimeUnit.NANOSECONDS.toMillis(requestEndTime - requestStartTime);
 
-        performanceTracker.addLatencyInMillis(requestLatency);
+        performanceTracker.addLatencyInMillis(requestLatency);  
         performanceTracker.updateLastSuccessfulRequestTimestamp(requestEndTime);
         performanceTracker.resetTotalOutstandingRequests();
 
         if (requestLatency > 0) {
             calculateRequestThroughput(bytes, requestLatency, performanceTracker, statsTracker);
-        }
+        }  
     }
 
-    private void calculateRequestThroughput(
+    private void calculateRequestThroughput(  
         long bytes,
         long requestLatency,
-        PerformanceTracker performanceTracker,
+        PerformanceTracker performanceTracker,  
         StatsTracker statsTracker
     ) {
-        double requestThroughput = (double) bytes / requestLatency;
+        double requestThroughput = (double) bytes / requestLatency;  
         performanceTracker.addNewThroughout(requestThroughput);
         if (performanceTracker.getThroughputMovingQueueSize() > shardIndexingPressureSettings.getRequestSizeWindow()) {
-            double front = performanceTracker.getFirstThroughput();
+            double front = performanceTracker.getFirstThroughput();  
             double movingAverage = memoryManager.calculateMovingAverage(
                 performanceTracker.getThroughputMovingAverage(),
-                front,
+                front,  
                 requestThroughput,
                 shardIndexingPressureSettings.getRequestSizeWindow()
-            );
+            );  
             performanceTracker.updateThroughputMovingAverage(Double.doubleToLongBits(movingAverage));
         } else {
-            double movingAverage = (double) statsTracker.getTotalBytes() / performanceTracker.getLatencyInMillis();
+            double movingAverage = (double) statsTracker.getTotalBytes() / performanceTracker.getLatencyInMillis();  
             performanceTracker.updateThroughputMovingAverage(Double.doubleToLongBits(movingAverage));
         }
-    }
+    }  
 
     private void markShardOperationComplete(
-        long bytes,
+        long bytes,  
         long requestStartTime,
         boolean isShadowModeBreach,
-        OperationTracker operationTracker,
+        OperationTracker operationTracker,  
         CommonOperationTracker commonOperationTracker
     ) {
-        commonOperationTracker.incrementCurrentCombinedCoordinatingAndPrimaryBytes(-bytes);
+        commonOperationTracker.incrementCurrentCombinedCoordinatingAndPrimaryBytes(-bytes);  
         commonOperationTracker.incrementTotalCombinedCoordinatingAndPrimaryBytes(bytes);
         markShardOperationComplete(bytes, requestStartTime, isShadowModeBreach, operationTracker);
-    }
+    }  
 
     private void markShardOperationComplete(
-        long bytes,
+        long bytes,  
         long requestStartTime,
         boolean isShadowModeBreach,
-        OperationTracker operationTracker
+        OperationTracker operationTracker  
     ) {
 
-        StatsTracker statsTracker = operationTracker.getStatsTracker();
+        StatsTracker statsTracker = operationTracker.getStatsTracker();  
         statsTracker.incrementCurrentBytes(-bytes);
         statsTracker.incrementTotalBytes(bytes);
 
         // In shadow mode if request was intended to be rejected, we do not account it for dynamic rejection parameters
         if (isShadowModeBreach == false) {
-            adjustPerformanceUponCompletion(bytes, requestStartTime, statsTracker, operationTracker.getPerformanceTracker());
+            adjustPerformanceUponCompletion(bytes, requestStartTime, statsTracker, operationTracker.getPerformanceTracker());  
         }
     }
 
     private void tryReleaseTracker(ShardIndexingPressureTracker tracker) {
         memoryManager.tryTrackerCleanupFromHotStore(
-            tracker,
+            tracker,  
             () -> (tracker.getCommonOperationTracker().getCurrentCombinedCoordinatingAndPrimaryBytes() == 0
                 && tracker.getReplicaOperationTracker().getStatsTracker().getCurrentBytes() == 0)
-        );
+        );  
     }
 
-    private void rejectShardRequest(
+    private void rejectShardRequest(  
         ShardIndexingPressureTracker tracker,
         long bytes,
-        long nodeTotalBytes,
+        long nodeTotalBytes,  
         long shardTotalBytes,
         RejectionTracker rejectionTracker,
-        String operationType
+        String operationType  
     ) {
         long nodeBytesWithoutOperation = nodeTotalBytes - bytes;
-        long shardBytesWithoutOperation = shardTotalBytes - bytes;
+        long shardBytesWithoutOperation = shardTotalBytes - bytes;  
         ShardId shardId = tracker.getShardId();
 
-        rejectionTracker.incrementTotalRejections();
+        rejectionTracker.incrementTotalRejections();  
         throw new OpenSearchRejectedExecutionException(
             "rejected execution of "
-                + operationType
+                + operationType  
                 + " operation ["
                 + "shard_detail=["
-                + shardId.getIndexName()
+                + shardId.getIndexName()  
                 + "]["
                 + shardId.id()
-                + "], "
+                + "], "  
                 + "shard_total_bytes="
                 + shardBytesWithoutOperation
-                + ", "
+                + ", "  
                 + "shard_operation_bytes="
                 + bytes
-                + ", "
+                + ", "  
                 + "shard_max_coordinating_and_primary_bytes="
                 + tracker.getPrimaryAndCoordinatingLimits()
-                + ", "
+                + ", "  
                 + "shard_max_replica_bytes="
                 + tracker.getReplicaLimits()
-                + "] OR ["
+                + "] OR ["  
                 + "node_total_bytes="
                 + nodeBytesWithoutOperation
-                + ", "
+                + ", "  
                 + "node_operation_bytes="
                 + bytes
-                + ", "
+                + ", "  
                 + "node_max_coordinating_and_primary_bytes="
                 + primaryAndCoordinatingLimits
-                + ", "
+                + ", "  
                 + "node_max_replica_bytes="
                 + replicaLimits
-                + "]",
+                + "]",  
             false
         );
-    }
+    }  
 
     public ShardIndexingPressureStats shardStats(CommonStatsFlags statsFlags) {
-        if (statsFlags.includeOnlyTopIndexingPressureMetrics()) {
+        if (statsFlags.includeOnlyTopIndexingPressureMetrics()) {  
             return topStats();
         } else {
-            ShardIndexingPressureStats allStats = shardStats();
+            ShardIndexingPressureStats allStats = shardStats();  
             if (statsFlags.includeAllShardIndexingPressureTrackers()) {
                 allStats.addAll(coldStats());
-            }
+            }  
             return allStats;
         }
-    }
+    }  
 
     ShardIndexingPressureStats shardStats() {
-        Map<ShardId, IndexingPressurePerShardStats> statsPerShard = new HashMap<>();
+        Map<ShardId, IndexingPressurePerShardStats> statsPerShard = new HashMap<>();  
         boolean isEnforcedMode = shardIndexingPressureSettings.isShardIndexingPressureEnforced();
 
-        for (Map.Entry<ShardId, ShardIndexingPressureTracker> shardEntry : memoryManager.getShardIndexingPressureHotStore().entrySet()) {
+        for (Map.Entry<ShardId, ShardIndexingPressureTracker> shardEntry : memoryManager.getShardIndexingPressureHotStore().entrySet()) {  
             IndexingPressurePerShardStats shardStats = new IndexingPressurePerShardStats(shardEntry.getValue(), isEnforcedMode);
             statsPerShard.put(shardEntry.getKey(), shardStats);
-        }
+        }  
         return new ShardIndexingPressureStats.Builder().shardIndexingPressureStore(statsPerShard)
             .totalNodeLimitsBreachedRejections(memoryManager.getTotalNodeLimitsBreachedRejections())
-            .totalLastSuccessfulRequestLimitsBreachedRejections(memoryManager.getTotalLastSuccessfulRequestLimitsBreachedRejections())
+            .totalLastSuccessfulRequestLimitsBreachedRejections(memoryManager.getTotalLastSuccessfulRequestLimitsBreachedRejections())  
             .totalThroughputDegradationLimitsBreachedRejections(memoryManager.getTotalThroughputDegradationLimitsBreachedRejections())
             .shardIndexingPressureEnabled(shardIndexingPressureSettings.isShardIndexingPressureEnabled())
-            .shardIndexingPressureEnforced(isEnforcedMode)
+            .shardIndexingPressureEnforced(isEnforcedMode)  
             .build();
     }
 
     ShardIndexingPressureStats coldStats() {
         Map<ShardId, IndexingPressurePerShardStats> statsPerShard = new HashMap<>();
-        boolean isEnforcedMode = shardIndexingPressureSettings.isShardIndexingPressureEnforced();
+        boolean isEnforcedMode = shardIndexingPressureSettings.isShardIndexingPressureEnforced();  
 
         for (Map.Entry<ShardId, ShardIndexingPressureTracker> shardEntry : memoryManager.getShardIndexingPressureColdStore().entrySet()) {
-            IndexingPressurePerShardStats shardStats = new IndexingPressurePerShardStats(shardEntry.getValue(), isEnforcedMode);
+            IndexingPressurePerShardStats shardStats = new IndexingPressurePerShardStats(shardEntry.getValue(), isEnforcedMode);  
             statsPerShard.put(shardEntry.getKey(), shardStats);
         }
-        return new ShardIndexingPressureStats.Builder().shardIndexingPressureStore(statsPerShard)
+        return new ShardIndexingPressureStats.Builder().shardIndexingPressureStore(statsPerShard)  
             .totalNodeLimitsBreachedRejections(memoryManager.getTotalNodeLimitsBreachedRejections())
             .totalLastSuccessfulRequestLimitsBreachedRejections(memoryManager.getTotalLastSuccessfulRequestLimitsBreachedRejections())
-            .totalThroughputDegradationLimitsBreachedRejections(memoryManager.getTotalThroughputDegradationLimitsBreachedRejections())
+            .totalThroughputDegradationLimitsBreachedRejections(memoryManager.getTotalThroughputDegradationLimitsBreachedRejections())  
             .shardIndexingPressureEnabled(shardIndexingPressureSettings.isShardIndexingPressureEnabled())
             .shardIndexingPressureEnforced(isEnforcedMode)
-            .build();
+            .build();  
     }
 
-    ShardIndexingPressureStats topStats() {
+    ShardIndexingPressureStats topStats() {  
         return new ShardIndexingPressureStats.Builder().shardIndexingPressureStore(Collections.emptyMap())
             .totalNodeLimitsBreachedRejections(memoryManager.getTotalNodeLimitsBreachedRejections())
-            .totalLastSuccessfulRequestLimitsBreachedRejections(memoryManager.getTotalLastSuccessfulRequestLimitsBreachedRejections())
+            .totalLastSuccessfulRequestLimitsBreachedRejections(memoryManager.getTotalLastSuccessfulRequestLimitsBreachedRejections())  
             .totalThroughputDegradationLimitsBreachedRejections(memoryManager.getTotalThroughputDegradationLimitsBreachedRejections())
             .shardIndexingPressureEnabled(shardIndexingPressureSettings.isShardIndexingPressureEnabled())
-            .shardIndexingPressureEnforced(shardIndexingPressureSettings.isShardIndexingPressureEnforced())
+            .shardIndexingPressureEnforced(shardIndexingPressureSettings.isShardIndexingPressureEnforced())  
             .build();
     }
 
     ShardIndexingPressureTracker getShardIndexingPressureTracker(ShardId shardId) {
         return memoryManager.getShardIndexingPressureTracker(shardId);
-    }
+    }  
 
     public boolean isShardIndexingPressureEnabled() {
-        return shardIndexingPressureSettings.isShardIndexingPressureEnabled();
+        return shardIndexingPressureSettings.isShardIndexingPressureEnabled();  
     }
 }

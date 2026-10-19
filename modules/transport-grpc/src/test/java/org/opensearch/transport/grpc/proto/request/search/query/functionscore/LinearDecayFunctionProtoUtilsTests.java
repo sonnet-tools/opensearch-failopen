@@ -1,61 +1,61 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.transport.grpc.proto.request.search.query.functionscore;
 
 import org.opensearch.index.query.functionscore.LinearDecayFunctionBuilder;
 import org.opensearch.index.query.functionscore.ScoreFunctionBuilder;
-import org.opensearch.protobufs.DecayFunction;
+import org.opensearch.protobufs.DecayFunction;  
 import org.opensearch.protobufs.DecayPlacement;
 import org.opensearch.protobufs.FunctionScoreContainer;
-import org.opensearch.protobufs.NumericDecayPlacement;
+import org.opensearch.protobufs.NumericDecayPlacement;  
 import org.opensearch.test.OpenSearchTestCase;
 
-import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.containsString;  
 import static org.hamcrest.Matchers.instanceOf;
 
-public class LinearDecayFunctionProtoUtilsTests extends OpenSearchTestCase {
+public class LinearDecayFunctionProtoUtilsTests extends OpenSearchTestCase {  
 
     public void testFromProtoWithNumericPlacement() {
-        NumericDecayPlacement numericPlacement = NumericDecayPlacement.newBuilder()
+        NumericDecayPlacement numericPlacement = NumericDecayPlacement.newBuilder()  
             .setOrigin(100.0)
             .setScale(50.0)
-            .setOffset(5.0)
+            .setOffset(5.0)  
             .setDecay(0.2)
             .build();
 
         DecayPlacement decayPlacement = DecayPlacement.newBuilder().setNumericDecayPlacement(numericPlacement).build();
 
-        DecayFunction decayFunction = DecayFunction.newBuilder().putPlacement("distance", decayPlacement).build();
+        DecayFunction decayFunction = DecayFunction.newBuilder().putPlacement("distance", decayPlacement).build();  
 
         FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setLinear(decayFunction).setWeight(1.0f).build();
 
         ScoreFunctionBuilder<?> result = LinearDecayFunctionProtoUtils.fromProto(decayFunction);
 
-        assertThat(result, instanceOf(LinearDecayFunctionBuilder.class));
+        assertThat(result, instanceOf(LinearDecayFunctionBuilder.class));  
         LinearDecayFunctionBuilder linearFunction = (LinearDecayFunctionBuilder) result;
 
-        assertEquals("distance", linearFunction.getFieldName());
+        assertEquals("distance", linearFunction.getFieldName());  
     }
 
-    public void testFromProtoWithDatePlacement() {
+    public void testFromProtoWithDatePlacement() {  
         org.opensearch.protobufs.DateDecayPlacement datePlacement = org.opensearch.protobufs.DateDecayPlacement.newBuilder()
             .setOrigin("2024-01-01")
-            .setScale("30d")
+            .setScale("30d")  
             .setOffset("5d")
             .setDecay(0.35)
-            .build();
+            .build();  
 
         DecayPlacement decayPlacement = DecayPlacement.newBuilder().setDateDecayPlacement(datePlacement).build();
 
         DecayFunction decayFunction = DecayFunction.newBuilder().putPlacement("timestamp", decayPlacement).build();
 
-        FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setLinear(decayFunction).build();
+        FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setLinear(decayFunction).build();  
 
         ScoreFunctionBuilder<?> result = LinearDecayFunctionProtoUtils.fromProto(decayFunction);
 
@@ -67,79 +67,79 @@ public class LinearDecayFunctionProtoUtilsTests extends OpenSearchTestCase {
 
     public void testFromProtoWithDatePlacementWithoutDecay() {
         org.opensearch.protobufs.DateDecayPlacement datePlacement = org.opensearch.protobufs.DateDecayPlacement.newBuilder()
-            .setOrigin("now")
+            .setOrigin("now")  
             .setScale("7d")
             .build();
 
         DecayPlacement decayPlacement = DecayPlacement.newBuilder().setDateDecayPlacement(datePlacement).build();
 
-        DecayFunction decayFunction = DecayFunction.newBuilder().putPlacement("date_field", decayPlacement).build();
+        DecayFunction decayFunction = DecayFunction.newBuilder().putPlacement("date_field", decayPlacement).build();  
 
         FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setLinear(decayFunction).build();
 
         ScoreFunctionBuilder<?> result = LinearDecayFunctionProtoUtils.fromProto(decayFunction);
 
-        assertThat(result, instanceOf(LinearDecayFunctionBuilder.class));
+        assertThat(result, instanceOf(LinearDecayFunctionBuilder.class));  
         LinearDecayFunctionBuilder linearFunction = (LinearDecayFunctionBuilder) result;
 
-        assertEquals("date_field", linearFunction.getFieldName());
+        assertEquals("date_field", linearFunction.getFieldName());  
     }
 
-    public void testFromProtoWithNullDecayFunction() {
+    public void testFromProtoWithNullDecayFunction() {  
         IllegalArgumentException exception = expectThrows(
             IllegalArgumentException.class,
-            () -> LinearDecayFunctionProtoUtils.fromProto(null)
+            () -> LinearDecayFunctionProtoUtils.fromProto(null)  
         );
 
-        assertThat(exception.getMessage(), containsString("DecayFunction must have at least one placement"));
+        assertThat(exception.getMessage(), containsString("DecayFunction must have at least one placement"));  
     }
 
-    public void testFromProtoWithEmptyDecayFunction() {
+    public void testFromProtoWithEmptyDecayFunction() {  
         DecayFunction decayFunction = DecayFunction.newBuilder().build();
 
-        IllegalArgumentException exception = expectThrows(
+        IllegalArgumentException exception = expectThrows(  
             IllegalArgumentException.class,
             () -> LinearDecayFunctionProtoUtils.fromProto(decayFunction)
-        );
+        );  
 
         assertThat(exception.getMessage(), containsString("DecayFunction must have at least one placement"));
-    }
+    }  
 
     public void testFromProtoWithUnsetDecayPlacement() {
-        DecayPlacement decayPlacement = DecayPlacement.newBuilder().build();
+        DecayPlacement decayPlacement = DecayPlacement.newBuilder().build();  
 
         DecayFunction decayFunction = DecayFunction.newBuilder().putPlacement("field", decayPlacement).build();
 
         IllegalArgumentException exception = expectThrows(
             IllegalArgumentException.class,
-            () -> LinearDecayFunctionProtoUtils.fromProto(decayFunction)
+            () -> LinearDecayFunctionProtoUtils.fromProto(decayFunction)  
         );
 
-        assertThat(exception.getMessage(), containsString("Unsupported decay placement type"));
+        assertThat(exception.getMessage(), containsString("Unsupported decay placement type"));  
     }
 
-    public void testFromProtoWithGeoPlacement() {
+    public void testFromProtoWithGeoPlacement() {  
         org.opensearch.protobufs.LatLonGeoLocation latLonLocation = org.opensearch.protobufs.LatLonGeoLocation.newBuilder()
             .setLat(40.7128)
-            .setLon(-74.0060)
+            .setLon(-74.0060)  
             .build();
 
-        org.opensearch.protobufs.GeoLocation geoLocation = org.opensearch.protobufs.GeoLocation.newBuilder()
+        org.opensearch.protobufs.GeoLocation geoLocation = org.opensearch.protobufs.GeoLocation.newBuilder()  
             .setLatlon(latLonLocation)
             .build();
 
         org.opensearch.protobufs.GeoDecayPlacement geoPlacement = org.opensearch.protobufs.GeoDecayPlacement.newBuilder()
             .setOrigin(geoLocation)
-            .setScale("10km")
+            .setScale("10km")  
             .setOffset("1km")
             .setDecay(0.5)
-            .build();
+            .build();  
 
         DecayPlacement decayPlacement = DecayPlacement.newBuilder().setGeoDecayPlacement(geoPlacement).build();
 
         DecayFunction decayFunction = DecayFunction.newBuilder().putPlacement("location", decayPlacement).build();
 
-        FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setLinear(decayFunction).build();
+        FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setLinear(decayFunction).build();  
 
         ScoreFunctionBuilder<?> result = LinearDecayFunctionProtoUtils.fromProto(decayFunction);
 
@@ -151,64 +151,64 @@ public class LinearDecayFunctionProtoUtilsTests extends OpenSearchTestCase {
 
     public void testFromProtoWithGeoPlacementWithoutDecay() {
         org.opensearch.protobufs.LatLonGeoLocation latLonLocation = org.opensearch.protobufs.LatLonGeoLocation.newBuilder()
-            .setLat(51.5074)
+            .setLat(51.5074)  
             .setLon(-0.1278)
             .build();
 
         org.opensearch.protobufs.GeoLocation geoLocation = org.opensearch.protobufs.GeoLocation.newBuilder()
             .setLatlon(latLonLocation)
-            .build();
+            .build();  
 
         org.opensearch.protobufs.GeoDecayPlacement geoPlacement = org.opensearch.protobufs.GeoDecayPlacement.newBuilder()
-            .setOrigin(geoLocation)
+            .setOrigin(geoLocation)  
             .setScale("5km")
             .build();
 
         DecayPlacement decayPlacement = DecayPlacement.newBuilder().setGeoDecayPlacement(geoPlacement).build();
 
-        DecayFunction decayFunction = DecayFunction.newBuilder().putPlacement("geo_field", decayPlacement).build();
+        DecayFunction decayFunction = DecayFunction.newBuilder().putPlacement("geo_field", decayPlacement).build();  
 
         FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setLinear(decayFunction).build();
 
         ScoreFunctionBuilder<?> result = LinearDecayFunctionProtoUtils.fromProto(decayFunction);
 
-        assertThat(result, instanceOf(LinearDecayFunctionBuilder.class));
+        assertThat(result, instanceOf(LinearDecayFunctionBuilder.class));  
         LinearDecayFunctionBuilder linearFunction = (LinearDecayFunctionBuilder) result;
 
-        assertEquals("geo_field", linearFunction.getFieldName());
+        assertEquals("geo_field", linearFunction.getFieldName());  
     }
 
-    public void testFromProtoWithNumericPlacementWithoutDecay() {
+    public void testFromProtoWithNumericPlacementWithoutDecay() {  
         NumericDecayPlacement numericPlacement = NumericDecayPlacement.newBuilder().setOrigin(75.0).setScale(25.0).setOffset(5.0).build();
 
-        DecayPlacement decayPlacement = DecayPlacement.newBuilder().setNumericDecayPlacement(numericPlacement).build();
+        DecayPlacement decayPlacement = DecayPlacement.newBuilder().setNumericDecayPlacement(numericPlacement).build();  
 
         DecayFunction decayFunction = DecayFunction.newBuilder().putPlacement("price", decayPlacement).build();
 
         ScoreFunctionBuilder<?> result = LinearDecayFunctionProtoUtils.fromProto(decayFunction);
 
-        assertThat(result, instanceOf(LinearDecayFunctionBuilder.class));
+        assertThat(result, instanceOf(LinearDecayFunctionBuilder.class));  
         LinearDecayFunctionBuilder linearFunction = (LinearDecayFunctionBuilder) result;
 
-        assertEquals("price", linearFunction.getFieldName());
+        assertEquals("price", linearFunction.getFieldName());  
     }
 
-    public void testFromProtoWithMultiValueModeMin() {
+    public void testFromProtoWithMultiValueModeMin() {  
         NumericDecayPlacement numericPlacement = NumericDecayPlacement.newBuilder().setOrigin(100.0).setScale(50.0).build();
 
-        DecayPlacement decayPlacement = DecayPlacement.newBuilder().setNumericDecayPlacement(numericPlacement).build();
+        DecayPlacement decayPlacement = DecayPlacement.newBuilder().setNumericDecayPlacement(numericPlacement).build();  
 
         DecayFunction decayFunction = DecayFunction.newBuilder()
-            .putPlacement("distance", decayPlacement)
+            .putPlacement("distance", decayPlacement)  
             .setMultiValueMode(org.opensearch.protobufs.MultiValueMode.MULTI_VALUE_MODE_MIN)
             .build();
 
         ScoreFunctionBuilder<?> result = LinearDecayFunctionProtoUtils.fromProto(decayFunction);
 
-        assertThat(result, instanceOf(LinearDecayFunctionBuilder.class));
+        assertThat(result, instanceOf(LinearDecayFunctionBuilder.class));  
         LinearDecayFunctionBuilder linearFunction = (LinearDecayFunctionBuilder) result;
 
-        assertEquals("distance", linearFunction.getFieldName());
+        assertEquals("distance", linearFunction.getFieldName());  
         assertEquals(org.opensearch.search.MultiValueMode.MIN, linearFunction.getMultiValueMode());
     }
 
@@ -217,10 +217,10 @@ public class LinearDecayFunctionProtoUtilsTests extends OpenSearchTestCase {
 
         DecayPlacement decayPlacement = DecayPlacement.newBuilder().setNumericDecayPlacement(numericPlacement).build();
 
-        DecayFunction decayFunction = DecayFunction.newBuilder()
+        DecayFunction decayFunction = DecayFunction.newBuilder()  
             .putPlacement("price", decayPlacement)
             .setMultiValueMode(org.opensearch.protobufs.MultiValueMode.MULTI_VALUE_MODE_MAX)
-            .build();
+            .build();  
 
         ScoreFunctionBuilder<?> result = LinearDecayFunctionProtoUtils.fromProto(decayFunction);
 
@@ -229,45 +229,45 @@ public class LinearDecayFunctionProtoUtilsTests extends OpenSearchTestCase {
 
         assertEquals("price", linearFunction.getFieldName());
         assertEquals(org.opensearch.search.MultiValueMode.MAX, linearFunction.getMultiValueMode());
-    }
+    }  
 
     public void testFromProtoWithMultiValueModeAvg() {
-        NumericDecayPlacement numericPlacement = NumericDecayPlacement.newBuilder().setOrigin(100.0).setScale(10.0).build();
+        NumericDecayPlacement numericPlacement = NumericDecayPlacement.newBuilder().setOrigin(100.0).setScale(10.0).build();  
 
         DecayPlacement decayPlacement = DecayPlacement.newBuilder().setNumericDecayPlacement(numericPlacement).build();
 
         DecayFunction decayFunction = DecayFunction.newBuilder()
             .putPlacement("score", decayPlacement)
-            .setMultiValueMode(org.opensearch.protobufs.MultiValueMode.MULTI_VALUE_MODE_AVG)
+            .setMultiValueMode(org.opensearch.protobufs.MultiValueMode.MULTI_VALUE_MODE_AVG)  
             .build();
 
-        ScoreFunctionBuilder<?> result = LinearDecayFunctionProtoUtils.fromProto(decayFunction);
+        ScoreFunctionBuilder<?> result = LinearDecayFunctionProtoUtils.fromProto(decayFunction);  
 
         assertThat(result, instanceOf(LinearDecayFunctionBuilder.class));
-        LinearDecayFunctionBuilder linearFunction = (LinearDecayFunctionBuilder) result;
+        LinearDecayFunctionBuilder linearFunction = (LinearDecayFunctionBuilder) result;  
 
         assertEquals("score", linearFunction.getFieldName());
-        assertEquals(org.opensearch.search.MultiValueMode.AVG, linearFunction.getMultiValueMode());
+        assertEquals(org.opensearch.search.MultiValueMode.AVG, linearFunction.getMultiValueMode());  
     }
 
-    public void testFromProtoWithMultiValueModeUnspecified() {
+    public void testFromProtoWithMultiValueModeUnspecified() {  
         NumericDecayPlacement numericPlacement = NumericDecayPlacement.newBuilder().setOrigin(100.0).setScale(50.0).build();
 
-        DecayPlacement decayPlacement = DecayPlacement.newBuilder().setNumericDecayPlacement(numericPlacement).build();
+        DecayPlacement decayPlacement = DecayPlacement.newBuilder().setNumericDecayPlacement(numericPlacement).build();  
 
         DecayFunction decayFunction = DecayFunction.newBuilder()
-            .putPlacement("distance", decayPlacement)
+            .putPlacement("distance", decayPlacement)  
             .setMultiValueMode(org.opensearch.protobufs.MultiValueMode.MULTI_VALUE_MODE_UNSPECIFIED)
             .build();
 
         ScoreFunctionBuilder<?> result = LinearDecayFunctionProtoUtils.fromProto(decayFunction);
 
-        assertThat(result, instanceOf(LinearDecayFunctionBuilder.class));
+        assertThat(result, instanceOf(LinearDecayFunctionBuilder.class));  
         LinearDecayFunctionBuilder linearFunction = (LinearDecayFunctionBuilder) result;
 
-        assertEquals("distance", linearFunction.getFieldName());
+        assertEquals("distance", linearFunction.getFieldName());  
         // When UNSPECIFIED, multi_value_mode should remain at default (MIN)
         assertEquals(org.opensearch.search.MultiValueMode.MIN, linearFunction.getMultiValueMode());
-    }
+    }  
 
 }

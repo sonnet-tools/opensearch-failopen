@@ -1,37 +1,37 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 package org.opensearch.transport.grpc.proto.response.search.aggregation.bucket.terms;
 
-import org.opensearch.protobufs.Aggregate;
+import org.opensearch.protobufs.Aggregate;  
 import org.opensearch.protobufs.UnmappedTermsAggregate;
 import org.opensearch.search.aggregations.BucketOrder;
-import org.opensearch.search.aggregations.bucket.terms.TermsAggregator;
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregator;  
 import org.opensearch.search.aggregations.bucket.terms.UnmappedTerms;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.io.IOException;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.HashMap;  
 import java.util.Map;
 
-/**
+/**  
  * Tests for {@link UnmappedTermsAggregateConverter}.
  */
-public class UnmappedTermsAggregateConverterTests extends OpenSearchTestCase {
+public class UnmappedTermsAggregateConverterTests extends OpenSearchTestCase {  
 
     private final UnmappedTermsAggregateConverter converter = new UnmappedTermsAggregateConverter();
 
     public void testGetHandledAggregationType() {
         assertEquals(UnmappedTerms.class, converter.getHandledAggregationType());
-    }
+    }  
 
     public void testToProtoWrapsAsUmterms() throws IOException {
-        UnmappedTerms unmappedTerms = createUnmappedTerms("unmapped_field", null);
+        UnmappedTerms unmappedTerms = createUnmappedTerms("unmapped_field", null);  
 
         Aggregate aggregate = converter.toProto(unmappedTerms).build();
 
@@ -43,25 +43,25 @@ public class UnmappedTermsAggregateConverterTests extends OpenSearchTestCase {
 
         UnmappedTermsAggregate result = converter.toProto(unmappedTerms).build().getUmterms();
 
-        assertEquals(0, result.getDocCountErrorUpperBound());
+        assertEquals(0, result.getDocCountErrorUpperBound());  
         assertEquals(0, result.getSumOtherDocCount());
         assertFalse("Should not have metadata for null", result.hasMeta());
-    }
+    }  
 
     public void testWithMetadata() throws IOException {
-        Map<String, Object> metadata = new HashMap<>();
+        Map<String, Object> metadata = new HashMap<>();  
         metadata.put("reason", "unmapped");
 
-        UnmappedTerms unmappedTerms = createUnmappedTerms("unmapped_field", metadata);
+        UnmappedTerms unmappedTerms = createUnmappedTerms("unmapped_field", metadata);  
 
         UnmappedTermsAggregate result = converter.toProto(unmappedTerms).build().getUmterms();
 
         assertTrue("Should have metadata", result.hasMeta());
         assertTrue("Metadata should contain reason", result.getMeta().getFieldsMap().containsKey("reason"));
-    }
+    }  
 
     public void testWithEmptyMetadata() throws IOException {
-        UnmappedTerms unmappedTerms = createUnmappedTerms("unmapped_field", new HashMap<>());
+        UnmappedTerms unmappedTerms = createUnmappedTerms("unmapped_field", new HashMap<>());  
 
         UnmappedTermsAggregate result = converter.toProto(unmappedTerms).build().getUmterms();
 
@@ -73,15 +73,15 @@ public class UnmappedTermsAggregateConverterTests extends OpenSearchTestCase {
 
         UnmappedTermsAggregate result = converter.toProto(unmappedTerms).build().getUmterms();
 
-        assertFalse("Should not have metadata for null", result.hasMeta());
+        assertFalse("Should not have metadata for null", result.hasMeta());  
     }
 
-    private static UnmappedTerms createUnmappedTerms(String name, Map<String, Object> metadata) {
+    private static UnmappedTerms createUnmappedTerms(String name, Map<String, Object> metadata) {  
         return new UnmappedTerms(
             name,
-            BucketOrder.count(false),
+            BucketOrder.count(false),  
             new TermsAggregator.BucketCountThresholds(1, 0, 10, -1),
             metadata != null ? metadata : Collections.emptyMap()
-        );
+        );  
     }
 }

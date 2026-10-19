@@ -1,64 +1,64 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.common.xcontent.support;
 
 import org.opensearch.common.compress.CompressedXContent;
 import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.common.xcontent.XContentType;  
 import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.xcontent.DeprecationHandler;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.ToXContentObject;
+import org.opensearch.core.xcontent.ToXContentObject;  
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.test.OpenSearchTestCase;  
 import org.hamcrest.Matchers;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
+import java.util.List;  
 import java.util.Map;
 
-public class XContentHelperTests extends OpenSearchTestCase {
+public class XContentHelperTests extends OpenSearchTestCase {  
 
     Map<String, Object> getMap(Object... keyValues) {
-        Map<String, Object> map = new HashMap<>();
+        Map<String, Object> map = new HashMap<>();  
         for (int i = 0; i < keyValues.length; i++) {
             map.put((String) keyValues[i], keyValues[++i]);
-        }
+        }  
         return map;
     }
 
@@ -67,205 +67,205 @@ public class XContentHelperTests extends OpenSearchTestCase {
 
         Map<String, Object> namedMap = new HashMap<>(1);
         namedMap.put(name, map);
-        return namedMap;
+        return namedMap;  
     }
 
-    List<Object> getList(Object... values) {
+    List<Object> getList(Object... values) {  
         return Arrays.asList(values);
     }
 
     public void testMergingListValuesAreMapsOfOne() {
         Map<String, Object> defaults = getMap("test", getList(getNamedMap("name1", "t1", "1"), getNamedMap("name2", "t2", "2")));
-        Map<String, Object> content = getMap("test", getList(getNamedMap("name2", "t3", "3"), getNamedMap("name4", "t4", "4")));
+        Map<String, Object> content = getMap("test", getList(getNamedMap("name2", "t3", "3"), getNamedMap("name4", "t4", "4")));  
         Map<String, Object> expected = getMap(
             "test",
-            getList(getNamedMap("name2", "t2", "2", "t3", "3"), getNamedMap("name4", "t4", "4"), getNamedMap("name1", "t1", "1"))
+            getList(getNamedMap("name2", "t2", "2", "t3", "3"), getNamedMap("name4", "t4", "4"), getNamedMap("name1", "t1", "1"))  
         );
 
-        XContentHelper.mergeDefaults(content, defaults);
+        XContentHelper.mergeDefaults(content, defaults);  
 
         assertThat(content, Matchers.equalTo(expected));
-    }
+    }  
 
     public void testToXContent() throws IOException {
-        final XContentType xContentType = randomFrom(XContentType.values());
+        final XContentType xContentType = randomFrom(XContentType.values());  
         final ToXContent toXContent;
         final boolean error;
-        if (randomBoolean()) {
+        if (randomBoolean()) {  
             if (randomBoolean()) {
                 error = false;
-                toXContent = (builder, params) -> builder.field("field", "value");
+                toXContent = (builder, params) -> builder.field("field", "value");  
             } else {
                 error = true;
-                toXContent = (builder, params) -> builder.startObject().field("field", "value").endObject();
+                toXContent = (builder, params) -> builder.startObject().field("field", "value").endObject();  
             }
         } else {
-            if (randomBoolean()) {
+            if (randomBoolean()) {  
                 error = false;
                 toXContent = (ToXContentObject) (builder, params) -> builder.startObject().field("field", "value").endObject();
-            } else {
+            } else {  
                 error = true;
                 toXContent = (ToXContentObject) (builder, params) -> builder.field("field", "value");
-            }
+            }  
         }
         if (error) {
-            expectThrows(IOException.class, () -> XContentHelper.toXContent(toXContent, xContentType, randomBoolean()));
+            expectThrows(IOException.class, () -> XContentHelper.toXContent(toXContent, xContentType, randomBoolean()));  
         } else {
             BytesReference bytes = XContentHelper.toXContent(toXContent, xContentType, randomBoolean());
-            try (
+            try (  
                 XContentParser parser = xContentType.xContent()
                     .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, bytes.streamInput())
-            ) {
+            ) {  
                 assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());
                 assertEquals(XContentParser.Token.FIELD_NAME, parser.nextToken());
-                assertTrue(parser.nextToken().isValue());
+                assertTrue(parser.nextToken().isValue());  
                 assertEquals("value", parser.text());
                 assertEquals(XContentParser.Token.END_OBJECT, parser.nextToken());
-                assertNull(parser.nextToken());
+                assertNull(parser.nextToken());  
             }
         }
-    }
+    }  
 
     public void testChildBytes() throws IOException {
 
         for (XContentType xContentType : XContentType.values()) {
 
-            XContentBuilder builder = XContentBuilder.builder(xContentType.xContent());
+            XContentBuilder builder = XContentBuilder.builder(xContentType.xContent());  
             builder.startObject().startObject("level1");
             builder.startObject("level2")
-                .startObject("object")
+                .startObject("object")  
                 .field("text", "string")
                 .field("number", 10)
-                .endObject()
+                .endObject()  
                 .startObject("object2")
                 .field("boolean", true)
-                .nullField("null")
+                .nullField("null")  
                 .startArray("array_of_strings")
                 .value("string1")
-                .value("string2")
+                .value("string2")  
                 .endArray()
                 .endObject()
-                .endObject();
+                .endObject();  
             builder.field("field", "value");
             builder.endObject().endObject();
-            BytesReference input = BytesReference.bytes(builder);
+            BytesReference input = BytesReference.bytes(builder);  
 
             BytesReference bytes;
-            try (
+            try (  
                 XContentParser parser = xContentType.xContent()
                     .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, input.streamInput())
-            ) {
+            ) {  
 
                 assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());
-                assertEquals(XContentParser.Token.FIELD_NAME, parser.nextToken());
+                assertEquals(XContentParser.Token.FIELD_NAME, parser.nextToken());  
                 assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());
                 assertEquals(XContentParser.Token.FIELD_NAME, parser.nextToken());
-                assertEquals("level2", parser.currentName());
+                assertEquals("level2", parser.currentName());  
                 // Extract everything under 'level2' as a bytestream
                 bytes = XContentHelper.childBytes(parser);
-                assertEquals(XContentParser.Token.FIELD_NAME, parser.nextToken());
+                assertEquals(XContentParser.Token.FIELD_NAME, parser.nextToken());  
                 assertEquals("field", parser.currentName());
             }
 
             // now parse the contents of 'level2'
             try (
-                XContentParser parser = xContentType.xContent()
+                XContentParser parser = xContentType.xContent()  
                     .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, bytes.streamInput())
             ) {
-                assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());
+                assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());  
                 assertEquals(XContentParser.Token.FIELD_NAME, parser.nextToken());
                 assertEquals("object", parser.currentName());
-                assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());
+                assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());  
                 assertEquals(XContentParser.Token.FIELD_NAME, parser.nextToken());
                 assertEquals("text", parser.currentName());
-                assertEquals(XContentParser.Token.VALUE_STRING, parser.nextToken());
+                assertEquals(XContentParser.Token.VALUE_STRING, parser.nextToken());  
                 assertEquals("string", parser.text());
                 assertEquals(XContentParser.Token.FIELD_NAME, parser.nextToken());
-                assertEquals("number", parser.currentName());
+                assertEquals("number", parser.currentName());  
                 assertEquals(XContentParser.Token.VALUE_NUMBER, parser.nextToken());
                 assertEquals(10, parser.numberValue());
-                assertEquals(XContentParser.Token.END_OBJECT, parser.nextToken());
+                assertEquals(XContentParser.Token.END_OBJECT, parser.nextToken());  
                 assertEquals(XContentParser.Token.FIELD_NAME, parser.nextToken());
                 assertEquals("object2", parser.currentName());
-                assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());
+                assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());  
                 assertEquals(XContentParser.Token.FIELD_NAME, parser.nextToken());
                 assertEquals("boolean", parser.currentName());
-                assertEquals(XContentParser.Token.VALUE_BOOLEAN, parser.nextToken());
+                assertEquals(XContentParser.Token.VALUE_BOOLEAN, parser.nextToken());  
                 assertTrue(parser.booleanValue());
                 assertEquals(XContentParser.Token.FIELD_NAME, parser.nextToken());
-                assertEquals("null", parser.currentName());
+                assertEquals("null", parser.currentName());  
                 assertEquals(XContentParser.Token.VALUE_NULL, parser.nextToken());
                 assertEquals(XContentParser.Token.FIELD_NAME, parser.nextToken());
-                assertEquals("array_of_strings", parser.currentName());
+                assertEquals("array_of_strings", parser.currentName());  
                 assertEquals(XContentParser.Token.START_ARRAY, parser.nextToken());
                 assertEquals(XContentParser.Token.VALUE_STRING, parser.nextToken());
-                assertEquals("string1", parser.text());
+                assertEquals("string1", parser.text());  
                 assertEquals(XContentParser.Token.VALUE_STRING, parser.nextToken());
                 assertEquals("string2", parser.text());
-                assertEquals(XContentParser.Token.END_ARRAY, parser.nextToken());
+                assertEquals(XContentParser.Token.END_ARRAY, parser.nextToken());  
                 assertEquals(XContentParser.Token.END_OBJECT, parser.nextToken());
                 assertEquals(XContentParser.Token.END_OBJECT, parser.nextToken());
-                assertNull(parser.nextToken());
+                assertNull(parser.nextToken());  
             }
 
-        }
+        }  
     }
 
-    public void testEmbeddedObject() throws IOException {
+    public void testEmbeddedObject() throws IOException {  
         // Need to test this separately as MediaTypeRegistry.JSON never produces VALUE_EMBEDDED_OBJECT
         XContentBuilder builder = XContentBuilder.builder(XContentType.CBOR.xContent());
-        builder.startObject().startObject("root");
+        builder.startObject().startObject("root");  
         CompressedXContent embedded = new CompressedXContent("{\"field\":\"value\"}");
         builder.field("bytes", embedded.compressed());
-        builder.endObject().endObject();
+        builder.endObject().endObject();  
         BytesReference bytes = BytesReference.bytes(builder);
 
-        BytesReference inner;
+        BytesReference inner;  
         try (
             XContentParser parser = XContentType.CBOR.xContent()
-                .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, bytes.streamInput())
+                .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, bytes.streamInput())  
         ) {
 
-            assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());
+            assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());  
             assertEquals(XContentParser.Token.FIELD_NAME, parser.nextToken());
             inner = XContentHelper.childBytes(parser);
-            assertEquals(XContentParser.Token.END_OBJECT, parser.nextToken());
+            assertEquals(XContentParser.Token.END_OBJECT, parser.nextToken());  
             assertNull(parser.nextToken());
         }
 
         try (
             XContentParser parser = XContentType.CBOR.xContent()
-                .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, inner.streamInput())
+                .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, inner.streamInput())  
         ) {
 
-            assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());
+            assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());  
             assertEquals(XContentParser.Token.FIELD_NAME, parser.nextToken());
             assertEquals("bytes", parser.currentName());
-            assertEquals(XContentParser.Token.VALUE_EMBEDDED_OBJECT, parser.nextToken());
+            assertEquals(XContentParser.Token.VALUE_EMBEDDED_OBJECT, parser.nextToken());  
             assertEquals(embedded, new CompressedXContent(parser.binaryValue()));
             assertEquals(XContentParser.Token.END_OBJECT, parser.nextToken());
-            assertNull(parser.nextToken());
+            assertNull(parser.nextToken());  
 
         }
-    }
+    }  
 
     public void testEmptyChildBytes() throws IOException {
 
         String inputJson = "{ \"mappings\" : {} }";
         try (
-            XContentParser parser = MediaTypeRegistry.JSON.xContent()
+            XContentParser parser = MediaTypeRegistry.JSON.xContent()  
                 .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, inputJson)
         ) {
 
             assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());
             assertEquals(XContentParser.Token.FIELD_NAME, parser.nextToken());
-            BytesReference bytes = XContentHelper.childBytes(parser);
+            BytesReference bytes = XContentHelper.childBytes(parser);  
             assertEquals(XContentParser.Token.END_OBJECT, parser.nextToken());
             assertNull(parser.nextToken());
 
             assertEquals("{}", bytes.utf8ToString());
 
-        }
+        }  
 
     }
-}
+}  

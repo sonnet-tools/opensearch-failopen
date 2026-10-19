@@ -1,61 +1,61 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.action.admin.cluster.stats;
 
 import org.opensearch.test.OpenSearchTestCase;
 
-import java.util.Arrays;
+import java.util.Arrays;  
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.HashSet;  
 import java.util.Map;
 import java.util.Set;
 
 public class MappingVisitorTests extends OpenSearchTestCase {
 
-    private static void collectTypes(Map<String, ?> mapping, Set<String> types) {
+    private static void collectTypes(Map<String, ?> mapping, Set<String> types) {  
         MappingVisitor.visitMapping(mapping, m -> {
             if (m.containsKey("type")) {
-                types.add(m.get("type").toString());
+                types.add(m.get("type").toString());  
             } else {
                 types.add("object");
-            }
+            }  
         });
     }
 
     public void testCountTopLevelFields() {
         Map<String, Object> mapping = new HashMap<>();
-        Set<String> fields = new HashSet<>();
+        Set<String> fields = new HashSet<>();  
         collectTypes(mapping, fields);
         assertEquals(Collections.emptySet(), fields);
 
@@ -64,31 +64,31 @@ public class MappingVisitorTests extends OpenSearchTestCase {
 
         Map<String, Object> keywordField = new HashMap<>();
         keywordField.put("type", "keyword");
-        properties.put("foo", keywordField);
+        properties.put("foo", keywordField);  
         collectTypes(mapping, fields);
         assertEquals(Collections.singleton("keyword"), fields);
 
         Map<String, Object> IndexField = new HashMap<>();
         IndexField.put("type", "integer");
-        properties.put("bar", IndexField);
+        properties.put("bar", IndexField);  
         fields = new HashSet<>();
         collectTypes(mapping, fields);
-        assertEquals(new HashSet<>(Arrays.asList("keyword", "integer")), fields);
+        assertEquals(new HashSet<>(Arrays.asList("keyword", "integer")), fields);  
 
         properties.put("baz", IndexField);
-        fields = new HashSet<>();
+        fields = new HashSet<>();  
         collectTypes(mapping, fields);
         assertEquals(new HashSet<>(Arrays.asList("keyword", "integer")), fields);
-    }
+    }  
 
     public void testCountMultiFields() {
-        Map<String, Object> keywordField = new HashMap<>();
+        Map<String, Object> keywordField = new HashMap<>();  
         keywordField.put("type", "keyword");
 
-        Map<String, Object> textField = new HashMap<>();
+        Map<String, Object> textField = new HashMap<>();  
         textField.put("type", "text");
 
-        Map<String, Object> fields = new HashMap<>();
+        Map<String, Object> fields = new HashMap<>();  
         fields.put("keyword", keywordField);
         textField.put("fields", fields);
 
@@ -100,10 +100,10 @@ public class MappingVisitorTests extends OpenSearchTestCase {
 
         Set<String> usedFields = new HashSet<>();
         collectTypes(mapping, usedFields);
-        assertEquals(new HashSet<>(Arrays.asList("keyword", "text")), usedFields);
+        assertEquals(new HashSet<>(Arrays.asList("keyword", "text")), usedFields);  
     }
 
-    public void testCountInnerFields() {
+    public void testCountInnerFields() {  
         Map<String, Object> keywordField = new HashMap<>();
         keywordField.put("type", "keyword");
 
@@ -115,16 +115,16 @@ public class MappingVisitorTests extends OpenSearchTestCase {
 
         Map<String, Object> mapping = new HashMap<>();
 
-        properties = new HashMap<>();
+        properties = new HashMap<>();  
         properties.put("obj", objectMapping);
         mapping.put("properties", properties);
-        Set<String> fields = new HashSet<>();
+        Set<String> fields = new HashSet<>();  
         collectTypes(mapping, fields);
         assertEquals(new HashSet<>(Arrays.asList("keyword", "object")), fields);
 
         properties.put("bar", keywordField);
         fields = new HashSet<>();
-        collectTypes(mapping, fields);
+        collectTypes(mapping, fields);  
         assertEquals(new HashSet<>(Arrays.asList("keyword", "object")), fields);
     }
-}
+}  

@@ -1,58 +1,58 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.analytics.exec;
 
 import org.opensearch.common.concurrent.GatedCloseable;
 import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.core.index.shard.ShardId;  
 import org.opensearch.index.engine.exec.IndexReaderProvider.Reader;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mock;  
 
 public class ReaderContextTests extends OpenSearchTestCase {
 
     private static final ShardId SHARD_0 = new ShardId(new Index("idx", "uuid"), 0);
 
-    private GatedCloseable<Reader> mockGatedReader() {
+    private GatedCloseable<Reader> mockGatedReader() {  
         Reader reader = mock(Reader.class);
         AtomicBoolean closed = new AtomicBoolean(false);
-        return new GatedCloseable<>(reader, () -> closed.set(true));
+        return new GatedCloseable<>(reader, () -> closed.set(true));  
     }
 
-    public void testMarkInUseIsAdditive() {
+    public void testMarkInUseIsAdditive() {  
         GatedCloseable<Reader> gated = mockGatedReader();
         ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 30_000);
 
         // Two phases can hold the context at once; both markInUse calls succeed.
         assertTrue(ctx.markInUse());
-        assertTrue(ctx.markInUse());
+        assertTrue(ctx.markInUse());  
 
         // One markDone per markInUse; still in use after the first.
-        ctx.markDone();
+        ctx.markDone();  
         assertFalse("Still in use after one of two done", ctx.isExpired());
 
-        ctx.markDone();
+        ctx.markDone();  
         assertTrue("Reusable once both are done", ctx.markInUse());
     }
 
     public void testNotExpiredWhileInUse() {
         GatedCloseable<Reader> gated = mockGatedReader();
-        ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 1); // 1ms keepAlive
+        ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 1); // 1ms keepAlive  
 
         ctx.markInUse();
-        assertFalse("Should not expire while in-use", ctx.isExpired());
+        assertFalse("Should not expire while in-use", ctx.isExpired());  
     }
 
-    public void testExpiresAfterKeepAlive() throws Exception {
+    public void testExpiresAfterKeepAlive() throws Exception {  
         GatedCloseable<Reader> gated = mockGatedReader();
         ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 50); // 50ms keepAlive
 
@@ -61,31 +61,31 @@ public class ReaderContextTests extends OpenSearchTestCase {
 
         Thread.sleep(100);
         assertTrue("Should expire after keepAlive", ctx.isExpired());
-    }
+    }  
 
     public void testNotExpiredBeforeKeepAlive() {
-        GatedCloseable<Reader> gated = mockGatedReader();
+        GatedCloseable<Reader> gated = mockGatedReader();  
         ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 30_000);
 
-        ctx.markInUse();
+        ctx.markInUse();  
         ctx.markDone();
 
-        assertFalse("Should not expire before keepAlive", ctx.isExpired());
+        assertFalse("Should not expire before keepAlive", ctx.isExpired());  
     }
 
-    public void testCloseReleasesReader() throws Exception {
+    public void testCloseReleasesReader() throws Exception {  
         AtomicBoolean closed = new AtomicBoolean(false);
         Reader reader = mock(Reader.class);
-        GatedCloseable<Reader> gated = new GatedCloseable<>(reader, () -> closed.set(true));
+        GatedCloseable<Reader> gated = new GatedCloseable<>(reader, () -> closed.set(true));  
 
         ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 30_000);
-        ctx.close();
+        ctx.close();  
 
         assertTrue("Reader should be closed", closed.get());
-    }
+    }  
 
     public void testMarkInUseAfterCloseReturnsFalse() throws Exception {
-        GatedCloseable<Reader> gated = mockGatedReader();
+        GatedCloseable<Reader> gated = mockGatedReader();  
         ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 30_000);
         ctx.close();
 
@@ -94,13 +94,13 @@ public class ReaderContextTests extends OpenSearchTestCase {
 
     public void testGetReader() {
         Reader reader = mock(Reader.class);
-        GatedCloseable<Reader> gated = new GatedCloseable<>(reader, () -> {});
+        GatedCloseable<Reader> gated = new GatedCloseable<>(reader, () -> {});  
         ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 30_000);
 
-        assertSame(reader, ctx.getReader());
+        assertSame(reader, ctx.getReader());  
     }
 
-    public void testGetQueryId() {
+    public void testGetQueryId() {  
         GatedCloseable<Reader> gated = mockGatedReader();
         ReaderContext ctx = new ReaderContext("test-query-123", SHARD_0, gated, 30_000);
 
@@ -109,18 +109,18 @@ public class ReaderContextTests extends OpenSearchTestCase {
 
     public void testLastAccessTimeUpdatedOnMarkInUse() throws Exception {
         GatedCloseable<Reader> gated = mockGatedReader();
-        ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 30_000);
+        ReaderContext ctx = new ReaderContext("q1", SHARD_0, gated, 30_000);  
 
         long timeAfterCreate = ctx.getLastAccessTime();
 
         Thread.sleep(20);
         ctx.markInUse();
-        long timeAfterMarkInUse = ctx.getLastAccessTime();
+        long timeAfterMarkInUse = ctx.getLastAccessTime();  
         assertTrue("lastAccessTime should advance on markInUse", timeAfterMarkInUse > timeAfterCreate);
 
-        Thread.sleep(20);
+        Thread.sleep(20);  
         ctx.markDone();
         long timeAfterDone = ctx.getLastAccessTime();
-        assertTrue("lastAccessTime should advance on markDone", timeAfterDone > timeAfterMarkInUse);
+        assertTrue("lastAccessTime should advance on markDone", timeAfterDone > timeAfterMarkInUse);  
     }
 }

@@ -1,169 +1,169 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.arrow.flight.transport;
 
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.Logger;  
 import org.opensearch.Version;
 import org.opensearch.common.lease.Releasable;
-import org.opensearch.core.transport.TransportResponse;
+import org.opensearch.core.transport.TransportResponse;  
 import org.opensearch.search.query.QuerySearchResult;
 import org.opensearch.transport.TcpChannel;
-import org.opensearch.transport.TcpTransportChannel;
+import org.opensearch.transport.TcpTransportChannel;  
 import org.opensearch.transport.stream.StreamErrorCode;
 import org.opensearch.transport.stream.StreamException;
 
 import java.io.IOException;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicBoolean;  
 
 /**
- * A TCP transport channel for Arrow Flight, supporting only streaming responses.
+ * A TCP transport channel for Arrow Flight, supporting only streaming responses.  
  * It is released in case any exception occurs in sendResponseBatch when sendResponse(Exception)
  * is called or when completeStream() is called.
- * The underlying TcpChannel is closed when release is called.
+ * The underlying TcpChannel is closed when release is called.  
  * @opensearch.internal
  */
-class FlightTransportChannel extends TcpTransportChannel implements ArrowFlightChannel {
+class FlightTransportChannel extends TcpTransportChannel implements ArrowFlightChannel {  
     private static final Logger logger = LogManager.getLogger(FlightTransportChannel.class);
 
-    private final AtomicBoolean streamOpen = new AtomicBoolean(true);
+    private final AtomicBoolean streamOpen = new AtomicBoolean(true);  
 
     public FlightTransportChannel(
-        FlightOutboundHandler outboundHandler,
+        FlightOutboundHandler outboundHandler,  
         TcpChannel channel,
         String action,
-        long requestId,
+        long requestId,  
         Version version,
         Set<String> features,
-        boolean compressResponse,
+        boolean compressResponse,  
         boolean isHandshake,
         Releasable breakerRelease
-    ) {
+    ) {  
         super(outboundHandler, channel, action, requestId, version, features, compressResponse, isHandshake, breakerRelease);
     }
 
     @Override
     public void sendResponse(TransportResponse response) {
-        throw new UnsupportedOperationException("Use sendResponseBatch instead");
+        throw new UnsupportedOperationException("Use sendResponseBatch instead");  
     }
 
-    @Override
+    @Override  
     public void sendResponse(Exception exception) throws IOException {
         if (!streamOpen.get()) {
-            throw new StreamException(StreamErrorCode.UNAVAILABLE, "Stream is closed for requestId [" + requestId + "]");
+            throw new StreamException(StreamErrorCode.UNAVAILABLE, "Stream is closed for requestId [" + requestId + "]");  
         }
         try {
-            ((FlightOutboundHandler) outboundHandler).sendErrorResponse(
+            ((FlightOutboundHandler) outboundHandler).sendErrorResponse(  
                 version,
                 features,
-                getChannel(),
+                getChannel(),  
                 this,
                 requestId,
-                action,
+                action,  
                 exception
             );
-        } catch (StreamException e) {
+        } catch (StreamException e) {  
             if (e.getErrorCode() == StreamErrorCode.CANCELLED) {
                 release(true);
-                throw e;
+                throw e;  
             }
             release(true);
-            throw e;
+            throw e;  
         } catch (Exception e) {
             release(true);
-            throw new StreamException(StreamErrorCode.INTERNAL, "Error sending response batch", e);
+            throw new StreamException(StreamErrorCode.INTERNAL, "Error sending response batch", e);  
         }
     }
 
     @Override
     public void sendResponseBatch(TransportResponse response) {
-        sendResponseBatch(response, false);
+        sendResponseBatch(response, false);  
     }
 
-    @Override
+    @Override  
     public void sendResponseBatch(TransportResponse response, boolean sync) {
         if (!streamOpen.get()) {
-            throw new StreamException(StreamErrorCode.UNAVAILABLE, "Stream is closed for requestId [" + requestId + "]");
+            throw new StreamException(StreamErrorCode.UNAVAILABLE, "Stream is closed for requestId [" + requestId + "]");  
         }
         if (response instanceof QuerySearchResult && ((QuerySearchResult) response).getShardSearchRequest() != null) {
-            ((QuerySearchResult) response).getShardSearchRequest().setOutboundNetworkTime(System.currentTimeMillis());
+            ((QuerySearchResult) response).getShardSearchRequest().setOutboundNetworkTime(System.currentTimeMillis());  
         }
         try {
-            ((FlightOutboundHandler) outboundHandler).sendResponseBatch(
+            ((FlightOutboundHandler) outboundHandler).sendResponseBatch(  
                 version,
                 features,
-                getChannel(),
+                getChannel(),  
                 this,
                 requestId,
-                action,
+                action,  
                 response,
                 compressResponse,
-                isHandshake,
+                isHandshake,  
                 sync
             );
-        } catch (StreamException e) {
+        } catch (StreamException e) {  
             // Cancelled: consumer is gone, release ends the call cleanly. For other
             // failures (e.g. TIMED_OUT from the back-pressure gate) leave the channel
-            // open so the handler can call channel.sendResponse(e) to relay the error
+            // open so the handler can call channel.sendResponse(e) to relay the error  
             // to the consumer; sendResponse releases on its own.
             if (e.getErrorCode() == StreamErrorCode.CANCELLED) {
-                release(true);
+                release(true);  
             }
             throw e;
-        } catch (Exception e) {
+        } catch (Exception e) {  
             throw new StreamException(StreamErrorCode.INTERNAL, "Error sending response batch", e);
         }
-    }
+    }  
 
     @Override
-    public void completeStream() {
+    public void completeStream() {  
         if (streamOpen.compareAndSet(true, false)) {
             try {
-                ((FlightOutboundHandler) outboundHandler).completeStream(version, features, getChannel(), this, requestId, action);
+                ((FlightOutboundHandler) outboundHandler).completeStream(version, features, getChannel(), this, requestId, action);  
             } catch (Exception e) {
                 release(true);
-                if (e instanceof StreamException se) {
+                if (e instanceof StreamException se) {  
                     throw se;
                 }
-                throw new StreamException(StreamErrorCode.INTERNAL, "Error completing stream", e);
+                throw new StreamException(StreamErrorCode.INTERNAL, "Error completing stream", e);  
             }
         } else {
-            release(true);
+            release(true);  
             logger.warn("CompleteStream called on already closed stream with action[{}] and requestId[{}]", action, requestId);
             throw new StreamException(StreamErrorCode.UNAVAILABLE, "FlightTransportChannel stream already closed.");
-        }
+        }  
     }
 
-    @Override
+    @Override  
     protected void release(boolean isExceptionResponse) {
         getChannel().close();
-        super.release(isExceptionResponse);
+        super.release(isExceptionResponse);  
     }
 
-    @Override
+    @Override  
     public String getChannelType() {
         return "stream-transport";
-    }
+    }  
 
     public void releaseChannel(boolean isExceptionResponse) {
-        release(isExceptionResponse);
+        release(isExceptionResponse);  
     }
 
-    @Override
+    @Override  
     public BufferAllocator getAllocator() {
         return ((FlightServerChannel) getChannel()).getAllocator();
-    }
+    }  
 
     @Override
-    public boolean isCancelled() {
+    public boolean isCancelled() {  
         return getChannel() instanceof FlightServerChannel fsc && fsc.isCancelled();
     }
-}
+}  

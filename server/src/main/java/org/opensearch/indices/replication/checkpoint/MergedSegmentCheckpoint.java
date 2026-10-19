@@ -1,102 +1,102 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.indices.replication.checkpoint;
 
 import org.opensearch.common.annotation.ExperimentalApi;
 import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.common.io.stream.StreamOutput;  
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.store.StoreFileMetadata;
+import org.opensearch.index.store.StoreFileMetadata;  
 
 import java.io.IOException;
-import java.util.Map;
+import java.util.Map;  
 import java.util.Objects;
 
-/**
+/**  
  * Represents a Pre-copy merged segment which is sent to a replica shard.
  * Inherit {@link ReplicationCheckpoint}, but the segmentsGen will not be used.
- *
+ *  
  * @opensearch.internal
  */
-@ExperimentalApi
+@ExperimentalApi  
 public class MergedSegmentCheckpoint extends ReplicationCheckpoint {
     private final String segmentName;
 
     public MergedSegmentCheckpoint(
         ShardId shardId,
-        long primaryTerm,
+        long primaryTerm,  
         long segmentInfosVersion,
         long length,
-        String codec,
+        String codec,  
         Map<String, StoreFileMetadata> metadataMap,
         String segmentName
-    ) {
+    ) {  
         super(shardId, primaryTerm, SequenceNumbers.NO_OPS_PERFORMED, segmentInfosVersion, length, codec, metadataMap);
         this.segmentName = segmentName;
-    }
+    }  
 
     public MergedSegmentCheckpoint(StreamInput in) throws IOException {
-        super(in);
+        super(in);  
         segmentName = in.readString();
     }
 
     /**
      * The segmentName
-     *
+     *  
      * @return the segmentCommitInfo name
      */
-    public String getSegmentName() {
+    public String getSegmentName() {  
         return segmentName;
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
+        super.writeTo(out);  
         out.writeString(segmentName);
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
+        if (this == o) return true;  
         if (o == null || getClass() != o.getClass()) return false;
         MergedSegmentCheckpoint that = (MergedSegmentCheckpoint) o;
-        return getPrimaryTerm() == that.getPrimaryTerm()
+        return getPrimaryTerm() == that.getPrimaryTerm()  
             && segmentName.equals(that.segmentName)
             && Objects.equals(getShardId(), that.getShardId())
-            && getCodec().equals(that.getCodec());
+            && getCodec().equals(that.getCodec());  
     }
 
-    @Override
+    @Override  
     public int hashCode() {
         return Objects.hash(getShardId(), getPrimaryTerm(), segmentName);
-    }
+    }  
 
     @Override
-    public String toString() {
+    public String toString() {  
         return "MergedSegmentCheckpoint{"
             + "shardId="
-            + getShardId()
+            + getShardId()  
             + ", primaryTerm="
             + getPrimaryTerm()
-            + ", segmentsGen="
+            + ", segmentsGen="  
             + getSegmentsGen()
             + ", version="
-            + getSegmentInfosVersion()
+            + getSegmentInfosVersion()  
             + ", size="
             + getLength()
-            + ", codec="
+            + ", codec="  
             + getCodec()
             + ", timestamp="
-            + getCreatedTimeStamp()
+            + getCreatedTimeStamp()  
             + ", segmentName="
             + segmentName
-            + '}';
+            + '}';  
     }
 }

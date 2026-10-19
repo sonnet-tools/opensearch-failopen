@@ -1,34 +1,34 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.gradle.precommit;
 
@@ -37,136 +37,136 @@ import de.thetaphi.forbiddenapis.gradle.ForbiddenApisPlugin;
 
 import groovy.lang.Closure;
 
-import org.opensearch.gradle.ExportOpenSearchBuildResourcesTask;
+import org.opensearch.gradle.ExportOpenSearchBuildResourcesTask;  
 import org.opensearch.gradle.info.BuildParams;
 import org.opensearch.gradle.util.GradleUtils;
-import org.gradle.api.Project;
+import org.gradle.api.Project;  
 import org.gradle.api.Task;
 import org.gradle.api.plugins.ExtraPropertiesExtension;
-import org.gradle.api.tasks.SourceSet;
+import org.gradle.api.tasks.SourceSet;  
 import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.api.tasks.TaskProvider;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Arrays;  
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
+import java.util.Set;  
 
 public class ForbiddenApisPrecommitPlugin extends PrecommitPlugin {
-    @Override
+    @Override  
     public TaskProvider<? extends Task> createTask(Project project) {
         project.getPluginManager().apply(ForbiddenApisPlugin.class);
 
         TaskProvider<ExportOpenSearchBuildResourcesTask> resourcesTask = project.getTasks()
             .register("forbiddenApisResources", ExportOpenSearchBuildResourcesTask.class);
-        Path resourcesDir = project.getBuildDir().toPath().resolve("forbidden-apis-config");
+        Path resourcesDir = project.getBuildDir().toPath().resolve("forbidden-apis-config");  
         resourcesTask.configure(t -> {
             t.setOutputDir(resourcesDir.toFile());
-            t.copy("forbidden/jdk-signatures.txt");
+            t.copy("forbidden/jdk-signatures.txt");  
             t.copy("forbidden/opensearch-all-signatures.txt");
             t.copy("forbidden/opensearch-test-signatures.txt");
-            t.copy("forbidden/http-signatures.txt");
+            t.copy("forbidden/http-signatures.txt");  
             t.copy("forbidden/opensearch-server-signatures.txt");
         });
-        project.getTasks().withType(CheckForbiddenApis.class).configureEach(t -> {
+        project.getTasks().withType(CheckForbiddenApis.class).configureEach(t -> {  
             t.dependsOn(resourcesTask);
 
-            assert t.getName().startsWith(ForbiddenApisPlugin.FORBIDDEN_APIS_TASK_NAME);
+            assert t.getName().startsWith(ForbiddenApisPlugin.FORBIDDEN_APIS_TASK_NAME);  
             String sourceSetName;
             if (ForbiddenApisPlugin.FORBIDDEN_APIS_TASK_NAME.equals(t.getName())) {
-                sourceSetName = "main";
+                sourceSetName = "main";  
             } else {
                 // parse out the sourceSetName
-                char[] chars = t.getName().substring(ForbiddenApisPlugin.FORBIDDEN_APIS_TASK_NAME.length()).toCharArray();
+                char[] chars = t.getName().substring(ForbiddenApisPlugin.FORBIDDEN_APIS_TASK_NAME.length()).toCharArray();  
                 chars[0] = Character.toLowerCase(chars[0]);
                 sourceSetName = new String(chars);
-            }
+            }  
 
             SourceSetContainer sourceSets = GradleUtils.getJavaSourceSets(project);
-            SourceSet sourceSet = sourceSets.getByName(sourceSetName);
+            SourceSet sourceSet = sourceSets.getByName(sourceSetName);  
             t.setClasspath(project.files(sourceSet.getRuntimeClasspath()).plus(sourceSet.getCompileClasspath()));
 
-            t.setTargetCompatibility(BuildParams.getRuntimeJavaVersion().getMajorVersion());
+            t.setTargetCompatibility(BuildParams.getRuntimeJavaVersion().getMajorVersion());  
             t.setBundledSignatures(new HashSet<>(Arrays.asList("jdk-unsafe", "jdk-deprecated", "jdk-non-portable", "jdk-system-out")));
             t.setSignaturesFiles(
-                project.files(
+                project.files(  
                     resourcesDir.resolve("forbidden/jdk-signatures.txt"),
                     resourcesDir.resolve("forbidden/opensearch-all-signatures.txt")
-                )
+                )  
             );
             t.setSuppressAnnotations(new HashSet<>(Arrays.asList("**.SuppressForbidden")));
-            if (t.getName().endsWith("Test")) {
+            if (t.getName().endsWith("Test")) {  
                 t.setSignaturesFiles(
                     t.getSignaturesFiles()
-                        .plus(
+                        .plus(  
                             project.files(
                                 resourcesDir.resolve("forbidden/opensearch-test-signatures.txt"),
-                                resourcesDir.resolve("forbidden/http-signatures.txt")
+                                resourcesDir.resolve("forbidden/http-signatures.txt")  
                             )
                         )
-                );
+                );  
             } else {
                 t.setSignaturesFiles(
-                    t.getSignaturesFiles().plus(project.files(resourcesDir.resolve("forbidden/opensearch-server-signatures.txt")))
+                    t.getSignaturesFiles().plus(project.files(resourcesDir.resolve("forbidden/opensearch-server-signatures.txt")))  
                 );
             }
-            ExtraPropertiesExtension ext = t.getExtensions().getExtraProperties();
+            ExtraPropertiesExtension ext = t.getExtensions().getExtraProperties();  
             ext.set("replaceSignatureFiles", new Closure<Void>(t) {
                 @Override
-                public Void call(Object... names) {
+                public Void call(Object... names) {  
                     List<Path> resources = new ArrayList<>(names.length);
                     for (Object name : names) {
-                        resources.add(resourcesDir.resolve("forbidden/" + name + ".txt"));
+                        resources.add(resourcesDir.resolve("forbidden/" + name + ".txt"));  
                     }
                     t.setSignaturesFiles(project.files(resources));
-                    return null;
+                    return null;  
                 }
 
-            });
+            });  
             ext.set("addSignatureFiles", new Closure<Void>(t) {
                 @Override
-                public Void call(Object... names) {
+                public Void call(Object... names) {  
                     List<Path> resources = new ArrayList<>(names.length);
                     for (Object name : names) {
-                        resources.add(resourcesDir.resolve("forbidden/" + name + ".txt"));
+                        resources.add(resourcesDir.resolve("forbidden/" + name + ".txt"));  
                     }
                     t.setSignaturesFiles(t.getSignaturesFiles().plus(project.files(resources)));
-                    return null;
+                    return null;  
                 }
             });
-            // Add a closure to allow projects to optionally call `forbidSleep()` which will add the signatures
+            // Add a closure to allow projects to optionally call `forbidSleep()` which will add the signatures  
             // to forbid all usages of `Thread.sleep`
             ext.set("forbidSleep", new Closure<Void>(t) {
-                @Override
+                @Override  
                 public Void call(Object... unused) {
                     final List<String> signatures = new ArrayList<>();
-                    signatures.addAll(t.getSignatures());
+                    signatures.addAll(t.getSignatures());  
                     signatures.add(
                         "java.lang.Thread#sleep(**) @ Fixed sleeps lead to non-deterministic test failures."
-                            + " Poll for whatever condition you're waiting for."
+                            + " Poll for whatever condition you're waiting for."  
                             + " Use helpers like `assertBusy` or the awaitility lib."
                     );
-                    t.setSignatures(signatures);
+                    t.setSignatures(signatures);  
                     return null;
                 }
-            });
+            });  
             // Use of the deprecated security manager APIs are pervasive so set them to warn
             // globally for all projects. Replacements for (most of) these APIs are available
-            // so usages can move to the non-deprecated variants to avoid the warnings.
+            // so usages can move to the non-deprecated variants to avoid the warnings.  
             t.setSignaturesWithSeverityWarn(
                 Set.of(
-                    "java.security.AccessController",
+                    "java.security.AccessController",  
                     "java.security.AccessControlContext",
                     "java.lang.System#getSecurityManager()",
-                    "java.lang.SecurityManager",
+                    "java.lang.SecurityManager",  
                     "java.security.Policy"
                 )
-            );
+            );  
         });
         TaskProvider<Task> forbiddenApis = project.getTasks().named("forbiddenApis");
-        forbiddenApis.configure(t -> t.setGroup(""));
+        forbiddenApis.configure(t -> t.setGroup(""));  
         return forbiddenApis;
     }
-}
+}  

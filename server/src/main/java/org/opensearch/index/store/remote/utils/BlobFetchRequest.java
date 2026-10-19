@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.index.store.remote.utils;
 
@@ -16,126 +16,126 @@ import java.util.List;
 
 /**
  * The specification to fetch specific block from blob store
- *
+ *  
  * @opensearch.internal
  */
-public class BlobFetchRequest {
+public class BlobFetchRequest {  
 
     private final Path filePath;
 
     private final Directory directory;
 
-    private final String fileName;
+    private final String fileName;  
 
     private final List<BlobPart> blobParts;
 
     private final long blobLength;
 
-    private BlobFetchRequest(Builder builder) {
+    private BlobFetchRequest(Builder builder) {  
         this.fileName = builder.fileName;
         this.filePath = builder.directory.getDirectory().resolve(fileName);
-        this.directory = builder.directory;
+        this.directory = builder.directory;  
         this.blobParts = builder.blobParts;
         this.blobLength = builder.blobParts.stream().mapToLong(o -> o.getLength()).sum();
-    }
+    }  
 
     public Path getFilePath() {
-        return filePath;
+        return filePath;  
     }
 
-    public Directory getDirectory() {
+    public Directory getDirectory() {  
         return directory;
     }
 
     public String getFileName() {
         return fileName;
-    }
+    }  
 
     public List<BlobPart> blobParts() {
-        return blobParts;
+        return blobParts;  
     }
 
-    public long getBlobLength() {
+    public long getBlobLength() {  
         return blobLength;
     }
 
     public static Builder builder() {
         return new Builder();
-    }
+    }  
 
     @Override
-    public String toString() {
+    public String toString() {  
         return "BlobFetchRequest{"
             + "blobParts="
-            + blobParts
+            + blobParts  
             + '\''
             + ", filePath="
-            + filePath
+            + filePath  
             + ", directory="
             + directory
-            + ", fileName='"
+            + ", fileName='"  
             + fileName
             + '\''
-            + '}';
+            + '}';  
     }
 
-    /**
+    /**  
      * BlobPart represents a single chunk of a file
      */
-    public static class BlobPart {
+    public static class BlobPart {  
         private String blobName;
         private long position;
-        private long length;
+        private long length;  
 
         public BlobPart(String blobName, long position, long length) {
-            this.blobName = blobName;
+            this.blobName = blobName;  
             if (length <= 0) {
                 throw new IllegalArgumentException("Length for blob part fetch request needs to be non-negative");
-            }
+            }  
             this.length = length;
             this.position = position;
-        }
+        }  
 
         public String getBlobName() {
-            return blobName;
+            return blobName;  
         }
 
-        public long getPosition() {
+        public long getPosition() {  
             return position;
         }
 
         public long getLength() {
             return length;
-        }
+        }  
     }
 
-    /**
+    /**  
      * Builder for BlobFetchRequest
      */
-    public static final class Builder {
+    public static final class Builder {  
         private List<BlobPart> blobParts;
         private FSDirectory directory;
-        private String fileName;
+        private String fileName;  
 
         private Builder() {}
 
         public Builder directory(FSDirectory directory) {
             this.directory = directory;
-            return this;
+            return this;  
         }
 
-        public Builder fileName(String fileName) {
+        public Builder fileName(String fileName) {  
             this.fileName = fileName;
             return this;
-        }
+        }  
 
         public Builder blobParts(List<BlobPart> blobParts) {
-            this.blobParts = blobParts;
+            this.blobParts = blobParts;  
             return this;
         }
 
         public BlobFetchRequest build() {
             return new BlobFetchRequest(this);
-        }
+        }  
     }
 }

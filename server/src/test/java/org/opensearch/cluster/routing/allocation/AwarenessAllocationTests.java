@@ -1,112 +1,112 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.cluster.routing.allocation;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.opensearch.Version;
+import org.opensearch.Version;  
 import org.opensearch.cluster.ClusterName;
 import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.OpenSearchAllocationTestCase;
+import org.opensearch.cluster.OpenSearchAllocationTestCase;  
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.node.DiscoveryNodes;
+import org.opensearch.cluster.node.DiscoveryNodes;  
 import org.opensearch.cluster.routing.RoutingNode;
 import org.opensearch.cluster.routing.RoutingNodes;
-import org.opensearch.cluster.routing.RoutingTable;
+import org.opensearch.cluster.routing.RoutingTable;  
 import org.opensearch.cluster.routing.ShardRouting;
 import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.cluster.routing.allocation.command.AllocationCommands;
+import org.opensearch.cluster.routing.allocation.command.AllocationCommands;  
 import org.opensearch.cluster.routing.allocation.command.CancelAllocationCommand;
 import org.opensearch.cluster.routing.allocation.command.MoveAllocationCommand;
-import org.opensearch.cluster.routing.allocation.decider.AllocationDeciders;
+import org.opensearch.cluster.routing.allocation.decider.AllocationDeciders;  
 import org.opensearch.cluster.routing.allocation.decider.AwarenessAllocationDecider;
 import org.opensearch.cluster.routing.allocation.decider.ClusterRebalanceAllocationDecider;
-import org.opensearch.cluster.routing.allocation.decider.Decision;
+import org.opensearch.cluster.routing.allocation.decider.Decision;  
 import org.opensearch.cluster.routing.allocation.decider.FilterAllocationDecider;
 import org.opensearch.cluster.routing.allocation.decider.ThrottlingAllocationDecider;
-import org.opensearch.common.settings.ClusterSettings;
+import org.opensearch.common.settings.ClusterSettings;  
 import org.opensearch.common.settings.Settings;
 
-import java.util.Collections;
+import java.util.Collections;  
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Map;  
 
 import static java.util.Collections.singletonMap;
-import static org.opensearch.cluster.routing.ShardRoutingState.INITIALIZING;
+import static org.opensearch.cluster.routing.ShardRoutingState.INITIALIZING;  
 import static org.opensearch.cluster.routing.ShardRoutingState.RELOCATING;
 import static org.opensearch.cluster.routing.ShardRoutingState.STARTED;
-import static org.opensearch.cluster.routing.ShardRoutingState.UNASSIGNED;
+import static org.opensearch.cluster.routing.ShardRoutingState.UNASSIGNED;  
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.sameInstance;
+import static org.hamcrest.Matchers.sameInstance;  
 
 public class AwarenessAllocationTests extends OpenSearchAllocationTestCase {
 
     private final Logger logger = LogManager.getLogger(AwarenessAllocationTests.class);
 
-    public void testMoveShardOnceNewNodeWithAttributeAdded1() {
+    public void testMoveShardOnceNewNodeWithAttributeAdded1() {  
         AllocationService strategy = createAllocationService(
             Settings.builder()
-                .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
+                .put("cluster.routing.allocation.node_concurrent_recoveries", 10)  
                 .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(), 10)
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
-                .put("cluster.routing.allocation.awareness.attributes", "rack_id")
+                .put("cluster.routing.allocation.awareness.attributes", "rack_id")  
                 .build()
         );
 
         logger.info("Building initial routing table for 'moveShardOnceNewNodeWithAttributeAdded1'");
 
-        Metadata metadata = Metadata.builder()
+        Metadata metadata = Metadata.builder()  
             .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(1))
             .build();
 
         RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();
 
-        ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
+        ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))  
             .metadata(metadata)
             .routingTable(initialRoutingTable)
-            .build();
+            .build();  
 
         logger.info("--> adding two nodes on same rack and do rerouting");
-        clusterState = ClusterState.builder(clusterState)
+        clusterState = ClusterState.builder(clusterState)  
             .nodes(
                 DiscoveryNodes.builder()
-                    .add(newNode("node1", singletonMap("rack_id", "1")))
+                    .add(newNode("node1", singletonMap("rack_id", "1")))  
                     .add(newNode("node2", singletonMap("rack_id", "1")))
             )
-            .build();
+            .build();  
         clusterState = strategy.reroute(clusterState, "reroute");
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(1));
 
@@ -118,16 +118,16 @@ public class AwarenessAllocationTests extends OpenSearchAllocationTestCase {
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(2));
 
-        logger.info("--> add a new node with a new rack and reroute");
+        logger.info("--> add a new node with a new rack and reroute");  
         clusterState = ClusterState.builder(clusterState)
             .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node3", singletonMap("rack_id", "2"))))
-            .build();
+            .build();  
         clusterState = strategy.reroute(clusterState, "reroute");
 
-        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(1));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(1));  
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.RELOCATING).size(), equalTo(1));
         assertThat(
-            clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.RELOCATING).get(0).relocatingNodeId(),
+            clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.RELOCATING).get(0).relocatingNodeId(),  
             equalTo("node3")
         );
 
@@ -136,76 +136,76 @@ public class AwarenessAllocationTests extends OpenSearchAllocationTestCase {
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(2));
 
-        logger.info("--> do another reroute, make sure nothing moves");
+        logger.info("--> do another reroute, make sure nothing moves");  
         assertThat(strategy.reroute(clusterState, "reroute").routingTable(), sameInstance(clusterState.routingTable()));
 
-        logger.info("--> add another node with a new rack, make sure nothing moves");
+        logger.info("--> add another node with a new rack, make sure nothing moves");  
         clusterState = ClusterState.builder(clusterState)
             .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node4", singletonMap("rack_id", "3"))))
-            .build();
+            .build();  
         ClusterState newState = strategy.reroute(clusterState, "reroute");
         assertThat(newState, equalTo(clusterState));
-        assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(2));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(2));  
     }
 
-    public void testMoveShardOnceNewNodeWithAttributeAdded2() {
+    public void testMoveShardOnceNewNodeWithAttributeAdded2() {  
         AllocationService strategy = createAllocationService(
             Settings.builder()
-                .put("cluster.routing.allocation.concurrent_recoveries", 10)
+                .put("cluster.routing.allocation.concurrent_recoveries", 10)  
                 .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(), 10)
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
-                .put("cluster.routing.allocation.awareness.attributes", "rack_id")
+                .put("cluster.routing.allocation.awareness.attributes", "rack_id")  
                 .build()
         );
 
         logger.info("Building initial routing table for 'moveShardOnceNewNodeWithAttributeAdded2'");
 
-        Metadata metadata = Metadata.builder()
+        Metadata metadata = Metadata.builder()  
             .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(1))
             .build();
 
         RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();
 
-        ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
+        ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))  
             .metadata(metadata)
             .routingTable(initialRoutingTable)
-            .build();
+            .build();  
 
         logger.info("--> adding two nodes on same rack and do rerouting");
-        clusterState = ClusterState.builder(clusterState)
+        clusterState = ClusterState.builder(clusterState)  
             .nodes(
                 DiscoveryNodes.builder()
-                    .add(newNode("node1", singletonMap("rack_id", "1")))
+                    .add(newNode("node1", singletonMap("rack_id", "1")))  
                     .add(newNode("node2", singletonMap("rack_id", "1")))
                     .add(newNode("node3", singletonMap("rack_id", "1")))
-            )
+            )  
             .build();
         clusterState = strategy.reroute(clusterState, "reroute");
-        assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(1));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(1));  
 
         logger.info("--> start the shards (primaries)");
-        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
+        clusterState = startInitializingShardsAndReroute(strategy, clusterState);  
 
         logger.info("--> start the shards (replicas)");
-        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
+        clusterState = startInitializingShardsAndReroute(strategy, clusterState);  
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(2));
 
         logger.info("--> add a new node with a new rack and reroute");
         clusterState = ClusterState.builder(clusterState)
-            .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node4", singletonMap("rack_id", "2"))))
+            .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node4", singletonMap("rack_id", "2"))))  
             .build();
         clusterState = strategy.reroute(clusterState, "reroute");
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(1));
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.RELOCATING).size(), equalTo(1));
-        assertThat(
+        assertThat(  
             clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.RELOCATING).get(0).relocatingNodeId(),
             equalTo("node4")
-        );
+        );  
 
         logger.info("--> complete relocation");
-        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
+        clusterState = startInitializingShardsAndReroute(strategy, clusterState);  
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(2));
 
@@ -214,55 +214,55 @@ public class AwarenessAllocationTests extends OpenSearchAllocationTestCase {
 
         logger.info("--> add another node with a new rack, make sure nothing moves");
         clusterState = ClusterState.builder(clusterState)
-            .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node5", singletonMap("rack_id", "3"))))
+            .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node5", singletonMap("rack_id", "3"))))  
             .build();
         ClusterState newState = strategy.reroute(clusterState, "reroute");
-        assertThat(newState, equalTo(clusterState));
+        assertThat(newState, equalTo(clusterState));  
         assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(2));
     }
 
     public void testMoveShardOnceNewNodeWithAttributeAdded3() {
         AllocationService strategy = createAllocationService(
-            Settings.builder()
+            Settings.builder()  
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
                 .put("cluster.routing.allocation.node_initial_primaries_recoveries", 10)
-                .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(), 10)
+                .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(), 10)  
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                 .put("cluster.routing.allocation.cluster_concurrent_rebalance", -1)
-                .put("cluster.routing.allocation.awareness.attributes", "rack_id")
+                .put("cluster.routing.allocation.awareness.attributes", "rack_id")  
                 .put("cluster.routing.allocation.balance.index", 0.0f)
                 .put("cluster.routing.allocation.balance.replica", 1.0f)
-                .put("cluster.routing.allocation.balance.primary", 0.0f)
+                .put("cluster.routing.allocation.balance.primary", 0.0f)  
                 .build()
         );
 
         logger.info("Building initial routing table for 'moveShardOnceNewNodeWithAttributeAdded3'");
 
-        Metadata metadata = Metadata.builder()
+        Metadata metadata = Metadata.builder()  
             .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(5).numberOfReplicas(1))
             .build();
 
         RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();
 
-        ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
+        ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))  
             .metadata(metadata)
             .routingTable(initialRoutingTable)
-            .build();
+            .build();  
 
         logger.info("--> adding two nodes on same rack and do rerouting");
-        clusterState = ClusterState.builder(clusterState)
+        clusterState = ClusterState.builder(clusterState)  
             .nodes(
                 DiscoveryNodes.builder()
-                    .add(newNode("node1", singletonMap("rack_id", "1")))
+                    .add(newNode("node1", singletonMap("rack_id", "1")))  
                     .add(newNode("node2", singletonMap("rack_id", "1")))
             )
-            .build();
+            .build();  
         clusterState = strategy.reroute(clusterState, "reroute");
 
-        logger.info("Initializing shards: {}", clusterState.getRoutingNodes().shardsWithState(INITIALIZING));
+        logger.info("Initializing shards: {}", clusterState.getRoutingNodes().shardsWithState(INITIALIZING));  
         logger.info("Started shards: {}", clusterState.getRoutingNodes().shardsWithState(STARTED));
         logger.info("Relocating shards: {}", clusterState.getRoutingNodes().shardsWithState(RELOCATING));
-        logger.info("Unassigned shards: {}", clusterState.getRoutingNodes().shardsWithState(UNASSIGNED));
+        logger.info("Unassigned shards: {}", clusterState.getRoutingNodes().shardsWithState(UNASSIGNED));  
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(5));
 
@@ -274,25 +274,25 @@ public class AwarenessAllocationTests extends OpenSearchAllocationTestCase {
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(10));
 
-        logger.info("--> add a new node with a new rack and reroute");
+        logger.info("--> add a new node with a new rack and reroute");  
         clusterState = ClusterState.builder(clusterState)
             .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node3", singletonMap("rack_id", "2"))))
-            .build();
+            .build();  
         clusterState = strategy.reroute(clusterState, "reroute");
 
-        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(5));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(5));  
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.RELOCATING).size(), equalTo(5));
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(5));
-        assertThat(
+        assertThat(  
             clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.RELOCATING).get(0).relocatingNodeId(),
             equalTo("node3")
-        );
+        );  
 
         logger.info("--> complete initializing");
-        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
+        clusterState = startInitializingShardsAndReroute(strategy, clusterState);  
 
         logger.info("--> run it again, since we still might have relocation");
-        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
+        clusterState = startInitializingShardsAndReroute(strategy, clusterState);  
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(10));
 
@@ -301,91 +301,91 @@ public class AwarenessAllocationTests extends OpenSearchAllocationTestCase {
 
         logger.info("--> add another node with a new rack, some more relocation should happen");
         clusterState = ClusterState.builder(clusterState)
-            .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node4", singletonMap("rack_id", "3"))))
+            .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node4", singletonMap("rack_id", "3"))))  
             .build();
         clusterState = strategy.reroute(clusterState, "reroute");
-        assertThat(clusterState.getRoutingNodes().shardsWithState(RELOCATING).size(), greaterThan(0));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(RELOCATING).size(), greaterThan(0));  
 
         logger.info("--> complete relocation");
-        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
+        clusterState = startInitializingShardsAndReroute(strategy, clusterState);  
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(10));
 
         logger.info("--> do another reroute, make sure nothing moves");
         assertThat(strategy.reroute(clusterState, "reroute").routingTable(), sameInstance(clusterState.routingTable()));
-    }
+    }  
 
     public void testMoveShardOnceNewNodeWithAttributeAdded4() {
-        AllocationService strategy = createAllocationService(
+        AllocationService strategy = createAllocationService(  
             Settings.builder()
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
-                .put("cluster.routing.allocation.node_initial_primaries_recoveries", 10)
+                .put("cluster.routing.allocation.node_initial_primaries_recoveries", 10)  
                 .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(), 10)
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
-                .put("cluster.routing.allocation.cluster_concurrent_rebalance", -1)
+                .put("cluster.routing.allocation.cluster_concurrent_rebalance", -1)  
                 .put("cluster.routing.allocation.awareness.attributes", "rack_id")
                 .build()
-        );
+        );  
 
         logger.info("Building initial routing table for 'moveShardOnceNewNodeWithAttributeAdded4'");
 
         Metadata metadata = Metadata.builder()
             .put(IndexMetadata.builder("test1").settings(settings(Version.CURRENT)).numberOfShards(5).numberOfReplicas(1))
-            .put(IndexMetadata.builder("test2").settings(settings(Version.CURRENT)).numberOfShards(5).numberOfReplicas(1))
+            .put(IndexMetadata.builder("test2").settings(settings(Version.CURRENT)).numberOfShards(5).numberOfReplicas(1))  
             .build();
 
-        RoutingTable initialRoutingTable = RoutingTable.builder()
+        RoutingTable initialRoutingTable = RoutingTable.builder()  
             .addAsNew(metadata.index("test1"))
             .addAsNew(metadata.index("test2"))
-            .build();
+            .build();  
 
         ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
-            .metadata(metadata)
+            .metadata(metadata)  
             .routingTable(initialRoutingTable)
             .build();
 
         logger.info("--> adding two nodes on same rack and do rerouting");
         clusterState = ClusterState.builder(clusterState)
-            .nodes(
+            .nodes(  
                 DiscoveryNodes.builder()
                     .add(newNode("node1", singletonMap("rack_id", "1")))
-                    .add(newNode("node2", singletonMap("rack_id", "1")))
+                    .add(newNode("node2", singletonMap("rack_id", "1")))  
             )
             .build();
-        clusterState = strategy.reroute(clusterState, "reroute");
+        clusterState = strategy.reroute(clusterState, "reroute");  
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(10));
 
-        logger.info("--> start the shards (primaries)");
+        logger.info("--> start the shards (primaries)");  
         clusterState = startInitializingShardsAndReroute(strategy, clusterState);
 
-        logger.info("--> start the shards (replicas)");
+        logger.info("--> start the shards (replicas)");  
         clusterState = startInitializingShardsAndReroute(strategy, clusterState);
 
-        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(20));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(20));  
 
         logger.info("--> add a new node with a new rack and reroute");
-        clusterState = ClusterState.builder(clusterState)
+        clusterState = ClusterState.builder(clusterState)  
             .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node3", singletonMap("rack_id", "2"))))
             .build();
-        clusterState = strategy.reroute(clusterState, "reroute");
+        clusterState = strategy.reroute(clusterState, "reroute");  
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(10));
-        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.RELOCATING).size(), equalTo(10));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.RELOCATING).size(), equalTo(10));  
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(10));
         assertThat(
-            clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.RELOCATING).get(0).relocatingNodeId(),
+            clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.RELOCATING).get(0).relocatingNodeId(),  
             equalTo("node3")
         );
 
         logger.info("--> complete initializing");
         for (int i = 0; i < 2; i++) {
-            logger.info("--> complete initializing round: [{}]", i);
+            logger.info("--> complete initializing round: [{}]", i);  
             clusterState = startInitializingShardsAndReroute(strategy, clusterState);
         }
-        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
+        clusterState = startInitializingShardsAndReroute(strategy, clusterState);  
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(20));
-        assertThat(clusterState.getRoutingNodes().node("node3").size(), equalTo(10));
+        assertThat(clusterState.getRoutingNodes().node("node3").size(), equalTo(10));  
         assertThat(clusterState.getRoutingNodes().node("node2").size(), equalTo(5));
         assertThat(clusterState.getRoutingNodes().node("node1").size(), equalTo(5));
 
@@ -394,166 +394,166 @@ public class AwarenessAllocationTests extends OpenSearchAllocationTestCase {
 
         logger.info("--> add another node with a new rack, some more relocation should happen");
         clusterState = ClusterState.builder(clusterState)
-            .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node4", singletonMap("rack_id", "3"))))
+            .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node4", singletonMap("rack_id", "3"))))  
             .build();
         clusterState = strategy.reroute(clusterState, "reroute");
-        assertThat(clusterState.getRoutingNodes().shardsWithState(RELOCATING).size(), greaterThan(0));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(RELOCATING).size(), greaterThan(0));  
 
         logger.info("--> complete relocation");
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 2; i++) {  
             logger.info("--> complete initializing round: [{}]", i);
             clusterState = startInitializingShardsAndReroute(strategy, clusterState);
-        }
+        }  
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(20));
         assertThat(clusterState.getRoutingNodes().node("node3").size(), equalTo(5));
-        assertThat(clusterState.getRoutingNodes().node("node4").size(), equalTo(5));
+        assertThat(clusterState.getRoutingNodes().node("node4").size(), equalTo(5));  
         assertThat(clusterState.getRoutingNodes().node("node2").size(), equalTo(5));
         assertThat(clusterState.getRoutingNodes().node("node1").size(), equalTo(5));
 
         logger.info("--> do another reroute, make sure nothing moves");
         assertThat(strategy.reroute(clusterState, "reroute").routingTable(), sameInstance(clusterState.routingTable()));
-    }
+    }  
 
     public void testMoveShardOnceNewNodeWithAttributeAdded5() {
-        AllocationService strategy = createAllocationService(
+        AllocationService strategy = createAllocationService(  
             Settings.builder()
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
-                .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(), 10)
+                .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(), 10)  
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                 .put("cluster.routing.allocation.awareness.attributes", "rack_id")
-                .build()
+                .build()  
         );
 
-        logger.info("Building initial routing table for 'moveShardOnceNewNodeWithAttributeAdded5'");
+        logger.info("Building initial routing table for 'moveShardOnceNewNodeWithAttributeAdded5'");  
 
         Metadata metadata = Metadata.builder()
-            .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(2))
+            .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(2))  
             .build();
 
-        RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();
+        RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();  
 
         ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
-            .metadata(metadata)
+            .metadata(metadata)  
             .routingTable(initialRoutingTable)
             .build();
 
         logger.info("--> adding two nodes on same rack and do rerouting");
         clusterState = ClusterState.builder(clusterState)
-            .nodes(
+            .nodes(  
                 DiscoveryNodes.builder()
                     .add(newNode("node1", singletonMap("rack_id", "1")))
-                    .add(newNode("node2", singletonMap("rack_id", "1")))
+                    .add(newNode("node2", singletonMap("rack_id", "1")))  
             )
             .build();
-        clusterState = strategy.reroute(clusterState, "reroute");
+        clusterState = strategy.reroute(clusterState, "reroute");  
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(1));
 
-        logger.info("--> start the shards (primaries)");
+        logger.info("--> start the shards (primaries)");  
         clusterState = startInitializingShardsAndReroute(strategy, clusterState);
 
-        logger.info("--> start the shards (replicas)");
+        logger.info("--> start the shards (replicas)");  
         clusterState = startInitializingShardsAndReroute(strategy, clusterState);
 
-        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(2));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(2));  
 
         logger.info("--> add a new node with a new rack and reroute");
-        clusterState = ClusterState.builder(clusterState)
+        clusterState = ClusterState.builder(clusterState)  
             .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node3", singletonMap("rack_id", "2"))))
             .build();
-        clusterState = strategy.reroute(clusterState, "reroute");
+        clusterState = strategy.reroute(clusterState, "reroute");  
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(2));
-        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(1));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(1));  
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.INITIALIZING).get(0).currentNodeId(), equalTo("node3"));
 
-        logger.info("--> complete relocation");
+        logger.info("--> complete relocation");  
         clusterState = startInitializingShardsAndReroute(strategy, clusterState);
 
-        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(3));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(3));  
 
         logger.info("--> do another reroute, make sure nothing moves");
-        assertThat(strategy.reroute(clusterState, "reroute").routingTable(), sameInstance(clusterState.routingTable()));
+        assertThat(strategy.reroute(clusterState, "reroute").routingTable(), sameInstance(clusterState.routingTable()));  
 
         logger.info("--> add another node with a new rack, we will have another relocation");
-        clusterState = ClusterState.builder(clusterState)
+        clusterState = ClusterState.builder(clusterState)  
             .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node4", singletonMap("rack_id", "3"))))
             .build();
-        clusterState = strategy.reroute(clusterState, "reroute");
+        clusterState = strategy.reroute(clusterState, "reroute");  
         assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(2));
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.RELOCATING).size(), equalTo(1));
-        assertThat(
+        assertThat(  
             clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.RELOCATING).get(0).relocatingNodeId(),
             equalTo("node4")
-        );
+        );  
 
         logger.info("--> complete relocation");
-        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
+        clusterState = startInitializingShardsAndReroute(strategy, clusterState);  
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(3));
 
         logger.info("--> make sure another reroute does not move things");
         assertThat(strategy.reroute(clusterState, "reroute").routingTable(), sameInstance(clusterState.routingTable()));
-    }
+    }  
 
     public void testMoveShardOnceNewNodeWithAttributeAdded6() {
-        AllocationService strategy = createAllocationService(
+        AllocationService strategy = createAllocationService(  
             Settings.builder()
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
-                .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(), 10)
+                .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(), 10)  
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                 .put("cluster.routing.allocation.awareness.attributes", "rack_id")
-                .build()
+                .build()  
         );
 
-        logger.info("Building initial routing table for 'moveShardOnceNewNodeWithAttributeAdded6'");
+        logger.info("Building initial routing table for 'moveShardOnceNewNodeWithAttributeAdded6'");  
 
         Metadata metadata = Metadata.builder()
-            .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(3))
+            .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(3))  
             .build();
 
-        RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();
+        RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();  
 
         ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
-            .metadata(metadata)
+            .metadata(metadata)  
             .routingTable(initialRoutingTable)
             .build();
 
         logger.info("--> adding two nodes on same rack and do rerouting");
         clusterState = ClusterState.builder(clusterState)
-            .nodes(
+            .nodes(  
                 DiscoveryNodes.builder()
                     .add(newNode("node1", singletonMap("rack_id", "1")))
-                    .add(newNode("node2", singletonMap("rack_id", "1")))
+                    .add(newNode("node2", singletonMap("rack_id", "1")))  
                     .add(newNode("node3", singletonMap("rack_id", "1")))
                     .add(newNode("node4", singletonMap("rack_id", "1")))
-            )
+            )  
             .build();
         clusterState = strategy.reroute(clusterState, "reroute");
-        assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(1));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(1));  
 
         logger.info("--> start the shards (primaries)");
-        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
+        clusterState = startInitializingShardsAndReroute(strategy, clusterState);  
 
         logger.info("--> start the shards (replicas)");
-        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
+        clusterState = startInitializingShardsAndReroute(strategy, clusterState);  
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(4));
 
         logger.info("--> add a new node with a new rack and reroute");
         clusterState = ClusterState.builder(clusterState)
-            .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node5", singletonMap("rack_id", "2"))))
+            .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node5", singletonMap("rack_id", "2"))))  
             .build();
         clusterState = strategy.reroute(clusterState, "reroute");
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(3));
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.RELOCATING).size(), equalTo(1));
-        assertThat(
+        assertThat(  
             clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.RELOCATING).get(0).relocatingNodeId(),
             equalTo("node5")
-        );
+        );  
 
         logger.info("--> complete relocation");
-        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
+        clusterState = startInitializingShardsAndReroute(strategy, clusterState);  
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(4));
 
@@ -562,13 +562,13 @@ public class AwarenessAllocationTests extends OpenSearchAllocationTestCase {
 
         logger.info("--> add another node with a new rack, we will have another relocation");
         clusterState = ClusterState.builder(clusterState)
-            .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node6", singletonMap("rack_id", "3"))))
+            .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node6", singletonMap("rack_id", "3"))))  
             .build();
         clusterState = strategy.reroute(clusterState, "reroute");
-        assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(3));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(3));  
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.RELOCATING).size(), equalTo(1));
         assertThat(
-            clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.RELOCATING).get(0).relocatingNodeId(),
+            clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.RELOCATING).get(0).relocatingNodeId(),  
             equalTo("node6")
         );
 
@@ -577,64 +577,64 @@ public class AwarenessAllocationTests extends OpenSearchAllocationTestCase {
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(4));
 
-        logger.info("--> make sure another reroute does not move things");
+        logger.info("--> make sure another reroute does not move things");  
         assertThat(strategy.reroute(clusterState, "reroute").routingTable(), sameInstance(clusterState.routingTable()));
     }
 
     public void testFullAwareness1() {
         AllocationService strategy = createAllocationService(
-            Settings.builder()
+            Settings.builder()  
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
                 .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(), 10)
-                .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
+                .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")  
                 .put("cluster.routing.allocation.awareness.force.rack_id.values", "1,2")
                 .put("cluster.routing.allocation.awareness.attributes", "rack_id")
-                .build()
+                .build()  
         );
 
-        logger.info("Building initial routing table for 'fullAwareness1'");
+        logger.info("Building initial routing table for 'fullAwareness1'");  
 
         Metadata metadata = Metadata.builder()
-            .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(1))
+            .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(1))  
             .build();
 
-        RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();
+        RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();  
 
         ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
-            .metadata(metadata)
+            .metadata(metadata)  
             .routingTable(initialRoutingTable)
             .build();
 
         logger.info("--> adding two nodes on same rack and do rerouting");
         clusterState = ClusterState.builder(clusterState)
-            .nodes(
+            .nodes(  
                 DiscoveryNodes.builder()
                     .add(newNode("node1", singletonMap("rack_id", "1")))
-                    .add(newNode("node2", singletonMap("rack_id", "1")))
+                    .add(newNode("node2", singletonMap("rack_id", "1")))  
             )
             .build();
-        clusterState = strategy.reroute(clusterState, "reroute");
+        clusterState = strategy.reroute(clusterState, "reroute");  
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(1));
 
-        logger.info("--> start the shards (primaries)");
+        logger.info("--> start the shards (primaries)");  
         clusterState = startInitializingShardsAndReroute(strategy, clusterState);
 
-        logger.info("--> replica will not start because we have only one rack value");
+        logger.info("--> replica will not start because we have only one rack value");  
         assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(1));
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(0));
 
         logger.info("--> add a new node with a new rack and reroute");
         clusterState = ClusterState.builder(clusterState)
-            .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node3", singletonMap("rack_id", "2"))))
+            .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node3", singletonMap("rack_id", "2"))))  
             .build();
         clusterState = strategy.reroute(clusterState, "reroute");
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(1));
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(1));
-        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.INITIALIZING).get(0).currentNodeId(), equalTo("node3"));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.INITIALIZING).get(0).currentNodeId(), equalTo("node3"));  
 
         logger.info("--> complete relocation");
-        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
+        clusterState = startInitializingShardsAndReroute(strategy, clusterState);  
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(2));
 
@@ -643,46 +643,46 @@ public class AwarenessAllocationTests extends OpenSearchAllocationTestCase {
 
         logger.info("--> add another node with a new rack, make sure nothing moves");
         clusterState = ClusterState.builder(clusterState)
-            .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node4", singletonMap("rack_id", "3"))))
+            .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node4", singletonMap("rack_id", "3"))))  
             .build();
         ClusterState newState = strategy.reroute(clusterState, "reroute");
-        assertThat(newState, equalTo(clusterState));
+        assertThat(newState, equalTo(clusterState));  
         assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(2));
     }
 
     public void testFullAwareness2() {
         AllocationService strategy = createAllocationService(
-            Settings.builder()
+            Settings.builder()  
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
                 .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(), 10)
-                .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
+                .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")  
                 .put("cluster.routing.allocation.awareness.force.rack_id.values", "1,2")
                 .put("cluster.routing.allocation.awareness.attributes", "rack_id")
-                .build()
+                .build()  
         );
 
-        logger.info("Building initial routing table for 'fullAwareness2'");
+        logger.info("Building initial routing table for 'fullAwareness2'");  
 
         Metadata metadata = Metadata.builder()
-            .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(1))
+            .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(1))  
             .build();
 
-        RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();
+        RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();  
 
         ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
-            .metadata(metadata)
+            .metadata(metadata)  
             .routingTable(initialRoutingTable)
             .build();
 
         logger.info("--> adding two nodes on same rack and do rerouting");
         clusterState = ClusterState.builder(clusterState)
-            .nodes(
+            .nodes(  
                 DiscoveryNodes.builder()
                     .add(newNode("node1", singletonMap("rack_id", "1")))
-                    .add(newNode("node2", singletonMap("rack_id", "1")))
+                    .add(newNode("node2", singletonMap("rack_id", "1")))  
                     .add(newNode("node3", singletonMap("rack_id", "1")))
             )
-            .build();
+            .build();  
         clusterState = strategy.reroute(clusterState, "reroute");
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(1));
 
@@ -691,76 +691,76 @@ public class AwarenessAllocationTests extends OpenSearchAllocationTestCase {
 
         logger.info("--> replica will not start because we have only one rack value");
         assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(1));
-        assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(0));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(0));  
 
         logger.info("--> add a new node with a new rack and reroute");
-        clusterState = ClusterState.builder(clusterState)
+        clusterState = ClusterState.builder(clusterState)  
             .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node4", singletonMap("rack_id", "2"))))
             .build();
-        clusterState = strategy.reroute(clusterState, "reroute");
+        clusterState = strategy.reroute(clusterState, "reroute");  
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(1));
-        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(1));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(1));  
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.INITIALIZING).get(0).currentNodeId(), equalTo("node4"));
 
-        logger.info("--> complete relocation");
+        logger.info("--> complete relocation");  
         clusterState = startInitializingShardsAndReroute(strategy, clusterState);
 
-        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(2));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(2));  
 
         logger.info("--> do another reroute, make sure nothing moves");
-        assertThat(strategy.reroute(clusterState, "reroute").routingTable(), sameInstance(clusterState.routingTable()));
+        assertThat(strategy.reroute(clusterState, "reroute").routingTable(), sameInstance(clusterState.routingTable()));  
 
         logger.info("--> add another node with a new rack, make sure nothing moves");
-        clusterState = ClusterState.builder(clusterState)
+        clusterState = ClusterState.builder(clusterState)  
             .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node5", singletonMap("rack_id", "3"))))
             .build();
-        ClusterState newState = strategy.reroute(clusterState, "reroute");
+        ClusterState newState = strategy.reroute(clusterState, "reroute");  
         assertThat(newState, equalTo(clusterState));
         assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(2));
-    }
+    }  
 
     public void testFullAwareness3() {
-        AllocationService strategy = createAllocationService(
+        AllocationService strategy = createAllocationService(  
             Settings.builder()
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
-                .put("cluster.routing.allocation.node_initial_primaries_recoveries", 10)
+                .put("cluster.routing.allocation.node_initial_primaries_recoveries", 10)  
                 .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(), 10)
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
-                .put("cluster.routing.allocation.cluster_concurrent_rebalance", -1)
+                .put("cluster.routing.allocation.cluster_concurrent_rebalance", -1)  
                 .put("cluster.routing.allocation.awareness.force.rack_id.values", "1,2")
                 .put("cluster.routing.allocation.awareness.attributes", "rack_id")
-                .put("cluster.routing.allocation.balance.index", 0.0f)
+                .put("cluster.routing.allocation.balance.index", 0.0f)  
                 .put("cluster.routing.allocation.balance.replica", 1.0f)
                 .put("cluster.routing.allocation.balance.primary", 0.0f)
-                .build()
+                .build()  
         );
 
-        logger.info("Building initial routing table for 'fullAwareness3'");
+        logger.info("Building initial routing table for 'fullAwareness3'");  
 
         Metadata metadata = Metadata.builder()
-            .put(IndexMetadata.builder("test1").settings(settings(Version.CURRENT)).numberOfShards(5).numberOfReplicas(1))
+            .put(IndexMetadata.builder("test1").settings(settings(Version.CURRENT)).numberOfShards(5).numberOfReplicas(1))  
             .put(IndexMetadata.builder("test2").settings(settings(Version.CURRENT)).numberOfShards(5).numberOfReplicas(1))
             .build();
 
         RoutingTable initialRoutingTable = RoutingTable.builder()
             .addAsNew(metadata.index("test1"))
-            .addAsNew(metadata.index("test2"))
+            .addAsNew(metadata.index("test2"))  
             .build();
 
-        ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
+        ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))  
             .metadata(metadata)
             .routingTable(initialRoutingTable)
-            .build();
+            .build();  
 
         logger.info("--> adding two nodes on same rack and do rerouting");
-        clusterState = ClusterState.builder(clusterState)
+        clusterState = ClusterState.builder(clusterState)  
             .nodes(
                 DiscoveryNodes.builder()
-                    .add(newNode("node1", singletonMap("rack_id", "1")))
+                    .add(newNode("node1", singletonMap("rack_id", "1")))  
                     .add(newNode("node2", singletonMap("rack_id", "1")))
             )
-            .build();
+            .build();  
         clusterState = strategy.reroute(clusterState, "reroute");
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(10));
 
@@ -769,13 +769,13 @@ public class AwarenessAllocationTests extends OpenSearchAllocationTestCase {
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(10));
 
-        logger.info("--> add a new node with a new rack and reroute");
+        logger.info("--> add a new node with a new rack and reroute");  
         clusterState = ClusterState.builder(clusterState)
             .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node3", singletonMap("rack_id", "2"))))
-            .build();
+            .build();  
         clusterState = strategy.reroute(clusterState, "reroute");
 
-        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(10));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(10));  
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(10));
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.INITIALIZING).get(0).currentNodeId(), equalTo("node3"));
 
@@ -787,13 +787,13 @@ public class AwarenessAllocationTests extends OpenSearchAllocationTestCase {
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(20));
 
-        logger.info("--> do another reroute, make sure nothing moves");
+        logger.info("--> do another reroute, make sure nothing moves");  
         assertThat(strategy.reroute(clusterState, "reroute").routingTable(), sameInstance(clusterState.routingTable()));
 
-        logger.info("--> add another node with a new rack, some more relocation should happen");
+        logger.info("--> add another node with a new rack, some more relocation should happen");  
         clusterState = ClusterState.builder(clusterState)
             .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node4", singletonMap("rack_id", "3"))))
-            .build();
+            .build();  
         clusterState = strategy.reroute(clusterState, "reroute");
         assertThat(clusterState.getRoutingNodes().shardsWithState(RELOCATING).size(), greaterThan(0));
 
@@ -802,262 +802,262 @@ public class AwarenessAllocationTests extends OpenSearchAllocationTestCase {
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(20));
 
-        logger.info("--> do another reroute, make sure nothing moves");
+        logger.info("--> do another reroute, make sure nothing moves");  
         assertThat(strategy.reroute(clusterState, "reroute").routingTable(), sameInstance(clusterState.routingTable()));
     }
 
     public void testUnbalancedZones() {
         AllocationService strategy = createAllocationService(
-            Settings.builder()
+            Settings.builder()  
                 .put("cluster.routing.allocation.awareness.force.zone.values", "a,b")
                 .put("cluster.routing.allocation.awareness.attributes", "zone")
-                .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
+                .put("cluster.routing.allocation.node_concurrent_recoveries", 10)  
                 .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(), 10)
                 .put("cluster.routing.allocation.node_initial_primaries_recoveries", 10)
-                .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
+                .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")  
                 .put("cluster.routing.allocation.cluster_concurrent_rebalance", -1)
                 .build()
-        );
+        );  
 
         logger.info("Building initial routing table for 'testUnbalancedZones'");
 
         Metadata metadata = Metadata.builder()
             .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(5).numberOfReplicas(1))
-            .build();
+            .build();  
 
         RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();
 
         ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
             .metadata(metadata)
-            .routingTable(initialRoutingTable)
+            .routingTable(initialRoutingTable)  
             .build();
 
-        logger.info("--> adding two nodes in different zones and do rerouting");
+        logger.info("--> adding two nodes in different zones and do rerouting");  
         clusterState = ClusterState.builder(clusterState)
             .nodes(DiscoveryNodes.builder().add(newNode("A-0", singletonMap("zone", "a"))).add(newNode("B-0", singletonMap("zone", "b"))))
-            .build();
+            .build();  
         clusterState = strategy.reroute(clusterState, "reroute");
         assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(0));
-        assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(5));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(5));  
 
         logger.info("--> start the shards (primaries)");
-        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
+        clusterState = startInitializingShardsAndReroute(strategy, clusterState);  
         assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(5));
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(5));
 
         clusterState = startInitializingShardsAndReroute(strategy, clusterState);
         logger.info("--> all replicas are allocated and started since we have on node in each zone");
-        assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(10));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(10));  
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(0));
 
-        logger.info("--> add a new node in zone 'a' and reroute");
+        logger.info("--> add a new node in zone 'a' and reroute");  
         clusterState = ClusterState.builder(clusterState)
             .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("A-1", singletonMap("zone", "a"))))
-            .build();
+            .build();  
         clusterState = strategy.reroute(clusterState, "reroute");
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(8));
-        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(2));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.INITIALIZING).size(), equalTo(2));  
         assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.INITIALIZING).get(0).currentNodeId(), equalTo("A-1"));
         logger.info("--> starting initializing shards on the new node");
 
         clusterState = startInitializingShardsAndReroute(strategy, clusterState);
 
-        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(10));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(ShardRoutingState.STARTED).size(), equalTo(10));  
         assertThat(clusterState.getRoutingNodes().node("A-1").size(), equalTo(2));
         assertThat(clusterState.getRoutingNodes().node("A-0").size(), equalTo(3));
-        assertThat(clusterState.getRoutingNodes().node("B-0").size(), equalTo(5));
+        assertThat(clusterState.getRoutingNodes().node("B-0").size(), equalTo(5));  
     }
 
-    public void testUnassignedShardsWithUnbalancedZones() {
+    public void testUnassignedShardsWithUnbalancedZones() {  
         AllocationService strategy = createAllocationService(
             Settings.builder()
-                .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
+                .put("cluster.routing.allocation.node_concurrent_recoveries", 10)  
                 .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(), 10)
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
-                .put("cluster.routing.allocation.awareness.attributes", "zone")
+                .put("cluster.routing.allocation.awareness.attributes", "zone")  
                 .build()
         );
 
         logger.info("Building initial routing table for 'testUnassignedShardsWithUnbalancedZones'");
 
-        Metadata metadata = Metadata.builder()
+        Metadata metadata = Metadata.builder()  
             .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(4))
             .build();
 
         RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();
 
-        ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
+        ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))  
             .metadata(metadata)
             .routingTable(initialRoutingTable)
-            .build();
+            .build();  
 
         logger.info("--> adding 5 nodes in different zones and do rerouting");
-        clusterState = ClusterState.builder(clusterState)
+        clusterState = ClusterState.builder(clusterState)  
             .nodes(
                 DiscoveryNodes.builder()
-                    .add(newNode("A-0", singletonMap("zone", "a")))
+                    .add(newNode("A-0", singletonMap("zone", "a")))  
                     .add(newNode("A-1", singletonMap("zone", "a")))
                     .add(newNode("A-2", singletonMap("zone", "a")))
-                    .add(newNode("A-3", singletonMap("zone", "a")))
+                    .add(newNode("A-3", singletonMap("zone", "a")))  
                     .add(newNode("A-4", singletonMap("zone", "a")))
                     .add(newNode("B-0", singletonMap("zone", "b")))
-            )
+            )  
             .build();
         clusterState = strategy.reroute(clusterState, "reroute");
-        assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(0));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(0));  
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(1));
 
-        logger.info("--> start the shard (primary)");
+        logger.info("--> start the shard (primary)");  
         clusterState = startInitializingShardsAndReroute(strategy, clusterState);
         assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(1));
-        assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(3));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(3));  
         assertThat(clusterState.getRoutingNodes().shardsWithState(UNASSIGNED).size(), equalTo(1)); // Unassigned shard is expected.
 
-        // Cancel all initializing shards and move started primary to another node.
+        // Cancel all initializing shards and move started primary to another node.  
         AllocationCommands commands = new AllocationCommands();
         String primaryNode = null;
-        for (ShardRouting routing : clusterState.routingTable().allShards()) {
+        for (ShardRouting routing : clusterState.routingTable().allShards()) {  
             if (routing.primary()) {
                 primaryNode = routing.currentNodeId();
-            } else if (routing.initializing()) {
+            } else if (routing.initializing()) {  
                 commands.add(new CancelAllocationCommand(routing.shardId().getIndexName(), routing.id(), routing.currentNodeId(), false));
             }
-        }
+        }  
         commands.add(new MoveAllocationCommand("test", 0, primaryNode, "A-4"));
 
-        clusterState = strategy.reroute(clusterState, commands, false, false).getClusterState();
+        clusterState = strategy.reroute(clusterState, commands, false, false).getClusterState();  
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(0));
-        assertThat(clusterState.getRoutingNodes().shardsWithState(RELOCATING).size(), equalTo(1));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(RELOCATING).size(), equalTo(1));  
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(4)); // +1 for relocating shard.
         assertThat(clusterState.getRoutingNodes().shardsWithState(UNASSIGNED).size(), equalTo(1)); // Still 1 unassigned.
-    }
+    }  
 
     public void testMultipleAwarenessAttributes() {
-        AllocationService strategy = createAllocationService(
+        AllocationService strategy = createAllocationService(  
             Settings.builder()
                 .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.getKey(), "zone, rack")
-                .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_FORCE_GROUP_SETTING.getKey() + "zone.values", "a, b")
+                .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_FORCE_GROUP_SETTING.getKey() + "zone.values", "a, b")  
                 .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_FORCE_GROUP_SETTING.getKey() + "rack.values", "c, d")
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
-                .build()
+                .build()  
         );
 
-        logger.info("Building initial routing table for 'testUnbalancedZones'");
+        logger.info("Building initial routing table for 'testUnbalancedZones'");  
 
         Metadata metadata = Metadata.builder()
-            .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(1))
+            .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(1))  
             .build();
 
-        RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();
+        RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();  
 
         ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
-            .metadata(metadata)
+            .metadata(metadata)  
             .routingTable(initialRoutingTable)
             .build();
 
         logger.info("--> adding two nodes in different zones and do rerouting");
         Map<String, String> nodeAAttributes = new HashMap<>();
-        nodeAAttributes.put("zone", "a");
+        nodeAAttributes.put("zone", "a");  
         nodeAAttributes.put("rack", "c");
         Map<String, String> nodeBAttributes = new HashMap<>();
-        nodeBAttributes.put("zone", "b");
+        nodeBAttributes.put("zone", "b");  
         nodeBAttributes.put("rack", "d");
         clusterState = ClusterState.builder(clusterState)
-            .nodes(DiscoveryNodes.builder().add(newNode("A-0", nodeAAttributes)).add(newNode("B-0", nodeBAttributes)))
+            .nodes(DiscoveryNodes.builder().add(newNode("A-0", nodeAAttributes)).add(newNode("B-0", nodeBAttributes)))  
             .build();
         clusterState = strategy.reroute(clusterState, "reroute");
-        assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(0));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(0));  
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(1));
 
-        logger.info("--> start the shards (primaries)");
+        logger.info("--> start the shards (primaries)");  
         clusterState = startInitializingShardsAndReroute(strategy, clusterState);
         assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(1));
-        assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(1));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(1));  
 
         clusterState = startInitializingShardsAndReroute(strategy, clusterState);
-        logger.info("--> all replicas are allocated and started since we have one node in each zone and rack");
+        logger.info("--> all replicas are allocated and started since we have one node in each zone and rack");  
         assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(2));
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(0));
-    }
+    }  
 
     public void testAllocationExplainForUnassignedShardsWithUnbalancedZones() {
-        Settings settings = Settings.builder()
+        Settings settings = Settings.builder()  
             .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
             .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_INITIAL_REPLICAS_RECOVERIES_SETTING.getKey(), 10)
-            .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
+            .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")  
             .put("cluster.routing.allocation.awareness.attributes", "zone")
             .put("cluster.routing.allocation.awareness.force.zone.values", "a,b,c")
-            .build();
+            .build();  
 
         AllocationService strategy = createAllocationService(settings);
 
         logger.info("Building initial routing table for 'testAllocationExplainForUnassignedShardsWithUnbalancedZones'");
         Metadata metadata = Metadata.builder()
-            .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(2))
+            .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(2))  
             .build();
 
-        RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();
+        RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();  
 
         ClusterState clusterState = ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
-            .metadata(metadata)
+            .metadata(metadata)  
             .routingTable(initialRoutingTable)
             .build();
 
         logger.info("--> adding 3 nodes in different zones and do rerouting");
         clusterState = ClusterState.builder(clusterState)
-            .nodes(
+            .nodes(  
                 DiscoveryNodes.builder()
                     .add(newNode("A-0", singletonMap("zone", "a")))
-                    .add(newNode("A-1", singletonMap("zone", "a")))
+                    .add(newNode("A-1", singletonMap("zone", "a")))  
                     .add(newNode("B-0", singletonMap("zone", "b")))
             )
-            .build();
+            .build();  
         clusterState = strategy.reroute(clusterState, "reroute");
         assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(0));
-        assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(1));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(1));  
 
         logger.info("--> start the shard (primary)");
-        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
+        clusterState = startInitializingShardsAndReroute(strategy, clusterState);  
         assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(1));
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(1));
-        // One Shard is unassigned due to forced zone awareness
+        // One Shard is unassigned due to forced zone awareness  
         assertThat(clusterState.getRoutingNodes().shardsWithState(UNASSIGNED).size(), equalTo(1));
 
-        List<ShardRouting> unassignedShards = clusterState.getRoutingTable().shardsWithState(UNASSIGNED);
+        List<ShardRouting> unassignedShards = clusterState.getRoutingTable().shardsWithState(UNASSIGNED);  
 
         ClusterSettings EMPTY_CLUSTER_SETTINGS = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        // Add a new node in zone c
+        // Add a new node in zone c  
         clusterState = ClusterState.builder(clusterState)
             .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("C-0", singletonMap("zone", "c"))))
-            .build();
+            .build();  
 
         final AwarenessAllocationDecider decider = new AwarenessAllocationDecider(settings, EMPTY_CLUSTER_SETTINGS);
 
         final RoutingAllocation allocation = new RoutingAllocation(
             new AllocationDeciders(Collections.singleton(decider)),
-            clusterState.getRoutingNodes(),
+            clusterState.getRoutingNodes(),  
             clusterState,
             null,
-            null,
+            null,  
             0L
         );
-        allocation.debugDecision(true);
+        allocation.debugDecision(true);  
 
         Decision decision = null;
-        RoutingNodes nodes = clusterState.getRoutingNodes();
+        RoutingNodes nodes = clusterState.getRoutingNodes();  
 
         for (RoutingNode node : nodes) {
-            // Try to allocate unassigned shard to A-0, fails because of forced zone awareness
+            // Try to allocate unassigned shard to A-0, fails because of forced zone awareness  
             if (node.nodeId().equals("A-0")) {
                 decision = decider.canAllocate(unassignedShards.get(0), node, allocation);
-                assertEquals(Decision.Type.NO, decision.type());
+                assertEquals(Decision.Type.NO, decision.type());  
                 assertEquals(
                     decision.getExplanation(),
-                    "there are too many copies of the shard allocated to nodes with attribute"
+                    "there are too many copies of the shard allocated to nodes with attribute"  
                         + " [zone], there are [3] total configured shard copies for this shard id and [3]"
                         + " total attribute values, expected the allocated shard count per attribute [2] to"
-                        + " be less than or equal to the upper bound of the required number of shards per attribute [1]"
+                        + " be less than or equal to the upper bound of the required number of shards per attribute [1]"  
                 );
             }
 
@@ -1069,28 +1069,28 @@ public class AwarenessAllocationTests extends OpenSearchAllocationTestCase {
 
         logger.info("--> Building initial routing table");
         Metadata metadata = Metadata.builder()
-            .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(1))
+            .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(1))  
             .build();
 
-        RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();
+        RoutingTable initialRoutingTable = RoutingTable.builder().addAsNew(metadata.index("test")).build();  
         ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
             .metadata(metadata)
-            .routingTable(initialRoutingTable)
+            .routingTable(initialRoutingTable)  
             .build();
 
-        logger.info("--> adding two nodes on same zone and do rerouting");
+        logger.info("--> adding two nodes on same zone and do rerouting");  
         clusterState = ClusterState.builder(clusterState)
             .nodes(
-                DiscoveryNodes.builder().add(newNode("node1", singletonMap("zone", "a"))).add(newNode("node2", singletonMap("zone", "a")))
+                DiscoveryNodes.builder().add(newNode("node1", singletonMap("zone", "a"))).add(newNode("node2", singletonMap("zone", "a")))  
             )
             .build();
-        clusterState = strategy.reroute(clusterState, "reroute");
+        clusterState = strategy.reroute(clusterState, "reroute");  
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(1));
 
-        logger.info("--> start the shards (primaries)");
+        logger.info("--> start the shards (primaries)");  
         clusterState = startInitializingShardsAndReroute(strategy, clusterState);
 
-        logger.info("--> start the shards (replicas)");
+        logger.info("--> start the shards (replicas)");  
         clusterState = startInitializingShardsAndReroute(strategy, clusterState);
         assertThat(clusterState.getRoutingNodes().shardsWithState(STARTED).size(), equalTo(2));
 
@@ -1099,224 +1099,224 @@ public class AwarenessAllocationTests extends OpenSearchAllocationTestCase {
 
         logger.info("--> try to move the replica to new node");
         AllocationService.CommandsResult commandsResult = strategy.reroute(
-            clusterState,
+            clusterState,  
             new AllocationCommands(new MoveAllocationCommand("test", 0, "node2", "node3")),
             true,
-            false
+            false  
         );
 
-        assertEquals(commandsResult.explanations().explanations().size(), 1);
+        assertEquals(commandsResult.explanations().explanations().size(), 1);  
         assertEquals(commandsResult.explanations().explanations().get(0).decisions().type(), Decision.Type.YES);
         List<Decision> decisions = commandsResult.explanations()
-            .explanations()
+            .explanations()  
             .get(0)
             .decisions()
-            .getDecisions()
+            .getDecisions()  
             .stream()
             .filter(item -> item.getExplanation().startsWith("allocation awareness is not enabled"))
-            .toList();
+            .toList();  
         assertEquals(
             "allocation awareness is not enabled, set cluster setting " + "[cluster.routing.allocation.awareness.attributes] to enable it",
-            decisions.get(0).getExplanation()
+            decisions.get(0).getExplanation()  
         );
     }
 
     public void testIgnoredByAutoExpandReplicasToAll() {
         final Settings settings = Settings.builder()
-            .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.getKey(), "zone")
+            .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.getKey(), "zone")  
             .build();
 
-        final AllocationService strategy = createAllocationService(settings);
+        final AllocationService strategy = createAllocationService(settings);  
 
         final IndexMetadata.Builder metadataBuilder = IndexMetadata.builder("test")
-            .settings(
+            .settings(  
                 settings(Version.CURRENT).put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
                     .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 100)
-                    .put(IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS, "0-all")
+                    .put(IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS, "0-all")  
             );
 
-        final Metadata metadata = Metadata.builder().put(metadataBuilder).build();
+        final Metadata metadata = Metadata.builder().put(metadataBuilder).build();  
 
         final DiscoveryNodes nodes = DiscoveryNodes.builder()
-            .add(newNode("A-0", singletonMap("zone", "a")))
+            .add(newNode("A-0", singletonMap("zone", "a")))  
             .add(newNode("A-1", singletonMap("zone", "a")))
             .add(newNode("A-2", singletonMap("zone", "a")))
-            .add(newNode("B-0", singletonMap("zone", "b")))
+            .add(newNode("B-0", singletonMap("zone", "b")))  
             .build();
 
-        final ClusterState clusterState = applyStartedShardsUntilNoChange(
+        final ClusterState clusterState = applyStartedShardsUntilNoChange(  
             ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.get(Settings.EMPTY))
                 .metadata(metadata)
-                .routingTable(RoutingTable.builder().addAsNew(metadata.index("test")).build())
+                .routingTable(RoutingTable.builder().addAsNew(metadata.index("test")).build())  
                 .nodes(nodes)
                 .build(),
-            strategy
+            strategy  
         );
 
-        assertThat(clusterState.getRoutingNodes().shardsWithState(UNASSIGNED).size(), equalTo(0));
+        assertThat(clusterState.getRoutingNodes().shardsWithState(UNASSIGNED).size(), equalTo(0));  
     }
 
-    public void testExcludedZoneIsIgnoredInAwarenessCount() {
+    public void testExcludedZoneIsIgnoredInAwarenessCount() {  
         // zone awareness is enabled and zone "b" is fully excluded from allocation via the cluster exclude filter
         final Settings settings = Settings.builder()
-            .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.getKey(), "zone")
+            .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.getKey(), "zone")  
             .put("cluster.routing.allocation.exclude.zone", "b")
             .build();
 
         final AllocationService strategy = createAllocationService(settings);
 
-        // 1 primary + 2 replicas = 3 copies of the shard
+        // 1 primary + 2 replicas = 3 copies of the shard  
         final Metadata metadata = Metadata.builder()
             .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(2))
-            .build();
+            .build();  
 
         // zone a has two nodes, zone c has one, and the excluded zone b has one
-        final DiscoveryNodes nodes = DiscoveryNodes.builder()
+        final DiscoveryNodes nodes = DiscoveryNodes.builder()  
             .add(newNode("a1", singletonMap("zone", "a")))
             .add(newNode("a2", singletonMap("zone", "a")))
-            .add(newNode("c1", singletonMap("zone", "c")))
+            .add(newNode("c1", singletonMap("zone", "c")))  
             .add(newNode("b1", singletonMap("zone", "b")))
             .build();
 
         final ClusterState clusterState = applyStartedShardsUntilNoChange(
             ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.get(Settings.EMPTY))
-                .metadata(metadata)
+                .metadata(metadata)  
                 .routingTable(RoutingTable.builder().addAsNew(metadata.index("test")).build())
                 .nodes(nodes)
-                .build(),
+                .build(),  
             strategy
         );
 
         // Because every node in zone b is excluded, awareness counts only zones {a, c}, so the per-zone cap is
         // ceil(3/2) = 2. All three copies allocate onto the two remaining zones and nothing is left unassigned.
-        // Previously all three zones were counted (ceil(3/3) = 1) and the third copy would stay UNASSIGNED.
+        // Previously all three zones were counted (ceil(3/3) = 1) and the third copy would stay UNASSIGNED.  
         final RoutingNodes routingNodes = clusterState.getRoutingNodes();
         assertThat(routingNodes.shardsWithState(STARTED).size(), equalTo(3));
-        assertThat(routingNodes.shardsWithState(UNASSIGNED).size(), equalTo(0));
+        assertThat(routingNodes.shardsWithState(UNASSIGNED).size(), equalTo(0));  
         assertThat(routingNodes.node("b1").size(), equalTo(0));
         assertThat(routingNodes.node("a1").size(), equalTo(1));
-        assertThat(routingNodes.node("a2").size(), equalTo(1));
+        assertThat(routingNodes.node("a2").size(), equalTo(1));  
         assertThat(routingNodes.node("c1").size(), equalTo(1));
     }
 
     public void testAllZonesCountedWhenNothingExcluded() {
         // same topology as the excluded-zone test but with no exclude filter: all three zones must still count
-        final Settings settings = Settings.builder()
+        final Settings settings = Settings.builder()  
             .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.getKey(), "zone")
             .build();
 
         final AllocationService strategy = createAllocationService(settings);
 
-        final Metadata metadata = Metadata.builder()
+        final Metadata metadata = Metadata.builder()  
             .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(2))
             .build();
 
         final DiscoveryNodes nodes = DiscoveryNodes.builder()
             .add(newNode("a1", singletonMap("zone", "a")))
-            .add(newNode("a2", singletonMap("zone", "a")))
+            .add(newNode("a2", singletonMap("zone", "a")))  
             .add(newNode("c1", singletonMap("zone", "c")))
             .add(newNode("b1", singletonMap("zone", "b")))
-            .build();
+            .build();  
 
         final ClusterState clusterState = applyStartedShardsUntilNoChange(
-            ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.get(Settings.EMPTY))
+            ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.get(Settings.EMPTY))  
                 .metadata(metadata)
                 .routingTable(RoutingTable.builder().addAsNew(metadata.index("test")).build())
-                .nodes(nodes)
+                .nodes(nodes)  
                 .build(),
             strategy
-        );
+        );  
 
         // With nothing excluded, awareness counts all three zones {a, b, c}, so the per-zone cap is ceil(3/3) = 1.
-        // The three copies spread one per zone: zone a receives a single copy (not two), and zone b is used.
+        // The three copies spread one per zone: zone a receives a single copy (not two), and zone b is used.  
         final RoutingNodes routingNodes = clusterState.getRoutingNodes();
         assertThat(routingNodes.shardsWithState(STARTED).size(), equalTo(3));
-        assertThat(routingNodes.shardsWithState(UNASSIGNED).size(), equalTo(0));
+        assertThat(routingNodes.shardsWithState(UNASSIGNED).size(), equalTo(0));  
         assertThat(routingNodes.node("a1").size() + routingNodes.node("a2").size(), equalTo(1));
         assertThat(routingNodes.node("b1").size(), equalTo(1));
-        assertThat(routingNodes.node("c1").size(), equalTo(1));
+        assertThat(routingNodes.node("c1").size(), equalTo(1));  
     }
 
-    public void testZoneStillCountedWhenOnlySomeOfItsNodesExcluded() {
+    public void testZoneStillCountedWhenOnlySomeOfItsNodesExcluded() {  
         // exclude a single node in zone a by id; zone a still has a non-excluded node, so zone a must keep counting
         final Settings settings = Settings.builder()
-            .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.getKey(), "zone")
+            .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.getKey(), "zone")  
             .put("cluster.routing.allocation.exclude._id", "a1")
             .build();
 
         final AllocationService strategy = createAllocationService(settings);
 
-        // 1 primary + 3 replicas = 4 copies of the shard
+        // 1 primary + 3 replicas = 4 copies of the shard  
         final Metadata metadata = Metadata.builder()
             .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(3))
-            .build();
+            .build();  
 
         // zone a: a1 (excluded) and a2 (usable); zone b: three usable nodes
-        final DiscoveryNodes nodes = DiscoveryNodes.builder()
+        final DiscoveryNodes nodes = DiscoveryNodes.builder()  
             .add(newNode("a1", singletonMap("zone", "a")))
             .add(newNode("a2", singletonMap("zone", "a")))
-            .add(newNode("b1", singletonMap("zone", "b")))
+            .add(newNode("b1", singletonMap("zone", "b")))  
             .add(newNode("b2", singletonMap("zone", "b")))
             .add(newNode("b3", singletonMap("zone", "b")))
-            .build();
+            .build();  
 
         final ClusterState clusterState = applyStartedShardsUntilNoChange(
-            ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.get(Settings.EMPTY))
+            ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.get(Settings.EMPTY))  
                 .metadata(metadata)
                 .routingTable(RoutingTable.builder().addAsNew(metadata.index("test")).build())
-                .nodes(nodes)
+                .nodes(nodes)  
                 .build(),
             strategy
-        );
+        );  
 
         // Zone a keeps counting because a2 is not excluded, so awareness sees zones {a, b} and the per-zone cap is
-        // ceil(4/2) = 2. Only a2 is usable in zone a (1 copy) and zone b is capped at 2, so a fourth copy cannot be
+        // ceil(4/2) = 2. Only a2 is usable in zone a (1 copy) and zone b is capped at 2, so a fourth copy cannot be  
         // placed and stays UNASSIGNED. If zone a had been wrongly dropped, the cap would be ceil(4/1) = 4 and all
         // four copies would fit, so this asserts we drop a value only when every one of its nodes is excluded.
-        final RoutingNodes routingNodes = clusterState.getRoutingNodes();
+        final RoutingNodes routingNodes = clusterState.getRoutingNodes();  
         assertThat(routingNodes.shardsWithState(STARTED).size(), equalTo(3));
         assertThat(routingNodes.shardsWithState(UNASSIGNED).size(), equalTo(1));
-        assertThat(routingNodes.node("a1").size(), equalTo(0));
+        assertThat(routingNodes.node("a1").size(), equalTo(0));  
         assertThat(routingNodes.node("a2").size(), equalTo(1));
         assertThat(routingNodes.node("b1").size() + routingNodes.node("b2").size() + routingNodes.node("b3").size(), equalTo(2));
-    }
+    }  
 
     public void testAwarenessDoesNotVetoWhenEveryZoneIsExcluded() {
-        // every node in every zone is excluded, so no awareness attribute values remain to balance across
+        // every node in every zone is excluded, so no awareness attribute values remain to balance across  
         final Settings settings = Settings.builder()
             .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.getKey(), "zone")
-            .put("cluster.routing.allocation.exclude.zone", "a,b")
+            .put("cluster.routing.allocation.exclude.zone", "a,b")  
             .build();
 
-        final Metadata metadata = Metadata.builder()
+        final Metadata metadata = Metadata.builder()  
             .persistentSettings(settings)
             .put(IndexMetadata.builder("test").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(1))
-            .build();
+            .build();  
 
         final ClusterState clusterState = ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.get(Settings.EMPTY))
-            .metadata(metadata)
+            .metadata(metadata)  
             .routingTable(RoutingTable.builder().addAsNew(metadata.index("test")).build())
             .nodes(DiscoveryNodes.builder().add(newNode("a1", singletonMap("zone", "a"))).add(newNode("b1", singletonMap("zone", "b"))))
-            .build();
+            .build();  
 
         final ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        final AwarenessAllocationDecider awarenessDecider = new AwarenessAllocationDecider(settings, clusterSettings);
+        final AwarenessAllocationDecider awarenessDecider = new AwarenessAllocationDecider(settings, clusterSettings);  
         final FilterAllocationDecider filterDecider = new FilterAllocationDecider(settings, clusterSettings);
         final RoutingAllocation allocation = new RoutingAllocation(
-            new AllocationDeciders(List.of(awarenessDecider, filterDecider)),
+            new AllocationDeciders(List.of(awarenessDecider, filterDecider)),  
             clusterState.getRoutingNodes(),
             clusterState,
-            null,
+            null,  
             null,
             0L
-        );
+        );  
 
         final ShardRouting primary = clusterState.getRoutingTable().shardsWithState(UNASSIGNED).get(0);
-        for (RoutingNode node : clusterState.getRoutingNodes()) {
+        for (RoutingNode node : clusterState.getRoutingNodes()) {  
             // with zero attribute values left, awareness must not veto (and must not divide by zero) ...
             assertEquals(Decision.Type.YES, awarenessDecider.canAllocate(primary, node, allocation).type());
-            // ... leaving FilterAllocationDecider as the decider that keeps shards off the excluded nodes
+            // ... leaving FilterAllocationDecider as the decider that keeps shards off the excluded nodes  
             assertEquals(Decision.Type.NO, filterDecider.canAllocate(primary, node, allocation).type());
         }
-    }
+    }  
 }

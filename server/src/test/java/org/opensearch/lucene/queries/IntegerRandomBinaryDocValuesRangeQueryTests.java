@@ -1,148 +1,148 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 /*
- * Modifications Copyright OpenSearch Contributors. See
+ * Modifications Copyright OpenSearch Contributors. See  
  * GitHub history for details.
  */
 
 package org.opensearch.lucene.queries;
 
-import org.apache.lucene.tests.util.TestUtil;
+import org.apache.lucene.tests.util.TestUtil;  
 import org.opensearch.index.mapper.RangeType;
 
-public class IntegerRandomBinaryDocValuesRangeQueryTests extends BaseRandomBinaryDocValuesRangeQueryTestCase {
+public class IntegerRandomBinaryDocValuesRangeQueryTests extends BaseRandomBinaryDocValuesRangeQueryTestCase {  
 
     @Override
-    protected String fieldName() {
+    protected String fieldName() {  
         return "int_range_dv_field";
     }
 
     @Override
     protected RangeType rangeType() {
-        return RangeType.INTEGER;
+        return RangeType.INTEGER;  
     }
 
-    @Override
+    @Override  
     protected Range nextRange(int dimensions) throws Exception {
         int value1 = nextIntInternal();
-        int value2 = nextIntInternal();
+        int value2 = nextIntInternal();  
         int min = Math.min(value1, value2);
         int max = Math.max(value1, value2);
-        return new IntTestRange(min, max);
+        return new IntTestRange(min, max);  
     }
 
-    private int nextIntInternal() {
+    private int nextIntInternal() {  
         switch (random().nextInt(5)) {
             case 0:
-                return Integer.MIN_VALUE;
+                return Integer.MIN_VALUE;  
             case 1:
                 return Integer.MAX_VALUE;
-            default:
+            default:  
                 int bpv = random().nextInt(32);
                 switch (bpv) {
-                    case 32:
+                    case 32:  
                         return random().nextInt();
                     default:
-                        int v = TestUtil.nextInt(random(), 0, (1 << bpv) - 1);
+                        int v = TestUtil.nextInt(random(), 0, (1 << bpv) - 1);  
                         if (bpv > 0) {
                             // negative values sometimes
-                            v -= 1 << (bpv - 1);
+                            v -= 1 << (bpv - 1);  
                         }
                         return v;
-                }
+                }  
         }
     }
 
     private static class IntTestRange extends AbstractRange<Integer> {
         int min;
-        int max;
+        int max;  
 
         IntTestRange(int min, int max) {
-            this.min = min;
+            this.min = min;  
             this.max = max;
         }
 
         @Override
         public Integer getMin() {
-            return min;
+            return min;  
         }
 
-        @Override
+        @Override  
         protected void setMin(int dim, Object val) {
             assert dim == 0;
-            int v = (Integer) val;
+            int v = (Integer) val;  
             if (min < v) {
                 max = v;
-            } else {
+            } else {  
                 min = v;
             }
-        }
+        }  
 
         @Override
-        public Integer getMax() {
+        public Integer getMax() {  
             return max;
         }
 
         @Override
         protected void setMax(int dim, Object val) {
-            assert dim == 0;
+            assert dim == 0;  
             int v = (Integer) val;
             if (max > v) {
-                min = v;
+                min = v;  
             } else {
                 max = v;
-            }
+            }  
         }
 
-        @Override
+        @Override  
         protected boolean isDisjoint(Range o) {
             IntTestRange other = (IntTestRange) o;
-            return this.min > other.max || this.max < other.min;
+            return this.min > other.max || this.max < other.min;  
         }
 
-        @Override
+        @Override  
         protected boolean isWithin(Range o) {
             IntTestRange other = (IntTestRange) o;
-            if ((this.min >= other.min && this.max <= other.max) == false) {
+            if ((this.min >= other.min && this.max <= other.max) == false) {  
                 // not within:
                 return false;
-            }
+            }  
             return true;
         }
 
         @Override
         protected boolean contains(Range o) {
-            IntTestRange other = (IntTestRange) o;
+            IntTestRange other = (IntTestRange) o;  
             if ((this.min <= other.min && this.max >= other.max) == false) {
                 // not contains:
-                return false;
+                return false;  
             }
             return true;
-        }
+        }  
 
     }
 

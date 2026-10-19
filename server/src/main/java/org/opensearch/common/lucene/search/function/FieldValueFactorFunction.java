@@ -1,264 +1,264 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.common.lucene.search.function;
 
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.Explanation;
-import org.opensearch.OpenSearchException;
+import org.opensearch.OpenSearchException;  
 import org.opensearch.common.Nullable;
 import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.common.io.stream.StreamOutput;  
 import org.opensearch.core.common.io.stream.Writeable;
 import org.opensearch.index.fielddata.FieldData;
-import org.opensearch.index.fielddata.IndexNumericFieldData;
+import org.opensearch.index.fielddata.IndexNumericFieldData;  
 import org.opensearch.index.fielddata.SortedNumericDoubleValues;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.util.Locale;
 import java.util.Objects;
 
 /**
  * A function_score function that multiplies the score with the value of a
- * field from the document, optionally multiplying the field by a factor first,
+ * field from the document, optionally multiplying the field by a factor first,  
  * and applying a modification (log, ln, sqrt, square, etc) afterwards.
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 public class FieldValueFactorFunction extends ScoreFunction {
-    private final String field;
+    private final String field;  
     private final float boostFactor;
     private final Modifier modifier;
-    private final String functionName;
+    private final String functionName;  
 
     /**
-     * Value used if the document is missing the field.
+     * Value used if the document is missing the field.  
      */
     private final Double missing;
-    private final IndexNumericFieldData indexFieldData;
+    private final IndexNumericFieldData indexFieldData;  
 
     public FieldValueFactorFunction(
-        String field,
+        String field,  
         float boostFactor,
         Modifier modifierType,
-        Double missing,
+        Double missing,  
         IndexNumericFieldData indexFieldData
     ) {
-        this(field, boostFactor, modifierType, missing, indexFieldData, null);
+        this(field, boostFactor, modifierType, missing, indexFieldData, null);  
     }
 
-    public FieldValueFactorFunction(
+    public FieldValueFactorFunction(  
         String field,
         float boostFactor,
-        Modifier modifierType,
+        Modifier modifierType,  
         Double missing,
         IndexNumericFieldData indexFieldData,
-        @Nullable String functionName
+        @Nullable String functionName  
     ) {
         super(CombineFunction.MULTIPLY);
-        this.field = field;
+        this.field = field;  
         this.boostFactor = boostFactor;
         this.modifier = modifierType;
-        this.indexFieldData = indexFieldData;
+        this.indexFieldData = indexFieldData;  
         this.missing = missing;
         this.functionName = functionName;
-    }
+    }  
 
     @Override
-    public LeafScoreFunction getLeafScoreFunction(LeafReaderContext ctx) {
+    public LeafScoreFunction getLeafScoreFunction(LeafReaderContext ctx) {  
         final SortedNumericDoubleValues values;
         if (indexFieldData == null) {
-            values = FieldData.emptySortedNumericDoubles();
+            values = FieldData.emptySortedNumericDoubles();  
         } else {
             values = this.indexFieldData.load(ctx).getDoubleValues();
-        }
+        }  
 
         return new LeafScoreFunction() {
 
             @Override
             public double score(int docId, float subQueryScore) throws IOException {
-                double value;
+                double value;  
                 if (values.advanceExact(docId)) {
                     value = values.nextValue();
-                } else {
+                } else {  
                     if (missing != null) {
                         value = missing;
-                    } else {
+                    } else {  
                         throw new OpenSearchException("Missing value for field [" + field + "]");
                     }
-                }
+                }  
                 double val = value * boostFactor;
                 double result = modifier.apply(val);
-                if (result < 0f) {
+                if (result < 0f) {  
                     String message = "field value function must not produce negative scores, but got: "
                         + "["
-                        + result
+                        + result  
                         + "] for field value: ["
                         + value
-                        + "]";
+                        + "]";  
                     if (modifier == Modifier.LN) {
                         message += "; consider using ln1p or ln2p instead of ln to avoid negative scores";
-                    } else if (modifier == Modifier.LOG) {
+                    } else if (modifier == Modifier.LOG) {  
                         message += "; consider using log1p or log2p instead of log to avoid negative scores";
                     }
-                    throw new IllegalArgumentException(message);
+                    throw new IllegalArgumentException(message);  
                 }
                 return result;
-            }
+            }  
 
             @Override
-            public Explanation explainScore(int docId, Explanation subQueryScore) throws IOException {
+            public Explanation explainScore(int docId, Explanation subQueryScore) throws IOException {  
                 String modifierStr = modifier != null ? modifier.toString() : "";
                 String defaultStr = missing != null ? "?:" + missing : "";
-                double score = score(docId, subQueryScore.getValue().floatValue());
+                double score = score(docId, subQueryScore.getValue().floatValue());  
                 return Explanation.match(
                     (float) score,
-                    String.format(
+                    String.format(  
                         Locale.ROOT,
                         "field value function" + Functions.nameOrEmptyFunc(functionName) + ": %s(doc['%s'].value%s * factor=%s)",
-                        modifierStr,
+                        modifierStr,  
                         field,
                         defaultStr,
-                        boostFactor
+                        boostFactor  
                     )
                 );
-            }
+            }  
         };
     }
 
     @Override
     public boolean needsScores() {
-        return false;
+        return false;  
     }
 
-    @Override
+    @Override  
     protected boolean doEquals(ScoreFunction other) {
         FieldValueFactorFunction fieldValueFactorFunction = (FieldValueFactorFunction) other;
-        return this.boostFactor == fieldValueFactorFunction.boostFactor
+        return this.boostFactor == fieldValueFactorFunction.boostFactor  
             && Objects.equals(this.field, fieldValueFactorFunction.field)
             && Objects.equals(this.modifier, fieldValueFactorFunction.modifier);
-    }
+    }  
 
     @Override
-    protected int doHashCode() {
+    protected int doHashCode() {  
         return Objects.hash(boostFactor, field, modifier);
     }
 
     /**
      * The Type class encapsulates the modification types that can be applied
-     * to the score/value product.
+     * to the score/value product.  
      *
      * @opensearch.internal
-     */
+     */  
     public enum Modifier implements Writeable {
         NONE {
-            @Override
+            @Override  
             public double apply(double n) {
                 return n;
-            }
+            }  
         },
         LOG {
-            @Override
+            @Override  
             public double apply(double n) {
                 return Math.log10(n);
-            }
+            }  
         },
         LOG1P {
-            @Override
+            @Override  
             public double apply(double n) {
                 return Math.log10(n + 1);
-            }
+            }  
         },
         LOG2P {
-            @Override
+            @Override  
             public double apply(double n) {
                 return Math.log10(n + 2);
-            }
+            }  
         },
         LN {
-            @Override
+            @Override  
             public double apply(double n) {
                 return Math.log(n);
-            }
+            }  
         },
         LN1P {
-            @Override
+            @Override  
             public double apply(double n) {
                 return Math.log1p(n);
-            }
+            }  
         },
         LN2P {
-            @Override
+            @Override  
             public double apply(double n) {
                 return Math.log1p(n + 1);
-            }
+            }  
         },
         SQUARE {
-            @Override
+            @Override  
             public double apply(double n) {
                 return Math.pow(n, 2);
-            }
+            }  
         },
         SQRT {
-            @Override
+            @Override  
             public double apply(double n) {
                 return Math.sqrt(n);
-            }
+            }  
         },
         RECIPROCAL {
-            @Override
+            @Override  
             public double apply(double n) {
                 return 1.0 / n;
-            }
+            }  
         };
 
-        public abstract double apply(double n);
+        public abstract double apply(double n);  
 
         @Override
-        public void writeTo(StreamOutput out) throws IOException {
+        public void writeTo(StreamOutput out) throws IOException {  
             out.writeEnum(this);
         }
 
         public static Modifier readFromStream(StreamInput in) throws IOException {
             return in.readEnum(Modifier.class);
-        }
+        }  
 
         @Override
-        public String toString() {
+        public String toString() {  
             return super.toString().toLowerCase(Locale.ROOT);
         }
 
         public static Modifier fromString(String modifier) {
             return valueOf(modifier.toUpperCase(Locale.ROOT));
-        }
+        }  
     }
 }

@@ -1,332 +1,332 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 /*
- * Modifications Copyright OpenSearch Contributors. See
+ * Modifications Copyright OpenSearch Contributors. See  
  * GitHub history for details.
  */
 
 package org.opensearch.index.mapper;
 
-import org.apache.lucene.document.FieldType;
+import org.apache.lucene.document.FieldType;  
 import org.opensearch.OpenSearchParseException;
 import org.opensearch.common.CheckedBiFunction;
-import org.opensearch.common.Explicit;
+import org.opensearch.common.Explicit;  
 import org.opensearch.common.geo.GeoPoint;
 import org.opensearch.common.geo.GeometryFormat;
-import org.opensearch.common.geo.GeometryParser;
+import org.opensearch.common.geo.GeometryParser;  
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.core.ParseField;
-import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.xcontent.XContentBuilder;  
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.geometry.Geometry;
-import org.opensearch.geometry.Point;
+import org.opensearch.geometry.Point;  
 
 import java.io.IOException;
-import java.text.ParseException;
+import java.text.ParseException;  
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Iterator;
+import java.util.Iterator;  
 import java.util.List;
 import java.util.Map;
-import java.util.function.Supplier;
+import java.util.function.Supplier;  
 
 import static org.opensearch.index.mapper.TypeParsers.parseField;
 
 /**
  * Base class for spatial fields that only support indexing points
- *
+ *  
  * @opensearch.internal
  */
-public abstract class AbstractPointGeometryFieldMapper<Parsed, Processed> extends AbstractGeometryFieldMapper<Parsed, Processed> {
+public abstract class AbstractPointGeometryFieldMapper<Parsed, Processed> extends AbstractGeometryFieldMapper<Parsed, Processed> {  
 
     /**
-     * Common parameter names for the base point geometry field mapper
+     * Common parameter names for the base point geometry field mapper  
      *
      * @opensearch.internal
-     */
+     */  
     public static class Names extends AbstractGeometryFieldMapper.Names {
         public static final ParseField NULL_VALUE = new ParseField("null_value");
-    }
+    }  
 
     public static final FieldType DEFAULT_FIELD_TYPE = new FieldType();
-    static {
+    static {  
         DEFAULT_FIELD_TYPE.setDimensions(2, Integer.BYTES);
         DEFAULT_FIELD_TYPE.setStored(false);
-        DEFAULT_FIELD_TYPE.freeze();
+        DEFAULT_FIELD_TYPE.freeze();  
     }
 
-    /**
+    /**  
      * Base builder for the base point geometry field mapper
      *
-     * @opensearch.internal
+     * @opensearch.internal  
      */
     public abstract static class Builder<T extends Builder<T, FT>, FT extends AbstractPointGeometryFieldType> extends
-        AbstractGeometryFieldMapper.Builder<T, FT> {
+        AbstractGeometryFieldMapper.Builder<T, FT> {  
 
         protected ParsedPoint nullValue;
 
         public Builder(String name, FieldType fieldType) {
             super(name, fieldType);
-        }
+        }  
 
         public void setNullValue(ParsedPoint nullValue) {
-            this.nullValue = nullValue;
+            this.nullValue = nullValue;  
         }
 
-        public abstract AbstractPointGeometryFieldMapper build(
+        public abstract AbstractPointGeometryFieldMapper build(  
             BuilderContext context,
             String simpleName,
-            FieldType fieldType,
+            FieldType fieldType,  
             MultiFields multiFields,
             Explicit<Boolean> ignoreMalformed,
-            Explicit<Boolean> ignoreZValue,
+            Explicit<Boolean> ignoreZValue,  
             ParsedPoint nullValue,
             CopyTo copyTo
-        );
+        );  
 
         @Override
-        public AbstractPointGeometryFieldMapper build(BuilderContext context) {
+        public AbstractPointGeometryFieldMapper build(BuilderContext context) {  
             return build(
                 context,
-                name,
+                name,  
                 fieldType,
                 multiFieldsBuilder.build(this, context),
-                ignoreMalformed(context),
+                ignoreMalformed(context),  
                 ignoreZValue(context),
                 nullValue,
-                copyTo
+                copyTo  
             );
         }
-    }
+    }  
 
     /**
-     * Base type parser for the base point geometry field mapper
+     * Base type parser for the base point geometry field mapper  
      *
      * @opensearch.internal
-     */
+     */  
     public abstract static class TypeParser<T extends Builder> extends AbstractGeometryFieldMapper.TypeParser<Builder> {
         protected abstract ParsedPoint parseNullValue(Object nullValue, boolean ignoreZValue, boolean ignoreMalformed);
 
         @Override
         public T parse(String name, Map<String, Object> node, Map<String, Object> params, ParserContext parserContext) {
-            T builder = (T) (super.parse(name, node, params, parserContext));
+            T builder = (T) (super.parse(name, node, params, parserContext));  
             parseField(builder, name, node, parserContext);
             Object nullValue = null;
-            for (Iterator<Map.Entry<String, Object>> iterator = node.entrySet().iterator(); iterator.hasNext();) {
+            for (Iterator<Map.Entry<String, Object>> iterator = node.entrySet().iterator(); iterator.hasNext();) {  
                 Map.Entry<String, Object> entry = iterator.next();
                 String propName = entry.getKey();
-                Object propNode = entry.getValue();
+                Object propNode = entry.getValue();  
 
                 if (Names.NULL_VALUE.match(propName, LoggingDeprecationHandler.INSTANCE)) {
-                    nullValue = propNode;
+                    nullValue = propNode;  
                     iterator.remove();
                 }
-            }
+            }  
 
             if (nullValue != null) {
-                builder.setNullValue(
+                builder.setNullValue(  
                     parseNullValue(nullValue, (Boolean) builder.ignoreZValue().value(), (Boolean) builder.ignoreMalformed().value())
                 );
-            }
+            }  
 
             return builder;
-        }
+        }  
     }
 
-    ParsedPoint nullValue;
+    ParsedPoint nullValue;  
 
     /**
-     * Base field type for the base point geometry field mapper
+     * Base field type for the base point geometry field mapper  
      *
      * @opensearch.internal
-     */
+     */  
     public abstract static class AbstractPointGeometryFieldType<Parsed, Processed> extends AbstractGeometryFieldType<Parsed, Processed> {
         protected AbstractPointGeometryFieldType(
-            String name,
+            String name,  
             boolean indexed,
             boolean stored,
-            boolean hasDocValues,
+            boolean hasDocValues,  
             Map<String, String> meta
         ) {
-            super(name, indexed, stored, hasDocValues, true, meta);
+            super(name, indexed, stored, hasDocValues, true, meta);  
         }
     }
 
     protected AbstractPointGeometryFieldMapper(
         String simpleName,
-        FieldType fieldType,
+        FieldType fieldType,  
         MappedFieldType mappedFieldType,
         MultiFields multiFields,
-        Explicit<Boolean> ignoreMalformed,
+        Explicit<Boolean> ignoreMalformed,  
         Explicit<Boolean> ignoreZValue,
         ParsedPoint nullValue,
-        CopyTo copyTo
+        CopyTo copyTo  
     ) {
         super(simpleName, fieldType, mappedFieldType, ignoreMalformed, ignoreZValue, multiFields, copyTo);
-        this.nullValue = nullValue;
+        this.nullValue = nullValue;  
     }
 
-    @Override
+    @Override  
     public final boolean parsesArrayValue() {
         return true;
-    }
+    }  
 
     @Override
-    protected void mergeOptions(FieldMapper other, List<String> conflicts) {
+    protected void mergeOptions(FieldMapper other, List<String> conflicts) {  
         super.mergeOptions(other, conflicts);
         AbstractPointGeometryFieldMapper gpfm = (AbstractPointGeometryFieldMapper) other;
-        // TODO make this un-updateable
+        // TODO make this un-updateable  
         if (gpfm.nullValue != null) {
             this.nullValue = gpfm.nullValue;
-        }
+        }  
     }
 
-    @Override
+    @Override  
     public void doXContentBody(XContentBuilder builder, boolean includeDefaults, Params params) throws IOException {
         super.doXContentBody(builder, includeDefaults, params);
-        if (nullValue != null || includeDefaults) {
+        if (nullValue != null || includeDefaults) {  
             builder.field(Names.NULL_VALUE.getPreferredName(), nullValue);
         }
-    }
+    }  
 
     public ParsedPoint nullValue() {
-        return nullValue;
+        return nullValue;  
     }
 
-    /**
+    /**  
      * represents a Point that has been parsed by {@link PointParser}
      *
-     * @opensearch.internal
+     * @opensearch.internal  
      */
     public interface ParsedPoint {
-        void validate(String fieldName);
+        void validate(String fieldName);  
 
         void normalize(String fieldName);
 
         void resetCoords(double x, double y);
 
-        Point asGeometry();
+        Point asGeometry();  
 
         default boolean isNormalizable(double coord) {
-            return Double.isNaN(coord) == false && Double.isInfinite(coord) == false;
+            return Double.isNaN(coord) == false && Double.isInfinite(coord) == false;  
         }
     }
 
     /**
      * A parser implementation that can parse the various point formats
-     *
+     *  
      * @opensearch.internal
      */
-    public static class PointParser<P extends ParsedPoint> extends Parser<List<P>> {
+    public static class PointParser<P extends ParsedPoint> extends Parser<List<P>> {  
         /**
          * Note that this parser is only used for formatting values.
-         */
+         */  
         private final GeometryParser geometryParser;
         private final String field;
-        private final Supplier<P> pointSupplier;
+        private final Supplier<P> pointSupplier;  
         private final CheckedBiFunction<XContentParser, P, P, IOException> objectParser;
         private final P nullValue;
-        private final boolean ignoreZValue;
+        private final boolean ignoreZValue;  
         private final boolean ignoreMalformed;
 
-        public PointParser(
+        public PointParser(  
             String field,
             Supplier<P> pointSupplier,
-            CheckedBiFunction<XContentParser, P, P, IOException> objectParser,
+            CheckedBiFunction<XContentParser, P, P, IOException> objectParser,  
             P nullValue,
             boolean ignoreZValue,
-            boolean ignoreMalformed
+            boolean ignoreMalformed  
         ) {
             this.field = field;
-            this.pointSupplier = pointSupplier;
+            this.pointSupplier = pointSupplier;  
             this.objectParser = objectParser;
             this.nullValue = nullValue;
-            this.ignoreZValue = ignoreZValue;
+            this.ignoreZValue = ignoreZValue;  
             this.ignoreMalformed = ignoreMalformed;
             this.geometryParser = new GeometryParser(true, true, true);
-        }
+        }  
 
         private P process(P in) {
-            if (ignoreMalformed == false) {
+            if (ignoreMalformed == false) {  
                 in.validate(field);
             } else {
-                in.normalize(field);
+                in.normalize(field);  
             }
             return in;
-        }
+        }  
 
         @Override
-        public List<P> parse(XContentParser parser) throws IOException, ParseException {
+        public List<P> parse(XContentParser parser) throws IOException, ParseException {  
 
             if (parser.currentToken() == XContentParser.Token.START_ARRAY) {
-                XContentParser.Token token = parser.nextToken();
+                XContentParser.Token token = parser.nextToken();  
                 P point = pointSupplier.get();
                 ArrayList<P> points = new ArrayList<>();
-                if (token == XContentParser.Token.VALUE_NUMBER) {
+                if (token == XContentParser.Token.VALUE_NUMBER) {  
                     double x = parser.doubleValue();
                     parser.nextToken();
-                    double y = parser.doubleValue();
+                    double y = parser.doubleValue();  
                     token = parser.nextToken();
                     if (token == XContentParser.Token.VALUE_NUMBER) {
-                        GeoPoint.assertZValue(ignoreZValue, parser.doubleValue());
+                        GeoPoint.assertZValue(ignoreZValue, parser.doubleValue());  
                     } else if (token != XContentParser.Token.END_ARRAY) {
                         throw new OpenSearchParseException("field type does not accept > 3 dimensions");
-                    }
+                    }  
 
                     point.resetCoords(x, y);
-                    points.add(process(point));
+                    points.add(process(point));  
                 } else {
                     while (token != XContentParser.Token.END_ARRAY) {
-                        points.add(process(objectParser.apply(parser, point)));
+                        points.add(process(objectParser.apply(parser, point)));  
                         point = pointSupplier.get();
                         token = parser.nextToken();
-                    }
+                    }  
                 }
                 return points;
-            } else if (parser.currentToken() == XContentParser.Token.VALUE_NULL) {
+            } else if (parser.currentToken() == XContentParser.Token.VALUE_NULL) {  
                 if (nullValue == null) {
                     return null;
-                } else {
+                } else {  
                     return Collections.singletonList(nullValue);
                 }
-            } else {
+            } else {  
                 return Collections.singletonList(process(objectParser.apply(parser, pointSupplier.get())));
             }
-        }
+        }  
 
         @Override
-        public Object format(List<P> points, String format) {
+        public Object format(List<P> points, String format) {  
             List<Object> result = new ArrayList<>();
             GeometryFormat<Geometry> geometryFormat = geometryParser.geometryFormat(format);
-            for (ParsedPoint point : points) {
+            for (ParsedPoint point : points) {  
                 Geometry geometry = point.asGeometry();
                 result.add(geometryFormat.toXContentAsObject(geometry));
-            }
+            }  
             return result;
         }
-    }
+    }  
 }

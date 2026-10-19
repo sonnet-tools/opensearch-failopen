@@ -1,93 +1,93 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 /*
- * Modifications Copyright OpenSearch Contributors. See
+ * Modifications Copyright OpenSearch Contributors. See  
  * GitHub history for details.
  */
 
 package org.opensearch.search.aggregations.metrics;
 
-import org.opensearch.search.DocValueFormat;
+import org.opensearch.search.DocValueFormat;  
 import org.opensearch.search.aggregations.Aggregator;
 import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.support.ValuesSource;
+import org.opensearch.search.aggregations.support.ValuesSource;  
 import org.opensearch.search.internal.SearchContext;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.util.Map;
 
-import org.HdrHistogram.DoubleHistogram;
+import org.HdrHistogram.DoubleHistogram;  
 
 /**
- * Aggregate all docs into a single HDR percentile
+ * Aggregate all docs into a single HDR percentile  
  *
  * @opensearch.internal
- */
+ */  
 class HDRPercentilesAggregator extends AbstractHDRPercentilesAggregator {
 
-    HDRPercentilesAggregator(
+    HDRPercentilesAggregator(  
         String name,
         ValuesSource valuesSource,
-        SearchContext context,
+        SearchContext context,  
         Aggregator parent,
         double[] percents,
-        int numberOfSignificantValueDigits,
+        int numberOfSignificantValueDigits,  
         boolean keyed,
         DocValueFormat formatter,
-        Map<String, Object> metadata
+        Map<String, Object> metadata  
     ) throws IOException {
         super(name, valuesSource, context, parent, percents, numberOfSignificantValueDigits, keyed, formatter, metadata);
-    }
+    }  
 
     @Override
-    public InternalAggregation buildAggregation(long owningBucketOrdinal) {
+    public InternalAggregation buildAggregation(long owningBucketOrdinal) {  
         DoubleHistogram state = getState(owningBucketOrdinal);
         if (state == null) {
-            return buildEmptyAggregation();
+            return buildEmptyAggregation();  
         } else {
             return new InternalHDRPercentiles(name, keys, state, keyed, format, metadata());
-        }
+        }  
     }
 
-    @Override
+    @Override  
     public double metric(String name, long bucketOrd) {
         DoubleHistogram state = getState(bucketOrd);
-        if (state == null) {
+        if (state == null) {  
             return Double.NaN;
         } else {
-            return state.getValueAtPercentile(Double.parseDouble(name));
+            return state.getValueAtPercentile(Double.parseDouble(name));  
         }
     }
 
     @Override
     public InternalAggregation buildEmptyAggregation() {
-        DoubleHistogram state;
+        DoubleHistogram state;  
         state = new DoubleHistogram(numberOfSignificantValueDigits);
         state.setAutoResize(true);
-        return new InternalHDRPercentiles(name, keys, state, keyed, format, metadata());
+        return new InternalHDRPercentiles(name, keys, state, keyed, format, metadata());  
     }
 }

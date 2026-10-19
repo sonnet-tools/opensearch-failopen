@@ -1,233 +1,233 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.client.indices;
 
 import org.opensearch.core.ParseField;
 import org.opensearch.core.common.Strings;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
+import org.opensearch.core.xcontent.ConstructingObjectParser;  
 import org.opensearch.core.xcontent.XContentParser;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.util.Arrays;
 import java.util.List;
-import java.util.Objects;
+import java.util.Objects;  
 
 import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
-import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;
+import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;  
 
 public class DetailAnalyzeResponse {
 
     private final boolean customAnalyzer;
     private final AnalyzeTokenList analyzer;
-    private final CharFilteredText[] charfilters;
+    private final CharFilteredText[] charfilters;  
     private final AnalyzeTokenList tokenizer;
     private final AnalyzeTokenList[] tokenfilters;
 
     private DetailAnalyzeResponse(
         boolean customAnalyzer,
-        AnalyzeTokenList analyzer,
+        AnalyzeTokenList analyzer,  
         List<CharFilteredText> charfilters,
         AnalyzeTokenList tokenizer,
-        List<AnalyzeTokenList> tokenfilters
+        List<AnalyzeTokenList> tokenfilters  
     ) {
         this.customAnalyzer = customAnalyzer;
-        this.analyzer = analyzer;
+        this.analyzer = analyzer;  
         this.charfilters = charfilters == null ? null : charfilters.toArray(new CharFilteredText[] {});
         this.tokenizer = tokenizer;
-        this.tokenfilters = tokenfilters == null ? null : tokenfilters.toArray(new AnalyzeTokenList[] {});
+        this.tokenfilters = tokenfilters == null ? null : tokenfilters.toArray(new AnalyzeTokenList[] {});  
     }
 
-    public AnalyzeTokenList analyzer() {
+    public AnalyzeTokenList analyzer() {  
         return this.analyzer;
     }
 
     public CharFilteredText[] charfilters() {
         return this.charfilters;
-    }
+    }  
 
     public AnalyzeTokenList tokenizer() {
-        return tokenizer;
+        return tokenizer;  
     }
 
-    public AnalyzeTokenList[] tokenfilters() {
+    public AnalyzeTokenList[] tokenfilters() {  
         return tokenfilters;
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
+        if (this == o) return true;  
         if (o == null || getClass() != o.getClass()) return false;
         DetailAnalyzeResponse that = (DetailAnalyzeResponse) o;
-        return customAnalyzer == that.customAnalyzer
+        return customAnalyzer == that.customAnalyzer  
             && Objects.equals(analyzer, that.analyzer)
             && Arrays.equals(charfilters, that.charfilters)
-            && Objects.equals(tokenizer, that.tokenizer)
+            && Objects.equals(tokenizer, that.tokenizer)  
             && Arrays.equals(tokenfilters, that.tokenfilters);
     }
 
     @Override
     public int hashCode() {
-        int result = Objects.hash(customAnalyzer, analyzer, tokenizer);
+        int result = Objects.hash(customAnalyzer, analyzer, tokenizer);  
         result = 31 * result + Arrays.hashCode(charfilters);
         result = 31 * result + Arrays.hashCode(tokenfilters);
-        return result;
+        return result;  
     }
 
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings("unchecked")  
     static final ConstructingObjectParser<DetailAnalyzeResponse, Void> PARSER = new ConstructingObjectParser<>(
         "detail",
-        true,
+        true,  
         args -> new DetailAnalyzeResponse(
             (boolean) args[0],
-            (AnalyzeTokenList) args[1],
+            (AnalyzeTokenList) args[1],  
             (List<CharFilteredText>) args[2],
             (AnalyzeTokenList) args[3],
-            (List<AnalyzeTokenList>) args[4]
+            (List<AnalyzeTokenList>) args[4]  
         )
     );
 
     static {
         PARSER.declareBoolean(constructorArg(), new ParseField("custom_analyzer"));
-        PARSER.declareObject(optionalConstructorArg(), AnalyzeTokenList.PARSER, new ParseField("analyzer"));
+        PARSER.declareObject(optionalConstructorArg(), AnalyzeTokenList.PARSER, new ParseField("analyzer"));  
         PARSER.declareObjectArray(optionalConstructorArg(), CharFilteredText.PARSER, new ParseField("charfilters"));
         PARSER.declareObject(optionalConstructorArg(), AnalyzeTokenList.PARSER, new ParseField("tokenizer"));
-        PARSER.declareObjectArray(optionalConstructorArg(), AnalyzeTokenList.PARSER, new ParseField("tokenfilters"));
+        PARSER.declareObjectArray(optionalConstructorArg(), AnalyzeTokenList.PARSER, new ParseField("tokenfilters"));  
     }
 
-    public static DetailAnalyzeResponse fromXContent(XContentParser parser) throws IOException {
+    public static DetailAnalyzeResponse fromXContent(XContentParser parser) throws IOException {  
         return PARSER.parse(parser, null);
     }
 
     public static class AnalyzeTokenList {
         private final String name;
-        private final AnalyzeResponse.AnalyzeToken[] tokens;
+        private final AnalyzeResponse.AnalyzeToken[] tokens;  
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(Object o) {  
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
-            AnalyzeTokenList that = (AnalyzeTokenList) o;
+            AnalyzeTokenList that = (AnalyzeTokenList) o;  
             return Objects.equals(name, that.name) && Arrays.equals(tokens, that.tokens);
         }
 
         @Override
         public int hashCode() {
-            int result = Objects.hash(name);
+            int result = Objects.hash(name);  
             result = 31 * result + Arrays.hashCode(tokens);
             return result;
-        }
+        }  
 
         public AnalyzeTokenList(String name, List<AnalyzeResponse.AnalyzeToken> tokens) {
-            this.name = name;
+            this.name = name;  
             this.tokens = tokens.toArray(new AnalyzeResponse.AnalyzeToken[] {});
         }
 
         public String getName() {
             return name;
-        }
+        }  
 
         public AnalyzeResponse.AnalyzeToken[] getTokens() {
-            return tokens;
+            return tokens;  
         }
 
-        @SuppressWarnings("unchecked")
+        @SuppressWarnings("unchecked")  
         private static final ConstructingObjectParser<AnalyzeTokenList, Void> PARSER = new ConstructingObjectParser<>(
             "token_list",
-            true,
+            true,  
             args -> new AnalyzeTokenList((String) args[0], (List<AnalyzeResponse.AnalyzeToken>) args[1])
         );
 
         static {
             PARSER.declareString(constructorArg(), new ParseField("name"));
-            PARSER.declareObjectArray(constructorArg(), (p, c) -> AnalyzeResponse.AnalyzeToken.fromXContent(p), new ParseField("tokens"));
+            PARSER.declareObjectArray(constructorArg(), (p, c) -> AnalyzeResponse.AnalyzeToken.fromXContent(p), new ParseField("tokens"));  
         }
 
-        public static AnalyzeTokenList fromXContent(XContentParser parser) throws IOException {
+        public static AnalyzeTokenList fromXContent(XContentParser parser) throws IOException {  
             return PARSER.parse(parser, null);
         }
 
     }
 
-    public static class CharFilteredText {
+    public static class CharFilteredText {  
         private final String name;
         private final String[] texts;
 
         CharFilteredText(String name, String[] texts) {
             this.name = name;
-            if (texts != null) {
+            if (texts != null) {  
                 this.texts = texts;
             } else {
-                this.texts = Strings.EMPTY_ARRAY;
+                this.texts = Strings.EMPTY_ARRAY;  
             }
         }
 
         public String getName() {
             return name;
-        }
+        }  
 
         public String[] getTexts() {
-            return texts;
+            return texts;  
         }
 
-        @SuppressWarnings("unchecked")
+        @SuppressWarnings("unchecked")  
         private static final ConstructingObjectParser<CharFilteredText, Void> PARSER = new ConstructingObjectParser<>(
             "char_filtered_text",
-            true,
+            true,  
             args -> new CharFilteredText((String) args[0], ((List<String>) args[1]).toArray(new String[0]))
         );
 
         static {
             PARSER.declareString(constructorArg(), new ParseField("name"));
-            PARSER.declareStringArray(constructorArg(), new ParseField("filtered_text"));
+            PARSER.declareStringArray(constructorArg(), new ParseField("filtered_text"));  
         }
 
-        public static CharFilteredText fromXContent(XContentParser parser) throws IOException {
+        public static CharFilteredText fromXContent(XContentParser parser) throws IOException {  
             return PARSER.parse(parser, null);
         }
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
+            if (this == o) return true;  
             if (o == null || getClass() != o.getClass()) return false;
             CharFilteredText that = (CharFilteredText) o;
-            return Objects.equals(name, that.name) && Arrays.equals(texts, that.texts);
+            return Objects.equals(name, that.name) && Arrays.equals(texts, that.texts);  
         }
 
-        @Override
+        @Override  
         public int hashCode() {
             int result = Objects.hash(name);
-            result = 31 * result + Arrays.hashCode(texts);
+            result = 31 * result + Arrays.hashCode(texts);  
             return result;
         }
-    }
+    }  
 }

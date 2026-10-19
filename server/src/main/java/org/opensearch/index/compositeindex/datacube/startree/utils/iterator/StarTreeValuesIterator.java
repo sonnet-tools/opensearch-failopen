@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.index.compositeindex.datacube.startree.utils.iterator;
 
@@ -13,13 +13,13 @@ import org.opensearch.common.annotation.ExperimentalApi;
 
 import java.io.IOException;
 
-/**
+/**  
  * Wrapper iterator class for StarTree index in place of DocIdSetIterator to read / traverse the docValues formats.
  * This is needed since star tree values are different from segment documents and number of star tree values
- * can even exceed segment docs in the worst cases.
+ * can even exceed segment docs in the worst cases.  
  *
  * @opensearch.experimental
- */
+ */  
 @ExperimentalApi
 public abstract class StarTreeValuesIterator {
 
@@ -28,28 +28,28 @@ public abstract class StarTreeValuesIterator {
 
     public StarTreeValuesIterator(DocIdSetIterator docIdSetIterator) {
         this.docIdSetIterator = docIdSetIterator;
-    }
+    }  
 
     public int entryId() {
-        return docIdSetIterator.docID();
+        return docIdSetIterator.docID();  
     }
 
-    public int nextEntry() throws IOException {
+    public int nextEntry() throws IOException {  
         return docIdSetIterator.nextDoc();
     }
 
     public int advance(int target) throws IOException {
         return docIdSetIterator.advance(target);
-    }
+    }  
 
     public abstract int entryValueCount();
 
     public long cost() {
         return docIdSetIterator.cost();
-    }
+    }  
 
     public abstract long value() throws IOException;
 
     public abstract boolean advanceExact(int target) throws IOException;
 
-}
+}  

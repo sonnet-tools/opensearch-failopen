@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.index.mapper;
 
@@ -13,40 +13,40 @@ import org.apache.lucene.index.SortedNumericDocValues;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.List;  
 
 /**
- * FieldValueFetcher for sorted numeric doc values, for a doc, values will be stored in
+ * FieldValueFetcher for sorted numeric doc values, for a doc, values will be stored in  
  * sorted order in lucene.
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 public class SortedNumericDocValuesFetcher extends FieldValueFetcher {
 
     public SortedNumericDocValuesFetcher(MappedFieldType mappedFieldType, String SimpleName) {
         super(SimpleName);
-        this.mappedFieldType = mappedFieldType;
+        this.mappedFieldType = mappedFieldType;  
     }
 
-    @Override
+    @Override  
     public List<Object> fetch(LeafReader reader, int docId) throws IOException {
         List<Object> values = new ArrayList<>();
-        try {
+        try {  
             final SortedNumericDocValues sortedNumericDocValues = reader.getSortedNumericDocValues(mappedFieldType.name());
             if (sortedNumericDocValues == null || !sortedNumericDocValues.advanceExact(docId)) {
-                return values;
+                return values;  
             }
             for (int i = 0; i < sortedNumericDocValues.docValueCount(); i++) {
-                values.add(sortedNumericDocValues.nextValue());
+                values.add(sortedNumericDocValues.nextValue());  
             }
         } catch (Exception e) {
-            throw new IOException("Failed to read doc values for document " + docId + " in field " + mappedFieldType.name(), e);
+            throw new IOException("Failed to read doc values for document " + docId + " in field " + mappedFieldType.name(), e);  
         }
         return values;
-    }
+    }  
 
     @Override
-    public Object convert(Object value) {
+    public Object convert(Object value) {  
         return mappedFieldType.valueForDisplay(value);
     }
-}
+}  

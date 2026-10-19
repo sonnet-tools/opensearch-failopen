@@ -1,49 +1,49 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.search.pipeline.common;
 
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
+import org.opensearch.common.unit.TimeValue;  
 import org.opensearch.script.MockScriptEngine;
 import org.opensearch.script.Script;
-import org.opensearch.script.ScriptModule;
+import org.opensearch.script.ScriptModule;  
 import org.opensearch.script.ScriptService;
 import org.opensearch.script.ScriptType;
-import org.opensearch.script.SearchScript;
+import org.opensearch.script.SearchScript;  
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
-import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.test.OpenSearchTestCase;  
 import org.junit.Before;
 
-import java.util.Collections;
+import java.util.Collections;  
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeUnit;  
 
 public class ScriptRequestProcessorTests extends OpenSearchTestCase {
 
     private ScriptService scriptService;
     private Script script;
-    private SearchScript searchScript;
+    private SearchScript searchScript;  
 
     @Before
-    public void setupScripting() {
+    public void setupScripting() {  
         String scriptName = "search_script";
         scriptService = new ScriptService(
-            Settings.builder().build(),
+            Settings.builder().build(),  
             Map.of(Script.DEFAULT_SCRIPT_LANG, new MockScriptEngine(Script.DEFAULT_SCRIPT_LANG, Map.of(scriptName, ctx -> {
                 Object sourceObj = ctx.get("_source");
-                if (sourceObj instanceof Map) {
+                if (sourceObj instanceof Map) {  
                     Map<String, Object> source = (SearchRequestMap) sourceObj;
 
-                    // Update all modifiable source fields
+                    // Update all modifiable source fields  
                     Integer from = (Integer) source.get("from");
                     source.put("from", from + 10);
 
@@ -70,67 +70,67 @@ public class ScriptRequestProcessorTests extends OpenSearchTestCase {
 
                     Integer terminateAfter = (Integer) source.get("terminate_after");
                     source.put("terminate_after", terminateAfter + 1);
-                }
+                }  
                 return null;
             }), Collections.emptyMap())),
-            new HashMap<>(ScriptModule.CORE_CONTEXTS)
+            new HashMap<>(ScriptModule.CORE_CONTEXTS)  
         );
         script = new Script(ScriptType.INLINE, Script.DEFAULT_SCRIPT_LANG, scriptName, Collections.emptyMap());
-        searchScript = scriptService.compile(script, SearchScript.CONTEXT).newInstance(script.getParams());
+        searchScript = scriptService.compile(script, SearchScript.CONTEXT).newInstance(script.getParams());  
     }
 
-    public void testScriptingWithoutPrecompiledScriptFactory() throws Exception {
+    public void testScriptingWithoutPrecompiledScriptFactory() throws Exception {  
         ScriptRequestProcessor processor = new ScriptRequestProcessor(randomAlphaOfLength(10), null, false, script, null, scriptService);
         SearchRequest searchRequest = new SearchRequest();
-        searchRequest.source(createSearchSourceBuilder());
+        searchRequest.source(createSearchSourceBuilder());  
 
         assertNotNull(searchRequest);
-        processor.processRequest(searchRequest, new PipelineProcessingContext());
+        processor.processRequest(searchRequest, new PipelineProcessingContext());  
         assertSearchRequest(searchRequest);
     }
 
     public void testScriptingWithPrecompiledIngestScript() throws Exception {
         ScriptRequestProcessor processor = new ScriptRequestProcessor(
-            randomAlphaOfLength(10),
+            randomAlphaOfLength(10),  
             null,
             false,
-            script,
+            script,  
             searchScript,
             scriptService
-        );
+        );  
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.source(createSearchSourceBuilder());
 
         assertNotNull(searchRequest);
         processor.processRequest(searchRequest, new PipelineProcessingContext());
-        assertSearchRequest(searchRequest);
+        assertSearchRequest(searchRequest);  
     }
 
-    private SearchSourceBuilder createSearchSourceBuilder() {
+    private SearchSourceBuilder createSearchSourceBuilder() {  
         SearchSourceBuilder source = new SearchSourceBuilder();
         source.from(10);
-        source.size(20);
+        source.size(20);  
         source.explain(true);
         source.version(true);
-        source.seqNoAndPrimaryTerm(true);
+        source.seqNoAndPrimaryTerm(true);  
         source.trackScores(true);
         source.trackTotalHitsUpTo(3);
-        source.minScore(1.0f);
+        source.minScore(1.0f);  
         source.timeout(new TimeValue(60, TimeUnit.SECONDS));
         source.terminateAfter(5);
-        return source;
+        return source;  
     }
 
-    private void assertSearchRequest(SearchRequest searchRequest) {
+    private void assertSearchRequest(SearchRequest searchRequest) {  
         assertEquals(20, searchRequest.source().from());
         assertEquals(30, searchRequest.source().size());
-        assertFalse(searchRequest.source().explain());
+        assertFalse(searchRequest.source().explain());  
         assertFalse(searchRequest.source().version());
         assertFalse(searchRequest.source().seqNoAndPrimaryTerm());
-        assertFalse(searchRequest.source().trackScores());
+        assertFalse(searchRequest.source().trackScores());  
         assertEquals(4, searchRequest.source().trackTotalHitsUpTo().intValue());
         assertEquals(2.0f, searchRequest.source().minScore(), 0.0001);
-        assertEquals(new TimeValue(60, TimeUnit.SECONDS), searchRequest.source().timeout());
+        assertEquals(new TimeValue(60, TimeUnit.SECONDS), searchRequest.source().timeout());  
         assertEquals(6, searchRequest.source().terminateAfter());
     }
-}
+}  

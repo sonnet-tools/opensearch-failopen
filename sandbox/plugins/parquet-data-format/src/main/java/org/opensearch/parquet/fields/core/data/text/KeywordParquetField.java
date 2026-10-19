@@ -1,25 +1,25 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.parquet.fields.core.data.text;
 
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.VarCharVector;
-import org.apache.arrow.vector.types.pojo.ArrowType;
+import org.apache.arrow.vector.types.pojo.ArrowType;  
 import org.apache.arrow.vector.types.pojo.FieldType;
 import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.parquet.fields.ParquetField;
+import org.opensearch.parquet.fields.ParquetField;  
 import org.opensearch.parquet.vsr.ManagedVSR;
 
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.StandardCharsets;  
 
 /**
- * Parquet field for keyword values using {@link VarCharVector} with UTF-8 encoding.
+ * Parquet field for keyword values using {@link VarCharVector} with UTF-8 encoding.  
  */
 public class KeywordParquetField extends ParquetField {
 
@@ -28,26 +28,26 @@ public class KeywordParquetField extends ParquetField {
 
     @Override
     protected void addToGroup(MappedFieldType mappedFieldType, ManagedVSR managedVSR, Object parseValue) {
-        addToVector(managedVSR.getVector(mappedFieldType.name()), managedVSR.getRowCount(), parseValue);
+        addToVector(managedVSR.getVector(mappedFieldType.name()), managedVSR.getRowCount(), parseValue);  
     }
 
-    @Override
+    @Override  
     protected void addToVector(FieldVector vector, int index, Object parseValue) {
         ((VarCharVector) vector).setSafe(index, parseValue.toString().getBytes(StandardCharsets.UTF_8));
-    }
+    }  
 
     @Override
-    public boolean supportsMultiValue() {
+    public boolean supportsMultiValue() {  
         return true;
     }
 
     @Override
     public ArrowType getArrowType() {
-        return new ArrowType.Utf8();
+        return new ArrowType.Utf8();  
     }
 
-    @Override
+    @Override  
     public FieldType getFieldType() {
         return FieldType.nullable(getArrowType());
-    }
+    }  
 }

@@ -1,52 +1,52 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.index.shard;
 
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.FilterDirectory;
+import org.apache.lucene.store.FilterDirectory;  
 import org.opensearch.cluster.routing.ShardRouting;
 import org.opensearch.common.util.UploadListener;
-import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.action.ActionListener;  
 import org.opensearch.core.index.Index;
 import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.store.CompositeDirectory;
+import org.opensearch.index.store.CompositeDirectory;  
 import org.opensearch.index.store.RemoteDirectory;
 import org.opensearch.index.store.RemoteSegmentStoreDirectory;
-import org.opensearch.index.store.RemoteSyncListener;
+import org.opensearch.index.store.RemoteSyncListener;  
 import org.opensearch.index.store.lockmanager.RemoteStoreLockManager;
 import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.threadpool.ThreadPool;  
 
 import java.io.IOException;
-import java.util.Arrays;
+import java.util.Arrays;  
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.HashMap;  
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeUnit;  
 import java.util.function.Function;
 
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.any;  
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mock;  
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verify;  
 import static org.mockito.Mockito.when;
 
-/**
+/**  
  * Test class for {@link RemoteStoreUploaderService}.
  * Tests various scenarios of segment upload functionality including success cases,
- * error handling, and different directory configurations.
+ * error handling, and different directory configurations.  
  */
 public class RemoteStoreUploaderServiceTests extends OpenSearchTestCase {
 
@@ -70,25 +70,25 @@ public class RemoteStoreUploaderServiceTests extends OpenSearchTestCase {
 
     /**
      * Sets up the test environment before each test method.
-     * Initializes all mock objects and the service under test.
+     * Initializes all mock objects and the service under test.  
      *
      * @throws Exception if setup fails
-     */
+     */  
     @Override
     public void setUp() throws Exception {
-        super.setUp();
+        super.setUp();  
         mockIndexShard = mock(IndexShard.class);
         ShardId shardId = new ShardId(new Index("test", "test"), 0);
-        when(mockIndexShard.shardId()).thenReturn(shardId);
+        when(mockIndexShard.shardId()).thenReturn(shardId);  
 
         // Mock IndexShard methods instead of setting private fields
-        when(mockIndexShard.state()).thenReturn(IndexShardState.STARTED);
+        when(mockIndexShard.state()).thenReturn(IndexShardState.STARTED);  
         mockStoreDirectory = mock(FilterDirectory.class);
         // Use a real instance with mocked dependencies instead of mocking the final class
-        RemoteDirectory remoteDataDirectory = mock(RemoteDirectory.class);
+        RemoteDirectory remoteDataDirectory = mock(RemoteDirectory.class);  
         mockRemoteDirectory = createMockRemoteDirectory(remoteDataDirectory);
         mockUploadListener = mock(UploadListener.class);
-        mockUploadListenerFunction = mock(Function.class);
+        mockUploadListenerFunction = mock(Function.class);  
 
         when(mockUploadListenerFunction.apply(any())).thenReturn(mockUploadListener);
 
@@ -97,265 +97,265 @@ public class RemoteStoreUploaderServiceTests extends OpenSearchTestCase {
 
     /**
      * Creates a real RemoteSegmentStoreDirectory instance with mocked dependencies
-     * instead of trying to mock the final class directly.
+     * instead of trying to mock the final class directly.  
      * This approach is used because RemoteSegmentStoreDirectory is a final class
      * that cannot be mocked directly.
-     *
+     *  
      * @param remoteDirectory the remote directory to use (currently unused)
      * @return a new RemoteSegmentStoreDirectory instance with mocked dependencies
-     * @throws RuntimeException if the directory creation fails
+     * @throws RuntimeException if the directory creation fails  
      */
     private RemoteSegmentStoreDirectory createMockRemoteDirectory(RemoteDirectory remoteDirectory) {
-        try {
+        try {  
             RemoteDirectory remoteDataDirectory = mock(RemoteDirectory.class);
             RemoteDirectory remoteMetadataDirectory = mock(RemoteDirectory.class);
-            RemoteStoreLockManager lockManager = mock(RemoteStoreLockManager.class);
+            RemoteStoreLockManager lockManager = mock(RemoteStoreLockManager.class);  
             ThreadPool threadPool = mock(ThreadPool.class);
             ShardId shardId = new ShardId(new Index("test", "test"), 0);
 
             return new RemoteSegmentStoreDirectory(
                 remoteDataDirectory,
-                remoteMetadataDirectory,
+                remoteMetadataDirectory,  
                 lockManager,
                 threadPool,
-                shardId,
+                shardId,  
                 new HashMap<>()
             );
-        } catch (IOException e) {
+        } catch (IOException e) {  
             throw new RuntimeException("Failed to create mock RemoteSegmentStoreDirectory", e);
         }
-    }
+    }  
 
     /**
-     * Tests that uploading an empty collection of segments completes successfully
+     * Tests that uploading an empty collection of segments completes successfully  
      * without performing any actual upload operations.
      *
-     * @throws Exception if the test fails
+     * @throws Exception if the test fails  
      */
     public void testUploadSegmentsWithEmptyCollection() throws Exception {
-        Collection<String> emptySegments = Collections.emptyList();
+        Collection<String> emptySegments = Collections.emptyList();  
         Map<String, Long> segmentSizeMap = new HashMap<>();
         CountDownLatch latch = new CountDownLatch(1);
 
         ActionListener<Void> listener = ActionListener.wrap(
             response -> latch.countDown(),
-            exception -> fail("Should not fail for empty segments")
+            exception -> fail("Should not fail for empty segments")  
         );
 
-        uploaderService.uploadSegments(emptySegments, segmentSizeMap, listener, mockUploadListenerFunction, false, null);
+        uploaderService.uploadSegments(emptySegments, segmentSizeMap, listener, mockUploadListenerFunction, false, null);  
 
         assertTrue(latch.await(1, TimeUnit.SECONDS));
-    }
+    }  
 
     /**
-     * Tests successful segment upload with low priority upload flag set to false.
+     * Tests successful segment upload with low priority upload flag set to false.  
      * Verifies that segments are uploaded correctly and upload listeners are notified.
      *
-     * @throws Exception if the test fails
+     * @throws Exception if the test fails  
      */
     public void testUploadSegmentsSuccessWithHighPriorityUpload() throws Exception {
-        Collection<String> segments = Arrays.asList("segment1", "segment2");
+        Collection<String> segments = Arrays.asList("segment1", "segment2");  
         Map<String, Long> segmentSizeMap = new HashMap<>();
         segmentSizeMap.put("segment1", 100L);
-        segmentSizeMap.put("segment2", 200L);
+        segmentSizeMap.put("segment2", 200L);  
 
         // Create a fresh mock IndexShard
-        IndexShard freshMockShard = mock(IndexShard.class);
+        IndexShard freshMockShard = mock(IndexShard.class);  
         ShardId shardId = new ShardId(new Index("test", "test"), 1);
         when(freshMockShard.shardId()).thenReturn(shardId);
-        when(freshMockShard.state()).thenReturn(IndexShardState.STARTED);
+        when(freshMockShard.state()).thenReturn(IndexShardState.STARTED);  
 
         // Create a mock directory structure that matches what the code expects
-        Directory innerMockDelegate = mock(Directory.class);
+        Directory innerMockDelegate = mock(Directory.class);  
         FilterDirectory innerFilterDirectory = new TestFilterDirectory(new TestFilterDirectory(innerMockDelegate));
 
-        FilterDirectory outerFilterDirectory = new TestFilterDirectory(new TestFilterDirectory(innerFilterDirectory));
+        FilterDirectory outerFilterDirectory = new TestFilterDirectory(new TestFilterDirectory(innerFilterDirectory));  
 
         // Setup the real RemoteSegmentStoreDirectory to handle copyFrom calls
-        RemoteDirectory remoteDirectory = mock(RemoteDirectory.class);
+        RemoteDirectory remoteDirectory = mock(RemoteDirectory.class);  
         RemoteSegmentStoreDirectory remoteSegmentStoreDirectory = new RemoteSegmentStoreDirectory(
             remoteDirectory,
-            mock(RemoteDirectory.class),
+            mock(RemoteDirectory.class),  
             mock(RemoteStoreLockManager.class),
             freshMockShard.getThreadPool(),
-            freshMockShard.shardId(),
+            freshMockShard.shardId(),  
             new HashMap<>()
         );
 
         // Create a new uploader service with the fresh mocks
         RemoteStoreUploaderService testUploaderService = new RemoteStoreUploaderService(
-            freshMockShard,
+            freshMockShard,  
             outerFilterDirectory,
             remoteSegmentStoreDirectory
-        );
+        );  
 
         doAnswer(invocation -> {
-            ActionListener<Void> callback = invocation.getArgument(5);
+            ActionListener<Void> callback = invocation.getArgument(5);  
             callback.onResponse(null);
             return true;
-        }).when(remoteDirectory).copyFrom(any(), any(), any(), any(), any(), any(), any(Boolean.class), any());
+        }).when(remoteDirectory).copyFrom(any(), any(), any(), any(), any(), any(), any(Boolean.class), any());  
 
         CountDownLatch latch = new CountDownLatch(1);
 
         ActionListener<Void> listener = ActionListener.wrap(
             response -> latch.countDown(),
-            exception -> fail("Upload should succeed: " + exception.getMessage())
+            exception -> fail("Upload should succeed: " + exception.getMessage())  
         );
 
-        testUploaderService.uploadSegments(segments, segmentSizeMap, listener, mockUploadListenerFunction, false, null);
+        testUploaderService.uploadSegments(segments, segmentSizeMap, listener, mockUploadListenerFunction, false, null);  
 
         assertTrue(latch.await(5, TimeUnit.SECONDS));
-        // Verify the upload listener was called correctly
+        // Verify the upload listener was called correctly  
         verify(mockUploadListener, times(2)).beforeUpload(any(String.class));
         verify(mockUploadListener, times(2)).onSuccess(any(String.class));
-    }
+    }  
 
     /**
-     * Tests successful segment upload with low priority upload flag set to true.
+     * Tests successful segment upload with low priority upload flag set to true.  
      * Verifies that segments are uploaded correctly and upload listeners are notified.
      *
-     * @throws Exception if the test fails
+     * @throws Exception if the test fails  
      */
     public void testUploadSegmentsSuccessWithLowPriorityUpload() throws Exception {
-        Collection<String> segments = Arrays.asList("segment1", "segment2");
+        Collection<String> segments = Arrays.asList("segment1", "segment2");  
         Map<String, Long> segmentSizeMap = new HashMap<>();
         segmentSizeMap.put("segment1", 100L);
-        segmentSizeMap.put("segment2", 200L);
+        segmentSizeMap.put("segment2", 200L);  
 
         // Create a fresh mock IndexShard
-        IndexShard freshMockShard = mock(IndexShard.class);
+        IndexShard freshMockShard = mock(IndexShard.class);  
         ShardId shardId = new ShardId(new Index("test", "test"), 1);
         when(freshMockShard.shardId()).thenReturn(shardId);
-        when(freshMockShard.state()).thenReturn(IndexShardState.STARTED);
+        when(freshMockShard.state()).thenReturn(IndexShardState.STARTED);  
 
         // Create a mock directory structure that matches what the code expects
-        Directory innerMockDelegate = mock(Directory.class);
+        Directory innerMockDelegate = mock(Directory.class);  
         FilterDirectory innerFilterDirectory = new TestFilterDirectory(new TestFilterDirectory(innerMockDelegate));
 
-        FilterDirectory outerFilterDirectory = new TestFilterDirectory(new TestFilterDirectory(innerFilterDirectory));
+        FilterDirectory outerFilterDirectory = new TestFilterDirectory(new TestFilterDirectory(innerFilterDirectory));  
 
         // Setup the real RemoteSegmentStoreDirectory to handle copyFrom calls
-        RemoteDirectory remoteDirectory = mock(RemoteDirectory.class);
+        RemoteDirectory remoteDirectory = mock(RemoteDirectory.class);  
         RemoteSegmentStoreDirectory remoteSegmentStoreDirectory = new RemoteSegmentStoreDirectory(
             remoteDirectory,
-            mock(RemoteDirectory.class),
+            mock(RemoteDirectory.class),  
             mock(RemoteStoreLockManager.class),
             freshMockShard.getThreadPool(),
-            freshMockShard.shardId(),
+            freshMockShard.shardId(),  
             new HashMap<>()
         );
 
         // Create a new uploader service with the fresh mocks
         RemoteStoreUploaderService testUploaderService = new RemoteStoreUploaderService(
-            freshMockShard,
+            freshMockShard,  
             outerFilterDirectory,
             remoteSegmentStoreDirectory
-        );
+        );  
 
         doAnswer(invocation -> {
-            ActionListener<Void> callback = invocation.getArgument(5);
+            ActionListener<Void> callback = invocation.getArgument(5);  
             callback.onResponse(null);
             return true;
-        }).when(remoteDirectory).copyFrom(any(), any(), any(), any(), any(), any(), any(Boolean.class), any());
+        }).when(remoteDirectory).copyFrom(any(), any(), any(), any(), any(), any(), any(Boolean.class), any());  
 
         CountDownLatch latch = new CountDownLatch(1);
 
         ActionListener<Void> listener = ActionListener.wrap(
             response -> latch.countDown(),
-            exception -> fail("Upload should succeed: " + exception.getMessage())
+            exception -> fail("Upload should succeed: " + exception.getMessage())  
         );
 
-        testUploaderService.uploadSegments(segments, segmentSizeMap, listener, mockUploadListenerFunction, true, null);
+        testUploaderService.uploadSegments(segments, segmentSizeMap, listener, mockUploadListenerFunction, true, null);  
 
         assertTrue(latch.await(5, TimeUnit.SECONDS));
-        // Verify the upload listener was called correctly
+        // Verify the upload listener was called correctly  
         verify(mockUploadListener, times(2)).beforeUpload(any(String.class));
         verify(mockUploadListener, times(2)).onSuccess(any(String.class));
-    }
+    }  
 
     /**
-     * Tests segment upload functionality when using a CompositeDirectory.
+     * Tests segment upload functionality when using a CompositeDirectory.  
      * Verifies that the afterSyncToRemote callback is invoked on the CompositeDirectory
      * after successful upload operations.
-     *
+     *  
      * @throws Exception if the test fails
      */
-    public void testUploadSegmentsWithCompositeDirectory() throws Exception {
+    public void testUploadSegmentsWithCompositeDirectory() throws Exception {  
         Collection<String> segments = Arrays.asList("segment1");
         Map<String, Long> segmentSizeMap = new HashMap<>();
-        segmentSizeMap.put("segment1", 100L);
+        segmentSizeMap.put("segment1", 100L);  
 
         // Create a fresh mock IndexShard
-        IndexShard freshMockShard = mock(IndexShard.class);
+        IndexShard freshMockShard = mock(IndexShard.class);  
         ShardId shardId = new ShardId(new Index("test", "test"), 0);
         when(freshMockShard.shardId()).thenReturn(shardId);
 
         // Create a mock ShardRouting and set it as a field on the IndexShard mock
         ShardRouting mockShardRouting = mock(ShardRouting.class);
-        freshMockShard.shardRouting = mockShardRouting;
+        freshMockShard.shardRouting = mockShardRouting;  
         when(mockShardRouting.primary()).thenReturn(true);
 
-        CompositeDirectory mockCompositeDirectory = mock(CompositeDirectory.class);
+        CompositeDirectory mockCompositeDirectory = mock(CompositeDirectory.class);  
         FilterDirectory innerFilterDirectory = new TestFilterDirectory(mockCompositeDirectory);
         FilterDirectory outerFilterDirectory = new TestFilterDirectory(innerFilterDirectory);
 
         // Setup the real RemoteSegmentStoreDirectory to handle copyFrom calls
         RemoteDirectory remoteDirectory = mock(RemoteDirectory.class);
-        RemoteSegmentStoreDirectory remoteSegmentStoreDirectory = new RemoteSegmentStoreDirectory(
+        RemoteSegmentStoreDirectory remoteSegmentStoreDirectory = new RemoteSegmentStoreDirectory(  
             remoteDirectory,
             mock(RemoteDirectory.class),
-            mock(RemoteStoreLockManager.class),
+            mock(RemoteStoreLockManager.class),  
             freshMockShard.getThreadPool(),
             freshMockShard.shardId(),
-            new HashMap<>()
+            new HashMap<>()  
         );
 
-        // Create a new uploader service with the fresh mocks
+        // Create a new uploader service with the fresh mocks  
         RemoteStoreUploaderService testUploaderService = new RemoteStoreUploaderService(
             freshMockShard,
-            outerFilterDirectory,
+            outerFilterDirectory,  
             remoteSegmentStoreDirectory
         );
 
         // Setup the real RemoteSegmentStoreDirectory to handle copyFrom calls
         doAnswer(invocation -> {
-            ActionListener<Void> callback = invocation.getArgument(5);
+            ActionListener<Void> callback = invocation.getArgument(5);  
             callback.onResponse(null);
             return true;
-        }).when(remoteDirectory).copyFrom(any(), any(), any(), any(), any(), any(), any(Boolean.class), any());
+        }).when(remoteDirectory).copyFrom(any(), any(), any(), any(), any(), any(), any(Boolean.class), any());  
 
         CountDownLatch latch = new CountDownLatch(1);
 
         ActionListener<Void> listener = ActionListener.wrap(
             response -> latch.countDown(),
-            exception -> fail("Upload should succeed: " + exception.getMessage())
+            exception -> fail("Upload should succeed: " + exception.getMessage())  
         );
 
-        testUploaderService.uploadSegments(segments, segmentSizeMap, listener, mockUploadListenerFunction, false, null);
+        testUploaderService.uploadSegments(segments, segmentSizeMap, listener, mockUploadListenerFunction, false, null);  
 
         assertTrue(latch.await(5, TimeUnit.SECONDS));
-        verify(mockCompositeDirectory).afterSyncToRemote("segment1");
+        verify(mockCompositeDirectory).afterSyncToRemote("segment1");  
     }
 
-    /**
+    /**  
      * Tests error handling when a CorruptIndexException occurs during segment upload.
      * Verifies that the shard is failed with the appropriate error message
-     * and the upload listener is notified of the failure.
+     * and the upload listener is notified of the failure.  
      *
      * @throws Exception if the test fails
-     */
+     */  
     public void testUploadSegmentsWithCorruptIndexException() throws Exception {
         Collection<String> segments = Arrays.asList("segment1");
-        Map<String, Long> segmentSizeMap = new HashMap<>();
+        Map<String, Long> segmentSizeMap = new HashMap<>();  
         segmentSizeMap.put("segment1", 100L);
 
-        // Create a fresh mock IndexShard
+        // Create a fresh mock IndexShard  
         IndexShard freshMockShard = mock(IndexShard.class);
         ShardId shardId = new ShardId(new Index("test", "test"), 0);
-        when(freshMockShard.shardId()).thenReturn(shardId);
+        when(freshMockShard.shardId()).thenReturn(shardId);  
 
         // Create a mock ShardRouting and set it as a field on the IndexShard mock
-        ShardRouting mockShardRouting = mock(ShardRouting.class);
+        ShardRouting mockShardRouting = mock(ShardRouting.class);  
         freshMockShard.shardRouting = mockShardRouting;
         when(mockShardRouting.primary()).thenReturn(true);
 
@@ -364,259 +364,259 @@ public class RemoteStoreUploaderServiceTests extends OpenSearchTestCase {
 
         FilterDirectory outerFilterDirectory = new TestFilterDirectory(new TestFilterDirectory(innerFilterDirectory));
 
-        // Setup the real RemoteSegmentStoreDirectory to handle copyFrom calls
+        // Setup the real RemoteSegmentStoreDirectory to handle copyFrom calls  
         RemoteDirectory remoteDirectory = mock(RemoteDirectory.class);
         RemoteSegmentStoreDirectory remoteSegmentStoreDirectory = new RemoteSegmentStoreDirectory(
-            remoteDirectory,
+            remoteDirectory,  
             mock(RemoteDirectory.class),
             mock(RemoteStoreLockManager.class),
-            freshMockShard.getThreadPool(),
+            freshMockShard.getThreadPool(),  
             freshMockShard.shardId(),
             new HashMap<>()
-        );
+        );  
 
         // Create a new uploader service with the fresh mocks
-        RemoteStoreUploaderService testUploaderService = new RemoteStoreUploaderService(
+        RemoteStoreUploaderService testUploaderService = new RemoteStoreUploaderService(  
             freshMockShard,
             outerFilterDirectory,
-            remoteSegmentStoreDirectory
+            remoteSegmentStoreDirectory  
         );
 
-        CorruptIndexException corruptException = new CorruptIndexException("Index corrupted", "test");
+        CorruptIndexException corruptException = new CorruptIndexException("Index corrupted", "test");  
         CountDownLatch latch = new CountDownLatch(1);
 
-        // Setup the real RemoteSegmentStoreDirectory to handle copyFrom calls
+        // Setup the real RemoteSegmentStoreDirectory to handle copyFrom calls  
         RemoteDirectory remoteDataDirectory = mock(RemoteDirectory.class);
         doAnswer(invocation -> {
-            ActionListener<Void> callback = invocation.getArgument(5);
+            ActionListener<Void> callback = invocation.getArgument(5);  
             callback.onFailure(corruptException);
             return true;
-        }).when(remoteDirectory).copyFrom(any(), any(), any(), any(), any(), any(), any(Boolean.class), any());
+        }).when(remoteDirectory).copyFrom(any(), any(), any(), any(), any(), any(), any(Boolean.class), any());  
 
         ActionListener<Void> listener = ActionListener.wrap(response -> fail("Should not succeed with corrupt index"), exception -> {
-            assertEquals(corruptException, exception);
+            assertEquals(corruptException, exception);  
             latch.countDown();
         });
 
         testUploaderService.uploadSegments(segments, segmentSizeMap, listener, mockUploadListenerFunction, false, null);
 
-        assertTrue(latch.await(5, TimeUnit.SECONDS));
+        assertTrue(latch.await(5, TimeUnit.SECONDS));  
         verify(freshMockShard).failShard(eq("Index corrupted (resource=test)"), eq(corruptException));
         verify(mockUploadListener).onFailure("segment1");
-    }
+    }  
 
     /**
-     * Tests error handling when a generic RuntimeException occurs during segment upload.
+     * Tests error handling when a generic RuntimeException occurs during segment upload.  
      * Verifies that the shard is NOT failed (unlike CorruptIndexException)
      * but the upload listener is still notified of the failure.
-     *
+     *  
      * @throws Exception if the test fails
      */
-    public void testUploadSegmentsWithGenericException() throws Exception {
+    public void testUploadSegmentsWithGenericException() throws Exception {  
         Collection<String> segments = Arrays.asList("segment1");
         Map<String, Long> segmentSizeMap = new HashMap<>();
-        segmentSizeMap.put("segment1", 100L);
+        segmentSizeMap.put("segment1", 100L);  
 
         // Create a fresh mock IndexShard
-        IndexShard freshMockShard = mock(IndexShard.class);
+        IndexShard freshMockShard = mock(IndexShard.class);  
         ShardId shardId = new ShardId(new Index("test", "test"), 0);
         when(freshMockShard.shardId()).thenReturn(shardId);
 
         // Create a mock ShardRouting and set it as a field on the IndexShard mock
         ShardRouting mockShardRouting = mock(ShardRouting.class);
-        freshMockShard.shardRouting = mockShardRouting;
+        freshMockShard.shardRouting = mockShardRouting;  
         when(mockShardRouting.primary()).thenReturn(true);
 
-        Directory innerMockDelegate = mock(Directory.class);
+        Directory innerMockDelegate = mock(Directory.class);  
         FilterDirectory innerFilterDirectory = new TestFilterDirectory(new TestFilterDirectory(innerMockDelegate));
 
-        FilterDirectory outerFilterDirectory = new TestFilterDirectory(new TestFilterDirectory(innerFilterDirectory));
+        FilterDirectory outerFilterDirectory = new TestFilterDirectory(new TestFilterDirectory(innerFilterDirectory));  
 
         // Setup the real RemoteSegmentStoreDirectory to handle copyFrom calls
-        RemoteDirectory remoteDirectory = mock(RemoteDirectory.class);
+        RemoteDirectory remoteDirectory = mock(RemoteDirectory.class);  
         RemoteSegmentStoreDirectory remoteSegmentStoreDirectory = new RemoteSegmentStoreDirectory(
             remoteDirectory,
-            mock(RemoteDirectory.class),
+            mock(RemoteDirectory.class),  
             mock(RemoteStoreLockManager.class),
             freshMockShard.getThreadPool(),
-            freshMockShard.shardId(),
+            freshMockShard.shardId(),  
             new HashMap<>()
         );
 
         // Create a new uploader service with the fresh mocks
         RemoteStoreUploaderService testUploaderService = new RemoteStoreUploaderService(
-            freshMockShard,
+            freshMockShard,  
             outerFilterDirectory,
             remoteSegmentStoreDirectory
-        );
+        );  
 
         RuntimeException genericException = new RuntimeException("Generic error");
-        CountDownLatch latch = new CountDownLatch(1);
+        CountDownLatch latch = new CountDownLatch(1);  
 
         // Setup the real RemoteSegmentStoreDirectory to handle copyFrom calls
-        doAnswer(invocation -> {
+        doAnswer(invocation -> {  
             ActionListener<Void> callback = invocation.getArgument(5);
             callback.onFailure(genericException);
-            return true;
+            return true;  
         }).when(remoteDirectory).copyFrom(any(), any(), any(), any(), any(), any(), any(Boolean.class), any());
 
-        ActionListener<Void> listener = ActionListener.wrap(response -> fail("Should not succeed with generic exception"), exception -> {
+        ActionListener<Void> listener = ActionListener.wrap(response -> fail("Should not succeed with generic exception"), exception -> {  
             assertEquals(genericException, exception);
             latch.countDown();
-        });
+        });  
 
         testUploaderService.uploadSegments(segments, segmentSizeMap, listener, mockUploadListenerFunction, false, null);
 
         assertTrue(latch.await(5, TimeUnit.SECONDS));
         verify(freshMockShard, never()).failShard(any(), any());
-        verify(mockUploadListener).onFailure("segment1");
+        verify(mockUploadListener).onFailure("segment1");  
     }
 
-    /**
+    /**  
      * Test implementation of FilterDirectory used for creating nested directory structures
      * in tests. This class simply delegates all operations to the wrapped directory.
-     */
+     */  
     public static class TestFilterDirectory extends FilterDirectory {
 
-        /**
+        /**  
          * Creates a new TestFilterDirectory wrapping the given directory.
          *
-         * @param in the directory to wrap
+         * @param in the directory to wrap  
          */
         public TestFilterDirectory(Directory in) {
-            super(in);
+            super(in);  
         }
     }
 
     // ═══════════════════════════════════════════════════════════════
     // RemoteSyncListener registration tests
-    // ═══════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════  
 
     /**
-     * Uploader auto-discovers RemoteSyncListener from directory chain at construction time.
+     * Uploader auto-discovers RemoteSyncListener from directory chain at construction time.  
      */
     public void testSyncListenerAutoRegisteredFromDirectoryChain() throws Exception {
-        IndexShard freshMockShard = mock(IndexShard.class);
+        IndexShard freshMockShard = mock(IndexShard.class);  
         ShardId shardId = new ShardId(new Index("test", "test"), 1);
         when(freshMockShard.shardId()).thenReturn(shardId);
-        when(freshMockShard.state()).thenReturn(IndexShardState.STARTED);
+        when(freshMockShard.state()).thenReturn(IndexShardState.STARTED);  
 
         // Create a concrete RemoteSyncListener directory that tracks afterSyncToRemote calls
-        Directory innerMockDelegate = mock(Directory.class);
+        Directory innerMockDelegate = mock(Directory.class);  
         TrackingSyncListenerDirectory listenerDir = new TrackingSyncListenerDirectory(innerMockDelegate);
         TestFilterDirectory outerDir = new TestFilterDirectory(listenerDir);
 
         RemoteDirectory remoteDataDirectory = mock(RemoteDirectory.class);
         RemoteSegmentStoreDirectory remoteSegmentStoreDirectory = new RemoteSegmentStoreDirectory(
-            remoteDataDirectory,
+            remoteDataDirectory,  
             mock(RemoteDirectory.class),
             mock(RemoteStoreLockManager.class),
-            freshMockShard.getThreadPool(),
+            freshMockShard.getThreadPool(),  
             freshMockShard.shardId(),
             new HashMap<>()
-        );
+        );  
 
         RemoteStoreUploaderService testUploaderService = new RemoteStoreUploaderService(
-            freshMockShard,
+            freshMockShard,  
             outerDir,
             remoteSegmentStoreDirectory
-        );
+        );  
 
         doAnswer(invocation -> {
-            ActionListener<Void> callback = invocation.getArgument(5);
+            ActionListener<Void> callback = invocation.getArgument(5);  
             callback.onResponse(null);
             return true;
-        }).when(remoteDataDirectory).copyFrom(any(), any(), any(), any(), any(), any(), any(Boolean.class), any());
+        }).when(remoteDataDirectory).copyFrom(any(), any(), any(), any(), any(), any(), any(Boolean.class), any());  
 
         CountDownLatch latch = new CountDownLatch(1);
-        testUploaderService.uploadSegments(
+        testUploaderService.uploadSegments(  
             Collections.singletonList("seg1"),
             Map.of("seg1", 100L),
-            ActionListener.wrap(r -> latch.countDown(), e -> fail("Should not fail")),
+            ActionListener.wrap(r -> latch.countDown(), e -> fail("Should not fail")),  
             mockUploadListenerFunction,
             false,
-            null
+            null  
         );
 
-        assertTrue(latch.await(5, TimeUnit.SECONDS));
+        assertTrue(latch.await(5, TimeUnit.SECONDS));  
         assertEquals("afterSyncToRemote should be called once", 1, listenerDir.syncCount);
         assertEquals("seg1", listenerDir.lastFile);
-    }
+    }  
 
     /**
-     * When no RemoteSyncListener in directory chain, upload still succeeds (no-op notification).
+     * When no RemoteSyncListener in directory chain, upload still succeeds (no-op notification).  
      */
     public void testNoSyncListenerInChainStillWorks() throws Exception {
-        IndexShard freshMockShard = mock(IndexShard.class);
+        IndexShard freshMockShard = mock(IndexShard.class);  
         ShardId shardId = new ShardId(new Index("test", "test"), 1);
         when(freshMockShard.shardId()).thenReturn(shardId);
-        when(freshMockShard.state()).thenReturn(IndexShardState.STARTED);
+        when(freshMockShard.state()).thenReturn(IndexShardState.STARTED);  
 
         // Plain FilterDirectory — no RemoteSyncListener
-        Directory innerDir = mock(Directory.class);
+        Directory innerDir = mock(Directory.class);  
         TestFilterDirectory outerDir = new TestFilterDirectory(new TestFilterDirectory(innerDir));
 
-        RemoteDirectory remoteDataDirectory = mock(RemoteDirectory.class);
+        RemoteDirectory remoteDataDirectory = mock(RemoteDirectory.class);  
         RemoteSegmentStoreDirectory remoteSegmentStoreDirectory = new RemoteSegmentStoreDirectory(
             remoteDataDirectory,
-            mock(RemoteDirectory.class),
+            mock(RemoteDirectory.class),  
             mock(RemoteStoreLockManager.class),
             freshMockShard.getThreadPool(),
-            freshMockShard.shardId(),
+            freshMockShard.shardId(),  
             new HashMap<>()
         );
 
         RemoteStoreUploaderService testUploaderService = new RemoteStoreUploaderService(
             freshMockShard,
-            outerDir,
+            outerDir,  
             remoteSegmentStoreDirectory
         );
 
         doAnswer(invocation -> {
             ActionListener<Void> callback = invocation.getArgument(5);
-            callback.onResponse(null);
+            callback.onResponse(null);  
             return true;
         }).when(remoteDataDirectory).copyFrom(any(), any(), any(), any(), any(), any(), any(Boolean.class), any());
 
         CountDownLatch latch = new CountDownLatch(1);
         testUploaderService.uploadSegments(
-            Collections.singletonList("seg1"),
+            Collections.singletonList("seg1"),  
             Map.of("seg1", 100L),
             ActionListener.wrap(r -> latch.countDown(), e -> fail("Should not fail")),
-            mockUploadListenerFunction,
+            mockUploadListenerFunction,  
             false,
             null
-        );
+        );  
 
         assertTrue(latch.await(5, TimeUnit.SECONDS));
-        // No exception = pass. No listener to call.
+        // No exception = pass. No listener to call.  
     }
 
-    /**
+    /**  
      * addSyncListener allows manually adding extra listeners beyond auto-discovery.
      */
-    public void testAddSyncListenerManually() throws Exception {
+    public void testAddSyncListenerManually() throws Exception {  
         IndexShard freshMockShard = mock(IndexShard.class);
         ShardId shardId = new ShardId(new Index("test", "test"), 1);
-        when(freshMockShard.shardId()).thenReturn(shardId);
+        when(freshMockShard.shardId()).thenReturn(shardId);  
         when(freshMockShard.state()).thenReturn(IndexShardState.STARTED);
 
-        Directory innerDir = mock(Directory.class);
+        Directory innerDir = mock(Directory.class);  
         TestFilterDirectory outerDir = new TestFilterDirectory(new TestFilterDirectory(innerDir));
 
-        RemoteDirectory remoteDataDirectory = mock(RemoteDirectory.class);
+        RemoteDirectory remoteDataDirectory = mock(RemoteDirectory.class);  
         RemoteSegmentStoreDirectory remoteSegmentStoreDirectory = new RemoteSegmentStoreDirectory(
             remoteDataDirectory,
-            mock(RemoteDirectory.class),
+            mock(RemoteDirectory.class),  
             mock(RemoteStoreLockManager.class),
             freshMockShard.getThreadPool(),
-            freshMockShard.shardId(),
+            freshMockShard.shardId(),  
             new HashMap<>()
         );
 
         RemoteStoreUploaderService testUploaderService = new RemoteStoreUploaderService(
             freshMockShard,
-            outerDir,
+            outerDir,  
             remoteSegmentStoreDirectory
         );
 
@@ -625,56 +625,56 @@ public class RemoteStoreUploaderServiceTests extends OpenSearchTestCase {
 
         doAnswer(invocation -> {
             ActionListener<Void> callback = invocation.getArgument(5);
-            callback.onResponse(null);
+            callback.onResponse(null);  
             return true;
         }).when(remoteDataDirectory).copyFrom(any(), any(), any(), any(), any(), any(), any(Boolean.class), any());
 
         CountDownLatch latch = new CountDownLatch(1);
         testUploaderService.uploadSegments(
-            Collections.singletonList("seg1"),
+            Collections.singletonList("seg1"),  
             Map.of("seg1", 100L),
             ActionListener.wrap(r -> latch.countDown(), e -> fail("Should not fail")),
-            mockUploadListenerFunction,
+            mockUploadListenerFunction,  
             false,
             null
-        );
+        );  
 
         assertTrue(latch.await(5, TimeUnit.SECONDS));
-        verify(manualListener).afterSyncToRemote("seg1");
+        verify(manualListener).afterSyncToRemote("seg1");  
     }
 
-    /**
+    /**  
      * addSyncListener with null is a no-op (no NPE).
      */
-    public void testAddSyncListenerNullIsNoOp() throws Exception {
+    public void testAddSyncListenerNullIsNoOp() throws Exception {  
         RemoteDirectory remoteDataDirectory = mock(RemoteDirectory.class);
         RemoteSegmentStoreDirectory remoteSegmentStoreDirectory = createMockRemoteDirectory(remoteDataDirectory);
 
         RemoteStoreUploaderService testUploaderService = new RemoteStoreUploaderService(
             mockIndexShard,
-            mock(Directory.class),
+            mock(Directory.class),  
             remoteSegmentStoreDirectory
         );
 
         // Should not throw
         testUploaderService.addSyncListener(null);
-    }
+    }  
 
     /**
-     * Concrete FilterDirectory that implements RemoteSyncListener and tracks calls.
+     * Concrete FilterDirectory that implements RemoteSyncListener and tracks calls.  
      */
     static class TrackingSyncListenerDirectory extends FilterDirectory implements RemoteSyncListener {
-        volatile int syncCount = 0;
+        volatile int syncCount = 0;  
         volatile String lastFile = null;
 
-        TrackingSyncListenerDirectory(Directory in) {
+        TrackingSyncListenerDirectory(Directory in) {  
             super(in);
         }
 
         @Override
         public void afterSyncToRemote(String file) {
-            syncCount++;
+            syncCount++;  
             lastFile = file;
         }
-    }
+    }  
 }

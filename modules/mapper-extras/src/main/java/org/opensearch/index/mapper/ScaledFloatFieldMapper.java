@@ -1,97 +1,97 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.index.mapper;
 
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.LongPoint;
-import org.apache.lucene.index.DocValues;
+import org.apache.lucene.index.DocValues;  
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NumericDocValues;
-import org.apache.lucene.index.SortedNumericDocValues;
+import org.apache.lucene.index.SortedNumericDocValues;  
 import org.apache.lucene.search.BoostQuery;
 import org.apache.lucene.search.Query;
-import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.BytesRef;  
 import org.opensearch.common.Explicit;
 import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
+import org.opensearch.common.settings.Settings;  
 import org.opensearch.common.xcontent.support.XContentMapValues;
 import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.core.xcontent.XContentParser.Token;
+import org.opensearch.core.xcontent.XContentParser.Token;  
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.compositeindex.datacube.DimensionType;
-import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
+import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;  
 import org.opensearch.index.fielddata.FieldData;
 import org.opensearch.index.fielddata.IndexFieldData;
-import org.opensearch.index.fielddata.IndexNumericFieldData;
+import org.opensearch.index.fielddata.IndexNumericFieldData;  
 import org.opensearch.index.fielddata.LeafNumericFieldData;
 import org.opensearch.index.fielddata.NumericDoubleValues;
-import org.opensearch.index.fielddata.ScriptDocValues;
+import org.opensearch.index.fielddata.ScriptDocValues;  
 import org.opensearch.index.fielddata.SortedBinaryDocValues;
 import org.opensearch.index.fielddata.SortedNumericDoubleValues;
-import org.opensearch.index.fielddata.plain.SortedNumericIndexFieldData;
+import org.opensearch.index.fielddata.plain.SortedNumericIndexFieldData;  
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.support.ValuesSourceType;
+import org.opensearch.search.aggregations.support.ValuesSourceType;  
 import org.opensearch.search.lookup.SearchLookup;
 import org.opensearch.tools.jackson.core.JsonParseException;
 
 import java.io.IOException;
 import java.time.ZoneId;
-import java.util.ArrayList;
+import java.util.ArrayList;  
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
+import java.util.List;  
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Supplier;
+import java.util.function.Supplier;  
 
 /** A {@link FieldMapper} for scaled floats. Values are internally multiplied
- * by a scaling factor and rounded to the closest long.
+ * by a scaling factor and rounded to the closest long.  
  */
 public class ScaledFloatFieldMapper extends ParametrizedFieldMapper {
 
     public static final String CONTENT_TYPE = "scaled_float";
 
-    // use the same default as numbers
+    // use the same default as numbers  
     private static final Setting<Boolean> COERCE_SETTING = NumberFieldMapper.COERCE_SETTING;
 
-    private static ScaledFloatFieldMapper toType(FieldMapper in) {
+    private static ScaledFloatFieldMapper toType(FieldMapper in) {  
         return (ScaledFloatFieldMapper) in;
     }
 
     public static class Builder extends ParametrizedFieldMapper.Builder {
 
-        private final Parameter<Boolean> indexed = Parameter.indexParam(m -> toType(m).indexed, () -> pluggableDataFormat == false);
+        private final Parameter<Boolean> indexed = Parameter.indexParam(m -> toType(m).indexed, () -> pluggableDataFormat == false);  
         private final Parameter<Boolean> hasDocValues = Parameter.docValuesParam(m -> toType(m).hasDocValues, true);
         private final Parameter<Boolean> stored = Parameter.storeParam(m -> toType(m).stored, false);
 
@@ -100,466 +100,466 @@ public class ScaledFloatFieldMapper extends ParametrizedFieldMapper {
 
         private final Parameter<Double> scalingFactor = new Parameter<>(
             "scaling_factor",
-            false,
+            false,  
             () -> null,
             (n, c, o) -> XContentMapValues.nodeDoubleValue(o),
-            m -> toType(m).scalingFactor
+            m -> toType(m).scalingFactor  
         ).setValidator(v -> {
             if (v == null) {
-                throw new IllegalArgumentException("Field [scaling_factor] is required");
+                throw new IllegalArgumentException("Field [scaling_factor] is required");  
             }
             if (Double.isFinite(v) == false || v <= 0) {
-                throw new IllegalArgumentException("[scaling_factor] must be a positive number, got [" + v + "]");
+                throw new IllegalArgumentException("[scaling_factor] must be a positive number, got [" + v + "]");  
             }
         });
-        private final Parameter<Double> nullValue = new Parameter<>(
+        private final Parameter<Double> nullValue = new Parameter<>(  
             "null_value",
             false,
-            () -> null,
+            () -> null,  
             (n, c, o) -> o == null ? null : XContentMapValues.nodeDoubleValue(o),
             m -> toType(m).nullValue
-        ).acceptsNull();
+        ).acceptsNull();  
         private final Parameter<Boolean> skiplist = new Parameter<>(
             "skip_list",
-            false,
+            false,  
             () -> false,
             (n, c, o) -> XContentMapValues.nodeBooleanValue(o),
-            m -> toType(m).skiplist
+            m -> toType(m).skiplist  
         );
         private final Parameter<Map<String, String>> meta = Parameter.metaParam();
 
         public Builder(String name, Settings settings) {
             this(name, IGNORE_MALFORMED_SETTING.get(settings), COERCE_SETTING.get(settings));
-            this.pluggableDataFormat = Mapper.isPluggableDataFormatEnabled(settings);
+            this.pluggableDataFormat = Mapper.isPluggableDataFormatEnabled(settings);  
         }
 
-        public Builder(String name, boolean ignoreMalformedByDefault, boolean coerceByDefault) {
+        public Builder(String name, boolean ignoreMalformedByDefault, boolean coerceByDefault) {  
             super(name);
             this.ignoreMalformed = Parameter.explicitBoolParam(
-                "ignore_malformed",
+                "ignore_malformed",  
                 true,
                 m -> toType(m).ignoreMalformed,
-                ignoreMalformedByDefault
+                ignoreMalformedByDefault  
             );
             this.coerce = Parameter.explicitBoolParam("coerce", true, m -> toType(m).coerce, coerceByDefault);
-        }
+        }  
 
         Builder scalingFactor(double scalingFactor) {
-            this.scalingFactor.setValue(scalingFactor);
+            this.scalingFactor.setValue(scalingFactor);  
             return this;
         }
 
         Builder nullValue(double nullValue) {
             this.nullValue.setValue(nullValue);
-            return this;
+            return this;  
         }
 
-        @Override
+        @Override  
         protected List<Parameter<?>> getParameters() {
             return Arrays.asList(indexed, hasDocValues, stored, ignoreMalformed, meta, scalingFactor, coerce, nullValue, skiplist);
-        }
+        }  
 
         @Override
-        public ScaledFloatFieldMapper build(BuilderContext context) {
+        public ScaledFloatFieldMapper build(BuilderContext context) {  
             ScaledFloatFieldType type = new ScaledFloatFieldType(
                 buildFullName(context),
-                indexed.getValue(),
+                indexed.getValue(),  
                 stored.getValue(),
                 hasDocValues.getValue(),
-                skiplist.getValue(),
+                skiplist.getValue(),  
                 meta.getValue(),
                 scalingFactor.getValue(),
-                nullValue.getValue()
+                nullValue.getValue()  
             );
             return new ScaledFloatFieldMapper(name, type, multiFieldsBuilder.build(this, context), copyTo.build(), this);
-        }
+        }  
 
         @Override
-        public Optional<DimensionType> getSupportedDataCubeDimensionType() {
+        public Optional<DimensionType> getSupportedDataCubeDimensionType() {  
             return Optional.of(DimensionType.NUMERIC);
         }
 
         @Override
         public boolean isDataCubeMetricSupported() {
-            return true;
+            return true;  
         }
     }
 
     public static final TypeParser PARSER = new TypeParser((n, c) -> new Builder(n, c.getSettings()));
 
-    public static final class ScaledFloatFieldType extends SimpleMappedFieldType implements NumericPointEncoder, FieldValueConverter {
+    public static final class ScaledFloatFieldType extends SimpleMappedFieldType implements NumericPointEncoder, FieldValueConverter {  
 
         private final double scalingFactor;
-        private final Double nullValue;
+        private final Double nullValue;  
         private final boolean skiplist;
 
-        public ScaledFloatFieldType(
+        public ScaledFloatFieldType(  
             String name,
             boolean indexed,
-            boolean stored,
+            boolean stored,  
             boolean hasDocValues,
             boolean skiplist,
-            Map<String, String> meta,
+            Map<String, String> meta,  
             double scalingFactor,
             Double nullValue
-        ) {
+        ) {  
             super(name, indexed, stored, hasDocValues, TextSearchInfo.SIMPLE_MATCH_ONLY, meta);
             this.skiplist = skiplist;
-            this.scalingFactor = scalingFactor;
+            this.scalingFactor = scalingFactor;  
             this.nullValue = nullValue;
         }
 
         public ScaledFloatFieldType(String name, double scalingFactor) {
             // TODO: enable skiplist by default
-            this(name, true, false, true, false, Collections.emptyMap(), scalingFactor, null);
+            this(name, true, false, true, false, Collections.emptyMap(), scalingFactor, null);  
         }
 
-        @Override
+        @Override  
         public byte[] encodePoint(Number value) {
             assert value instanceof Double;
-            double doubleValue = (Double) value;
+            double doubleValue = (Double) value;  
             byte[] point = new byte[Long.BYTES];
             if (doubleValue == Double.POSITIVE_INFINITY) {
-                LongPoint.encodeDimension(Long.MAX_VALUE, point, 0);
+                LongPoint.encodeDimension(Long.MAX_VALUE, point, 0);  
             } else if (doubleValue == Double.NEGATIVE_INFINITY) {
                 LongPoint.encodeDimension(Long.MIN_VALUE, point, 0);
-            } else {
+            } else {  
                 LongPoint.encodeDimension(Math.round(scale(value)), point, 0);
             }
-            return point;
+            return point;  
         }
 
-        @Override
+        @Override  
         public byte[] encodePoint(Object value, boolean roundUp) {
             long scaledValue = Math.round(scale(value));
-            if (roundUp) {
+            if (roundUp) {  
                 if (scaledValue < Long.MAX_VALUE) {
                     scaledValue = scaledValue + 1;
-                }
+                }  
             } else {
                 if (scaledValue > Long.MIN_VALUE) {
-                    scaledValue = scaledValue - 1;
+                    scaledValue = scaledValue - 1;  
                 }
             }
-            byte[] point = new byte[Long.BYTES];
+            byte[] point = new byte[Long.BYTES];  
             LongPoint.encodeDimension(scaledValue, point, 0);
             return point;
-        }
+        }  
 
         public double getScalingFactor() {
-            return scalingFactor;
+            return scalingFactor;  
         }
 
-        @Override
+        @Override  
         public String typeName() {
             return CONTENT_TYPE;
-        }
+        }  
 
         @Override
-        protected FieldTypeCapabilities.Capability searchCapability() {
+        protected FieldTypeCapabilities.Capability searchCapability() {  
             return FieldTypeCapabilities.Capability.POINT_RANGE;
         }
 
         /** Still searchable from doc values when the index uses a pluggable data format. */
         @Override
-        public boolean isSearchableViaDocValues(IndexSettings indexSettings) {
+        public boolean isSearchableViaDocValues(IndexSettings indexSettings) {  
             return isSearchable() || (indexSettings != null && indexSettings.isPluggableDataFormatEnabled() && hasDocValues());
         }
 
         @Override
         public Query termQuery(Object value, QueryShardContext context) {
-            failIfNotIndexedAndNoDocValues();
+            failIfNotIndexedAndNoDocValues();  
             long scaledValue = Math.round(scale(value));
             Query query = NumberFieldMapper.NumberType.LONG.termQuery(name(), scaledValue, hasDocValues(), isSearchable());
-            if (boost() != 1f) {
+            if (boost() != 1f) {  
                 query = new BoostQuery(query, boost());
             }
-            return query;
+            return query;  
         }
 
-        @Override
+        @Override  
         public Query termsQuery(List<?> values, QueryShardContext context) {
             failIfNotIndexedAndNoDocValues();
-            List<Long> scaledValues = new ArrayList<>(values.size());
+            List<Long> scaledValues = new ArrayList<>(values.size());  
             for (Object value : values) {
                 long scaledValue = Math.round(scale(value));
-                scaledValues.add(scaledValue);
+                scaledValues.add(scaledValue);  
             }
             Query query = NumberFieldMapper.NumberType.LONG.termsQuery(
-                name(),
+                name(),  
                 Collections.unmodifiableList(scaledValues),
                 hasDocValues(),
-                isSearchable()
+                isSearchable()  
             );
             if (boost() != 1f) {
-                query = new BoostQuery(query, boost());
+                query = new BoostQuery(query, boost());  
             }
             return query;
-        }
+        }  
 
         @Override
-        public Query rangeQuery(Object lowerTerm, Object upperTerm, boolean includeLower, boolean includeUpper, QueryShardContext context) {
+        public Query rangeQuery(Object lowerTerm, Object upperTerm, boolean includeLower, boolean includeUpper, QueryShardContext context) {  
             failIfNotIndexedAndNoDocValues();
             Long lo = null;
-            if (lowerTerm != null) {
+            if (lowerTerm != null) {  
                 lo = Math.round(scale(lowerTerm));
             }
-            Long hi = null;
+            Long hi = null;  
             if (upperTerm != null) {
                 hi = Math.round(scale(upperTerm));
-            }
+            }  
             Query query = NumberFieldMapper.NumberType.LONG.rangeQuery(
                 name(),
-                lo,
+                lo,  
                 hi,
                 includeLower,
-                includeUpper,
+                includeUpper,  
                 hasDocValues(),
                 isSearchable(),
-                context
+                context  
             );
             if (boost() != 1f) {
-                query = new BoostQuery(query, boost());
+                query = new BoostQuery(query, boost());  
             }
             return query;
-        }
+        }  
 
         @Override
-        public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName, Supplier<SearchLookup> searchLookup) {
+        public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName, Supplier<SearchLookup> searchLookup) {  
             failIfNoDocValues();
             return (cache, breakerService) -> {
-                final IndexNumericFieldData scaledValues = new SortedNumericIndexFieldData.Builder(
+                final IndexNumericFieldData scaledValues = new SortedNumericIndexFieldData.Builder(  
                     name(),
                     IndexNumericFieldData.NumericType.LONG
-                ).build(cache, breakerService);
+                ).build(cache, breakerService);  
                 return new ScaledFloatIndexFieldData(scaledValues, scalingFactor);
             };
-        }
+        }  
 
         @Override
-        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, String format) {
+        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, String format) {  
             if (format != null) {
                 throw new IllegalArgumentException("Field [" + name() + "] of type [" + typeName() + "] doesn't support formats.");
-            }
+            }  
             return new SourceValueFetcher(name(), context) {
                 @Override
-                protected Double parseSourceValue(Object value) {
+                protected Double parseSourceValue(Object value) {  
                     double doubleValue;
                     if (value.equals("")) {
-                        if (nullValue == null) {
+                        if (nullValue == null) {  
                             return null;
                         }
-                        doubleValue = nullValue;
+                        doubleValue = nullValue;  
                     } else {
                         doubleValue = objectToDouble(value);
-                    }
+                    }  
 
                     double scalingFactor = getScalingFactor();
-                    return Math.round(doubleValue * scalingFactor) / scalingFactor;
+                    return Math.round(doubleValue * scalingFactor) / scalingFactor;  
                 }
             };
-        }
+        }  
 
         @Override
-        public Object valueForDisplay(Object value) {
+        public Object valueForDisplay(Object value) {  
             if (value == null) {
                 return null;
-            }
+            }  
             return ((Number) value).longValue() / scalingFactor;
         }
 
         @Override
         public DocValueFormat docValueFormat(String format, ZoneId timeZone) {
-            if (timeZone != null) {
+            if (timeZone != null) {  
                 throw new IllegalArgumentException(
                     "Field [" + name() + "] of type [" + typeName() + "] does not support custom time zones"
-                );
+                );  
             }
             if (format == null) {
-                return DocValueFormat.RAW;
+                return DocValueFormat.RAW;  
             } else {
                 return new DocValueFormat.Decimal(format);
-            }
+            }  
         }
 
-        /**
+        /**  
          * Parses input value and multiplies it with the scaling factor.
          * Note: Uses direct floating-point multiplication for consistency
-         * between indexing and querying. While this may result in
+         * between indexing and querying. While this may result in  
          * floating-point imprecision (e.g., 79.99 * 100 = 7998.999...),
          * the consistent behavior ensures search queries work correctly.
-         *
+         *  
          * @param input Input value to parse floating point num from
          * @return Scaled value
-         */
+         */  
         private double scale(Object input) {
             return parse(input) * scalingFactor;
-        }
+        }  
 
         @Override
-        public double toDoubleValue(long value) {
+        public double toDoubleValue(long value) {  
             double inverseScalingFactor = 1d / scalingFactor;
             return value * inverseScalingFactor;
-        }
+        }  
     }
 
-    private final Explicit<Boolean> ignoreMalformed;
+    private final Explicit<Boolean> ignoreMalformed;  
     private final Explicit<Boolean> coerce;
     private final boolean indexed;
-    private final boolean hasDocValues;
+    private final boolean hasDocValues;  
     private final boolean stored;
     private final boolean skiplist;
-    private final Double nullValue;
+    private final Double nullValue;  
     private final double scalingFactor;
     private final boolean ignoreMalformedByDefault;
-    private final boolean coerceByDefault;
+    private final boolean coerceByDefault;  
 
     private ScaledFloatFieldMapper(
-        String simpleName,
+        String simpleName,  
         ScaledFloatFieldType mappedFieldType,
         MultiFields multiFields,
-        CopyTo copyTo,
+        CopyTo copyTo,  
         Builder builder
     ) {
-        super(simpleName, mappedFieldType, multiFields, copyTo, builder.isPluggableDataFormat());
+        super(simpleName, mappedFieldType, multiFields, copyTo, builder.isPluggableDataFormat());  
         this.indexed = builder.indexed.getValue();
         this.hasDocValues = builder.hasDocValues.getValue();
-        this.stored = builder.stored.getValue();
+        this.stored = builder.stored.getValue();  
         this.skiplist = builder.skiplist.getValue();
         this.scalingFactor = builder.scalingFactor.getValue();
-        this.nullValue = builder.nullValue.getValue();
+        this.nullValue = builder.nullValue.getValue();  
         this.ignoreMalformed = builder.ignoreMalformed.getValue();
         this.coerce = builder.coerce.getValue();
-        this.ignoreMalformedByDefault = builder.ignoreMalformed.getDefaultValue().value();
+        this.ignoreMalformedByDefault = builder.ignoreMalformed.getDefaultValue().value();  
         this.coerceByDefault = builder.coerce.getDefaultValue().value();
     }
 
     boolean coerce() {
         return coerce.value();
-    }
+    }  
 
     @Override
-    protected Explicit<Boolean> ignoreMalformed() {
+    protected Explicit<Boolean> ignoreMalformed() {  
         return ignoreMalformed;
     }
 
     @Override
     public ScaledFloatFieldType fieldType() {
-        return (ScaledFloatFieldType) super.fieldType();
+        return (ScaledFloatFieldType) super.fieldType();  
     }
 
-    @Override
+    @Override  
     protected String contentType() {
         return CONTENT_TYPE;
-    }
+    }  
 
     @Override
-    public ParametrizedFieldMapper.Builder getMergeBuilder() {
+    public ParametrizedFieldMapper.Builder getMergeBuilder() {  
         return new Builder(simpleName(), ignoreMalformedByDefault, coerceByDefault).init(this);
     }
 
     @Override
     protected ScaledFloatFieldMapper clone() {
-        return (ScaledFloatFieldMapper) super.clone();
+        return (ScaledFloatFieldMapper) super.clone();  
     }
 
-    @Override
+    @Override  
     protected void parseCreateField(ParseContext context) throws IOException {
         Long scaledValue = parseScaledValue(context);
-        if (scaledValue == null) {
+        if (scaledValue == null) {  
             return;
         }
 
         List<Field> fields = NumberFieldMapper.NumberType.LONG.createFields(
             fieldType().name(),
-            scaledValue,
+            scaledValue,  
             indexed,
             hasDocValues,
-            skiplist,
+            skiplist,  
             stored
         );
-        context.doc().addAll(fields);
+        context.doc().addAll(fields);  
 
         if (hasDocValues == false && (indexed || stored)) {
-            createFieldNamesField(context);
+            createFieldNamesField(context);  
         }
     }
 
     @Override
     protected void parseCreateFieldForPluggableFormat(ParseContext context) throws IOException {
-        Long scaledValue = parseScaledValue(context);
+        Long scaledValue = parseScaledValue(context);  
         if (scaledValue == null) {
             return;
-        }
+        }  
         context.documentInput().addField(fieldType(), scaledValue);
     }
 
     private Long parseScaledValue(ParseContext context) throws IOException {
         XContentParser parser = context.parser();
-        Object value;
+        Object value;  
         Number numericValue = null;
         if (context.externalValueSet()) {
-            value = context.externalValue();
+            value = context.externalValue();  
         } else if (parser.currentToken() == Token.VALUE_NULL) {
             value = null;
-        } else if (coerce.value() && parser.currentToken() == Token.VALUE_STRING && parser.textLength() == 0) {
+        } else if (coerce.value() && parser.currentToken() == Token.VALUE_STRING && parser.textLength() == 0) {  
             value = null;
         } else {
-            try {
+            try {  
                 numericValue = parse(parser, coerce.value());
             } catch (IllegalArgumentException | JsonParseException e) {
-                if (ignoreMalformed.value()) {
+                if (ignoreMalformed.value()) {  
                     return null;
                 } else {
-                    throw e;
+                    throw e;  
                 }
             }
-            value = numericValue;
+            value = numericValue;  
         }
 
-        if (value == null) {
+        if (value == null) {  
             value = nullValue;
         }
 
         if (value == null) {
             return null;
-        }
+        }  
 
         if (numericValue == null) {
-            numericValue = parse(value);
+            numericValue = parse(value);  
         }
 
-        double doubleValue = numericValue.doubleValue();
+        double doubleValue = numericValue.doubleValue();  
         if (Double.isFinite(doubleValue) == false) {
             if (ignoreMalformed.value()) {
-                return null;
+                return null;  
             } else {
                 // since we encode to a long, we have no way to carry NaNs and infinities
-                throw new IllegalArgumentException("[scaled_float] only supports finite values, but got [" + doubleValue + "]");
+                throw new IllegalArgumentException("[scaled_float] only supports finite values, but got [" + doubleValue + "]");  
             }
         }
-        return Math.round(doubleValue * scalingFactor);
+        return Math.round(doubleValue * scalingFactor);  
     }
 
-    static Double parse(Object value) {
+    static Double parse(Object value) {  
         return objectToDouble(value);
     }
 
     private static Double parse(XContentParser parser, boolean coerce) throws IOException {
         return parser.doubleValue(coerce);
-    }
+    }  
 
     /**
-     * Converts an Object to a double by checking it against known types first
+     * Converts an Object to a double by checking it against known types first  
      */
     private static double objectToDouble(Object value) {
-        double doubleValue;
+        double doubleValue;  
 
         if (value instanceof Number number) {
-            doubleValue = number.doubleValue();
+            doubleValue = number.doubleValue();  
         } else if (value instanceof BytesRef bytesRef) {
             doubleValue = Double.parseDouble(bytesRef.utf8ToString());
-        } else {
+        } else {  
             doubleValue = Double.parseDouble(value.toString());
         }
 
@@ -568,170 +568,170 @@ public class ScaledFloatFieldMapper extends ParametrizedFieldMapper {
 
     @Override
     protected void canDeriveSourceInternal() {
-        checkStoredAndDocValuesForDerivedSource();
+        checkStoredAndDocValuesForDerivedSource();  
     }
 
-    /**
+    /**  
      * 1. If it has doc values, build source using doc values
      * 2. If doc_values is disabled in field mapping, then build source using stored field
-     * <p>
+     * <p>  
      * Considerations:
      *    1. When using doc values, for multi value field, result would be in sorted order
-     *    2. There might be precision loss as values are stored as long after multiplying it with "scaling_factor" for
+     *    2. There might be precision loss as values are stored as long after multiplying it with "scaling_factor" for  
      *       both doc values and stored field
      */
-    @Override
+    @Override  
     protected DerivedFieldGenerator derivedFieldGenerator() {
         return new DerivedFieldGenerator(
-            mappedFieldType,
+            mappedFieldType,  
             new SortedNumericDocValuesFetcher(mappedFieldType, simpleName()),
             new StoredFieldFetcher(mappedFieldType, simpleName())
-        );
+        );  
     }
 
-    private static class ScaledFloatIndexFieldData extends IndexNumericFieldData {
+    private static class ScaledFloatIndexFieldData extends IndexNumericFieldData {  
 
         private final IndexNumericFieldData scaledFieldData;
-        private final double scalingFactor;
+        private final double scalingFactor;  
 
         ScaledFloatIndexFieldData(IndexNumericFieldData scaledFieldData, double scalingFactor) {
-            this.scaledFieldData = scaledFieldData;
+            this.scaledFieldData = scaledFieldData;  
             this.scalingFactor = scalingFactor;
         }
 
         @Override
         public String getFieldName() {
-            return scaledFieldData.getFieldName();
+            return scaledFieldData.getFieldName();  
         }
 
-        @Override
+        @Override  
         public ValuesSourceType getValuesSourceType() {
             return scaledFieldData.getValuesSourceType();
-        }
+        }  
 
         @Override
-        public LeafNumericFieldData load(LeafReaderContext context) {
+        public LeafNumericFieldData load(LeafReaderContext context) {  
             return new ScaledFloatLeafFieldData(scaledFieldData.load(context), scalingFactor);
         }
 
         @Override
         public LeafNumericFieldData loadDirect(LeafReaderContext context) throws Exception {
-            return new ScaledFloatLeafFieldData(scaledFieldData.loadDirect(context), scalingFactor);
+            return new ScaledFloatLeafFieldData(scaledFieldData.loadDirect(context), scalingFactor);  
         }
 
-        @Override
+        @Override  
         protected boolean sortRequiresCustomComparator() {
             /*
-             * We need to use a custom comparator because the non-custom
+             * We need to use a custom comparator because the non-custom  
              * comparator wouldn't properly decode the long bits into the
              * double. Sorting on the long representation *would* put the
-             * docs in order. We just don't have a way to convert the long
+             * docs in order. We just don't have a way to convert the long  
              * into a double the right way afterwords.
              */
-            return true;
+            return true;  
         }
 
-        @Override
+        @Override  
         public NumericType getNumericType() {
             /*
-             * {@link ScaledFloatLeafFieldData#getDoubleValues()} transforms the raw long values in `scaled` floats.
+             * {@link ScaledFloatLeafFieldData#getDoubleValues()} transforms the raw long values in `scaled` floats.  
              */
             return NumericType.DOUBLE;
-        }
+        }  
 
     }
 
     private static class ScaledFloatLeafFieldData implements LeafNumericFieldData {
 
-        private final LeafNumericFieldData scaledFieldData;
+        private final LeafNumericFieldData scaledFieldData;  
         private final double scalingFactorInverse;
 
-        ScaledFloatLeafFieldData(LeafNumericFieldData scaledFieldData, double scalingFactor) {
+        ScaledFloatLeafFieldData(LeafNumericFieldData scaledFieldData, double scalingFactor) {  
             this.scaledFieldData = scaledFieldData;
             this.scalingFactorInverse = 1d / scalingFactor;
-        }
+        }  
 
         @Override
-        public ScriptDocValues.Doubles getScriptValues() {
+        public ScriptDocValues.Doubles getScriptValues() {  
             return new ScriptDocValues.Doubles(getDoubleValues());
         }
 
         @Override
         public SortedBinaryDocValues getBytesValues() {
-            return FieldData.toString(getDoubleValues());
+            return FieldData.toString(getDoubleValues());  
         }
 
-        @Override
+        @Override  
         public long ramBytesUsed() {
             return scaledFieldData.ramBytesUsed();
-        }
+        }  
 
         @Override
-        public void close() {
+        public void close() {  
             scaledFieldData.close();
         }
 
         @Override
         public SortedNumericDocValues getLongValues() {
-            return FieldData.castToLong(getDoubleValues());
+            return FieldData.castToLong(getDoubleValues());  
         }
 
-        @Override
+        @Override  
         public SortedNumericDoubleValues getDoubleValues() {
             final SortedNumericDocValues values = scaledFieldData.getLongValues();
-            final NumericDocValues singleValues = DocValues.unwrapSingleton(values);
+            final NumericDocValues singleValues = DocValues.unwrapSingleton(values);  
             if (singleValues != null) {
                 return FieldData.singleton(new NumericDoubleValues() {
-                    @Override
+                    @Override  
                     public boolean advanceExact(int doc) throws IOException {
                         return singleValues.advanceExact(doc);
-                    }
+                    }  
 
                     @Override
-                    public double doubleValue() throws IOException {
+                    public double doubleValue() throws IOException {  
                         return singleValues.longValue() * scalingFactorInverse;
                     }
-                });
+                });  
             } else {
                 return new SortedNumericDoubleValues() {
 
                     @Override
                     public boolean advanceExact(int target) throws IOException {
-                        return values.advanceExact(target);
+                        return values.advanceExact(target);  
                     }
 
-                    @Override
+                    @Override  
                     public double nextValue() throws IOException {
                         return values.nextValue() * scalingFactorInverse;
-                    }
+                    }  
 
                     @Override
-                    public int docValueCount() {
+                    public int docValueCount() {  
                         return values.docValueCount();
                     }
-                };
+                };  
             }
         }
 
         @Override
         public DocValueFetcher.Leaf getLeafValueFetcher(DocValueFormat format) {
-            SortedNumericDoubleValues values = getDoubleValues();
+            SortedNumericDoubleValues values = getDoubleValues();  
             return new DocValueFetcher.Leaf() {
                 @Override
-                public boolean advanceExact(int docId) throws IOException {
+                public boolean advanceExact(int docId) throws IOException {  
                     return values.advanceExact(docId);
                 }
 
                 @Override
                 public int docValueCount() throws IOException {
-                    return values.docValueCount();
+                    return values.docValueCount();  
                 }
 
-                @Override
+                @Override  
                 public Object nextValue() throws IOException {
                     return format.format(values.nextValue());
-                }
+                }  
             };
         }
-    }
+    }  
 }

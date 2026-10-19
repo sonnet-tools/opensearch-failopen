@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.index.engine.exec;
 
@@ -13,17 +13,17 @@ import org.opensearch.index.engine.EngineConfig;
 
 /**
  * Factory for creating {@link Indexer} instances from an {@link EngineConfig}.
- * <p>
+ * <p>  
  * Implementations decide which {@link Indexer} to instantiate based on the
  * engine configuration — for example, an engine-backed indexer that wraps a
- * Lucene {@code InternalEngine}, or a {@code DataFormatAwareEngine} for
+ * Lucene {@code InternalEngine}, or a {@code DataFormatAwareEngine} for  
  * pluggable data formats.
  *
- * @opensearch.experimental
+ * @opensearch.experimental  
  */
 @ExperimentalApi
-@FunctionalInterface
+@FunctionalInterface  
 public interface IndexerFactory {
 
-    Indexer createIndexer(EngineConfig config);
+    Indexer createIndexer(EngineConfig config);  
 }

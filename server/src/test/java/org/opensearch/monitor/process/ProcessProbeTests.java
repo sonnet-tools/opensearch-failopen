@@ -1,73 +1,73 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.monitor.process;
 
 import org.apache.lucene.util.Constants;
 import org.opensearch.bootstrap.BootstrapInfo;
-import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.test.OpenSearchTestCase;  
 
 import static org.opensearch.monitor.jvm.JvmInfo.jvmInfo;
-import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.allOf;  
 import static org.hamcrest.Matchers.anyOf;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.greaterThan;  
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.lessThan;
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
+import static org.hamcrest.Matchers.lessThanOrEqualTo;  
 
 public class ProcessProbeTests extends OpenSearchTestCase {
-    private final ProcessProbe probe = ProcessProbe.getInstance();
+    private final ProcessProbe probe = ProcessProbe.getInstance();  
 
     public void testProcessInfo() {
-        long refreshInterval = randomNonNegativeLong();
+        long refreshInterval = randomNonNegativeLong();  
         ProcessInfo info = probe.processInfo(refreshInterval);
         assertNotNull(info);
-        assertEquals(refreshInterval, info.getRefreshInterval());
+        assertEquals(refreshInterval, info.getRefreshInterval());  
         assertEquals(jvmInfo().pid(), info.getId());
         assertEquals(BootstrapInfo.isMemoryLocked(), info.isMlockall());
-    }
+    }  
 
     public void testProcessStats() {
-        ProcessStats stats = probe.processStats();
+        ProcessStats stats = probe.processStats();  
         assertNotNull(stats);
         assertThat(stats.getTimestamp(), greaterThan(0L));
 
         if (Constants.WINDOWS) {
             // Open/Max files descriptors are not supported on Windows platforms
-            assertThat(stats.getOpenFileDescriptors(), equalTo(-1L));
+            assertThat(stats.getOpenFileDescriptors(), equalTo(-1L));  
             assertThat(stats.getMaxFileDescriptors(), equalTo(-1L));
         } else {
-            assertThat(stats.getOpenFileDescriptors(), greaterThan(0L));
+            assertThat(stats.getOpenFileDescriptors(), greaterThan(0L));  
             assertThat(stats.getMaxFileDescriptors(), greaterThan(0L));
         }
 
@@ -82,7 +82,7 @@ public class ProcessProbeTests extends OpenSearchTestCase {
 
         ProcessStats.Mem mem = stats.getMem();
         assertNotNull(mem);
-        // Committed total virtual memory can return -1 if not supported, let's see which platforms fail
+        // Committed total virtual memory can return -1 if not supported, let's see which platforms fail  
         assertThat(mem.getTotalVirtual().getBytes(), greaterThan(0L));
     }
-}
+}  

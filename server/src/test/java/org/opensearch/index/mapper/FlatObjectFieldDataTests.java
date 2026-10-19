@@ -1,104 +1,104 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 package org.opensearch.index.mapper;
 
-import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.index.LeafReaderContext;  
 import org.opensearch.common.compress.CompressedXContent;
 import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.common.bytes.BytesReference;
+import org.opensearch.core.common.bytes.BytesReference;  
 import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.fielddata.AbstractFieldDataTestCase;
+import org.opensearch.index.fielddata.AbstractFieldDataTestCase;  
 import org.opensearch.index.fielddata.IndexFieldData;
 
-import java.util.List;
+import java.util.List;  
 
 public class FlatObjectFieldDataTests extends AbstractFieldDataTestCase {
-    private String FIELD_TYPE = "flat_object";
+    private String FIELD_TYPE = "flat_object";  
 
     @Override
-    protected boolean hasDocValues() {
+    protected boolean hasDocValues() {  
         return true;
     }
 
     public void testDocValue() throws Exception {
         String mapping = XContentFactory.jsonBuilder()
-            .startObject()
+            .startObject()  
             .startObject("test")
             .startObject("properties")
-            .startObject("field")
+            .startObject("field")  
             .field("type", FIELD_TYPE)
             .endObject()
+            .endObject()  
             .endObject()
             .endObject()
-            .endObject()
-            .toString();
+            .toString();  
         final DocumentMapper mapper = mapperService.documentMapperParser().parse("test", new CompressedXContent(mapping));
 
-        XContentBuilder json = XContentFactory.jsonBuilder().startObject().startObject("field").field("foo", "bar").endObject().endObject();
+        XContentBuilder json = XContentFactory.jsonBuilder().startObject().startObject("field").field("foo", "bar").endObject().endObject();  
         ParsedDocument d = mapper.parse(new SourceToParse("test", "1", BytesReference.bytes(json), MediaTypeRegistry.JSON));
         writer.addDocument(d.rootDoc());
-        writer.commit();
+        writer.commit();  
 
         IndexFieldData<?> fieldData = getForField("field");
-        List<LeafReaderContext> readers = refreshReader();
+        List<LeafReaderContext> readers = refreshReader();  
         assertEquals(1, readers.size());
 
-        IndexFieldData<?> valueFieldData = getForField("field._value");
+        IndexFieldData<?> valueFieldData = getForField("field._value");  
         List<LeafReaderContext> valueReaders = refreshReader();
         assertEquals(1, valueReaders.size());
-    }
+    }  
 
     public void testLongFieldNameWithHashArray() throws Exception {
-        String mapping = XContentFactory.jsonBuilder()
+        String mapping = XContentFactory.jsonBuilder()  
             .startObject()
             .startObject("test")
-            .startObject("properties")
+            .startObject("properties")  
             .startObject("field")
             .field("type", FIELD_TYPE)
+            .endObject()  
             .endObject()
             .endObject()
-            .endObject()
-            .endObject()
+            .endObject()  
             .toString();
         final DocumentMapper mapper = mapperService.documentMapperParser().parse("test", new CompressedXContent(mapping));
 
         XContentBuilder json = XContentFactory.jsonBuilder()
             .startObject()
-            .startObject("field")
+            .startObject("field")  
             .startObject("detail")
             .startArray("fooooooooooo")
-            .startObject()
+            .startObject()  
             .field("name", "baz")
             .endObject()
-            .startObject()
+            .startObject()  
             .field("name", "baz")
             .endObject()
-            .endArray()
+            .endArray()  
             .endObject()
             .endObject()
-            .endObject();
+            .endObject();  
 
         ParsedDocument d = mapper.parse(new SourceToParse("test", "1", BytesReference.bytes(json), MediaTypeRegistry.JSON));
-        writer.addDocument(d.rootDoc());
+        writer.addDocument(d.rootDoc());  
         writer.commit();
 
-        IndexFieldData<?> fieldData = getForField("field");
+        IndexFieldData<?> fieldData = getForField("field");  
         List<LeafReaderContext> readers = refreshReader();
         assertEquals(1, readers.size());
 
         IndexFieldData<?> valueFieldData = getForField("field._value");
         List<LeafReaderContext> valueReaders = refreshReader();
-        assertEquals(1, valueReaders.size());
+        assertEquals(1, valueReaders.size());  
     }
 
-    @Override
+    @Override  
     protected String getFieldDataType() {
         return FIELD_TYPE;
-    }
+    }  
 }

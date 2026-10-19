@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.wlm.stats;
 
@@ -16,125 +16,125 @@ import java.util.Map;
 
 /**
  * This class will keep the point in time view of the workload group stats
- */
+ */  
 public class WorkloadGroupState {
     /**
-     * co-ordinator level completions at the workload group level, this is a cumulative counter since the Opensearch start time
+     * co-ordinator level completions at the workload group level, this is a cumulative counter since the Opensearch start time  
      */
     public final CounterMetric totalCompletions = new CounterMetric();
 
     /**
      * rejections at the workload group level, this is a cumulative counter since the OpenSearch start time
-     */
+     */  
     public final CounterMetric totalRejections = new CounterMetric();
 
-    /**
+    /**  
      * this will track the cumulative failures in a workload group
      */
-    public final CounterMetric failures = new CounterMetric();
+    public final CounterMetric failures = new CounterMetric();  
 
     /**
-     * This will track total number of cancellations in the workload group due to all resource type breaches
+     * This will track total number of cancellations in the workload group due to all resource type breaches  
      */
     public final CounterMetric totalCancellations = new CounterMetric();
 
     /**
      * This will track the cumulative requests throttled (rejected by the node-level in-flight throttle) in the workload group since the OpenSearch start time
-     */
+     */  
     public final CounterMetric totalThrottled = new CounterMetric();
 
-    /**
+    /**  
      * This will track the cumulative requests that would have been throttled in MONITOR mode but were admitted anyway, in the
      * workload group since the OpenSearch start time. It gives operators a signal to size {@code node_limit} before switching a
-     * group to an enforcing mode; unlike {@link #totalThrottled}, no request was actually rejected.
+     * group to an enforcing mode; unlike {@link #totalThrottled}, no request was actually rejected.  
      */
     public final CounterMetric totalWouldThrottle = new CounterMetric();
 
     /**
      * This is used to store the resource type state both for CPU and MEMORY
-     */
+     */  
     private final Map<ResourceType, ResourceTypeState> resourceState;
 
-    public WorkloadGroupState() {
+    public WorkloadGroupState() {  
         resourceState = new EnumMap<>(ResourceType.class);
         for (ResourceType resourceType : ResourceType.values()) {
-            if (resourceType.hasStatsEnabled()) {
+            if (resourceType.hasStatsEnabled()) {  
                 resourceState.put(resourceType, new ResourceTypeState(resourceType));
             }
-        }
+        }  
     }
 
-    /**
+    /**  
      *
      * @return co-ordinator completions in the workload group
-     */
+     */  
     public long getTotalCompletions() {
         return totalCompletions.count();
-    }
+    }  
 
     /**
-     *
+     *  
      * @return rejections in the workload group
      */
-    public long getTotalRejections() {
+    public long getTotalRejections() {  
         return totalRejections.count();
     }
 
     /**
      *
-     * @return failures in the workload group
+     * @return failures in the workload group  
      */
     public long getFailures() {
-        return failures.count();
+        return failures.count();  
     }
 
-    public long getTotalCancellations() {
+    public long getTotalCancellations() {  
         return totalCancellations.count();
     }
 
     /**
      *
-     * @return requests throttled in the workload group
+     * @return requests throttled in the workload group  
      */
     public long getTotalThrottled() {
-        return totalThrottled.count();
+        return totalThrottled.count();  
     }
 
-    /**
+    /**  
      *
      * @return requests that would have been throttled in MONITOR mode in the workload group
-     */
+     */  
     public long getTotalWouldThrottle() {
         return totalWouldThrottle.count();
-    }
+    }  
 
     /**
-     * getter for workload group resource state
+     * getter for workload group resource state  
      * @return the workload group resource state
      */
-    public Map<ResourceType, ResourceTypeState> getResourceState() {
+    public Map<ResourceType, ResourceTypeState> getResourceState() {  
         return resourceState;
     }
 
     /**
      * This class holds the resource level stats for the workload group
-     */
+     */  
     public static class ResourceTypeState {
         public final ResourceType resourceType;
-        public final CounterMetric cancellations = new CounterMetric();
+        public final CounterMetric cancellations = new CounterMetric();  
         public final CounterMetric rejections = new CounterMetric();
         private double lastRecordedUsage = 0;
 
         public ResourceTypeState(ResourceType resourceType) {
             this.resourceType = resourceType;
-        }
+        }  
 
         public void setLastRecordedUsage(double recordedUsage) {
-            lastRecordedUsage = recordedUsage;
+            lastRecordedUsage = recordedUsage;  
         }
 
-        public double getLastRecordedUsage() {
+        public double getLastRecordedUsage() {  
             return lastRecordedUsage;
         }
-    }
+    }  
 }

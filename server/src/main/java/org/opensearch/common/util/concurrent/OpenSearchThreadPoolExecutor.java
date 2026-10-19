@@ -1,34 +1,34 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.common.util.concurrent;
 
@@ -37,183 +37,183 @@ import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
 
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.ThreadPoolExecutor;  
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 /**
  * An extension to thread pool executor, allowing (in the future) to add specific additional stats to it.
- *
+ *  
  * @opensearch.internal
  */
-public class OpenSearchThreadPoolExecutor extends ThreadPoolExecutor {
+public class OpenSearchThreadPoolExecutor extends ThreadPoolExecutor {  
 
     private final ThreadContext contextHolder;
-    private volatile ShutdownListener listener;
+    private volatile ShutdownListener listener;  
 
     private final Object monitor = new Object();
-    /**
+    /**  
      * Name used in error reporting.
      */
-    private final String name;
+    private final String name;  
 
     final String getName() {
-        return name;
+        return name;  
     }
 
-    OpenSearchThreadPoolExecutor(
+    OpenSearchThreadPoolExecutor(  
         String name,
         int corePoolSize,
-        int maximumPoolSize,
+        int maximumPoolSize,  
         long keepAliveTime,
         TimeUnit unit,
-        BlockingQueue<Runnable> workQueue,
+        BlockingQueue<Runnable> workQueue,  
         ThreadFactory threadFactory,
         ThreadContext contextHolder
-    ) {
+    ) {  
         this(
             name,
-            corePoolSize,
+            corePoolSize,  
             maximumPoolSize,
             keepAliveTime,
-            unit,
+            unit,  
             workQueue,
             threadFactory,
-            new OpenSearchAbortPolicy(),
+            new OpenSearchAbortPolicy(),  
             contextHolder
         );
-    }
+    }  
 
     @SuppressForbidden(reason = "properly rethrowing errors, see OpenSearchExecutors.rethrowErrors")
-    OpenSearchThreadPoolExecutor(
+    OpenSearchThreadPoolExecutor(  
         String name,
         int corePoolSize,
-        int maximumPoolSize,
+        int maximumPoolSize,  
         long keepAliveTime,
         TimeUnit unit,
-        BlockingQueue<Runnable> workQueue,
+        BlockingQueue<Runnable> workQueue,  
         ThreadFactory threadFactory,
         XRejectedExecutionHandler handler,
-        ThreadContext contextHolder
+        ThreadContext contextHolder  
     ) {
         super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, threadFactory, handler);
-        this.name = name;
+        this.name = name;  
         this.contextHolder = contextHolder;
     }
 
     @Override
     protected synchronized void terminated() {
-        super.terminated();
+        super.terminated();  
         synchronized (monitor) {
             if (listener != null) {
-                try {
+                try {  
                     listener.onTerminated();
                 } finally {
-                    listener = null;
+                    listener = null;  
                 }
             }
-        }
+        }  
     }
 
-    /**
+    /**  
      * Listener on shut down
      *
-     * @opensearch.internal
+     * @opensearch.internal  
      */
     public interface ShutdownListener {
-        void onTerminated();
+        void onTerminated();  
     }
 
-    @Override
+    @Override  
     public void execute(Runnable command) {
         command = wrapRunnable(command);
-        try {
+        try {  
             super.execute(command);
         } catch (OpenSearchRejectedExecutionException ex) {
-            if (command instanceof AbstractRunnable) {
+            if (command instanceof AbstractRunnable) {  
                 // If we are an abstract runnable we can handle the rejection
                 // directly and don't need to rethrow it.
-                try {
+                try {  
                     ((AbstractRunnable) command).onRejection(ex);
                 } finally {
-                    ((AbstractRunnable) command).onAfter();
+                    ((AbstractRunnable) command).onAfter();  
 
                 }
-            } else {
+            } else {  
                 throw ex;
             }
-        }
+        }  
     }
 
-    @Override
+    @Override  
     protected void afterExecute(Runnable r, Throwable t) {
         super.afterExecute(r, t);
-        OpenSearchExecutors.rethrowErrors(unwrap(r));
+        OpenSearchExecutors.rethrowErrors(unwrap(r));  
         assert assertDefaultContext(r);
     }
 
     private boolean assertDefaultContext(Runnable r) {
         assert contextHolder.isDefaultContext() : "the thread context is not the default context and the thread ["
-            + Thread.currentThread().getName()
+            + Thread.currentThread().getName()  
             + "] is being returned to the pool after executing ["
             + r
-            + "]";
+            + "]";  
         return true;
     }
 
     /**
      * Returns a stream of all pending tasks. This is similar to {@link #getQueue()} but will expose the originally submitted
-     * {@link Runnable} instances rather than potentially wrapped ones.
+     * {@link Runnable} instances rather than potentially wrapped ones.  
      */
     public Stream<Runnable> getTasks() {
-        return this.getQueue().stream().map(this::unwrap);
+        return this.getQueue().stream().map(this::unwrap);  
     }
 
-    @Override
+    @Override  
     public final String toString() {
         StringBuilder b = new StringBuilder();
-        b.append(getClass().getSimpleName()).append('[');
+        b.append(getClass().getSimpleName()).append('[');  
         b.append("name = ").append(name).append(", ");
         if (getQueue() instanceof SizeBlockingQueue) {
-            @SuppressWarnings("rawtypes")
+            @SuppressWarnings("rawtypes")  
             SizeBlockingQueue queue = (SizeBlockingQueue) getQueue();
             b.append("queue capacity = ").append(queue.capacity()).append(", ");
-        }
+        }  
         appendThreadPoolExecutorDetails(b);
         /*
-         * ThreadPoolExecutor has some nice information in its toString but we
+         * ThreadPoolExecutor has some nice information in its toString but we  
          * can't get at it easily without just getting the toString.
          */
-        b.append(super.toString()).append(']');
+        b.append(super.toString()).append(']');  
         return b.toString();
     }
 
     /**
      * Append details about this thread pool to the specified {@link StringBuilder}. All details should be appended as key/value pairs in
-     * the form "%s = %s, "
+     * the form "%s = %s, "  
      *
      * @param sb the {@link StringBuilder} to append to
-     */
+     */  
     protected void appendThreadPoolExecutorDetails(final StringBuilder sb) {
 
-    }
+    }  
 
     protected Runnable wrapRunnable(Runnable command) {
-        return contextHolder.preserveContext(command);
+        return contextHolder.preserveContext(command);  
     }
 
-    protected Runnable unwrap(Runnable runnable) {
+    protected Runnable unwrap(Runnable runnable) {  
         return contextHolder.unwrap(runnable);
     }
 
     /**
      * Returns the cumulative wait time of the ThreadPool. If the ThreadPool does not support tracking the cumulative pool wait time
-     * then this should return -1 which will prevent the value from showing up in {@link org.opensearch.threadpool.ThreadPoolStats}.
+     * then this should return -1 which will prevent the value from showing up in {@link org.opensearch.threadpool.ThreadPoolStats}.  
      * ThreadPools that do support this metric should override this method. For example, {@link QueueResizingOpenSearchThreadPoolExecutor}
      * does so using the {@link TimedRunnable} to get the difference between Runnable creation and execution.
-     *
+     *  
      */
     public long getPoolWaitTimeNanos() {
-        return -1;
+        return -1;  
     }
 }

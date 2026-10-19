@@ -1,257 +1,257 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.painless.phase;
 
 import org.opensearch.painless.AnalyzerCaster;
 import org.opensearch.painless.Location;
-import org.opensearch.painless.ScriptClassInfo;
+import org.opensearch.painless.ScriptClassInfo;  
 import org.opensearch.painless.lookup.PainlessCast;
 import org.opensearch.painless.lookup.PainlessLookupUtility;
-import org.opensearch.painless.lookup.def;
+import org.opensearch.painless.lookup.def;  
 import org.opensearch.painless.node.AExpression;
 import org.opensearch.painless.node.AStatement;
-import org.opensearch.painless.node.SBlock;
+import org.opensearch.painless.node.SBlock;  
 import org.opensearch.painless.node.SExpression;
 import org.opensearch.painless.node.SFunction;
-import org.opensearch.painless.node.SReturn;
+import org.opensearch.painless.node.SReturn;  
 import org.opensearch.painless.symbol.Decorations;
 import org.opensearch.painless.symbol.Decorations.AllEscape;
-import org.opensearch.painless.symbol.Decorations.ExpressionPainlessCast;
+import org.opensearch.painless.symbol.Decorations.ExpressionPainlessCast;  
 import org.opensearch.painless.symbol.Decorations.Internal;
 import org.opensearch.painless.symbol.Decorations.LastSource;
-import org.opensearch.painless.symbol.Decorations.LoopEscape;
+import org.opensearch.painless.symbol.Decorations.LoopEscape;  
 import org.opensearch.painless.symbol.Decorations.MethodEscape;
 import org.opensearch.painless.symbol.Decorations.Read;
-import org.opensearch.painless.symbol.Decorations.TargetType;
+import org.opensearch.painless.symbol.Decorations.TargetType;  
 import org.opensearch.painless.symbol.FunctionTable.LocalFunction;
 import org.opensearch.painless.symbol.ScriptScope;
-import org.opensearch.painless.symbol.SemanticScope;
+import org.opensearch.painless.symbol.SemanticScope;  
 import org.opensearch.painless.symbol.SemanticScope.FunctionScope;
 
-import java.util.List;
+import java.util.List;  
 
 import static org.opensearch.painless.symbol.SemanticScope.newFunctionScope;
 
 public class PainlessSemanticAnalysisPhase extends DefaultSemanticAnalysisPhase {
 
-    /** Current function while in {@code visitFunction} */
+    /** Current function while in {@code visitFunction} */  
     protected String functionName = "";
 
-    @Override
+    @Override  
     public void visitFunction(SFunction userFunctionNode, ScriptScope scriptScope) {
         functionName = userFunctionNode.getFunctionName();
 
         if ("execute".equals(functionName)) {
             ScriptClassInfo scriptClassInfo = scriptScope.getScriptClassInfo();
-            LocalFunction localFunction = scriptScope.getFunctionTable()
+            LocalFunction localFunction = scriptScope.getFunctionTable()  
                 .getFunction(functionName, scriptClassInfo.getExecuteArguments().size());
             List<Class<?>> typeParameters = localFunction.getTypeParameters();
-            FunctionScope functionScope = newFunctionScope(scriptScope, localFunction.getReturnType());
+            FunctionScope functionScope = newFunctionScope(scriptScope, localFunction.getReturnType());  
 
             for (int i = 0; i < typeParameters.size(); ++i) {
-                Class<?> typeParameter = localFunction.getTypeParameters().get(i);
+                Class<?> typeParameter = localFunction.getTypeParameters().get(i);  
                 String parameterName = scriptClassInfo.getExecuteArguments().get(i).getName();
                 functionScope.defineVariable(userFunctionNode.getLocation(), typeParameter, parameterName, false);
-            }
+            }  
 
             for (int i = 0; i < scriptClassInfo.getGetMethods().size(); ++i) {
-                Class<?> typeParameter = scriptClassInfo.getGetReturns().get(i);
+                Class<?> typeParameter = scriptClassInfo.getGetReturns().get(i);  
                 org.objectweb.asm.commons.Method method = scriptClassInfo.getGetMethods().get(i);
                 String parameterName = method.getName().substring(3);
-                parameterName = Character.toLowerCase(parameterName.charAt(0)) + parameterName.substring(1);
+                parameterName = Character.toLowerCase(parameterName.charAt(0)) + parameterName.substring(1);  
                 functionScope.defineVariable(userFunctionNode.getLocation(), typeParameter, parameterName, false);
             }
 
             SBlock userBlockNode = userFunctionNode.getBlockNode();
 
-            if (userBlockNode.getStatementNodes().isEmpty()) {
+            if (userBlockNode.getStatementNodes().isEmpty()) {  
                 throw userFunctionNode.createError(
                     new IllegalArgumentException(
-                        "invalid function definition: "
+                        "invalid function definition: "  
                             + "found no statements for function "
                             + "["
-                            + functionName
+                            + functionName  
                             + "] with ["
                             + typeParameters.size()
-                            + "] parameters"
+                            + "] parameters"  
                     )
                 );
-            }
+            }  
 
             functionScope.setCondition(userBlockNode, LastSource.class);
-            visit(userBlockNode, functionScope.newLocalScope());
+            visit(userBlockNode, functionScope.newLocalScope());  
             boolean methodEscape = functionScope.getCondition(userBlockNode, MethodEscape.class);
 
-            if (methodEscape) {
+            if (methodEscape) {  
                 functionScope.setCondition(userFunctionNode, MethodEscape.class);
             }
 
             scriptScope.setUsedVariables(functionScope.getUsedVariables());
         } else {
-            super.visitFunction(userFunctionNode, scriptScope);
+            super.visitFunction(userFunctionNode, scriptScope);  
         }
 
-        functionName = "";
+        functionName = "";  
     }
 
-    /**
+    /**  
      * Visits an expression that is also considered a statement.
      * <p>
-     * If the statement is a return from the execute method, performs return value conversion.
+     * If the statement is a return from the execute method, performs return value conversion.  
      * <p>
      * Checks: control flow, type validation
-     */
+     */  
     @Override
     public void visitExpression(SExpression userExpressionNode, SemanticScope semanticScope) {
-        Class<?> rtnType = semanticScope.getReturnType();
+        Class<?> rtnType = semanticScope.getReturnType();  
         boolean isVoid = rtnType == void.class;
         boolean lastSource = semanticScope.getCondition(userExpressionNode, LastSource.class);
-        AExpression userStatementNode = userExpressionNode.getStatementNode();
+        AExpression userStatementNode = userExpressionNode.getStatementNode();  
 
         if (lastSource && isVoid == false) {
-            semanticScope.setCondition(userStatementNode, Read.class);
+            semanticScope.setCondition(userStatementNode, Read.class);  
         }
 
-        checkedVisit(userStatementNode, semanticScope);
+        checkedVisit(userStatementNode, semanticScope);  
         Class<?> expressionValueType = semanticScope.getDecoration(userStatementNode, Decorations.ValueType.class).getValueType();
         boolean rtn = lastSource && isVoid == false && expressionValueType != void.class;
 
         if (rtn) {
             semanticScope.putDecoration(userStatementNode, new TargetType(rtnType));
-            semanticScope.setCondition(userStatementNode, Internal.class);
+            semanticScope.setCondition(userStatementNode, Internal.class);  
             if ("execute".equals(functionName)) {
                 decorateWithCastForReturn(
-                    userStatementNode,
+                    userStatementNode,  
                     userExpressionNode,
                     semanticScope,
-                    semanticScope.getScriptScope().getScriptClassInfo()
+                    semanticScope.getScriptScope().getScriptClassInfo()  
                 );
             } else {
-                decorateWithCast(userStatementNode, semanticScope);
+                decorateWithCast(userStatementNode, semanticScope);  
             }
 
-            semanticScope.setCondition(userExpressionNode, MethodEscape.class);
+            semanticScope.setCondition(userExpressionNode, MethodEscape.class);  
             semanticScope.setCondition(userExpressionNode, LoopEscape.class);
             semanticScope.setCondition(userExpressionNode, AllEscape.class);
-        }
+        }  
     }
 
-    /**
+    /**  
      * Visits a return statement and casts the value to the return type if possible.
      * <p>
-     * If the statement is a return from the execute method, performs return value conversion.
+     * If the statement is a return from the execute method, performs return value conversion.  
      * <p>
      * Checks: type validation
-     */
+     */  
     @Override
     public void visitReturn(SReturn userReturnNode, SemanticScope semanticScope) {
-        AExpression userValueNode = userReturnNode.getValueNode();
+        AExpression userValueNode = userReturnNode.getValueNode();  
 
         if (userValueNode == null) {
-            if (semanticScope.getReturnType() != void.class) {
+            if (semanticScope.getReturnType() != void.class) {  
                 throw userReturnNode.createError(
                     new ClassCastException(
-                        "cannot cast from "
+                        "cannot cast from "  
                             + "["
                             + semanticScope.getReturnCanonicalTypeName()
-                            + "] to "
+                            + "] to "  
                             + "["
                             + PainlessLookupUtility.typeToCanonicalTypeName(void.class)
-                            + "]"
+                            + "]"  
                     )
                 );
-            }
+            }  
         } else {
             semanticScope.setCondition(userValueNode, Read.class);
-            semanticScope.putDecoration(userValueNode, new TargetType(semanticScope.getReturnType()));
+            semanticScope.putDecoration(userValueNode, new TargetType(semanticScope.getReturnType()));  
             semanticScope.setCondition(userValueNode, Internal.class);
             checkedVisit(userValueNode, semanticScope);
-            if ("execute".equals(functionName)) {
+            if ("execute".equals(functionName)) {  
                 decorateWithCastForReturn(
                     userValueNode,
-                    userReturnNode,
+                    userReturnNode,  
                     semanticScope,
                     semanticScope.getScriptScope().getScriptClassInfo()
-                );
+                );  
             } else {
                 decorateWithCast(userValueNode, semanticScope);
-            }
+            }  
         }
 
-        semanticScope.setCondition(userReturnNode, MethodEscape.class);
+        semanticScope.setCondition(userReturnNode, MethodEscape.class);  
         semanticScope.setCondition(userReturnNode, LoopEscape.class);
         semanticScope.setCondition(userReturnNode, AllEscape.class);
-    }
+    }  
 
     /**
-     * Decorates a user expression node with a PainlessCast.
+     * Decorates a user expression node with a PainlessCast.  
      */
     public void decorateWithCastForReturn(
-        AExpression userExpressionNode,
+        AExpression userExpressionNode,  
         AStatement parent,
         SemanticScope semanticScope,
-        ScriptClassInfo scriptClassInfo
+        ScriptClassInfo scriptClassInfo  
     ) {
         Location location = userExpressionNode.getLocation();
-        Class<?> valueType = semanticScope.getDecoration(userExpressionNode, Decorations.ValueType.class).getValueType();
+        Class<?> valueType = semanticScope.getDecoration(userExpressionNode, Decorations.ValueType.class).getValueType();  
         Class<?> targetType = semanticScope.getDecoration(userExpressionNode, TargetType.class).getTargetType();
 
-        PainlessCast painlessCast;
+        PainlessCast painlessCast;  
         if (valueType == def.class) {
             if (scriptClassInfo.defConverter != null) {
-                semanticScope.putDecoration(parent, new Decorations.Converter(scriptClassInfo.defConverter));
+                semanticScope.putDecoration(parent, new Decorations.Converter(scriptClassInfo.defConverter));  
                 return;
             }
-        } else {
+        } else {  
             for (LocalFunction converter : scriptClassInfo.converters) {
                 try {
-                    painlessCast = AnalyzerCaster.getLegalCast(location, valueType, converter.getTypeParameters().get(0), false, true);
+                    painlessCast = AnalyzerCaster.getLegalCast(location, valueType, converter.getTypeParameters().get(0), false, true);  
                     if (painlessCast != null) {
                         semanticScope.putDecoration(userExpressionNode, new ExpressionPainlessCast(painlessCast));
-                    }
+                    }  
                     semanticScope.putDecoration(parent, new Decorations.Converter(converter));
                     return;
-                } catch (ClassCastException e) {
+                } catch (ClassCastException e) {  
                     // Do nothing, we're checking all converters
                 }
-            }
+            }  
         }
 
-        boolean isExplicitCast = semanticScope.getCondition(userExpressionNode, Decorations.Explicit.class);
+        boolean isExplicitCast = semanticScope.getCondition(userExpressionNode, Decorations.Explicit.class);  
         boolean isInternalCast = semanticScope.getCondition(userExpressionNode, Internal.class);
         painlessCast = AnalyzerCaster.getLegalCast(location, valueType, targetType, isExplicitCast, isInternalCast);
-        if (painlessCast != null) {
+        if (painlessCast != null) {  
             semanticScope.putDecoration(userExpressionNode, new ExpressionPainlessCast(painlessCast));
         }
-    }
+    }  
 }

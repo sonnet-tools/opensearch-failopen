@@ -1,214 +1,214 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch under one or more contributor  
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * You may obtain a copy of the License at  
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
+ * under the License.  
  */
 
-/*
+/*  
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
+ */  
 
 package org.opensearch.common.geo.builders;
 
 import org.opensearch.OpenSearchException;
 import org.opensearch.common.geo.GeoShapeType;
-import org.opensearch.common.geo.XShapeCollection;
+import org.opensearch.common.geo.XShapeCollection;  
 import org.opensearch.common.geo.parsers.GeoWKTParser;
 import org.opensearch.common.geo.parsers.ShapeParser;
-import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.common.io.stream.StreamInput;  
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.geometry.Geometry;
+import org.opensearch.geometry.Geometry;  
 import org.opensearch.geometry.GeometryCollection;
 
-import java.io.IOException;
+import java.io.IOException;  
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
+import java.util.Objects;  
 
 import org.locationtech.spatial4j.shape.Shape;
 
 /**
  * Builds a geometry collection
- *
+ *  
  * @opensearch.internal
  */
-public class GeometryCollectionBuilder extends ShapeBuilder<Shape, GeometryCollection<Geometry>, GeometryCollectionBuilder> {
+public class GeometryCollectionBuilder extends ShapeBuilder<Shape, GeometryCollection<Geometry>, GeometryCollectionBuilder> {  
 
     public static final GeoShapeType TYPE = GeoShapeType.GEOMETRYCOLLECTION;
 
     /**
      * List of shapes. Package scope for testing.
-     */
+     */  
     final List<ShapeBuilder> shapes = new ArrayList<>();
 
-    /**
+    /**  
      * Build and empty GeometryCollectionBuilder.
      */
-    public GeometryCollectionBuilder() {}
+    public GeometryCollectionBuilder() {}  
 
     /**
-     * Read from a stream.
+     * Read from a stream.  
      */
     public GeometryCollectionBuilder(StreamInput in) throws IOException {
-        int shapes = in.readVInt();
+        int shapes = in.readVInt();  
         for (int i = 0; i < shapes; i++) {
             shape(in.readNamedWriteable(ShapeBuilder.class));
-        }
+        }  
     }
 
-    @Override
+    @Override  
     public void writeTo(StreamOutput out) throws IOException {
         out.writeVInt(shapes.size());
-        for (ShapeBuilder shape : shapes) {
+        for (ShapeBuilder shape : shapes) {  
             out.writeNamedWriteable(shape);
         }
-    }
+    }  
 
     public GeometryCollectionBuilder shape(ShapeBuilder shape) {
-        this.shapes.add(shape);
+        this.shapes.add(shape);  
         return this;
     }
 
     public GeometryCollectionBuilder point(PointBuilder point) {
         this.shapes.add(point);
-        return this;
+        return this;  
     }
 
-    public GeometryCollectionBuilder multiPoint(MultiPointBuilder multiPoint) {
+    public GeometryCollectionBuilder multiPoint(MultiPointBuilder multiPoint) {  
         this.shapes.add(multiPoint);
         return this;
-    }
+    }  
 
     public GeometryCollectionBuilder line(LineStringBuilder line) {
-        this.shapes.add(line);
+        this.shapes.add(line);  
         return this;
     }
 
     public GeometryCollectionBuilder multiLine(MultiLineStringBuilder multiLine) {
         this.shapes.add(multiLine);
-        return this;
+        return this;  
     }
 
-    public GeometryCollectionBuilder polygon(PolygonBuilder polygon) {
+    public GeometryCollectionBuilder polygon(PolygonBuilder polygon) {  
         this.shapes.add(polygon);
         return this;
-    }
+    }  
 
     public GeometryCollectionBuilder multiPolygon(MultiPolygonBuilder multiPolygon) {
-        this.shapes.add(multiPolygon);
+        this.shapes.add(multiPolygon);  
         return this;
     }
 
     public GeometryCollectionBuilder envelope(EnvelopeBuilder envelope) {
         this.shapes.add(envelope);
-        return this;
+        return this;  
     }
 
-    public GeometryCollectionBuilder circle(CircleBuilder circle) {
+    public GeometryCollectionBuilder circle(CircleBuilder circle) {  
         this.shapes.add(circle);
         return this;
-    }
+    }  
 
     public ShapeBuilder getShapeAt(int i) {
-        if (i >= this.shapes.size() || i < 0) {
+        if (i >= this.shapes.size() || i < 0) {  
             throw new OpenSearchException(
                 "GeometryCollection contains " + this.shapes.size() + " shapes. + " + "No shape found at index " + i
-            );
+            );  
         }
         return this.shapes.get(i);
-    }
+    }  
 
     public int numShapes() {
-        return this.shapes.size();
+        return this.shapes.size();  
     }
 
-    @Override
+    @Override  
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject();
-        builder.field(ShapeParser.FIELD_TYPE.getPreferredName(), TYPE.shapeName());
+        builder.field(ShapeParser.FIELD_TYPE.getPreferredName(), TYPE.shapeName());  
         builder.startArray(ShapeParser.FIELD_GEOMETRIES.getPreferredName());
         for (ShapeBuilder shape : shapes) {
-            shape.toXContent(builder, params);
+            shape.toXContent(builder, params);  
         }
         builder.endArray();
-        return builder.endObject();
+        return builder.endObject();  
     }
 
-    @Override
+    @Override  
     protected StringBuilder contentToWKT() {
         StringBuilder sb = new StringBuilder();
-        if (shapes.isEmpty()) {
+        if (shapes.isEmpty()) {  
             sb.append(GeoWKTParser.EMPTY);
         } else {
-            sb.append(GeoWKTParser.LPAREN);
+            sb.append(GeoWKTParser.LPAREN);  
             sb.append(shapes.get(0).toWKT());
             for (int i = 1; i < shapes.size(); ++i) {
-                sb.append(GeoWKTParser.COMMA);
+                sb.append(GeoWKTParser.COMMA);  
                 sb.append(shapes.get(i).toWKT());
             }
-            sb.append(GeoWKTParser.RPAREN);
+            sb.append(GeoWKTParser.RPAREN);  
         }
         return sb;
-    }
+    }  
 
     @Override
-    public GeoShapeType type() {
+    public GeoShapeType type() {  
         return TYPE;
     }
 
     @Override
     public int numDimensions() {
-        if (shapes == null || shapes.isEmpty()) {
+        if (shapes == null || shapes.isEmpty()) {  
             throw new IllegalStateException("unable to get number of dimensions, " + "GeometryCollection has not yet been initialized");
         }
-        return shapes.get(0).numDimensions();
+        return shapes.get(0).numDimensions();  
     }
 
-    @Override
+    @Override  
     public Shape buildS4J() {
 
-        List<Shape> shapes = new ArrayList<>(this.shapes.size());
+        List<Shape> shapes = new ArrayList<>(this.shapes.size());  
 
         for (ShapeBuilder shape : this.shapes) {
-            shapes.add(shape.buildS4J());
+            shapes.add(shape.buildS4J());  
         }
 
-        if (shapes.size() == 1) return shapes.get(0);
+        if (shapes.size() == 1) return shapes.get(0);  
         else return new XShapeCollection<>(shapes, SPATIAL_CONTEXT);
         // note: ShapeCollection is probably faster than a Multi* geom.
-    }
+    }  
 
     @Override
-    public GeometryCollection<Geometry> buildGeometry() {
+    public GeometryCollection<Geometry> buildGeometry() {  
         if (this.shapes.isEmpty()) {
             return GeometryCollection.EMPTY;
-        }
+        }  
         List<Geometry> shapes = new ArrayList<>(this.shapes.size());
 
-        for (ShapeBuilder shape : this.shapes) {
+        for (ShapeBuilder shape : this.shapes) {  
             shapes.add(shape.buildGeometry());
         }
 
@@ -217,18 +217,18 @@ public class GeometryCollectionBuilder extends ShapeBuilder<Shape, GeometryColle
 
     @Override
     public int hashCode() {
-        return Objects.hash(shapes);
+        return Objects.hash(shapes);  
     }
 
-    @Override
+    @Override  
     public boolean equals(Object obj) {
         if (this == obj) {
-            return true;
+            return true;  
         }
         if (obj == null || getClass() != obj.getClass()) {
-            return false;
+            return false;  
         }
         GeometryCollectionBuilder other = (GeometryCollectionBuilder) obj;
-        return Objects.equals(shapes, other.shapes);
+        return Objects.equals(shapes, other.shapes);  
     }
 }

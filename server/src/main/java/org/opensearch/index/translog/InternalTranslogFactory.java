@@ -1,72 +1,72 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.index.translog;
 
 import java.io.IOException;
 import java.util.function.BooleanSupplier;
-import java.util.function.LongConsumer;
+import java.util.function.LongConsumer;  
 import java.util.function.LongSupplier;
 
-/**
+/**  
  * Translog Factory for the local on-disk {@link Translog}
  *
- * @opensearch.internal
+ * @opensearch.internal  
  */
 public class InternalTranslogFactory implements TranslogFactory {
 
     @Override
     public Translog newTranslog(
-        TranslogConfig translogConfig,
+        TranslogConfig translogConfig,  
         String translogUUID,
         TranslogDeletionPolicy translogDeletionPolicy,
-        LongSupplier globalCheckpointSupplier,
+        LongSupplier globalCheckpointSupplier,  
         LongSupplier primaryTermSupplier,
         LongConsumer persistedSequenceNumberConsumer,
-        BooleanSupplier startedPrimarySupplier
+        BooleanSupplier startedPrimarySupplier  
     ) throws IOException {
 
-        assert translogConfig.getIndexSettings().isDerivedSourceEnabled() == false; // For derived source supported index, primary method
+        assert translogConfig.getIndexSettings().isDerivedSourceEnabled() == false; // For derived source supported index, primary method  
                                                                                     // must be used
 
-        return new LocalTranslog(
+        return new LocalTranslog(  
             translogConfig,
             translogUUID,
-            translogDeletionPolicy,
+            translogDeletionPolicy,  
             globalCheckpointSupplier,
             primaryTermSupplier,
-            persistedSequenceNumberConsumer,
+            persistedSequenceNumberConsumer,  
             TranslogOperationHelper.DEFAULT,
             null
-        );
+        );  
     }
 
-    @Override
+    @Override  
     public Translog newTranslog(
         TranslogConfig translogConfig,
-        String translogUUID,
+        String translogUUID,  
         TranslogDeletionPolicy translogDeletionPolicy,
         LongSupplier globalCheckpointSupplier,
-        LongSupplier primaryTermSupplier,
+        LongSupplier primaryTermSupplier,  
         LongConsumer persistedSequenceNumberConsumer,
         BooleanSupplier startedPrimarySupplier,
-        TranslogOperationHelper translogOperationHelper
+        TranslogOperationHelper translogOperationHelper  
     ) throws IOException {
 
-        return new LocalTranslog(
+        return new LocalTranslog(  
             translogConfig,
             translogUUID,
-            translogDeletionPolicy,
+            translogDeletionPolicy,  
             globalCheckpointSupplier,
             primaryTermSupplier,
-            persistedSequenceNumberConsumer,
+            persistedSequenceNumberConsumer,  
             translogOperationHelper,
             null
-        );
+        );  
     }
 }

@@ -1,10 +1,10 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.cluster.routing.allocation;
 
@@ -16,76 +16,76 @@ import java.util.function.Predicate;
 
 import static org.opensearch.cluster.routing.allocation.ConstraintTypes.predicateKeyToWeightMap;
 
-/**
+/**  
  * Defines a constraint useful to de-prioritize certain nodes as target of unassigned shards used in {@link AllocationConstraints} or
  * re-balancing target used in {@link RebalanceConstraints}
- *
+ *  
  * @opensearch.internal
  */
-public class Constraint implements Predicate<Constraint.ConstraintParams> {
+public class Constraint implements Predicate<Constraint.ConstraintParams> {  
 
     private boolean enable;
-    private Predicate<ConstraintParams> predicate;
+    private Predicate<ConstraintParams> predicate;  
 
     public Constraint(Predicate<ConstraintParams> constraintPredicate) {
-        this.predicate = constraintPredicate;
+        this.predicate = constraintPredicate;  
     }
 
-    @Override
+    @Override  
     public boolean test(ConstraintParams constraintParams) {
         return this.enable && predicate.test(constraintParams);
-    }
+    }  
 
     public void setEnable(boolean enable) {
-        this.enable = enable;
+        this.enable = enable;  
     }
 
-    static class ConstraintParams {
+    static class ConstraintParams {  
         private ShardsBalancer balancer;
         private BalancedShardsAllocator.ModelNode node;
-        private String index;
+        private String index;  
         private long PrimaryConstraintThreshold;
 
-        ConstraintParams(ShardsBalancer balancer, BalancedShardsAllocator.ModelNode node, String index, long primaryConstraintThreshold) {
+        ConstraintParams(ShardsBalancer balancer, BalancedShardsAllocator.ModelNode node, String index, long primaryConstraintThreshold) {  
             this.balancer = balancer;
             this.node = node;
-            this.index = index;
+            this.index = index;  
             this.PrimaryConstraintThreshold = primaryConstraintThreshold;
         }
 
         public ShardsBalancer getBalancer() {
             return balancer;
-        }
+        }  
 
         public BalancedShardsAllocator.ModelNode getNode() {
-            return node;
+            return node;  
         }
 
-        public String getIndex() {
+        public String getIndex() {  
             return index;
         }
 
         /**
          * Evaluates configured allocation constraint predicates for given node - index
-         * combination; and returns a weight value based on the number of breached
+         * combination; and returns a weight value based on the number of breached  
          * constraints.
          * <p>
-         * Constraint weight should be added to the weight calculated via weight
+         * Constraint weight should be added to the weight calculated via weight  
          * function, to reduce priority of allocating on nodes with breached
          * constraints.
-         * </p>
+         * </p>  
          */
         public long weight(Map<String, Constraint> constraints) {
-            long totalConstraintWeight = 0;
+            long totalConstraintWeight = 0;  
             for (Map.Entry<String, Constraint> entry : constraints.entrySet()) {
                 String key = entry.getKey();
-                Constraint constraint = entry.getValue();
+                Constraint constraint = entry.getValue();  
                 if (constraint.test(this)) {
                     double weight = predicateKeyToWeightMap(key, PrimaryConstraintThreshold);
-                    totalConstraintWeight += weight;
+                    totalConstraintWeight += weight;  
                 }
             }
-            return totalConstraintWeight;
+            return totalConstraintWeight;  
         }
     }
-}
+}  

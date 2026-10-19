@@ -1,70 +1,70 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.action.support.nodes;
 
 import org.opensearch.action.admin.cluster.node.stats.NodesStatsRequest;
 import org.opensearch.action.admin.cluster.stats.ClusterStatsRequest;
-import org.opensearch.action.admin.cluster.stats.TransportClusterStatsAction;
+import org.opensearch.action.admin.cluster.stats.TransportClusterStatsAction;  
 import org.opensearch.action.support.ActionFilters;
 import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.cluster.node.DiscoveryNode;
+import org.opensearch.cluster.node.DiscoveryNode;  
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.common.io.stream.StreamInput;  
 import org.opensearch.indices.IndicesService;
 import org.opensearch.node.NodeService;
-import org.opensearch.test.transport.CapturingTransport;
+import org.opensearch.test.transport.CapturingTransport;  
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.TransportService;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Collection;  
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
+import java.util.List;  
 import java.util.Map;
 
-public class TransportClusterStatsActionTests extends TransportNodesActionTests {
+public class TransportClusterStatsActionTests extends TransportNodesActionTests {  
 
     /**
-     * In the optimized ClusterStats Request, we do not send the DiscoveryNodes List to each node. This behavior is
+     * In the optimized ClusterStats Request, we do not send the DiscoveryNodes List to each node. This behavior is  
      * asserted in this test.
      */
-    public void testClusterStatsActionWithoutRetentionOfDiscoveryNodesList() {
+    public void testClusterStatsActionWithoutRetentionOfDiscoveryNodesList() {  
         ClusterStatsRequest request = new ClusterStatsRequest();
         Map<String, List<MockClusterStatsNodeRequest>> combinedSentRequest = performNodesInfoAction(request);
 
         assertNotNull(combinedSentRequest);
         combinedSentRequest.forEach((node, capturedRequestList) -> {
-            assertNotNull(capturedRequestList);
+            assertNotNull(capturedRequestList);  
             capturedRequestList.forEach(sentRequest -> { assertNull(sentRequest.getDiscoveryNodes()); });
         });
-    }
+    }  
 
     public void testClusterStatsActionWithPreFilledConcreteNodesAndWithoutRetentionOfDiscoveryNodesList() {
-        ClusterStatsRequest request = new ClusterStatsRequest();
+        ClusterStatsRequest request = new ClusterStatsRequest();  
         Collection<DiscoveryNode> discoveryNodes = clusterService.state().getNodes().getNodes().values();
         request.setConcreteNodes(discoveryNodes.toArray(DiscoveryNode[]::new));
-        Map<String, List<MockClusterStatsNodeRequest>> combinedSentRequest = performNodesInfoAction(request);
+        Map<String, List<MockClusterStatsNodeRequest>> combinedSentRequest = performNodesInfoAction(request);  
 
         assertNotNull(combinedSentRequest);
-        combinedSentRequest.forEach((node, capturedRequestList) -> {
+        combinedSentRequest.forEach((node, capturedRequestList) -> {  
             assertNotNull(capturedRequestList);
             capturedRequestList.forEach(sentRequest -> { assertNull(sentRequest.getDiscoveryNodes()); });
-        });
+        });  
     }
 
-    private Map<String, List<MockClusterStatsNodeRequest>> performNodesInfoAction(ClusterStatsRequest request) {
+    private Map<String, List<MockClusterStatsNodeRequest>> performNodesInfoAction(ClusterStatsRequest request) {  
         TransportNodesAction action = getTestTransportClusterStatsAction();
         PlainActionFuture<NodesStatsRequest> listener = new PlainActionFuture<>();
-        action.new AsyncAction(null, request, listener).start();
+        action.new AsyncAction(null, request, listener).start();  
         Map<String, List<CapturingTransport.CapturedRequest>> capturedRequests = transport.getCapturedRequestsByTargetNodeAndClear();
         Map<String, List<MockClusterStatsNodeRequest>> combinedSentRequest = new HashMap<>();
 
@@ -73,56 +73,56 @@ public class TransportClusterStatsActionTests extends TransportNodesActionTests 
 
             capturedRequestList.forEach(preSentRequest -> {
                 BytesStreamOutput out = new BytesStreamOutput();
-                try {
+                try {  
                     TransportClusterStatsAction.ClusterStatsNodeRequest clusterStatsNodeRequestFromCoordinator =
                         (TransportClusterStatsAction.ClusterStatsNodeRequest) preSentRequest.request;
-                    clusterStatsNodeRequestFromCoordinator.writeTo(out);
+                    clusterStatsNodeRequestFromCoordinator.writeTo(out);  
                     StreamInput in = out.bytes().streamInput();
                     MockClusterStatsNodeRequest mockClusterStatsNodeRequest = new MockClusterStatsNodeRequest(in);
-                    sentRequestList.add(mockClusterStatsNodeRequest);
+                    sentRequestList.add(mockClusterStatsNodeRequest);  
                 } catch (IOException e) {
                     throw new RuntimeException(e);
-                }
+                }  
             });
 
-            combinedSentRequest.put(node, sentRequestList);
+            combinedSentRequest.put(node, sentRequestList);  
         });
 
-        return combinedSentRequest;
+        return combinedSentRequest;  
     }
 
-    private TestTransportClusterStatsAction getTestTransportClusterStatsAction() {
+    private TestTransportClusterStatsAction getTestTransportClusterStatsAction() {  
         return new TestTransportClusterStatsAction(
             THREAD_POOL,
-            clusterService,
+            clusterService,  
             transportService,
             nodeService,
-            indicesService,
+            indicesService,  
             new ActionFilters(Collections.emptySet())
         );
-    }
+    }  
 
     private static class TestTransportClusterStatsAction extends TransportClusterStatsAction {
-        public TestTransportClusterStatsAction(
+        public TestTransportClusterStatsAction(  
             ThreadPool threadPool,
             ClusterService clusterService,
-            TransportService transportService,
+            TransportService transportService,  
             NodeService nodeService,
             IndicesService indicesService,
-            ActionFilters actionFilters
+            ActionFilters actionFilters  
         ) {
             super(threadPool, clusterService, transportService, nodeService, indicesService, actionFilters);
-        }
+        }  
     }
 
-    private static class MockClusterStatsNodeRequest extends TransportClusterStatsAction.ClusterStatsNodeRequest {
+    private static class MockClusterStatsNodeRequest extends TransportClusterStatsAction.ClusterStatsNodeRequest {  
 
         public MockClusterStatsNodeRequest(StreamInput in) throws IOException {
-            super(in);
+            super(in);  
         }
 
-        public DiscoveryNode[] getDiscoveryNodes() {
+        public DiscoveryNode[] getDiscoveryNodes() {  
             return this.request.concreteNodes();
         }
-    }
+    }  
 }

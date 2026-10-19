@@ -1,46 +1,46 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.transport.grpc.proto.request.common;
 
 import org.opensearch.core.common.Strings;
 import org.opensearch.protobufs.BulkRequest;
-import org.opensearch.protobufs.SearchRequest;
+import org.opensearch.protobufs.SearchRequest;  
 import org.opensearch.protobufs.SourceConfig;
 import org.opensearch.protobufs.SourceConfigParam;
-import org.opensearch.protobufs.SourceFilter;
+import org.opensearch.protobufs.SourceFilter;  
 import org.opensearch.protobufs.StringArray;
 import org.opensearch.search.fetch.subphase.FetchSourceContext;
-import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.test.OpenSearchTestCase;  
 
 public class FetchSourceContextProtoUtilsTests extends OpenSearchTestCase {
 
     public void testParseFromProtoRequestWithBoolValue() {
         // Create a BulkRequest with source as boolean
-        BulkRequest request = BulkRequest.newBuilder().setXSource(SourceConfigParam.newBuilder().setFetch(true).build()).build();
+        BulkRequest request = BulkRequest.newBuilder().setXSource(SourceConfigParam.newBuilder().setFetch(true).build()).build();  
 
         // Parse the request
-        FetchSourceContext context = FetchSourceContextProtoUtils.parseFromProtoRequest(request);
+        FetchSourceContext context = FetchSourceContextProtoUtils.parseFromProtoRequest(request);  
 
         // Verify the result
-        assertNotNull("Context should not be null", context);
+        assertNotNull("Context should not be null", context);  
         assertTrue("fetchSource should be true", context.fetchSource());
         assertArrayEquals("includes should be empty", Strings.EMPTY_ARRAY, context.includes());
-        assertArrayEquals("excludes should be empty", Strings.EMPTY_ARRAY, context.excludes());
+        assertArrayEquals("excludes should be empty", Strings.EMPTY_ARRAY, context.excludes());  
     }
 
-    public void testParseFromProtoRequestWithStringArray() {
+    public void testParseFromProtoRequestWithStringArray() {  
         // Create a BulkRequest with source as string array
         BulkRequest request = BulkRequest.newBuilder()
-            .setXSource(
+            .setXSource(  
                 SourceConfigParam.newBuilder()
                     .setFields(StringArray.newBuilder().addStringArray("field1").addStringArray("field2").build())
-                    .build()
+                    .build()  
             )
             .build();
 
@@ -49,88 +49,88 @@ public class FetchSourceContextProtoUtilsTests extends OpenSearchTestCase {
 
         // Verify the result
         assertNotNull("Context should not be null", context);
-        assertTrue("fetchSource should be true", context.fetchSource());
+        assertTrue("fetchSource should be true", context.fetchSource());  
         assertArrayEquals("includes should match", new String[] { "field1", "field2" }, context.includes());
         assertArrayEquals("excludes should be empty", Strings.EMPTY_ARRAY, context.excludes());
-    }
+    }  
 
     public void testParseFromProtoRequestWithSourceIncludes() {
-        // Create a BulkRequest with source includes
+        // Create a BulkRequest with source includes  
         BulkRequest request = BulkRequest.newBuilder().addXSourceIncludes("field1").addXSourceIncludes("field2").build();
 
-        // Parse the request
+        // Parse the request  
         FetchSourceContext context = FetchSourceContextProtoUtils.parseFromProtoRequest(request);
 
-        // Verify the result
+        // Verify the result  
         assertNotNull("Context should not be null", context);
         assertTrue("fetchSource should be true", context.fetchSource());
-        assertArrayEquals("includes should match", new String[] { "field1", "field2" }, context.includes());
+        assertArrayEquals("includes should match", new String[] { "field1", "field2" }, context.includes());  
         assertArrayEquals("excludes should be empty", Strings.EMPTY_ARRAY, context.excludes());
     }
 
     public void testParseFromProtoRequestWithSourceExcludes() {
         // Create a BulkRequest with source excludes
-        BulkRequest request = BulkRequest.newBuilder().addXSourceExcludes("field1").addXSourceExcludes("field2").build();
+        BulkRequest request = BulkRequest.newBuilder().addXSourceExcludes("field1").addXSourceExcludes("field2").build();  
 
         // Parse the request
-        FetchSourceContext context = FetchSourceContextProtoUtils.parseFromProtoRequest(request);
+        FetchSourceContext context = FetchSourceContextProtoUtils.parseFromProtoRequest(request);  
 
         // Verify the result
-        assertNotNull("Context should not be null", context);
+        assertNotNull("Context should not be null", context);  
         assertTrue("fetchSource should be true", context.fetchSource());
         assertArrayEquals("includes should be empty", Strings.EMPTY_ARRAY, context.includes());
-        assertArrayEquals("excludes should match", new String[] { "field1", "field2" }, context.excludes());
+        assertArrayEquals("excludes should match", new String[] { "field1", "field2" }, context.excludes());  
     }
 
-    public void testParseFromProtoRequestWithBothIncludesAndExcludes() {
+    public void testParseFromProtoRequestWithBothIncludesAndExcludes() {  
         // Create a BulkRequest with both source includes and excludes
         BulkRequest request = BulkRequest.newBuilder()
-            .addXSourceIncludes("include1")
+            .addXSourceIncludes("include1")  
             .addXSourceIncludes("include2")
             .addXSourceExcludes("exclude1")
-            .addXSourceExcludes("exclude2")
+            .addXSourceExcludes("exclude2")  
             .build();
 
-        // Parse the request
+        // Parse the request  
         FetchSourceContext context = FetchSourceContextProtoUtils.parseFromProtoRequest(request);
 
-        // Verify the result
+        // Verify the result  
         assertNotNull("Context should not be null", context);
         assertTrue("fetchSource should be true", context.fetchSource());
-        assertArrayEquals("includes should match", new String[] { "include1", "include2" }, context.includes());
+        assertArrayEquals("includes should match", new String[] { "include1", "include2" }, context.includes());  
         assertArrayEquals("excludes should match", new String[] { "exclude1", "exclude2" }, context.excludes());
     }
 
     public void testParseFromProtoRequestWithNoSourceParams() {
         // Create a BulkRequest with no source parameters
-        BulkRequest request = BulkRequest.newBuilder().build();
+        BulkRequest request = BulkRequest.newBuilder().build();  
 
         // Parse the request
-        FetchSourceContext context = FetchSourceContextProtoUtils.parseFromProtoRequest(request);
+        FetchSourceContext context = FetchSourceContextProtoUtils.parseFromProtoRequest(request);  
 
         // Verify the result
-        // When no source parameters are provided, should return null to match REST API behavior
+        // When no source parameters are provided, should return null to match REST API behavior  
         // This prevents the "get" field from being returned in update/upsert responses
         assertNull("Context should be null when no source parameters provided", context);
-    }
+    }  
 
     public void testFromProtoWithFetch() {
-        // Create a SourceConfig with fetch=true
+        // Create a SourceConfig with fetch=true  
         SourceConfig sourceConfig = SourceConfig.newBuilder().setFetch(true).build();
 
-        // Convert to FetchSourceContext
+        // Convert to FetchSourceContext  
         FetchSourceContext context = FetchSourceContextProtoUtils.fromProto(sourceConfig);
 
-        // Verify the result
+        // Verify the result  
         assertNotNull("Context should not be null", context);
         assertTrue("fetchSource should be true", context.fetchSource());
-        assertArrayEquals("includes should be empty", Strings.EMPTY_ARRAY, context.includes());
+        assertArrayEquals("includes should be empty", Strings.EMPTY_ARRAY, context.includes());  
         assertArrayEquals("excludes should be empty", Strings.EMPTY_ARRAY, context.excludes());
     }
 
     public void testFromProtoWithIncludes() {
         // Create a SourceConfig with includes
-        SourceConfig sourceConfig = SourceConfig.newBuilder()
+        SourceConfig sourceConfig = SourceConfig.newBuilder()  
             .setFilter(SourceFilter.newBuilder().addIncludes("field1").addIncludes("field2").build())
             .build();
 
@@ -139,64 +139,64 @@ public class FetchSourceContextProtoUtilsTests extends OpenSearchTestCase {
 
         // Verify the result
         assertNotNull("Context should not be null", context);
-        assertTrue("fetchSource should be true", context.fetchSource());
+        assertTrue("fetchSource should be true", context.fetchSource());  
         assertArrayEquals("includes should match", new String[] { "field1", "field2" }, context.includes());
         assertArrayEquals("excludes should be empty", Strings.EMPTY_ARRAY, context.excludes());
-    }
+    }  
 
     public void testFromProtoWithFilterIncludes() {
-        // Create a SourceConfig with filter includes
+        // Create a SourceConfig with filter includes  
         SourceConfig sourceConfig = SourceConfig.newBuilder()
             .setFilter(SourceFilter.newBuilder().addIncludes("field1").addIncludes("field2").build())
-            .build();
+            .build();  
 
         // Convert to FetchSourceContext
-        FetchSourceContext context = FetchSourceContextProtoUtils.fromProto(sourceConfig);
+        FetchSourceContext context = FetchSourceContextProtoUtils.fromProto(sourceConfig);  
 
         // Verify the result
-        assertNotNull("Context should not be null", context);
+        assertNotNull("Context should not be null", context);  
         assertTrue("fetchSource should be true", context.fetchSource());
         assertArrayEquals("includes should match", new String[] { "field1", "field2" }, context.includes());
-        assertArrayEquals("excludes should be empty", Strings.EMPTY_ARRAY, context.excludes());
+        assertArrayEquals("excludes should be empty", Strings.EMPTY_ARRAY, context.excludes());  
     }
 
-    public void testFromProtoWithFilterExcludes() {
+    public void testFromProtoWithFilterExcludes() {  
         // Create a SourceConfig with filter excludes
         SourceConfig sourceConfig = SourceConfig.newBuilder()
-            .setFilter(SourceFilter.newBuilder().addExcludes("field1").addExcludes("field2").build())
+            .setFilter(SourceFilter.newBuilder().addExcludes("field1").addExcludes("field2").build())  
             .build();
 
-        // Convert to FetchSourceContext
+        // Convert to FetchSourceContext  
         FetchSourceContext context = FetchSourceContextProtoUtils.fromProto(sourceConfig);
 
-        // Verify the result
+        // Verify the result  
         assertNotNull("Context should not be null", context);
         assertTrue("fetchSource should be true", context.fetchSource());
-        assertArrayEquals("includes should be empty", Strings.EMPTY_ARRAY, context.includes());
+        assertArrayEquals("includes should be empty", Strings.EMPTY_ARRAY, context.includes());  
         assertArrayEquals("excludes should match", new String[] { "field1", "field2" }, context.excludes());
     }
 
     public void testParseFromProtoRequestWithSearchRequestBoolValue() {
         // Create a SearchRequest with source as boolean
-        SearchRequest request = SearchRequest.newBuilder().setXSource(SourceConfigParam.newBuilder().setFetch(true).build()).build();
+        SearchRequest request = SearchRequest.newBuilder().setXSource(SourceConfigParam.newBuilder().setFetch(true).build()).build();  
 
         // Parse the request
-        FetchSourceContext context = FetchSourceContextProtoUtils.parseFromProtoRequest(request);
+        FetchSourceContext context = FetchSourceContextProtoUtils.parseFromProtoRequest(request);  
 
         // Verify the result
-        assertNotNull("Context should not be null", context);
+        assertNotNull("Context should not be null", context);  
         assertTrue("fetchSource should be true", context.fetchSource());
         assertArrayEquals("includes should be empty", Strings.EMPTY_ARRAY, context.includes());
-        assertArrayEquals("excludes should be empty", Strings.EMPTY_ARRAY, context.excludes());
+        assertArrayEquals("excludes should be empty", Strings.EMPTY_ARRAY, context.excludes());  
     }
 
-    public void testParseFromProtoRequestWithSearchRequestStringArray() {
+    public void testParseFromProtoRequestWithSearchRequestStringArray() {  
         // Create a SearchRequest with source as string array
         SearchRequest request = SearchRequest.newBuilder()
-            .setXSource(
+            .setXSource(  
                 SourceConfigParam.newBuilder()
                     .setFields(StringArray.newBuilder().addStringArray("field1").addStringArray("field2").build())
-                    .build()
+                    .build()  
             )
             .build();
 
@@ -205,70 +205,70 @@ public class FetchSourceContextProtoUtilsTests extends OpenSearchTestCase {
 
         // Verify the result
         assertNotNull("Context should not be null", context);
-        assertTrue("fetchSource should be true", context.fetchSource());
+        assertTrue("fetchSource should be true", context.fetchSource());  
         assertArrayEquals("includes should match", new String[] { "field1", "field2" }, context.includes());
         assertArrayEquals("excludes should be empty", Strings.EMPTY_ARRAY, context.excludes());
-    }
+    }  
 
     public void testParseFromProtoRequestWithSearchRequestSourceIncludes() {
-        // Create a SearchRequest with source includes
+        // Create a SearchRequest with source includes  
         SearchRequest request = SearchRequest.newBuilder().addXSourceIncludes("field1").addXSourceIncludes("field2").build();
 
-        // Parse the request
+        // Parse the request  
         FetchSourceContext context = FetchSourceContextProtoUtils.parseFromProtoRequest(request);
 
-        // Verify the result
+        // Verify the result  
         assertNotNull("Context should not be null", context);
         assertTrue("fetchSource should be true", context.fetchSource());
-        assertArrayEquals("includes should match", new String[] { "field1", "field2" }, context.includes());
+        assertArrayEquals("includes should match", new String[] { "field1", "field2" }, context.includes());  
         assertArrayEquals("excludes should be empty", Strings.EMPTY_ARRAY, context.excludes());
     }
 
     public void testParseFromProtoRequestWithSearchRequestSourceExcludes() {
         // Create a SearchRequest with source excludes
-        SearchRequest request = SearchRequest.newBuilder().addXSourceExcludes("field1").addXSourceExcludes("field2").build();
+        SearchRequest request = SearchRequest.newBuilder().addXSourceExcludes("field1").addXSourceExcludes("field2").build();  
 
         // Parse the request
-        FetchSourceContext context = FetchSourceContextProtoUtils.parseFromProtoRequest(request);
+        FetchSourceContext context = FetchSourceContextProtoUtils.parseFromProtoRequest(request);  
 
         // Verify the result
-        assertNotNull("Context should not be null", context);
+        assertNotNull("Context should not be null", context);  
         assertTrue("fetchSource should be true", context.fetchSource());
         assertArrayEquals("includes should be empty", Strings.EMPTY_ARRAY, context.includes());
-        assertArrayEquals("excludes should match", new String[] { "field1", "field2" }, context.excludes());
+        assertArrayEquals("excludes should match", new String[] { "field1", "field2" }, context.excludes());  
     }
 
-    public void testParseFromProtoRequestWithSearchRequestBothIncludesAndExcludes() {
+    public void testParseFromProtoRequestWithSearchRequestBothIncludesAndExcludes() {  
         // Create a SearchRequest with both source includes and excludes
         SearchRequest request = SearchRequest.newBuilder()
-            .addXSourceIncludes("include1")
+            .addXSourceIncludes("include1")  
             .addXSourceIncludes("include2")
             .addXSourceExcludes("exclude1")
-            .addXSourceExcludes("exclude2")
+            .addXSourceExcludes("exclude2")  
             .build();
 
-        // Parse the request
+        // Parse the request  
         FetchSourceContext context = FetchSourceContextProtoUtils.parseFromProtoRequest(request);
 
-        // Verify the result
+        // Verify the result  
         assertNotNull("Context should not be null", context);
         assertTrue("fetchSource should be true", context.fetchSource());
-        assertArrayEquals("includes should match", new String[] { "include1", "include2" }, context.includes());
+        assertArrayEquals("includes should match", new String[] { "include1", "include2" }, context.includes());  
         assertArrayEquals("excludes should match", new String[] { "exclude1", "exclude2" }, context.excludes());
     }
 
     public void testParseFromProtoRequestWithSearchRequestNoSourceParams() {
         // Create a SearchRequest with no source parameters
-        SearchRequest request = SearchRequest.newBuilder().build();
+        SearchRequest request = SearchRequest.newBuilder().build();  
 
         // Parse the request
-        FetchSourceContext context = FetchSourceContextProtoUtils.parseFromProtoRequest(request);
+        FetchSourceContext context = FetchSourceContextProtoUtils.parseFromProtoRequest(request);  
 
         // Verify the result
-        assertNull("Context should be null", context);
+        assertNull("Context should be null", context);  
     }
 
-    public void testFromProtoWithSourceConfigFetch() {
+    public void testFromProtoWithSourceConfigFetch() {  
         // Create a SourceConfig with fetch=false
         SourceConfig sourceConfig = SourceConfig.newBuilder().setFetch(false).build();
 
@@ -277,46 +277,46 @@ public class FetchSourceContextProtoUtilsTests extends OpenSearchTestCase {
 
         // Verify the result
         assertNotNull("Context should not be null", context);
-        assertFalse("fetchSource should be false", context.fetchSource());
+        assertFalse("fetchSource should be false", context.fetchSource());  
         assertArrayEquals("includes should be empty", Strings.EMPTY_ARRAY, context.includes());
         assertArrayEquals("excludes should be empty", Strings.EMPTY_ARRAY, context.excludes());
-    }
+    }  
 
     public void testFromProtoWithSourceConfigIncludes() {
-        // Create a SourceConfig with includes
+        // Create a SourceConfig with includes  
         SourceConfig sourceConfig = SourceConfig.newBuilder()
             .setFilter(SourceFilter.newBuilder().addIncludes("field1").addIncludes("field2").build())
-            .build();
+            .build();  
 
         // Convert to FetchSourceContext
-        FetchSourceContext context = FetchSourceContextProtoUtils.fromProto(sourceConfig);
+        FetchSourceContext context = FetchSourceContextProtoUtils.fromProto(sourceConfig);  
 
         // Verify the result
-        assertNotNull("Context should not be null", context);
+        assertNotNull("Context should not be null", context);  
         assertTrue("fetchSource should be true", context.fetchSource());
         assertArrayEquals("includes should match", new String[] { "field1", "field2" }, context.includes());
-        assertArrayEquals("excludes should be empty", Strings.EMPTY_ARRAY, context.excludes());
+        assertArrayEquals("excludes should be empty", Strings.EMPTY_ARRAY, context.excludes());  
     }
 
-    public void testFromProtoWithSourceConfigFilterIncludesOnly() {
+    public void testFromProtoWithSourceConfigFilterIncludesOnly() {  
         // Create a SourceConfig with filter includes only
         SourceConfig sourceConfig = SourceConfig.newBuilder()
-            .setFilter(SourceFilter.newBuilder().addIncludes("field1").addIncludes("field2").build())
+            .setFilter(SourceFilter.newBuilder().addIncludes("field1").addIncludes("field2").build())  
             .build();
 
-        // Convert to FetchSourceContext
+        // Convert to FetchSourceContext  
         FetchSourceContext context = FetchSourceContextProtoUtils.fromProto(sourceConfig);
 
-        // Verify the result
+        // Verify the result  
         assertNotNull("Context should not be null", context);
         assertTrue("fetchSource should be true", context.fetchSource());
-        assertArrayEquals("includes should match", new String[] { "field1", "field2" }, context.includes());
+        assertArrayEquals("includes should match", new String[] { "field1", "field2" }, context.includes());  
         assertArrayEquals("excludes should be empty", Strings.EMPTY_ARRAY, context.excludes());
     }
 
     public void testFromProtoWithSourceConfigFilterExcludesOnly() {
         // Create a SourceConfig with filter excludes only
-        SourceConfig sourceConfig = SourceConfig.newBuilder()
+        SourceConfig sourceConfig = SourceConfig.newBuilder()  
             .setFilter(SourceFilter.newBuilder().addExcludes("field1").addExcludes("field2").build())
             .build();
 
@@ -325,53 +325,53 @@ public class FetchSourceContextProtoUtilsTests extends OpenSearchTestCase {
 
         // Verify the result
         assertNotNull("Context should not be null", context);
-        assertTrue("fetchSource should be true", context.fetchSource());
+        assertTrue("fetchSource should be true", context.fetchSource());  
         assertArrayEquals("includes should be empty", Strings.EMPTY_ARRAY, context.includes());
         assertArrayEquals("excludes should match", new String[] { "field1", "field2" }, context.excludes());
-    }
+    }  
 
     public void testFromProtoWithSourceConfigFilterBothIncludesAndExcludes() {
-        // Create a SourceConfig with filter includes and excludes
+        // Create a SourceConfig with filter includes and excludes  
         SourceConfig sourceConfig = SourceConfig.newBuilder()
             .setFilter(
-                SourceFilter.newBuilder()
+                SourceFilter.newBuilder()  
                     .addIncludes("include1")
                     .addIncludes("include2")
-                    .addExcludes("exclude1")
+                    .addExcludes("exclude1")  
                     .addExcludes("exclude2")
                     .build()
-            )
+            )  
             .build();
 
-        // Convert to FetchSourceContext
+        // Convert to FetchSourceContext  
         FetchSourceContext context = FetchSourceContextProtoUtils.fromProto(sourceConfig);
 
-        // Verify the result
+        // Verify the result  
         assertNotNull("Context should not be null", context);
         assertTrue("fetchSource should be true", context.fetchSource());
-        assertArrayEquals("includes should match", new String[] { "include1", "include2" }, context.includes());
+        assertArrayEquals("includes should match", new String[] { "include1", "include2" }, context.includes());  
         assertArrayEquals("excludes should match", new String[] { "exclude1", "exclude2" }, context.excludes());
     }
 
     public void testFromProtoWithSourceConfigFilterAmbiguousIncludesAndExcludes() {
         // Create a SourceConfig with filter includes and excludes
-        final SourceConfig sourceConfig = SourceConfig.newBuilder()
+        final SourceConfig sourceConfig = SourceConfig.newBuilder()  
             .setFilter(
                 SourceFilter.newBuilder()
-                    .addIncludes("theSameEntry")
+                    .addIncludes("theSameEntry")  
                     .addIncludes("include2")
                     .addExcludes("theSameEntry")
-                    .addExcludes("exclude2")
+                    .addExcludes("exclude2")  
                     .build()
             )
-            .build();
+            .build();  
 
         // Exception when attempting to convert to FetchSourceContext
-        final IllegalArgumentException e = expectThrows(
+        final IllegalArgumentException e = expectThrows(  
             IllegalArgumentException.class,
             () -> FetchSourceContextProtoUtils.fromProto(sourceConfig)
-        );
+        );  
 
         assertEquals("The same entry [theSameEntry] cannot be both included and excluded in _source.", e.getMessage());
-    }
+    }  
 }

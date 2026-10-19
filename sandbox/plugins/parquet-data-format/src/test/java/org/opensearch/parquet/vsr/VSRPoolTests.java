@@ -1,85 +1,85 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.parquet.vsr;
 
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
-import org.apache.arrow.vector.types.pojo.FieldType;
+import org.apache.arrow.vector.types.pojo.FieldType;  
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.opensearch.arrow.allocator.ArrowNativeAllocator;
-import org.opensearch.arrow.spi.NativeAllocatorPoolConfig;
+import org.opensearch.arrow.spi.NativeAllocatorPoolConfig;  
 import org.opensearch.common.settings.Settings;
 import org.opensearch.parquet.memory.ArrowBufferPool;
-import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.test.OpenSearchTestCase;  
 
 import java.io.IOException;
-import java.util.List;
+import java.util.List;  
 
 public class VSRPoolTests extends OpenSearchTestCase {
 
     private ArrowNativeAllocator nativeAllocator;
     private ArrowBufferPool bufferPool;
-    private Schema schema;
+    private Schema schema;  
 
     @Override
-    public void setUp() throws Exception {
+    public void setUp() throws Exception {  
         super.setUp();
         nativeAllocator = new ArrowNativeAllocator();
-        nativeAllocator.getOrCreatePool(NativeAllocatorPoolConfig.POOL_INGEST, 0L, Long.MAX_VALUE, null);
+        nativeAllocator.getOrCreatePool(NativeAllocatorPoolConfig.POOL_INGEST, 0L, Long.MAX_VALUE, null);  
         bufferPool = new ArrowBufferPool(Settings.EMPTY, nativeAllocator);
         schema = new Schema(List.of(new Field("val", FieldType.nullable(new ArrowType.Int(32, true)), null)));
-    }
+    }  
 
     @Override
-    public void tearDown() throws Exception {
+    public void tearDown() throws Exception {  
         bufferPool.close();
         if (nativeAllocator != null) {
-            nativeAllocator.close();
+            nativeAllocator.close();  
             nativeAllocator = null;
         }
-        super.tearDown();
+        super.tearDown();  
     }
 
-    public void testInitialStateHasActiveVSR() {
+    public void testInitialStateHasActiveVSR() {  
         VSRPool pool = new VSRPool("pool-1", schema, bufferPool, 50000);
         assertNotNull(pool.getActiveVSR());
-        assertEquals(VSRState.ACTIVE, pool.getActiveVSR().getState());
+        assertEquals(VSRState.ACTIVE, pool.getActiveVSR().getState());  
         assertNull(pool.getFrozenVSR());
         pool.close();
-    }
+    }  
 
     public void testNoRotationBelowThreshold() throws IOException {
-        VSRPool pool = new VSRPool("pool-2", schema, bufferPool, 50000);
+        VSRPool pool = new VSRPool("pool-2", schema, bufferPool, 50000);  
         assertFalse(pool.maybeRotateActiveVSR());
         pool.close();
-    }
+    }  
 
     public void testRotationAtThreshold() throws IOException {
-        VSRPool pool = new VSRPool("pool-3", schema, bufferPool, 50000);
+        VSRPool pool = new VSRPool("pool-3", schema, bufferPool, 50000);  
         ManagedVSR original = pool.getActiveVSR();
         original.setRowCount(50000);
-        assertTrue(pool.maybeRotateActiveVSR());
+        assertTrue(pool.maybeRotateActiveVSR());  
 
         assertNotNull(pool.getFrozenVSR());
-        assertEquals(VSRState.FROZEN, pool.getFrozenVSR().getState());
+        assertEquals(VSRState.FROZEN, pool.getFrozenVSR().getState());  
         assertNotNull(pool.getActiveVSR());
         assertNotSame(original, pool.getActiveVSR());
-        assertEquals(VSRState.ACTIVE, pool.getActiveVSR().getState());
+        assertEquals(VSRState.ACTIVE, pool.getActiveVSR().getState());  
 
         // cleanup frozen, then freeze active, then close
-        pool.completeVSR(pool.getFrozenVSR());
+        pool.completeVSR(pool.getFrozenVSR());  
         pool.unsetFrozenVSR();
         pool.close();
-    }
+    }  
 
     public void testRotationFailsWhenFrozenSlotOccupied() throws IOException {
-        VSRPool pool = new VSRPool("pool-4", schema, bufferPool, 50000);
+        VSRPool pool = new VSRPool("pool-4", schema, bufferPool, 50000);  
         pool.getActiveVSR().setRowCount(50000);
         pool.maybeRotateActiveVSR();
 
@@ -88,31 +88,31 @@ public class VSRPoolTests extends OpenSearchTestCase {
 
         pool.completeVSR(pool.getFrozenVSR());
         pool.unsetFrozenVSR();
-        pool.close();
+        pool.close();  
     }
 
-    public void testCompleteAndUnsetFrozenVSR() throws IOException {
+    public void testCompleteAndUnsetFrozenVSR() throws IOException {  
         VSRPool pool = new VSRPool("pool-5", schema, bufferPool, 50000);
         pool.getActiveVSR().setRowCount(50000);
-        pool.maybeRotateActiveVSR();
+        pool.maybeRotateActiveVSR();  
 
         ManagedVSR frozen = pool.getFrozenVSR();
-        assertNotNull(frozen);
+        assertNotNull(frozen);  
         pool.completeVSR(frozen);
         assertEquals(VSRState.CLOSED, frozen.getState());
-        pool.unsetFrozenVSR();
+        pool.unsetFrozenVSR();  
         assertNull(pool.getFrozenVSR());
         pool.close();
-    }
+    }  
 
     public void testUnsetFrozenVSRThrowsWhenNoneSet() {
-        VSRPool pool = new VSRPool("pool-6", schema, bufferPool, 50000);
+        VSRPool pool = new VSRPool("pool-6", schema, bufferPool, 50000);  
         expectThrows(IllegalStateException.class, pool::unsetFrozenVSR);
         pool.close();
-    }
+    }  
 
     public void testUnsetFrozenVSRThrowsWhenNotClosed() throws IOException {
-        VSRPool pool = new VSRPool("pool-7", schema, bufferPool, 50000);
+        VSRPool pool = new VSRPool("pool-7", schema, bufferPool, 50000);  
         pool.getActiveVSR().setRowCount(50000);
         pool.maybeRotateActiveVSR();
 
@@ -121,6 +121,6 @@ public class VSRPoolTests extends OpenSearchTestCase {
 
         pool.completeVSR(pool.getFrozenVSR());
         pool.unsetFrozenVSR();
-        pool.close();
+        pool.close();  
     }
 }

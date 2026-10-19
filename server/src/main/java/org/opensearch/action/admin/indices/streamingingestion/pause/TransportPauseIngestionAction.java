@@ -1,46 +1,46 @@
-/*
+/*  
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
+ * The OpenSearch Contributors require contributions made to  
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
+ */  
 
 package org.opensearch.action.admin.indices.streamingingestion.pause;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.opensearch.action.admin.indices.streamingingestion.IngestionStateShardFailure;
+import org.opensearch.action.admin.indices.streamingingestion.IngestionStateShardFailure;  
 import org.opensearch.action.admin.indices.streamingingestion.state.UpdateIngestionStateRequest;
 import org.opensearch.action.admin.indices.streamingingestion.state.UpdateIngestionStateResponse;
-import org.opensearch.action.support.ActionFilters;
+import org.opensearch.action.support.ActionFilters;  
 import org.opensearch.action.support.DestructiveOperations;
 import org.opensearch.action.support.TransportIndicesResolvingAction;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;  
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
+import org.opensearch.cluster.block.ClusterBlockLevel;  
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.metadata.MetadataStreamingIngestionStateService;
-import org.opensearch.cluster.metadata.ResolvedIndices;
+import org.opensearch.cluster.metadata.ResolvedIndices;  
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.inject.Inject;
-import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.action.ActionListener;  
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.tasks.Task;
-import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.threadpool.ThreadPool;  
 import org.opensearch.transport.TransportService;
 
-import java.io.IOException;
+import java.io.IOException;  
 
 /**
- * Pause ingestion transport action.
+ * Pause ingestion transport action.  
  *
  * @opensearch.api
- */
+ */  
 public class TransportPauseIngestionAction extends TransportClusterManagerNodeAction<PauseIngestionRequest, PauseIngestionResponse>
     implements
-        TransportIndicesResolvingAction<PauseIngestionRequest> {
+        TransportIndicesResolvingAction<PauseIngestionRequest> {  
 
     private static final Logger logger = LogManager.getLogger(TransportPauseIngestionAction.class);
 
@@ -49,112 +49,112 @@ public class TransportPauseIngestionAction extends TransportClusterManagerNodeAc
 
     @Inject
     public TransportPauseIngestionAction(
-        TransportService transportService,
+        TransportService transportService,  
         ClusterService clusterService,
         ThreadPool threadPool,
-        MetadataStreamingIngestionStateService ingestionStateService,
+        MetadataStreamingIngestionStateService ingestionStateService,  
         ActionFilters actionFilters,
         IndexNameExpressionResolver indexNameExpressionResolver,
-        DestructiveOperations destructiveOperations
+        DestructiveOperations destructiveOperations  
     ) {
         super(
-            PauseIngestionAction.NAME,
+            PauseIngestionAction.NAME,  
             transportService,
             clusterService,
-            threadPool,
+            threadPool,  
             actionFilters,
             PauseIngestionRequest::new,
-            indexNameExpressionResolver
+            indexNameExpressionResolver  
         );
         this.ingestionStateService = ingestionStateService;
-        this.destructiveOperations = destructiveOperations;
+        this.destructiveOperations = destructiveOperations;  
     }
 
-    @Override
+    @Override  
     protected String executor() {
         return ThreadPool.Names.SAME;
-    }
+    }  
 
     @Override
-    protected PauseIngestionResponse read(StreamInput in) throws IOException {
+    protected PauseIngestionResponse read(StreamInput in) throws IOException {  
         return new PauseIngestionResponse(in);
     }
 
     @Override
     protected void doExecute(Task task, PauseIngestionRequest request, ActionListener<PauseIngestionResponse> listener) {
-        destructiveOperations.failDestructive(request.indices());
+        destructiveOperations.failDestructive(request.indices());  
         super.doExecute(task, request, listener);
     }
 
     @Override
     protected ClusterBlockException checkBlock(PauseIngestionRequest request, ClusterState state) {
-        return state.blocks()
+        return state.blocks()  
             .indicesBlockedException(ClusterBlockLevel.METADATA_WRITE, indexNameExpressionResolver.concreteIndexNames(state, request));
     }
 
     @Override
     protected void clusterManagerOperation(
-        final PauseIngestionRequest request,
+        final PauseIngestionRequest request,  
         final ClusterState state,
         final ActionListener<PauseIngestionResponse> listener
-    ) {
+    ) {  
         throw new UnsupportedOperationException("The task parameter is required");
     }
 
     @Override
     protected void clusterManagerOperation(
-        final Task task,
+        final Task task,  
         final PauseIngestionRequest request,
         final ClusterState state,
-        final ActionListener<PauseIngestionResponse> listener
+        final ActionListener<PauseIngestionResponse> listener  
     ) throws Exception {
         final ResolvedIndices.Local.Concrete concreteIndices = resolveIndices(request, state);
-        if (concreteIndices.concreteIndices().isEmpty()) {
+        if (concreteIndices.concreteIndices().isEmpty()) {  
             listener.onResponse(new PauseIngestionResponse(true, false, new IngestionStateShardFailure[0], ""));
             return;
-        }
+        }  
 
         UpdateIngestionStateRequest updateIngestionStateRequest = new UpdateIngestionStateRequest(
-            concreteIndices.namesOfConcreteIndicesAsArray(),
+            concreteIndices.namesOfConcreteIndicesAsArray(),  
             new int[0]
         );
-        updateIngestionStateRequest.timeout(request.clusterManagerNodeTimeout());
+        updateIngestionStateRequest.timeout(request.clusterManagerNodeTimeout());  
         updateIngestionStateRequest.setIngestionPaused(true);
 
-        ingestionStateService.updateIngestionPollerState(
+        ingestionStateService.updateIngestionPollerState(  
             "pause-ingestion",
             concreteIndices.concreteIndicesAsArray(),
-            updateIngestionStateRequest,
+            updateIngestionStateRequest,  
             new ActionListener<>() {
 
-                @Override
+                @Override  
                 public void onResponse(UpdateIngestionStateResponse updateIngestionStateResponse) {
                     boolean shardsAcked = updateIngestionStateResponse.isAcknowledged()
-                        && updateIngestionStateResponse.getFailedShards() == 0;
+                        && updateIngestionStateResponse.getFailedShards() == 0;  
                     PauseIngestionResponse pauseIngestionResponse = new PauseIngestionResponse(
                         true,
-                        shardsAcked,
+                        shardsAcked,  
                         updateIngestionStateResponse.getShardFailureList(),
                         updateIngestionStateResponse.getErrorMessage()
-                    );
+                    );  
                     listener.onResponse(pauseIngestionResponse);
                 }
 
                 @Override
                 public void onFailure(Exception e) {
-                    logger.debug("Error pausing ingestion", e);
+                    logger.debug("Error pausing ingestion", e);  
                     listener.onFailure(e);
                 }
-            }
+            }  
         );
     }
 
     @Override
     public ResolvedIndices resolveIndices(PauseIngestionRequest request) {
-        return ResolvedIndices.of(resolveIndices(request, clusterService.state()));
+        return ResolvedIndices.of(resolveIndices(request, clusterService.state()));  
     }
 
-    private ResolvedIndices.Local.Concrete resolveIndices(PauseIngestionRequest request, ClusterState clusterState) {
+    private ResolvedIndices.Local.Concrete resolveIndices(PauseIngestionRequest request, ClusterState clusterState) {  
         return indexNameExpressionResolver.concreteResolvedIndices(clusterState, request);
     }
-}
+}  
